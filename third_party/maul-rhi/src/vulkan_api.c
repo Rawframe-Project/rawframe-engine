@@ -120,8 +120,21 @@ bool mrhiOpenVulkan(mrhiVulkan* vulkan)
     return found;
 }
 
+bool mrhiAdoptVulkan(mrhiVulkan* vulkan, PFN_vkGetInstanceProcAddr entry)
+{
+    *vulkan = (mrhiVulkan){.vkGetInstanceProcAddr = entry};
+    bool found = entry != nullptr && ReadInstance(vulkan, VK_NULL_HANDLE, s_global,
+                                                  sizeof(s_global) / sizeof(s_global[0]));
+    if (!found)
+    {
+        *vulkan = (mrhiVulkan){0};
+    }
+    return found;
+}
+
 bool mrhiLoadVulkanInstance(mrhiVulkan* vulkan, VkInstance instance)
 {
+    vulkan->instance = instance;
     return ReadInstance(vulkan, instance, s_instance, sizeof(s_instance) / sizeof(s_instance[0]));
 }
 

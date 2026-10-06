@@ -406,8 +406,11 @@ static bool IsEntryValid(const mrhiContainer* container, uint32_t index)
                    (entry.outputCount == 0 || fragment);
     bool variables = InArray(entry.firstVariable, entry.variableCount, container->variableCount) &&
                      (entry.variableCount == 0 || !compute);
-    bool builtins =
-        (entry.builtins & ~mrhiShaderBuiltinsKnown) == 0 && (entry.builtins == 0 || fragment);
+    // The view index is a vertex or fragment builtin; the others are a
+    // fragment entry's.
+    uint32_t others = entry.builtins & ~(uint32_t)mrhi_builtinViewIndex;
+    bool builtins = (entry.builtins & ~mrhiShaderBuiltinsKnown) == 0 && (others == 0 || fragment) &&
+                    ((entry.builtins & mrhi_builtinViewIndex) == 0 || !compute);
     // Writes go with the storage kinds, never in a vertex entry, as
     // WebGPU's rule for bound storage.
     uint32_t storage = mrhi_heapUseStorageTextures | mrhi_heapUseStorageBuffers;
@@ -878,9 +881,10 @@ static bool AreRecordsValid(mrhiContainer* container)
         container->builtins |= entry.builtins;
         container->heapUses |= entry.heapUses;
     }
-    // WGSL reads no heaps yet: a container using one has no WGSL, and
-    // one using none needs it.
-    if ((container->heapUses != 0) == (container->wgslBytes > 0))
+    // WGSL reads no heaps yet and has no view index: a container using
+    // either has no WGSL, and one using neither needs it.
+    bool native = container->heapUses != 0 || (container->builtins & mrhi_builtinViewIndex) != 0;
+    if (native == (container->wgslBytes > 0))
     {
         return false;
     }

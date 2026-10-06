@@ -15,7 +15,7 @@ mrhiFramePass* mrhiCopyPass(mrhiDevice* device, mrhiPassId id, mrhiResult* statu
     mrhiFramePass* pass = mrhiRecordingPass(device, id, statusOut);
     if (pass != nullptr && mrhiWorkOf(pass) == mrhiWorkRender)
     {
-        *statusOut = mrhiDeviceMisuse(device);
+        *statusOut = mrhiDeviceMisuse(device, mrhi_diagnosticTransferInRenderPass);
         return nullptr;
     }
     return pass;
@@ -39,9 +39,9 @@ uint32_t mrhiFindKind(const mrhiDevice* device, mrhiResourceId id, bool buffer,
     return object;
 }
 
-mrhiResult mrhiRefuse(mrhiDevice* device, mrhiResult status)
+mrhiResult mrhiRefuse(mrhiDevice* device, mrhiResult status, mrhiDiagnosticCode code)
 {
-    return status == mrhi_errorInvalid ? mrhiDeviceMisuse(device) : status;
+    return status == mrhi_errorInvalid ? mrhiDeviceMisuse(device, code) : status;
 }
 
 mrhiCommand* mrhiTakeCopy(mrhiDevice* device, mrhiFramePass* pass, mrhiCommandType type,
@@ -59,6 +59,53 @@ mrhiCommand* mrhiTakeCopy(mrhiDevice* device, mrhiFramePass* pass, mrhiCommandTy
         };
     }
     return records;
+}
+
+mrhiResult mrhiClearBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
+                           uint64_t offset, uint64_t size)
+{
+    if (device == nullptr)
+    {
+        return mrhi_errorInvalid;
+    }
+    mrhiResult status = mrhi_success;
+    mrhiFramePass* pass = mrhiCopyPass(device, id, &status);
+    if (pass == nullptr)
+    {
+        return status;
+    }
+    uint32_t object = mrhiFindKind(device, resource, true, &status);
+    if (object == 0)
+    {
+        return mrhiRefuse(device, status, mrhi_diagnosticResourceKind);
+    }
+    uint64_t total = mrhiBufferBytesOf(&device->frameResources[object - 1]);
+    uint64_t bytes = size == MRHI_WHOLE_SIZE && offset <= total ? total - offset : size;
+    mrhiDiagnosticCode fault = mrhiRangeFault(
+        offset % 4 == 0 && bytes % 4 == 0, offset <= total && bytes <= total - offset,
+        mrhiPassDeclares(device, pass, object, MRHI_KIND(mrhi_accessCopyDestination), nullptr));
+    if (fault != 0)
+    {
+        return mrhiDeviceMisuse(device, fault);
+    }
+    // An empty clear writes nothing; drivers never see it (Vulkan refuses
+    // an empty fill).
+    if (bytes == 0)
+    {
+        return mrhi_success;
+    }
+    mrhiCommand* record = mrhiTakeCommands(device, pass, 1);
+    if (record == nullptr)
+    {
+        return mrhi_errorCapacity;
+    }
+    record[0] = (mrhiCommand){
+        .type = mrhiCommandClearBuffer,
+        .a = object,
+        .c = offset,
+        .d = bytes,
+    };
+    return mrhi_success;
 }
 
 mrhiResult mrhiCopyBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId source,
@@ -79,19 +126,27 @@ mrhiResult mrhiCopyBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId sour
     uint32_t to = from == 0 ? 0 : mrhiFindKind(device, destination, true, &status);
     if (to == 0)
     {
-        return mrhiRefuse(device, status);
+        return mrhiRefuse(device, status, mrhi_diagnosticResourceKind);
     }
     uint64_t fromBytes = mrhiBufferBytesOf(&device->frameResources[from - 1]);
     uint64_t toBytes = mrhiBufferBytesOf(&device->frameResources[to - 1]);
     // One buffer as both is refused by the pass's declarations: a pass
     // never declares a buffer as both a copy source and destination.
-    if (size % 4 != 0 || sourceOffset % 4 != 0 || destinationOffset % 4 != 0 ||
-        sourceOffset > fromBytes || size > fromBytes - sourceOffset ||
-        destinationOffset > toBytes || size > toBytes - destinationOffset ||
-        !mrhiPassDeclares(device, pass, from, MRHI_KIND(mrhi_accessCopySource), nullptr) ||
-        !mrhiPassDeclares(device, pass, to, MRHI_KIND(mrhi_accessCopyDestination), nullptr))
+    mrhiDiagnosticCode fault = mrhiRangeFault(
+        size % 4 == 0 && sourceOffset % 4 == 0 && destinationOffset % 4 == 0,
+        sourceOffset <= fromBytes && size <= fromBytes - sourceOffset &&
+            destinationOffset <= toBytes && size <= toBytes - destinationOffset,
+        mrhiPassDeclares(device, pass, from, MRHI_KIND(mrhi_accessCopySource), nullptr) &&
+            mrhiPassDeclares(device, pass, to, MRHI_KIND(mrhi_accessCopyDestination), nullptr));
+    if (fault != 0)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, fault);
+    }
+    // An empty copy is valid and copies nothing; drivers never see it
+    // (Vulkan refuses empty regions).
+    if (size == 0)
+    {
+        return mrhi_success;
     }
     mrhiCommand* records = mrhiTakeCopy(device, pass, mrhiCommandCopyBuffer, size, 1, 1);
     if (records == nullptr)
@@ -233,8 +288,9 @@ mrhiResult mrhiCheckTextureTransfer(const mrhiDevice* device, const mrhiTextureC
 }
 
 // Checks a copy between a buffer and a texture, the texture being the
-// source when asked: success with the sides resolved, or the refusal.
-static mrhiResult CheckBufferTexture(const mrhiDevice* device, const mrhiFramePass* pass,
+// source when asked: success with the sides resolved, or the refusal,
+// invalid input counted as misuse under its check.
+static mrhiResult CheckBufferTexture(mrhiDevice* device, const mrhiFramePass* pass,
                                      const mrhiBufferCopy* buffer, const mrhiTextureCopy* texture,
                                      const mrhiExtent3d* size, bool fromTexture,
                                      uint32_t* bufferOut, mrhiTextureSide* textureOut)
@@ -243,13 +299,13 @@ static mrhiResult CheckBufferTexture(const mrhiDevice* device, const mrhiFramePa
     uint32_t object = mrhiFindKind(device, buffer->resource, true, &status);
     if (object == 0)
     {
-        return status;
+        return mrhiRefuse(device, status, mrhi_diagnosticResourceKind);
     }
     mrhiFormatCopy facts;
     status = mrhiCheckTextureTransfer(device, texture, size, fromTexture, textureOut, &facts);
     if (status != mrhi_success)
     {
-        return status;
+        return mrhiRefuse(device, status, mrhi_diagnosticTextureRegion);
     }
     const mrhiTextureDef* def = textureOut->def;
     uint32_t alignment = mrhiFormatHasDepth(def->format) ? 4 : facts.bytes;
@@ -259,11 +315,15 @@ static mrhiResult CheckBufferTexture(const mrhiDevice* device, const mrhiFramePa
                                    mrhiGetFormatBlock(def->format), facts.bytes, size, true);
     mrhiAccessKind bufferKind = fromTexture ? mrhi_accessCopyDestination : mrhi_accessCopySource;
     mrhiAccessKind textureKind = fromTexture ? mrhi_accessCopySource : mrhi_accessCopyDestination;
-    if (!valid || !mrhiPassDeclares(device, pass, object, MRHI_KIND(bufferKind), nullptr) ||
+    if (!valid)
+    {
+        return mrhiDeviceMisuse(device, mrhi_diagnosticBufferTextureCopy);
+    }
+    if (!mrhiPassDeclares(device, pass, object, MRHI_KIND(bufferKind), nullptr) ||
         !mrhiPassDeclares(device, pass, textureOut->object, MRHI_KIND(textureKind),
                           &textureOut->part))
     {
-        return mrhi_errorInvalid;
+        return mrhiDeviceMisuse(device, mrhi_diagnosticUndeclaredAccess);
     }
     *bufferOut = object;
     return mrhi_success;
@@ -281,7 +341,7 @@ static mrhiResult CopyBufferTexture(mrhiDevice* device, mrhiPassId id, const mrh
     }
     if (buffer == nullptr || texture == nullptr || size == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhi_success;
     mrhiFramePass* pass = mrhiCopyPass(device, id, &status);
@@ -294,7 +354,13 @@ static mrhiResult CopyBufferTexture(mrhiDevice* device, mrhiPassId id, const mrh
     status = CheckBufferTexture(device, pass, buffer, texture, size, fromTexture, &object, &side);
     if (status != mrhi_success)
     {
-        return mrhiRefuse(device, status);
+        return status;
+    }
+    // An empty copy is valid and copies nothing; drivers never see it
+    // (Vulkan refuses empty regions).
+    if (mrhiIsEmptyExtent(size))
+    {
+        return mrhi_success;
     }
     mrhiCommandType type =
         fromTexture ? mrhiCommandCopyTextureToBuffer : mrhiCommandCopyBufferToTexture;
@@ -355,7 +421,7 @@ mrhiResult mrhiCopyTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureC
     }
     if (source == nullptr || destination == nullptr || size == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhi_success;
     mrhiFramePass* pass = mrhiCopyPass(device, id, &status);
@@ -369,7 +435,7 @@ mrhiResult mrhiCopyTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureC
     status = status == mrhi_success ? mrhiCheckTextureSide(device, destination, size, &to) : status;
     if (status != mrhi_success)
     {
-        return mrhiRefuse(device, status);
+        return mrhiRefuse(device, status, mrhi_diagnosticTextureRegion);
     }
     // Overlapping parts of one texture are refused by the pass's
     // declarations, which never name a part as both a copy source and
@@ -378,12 +444,21 @@ mrhiResult mrhiCopyTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureC
     mrhiFormat b = to.def->format;
     bool compatible = a == b || mrhiFormatSrgbPair(a) == b;
     if (!compatible || from.def->sampleCount != to.def->sampleCount || !IsEveryAspect(&from) ||
-        !IsEveryAspect(&to) ||
-        !mrhiPassDeclares(device, pass, from.object, MRHI_KIND(mrhi_accessCopySource),
+        !IsEveryAspect(&to))
+    {
+        return mrhiDeviceMisuse(device, mrhi_diagnosticCopyTextureMismatch);
+    }
+    if (!mrhiPassDeclares(device, pass, from.object, MRHI_KIND(mrhi_accessCopySource),
                           &from.part) ||
         !mrhiPassDeclares(device, pass, to.object, MRHI_KIND(mrhi_accessCopyDestination), &to.part))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticUndeclaredAccess);
+    }
+    // An empty copy is valid and copies nothing; drivers never see it
+    // (Vulkan refuses empty regions).
+    if (mrhiIsEmptyExtent(size))
+    {
+        return mrhi_success;
     }
     mrhiCommand* records = mrhiTakeCopy(device, pass, mrhiCommandCopyTexture, size->width,
                                         size->height, size->depthOrLayers);

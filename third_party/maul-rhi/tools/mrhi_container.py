@@ -17,8 +17,10 @@
 # "samplers", and "writes" with a storage kind, never in a vertex entry).
 # SPIR-V reads the resource heap at set 4 binding 0 and the sampler heap
 # at set 4 binding 1 (DXC: -fvk-bind-resource-heap 0 4
-# -fvk-bind-sampler-heap 1 4). WGSL reads no heaps yet, so a container
-# whose entries use one has no WGSL: pass - for it.
+# -fvk-bind-sampler-heap 1 4). An entry reading the view index of a
+# multiview pass (record mrhi-0020) lists the builtin "view_index", in a
+# vertex entry too. WGSL reads no heaps yet and has no view index, so a
+# container whose entries use either has no WGSL: pass - for it.
 #
 # The enum names are the contract's (docs/contract/mrhi.json) without
 # their prefixes. The reflection:
@@ -263,8 +265,12 @@ def pack_entries(reflection, enums, strings, inputs, outputs, variables):
         storage = number(entry.get("workgroup_storage_bytes", 0), f"{where}: workgroup storage",
                          0, 0xFFFFFFFF if compute else 0)
         builtins = entry.get("builtins", [])
-        need(isinstance(builtins, list) and (not builtins or stage == "fragment"),
-             f"{where}: only fragment entries list builtins")
+        # The view index is a vertex or fragment builtin (record
+        # mrhi-0020); the others are a fragment entry's.
+        need(isinstance(builtins, list) and
+             all(stage == "fragment" or (b == "view_index" and stage == "vertex")
+                 for b in builtins),
+             f"{where}: only fragment entries list builtins, and vertex ones the view index")
         unique(builtins, f"builtin in {where}")
         mask = 0
         for builtin in builtins:
@@ -746,11 +752,13 @@ def build(spirv, wgsl, reflection, enums, msl=None, metallib=None, dxil=None):
          "too many records")
     check_spirv(spirv, reflection, bindings)
     heaps = any(e.get("heap_uses") for e in reflection["entries"])
-    if heaps:
-        need(wgsl is None, "WGSL reads no heaps: a container using one has no WGSL")
+    views = any("view_index" in e.get("builtins", []) for e in reflection["entries"])
+    if heaps or views:
+        need(wgsl is None, "WGSL reads no heaps and has no view index: a container using "
+             "either has no WGSL")
         wgsl = b""
     else:
-        need(wgsl is not None, "a container using no heap needs WGSL")
+        need(wgsl is not None, "a container using no heap and no view index needs WGSL")
         try:
             text = wgsl.decode("utf-8")
         except UnicodeDecodeError as error:

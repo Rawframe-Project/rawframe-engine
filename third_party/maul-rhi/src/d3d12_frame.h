@@ -34,7 +34,15 @@ typedef struct mrhiD3d12Retiree
 typedef struct mrhiD3d12Slot
 {
     ID3D12CommandAllocator* allocator;
-    ID3D12GraphicsCommandList* list;
+    // The lists the frame records into, one after another on the
+    // allocator: the first, then after each native pass the next
+    // (mrhi-0019).
+    ID3D12GraphicsCommandList* parts[1 + MRHI_NATIVE_PASSES];
+    uint32_t partsUsed;
+    // The lists the frame runs, in order, each in its own
+    // ExecuteCommandLists: its parts with the native passes' between.
+    ID3D12CommandList* runs[1 + 2 * MRHI_NATIVE_PASSES];
+    uint32_t runCount;
     // The core's tag while its frame runs; 0 when idle.
     uint64_t tag;
     // The frame's serial, the fence value its end signals.
@@ -95,8 +103,13 @@ typedef struct mrhiD3d12Frames
     uint8_t* readbackBytes;
     uint64_t readbackSize;
     ID3D12CommandSignature* signatures[mrhiD3d12IndirectCount];
+    // Whether the device draws counted multi-draws, and the kernel that
+    // expands their records for pipelines reading the vertex information
+    // (mrhi-0020), made when it does.
+    bool counted;
+    ID3D12RootSignature* expandRoot;
+    ID3D12PipelineState* expand;
     ID3D12Resource* zeros;
-    uint64_t zeroBytes;
     // The frame being recorded's state, kept here for its size.
     mrhiD3d12Recorder recorder;
     // Frames submitted, and frames reported finished.

@@ -245,10 +245,17 @@ static bool Agrees(TargetShape* shape, const mrhiTextureDef* def, uint32_t mip)
     return shape->width == width && shape->height == height && shape->samples == def->sampleCount;
 }
 
-// Finds a texture a target uses at a mip and layer: its slot, or 0 with
-// the refusal in statusOut.
+// The views a pass def renders: 1 for 0 (mrhi-0020).
+static uint32_t ViewsOf(const mrhiPassDef* def)
+{
+    return def->viewCount > 1 ? def->viewCount : 1;
+}
+
+// Finds a texture a target uses at a mip from a layer, one layer per
+// view, every view on a layer of a texture that is not 3D: its slot, or
+// 0 with the refusal in statusOut.
 static uint32_t FindTarget(const mrhiDevice* device, mrhiResourceId id, uint32_t mip,
-                           uint32_t layer, uint8_t use, mrhiResult* statusOut)
+                           uint32_t layer, uint32_t views, uint8_t use, mrhiResult* statusOut)
 {
     uint32_t slot = mrhiFindFrameResource(device, id);
     if (slot == 0)
@@ -263,7 +270,8 @@ static uint32_t FindTarget(const mrhiDevice* device, mrhiResourceId id, uint32_t
         return 0;
     }
     const mrhiTextureDef* def = mrhiFrameTextureOf(resource);
-    if (mip >= def->mipLevels || layer >= LayersAt(def, mip))
+    if (mip >= def->mipLevels || layer >= LayersAt(def, mip) ||
+        views > LayersAt(def, mip) - layer || (views > 1 && def->kind == mrhi_texture3d))
     {
         return 0;
     }
@@ -273,10 +281,10 @@ static uint32_t FindTarget(const mrhiDevice* device, mrhiResourceId id, uint32_t
 
 // Makes the uses of a color target and its resolve: how many, or 0 with
 // the refusal in statusOut.
-static uint32_t UsesOfColor(const mrhiDevice* device, const mrhiColorTarget* target,
+static uint32_t UsesOfColor(const mrhiDevice* device, const mrhiColorTarget* target, uint32_t views,
                             TargetShape* shape, mrhiFrameUse* usesOut, mrhiResult* statusOut)
 {
-    uint32_t slot = FindTarget(device, target->resource, target->mip, target->layer,
+    uint32_t slot = FindTarget(device, target->resource, target->mip, target->layer, views,
                                mrhiUseColorTarget, statusOut);
     if (slot == 0)
     {
@@ -299,7 +307,7 @@ static uint32_t UsesOfColor(const mrhiDevice* device, const mrhiColorTarget* tar
         .baseMip = target->mip,
         .mipCount = 1,
         .baseLayer = target->layer,
-        .layerCount = 1,
+        .layerCount = views,
     };
     *statusOut = mrhi_success;
     if (target->resolve.index1 == 0)
@@ -307,7 +315,7 @@ static uint32_t UsesOfColor(const mrhiDevice* device, const mrhiColorTarget* tar
         return 1;
     }
     uint32_t resolve = FindTarget(device, target->resolve, target->resolveMip, target->resolveLayer,
-                                  mrhiUseResolve, statusOut);
+                                  views, mrhiUseResolve, statusOut);
     if (resolve == 0)
     {
         return 0;
@@ -330,17 +338,17 @@ static uint32_t UsesOfColor(const mrhiDevice* device, const mrhiColorTarget* tar
         .baseMip = target->resolveMip,
         .mipCount = 1,
         .baseLayer = target->resolveLayer,
-        .layerCount = 1,
+        .layerCount = views,
     };
     return 2;
 }
 
 // Makes the use of a depth target: success, or the refusal.
 static mrhiResult UseOfDepth(const mrhiDevice* device, const mrhiDepthTarget* target,
-                             TargetShape* shape, mrhiFrameUse* useOut)
+                             uint32_t views, TargetShape* shape, mrhiFrameUse* useOut)
 {
     mrhiResult status = mrhi_success;
-    uint32_t slot = FindTarget(device, target->resource, target->mip, target->layer,
+    uint32_t slot = FindTarget(device, target->resource, target->mip, target->layer, views,
                                mrhiUseDepthTarget, &status);
     if (slot == 0)
     {
@@ -370,7 +378,7 @@ static mrhiResult UseOfDepth(const mrhiDevice* device, const mrhiDepthTarget* ta
         .baseMip = target->mip,
         .mipCount = 1,
         .baseLayer = target->layer,
-        .layerCount = 1,
+        .layerCount = views,
     };
     return mrhi_success;
 }
@@ -438,11 +446,12 @@ static uint32_t MakeUses(const mrhiDevice* device, const mrhiPassDef* def, mrhiR
     TargetShape shape = {0};
     for (uint32_t i = 0; i < def->colorTargetCount && *statusOut == mrhi_success; ++i)
     {
-        count += UsesOfColor(device, &def->colorTargets[i], &shape, &uses[count], statusOut);
+        count += UsesOfColor(device, &def->colorTargets[i], ViewsOf(def), &shape, &uses[count],
+                             statusOut);
     }
     if (*statusOut == mrhi_success && def->depthTarget.resource.index1 != 0)
     {
-        *statusOut = UseOfDepth(device, &def->depthTarget, &shape, &uses[count]);
+        *statusOut = UseOfDepth(device, &def->depthTarget, ViewsOf(def), &shape, &uses[count]);
         // Sampling a read-only depth target shares its state, which allows
         // it.
         for (uint32_t i = 0; i < def->accessCount && *statusOut == mrhi_success; ++i)
@@ -463,6 +472,40 @@ static uint32_t MakeUses(const mrhiDevice* device, const mrhiPassDef* def, mrhiR
 }
 
 // Checks what a def says before its uses: success, or the refusal.
+// Checks a native pass's def (mrhi-0019): on a Vulkan, D3D12 or Metal device, without
+// targets, queries or a heap, its accesses to imported resources only,
+// and room for it in the frame.
+static mrhiResult CheckNative(mrhiDevice* device, const mrhiPassDef* def)
+{
+    if (device->adapterInfo.driver != mrhi_driverVulkan &&
+        device->adapterInfo.driver != mrhi_driverD3d12 &&
+        device->adapterInfo.driver != mrhi_driverMetal)
+    {
+        return mrhi_errorUnsupported;
+    }
+    if (def->colorTargetCount > 0 || def->depthTarget.resource.index1 != 0 ||
+        def->occlusionQuerySet.index1 != 0 || def->timestampQuerySet.index1 != 0 ||
+        def->heap.index1 != 0)
+    {
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNativePassDef);
+    }
+    for (uint32_t i = 0; i < def->accessCount; ++i)
+    {
+        uint32_t slot = mrhiFindFrameResource(device, def->accesses[i].resource);
+        if (def->accesses[i].kind == mrhi_accessQueryResolve ||
+            (slot != 0 && !mrhiIsImported(&device->frameResources[slot - 1])))
+        {
+            return mrhiDeviceMisuse(device, mrhi_diagnosticNativePassDef);
+        }
+    }
+    uint32_t natives = 0;
+    for (uint32_t i = 0; i < device->framePassCount; ++i)
+    {
+        natives += device->framePasses[i].native ? 1u : 0u;
+    }
+    return natives < MRHI_NATIVE_PASSES ? mrhi_success : mrhi_errorCapacity;
+}
+
 static mrhiResult CheckDef(mrhiDevice* device, const mrhiPassDef* def)
 {
     mrhiResult status = mrhiCheckObjectDef(device, MRHI_DEF_HEAD(def), PASS_DEF_COOKIE);
@@ -470,10 +513,27 @@ static mrhiResult CheckDef(mrhiDevice* device, const mrhiPassDef* def)
     {
         return status;
     }
-    if (def->passClass > mrhi_passTransfer || (def->accesses == nullptr && def->accessCount > 0) ||
-        def->colorTargetCount > MRHI_COLOR_TARGETS)
+    bool targets = def->colorTargetCount > 0 || def->depthTarget.resource.index1 != 0;
+    if (def->passClass > mrhi_passTransfer)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticPassClass);
+    }
+    if (def->accesses == nullptr && def->accessCount > 0)
+    {
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
+    }
+    if (def->colorTargetCount > MRHI_COLOR_TARGETS)
+    {
+        return mrhiDeviceMisuse(device, mrhi_diagnosticPassColorTargets);
+    }
+    if (ViewsOf(def) > 1 && (def->native || !targets))
+    {
+        return mrhiDeviceMisuse(device, mrhi_diagnosticPassViews);
+    }
+    if (ViewsOf(def) > 1 &&
+        (!device->features.multiview || ViewsOf(def) > device->limits.multiviewViews))
+    {
+        return mrhi_errorUnsupported;
     }
     if (!device->frameOpen || device->frameCompiled)
     {
@@ -487,13 +547,14 @@ static mrhiResult CheckDef(mrhiDevice* device, const mrhiPassDef* def)
     {
         return mrhi_errorCapacity;
     }
-    return mrhi_success;
+    return def->native ? CheckNative(device, def) : mrhi_success;
 }
 
 // The layout and size of a render pass's targets, from their textures;
 // nothing for a pass without targets.
 static void MeasureTargets(const mrhiDevice* device, mrhiFramePass* pass)
 {
+    pass->layout.views = pass->viewCount;
     for (uint32_t i = 0; i < pass->colorTargetCount; ++i)
     {
         const mrhiColorTarget* target = &pass->colorTargets[i];
@@ -524,7 +585,7 @@ mrhiResult mrhiAddPass(mrhiDevice* device, const mrhiPassDef* def, mrhiPassId* p
     }
     if (def == nullptr || passOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = CheckDef(device, def);
     if (status != mrhi_success)
@@ -536,11 +597,16 @@ mrhiResult mrhiAddPass(mrhiDevice* device, const mrhiPassDef* def, mrhiPassId* p
     if (status == mrhi_success)
     {
         status = mrhiCheckPassQueries(device, def);
+        if (status == mrhi_errorInvalid)
+        {
+            return mrhiDeviceMisuse(device, mrhi_diagnosticPassQueries);
+        }
     }
     uint32_t count = status == mrhi_success ? MakeUses(device, def, &status) : 0;
     if (status != mrhi_success)
     {
-        return status == mrhi_errorInvalid ? mrhiDeviceMisuse(device) : status;
+        return status == mrhi_errorInvalid ? mrhiDeviceMisuse(device, mrhi_diagnosticPassUses)
+                                           : status;
     }
     const mrhiFrameUse* uses = &device->frameUses[device->frameUseCount];
     for (uint32_t i = 0; i < count; ++i)
@@ -551,10 +617,12 @@ mrhiResult mrhiAddPass(mrhiDevice* device, const mrhiPassDef* def, mrhiPassId* p
     *pass = (mrhiFramePass){
         .passClass = def->passClass,
         .neverCull = def->neverCull,
+        .native = def->native,
         .firstUse = device->frameUseCount,
         .useCount = count,
         .colorTargetCount = def->colorTargetCount,
         .depthTarget = def->depthTarget,
+        .viewCount = ViewsOf(def),
         .occlusionSet = def->occlusionQuerySet.index1,
         .occlusionGeneration = def->occlusionQuerySet.generation,
         .heap = heap,

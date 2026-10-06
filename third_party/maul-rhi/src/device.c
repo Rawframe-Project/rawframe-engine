@@ -14,6 +14,8 @@
 #include "invariant.h"
 #include "label.h"
 
+#include "maul-rhi/vulkan.h"
+
 #include <stdalign.h>
 #include <stdatomic.h>
 #include <stddef.h>
@@ -44,30 +46,80 @@ mrhiDeviceDef mrhiDefaultDeviceDef(void)
     def.deviceLimits.querySets = 16;
     def.deviceLimits.queries = 4096;
     def.deviceLimits.heaps = 4;
+    def.deviceLimits.frameIndirectDraws = 1u << 18;
     return def;
 }
 
-// Checks a def against the instance, the adapter and the floor, and
-// returns the adapter it names; NULL with the refusal in statusOut.
-static const mrhiDriverAdapter* CheckDef(mrhiInstance* instance, const mrhiDeviceDef* def,
-                                         mrhiResult* statusOut)
+// The chained structs a device def accepts.
+static const mrhiStructType s_deviceStructs[] = {
+#ifdef MAUL_RHI_VULKAN_DRIVER
+    mrhi_structDeviceVulkanAdopt,
+    mrhi_structDeviceVulkanExtensions,
+#endif
+    mrhi_structNone,
+};
+
+// Whether the def's Vulkan structs are well formed (mrhi-0018).
+static bool AreVulkanStructsValid(const mrhiDeviceDef* def)
+{
+    const mrhiDeviceVulkanAdopt* adopt =
+        (const mrhiDeviceVulkanAdopt*)mrhiFindStruct(def->next, mrhi_structDeviceVulkanAdopt);
+    const mrhiDeviceVulkanExtensions* extra = (const mrhiDeviceVulkanExtensions*)mrhiFindStruct(
+        def->next, mrhi_structDeviceVulkanExtensions);
+    return (adopt == nullptr || adopt->device != nullptr) &&
+           (extra == nullptr || mrhiIsNameList(extra->extensions, extra->extensionsLength));
+}
+
+// Whether the def's own limits on the device's bookkeeping are usable.
+static bool AreDeviceLimitsValid(const mrhiDeviceLimits* limits)
+{
+    return limits->notifications >= 2 && limits->samplers != 0 && limits->buffers != 0 &&
+           limits->textures != 0 && limits->views != 0 && limits->surfaces != 0 &&
+           limits->frameResources != 0 && limits->framePasses != 0 && limits->frameAccesses != 0 &&
+           limits->frameBarriers != 0 && limits->shaders != 0 && limits->pipelines != 0 &&
+           limits->frameCommandBytes >= MRHI_CHUNK_BYTES && limits->readbackBytes % 512 == 0;
+}
+
+// The check a device def fails first, or 0 when it is well formed.
+static mrhiDiagnosticCode DeviceDefFault(const mrhiDeviceDef* def, mrhiResult chain)
 {
     mrhiLimits floor = mrhiDefaultLimits();
-    mrhiResult chain = mrhiCheckChain(def->next, nullptr, 0, instance->limits.chainDepth);
-    if (def->cookie != DEVICE_DEF_COOKIE || def->deviceLimits.notifications < 2 ||
-        def->deviceLimits.samplers == 0 || def->deviceLimits.buffers == 0 ||
-        def->deviceLimits.textures == 0 || def->deviceLimits.views == 0 ||
-        def->deviceLimits.surfaces == 0 || def->deviceLimits.frameResources == 0 ||
-        def->deviceLimits.framePasses == 0 || def->deviceLimits.frameAccesses == 0 ||
-        def->deviceLimits.frameBarriers == 0 || def->deviceLimits.shaders == 0 ||
-        def->deviceLimits.pipelines == 0 ||
-        def->deviceLimits.frameCommandBytes < MRHI_CHUNK_BYTES ||
-        def->deviceLimits.readbackBytes % 512 != 0 ||
-        !mrhiIsLabelValid(def->label, def->labelLength) || !mrhiIsAllocatorValid(&def->allocator) ||
-        (def->pipelineCache == nullptr && def->pipelineCacheBytes > 0) ||
-        !mrhiLimitsWithin(&floor, &def->limits) || chain == mrhi_errorInvalid)
+    if (def->cookie != DEVICE_DEF_COOKIE || chain == mrhi_errorInvalid ||
+        !mrhiIsLabelValid(def->label, def->labelLength))
     {
-        *statusOut = mrhiMisuse(instance);
+        return mrhi_diagnosticDefHeader;
+    }
+    if (chain == mrhi_success && !AreVulkanStructsValid(def))
+    {
+        return mrhi_diagnosticChainedStruct;
+    }
+    if (!AreDeviceLimitsValid(&def->deviceLimits))
+    {
+        return mrhi_diagnosticDeviceLimits;
+    }
+    if (!mrhiLimitsWithin(&floor, &def->limits))
+    {
+        return mrhi_diagnosticLimitsFloor;
+    }
+    if (!mrhiIsAllocatorValid(&def->allocator))
+    {
+        return mrhi_diagnosticAllocator;
+    }
+    return def->pipelineCache == nullptr && def->pipelineCacheBytes > 0
+               ? mrhi_diagnosticPipelineCacheBytes
+               : 0;
+}
+
+const mrhiDriverAdapter* mrhiCheckDeviceDef(mrhiInstance* instance, const mrhiDeviceDef* def,
+                                            mrhiResult* statusOut)
+{
+    size_t accepted = sizeof(s_deviceStructs) / sizeof(s_deviceStructs[0]) - 1;
+    mrhiResult chain =
+        mrhiCheckChain(def->next, s_deviceStructs, accepted, instance->limits.chainDepth);
+    mrhiDiagnosticCode fault = DeviceDefFault(def, chain);
+    if (fault != 0)
+    {
+        *statusOut = mrhiMisuse(instance, fault);
         return nullptr;
     }
     const mrhiDriverAdapter* adapter = mrhiFindAdapter(instance, def->adapter);
@@ -78,6 +130,12 @@ static const mrhiDriverAdapter* CheckDef(mrhiInstance* instance, const mrhiDevic
     else if (adapter == nullptr)
     {
         *statusOut = mrhi_errorStale;
+    }
+    else if (adapter->info.driver != mrhi_driverVulkan &&
+             (mrhiFindStruct(def->next, mrhi_structDeviceVulkanAdopt) != nullptr ||
+              mrhiFindStruct(def->next, mrhi_structDeviceVulkanExtensions) != nullptr))
+    {
+        *statusOut = mrhi_errorUnsupported;
     }
     else if (!mrhiFeaturesWithin(&def->features, &adapter->features) ||
              !mrhiLimitsWithin(&def->limits, &adapter->limits))
@@ -305,6 +363,8 @@ static mrhiDevice* Allocate(const mrhiDeviceDef* def)
     FrameParts frame = AddFrameParts(&layout, def);
     size_t queueAt = mrhiLayoutAdd(&layout, limits->notifications, sizeof(mrhiDeviceNotification),
                                    alignof(mrhiDeviceNotification));
+    size_t diagnosticsAt = mrhiLayoutAdd(&layout, limits->diagnostics, sizeof(mrhiDiagnostic),
+                                         alignof(mrhiDiagnostic));
     unsigned char* block =
         layout.overflow ? nullptr : mrhiAllocate(&def->allocator, layout.size, alignof(mrhiDevice));
     if (block == nullptr)
@@ -327,6 +387,8 @@ static mrhiDevice* Allocate(const mrhiDeviceDef* def)
         device->readbacks[i] = (mrhiReadback){0};
     }
     device->queue = (mrhiDeviceNotification*)(block + queueAt);
+    mrhiInitDiagnostics(&device->diagnostics, (mrhiDiagnostic*)(block + diagnosticsAt),
+                        limits->diagnostics);
     PlaceFrameParts(device, block, &frame);
     return device;
 }
@@ -344,11 +406,11 @@ mrhiResult mrhiCreateDevice(mrhiInstance* instance, const mrhiDeviceDef* def,
         {
             *deviceOut = nullptr;
         }
-        return mrhiMisuse(instance);
+        return mrhiMisuse(instance, mrhi_diagnosticNullArgument);
     }
     *deviceOut = nullptr;
     mrhiResult status = mrhi_success;
-    const mrhiDriverAdapter* adapter = CheckDef(instance, def, &status);
+    const mrhiDriverAdapter* adapter = mrhiCheckDeviceDef(instance, def, &status);
     if (adapter == nullptr)
     {
         return status;
@@ -378,6 +440,16 @@ mrhiResult mrhiCreateDevice(mrhiInstance* instance, const mrhiDeviceDef* def,
     MRHI_ASSERT(instance->driver.vtable != nullptr);
     status = instance->driver.vtable->createDevice(instance->driver.self, adapter->handle, def,
                                                    device->request, &device->driver);
+    if (status == mrhi_success)
+    {
+        // The handshake (mrhi-0024); destroy comes first in every version.
+        status = mrhiCheckDeviceVtable(device->driver.vtable);
+        if (status != mrhi_success && device->driver.vtable != nullptr &&
+            device->driver.vtable->destroy != nullptr)
+        {
+            device->driver.vtable->destroy(device->driver.self);
+        }
+    }
     if (status != mrhi_success)
     {
         mrhiRelease(&device->allocator, device, device->bytes, alignof(mrhiDevice));
@@ -436,9 +508,10 @@ mrhiDeviceState mrhiGetDeviceState(mrhiDevice* device)
     return device == nullptr ? mrhi_deviceFailed : device->state;
 }
 
-mrhiResult mrhiDeviceMisuse(mrhiDevice* device)
+mrhiResult mrhiDeviceMisuse(mrhiDevice* device, mrhiDiagnosticCode code)
 {
     atomic_fetch_add_explicit(&device->misuse, 1, memory_order_relaxed);
+    mrhiRecordDiagnostic(&device->diagnostics, code);
     return mrhi_errorInvalid;
 }
 
@@ -455,7 +528,8 @@ mrhiResult mrhiGetDeviceFeatures(mrhiDevice* device, mrhiFeatures* featuresOut)
 {
     if (device == nullptr || featuresOut == nullptr)
     {
-        return device == nullptr ? mrhi_errorInvalid : mrhiDeviceMisuse(device);
+        return device == nullptr ? mrhi_errorInvalid
+                                 : mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     *featuresOut = device->features;
     return mrhi_success;
@@ -465,7 +539,8 @@ mrhiResult mrhiGetDeviceLimits(mrhiDevice* device, mrhiLimits* limitsOut)
 {
     if (device == nullptr || limitsOut == nullptr)
     {
-        return device == nullptr ? mrhi_errorInvalid : mrhiDeviceMisuse(device);
+        return device == nullptr ? mrhi_errorInvalid
+                                 : mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     *limitsOut = device->limits;
     return mrhi_success;
@@ -475,7 +550,8 @@ mrhiResult mrhiGetDeviceTimestampPeriod(mrhiDevice* device, double* periodOut)
 {
     if (device == nullptr || periodOut == nullptr)
     {
-        return device == nullptr ? mrhi_errorInvalid : mrhiDeviceMisuse(device);
+        return device == nullptr ? mrhi_errorInvalid
+                                 : mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhiDeviceUsable(device);
     if (status != mrhi_success)
@@ -494,7 +570,8 @@ mrhiResult mrhiGetDeviceLossReport(mrhiDevice* device, mrhiDeviceLossReport* rep
 {
     if (device == nullptr || reportOut == nullptr)
     {
-        return device == nullptr ? mrhi_errorInvalid : mrhiDeviceMisuse(device);
+        return device == nullptr ? mrhi_errorInvalid
+                                 : mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     if (device->state != mrhi_deviceLost)
     {
@@ -509,13 +586,33 @@ uint64_t mrhiGetDeviceMisuse(mrhiDevice* device)
     return device == nullptr ? 0 : atomic_load_explicit(&device->misuse, memory_order_relaxed);
 }
 
+mrhiResult mrhiNextDeviceDiagnostic(mrhiDevice* device, mrhiDiagnostic* diagnosticOut)
+{
+    if (device == nullptr)
+    {
+        return mrhi_errorInvalid;
+    }
+    if (diagnosticOut == nullptr)
+    {
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
+    }
+    return mrhiTakeDiagnostic(&device->diagnostics, diagnosticOut);
+}
+
 mrhiResult mrhiCheckObjectDef(mrhiDevice* device, mrhiDefHead head, uint32_t expected)
 {
-    mrhiResult chain = mrhiCheckChain(head.next, nullptr, 0, device->instance->limits.chainDepth);
+    return mrhiCheckObjectDefWith(device, head, expected, nullptr, 0);
+}
+
+mrhiResult mrhiCheckObjectDefWith(mrhiDevice* device, mrhiDefHead head, uint32_t expected,
+                                  const mrhiStructType* known, size_t knownCount)
+{
+    mrhiResult chain =
+        mrhiCheckChain(head.next, known, knownCount, device->instance->limits.chainDepth);
     if (head.cookie != expected || chain == mrhi_errorInvalid ||
         !mrhiIsLabelValid(head.label, head.labelLength))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticDefHeader);
     }
     return chain;
 }

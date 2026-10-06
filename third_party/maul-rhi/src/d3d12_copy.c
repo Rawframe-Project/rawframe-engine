@@ -253,8 +253,30 @@ void mrhiD3d12Copy(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
     case mrhiCommandCopyTexture:
         CopyTexture(recorder, command);
         break;
+    case mrhiCommandClearBuffer:
+    {
+        ID3D12Resource* target =
+            BufferOf(recorder, command->a, false, D3D12_RESOURCE_STATE_COPY_DEST);
+        mrhiD3d12FlushBarriers(recorder);
+        mrhiD3d12CopyZeros(recorder, target, command->c, command->d);
+        break;
+    }
     default:
         CopyWithTexture(recorder, command);
         break;
+    }
+}
+
+void mrhiD3d12CopyZeros(const mrhiD3d12Recorder* recorder, ID3D12Resource* target, uint64_t offset,
+                        uint64_t bytes)
+{
+    // The zeros are read where buffers promote to a copy source on their
+    // own.
+    for (uint64_t done = 0; done < bytes; done += MRHI_D3D12_ZERO_BYTES)
+    {
+        uint64_t piece =
+            bytes - done < MRHI_D3D12_ZERO_BYTES ? bytes - done : MRHI_D3D12_ZERO_BYTES;
+        ID3D12GraphicsCommandList_CopyBufferRegion(recorder->list, target, offset + done,
+                                                   recorder->zeros, 0, piece);
     }
 }

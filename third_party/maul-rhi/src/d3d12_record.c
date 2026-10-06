@@ -58,14 +58,16 @@ static D3D12_CPU_DESCRIPTOR_HANDLE ColorView(mrhiD3d12Recorder* recorder,
     else if (def->sampleCount > 1)
     {
         desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
-        desc.Texture2DMSArray =
-            (D3D12_TEX2DMS_ARRAY_RTV){.FirstArraySlice = target->layer, .ArraySize = 1};
+        desc.Texture2DMSArray = (D3D12_TEX2DMS_ARRAY_RTV){.FirstArraySlice = target->layer,
+                                                          .ArraySize = recorder->pass->viewCount};
     }
     else
     {
         desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
-        desc.Texture2DArray = (D3D12_TEX2D_ARRAY_RTV){
-            .MipSlice = target->mip, .FirstArraySlice = target->layer, .ArraySize = 1};
+        // A layer per view (mrhi-0020).
+        desc.Texture2DArray = (D3D12_TEX2D_ARRAY_RTV){.MipSlice = target->mip,
+                                                      .FirstArraySlice = target->layer,
+                                                      .ArraySize = recorder->pass->viewCount};
     }
     D3D12_CPU_DESCRIPTOR_HANDLE view = Take(&recorder->targets);
     ID3D12Device_CreateRenderTargetView(recorder->device, object->resource, &desc, view);
@@ -87,14 +89,15 @@ static D3D12_CPU_DESCRIPTOR_HANDLE DepthView(mrhiD3d12Recorder* recorder,
     if (def->sampleCount > 1)
     {
         desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
-        desc.Texture2DMSArray =
-            (D3D12_TEX2DMS_ARRAY_DSV){.FirstArraySlice = target->layer, .ArraySize = 1};
+        desc.Texture2DMSArray = (D3D12_TEX2DMS_ARRAY_DSV){.FirstArraySlice = target->layer,
+                                                          .ArraySize = recorder->pass->viewCount};
     }
     else
     {
         desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
-        desc.Texture2DArray = (D3D12_TEX2D_ARRAY_DSV){
-            .MipSlice = target->mip, .FirstArraySlice = target->layer, .ArraySize = 1};
+        desc.Texture2DArray = (D3D12_TEX2D_ARRAY_DSV){.MipSlice = target->mip,
+                                                      .FirstArraySlice = target->layer,
+                                                      .ArraySize = recorder->pass->viewCount};
     }
     D3D12_CPU_DESCRIPTOR_HANDLE view = Take(&recorder->depths);
     ID3D12Device_CreateDepthStencilView(recorder->device, object->resource, &desc, view);
@@ -161,6 +164,15 @@ static void StartTargets(mrhiD3d12Recorder* recorder)
     }
     ID3D12GraphicsCommandList_OMSetRenderTargets(recorder->list, pass->colorTargetCount, colors,
                                                  FALSE, depth ? &depthView : nullptr);
+    ID3D12GraphicsCommandList1* views = nullptr;
+    if (pass->viewCount > 1 &&
+        SUCCEEDED(ID3D12GraphicsCommandList_QueryInterface(
+            recorder->list, &IID_ID3D12GraphicsCommandList1, (void**)&views)))
+    {
+        // Every view of a multiview pass (mrhi-0020).
+        ID3D12GraphicsCommandList1_SetViewInstanceMask(views, (1u << pass->viewCount) - 1);
+        ID3D12GraphicsCommandList1_Release(views);
+    }
     D3D12_VIEWPORT viewport = {0.0f, 0.0f, (FLOAT)pass->width, (FLOAT)pass->height, 0.0f, 1.0f};
     D3D12_RECT scissor = {0, 0, (LONG)pass->width, (LONG)pass->height};
     ID3D12GraphicsCommandList_RSSetViewports(recorder->list, 1, &viewport);
@@ -187,17 +199,23 @@ static void Resolve(mrhiD3d12Recorder* recorder)
         }
         const mrhiD3d12Object* source = TargetOf(recorder, target->resource);
         const mrhiD3d12Object* into = TargetOf(recorder, target->resolve);
-        UINT from = SubresourceOf(source->texture, target->mip, target->layer);
-        UINT to = SubresourceOf(into->texture, target->resolveMip, target->resolveLayer);
-        mrhiD3d12Transition(recorder, source->resource, from, D3D12_RESOURCE_STATE_RENDER_TARGET,
-                            D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
-        mrhiD3d12FlushBarriers(recorder);
-        ID3D12GraphicsCommandList_ResolveSubresource(recorder->list, into->resource, to,
-                                                     source->resource, from,
-                                                     mrhiD3d12Format(source->texture->format));
-        mrhiD3d12Transition(recorder, source->resource, from, D3D12_RESOURCE_STATE_RESOLVE_SOURCE,
-                            D3D12_RESOURCE_STATE_RENDER_TARGET);
-        mrhiD3d12FlushBarriers(recorder);
+        // Each view's layer (mrhi-0020).
+        for (uint32_t view = 0; view < pass->viewCount; ++view)
+        {
+            UINT from = SubresourceOf(source->texture, target->mip, target->layer + view);
+            UINT to = SubresourceOf(into->texture, target->resolveMip, target->resolveLayer + view);
+            mrhiD3d12Transition(recorder, source->resource, from,
+                                D3D12_RESOURCE_STATE_RENDER_TARGET,
+                                D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+            mrhiD3d12FlushBarriers(recorder);
+            ID3D12GraphicsCommandList_ResolveSubresource(recorder->list, into->resource, to,
+                                                         source->resource, from,
+                                                         mrhiD3d12Format(source->texture->format));
+            mrhiD3d12Transition(recorder, source->resource, from,
+                                D3D12_RESOURCE_STATE_RESOLVE_SOURCE,
+                                D3D12_RESOURCE_STATE_RENDER_TARGET);
+            mrhiD3d12FlushBarriers(recorder);
+        }
     }
 }
 
@@ -263,10 +281,14 @@ static void Record(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
     case mrhiCommandDrawIndirect:
     case mrhiCommandDrawIndexedIndirect:
     case mrhiCommandDispatchIndirect:
+    case mrhiCommandDrawIndirectCount:
+    case mrhiCommandDrawIndexedIndirectCount:
         mrhiD3d12Draw(recorder, command);
         break;
     case mrhiCommandBeginOcclusionQuery:
     case mrhiCommandEndOcclusionQuery:
+    case mrhiCommandBeginStatisticsQuery:
+    case mrhiCommandEndStatisticsQuery:
     case mrhiCommandResolveQueries:
         mrhiD3d12Query(recorder, command);
         break;

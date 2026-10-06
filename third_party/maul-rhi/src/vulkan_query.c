@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Queries on Vulkan (vulkan_query.h). A frame's recording marks the
-// queries it writes, so that a resolve copies those, waiting for their
-// results, and fills the rest with 0: Vulkan leaves a query that was
-// never written unwritten in the buffer.
+// Queries on Vulkan (vulkan_query.h), pipeline statistics among them
+// (mrhi-0023). A frame's recording marks the queries it writes, so that
+// a resolve copies those, waiting for their results, and fills the rest
+// with 0: Vulkan leaves a query that was never written unwritten in the
+// buffer.
 
 #include "vulkan_query.h"
 
@@ -41,6 +42,7 @@ static void ResetNamed(const mrhiVulkanRecording* recording, const mrhiDriverPas
         {
             const mrhiCommand* command = &at->commands[i];
             if (command->type == mrhiCommandBeginOcclusionQuery ||
+                command->type == mrhiCommandBeginStatisticsQuery ||
                 command->type == mrhiCommandResolveQueries)
             {
                 Reset(recording, command->b);
@@ -99,6 +101,7 @@ static void Resolve(const mrhiVulkanRecording* recording, const mrhiCommand* com
     VkBuffer buffer = mrhiVulkanFrameBuffer(recording, (uint32_t)command->a);
     uint32_t first = (uint32_t)command->c;
     uint32_t count = (uint32_t)(command->c >> 32);
+    VkDeviceSize stride = mrhiQueryBytes(set->type);
     uint32_t i = 0;
     while (i < count)
     {
@@ -108,16 +111,16 @@ static void Resolve(const mrhiVulkanRecording* recording, const mrhiCommand* com
         {
             ++run;
         }
-        VkDeviceSize offset = command->d + (VkDeviceSize)i * sizeof(uint64_t);
+        VkDeviceSize offset = command->d + i * stride;
         if (written)
         {
             api->vkCmdCopyQueryPoolResults(commands, set->pool, first + i, run, buffer, offset,
-                                           sizeof(uint64_t),
+                                           stride,
                                            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
         }
         else
         {
-            api->vkCmdFillBuffer(commands, buffer, offset, (VkDeviceSize)run * sizeof(uint64_t), 0);
+            api->vkCmdFillBuffer(commands, buffer, offset, run * stride, 0);
         }
         i += run;
     }
@@ -140,6 +143,16 @@ void mrhiVulkanQuery(mrhiVulkanRecording* recording, const mrhiCommand* command)
     case mrhiCommandEndOcclusionQuery:
         api->vkCmdEndQuery(commands, SetOf(recording, recording->pass->occlusionSet)->pool,
                            recording->openQuery);
+        break;
+    case mrhiCommandBeginStatisticsQuery:
+    {
+        mrhiVulkanQuerySet* set = SetOf(recording, command->b);
+        Mark(set, (uint32_t)command->a);
+        api->vkCmdBeginQuery(commands, set->pool, (uint32_t)command->a, 0);
+        break;
+    }
+    case mrhiCommandEndStatisticsQuery:
+        api->vkCmdEndQuery(commands, SetOf(recording, command->b)->pool, (uint32_t)command->a);
         break;
     default:
         Resolve(recording, command);

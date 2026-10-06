@@ -140,6 +140,10 @@ mrhiResult mrhiRefreshAdapters(mrhiInstance* instance, const mrhiPending* search
     for (size_t i = 0; i < count; ++i)
     {
         mrhiDriverAdapter* adapter = &instance->found[i];
+        if (instance->external)
+        {
+            adapter->info.driver = mrhi_driverExternal;
+        }
         mrhiMaskFeatures(&adapter->features, adapter->info.driver);
         if ((!search->allowSoftware && adapter->info.kind == mrhi_adapterSoftware) ||
             !MeetsFloor(instance, adapter) || !Presents(instance, search, adapter))
@@ -178,12 +182,12 @@ mrhiResult mrhiRequestAdapters(mrhiInstance* instance, const mrhiAdapterRequestD
     if (def == nullptr || requestOut == nullptr || def->cookie != ADAPTER_REQUEST_DEF_COOKIE ||
         def->preference > mrhi_powerHigh)
     {
-        return mrhiMisuse(instance);
+        return mrhiMisuse(instance, mrhi_diagnosticAdapterRequestDef);
     }
     mrhiResult chain = mrhiCheckChain(def->next, nullptr, 0, instance->limits.chainDepth);
     if (chain != mrhi_success)
     {
-        return chain == mrhi_errorInvalid ? mrhiMisuse(instance) : chain;
+        return chain == mrhi_errorInvalid ? mrhiMisuse(instance, mrhi_diagnosticDefHeader) : chain;
     }
     if (def->compatibleSurface.index1 != 0 &&
         mrhiFindSurface(instance, def->compatibleSurface) == 0)
@@ -224,7 +228,8 @@ mrhiResult mrhiGetAdapters(mrhiInstance* instance, mrhiAdapterId* adapters, size
 {
     if (instance == nullptr || countOut == nullptr || (adapters == nullptr && capacity > 0))
     {
-        return instance == nullptr ? mrhi_errorInvalid : mrhiMisuse(instance);
+        return instance == nullptr ? mrhi_errorInvalid
+                                   : mrhiMisuse(instance, mrhi_diagnosticNullArgument);
     }
     for (uint32_t i = 0; i < instance->listed && i < capacity; ++i)
     {
@@ -251,7 +256,8 @@ mrhiResult mrhiGetAdapterInfo(mrhiInstance* instance, mrhiAdapterId adapter,
 {
     if (instance == nullptr || infoOut == nullptr)
     {
-        return instance == nullptr ? mrhi_errorInvalid : mrhiMisuse(instance);
+        return instance == nullptr ? mrhi_errorInvalid
+                                   : mrhiMisuse(instance, mrhi_diagnosticNullArgument);
     }
     const mrhiDriverAdapter* found = mrhiFindAdapter(instance, adapter);
     if (found == nullptr)
@@ -267,7 +273,8 @@ mrhiResult mrhiGetAdapterFeatures(mrhiInstance* instance, mrhiAdapterId adapter,
 {
     if (instance == nullptr || featuresOut == nullptr)
     {
-        return instance == nullptr ? mrhi_errorInvalid : mrhiMisuse(instance);
+        return instance == nullptr ? mrhi_errorInvalid
+                                   : mrhiMisuse(instance, mrhi_diagnosticNullArgument);
     }
     const mrhiDriverAdapter* found = mrhiFindAdapter(instance, adapter);
     if (found == nullptr)
@@ -283,7 +290,8 @@ mrhiResult mrhiGetAdapterLimits(mrhiInstance* instance, mrhiAdapterId adapter,
 {
     if (instance == nullptr || limitsOut == nullptr)
     {
-        return instance == nullptr ? mrhi_errorInvalid : mrhiMisuse(instance);
+        return instance == nullptr ? mrhi_errorInvalid
+                                   : mrhiMisuse(instance, mrhi_diagnosticNullArgument);
     }
     const mrhiDriverAdapter* found = mrhiFindAdapter(instance, adapter);
     if (found == nullptr)
@@ -299,7 +307,8 @@ mrhiResult mrhiGetFormatCaps(mrhiInstance* instance, mrhiAdapterId adapter, mrhi
 {
     if (instance == nullptr || capsOut == nullptr || !mrhiIsFormatKnown(format))
     {
-        return instance == nullptr ? mrhi_errorInvalid : mrhiMisuse(instance);
+        return instance == nullptr ? mrhi_errorInvalid
+                                   : mrhiMisuse(instance, mrhi_diagnosticNullArgument);
     }
     const mrhiDriverAdapter* found = mrhiFindAdapter(instance, adapter);
     if (found == nullptr)

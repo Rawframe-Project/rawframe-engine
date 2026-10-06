@@ -31,6 +31,13 @@ VkFormat mrhiVulkanDepthStencil(const mrhiVulkan* vulkan, VkPhysicalDevice devic
 // format; VK_FORMAT_UNDEFINED for one the contract does not list.
 VkFormat mrhiVulkanFormat(mrhiFormat format, VkFormat depthStencil);
 
+// The limits of binding a device's Vulkan limits give, into limits whose
+// tables and vertex buffers are already set: the contract's slots per
+// table, the per-stage kinds fitted under maxPerStageResources less the
+// color attachments (stage_limits.h), and tables plus vertex buffers at
+// least the contract's value.
+void mrhiVulkanBindingLimits(const VkPhysicalDeviceLimits* limits, mrhiLimits* granted);
+
 // The queue family with graphics and compute a listed device has.
 uint32_t mrhiVulkanQueueFamily(const mrhiVulkan* vulkan, VkPhysicalDevice device);
 

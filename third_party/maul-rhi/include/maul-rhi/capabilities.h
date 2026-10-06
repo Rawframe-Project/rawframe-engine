@@ -28,7 +28,7 @@ extern "C"
     {
         // Timestamps at pass boundaries (mrhi-0006).
         bool timestampQuery;
-        // Pipeline statistics queries.
+        // Pipeline statistics queries (query_pipeline_statistics).
         bool pipelineStatisticsQuery;
         // BC1 to BC7 textures.
         bool textureCompressionBc;
@@ -52,9 +52,12 @@ extern "C"
         bool shaderInt64;
         // A first instance other than zero in indirect draws.
         bool indirectFirstInstance;
-        // Multi-draw indirect with a GPU-written count.
+        // Counted multi-draw indirect (mrhiDrawIndirectCount,
+        // mrhiDrawIndexedIndirectCount): up to a maximum of indirect draws, the
+        // number drawn written on the GPU.
         bool multiDrawIndirectCount;
-        // Rendering several views in one pass.
+        // Rendering several views in one pass (mrhiPassDef's viewCount), each
+        // into a layer of the targets.
         bool multiview;
         // A heap of sampled textures and samplers.
         bool bindlessSampling;
@@ -134,6 +137,9 @@ extern "C"
         uint32_t samplerHeapSize;
         // Frames recorded while earlier ones still run on the GPU.
         uint32_t framesInFlight;
+        // The views a multiview pass renders at most (mrhiPassDef's viewCount);
+        // 1 without the multiview feature.
+        uint32_t multiviewViews;
     } mrhiLimits;
 
     // A texel format. The compressed families need their feature; `format_caps`

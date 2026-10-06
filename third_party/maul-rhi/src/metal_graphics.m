@@ -202,6 +202,11 @@ MTLRenderPipelineDescriptor* mrhiMetalDescribeRender(const mrhiGraphicsPipelineD
     descriptor.rasterSampleCount = def->sampleCount;
     descriptor.alphaToCoverageEnabled = def->alphaToCoverage;
     descriptor.inputPrimitiveTopology = TopologyClassOf(def->topology);
+    if (def->viewCount > 1)
+    {
+        // Each view an amplification of the vertices (mrhi-0020).
+        descriptor.maxVertexAmplificationCount = def->viewCount;
+    }
     if (def->labelLength > 0)
     {
         descriptor.label = mrhiMetalLabel(def->label, def->labelLength);

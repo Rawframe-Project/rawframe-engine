@@ -461,6 +461,12 @@ EM_JS(void, mrhiJsCopyBuffer, (int state, uint32_t source, double sourceOffset, 
     }
 });
 
+// Zeros a range of a frame buffer.
+EM_JS(void, mrhiJsClearBuffer, (int state, uint32_t object, double offset, double size), {
+    const frame = Module.mrhiGpu.states[state].frame;
+    frame.outside().clearBuffer(frame.objects[object], offset, size);
+});
+
 // A copy between a buffer and a texture, object 0 naming staging or the
 // ring's mirror, bytes the span a readback fills.
 EM_JS(void, mrhiJsCopyWithTexture, (int state, bool toTexture, uint32_t buffer, double offset,
@@ -826,6 +832,9 @@ static void Copy(int state, const mrhiDriverFrame* frame, const mrhiCommand* com
                           (uint32_t)command->d);
         break;
     }
+    case mrhiCommandClearBuffer:
+        mrhiJsClearBuffer(state, command->a, (double)command->c, (double)command->d);
+        break;
     default:
         CopyWithTexture(state, frame, command);
         break;

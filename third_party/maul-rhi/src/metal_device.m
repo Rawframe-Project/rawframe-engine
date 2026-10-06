@@ -405,6 +405,7 @@ mrhiResult mrhiCreateMetalDevice(const mrhiAllocator* allocator, id<MTLDevice> d
         };
     }
     Lay(made, &room, &def->deviceLimits);
+    made->frames.counted = def->features.multiDrawIndirectCount;
     if (mrhiMetalOpenFrames(&made->frames) != mrhi_success)
     {
         Destroy(made);
@@ -412,4 +413,21 @@ mrhiResult mrhiCreateMetalDevice(const mrhiAllocator* allocator, id<MTLDevice> d
     }
     *deviceOut = (mrhiDeviceDriver){.vtable = &s_vtable, .self = made};
     return mrhi_success;
+}
+
+bool mrhiMetalDeviceNative(const mrhiDeviceDriver* driver, void** deviceOut, void** queueOut)
+{
+    if (driver->vtable != &s_vtable)
+    {
+        return false;
+    }
+    const MetalDevice* device = driver->self;
+    *deviceOut = (void*)device->device;
+    *queueOut = (void*)device->queue;
+    return true;
+}
+
+void* mrhiMetalTextureNative(uint64_t handle)
+{
+    return (void*)mrhiMetalObject(handle);
 }

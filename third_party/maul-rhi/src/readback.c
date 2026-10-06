@@ -126,7 +126,7 @@ mrhiResult mrhiReadBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId reso
     }
     if (requestOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhi_success;
     mrhiFramePass* pass = mrhiCopyPass(device, id, &status);
@@ -137,15 +137,24 @@ mrhiResult mrhiReadBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId reso
     uint32_t object = mrhiFindKind(device, resource, true, &status);
     if (object == 0)
     {
-        return mrhiRefuse(device, status);
+        return mrhiRefuse(device, status, mrhi_diagnosticResourceKind);
     }
     uint64_t total = mrhiBufferBytesOf(&device->frameResources[object - 1]);
-    if (offset % 4 != 0 || size % 4 != 0 || offset > total || size > total - offset ||
-        !mrhiPassDeclares(device, pass, object, MRHI_KIND(mrhi_accessCopySource), nullptr))
+    mrhiDiagnosticCode fault = mrhiRangeFault(
+        offset % 4 == 0 && size % 4 == 0, offset <= total && size <= total - offset,
+        mrhiPassDeclares(device, pass, object, MRHI_KIND(mrhi_accessCopySource), nullptr));
+    if (fault != 0)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, fault);
     }
     mrhiReadback* readback = Reserve(device, size, size, 0, 0, 0);
+    // An empty read is answered with no bytes, and copies nothing:
+    // drivers never see it (Vulkan refuses empty regions).
+    if (readback != nullptr && size == 0)
+    {
+        *requestOut = (mrhiRequestId){readback->request, 1};
+        return mrhi_success;
+    }
     mrhiCommand* records = readback == nullptr
                                ? nullptr
                                : mrhiTakeCopy(device, pass, mrhiCommandReadBuffer, size, 1, 1);
@@ -171,7 +180,7 @@ mrhiResult mrhiReadTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureC
     }
     if (source == nullptr || size == nullptr || requestOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhi_success;
     mrhiFramePass* pass = mrhiCopyPass(device, id, &status);
@@ -184,11 +193,11 @@ mrhiResult mrhiReadTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureC
     status = mrhiCheckTextureTransfer(device, source, size, true, &side, &facts);
     if (status != mrhi_success)
     {
-        return mrhiRefuse(device, status);
+        return mrhiRefuse(device, status, mrhi_diagnosticTextureRegion);
     }
     if (!mrhiPassDeclares(device, pass, side.object, MRHI_KIND(mrhi_accessCopySource), &side.part))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticUndeclaredAccess);
     }
     mrhiFormatBlock block = mrhiGetFormatBlock(side.def->format);
     uint64_t rows = size->height / block.height;
@@ -204,6 +213,12 @@ mrhiResult mrhiReadTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureC
     }
     mrhiReadback* readback =
         Reserve(device, ringBytes, tight, (uint32_t)pitch, (uint32_t)rowBytes, (uint32_t)rows);
+    // An empty read is answered with no bytes, and copies nothing.
+    if (readback != nullptr && mrhiIsEmptyExtent(size))
+    {
+        *requestOut = (mrhiRequestId){readback->request, 1};
+        return mrhi_success;
+    }
     mrhiCommand* records = readback == nullptr
                                ? nullptr
                                : mrhiTakeCopy(device, pass, mrhiCommandReadTexture, size->width,
@@ -268,7 +283,7 @@ mrhiResult mrhiTakeReadback(mrhiDevice* device, mrhiRequestId request, void* byt
     }
     if (sizeOut == nullptr || (bytes == nullptr && capacity > 0))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiReadback* readback = Find(device, request);
     if (readback == nullptr)

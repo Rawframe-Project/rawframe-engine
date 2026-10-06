@@ -64,7 +64,7 @@ mrhiResult mrhiGetPipelineCache(mrhiDevice* device, void* bytesOut, size_t capac
     }
     if (sizeOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhiDeviceUsable(device);
     if (status != mrhi_success)

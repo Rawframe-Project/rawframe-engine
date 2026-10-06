@@ -109,19 +109,21 @@ static VkImageView MakeView(mrhiVulkanRecording* recording, VkImage image, const
     return view;
 }
 
-// A view of one mip and layer (a 3D texture's depth slice) of a target.
+// A view of one mip and layer (a 3D texture's depth slice) of a target;
+// in a multiview pass, of a layer per view from it (mrhi-0020).
 static VkImageView TargetView(mrhiVulkanRecording* recording, uint32_t index1, uint32_t mip,
                               uint32_t layer, VkImageUsageFlags use)
 {
     mrhiVulkanFrameTexture texture = mrhiVulkanFrameImage(recording, index1);
+    uint32_t views = recording->pass->viewCount;
     const ViewShape shape = {
-        .type = VK_IMAGE_VIEW_TYPE_2D,
+        .type = views > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D,
         .format = texture.def->format,
         .aspects = mrhiVulkanAspect(mrhi_aspectAll, texture.def->format),
         .mip = mip,
         .mips = 1,
         .layer = layer,
-        .layers = 1,
+        .layers = views,
         .usage = use,
     };
     return MakeView(recording, texture.image, &shape);
@@ -253,6 +255,9 @@ void mrhiVulkanBeginPass(mrhiVulkanRecording* recording)
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .renderArea = {.extent = {pass->width, pass->height}},
         .layerCount = 1,
+        // A view per layer from the targets' (mrhi-0020); Vulkan ignores
+        // the layer count then.
+        .viewMask = pass->viewCount > 1 ? (1u << pass->viewCount) - 1 : 0,
         .colorAttachmentCount = pass->colorTargetCount,
         .pColorAttachments = colors,
         .pDepthAttachment = hasDepth ? &depth : nullptr,

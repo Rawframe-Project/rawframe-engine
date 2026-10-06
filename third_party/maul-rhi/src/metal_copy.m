@@ -178,6 +178,11 @@ void mrhiMetalCopy(mrhiMetalEncoder* encoder, const mrhiCommand* command)
     case mrhiCommandCopyTexture:
         CopyTexture(encoder, command);
         break;
+    case mrhiCommandClearBuffer:
+        [encoder->blit fillBuffer:BufferOf(encoder, command->a, false)
+                            range:NSMakeRange((NSUInteger)command->c, (NSUInteger)command->d)
+                            value:0];
+        break;
     default:
         CopyWithTexture(encoder, command);
         break;

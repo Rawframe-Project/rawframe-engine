@@ -79,9 +79,10 @@ static VkResult MakeSlot(mrhiVulkanFrames* frames, mrhiVulkanSlot* slot, uint32_
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = slot->pool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
+        .commandBufferCount = 1 + MRHI_NATIVE_PASSES,
     };
-    result = frames->api->vkAllocateCommandBuffers(frames->device, &buffer, &slot->commands);
+    result = frames->api->vkAllocateCommandBuffers(frames->device, &buffer, slot->parts);
+    slot->commands = slot->parts[0];
     if (result != VK_SUCCESS || limits->frameUploadBytes == 0)
     {
         return result;
@@ -359,6 +360,9 @@ static VkResult Run(mrhiVulkanFrames* frames, mrhiVulkanSlot* slot, const mrhiDr
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
+    slot->commands = slot->parts[0];
+    slot->partsUsed = 1;
+    slot->submitCount = 0;
     if (result == VK_SUCCESS)
     {
         result = frames->api->vkBeginCommandBuffer(slot->commands, &begin);
@@ -372,7 +376,7 @@ static VkResult Run(mrhiVulkanFrames* frames, mrhiVulkanSlot* slot, const mrhiDr
     {
         return result;
     }
-    const VkCommandBufferSubmitInfo commands = {
+    slot->submits[slot->submitCount++] = (VkCommandBufferSubmitInfo){
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
         .commandBuffer = slot->commands,
     };
@@ -401,8 +405,8 @@ static VkResult Run(mrhiVulkanFrames* frames, mrhiVulkanSlot* slot, const mrhiDr
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
         .waitSemaphoreInfoCount = images + (reused ? 1 : 0),
         .pWaitSemaphoreInfos = reused ? swapchains->waits : swapchains->waits + 1,
-        .commandBufferInfoCount = 1,
-        .pCommandBufferInfos = &commands,
+        .commandBufferInfoCount = slot->submitCount,
+        .pCommandBufferInfos = slot->submits,
         .signalSemaphoreInfoCount = images + 1,
         .pSignalSemaphoreInfos = swapchains->signals,
     };

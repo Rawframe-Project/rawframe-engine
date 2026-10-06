@@ -17,4 +17,6 @@
 mrhiResult mrhiCreateMetalDevice(const mrhiAllocator* allocator, id<MTLDevice> device,
                                  const mrhiDeviceDef* def, mrhiDeviceDriver* deviceOut);
 
+#include "metal_native.h"
+
 #endif // MAUL_RHI_SRC_METAL_DEVICE_H

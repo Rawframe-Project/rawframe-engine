@@ -166,9 +166,9 @@ extern "C"
     /// @param device  The device.
     /// @param pass    The pass, recording.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device, open
-    /// debug groups, or an open occlusion query; `mrhi_errorStale` for a pass
-    /// of another frame or none; `mrhi_errorState` for a pass that is not
-    /// recording.
+    /// debug groups, or an open occlusion or statistics query;
+    /// `mrhi_errorStale` for a pass of another frame or none; `mrhi_errorState`
+    /// for a pass that is not recording.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiEndPass(mrhiDevice* device, mrhiPassId pass);
@@ -402,6 +402,82 @@ extern "C"
                                                                mrhiResourceId resource,
                                                                uint64_t offset);
 
+// The draws a counted multi-draw makes at most (mrhiDrawIndirectCount's
+// maxCount).
+#define MRHI_INDIRECT_DRAWS 65535
+
+    /// Draws up to maxCount non-indexed draws with the pass's pipeline, tables
+    /// and buffers, each from its own record of the single indirect draw's
+    /// layout (16 bytes, packed one after another), the number drawn read on
+    /// the GPU from a 32-bit count and clamped to maxCount. Each record follows
+    /// the single draw's rules. Needs the multi_draw_indirect_count feature.
+    ///
+    /// @param device         The device.
+    /// @param pass           The pass, recording, with a graphics pipeline set.
+    /// @param resource       A buffer of the open frame the pass declares with
+    ///                       the indirect access, holding the records.
+    /// @param offset         The first record's first byte, a multiple of 4,
+    ///                       with maxCount records after it in the buffer.
+    /// @param countResource  A buffer of the open frame the pass declares with
+    ///                       the indirect access, holding the count; it may be
+    ///                       the records' buffer.
+    /// @param countOffset    The count's first byte, a multiple of 4, with 4
+    ///                       bytes after it in the buffer.
+    /// @param maxCount       The draws made at most, 1 to MRHI_INDIRECT_DRAWS.
+    /// @return `mrhi_success`; `mrhi_errorUnsupported` for a device without the
+    /// multi_draw_indirect_count feature; `mrhi_errorInvalid` for a NULL
+    /// device, a maxCount of 0 or past MRHI_INDIRECT_DRAWS, a pass without
+    /// targets, or an arguments or count resource that is not a buffer the pass
+    /// declares with the indirect access, or an offset not a multiple of 4 or
+    /// without maxCount records, or the count's 4 bytes, after it;
+    /// `mrhi_errorStale` for a pass of another frame, a destroyed pipeline, or
+    /// a resource that is not live; `mrhi_errorState` for a pass that is not
+    /// recording, has no pipeline set, or lacks a table or vertex buffer the
+    /// pipeline reads; `mrhi_errorCapacity` when the frame's commands are full,
+    /// or its counted draws would pass the device's frameIndirectDraws.
+    /// @par Thread safety
+    /// Safe from any thread; the pass is used by one thread at a time.
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDrawIndirectCount(
+        mrhiDevice* device, mrhiPassId pass, mrhiResourceId resource, uint64_t offset,
+        mrhiResourceId countResource, uint64_t countOffset, uint32_t maxCount);
+
+    /// Draws up to maxCount indexed draws with the pass's pipeline, tables and
+    /// buffers, each from its own record of the single indirect draw's layout
+    /// (20 bytes, packed one after another), the number drawn read on the GPU
+    /// from a 32-bit count and clamped to maxCount. Each record follows the
+    /// single draw's rules. Needs the multi_draw_indirect_count feature.
+    ///
+    /// @param device         The device.
+    /// @param pass           The pass, recording, with a graphics pipeline and
+    ///                       an index buffer set.
+    /// @param resource       A buffer of the open frame the pass declares with
+    ///                       the indirect access, holding the records.
+    /// @param offset         The first record's first byte, a multiple of 4,
+    ///                       with maxCount records after it in the buffer.
+    /// @param countResource  A buffer of the open frame the pass declares with
+    ///                       the indirect access, holding the count; it may be
+    ///                       the records' buffer.
+    /// @param countOffset    The count's first byte, a multiple of 4, with 4
+    ///                       bytes after it in the buffer.
+    /// @param maxCount       The draws made at most, 1 to MRHI_INDIRECT_DRAWS.
+    /// @return `mrhi_success`; `mrhi_errorUnsupported` for a device without the
+    /// multi_draw_indirect_count feature; `mrhi_errorInvalid` for a NULL
+    /// device, a maxCount of 0 or past MRHI_INDIRECT_DRAWS, a pass without
+    /// targets, or an arguments or count resource that is not a buffer the pass
+    /// declares with the indirect access, or an offset not a multiple of 4 or
+    /// without maxCount records, or the count's 4 bytes, after it;
+    /// `mrhi_errorStale` for a pass of another frame, a destroyed pipeline, or
+    /// a resource that is not live; `mrhi_errorState` for a pass that is not
+    /// recording, has no pipeline set, lacks a table or vertex buffer the
+    /// pipeline reads, or has no index buffer of the pipeline's strip index
+    /// format; `mrhi_errorCapacity` when the frame's commands are full, or its
+    /// counted draws would pass the device's frameIndirectDraws.
+    /// @par Thread safety
+    /// Safe from any thread; the pass is used by one thread at a time.
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDrawIndexedIndirectCount(
+        mrhiDevice* device, mrhiPassId pass, mrhiResourceId resource, uint64_t offset,
+        mrhiResourceId countResource, uint64_t countOffset, uint32_t maxCount);
+
     /// Dispatches workgroups with the pass's compute pipeline and tables, the
     /// counts in x, y and z read on the GPU, 32-bit each. A count past the
     /// device's workgroupsPerDimension makes the dispatch do nothing.
@@ -457,9 +533,42 @@ extern "C"
     /// Safe from any thread; the pass is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiEndOcclusionQuery(mrhiDevice* device, mrhiPassId pass);
 
+    /// Begins a pipeline statistics query: the pass's work until its end is
+    /// counted. A query is written at most once in a frame.
+    ///
+    /// @param device  The device.
+    /// @param pass    The pass, recording, of the graphics class, rendering one
+    ///                view.
+    /// @param set     A query set of pipeline statistics queries.
+    /// @param query   The query, below the set's count.
+    /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device, a pass
+    /// not of the graphics class or rendering several views, a set that is not
+    /// of statistics queries, a query past the set's count or already written
+    /// in this frame, or a statistics query already open in the pass;
+    /// `mrhi_errorStale` for a pass of another frame or a destroyed query set;
+    /// `mrhi_errorState` for a pass that is not recording; `mrhi_errorCapacity`
+    /// when the frame's commands are full.
+    /// @par Thread safety
+    /// Safe from any thread; the pass is used by one thread at a time.
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiBeginStatisticsQuery(mrhiDevice* device, mrhiPassId pass,
+                                                                mrhiQuerySetId set, uint32_t query);
+
+    /// Ends the pass's open statistics query. One refused for capacity still
+    /// ends it, so the pass can end.
+    ///
+    /// @param device  The device.
+    /// @param pass    The pass, recording, with a statistics query open.
+    /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device or a pass
+    /// without an open statistics query; `mrhi_errorStale` for a pass of
+    /// another frame; `mrhi_errorState` for a pass that is not recording;
+    /// `mrhi_errorCapacity` when the frame's commands are full.
+    /// @par Thread safety
+    /// Safe from any thread; the pass is used by one thread at a time.
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiEndStatisticsQuery(mrhiDevice* device, mrhiPassId pass);
+
     /// Writes queries of a set into a buffer as 64-bit values: an occlusion
-    /// query's result, or a timestamp in ticks. A query not written earlier in
-    /// the frame reads 0.
+    /// query's result, a timestamp in ticks, or a statistics query's eleven
+    /// counters. A query not written earlier in the frame reads zeros.
     ///
     /// @param device    The device.
     /// @param pass      The pass, recording, of the graphics class without
@@ -474,10 +583,11 @@ extern "C"
     /// with targets or not of the graphics class, queries past the set's count
     /// or a first query at or past it, a resource that is not a buffer the pass
     /// declares with the query resolve access, or an offset not a multiple of
-    /// 256 or without 8 bytes per query after it; `mrhi_errorStale` for a pass
-    /// of another frame, a destroyed query set, or a resource that is not live;
-    /// `mrhi_errorState` for a pass that is not recording; `mrhi_errorCapacity`
-    /// when the frame's commands are full.
+    /// 256 or without the queries' bytes after it (88 per statistics query, 8
+    /// per other); `mrhi_errorStale` for a pass of another frame, a destroyed
+    /// query set, or a resource that is not live; `mrhi_errorState` for a pass
+    /// that is not recording; `mrhi_errorCapacity` when the frame's commands
+    /// are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiResolveQueries(mrhiDevice* device, mrhiPassId pass,
@@ -507,6 +617,27 @@ extern "C"
                                                       mrhiResourceId source, uint64_t sourceOffset,
                                                       mrhiResourceId destination,
                                                       uint64_t destinationOffset, uint64_t size);
+
+    /// Writes zeros into a range of a buffer of the frame (mrhi-0022).
+    ///
+    /// @param device    The device.
+    /// @param pass      The pass, recording, without targets.
+    /// @param resource  The buffer.
+    /// @param offset    The range's first byte, a multiple of 4.
+    /// @param size      Its bytes, a multiple of 4, or MRHI_WHOLE_SIZE for the
+    ///                  rest; 0 writes nothing.
+    /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device, a pass
+    /// with targets, an offset or a size not a multiple of 4, a range past the
+    /// buffer, or a resource that is not a buffer the pass declares a covering
+    /// copy destination access of; `mrhi_errorStale` for a pass of another
+    /// frame or a resource that is not live; `mrhi_errorState` for a pass that
+    /// is not recording; `mrhi_errorCapacity` when the frame's commands are
+    /// full.
+    /// @par Thread safety
+    /// Safe from any thread; the pass is used by one thread at a time.
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiClearBuffer(mrhiDevice* device, mrhiPassId pass,
+                                                       mrhiResourceId resource, uint64_t offset,
+                                                       uint64_t size);
 
     /// Copies texels from a buffer of the frame into a texture's mip.
     ///

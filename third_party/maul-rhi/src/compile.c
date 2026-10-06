@@ -98,7 +98,7 @@ mrhiResult mrhiIsPassKept(mrhiDevice* device, mrhiPassId pass, bool* keptOut)
     }
     if (keptOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     if (!device->frameOpen || !device->frameCompiled)
     {

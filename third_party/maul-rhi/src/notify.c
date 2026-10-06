@@ -100,7 +100,8 @@ mrhiResult mrhiNextInstanceNotification(mrhiInstance* instance,
 {
     if (instance == nullptr || notificationOut == nullptr)
     {
-        return instance == nullptr ? mrhi_errorInvalid : mrhiMisuse(instance);
+        return instance == nullptr ? mrhi_errorInvalid
+                                   : mrhiMisuse(instance, mrhi_diagnosticNullArgument);
     }
     if (instance->queueCount == 0)
     {

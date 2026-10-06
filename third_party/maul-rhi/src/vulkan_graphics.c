@@ -197,6 +197,8 @@ static void TargetsOf(const mrhiGraphicsPipelineDef* def, VkFormat depthStencil,
         .pColorAttachmentFormats = targets->formats,
         .depthAttachmentFormat = mrhiFormatHasDepth(depth) ? vulkanDepth : VK_FORMAT_UNDEFINED,
         .stencilAttachmentFormat = mrhiFormatHasStencil(depth) ? vulkanDepth : VK_FORMAT_UNDEFINED,
+        // The views of its passes (mrhi-0020).
+        .viewMask = def->viewCount > 1 ? (1u << def->viewCount) - 1 : 0,
     };
 }
 

@@ -359,6 +359,79 @@ static ID3D12CommandSignature* SignatureOf(ID3D12Device* device, const mrhiD3d12
                : nullptr;
 }
 
+// A pipeline state stream: subobjects one after another, each its type
+// then its value at the value's alignment, each starting at a pointer's
+// alignment.
+typedef struct Stream
+{
+    alignas(void*) unsigned char bytes[1024];
+    size_t size;
+} Stream;
+
+static void Put(Stream* stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE type, const void* value,
+                size_t size, size_t alignment)
+{
+    size_t at = (stream->size + alignof(void*) - 1) & ~(alignof(void*) - 1);
+    size_t valueAt = (at + sizeof(type) + alignment - 1) & ~(alignment - 1);
+    MRHI_ASSERT(valueAt + size <= sizeof(stream->bytes));
+    memcpy(stream->bytes + at, &type, sizeof(type));
+    memcpy(stream->bytes + valueAt, value, size);
+    stream->size = valueAt + size;
+}
+
+#define PUT(stream, type, value) Put(stream, type, &(value), sizeof(value), alignof(typeof(value)))
+
+// Makes a graphics pipeline rendering views (mrhi-0020): the desc's state
+// as a stream with its view instancing, each view on the next layer of
+// the targets, through ID3D12Device2.
+static HRESULT CreateViewed(ID3D12Device* device, const D3D12_GRAPHICS_PIPELINE_STATE_DESC* desc,
+                            uint32_t views, ID3D12PipelineState** stateOut)
+{
+    ID3D12Device2* device2 = nullptr;
+    HRESULT result = ID3D12Device_QueryInterface(device, &IID_ID3D12Device2, (void**)&device2);
+    if (FAILED(result))
+    {
+        return result;
+    }
+    D3D12_VIEW_INSTANCE_LOCATION locations[D3D12_MAX_VIEW_INSTANCE_COUNT] = {0};
+    for (uint32_t view = 0; view < views; ++view)
+    {
+        locations[view].RenderTargetArrayIndex = view;
+    }
+    const D3D12_VIEW_INSTANCING_DESC instancing = {
+        .ViewInstanceCount = views,
+        .pViewInstanceLocations = locations,
+    };
+    struct D3D12_RT_FORMAT_ARRAY formats = {.NumRenderTargets = desc->NumRenderTargets};
+    memcpy(formats.RTFormats, desc->RTVFormats, sizeof(formats.RTFormats));
+    Stream stream = {.size = 0};
+    ID3D12RootSignature* root = desc->pRootSignature;
+    Put(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE, (const void*)&root,
+        sizeof(ID3D12RootSignature*), alignof(ID3D12RootSignature*));
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_VS, desc->VS);
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PS, desc->PS);
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_BLEND, desc->BlendState);
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_MASK, desc->SampleMask);
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER, desc->RasterizerState);
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL, desc->DepthStencilState);
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_INPUT_LAYOUT, desc->InputLayout);
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_IB_STRIP_CUT_VALUE, desc->IBStripCutValue);
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PRIMITIVE_TOPOLOGY,
+        desc->PrimitiveTopologyType);
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS, formats);
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL_FORMAT, desc->DSVFormat);
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_DESC, desc->SampleDesc);
+    PUT(&stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_VIEW_INSTANCING, instancing);
+    const D3D12_PIPELINE_STATE_STREAM_DESC streamDesc = {
+        .SizeInBytes = stream.size,
+        .pPipelineStateSubobjectStream = stream.bytes,
+    };
+    result = ID3D12Device2_CreatePipelineState(device2, &streamDesc, &IID_ID3D12PipelineState,
+                                               (void**)stateOut);
+    ID3D12Device2_Release(device2);
+    return result;
+}
+
 mrhiResult mrhiD3d12CreateGraphics(mrhiD3d12Pipelines* pipelines,
                                    const mrhiDriverGraphicsPipeline* pipeline, uint64_t tag,
                                    uint64_t* handleOut)
@@ -391,11 +464,13 @@ mrhiResult mrhiD3d12CreateGraphics(mrhiD3d12Pipelines* pipelines,
             graphics.desc.PS = shader->code[pipeline->fragmentEntry];
         }
         made->topology = graphics.topology;
-        status =
-            FAILED(ID3D12Device_CreateGraphicsPipelineState(
-                pipelines->device, &graphics.desc, &IID_ID3D12PipelineState, (void**)&made->state))
-                ? mrhi_errorPlatform
-                : mrhi_success;
+        HRESULT result =
+            def->viewCount > 1
+                ? CreateViewed(pipelines->device, &graphics.desc, def->viewCount, &made->state)
+                : ID3D12Device_CreateGraphicsPipelineState(pipelines->device, &graphics.desc,
+                                                           &IID_ID3D12PipelineState,
+                                                           (void**)&made->state);
+        status = FAILED(result) ? mrhi_errorPlatform : mrhi_success;
     }
     if (status == mrhi_success && made->vertexInfo)
     {

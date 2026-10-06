@@ -164,7 +164,8 @@ extern "C"
         mrhi_samplingEither = 5,
     };
 
-    // The fragment builtins an entry point uses that constrain its pipelines.
+    // The builtins an entry point uses that constrain its pipelines: the
+    // fragment builtins, and the view index.
     typedef uint32_t mrhiShaderBuiltins;
 
     enum
@@ -183,6 +184,10 @@ extern "C"
         // Reads the primitive index; no device grants it yet, so shaders using
         // it are unsupported.
         mrhi_builtinPrimitiveIndex = 0x20u,
+        // Reads the view index of a multiview pass, in a vertex or fragment
+        // entry; its container has no WGSL, and its device needs the multiview
+        // feature.
+        mrhi_builtinViewIndex = 0x40u,
     };
 
     // What an entry point reads through the pass's heap (mrhi-0015); none for

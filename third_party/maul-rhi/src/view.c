@@ -129,7 +129,7 @@ static mrhiResult CheckView(mrhiDevice* device, const mrhiViewDef* def, mrhiView
     }
     if (!IsKnown(def))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticViewDef);
     }
     status = mrhiDeviceUsable(device);
     if (status != mrhi_success)
@@ -143,7 +143,7 @@ static mrhiResult CheckView(mrhiDevice* device, const mrhiViewDef* def, mrhiView
     const mrhiTextureDef* texture = &device->textureSlots[def->texture.index1 - 1].def;
     if (!mrhiResolveView(texture, def, resolvedOut))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticViewRange);
     }
     return mrhiFormatTakes(device, resolvedOut->format, resolvedOut->usage) ? mrhi_success
                                                                             : mrhi_errorUnsupported;
@@ -157,7 +157,7 @@ mrhiResult mrhiCreateView(mrhiDevice* device, const mrhiViewDef* def, mrhiViewId
     }
     if (def == nullptr || viewOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiViewDef resolved;
     mrhiResult status = CheckView(device, def, &resolved);

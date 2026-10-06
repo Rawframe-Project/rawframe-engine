@@ -65,7 +65,8 @@ bool mrhiLimitsWithin(const mrhiLimits* asked, const mrhiLimits* granted)
         && asked->rootBlockBytes <= granted->rootBlockBytes
         && asked->heapSize <= granted->heapSize
         && asked->samplerHeapSize <= granted->samplerHeapSize
-        && asked->framesInFlight <= granted->framesInFlight;
+        && asked->framesInFlight <= granted->framesInFlight
+        && asked->multiviewViews <= granted->multiviewViews;
 }
 
 void mrhiMaskFeatures(mrhiFeatures* features, mrhiDriverKind driver)
@@ -79,6 +80,7 @@ void mrhiMaskFeatures(mrhiFeatures* features, mrhiDriverKind driver)
         features->textureCompressionAstc = false;
         break;
     case mrhi_driverMetal:
+        features->pipelineStatisticsQuery = false;
         break;
     case mrhi_driverWebGpu:
         features->pipelineStatisticsQuery = false;
@@ -1478,7 +1480,7 @@ const mrhiAlphaModes mrhiAlphaModesKnown = 0x3u;
 
 const mrhiShaderStages mrhiShaderStagesKnown = 0x7u;
 
-const mrhiShaderBuiltins mrhiShaderBuiltinsKnown = 0x3Fu;
+const mrhiShaderBuiltins mrhiShaderBuiltinsKnown = 0x7Fu;
 
 const mrhiShaderHeapUses mrhiShaderHeapUsesKnown = 0x1Fu;
 

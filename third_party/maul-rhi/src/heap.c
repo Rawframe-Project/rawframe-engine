@@ -38,7 +38,7 @@ mrhiResult mrhiCreateHeap(mrhiDevice* device, const mrhiHeapDef* def, mrhiHeapId
     }
     if (def == nullptr || heapOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhiCheckObjectDef(device, MRHI_DEF_HEAD(def), HEAP_DEF_COOKIE);
     if (status != mrhi_success)
@@ -47,7 +47,7 @@ mrhiResult mrhiCreateHeap(mrhiDevice* device, const mrhiHeapDef* def, mrhiHeapId
     }
     if (def->entries == 0)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticHeapDef);
     }
     if (!device->features.bindlessSampling || def->entries > device->limits.heapSize ||
         def->samplers > device->limits.samplerHeapSize)
@@ -187,7 +187,7 @@ static mrhiHeapEntrySlot* FindEntry(mrhiDevice* device, mrhiHeapId heap, uint32_
     mrhiHeapSlot* slot = &device->heapSlots[heap.index1 - 1];
     if (index >= (sampler ? slot->samplers : slot->entries))
     {
-        *statusOut = mrhiDeviceMisuse(device);
+        *statusOut = mrhiDeviceMisuse(device, mrhi_diagnosticHeapIndex);
         return nullptr;
     }
     return &slot->table[(sampler ? slot->entries : 0) + index];
@@ -207,7 +207,7 @@ static mrhiResult CheckView(mrhiDevice* device, const mrhiHeapEntry* entry, uint
     if ((view->def.usage & needed) == 0 || (storage && view->def.mipCount != 1) ||
         (!storage && entry->writable))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticHeapView);
     }
     *handleOut = view->handle;
     return mrhi_success;
@@ -230,7 +230,7 @@ static mrhiResult CheckBuffer(mrhiDevice* device, const mrhiHeapEntry* entry, ui
         offset % device->limits.storageOffsetAlignment != 0 || size == 0 || size % 4 != 0 ||
         offset > buffer->size || size > buffer->size - offset)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticHeapBuffer);
     }
     *sizeOut = size;
     *handleOut = buffer->handle;
@@ -246,7 +246,7 @@ mrhiResult mrhiSetHeapEntry(mrhiDevice* device, mrhiHeapId heap, uint32_t index,
     }
     if (entry == nullptr || entry->kind > mrhi_heapStorageBuffer)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticHeapEntry);
     }
     mrhiResult status = mrhi_success;
     mrhiHeapEntrySlot* slot = FindEntry(device, heap, index, false, &status);

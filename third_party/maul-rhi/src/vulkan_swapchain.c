@@ -72,13 +72,17 @@ static mrhiResult StatusOf(VkResult result)
 }
 
 // Whether the size is one the window takes now: its own where it fixes
-// the extent, else one within the surface's bounds.
+// the extent, else one within the surface's bounds. Android reports the
+// window's size yet takes any size within the bounds, which its
+// compositor scales to the window.
 static bool TakesSize(const VkSurfaceCapabilitiesKHR* caps, VkExtent2D size)
 {
+#ifndef __ANDROID__
     if (caps->currentExtent.width != UINT32_MAX)
     {
         return caps->currentExtent.width == size.width && caps->currentExtent.height == size.height;
     }
+#endif
     return size.width >= caps->minImageExtent.width && size.width <= caps->maxImageExtent.width &&
            size.height >= caps->minImageExtent.height && size.height <= caps->maxImageExtent.height;
 }

@@ -51,9 +51,18 @@ typedef enum mrhiCommandType
     mrhiCommandDrawIndirect,
     mrhiCommandDrawIndexedIndirect,
     mrhiCommandDispatchIndirect,
+    // A counted multi-draw (mrhi-0020). a: the records' frame resource's slot
+    // plus one; b: the count's slot plus one, and the most draws in the
+    // upper half; c: the records' offset; d: the count's offset.
+    mrhiCommandDrawIndirectCount,
+    mrhiCommandDrawIndexedIndirectCount,
     // a: the query; b: the query set's driver handle.
     mrhiCommandBeginOcclusionQuery,
     mrhiCommandEndOcclusionQuery,
+    // a: the query; b: the query set's driver handle, at its begin and
+    // its end.
+    mrhiCommandBeginStatisticsQuery,
+    mrhiCommandEndStatisticsQuery,
     // a: the frame resource's slot plus one; b: the query set's driver
     // handle; c: the first query, and the count in the upper half; d: the
     // offset.
@@ -74,6 +83,9 @@ typedef enum mrhiCommandType
     // device's readback ring (object 0), placed and pitched as uploads.
     mrhiCommandReadBuffer,
     mrhiCommandReadTexture,
+    // Zeros a buffer's range (mrhi-0022). a: the frame resource's slot
+    // plus one; c: the offset; d: the bytes, a positive multiple of 4.
+    mrhiCommandClearBuffer,
     // One past the last type.
     mrhiCommandTypeEnd,
 } mrhiCommandType;

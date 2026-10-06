@@ -163,12 +163,16 @@ EM_JS(int, mrhiJsAdapterName, (int state, char* out, int capacity), {
 
 // A canvas the selector names and its WebGPU context, kept as a state of
 // its own so that any device reaches it by handle: the handle, or 0 for a
-// selector naming no canvas, or a canvas without a WebGPU context.
+// selector naming no canvas, or a canvas without a WebGPU context. The
+// program's registered canvases come first (mrhi-0026): in a worker,
+// which has no document, an OffscreenCanvas.
 EM_JS(int, mrhiJsCreateCanvas, (const char* selector, int selectorLength), {
-    let canvas = null;
+    const name = UTF8ToString(selector, selectorLength);
+    const registered = Module.mrhiCanvases;
+    let canvas = registered && Object.prototype.hasOwnProperty.call(registered, name) ?
+        registered[name] : null;
     try {
-        canvas = typeof document === 'undefined' ? null :
-            document.querySelector(UTF8ToString(selector, selectorLength));
+        canvas = canvas || (typeof document === 'undefined' ? null : document.querySelector(name));
     } catch (error) {
         canvas = null;
     }
@@ -217,6 +221,8 @@ static bool Describe(const WebGpuDriver* driver, mrhiDriverAdapter* adapterOut)
                            mrhiJsAdapterLimit(driver->state, mrhiWebGpuLimits[i].name));
     }
     adapterOut->limits.framesInFlight = WEBGPU_FRAMES_IN_FLIGHT;
+    // WebGPU has no multiview: one view.
+    adapterOut->limits.multiviewViews = 1;
     return true;
 }
 
@@ -331,6 +337,8 @@ static void GetSurfaceCaps(const void* self, uint64_t surface, uint64_t adapter,
         .alphaModes = mrhi_alphaOpaque | mrhi_alphaPremultiplied,
         .usages = mrhi_textureRenderTarget | mrhi_textureSampled | mrhi_textureStorage |
                   mrhi_textureCopySource | mrhi_textureCopyDestination,
+        // A canvas takes viewFormats, never an sRGB format of its own.
+        .twinViews = true,
     };
     for (uint32_t p = 0; p < 2; ++p)
     {
@@ -363,7 +371,7 @@ static mrhiResult CreateDevice(void* self, uint64_t adapter, const mrhiDeviceDef
         return mrhi_errorCapacity;
     }
     mrhiResult status =
-        mrhiCreateWebGpuDevice(&driver->allocator, driver->state, slot, def, deviceOut);
+        mrhiCreateWebGpuDevice(&def->allocator, driver->state, slot, def, deviceOut);
     if (status != mrhi_success)
     {
         driver->tags[slot] = 0;

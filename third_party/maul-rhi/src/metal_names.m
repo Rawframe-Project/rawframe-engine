@@ -29,6 +29,11 @@ static const MTLPixelFormat s_formats[MRHI_KNOWN_FORMATS + 1] = {
     [mrhi_formatRg11b10Ufloat] = MTLPixelFormatRG11B10Float,
     [mrhi_formatDepth32Float] = MTLPixelFormatDepth32Float,
     [mrhi_formatDepthStencil] = MTLPixelFormatDepth32Float_Stencil8,
+// The BC formats' values exist on iOS from 16.4 only. They are only
+// numbers here: a texture of one is made only where the device reports
+// BC support, which iOS before 16.4 never does (driver_metal.m).
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
     [mrhi_formatBc1RgbaUnorm] = MTLPixelFormatBC1_RGBA,
     [mrhi_formatBc1RgbaUnormSrgb] = MTLPixelFormatBC1_RGBA_sRGB,
     [mrhi_formatBc2RgbaUnorm] = MTLPixelFormatBC2_RGBA,
@@ -43,6 +48,7 @@ static const MTLPixelFormat s_formats[MRHI_KNOWN_FORMATS + 1] = {
     [mrhi_formatBc6hRgbFloat] = MTLPixelFormatBC6H_RGBFloat,
     [mrhi_formatBc7RgbaUnorm] = MTLPixelFormatBC7_RGBAUnorm,
     [mrhi_formatBc7RgbaUnormSrgb] = MTLPixelFormatBC7_RGBAUnorm_sRGB,
+#pragma clang diagnostic pop
     [mrhi_formatEtc2Rgb8Unorm] = MTLPixelFormatETC2_RGB8,
     [mrhi_formatEtc2Rgb8UnormSrgb] = MTLPixelFormatETC2_RGB8_sRGB,
     [mrhi_formatEtc2Rgb8a1Unorm] = MTLPixelFormatETC2_RGB8A1,

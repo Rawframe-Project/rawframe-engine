@@ -24,4 +24,14 @@ mrhiResult mrhiCreateD3d12Device(const mrhiAllocator* allocator, const mrhiD3d12
                                  IDXGIFactory4* factory, ID3D12Device* device,
                                  const mrhiDeviceDef* def, mrhiDeviceDriver* deviceOut);
 
+// Reads a device's ID3D12Device and command queue, borrowed
+// (mrhi-0019): false for a device driver that is not D3D12's.
+bool mrhiD3d12DeviceNative(const mrhiDeviceDriver* driver, ID3D12Device** deviceOut,
+                           ID3D12CommandQueue** queueOut);
+
+// Reads a device texture's resource, borrowed: false for a device
+// driver that is not D3D12's.
+bool mrhiD3d12DeviceTexture(const mrhiDeviceDriver* driver, uint64_t handle,
+                            ID3D12Resource** resourceOut);
+
 #endif // MAUL_RHI_SRC_D3D12_DEVICE_H

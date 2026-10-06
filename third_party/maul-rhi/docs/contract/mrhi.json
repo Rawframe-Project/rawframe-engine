@@ -6,8 +6,8 @@
   "guard": "MAUL_RHI",
   "version": {
     "major": 0,
-    "minor": 0,
-    "patch": 1
+    "minor": 2,
+    "patch": 0
   },
   "headers": [
     {
@@ -180,7 +180,7 @@
           "kind": "enum",
           "name": "struct_type",
           "width": "uint32",
-          "doc": "The type of a chained struct. Bit 31 clear marks a critical extension, which a library that does not know it refuses; bit 31 set marks a hint it may skip.",
+          "doc": "The type of a chained struct. Bit 31 clear marks a critical extension, which a library that does not know it refuses; bit 31 set marks a hint it may skip. Types with bit 30 set (MRHI_STRUCT_DRIVER_DEFINED) belong to drivers built outside the tree (mrhi-0024).",
           "values": [
             {
               "name": "struct_none",
@@ -226,9 +226,45 @@
               "name": "struct_surface_source_test",
               "value": 8,
               "doc": "mrhiSurfaceSourceTest, on a surface def: a surface of the test driver."
+            },
+            {
+              "name": "struct_instance_vulkan_adopt",
+              "value": 9,
+              "doc": "mrhiInstanceVulkanAdopt, on an instance def: a VkInstance made elsewhere."
+            },
+            {
+              "name": "struct_instance_vulkan_extensions",
+              "value": 10,
+              "doc": "mrhiInstanceVulkanExtensions, on an instance def: extensions the Vulkan instance also enables."
+            },
+            {
+              "name": "struct_device_vulkan_adopt",
+              "value": 11,
+              "doc": "mrhiDeviceVulkanAdopt, on a device def: a VkDevice made from the instance's description."
+            },
+            {
+              "name": "struct_device_vulkan_extensions",
+              "value": 12,
+              "doc": "mrhiDeviceVulkanExtensions, on a device def: extensions the Vulkan device also enables."
+            },
+            {
+              "name": "struct_texture_vulkan_adopt",
+              "value": 13,
+              "doc": "mrhiTextureVulkanAdopt, on a texture def: a VkImage made elsewhere."
+            },
+            {
+              "name": "struct_external_driver",
+              "value": 14,
+              "doc": "mrhiExternalDriverDef, on an instance def: a driver made outside the library (mrhi-0024)."
             }
           ],
           "library": "tags of the library's extension chain"
+        },
+        {
+          "kind": "constant",
+          "name": "struct_driver_defined",
+          "value": 1073741824,
+          "doc": "The bit of a chained struct type defined by a driver built outside the tree: such a struct is a surface's source on an instance of that driver, handed to it unexamined, and refused everywhere else (mrhi-0024)."
         },
         {
           "kind": "struct",
@@ -291,6 +327,513 @@
             "class": "any"
           },
           "library": "names the library's result codes"
+        },
+        {
+          "kind": "enum",
+          "name": "diagnostic_code",
+          "width": "uint16",
+          "doc": "The check a diagnostic record reports (mrhi-0027): one check of the core that refused a call as invalid input, or, in a build with the validation layer, one rule of the driver SPI that the driver broke (the driver codes, recorded in the instance's queue). Codes are fixed from the first release that carries them, and only added after it; mrhiDiagnosticText gives each one's text.",
+          "values": [
+            {
+              "name": "diagnostic_null_argument",
+              "value": 1,
+              "doc": "A required pointer is NULL, or an array is NULL with a nonzero count."
+            },
+            {
+              "name": "diagnostic_def_header",
+              "value": 2,
+              "doc": "A def lacks its cookie (start from its default def), carries a malformed extension chain or one deeper than the chainDepth limit, or a label that is not UTF-8 of at most MRHI_LABEL_BYTES."
+            },
+            {
+              "name": "diagnostic_adapter_request_def",
+              "value": 3,
+              "doc": "An adapter request def is NULL, lacks its cookie or names an unknown power preference."
+            },
+            {
+              "name": "diagnostic_instance_has_devices",
+              "value": 5,
+              "doc": "An instance was destroyed while devices made on it live; nothing was destroyed."
+            },
+            {
+              "name": "diagnostic_surface_source",
+              "value": 6,
+              "doc": "A surface def names no surface source, or more than one."
+            },
+            {
+              "name": "diagnostic_surface_config",
+              "value": 7,
+              "doc": "A surface config names an unknown format, primaries, transfer or range, or a view format that is not its format's twin."
+            },
+            {
+              "name": "diagnostic_native_commands",
+              "value": 8,
+              "doc": "Native commands set without a command buffer, or on a pass not added as native."
+            },
+            {
+              "name": "diagnostic_recorded_in_native_pass",
+              "value": 9,
+              "doc": "A command recorded through the library in a native pass, whose commands are the program's own."
+            },
+            {
+              "name": "diagnostic_native_pass_def",
+              "value": 10,
+              "doc": "A native pass def with targets, query sets or a heap, or with an access that resolves queries or names a resource that is not imported."
+            },
+            {
+              "name": "diagnostic_pass_end_open",
+              "value": 13,
+              "doc": "A pass ended with a debug group or a query still open."
+            },
+            {
+              "name": "diagnostic_render_state_outside_render_pass",
+              "value": 14,
+              "doc": "A draw, a graphics pipeline or other draw state recorded in a pass without targets."
+            },
+            {
+              "name": "diagnostic_compute_outside_compute_pass",
+              "value": 15,
+              "doc": "A dispatch, a compute pipeline or a query resolve recorded in a pass that is not a compute pass."
+            },
+            {
+              "name": "diagnostic_transfer_in_render_pass",
+              "value": 16,
+              "doc": "A copy, clear, upload or readback recorded in a pass with targets."
+            },
+            {
+              "name": "diagnostic_graphics_pipeline_mismatch",
+              "value": 17,
+              "doc": "A graphics pipeline whose targets differ from the pass's, which writes depth or stencil the pass only reads, or which uses a heap the pass has none of."
+            },
+            {
+              "name": "diagnostic_compute_pipeline_heap",
+              "value": 18,
+              "doc": "A compute pipeline that uses a heap, set in a pass without one."
+            },
+            {
+              "name": "diagnostic_bindings_table",
+              "value": 19,
+              "doc": "Bindings set in a transfer pass, or for a table past the bindingTables limit."
+            },
+            {
+              "name": "diagnostic_bindings_count",
+              "value": 20,
+              "doc": "A binding count that is not the number of slots the pipeline's reflection gives the table."
+            },
+            {
+              "name": "diagnostic_bindings_slot",
+              "value": 21,
+              "doc": "A binding naming a slot the table lacks, or one already bound in the same call."
+            },
+            {
+              "name": "diagnostic_binding_resource",
+              "value": 22,
+              "doc": "A binding whose resource does not fit its slot: its kind, usage, range, format or the access the pass declares."
+            },
+            {
+              "name": "diagnostic_root_block",
+              "value": 23,
+              "doc": "A root block set in a transfer pass, empty, or at an offset or size not a multiple of 4."
+            },
+            {
+              "name": "diagnostic_vertex_buffer_slot",
+              "value": 24,
+              "doc": "A vertex buffer set at a slot past the vertexBuffers limit."
+            },
+            {
+              "name": "diagnostic_vertex_buffer_too_small",
+              "value": 26,
+              "doc": "A draw reading vertices or instances past the end of a vertex buffer it uses."
+            },
+            {
+              "name": "diagnostic_index_buffer_format",
+              "value": 27,
+              "doc": "An index buffer set with an unknown format."
+            },
+            {
+              "name": "diagnostic_dispatch_size",
+              "value": 29,
+              "doc": "A dispatch of more workgroups in a dimension than the workgroupsPerDimension limit."
+            },
+            {
+              "name": "diagnostic_indirect_count_limit",
+              "value": 31,
+              "doc": "A counted indirect draw whose maxCount is zero or past MRHI_INDIRECT_DRAWS."
+            },
+            {
+              "name": "diagnostic_viewport",
+              "value": 32,
+              "doc": "A viewport wider or taller than the textureDimension2d limit, outside twice that range, or with depths outside [0, 1] or in reverse order."
+            },
+            {
+              "name": "diagnostic_scissor",
+              "value": 33,
+              "doc": "A scissor rectangle reaching past the pass's targets."
+            },
+            {
+              "name": "diagnostic_blend_constant",
+              "value": 34,
+              "doc": "A blend constant that is not finite."
+            },
+            {
+              "name": "diagnostic_debug_label",
+              "value": 35,
+              "doc": "A debug label that is empty, not UTF-8, or longer than MRHI_LABEL_BYTES."
+            },
+            {
+              "name": "diagnostic_debug_group_underflow",
+              "value": 36,
+              "doc": "A debug group popped with none open."
+            },
+            {
+              "name": "diagnostic_resource_kind",
+              "value": 37,
+              "doc": "A texture given where a buffer is wanted, or a buffer where a texture is."
+            },
+            {
+              "name": "diagnostic_buffer_texture_copy",
+              "value": 40,
+              "doc": "A copy between a buffer and a texture whose layout the buffer cannot hold: an offset not a multiple of the texel block's bytes (4 for depth), bytes per row not a multiple of 256, rows or images shorter than the copy needs, or a region past the buffer."
+            },
+            {
+              "name": "diagnostic_texture_region",
+              "value": 41,
+              "doc": "A texture region off the format's blocks or past the mip, of a multisampled texture, or of an aspect that cannot be copied, or a buffer named as the texture."
+            },
+            {
+              "name": "diagnostic_copy_texture_mismatch",
+              "value": 42,
+              "doc": "A texture copy between formats that are neither equal nor sRGB twins, between sample counts that differ, or naming one aspect of a format that has two."
+            },
+            {
+              "name": "diagnostic_write_texture_layout",
+              "value": 44,
+              "doc": "A texture write whose layout the bytes cannot hold: rows or images shorter than the write needs, or a region past the bytes given."
+            },
+            {
+              "name": "diagnostic_frame_token",
+              "value": 47,
+              "doc": "A frame token this device never returned."
+            },
+            {
+              "name": "diagnostic_transient_usage",
+              "value": 48,
+              "doc": "A transient resource declared with a usage; the frame derives its usages from the passes' accesses."
+            },
+            {
+              "name": "diagnostic_seal_not_imported",
+              "value": 49,
+              "doc": "A resource sealed or unsealed that is not imported."
+            },
+            {
+              "name": "diagnostic_seal_texture",
+              "value": 50,
+              "doc": "A texture sealed without sampled usage, or an adopted image, which rests as a target."
+            },
+            {
+              "name": "diagnostic_heap_def",
+              "value": 53,
+              "doc": "A heap def with no entries."
+            },
+            {
+              "name": "diagnostic_heap_index",
+              "value": 54,
+              "doc": "A heap index past the heap's entries or samplers."
+            },
+            {
+              "name": "diagnostic_heap_entry",
+              "value": 55,
+              "doc": "A heap entry of an unknown kind."
+            },
+            {
+              "name": "diagnostic_heap_view",
+              "value": 56,
+              "doc": "A heap entry's view without the usage its kind needs, a storage view of more than one mip, or a sampled view marked writable."
+            },
+            {
+              "name": "diagnostic_heap_buffer",
+              "value": 57,
+              "doc": "A heap entry's buffer without storage usage, or a range misaligned, empty, not a multiple of 4 or past the buffer."
+            },
+            {
+              "name": "diagnostic_query_set_def",
+              "value": 58,
+              "doc": "A query set def of an unknown type, or of zero or too many queries."
+            },
+            {
+              "name": "diagnostic_occlusion_query",
+              "value": 59,
+              "doc": "An occlusion query begun in a pass without an occlusion set, while one is open, past the set or written twice in a frame; or ended with none open."
+            },
+            {
+              "name": "diagnostic_statistics_query",
+              "value": 60,
+              "doc": "A statistics query begun outside a graphics-class pass of one view, while one is open, on a set of another type, past the set or written twice in a frame; or ended with none open."
+            },
+            {
+              "name": "diagnostic_sampler_def",
+              "value": 62,
+              "doc": "A sampler def with an unknown filter, address mode or compare function, a negative or reversed level of detail range, or anisotropy outside 1 to 16 or above 1 without linear filtering."
+            },
+            {
+              "name": "diagnostic_buffer_size",
+              "value": 63,
+              "doc": "A buffer size of zero or not a multiple of 4."
+            },
+            {
+              "name": "diagnostic_buffer_usage",
+              "value": 64,
+              "doc": "A buffer def with no usage, or an unknown one."
+            },
+            {
+              "name": "diagnostic_shader_bytes",
+              "value": 65,
+              "doc": "Shader bytes that are NULL or not 8-byte aligned."
+            },
+            {
+              "name": "diagnostic_shader_container",
+              "value": 66,
+              "doc": "Shader bytes that are not a well-formed container: its bounds, version, digest or reflection."
+            },
+            {
+              "name": "diagnostic_texture_usage",
+              "value": 68,
+              "doc": "A texture def with a usage that is unknown or that its format, kind or sample count cannot take."
+            },
+            {
+              "name": "diagnostic_texture_adopt",
+              "value": 69,
+              "doc": "A texture adopting a Vulkan image without an image, or without render target usage."
+            },
+            {
+              "name": "diagnostic_view_def",
+              "value": 70,
+              "doc": "A view def with an unknown kind or aspect."
+            },
+            {
+              "name": "diagnostic_view_range",
+              "value": 71,
+              "doc": "A view whose mips, layers, format, aspect or kind its texture cannot give."
+            },
+            {
+              "name": "diagnostic_driver_request_tags",
+              "value": 72,
+              "doc": "A request reached the driver past the notifications limit, so its answer could not be matched."
+            },
+            {
+              "name": "diagnostic_driver_unasked_answer",
+              "value": 73,
+              "doc": "A driver answered a request it was never asked, or answered one twice."
+            },
+            {
+              "name": "diagnostic_driver_events_overrun",
+              "value": 74,
+              "doc": "A driver reported more events than the room it was given; the layer kept the room's worth."
+            },
+            {
+              "name": "diagnostic_driver_event_tag",
+              "value": 75,
+              "doc": "A device driver reported an event without a tag that is not a device loss."
+            },
+            {
+              "name": "diagnostic_driver_adapter",
+              "value": 76,
+              "doc": "A driver listed an adapter with a zero or repeated handle, a name longer than MRHI_ADAPTER_NAME_BYTES, or an unknown kind."
+            },
+            {
+              "name": "diagnostic_driver_sample_counts",
+              "value": 77,
+              "doc": "A driver reported format caps naming sample counts other than 1, 2 and 4."
+            },
+            {
+              "name": "diagnostic_driver_zero_handle",
+              "value": 78,
+              "doc": "A driver reported success for an object, surface or surface image with a zero handle."
+            },
+            {
+              "name": "diagnostic_driver_device_handshake",
+              "value": 79,
+              "doc": "A driver made a device whose vtable fails the SPI version and size handshake."
+            },
+            {
+              "name": "diagnostic_driver_timestamp_period",
+              "value": 80,
+              "doc": "A driver reported a negative timestamp period."
+            },
+            {
+              "name": "diagnostic_driver_memory_alignment",
+              "value": 81,
+              "doc": "A driver reported a memory alignment of zero or not a power of two."
+            },
+            {
+              "name": "diagnostic_driver_frame_walk",
+              "value": 82,
+              "doc": "A submitted frame failed the layer's walk: a handle, payload or range no driver could translate."
+            },
+            {
+              "name": "diagnostic_pipeline_entry",
+              "value": 83,
+              "doc": "A pipeline def names an entry point its shader lacks for the stage, gives a fragment entry length without a name, or names no vertex entry."
+            },
+            {
+              "name": "diagnostic_pipeline_constants",
+              "value": 84,
+              "doc": "A pipeline def's constant values name an id the shader lacks, give one twice, hold a value its type cannot, or leave out one without a default."
+            },
+            {
+              "name": "diagnostic_graphics_vertex",
+              "value": 85,
+              "doc": "A graphics pipeline's vertex state is malformed: its buffers or attributes, two attributes at one location, or a vertex input with no attribute of its scalar class."
+            },
+            {
+              "name": "diagnostic_graphics_primitive",
+              "value": 86,
+              "doc": "A graphics pipeline's primitive state has an unknown value, a strip index format for a list, or more than one view without multiview."
+            },
+            {
+              "name": "diagnostic_graphics_depth_stencil",
+              "value": 87,
+              "doc": "A graphics pipeline's depth and stencil state has an unknown value, an aspect's fields set without the aspect in the format, a bias that is not finite or set for points and lines, or no depth format while the fragment entry writes depth."
+            },
+            {
+              "name": "diagnostic_graphics_targets",
+              "value": 88,
+              "doc": "A graphics pipeline's color targets are more than MRHI_COLOR_TARGETS, present without a fragment entry, malformed (format, blend or writes), not written by the fragment entry's outputs as their types allow, or absent with no depth either."
+            },
+            {
+              "name": "diagnostic_graphics_multisample",
+              "value": 89,
+              "doc": "A graphics pipeline's sample count is not a power of two, or alpha to coverage is asked single-sampled, without a first target that has alpha, or while the fragment entry writes the sample mask."
+            },
+            {
+              "name": "diagnostic_graphics_interface",
+              "value": 90,
+              "doc": "A graphics pipeline's fragment input has no vertex output of the same location, type and interpolation, or a point list leaves no room for its point size."
+            },
+            {
+              "name": "diagnostic_chained_struct",
+              "value": 91,
+              "doc": "A chained struct the def carries is malformed: an adopted Vulkan object that is NULL, or an extension list that is not a list of names."
+            },
+            {
+              "name": "diagnostic_device_limits",
+              "value": 92,
+              "doc": "A device def's device limits include a zero, fewer than 2 notifications, a command arena under one chunk, or readback bytes not a multiple of 512."
+            },
+            {
+              "name": "diagnostic_limits_floor",
+              "value": 93,
+              "doc": "A device def asks for limits below the floor every adapter reaches."
+            },
+            {
+              "name": "diagnostic_allocator",
+              "value": 94,
+              "doc": "An allocator with one function set and the other not."
+            },
+            {
+              "name": "diagnostic_pipeline_cache_bytes",
+              "value": 95,
+              "doc": "A pipeline cache size given without its bytes."
+            },
+            {
+              "name": "diagnostic_texture_format",
+              "value": 96,
+              "doc": "A texture def names an unknown format."
+            },
+            {
+              "name": "diagnostic_texture_size",
+              "value": 97,
+              "doc": "A texture def's size or layers do not fit its kind and its format's block, or its mips are more than a full chain."
+            },
+            {
+              "name": "diagnostic_texture_samples",
+              "value": 98,
+              "doc": "A texture def's sample count is not 1, 2 or 4, or several samples are asked for a texture that is not 2D with one mip."
+            },
+            {
+              "name": "diagnostic_texture_view_formats",
+              "value": 99,
+              "doc": "A texture def's view format is neither unused nor its format's twin."
+            },
+            {
+              "name": "diagnostic_transfer_alignment",
+              "value": 100,
+              "doc": "An offset or size not a multiple of what the command needs: 4 for buffer copies, clears, uploads, readbacks, vertex buffers and indirect arguments, the index size for index buffers, 256 for query resolves."
+            },
+            {
+              "name": "diagnostic_transfer_range",
+              "value": 101,
+              "doc": "A range reaching past the end of its buffer, or past its query set."
+            },
+            {
+              "name": "diagnostic_undeclared_access",
+              "value": 102,
+              "doc": "A command reaching a resource the pass declares no covering access of the kind it needs."
+            },
+            {
+              "name": "diagnostic_pass_class",
+              "value": 103,
+              "doc": "A pass def with an unknown pass class."
+            },
+            {
+              "name": "diagnostic_pass_color_targets",
+              "value": 104,
+              "doc": "A pass def with more than MRHI_COLOR_TARGETS color targets."
+            },
+            {
+              "name": "diagnostic_pass_views",
+              "value": 105,
+              "doc": "A pass def with several views on a native pass or on one without targets."
+            },
+            {
+              "name": "diagnostic_pass_queries",
+              "value": 106,
+              "doc": "A pass def's query sets do not fit: an occlusion set that is not one or on a pass without targets, or timestamps that are not a graphics pass's two different queries, in range and not yet written this frame."
+            },
+            {
+              "name": "diagnostic_pass_uses",
+              "value": 107,
+              "doc": "A pass def's accesses or targets do not fit: a kind the resource's usage lacks, a range past it, a write to a sealed resource, targets whose sizes, samples, mips or layers disagree, uses that conflict within the pass, or a read of a declared resource no earlier pass wrote."
+            }
+          ],
+          "library": "names the library's own checks"
+        },
+        {
+          "kind": "struct",
+          "name": "diagnostic",
+          "doc": "A record from an instance's or a device's diagnostic queue.",
+          "members": [
+            {
+              "name": "code",
+              "type": "enum.diagnostic_code",
+              "doc": "The check that refused the call."
+            },
+            {
+              "name": "count",
+              "type": "uint32",
+              "doc": "How many refusals in a row the record stands for: a refusal by the newest record's check adds to its count instead of taking room."
+            }
+          ],
+          "library": "a record of the library's own diagnostic queue"
+        },
+        {
+          "kind": "function",
+          "name": "diagnostic_text",
+          "doc": "Returns the text of a diagnostic code, for people; programs compare codes, never texts.",
+          "returns": {
+            "type": "static_cstring",
+            "doc": "A static, NUL-terminated English sentence."
+          },
+          "args": [
+            {
+              "name": "code",
+              "type": "enum.diagnostic_code",
+              "doc": "Any value; an unknown one has a text saying so."
+            }
+          ],
+          "thread_safety": {
+            "class": "any"
+          },
+          "library": "names the library's own checks"
         }
       ]
     },
@@ -347,6 +890,11 @@
               "name": "driver_d3d12",
               "value": 4,
               "doc": "Direct3D 12."
+            },
+            {
+              "name": "driver_external",
+              "value": 5,
+              "doc": "A driver made outside the library and handed to the instance (mrhi-0024); its adapters' names tell such drivers apart."
             }
           ],
           "library": "names the library's drivers, one per API"
@@ -608,9 +1156,35 @@
               "name": "surfaces",
               "type": "uint32",
               "doc": "Surfaces the instance holds at once; 16 by default."
+            },
+            {
+              "name": "diagnostics",
+              "type": "uint32",
+              "doc": "Records the diagnostic queue holds; 0 by default, keeping none."
             }
           ],
           "library": "sizes of the library's own tables"
+        },
+        {
+          "kind": "struct",
+          "name": "external_driver_def",
+          "chained": true,
+          "doc": "A driver made outside the library against its SPI headers (maul-rhi/spi, mrhi-0024), chained on an instance def with the type mrhi_structExternalDriver. The instance starts it instead of the build's own driver. From a successful create the instance owns it and destroys it at its end; when the create fails, the program still owns it.",
+          "members": [
+            {
+              "name": "vtable",
+              "type": "void",
+              "pointer": "const",
+              "doc": "The driver's mrhiInstanceDriverVtable, of this library's MRHI_SPI_VERSION."
+            },
+            {
+              "name": "driver",
+              "type": "void",
+              "pointer": "mutable",
+              "doc": "The driver's own pointer, passed to each of its functions."
+            }
+          ],
+          "library": "hands the library a driver of its SPI, whatever API that driver speaks"
         },
         {
           "kind": "struct",
@@ -671,7 +1245,7 @@
           "doc": "Makes an instance.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a zero limit or an allocator with one function; `mrhi_errorVersion` when the def's contract version is not the library's; `mrhi_errorUnsupported` for a critical extension the library does not know, such as mrhiTestDriverDef in a build without the test driver; `mrhi_errorCapacity` when the chain is deeper than the limit or the allocator fails."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a zero limit, an allocator with one function, an external driver without a vtable or with one smaller than the library knows or lacking a function, or an external driver beside the test driver or Vulkan structs; `mrhi_errorVersion` when the def's contract version is not the library's, or an external driver's SPI version is not its; `mrhi_errorUnsupported` for a critical extension the library does not know, such as mrhiTestDriverDef in a build without the test driver; `mrhi_errorCapacity` when the chain is deeper than the limit or the allocator fails."
           },
           "args": [
             {
@@ -765,6 +1339,55 @@
             "object": "the instance"
           },
           "library": "reads the library's misuse count"
+        },
+        {
+          "kind": "function",
+          "name": "next_instance_diagnostic",
+          "doc": "Takes the oldest record from the instance's diagnostic queue (mrhi-0027), which holds a record for each call the instance refused as invalid input and, in a build with the validation layer, for each rule of the driver SPI its driver or its devices' drivers broke, up to the diagnostics limit; those past it are counted but not recorded.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success` with a record; `mrhi_empty` when the queue is drained or keeps none; `mrhi_errorInvalid` for a NULL argument."
+          },
+          "args": [
+            {
+              "name": "instance",
+              "type": "opaque.instance",
+              "pointer": "mutable",
+              "doc": "The instance."
+            },
+            {
+              "name": "diagnostic_out",
+              "type": "struct.diagnostic",
+              "pointer": "mutable",
+              "doc": "Receives the record; untouched unless one is taken."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the instance"
+          },
+          "library": "reads the library's own diagnostic queue"
+        },
+        {
+          "kind": "function",
+          "name": "get_driver_faults",
+          "doc": "Returns how many breaches of the driver SPI the validation layer has found on the instance and its devices (mrhi-0025): frames no driver could translate, and driver answers no core could trust. Builds without the layer (MAUL_RHI_VALIDATION) find none.",
+          "returns": {
+            "type": "uint64",
+            "doc": "The count; 0 for a NULL instance or a build without the layer."
+          },
+          "args": [
+            {
+              "name": "instance",
+              "type": "opaque.instance",
+              "pointer": "const",
+              "doc": "The instance."
+            }
+          ],
+          "thread_safety": {
+            "class": "any"
+          },
+          "library": "reads the library's validation layer count"
         },
         {
           "kind": "function",
@@ -972,7 +1595,7 @@
             {
               "name": "pipeline_statistics_query",
               "type": "bool",
-              "doc": "Pipeline statistics queries.",
+              "doc": "Pipeline statistics queries (query_pipeline_statistics).",
               "mapping": {
                 "vulkan": {
                   "class": "restricted",
@@ -983,8 +1606,8 @@
                   "note": "pipeline statistics queries"
                 },
                 "metal": {
-                  "class": "restricted",
-                  "note": "a statistic counter set on some Macs, none on Apple GPUs"
+                  "class": "absent_rejected",
+                  "note": "not granted: a statistic counter set on some Macs only, sampled at encoder boundaries"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -1248,20 +1871,21 @@
             {
               "name": "multi_draw_indirect_count",
               "type": "bool",
-              "doc": "Multi-draw indirect with a GPU-written count.",
+              "doc": "Counted multi-draw indirect (mrhiDrawIndirectCount, mrhiDrawIndexedIndirectCount): up to a maximum of indirect draws, the number drawn written on the GPU.",
               "mapping": {
                 "vulkan": {
                   "class": "direct",
-                  "note": "drawIndirectCount (1.2)"
+                  "note": "vkCmdDrawIndirectCount, with drawIndirectCount (1.2) and multiDrawIndirect"
                 },
                 "d3d12": {
-                  "class": "direct",
-                  "note": "ExecuteIndirect with a count buffer"
+                  "class": "emulated",
+                  "note": "ExecuteIndirect with a count buffer, records first expanded by a compute pass for pipelines reading their first vertex or instance",
+                  "cost": "for such pipelines, a dispatch and scratch per draw"
                 },
                 "metal": {
                   "class": "emulated",
-                  "note": "an indirect command buffer filled by a compute pass",
-                  "cost": "a compute dispatch per multi-draw, and an indirect command buffer of the largest count"
+                  "note": "a compute pass copying the records into scratch with every record past the count drawing no instances, then the most draws from the scratch",
+                  "cost": "a dispatch and the most draws encoded, whatever the count"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -1272,19 +1896,19 @@
             {
               "name": "multiview",
               "type": "bool",
-              "doc": "Rendering several views in one pass.",
+              "doc": "Rendering several views in one pass (mrhiPassDef's viewCount), each into a layer of the targets.",
               "mapping": {
                 "vulkan": {
                   "class": "direct",
-                  "note": "multiview (1.1)"
+                  "note": "multiview (1.1) with the rendering view mask"
                 },
                 "d3d12": {
                   "class": "restricted",
-                  "note": "view instancing tiers"
+                  "note": "view instancing, tier 1 or more, with shader model 6.1; 4 views"
                 },
                 "metal": {
                   "class": "restricted",
-                  "note": "vertex amplification"
+                  "note": "vertex amplification onto layers, where the device amplifies to 2 and renders layers"
                 },
                 "web_gpu": {
                   "class": "absent_rejected",
@@ -1474,7 +2098,7 @@
               "mapping": {
                 "vulkan": {
                   "class": "direct",
-                  "note": "bounded by maxPerStageResources"
+                  "note": "no bound on binding numbers: the default"
                 },
                 "d3d12": {
                   "class": "direct",
@@ -1498,7 +2122,7 @@
               "mapping": {
                 "vulkan": {
                   "class": "direct",
-                  "note": "maxPerStageDescriptorSampledImages"
+                  "note": "maxPerStageDescriptorSampledImages, fitted under maxPerStageResources"
                 },
                 "d3d12": {
                   "class": "direct",
@@ -1522,7 +2146,7 @@
               "mapping": {
                 "vulkan": {
                   "class": "direct",
-                  "note": "maxPerStageDescriptorSamplers"
+                  "note": "maxPerStageDescriptorSamplers, fitted under maxPerStageResources"
                 },
                 "d3d12": {
                   "class": "direct",
@@ -1546,7 +2170,7 @@
               "mapping": {
                 "vulkan": {
                   "class": "direct",
-                  "note": "maxPerStageDescriptorStorageBuffers"
+                  "note": "maxPerStageDescriptorStorageBuffers, fitted under maxPerStageResources"
                 },
                 "d3d12": {
                   "class": "direct",
@@ -1570,7 +2194,7 @@
               "mapping": {
                 "vulkan": {
                   "class": "direct",
-                  "note": "maxPerStageDescriptorStorageImages"
+                  "note": "maxPerStageDescriptorStorageImages, fitted under maxPerStageResources"
                 },
                 "d3d12": {
                   "class": "direct",
@@ -1594,7 +2218,7 @@
               "mapping": {
                 "vulkan": {
                   "class": "direct",
-                  "note": "maxPerStageDescriptorUniformBuffers"
+                  "note": "maxPerStageDescriptorUniformBuffers, fitted under maxPerStageResources"
                 },
                 "d3d12": {
                   "class": "direct",
@@ -1740,7 +2364,7 @@
               "mapping": {
                 "vulkan": {
                   "class": "direct",
-                  "note": "no shared bound"
+                  "note": "no shared bound: the sum, at least the default"
                 },
                 "d3d12": {
                   "class": "direct",
@@ -2139,6 +2763,30 @@
                   "class": "emulated",
                   "note": "submitted-work-done promises",
                   "cost": "a promise per frame, settled only when the browser runs its event loop"
+                }
+              }
+            },
+            {
+              "name": "multiview_views",
+              "type": "uint32",
+              "default": 1,
+              "doc": "The views a multiview pass renders at most (mrhiPassDef's viewCount); 1 without the multiview feature.",
+              "mapping": {
+                "vulkan": {
+                  "class": "direct",
+                  "note": "maxMultiviewViewCount"
+                },
+                "d3d12": {
+                  "class": "restricted",
+                  "note": "D3D12_MAX_VIEW_INSTANCE_COUNT, 4"
+                },
+                "metal": {
+                  "class": "restricted",
+                  "note": "the largest supportsVertexAmplificationCount: (2 on the CI runner)"
+                },
+                "web_gpu": {
+                  "class": "absent_rejected",
+                  "note": "no multiview"
                 }
               }
             }
@@ -5757,6 +6405,16 @@
               "name": "heaps",
               "type": "uint32",
               "doc": "Bindless heaps the device holds at once; 4 by default, 0 for none."
+            },
+            {
+              "name": "frame_indirect_draws",
+              "type": "uint32",
+              "doc": "The draws one frame's counted multi-draws make at most, their maxCounts in all; 262144 by default, 0 for none."
+            },
+            {
+              "name": "diagnostics",
+              "type": "uint32",
+              "doc": "Records the diagnostic queue holds; 0 by default, keeping none."
             }
           ],
           "library": "sizes of the library's own tables and rings"
@@ -6084,6 +6742,34 @@
             "object": "the device"
           },
           "library": "reads the library's misuse count"
+        },
+        {
+          "kind": "function",
+          "name": "next_device_diagnostic",
+          "doc": "Takes the oldest record from the device's diagnostic queue (mrhi-0027), which holds a record for each call the device refused as invalid input, up to the diagnostics limit; refusals past it are counted but not recorded.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success` with a record; `mrhi_empty` when the queue is drained or keeps none; `mrhi_errorInvalid` for a NULL argument."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "diagnostic_out",
+              "type": "struct.diagnostic",
+              "pointer": "mutable",
+              "doc": "Receives the record; untouched unless one is taken."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "library": "reads the library's own diagnostic queue"
         },
         {
           "kind": "enum",
@@ -8669,6 +9355,29 @@
                   "note": "timestamp"
                 }
               }
+            },
+            {
+              "name": "query_pipeline_statistics",
+              "value": 2,
+              "doc": "Eleven 64-bit counters of the work between a begin and an end in a pass of the graphics class, in this order: input assembly vertices and primitives, vertex invocations, geometry invocations and primitives, clipping invocations and primitives, fragment invocations, tessellation control patches and evaluation invocations, compute invocations. The geometry and tessellation counters are 0. Needs the pipeline_statistics_query feature.",
+              "mapping": {
+                "vulkan": {
+                  "class": "direct",
+                  "note": "VK_QUERY_TYPE_PIPELINE_STATISTICS, every counter"
+                },
+                "d3d12": {
+                  "class": "direct",
+                  "note": "D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS"
+                },
+                "metal": {
+                  "class": "absent_rejected",
+                  "note": "no pipeline statistics"
+                },
+                "web_gpu": {
+                  "class": "absent_rejected",
+                  "note": "no pipeline statistics"
+                }
+              }
             }
           ]
         },
@@ -8805,7 +9514,7 @@
           "doc": "Makes a query set on a ready device.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a label that is not UTF-8 without NUL within MRHI_LABEL_BYTES, an unknown type, or a count of 0 or past 4096; `mrhi_errorState` for a device that is not ready; `mrhi_errorUnsupported` for a critical extension the library does not know, or timestamps without the timestamp_query feature; `mrhi_errorCapacity` when the device's querySets limit is reached or its queries limit lacks a run of count queries."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a label that is not UTF-8 without NUL within MRHI_LABEL_BYTES, an unknown type, or a count of 0 or past 4096; `mrhi_errorState` for a device that is not ready; `mrhi_errorUnsupported` for a critical extension the library does not know, timestamps without the timestamp_query feature, or pipeline statistics without the pipeline_statistics_query feature; `mrhi_errorCapacity` when the device's querySets limit is reached or its queries limit lacks a run of count queries."
           },
           "args": [
             {
@@ -9745,7 +10454,7 @@
             {
               "name": "format",
               "type": "enum.format",
-              "doc": "A unorm or float format; sRGB is rendered through the format's twin view.",
+              "doc": "A unorm or float format; sRGB is rendered through the format's twin, as a view or as the images' format (mrhiSurfaceCaps).",
               "mapping": {
                 "vulkan": {
                   "class": "direct",
@@ -10010,12 +10719,22 @@
               "name": "usages",
               "type": "bitflags.texture_usage",
               "doc": "The usages its images may have, mrhi_textureRenderTarget among them."
+            },
+            {
+              "name": "twin_views",
+              "type": "bool",
+              "doc": "Whether a configuration may name its color format's sRGB twin among its view formats."
+            },
+            {
+              "name": "twin_images",
+              "type": "bool",
+              "doc": "Whether a configuration may take the sRGB twin of a reported color's format as its color format, its images then sRGB; at least one of twinViews and twinImages is set."
             }
           ],
           "mapping": {
             "vulkan": {
               "class": "direct",
-              "note": "vkGetPhysicalDeviceSurfaceCapabilitiesKHR, SurfaceFormats and SurfacePresentModes"
+              "note": "vkGetPhysicalDeviceSurfaceCapabilitiesKHR, SurfaceFormats and SurfacePresentModes; twin views with VK_KHR_swapchain_mutable_format, twin images where the surface lists the sRGB format"
             },
             "d3d12": {
               "class": "direct",
@@ -10218,7 +10937,7 @@
               "name": "selector",
               "type": "char",
               "pointer": "const",
-              "doc": "The canvas's CSS selector, UTF-8, selectorLength bytes. Only read during the call."
+              "doc": "The canvas's name, UTF-8, selectorLength bytes: first a key of the program's Module.mrhiCanvases (an OffscreenCanvas in a worker, mrhi-0026), else a CSS selector of the document. Only read during the call."
             },
             {
               "name": "selector_length",
@@ -11349,6 +12068,12 @@
           "library": "marks the resource; nothing reaches the driver"
         },
         {
+          "kind": "constant",
+          "name": "native_passes",
+          "value": 8,
+          "doc": "The native passes a frame holds at most (mrhiPassDef's native)."
+        },
+        {
           "kind": "enum",
           "name": "pass_class",
           "width": "uint8",
@@ -12121,6 +12846,11 @@
               "doc": "Kept even when nothing kept reads what it writes, for work seen outside the frame."
             },
             {
+              "name": "native",
+              "type": "bool",
+              "doc": "Whether the program records the pass's commands itself, in a native command buffer it hands over (maul-rhi/vulkan.h, d3d12.h, metal.h); its accesses name imported resources only, it has no targets, query sets or heap, and no encoder call records into it. The library orders it against all commands before and after it."
+            },
+            {
               "name": "accesses",
               "type": "struct.access",
               "pointer": "const",
@@ -12171,6 +12901,11 @@
               "name": "heap",
               "type": "id.heap_id",
               "doc": "The bindless heap every draw and dispatch of the pass reads; a null id for none."
+            },
+            {
+              "name": "view_count",
+              "type": "uint32",
+              "doc": "The views the pass renders, each into the next layer of every target from the target's layer: 0 and 1 mean one view. More needs the multiview feature, at most the device's multiviewViews limit, a pipeline made for as many, and targets with the layers."
             }
           ],
           "mapping": {
@@ -12212,7 +12947,7 @@
           "doc": "Declares a pass of the open frame, after the passes declared before it in its class.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a bad label, an unknown class, kind, aspect or operation, an access or target its resource cannot take (a kind for the other resource type, a range outside the texture, a use an imported object was not made with, a target that does not render or depth-test, a use of a sealed resource other than the reads its sealed state allows), targets of different sizes or sample counts, a resolve that does not match, a subresource written and used otherwise in the pass, an access the class does not allow, a declared resource read before any pass wrote it, an occlusion query set that is not one or is named by a pass without targets, or timestamps of a set that is not a timestamp set, on a pass not of the graphics class, without a set, with neither query, with both the same, or with a query past the set's count or already written in this frame; `mrhi_errorStale` for a resource of another frame, an imported object destroyed since, or a query set or heap the device no longer has; `mrhi_errorUnsupported` for a critical extension the library does not know; `mrhi_errorState` for a device without an open frame, or a frame already compiled; `mrhi_errorCapacity` when the device's framePasses or frameAccesses limit is reached."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a bad label, an unknown class, kind, aspect or operation, an access or target its resource cannot take (a kind for the other resource type, a range outside the texture, a use an imported object was not made with, a target that does not render or depth-test, a use of a sealed resource other than the reads its sealed state allows), targets of different sizes or sample counts, views past one on a native pass or one without targets, targets without a layer for each view or of a 3D texture with views past one, a resolve that does not match, a subresource written and used otherwise in the pass, an access the class does not allow, a declared resource read before any pass wrote it, an occlusion query set that is not one or is named by a pass without targets, or timestamps of a set that is not a timestamp set, on a pass not of the graphics class, without a set, with neither query, with both the same, or with a query past the set's count or already written in this frame; `mrhi_errorStale` for a resource of another frame, an imported object destroyed since, or a query set or heap the device no longer has; `mrhi_errorUnsupported` for a critical extension the library does not know, or views past one without the multiview feature or past its limit; `mrhi_errorState` for a device without an open frame, or a frame already compiled; `mrhi_errorCapacity` when the device's framePasses or frameAccesses limit is reached."
           },
           "args": [
             {
@@ -13843,7 +14578,7 @@
           "name": "shader_builtins",
           "width": "uint32",
           "mapped": true,
-          "doc": "The fragment builtins an entry point uses that constrain its pipelines.",
+          "doc": "The builtins an entry point uses that constrain its pipelines: the fragment builtins, and the view index.",
           "values": [
             {
               "name": "builtin_frag_depth",
@@ -13980,6 +14715,29 @@
                 "web_gpu": {
                   "class": "direct",
                   "note": "primitive_index"
+                }
+              }
+            },
+            {
+              "name": "builtin_view_index",
+              "value": 64,
+              "doc": "Reads the view index of a multiview pass, in a vertex or fragment entry; its container has no WGSL, and its device needs the multiview feature.",
+              "mapping": {
+                "vulkan": {
+                  "class": "direct",
+                  "note": "ViewIndex"
+                },
+                "d3d12": {
+                  "class": "direct",
+                  "note": "SV_ViewID (shader model 6.1)"
+                },
+                "metal": {
+                  "class": "direct",
+                  "note": "[[amplification_id]] in a vertex entry, [[render_target_array_index]] in a fragment one"
+                },
+                "web_gpu": {
+                  "class": "absent_rejected",
+                  "note": "WGSL has no view index"
                 }
               }
             }
@@ -17159,6 +17917,11 @@
               "name": "constant_count",
               "type": "uint32",
               "doc": "The values."
+            },
+            {
+              "name": "view_count",
+              "type": "uint32",
+              "doc": "The views of the passes the pipeline draws in, as mrhiPassDef's viewCount: 0 and 1 mean one view. More needs the multiview feature and at most the device's multiviewViews limit."
             }
           ],
           "mapping": {
@@ -17200,7 +17963,7 @@
           "doc": "Makes a graphics pipeline on a ready device, checked against its shader's reflection and the device as WebGPU checks it. It returns at once with the pipeline pending, and the device's queue answers the request with mrhi_devicePipelineReady; a pipeline is usable once that answer is mrhi_success.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success` with the pipeline pending; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a bad label, entries the shader has not as vertex and fragment entries, constants as for compute pipelines, or state that contradicts itself, the reflection or WebGPU's rules; `mrhi_errorStale` for a shader the device no longer has; `mrhi_errorUnsupported` for vertex buffers, attributes, strides, inter-stage variables or color bytes past the device's limits, target formats the device cannot render, blend or multisample as asked, unclipped depth without its feature, a critical extension the library does not know; `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity` when the device's pipeline limit is reached or its queue has no room for the answer; `mrhi_errorPlatform` when the driver refuses at once."
+            "doc": "`mrhi_success` with the pipeline pending; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a bad label, entries the shader has not as vertex and fragment entries, constants as for compute pipelines, or state that contradicts itself, the reflection or WebGPU's rules; `mrhi_errorStale` for a shader the device no longer has; `mrhi_errorUnsupported` for vertex buffers, attributes, strides, inter-stage variables or color bytes past the device's limits, target formats the device cannot render, blend or multisample as asked, unclipped depth without its feature, views past one without multiview or past its limit, a critical extension the library does not know; `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity` when the device's pipeline limit is reached or its queue has no room for the answer; `mrhi_errorPlatform` when the driver refuses at once."
           },
           "args": [
             {
@@ -17950,7 +18713,7 @@
           "doc": "Ends recording a pass. Its debug groups must be closed.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL device, open debug groups, or an open occlusion query; `mrhi_errorStale` for a pass of another frame or none; `mrhi_errorState` for a pass that is not recording."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL device, open debug groups, or an open occlusion or statistics query; `mrhi_errorStale` for a pass of another frame or none; `mrhi_errorState` for a pass that is not recording."
           },
           "args": [
             {
@@ -18577,6 +19340,154 @@
           }
         },
         {
+          "kind": "constant",
+          "name": "indirect_draws",
+          "value": 65535,
+          "doc": "The draws a counted multi-draw makes at most (mrhiDrawIndirectCount's maxCount)."
+        },
+        {
+          "kind": "function",
+          "name": "draw_indirect_count",
+          "doc": "Draws up to maxCount non-indexed draws with the pass's pipeline, tables and buffers, each from its own record of the single indirect draw's layout (16 bytes, packed one after another), the number drawn read on the GPU from a 32-bit count and clamped to maxCount. Each record follows the single draw's rules. Needs the multi_draw_indirect_count feature.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` for a device without the multi_draw_indirect_count feature; `mrhi_errorInvalid` for a NULL device, a maxCount of 0 or past MRHI_INDIRECT_DRAWS, a pass without targets, or an arguments or count resource that is not a buffer the pass declares with the indirect access, or an offset not a multiple of 4 or without maxCount records, or the count's 4 bytes, after it; `mrhi_errorStale` for a pass of another frame, a destroyed pipeline, or a resource that is not live; `mrhi_errorState` for a pass that is not recording, has no pipeline set, or lacks a table or vertex buffer the pipeline reads; `mrhi_errorCapacity` when the frame's commands are full, or its counted draws would pass the device's frameIndirectDraws."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "pass",
+              "type": "id.pass_id",
+              "doc": "The pass, recording, with a graphics pipeline set."
+            },
+            {
+              "name": "resource",
+              "type": "id.resource_id",
+              "doc": "A buffer of the open frame the pass declares with the indirect access, holding the records."
+            },
+            {
+              "name": "offset",
+              "type": "uint64",
+              "doc": "The first record's first byte, a multiple of 4, with maxCount records after it in the buffer."
+            },
+            {
+              "name": "count_resource",
+              "type": "id.resource_id",
+              "doc": "A buffer of the open frame the pass declares with the indirect access, holding the count; it may be the records' buffer."
+            },
+            {
+              "name": "count_offset",
+              "type": "uint64",
+              "doc": "The count's first byte, a multiple of 4, with 4 bytes after it in the buffer."
+            },
+            {
+              "name": "max_count",
+              "type": "uint32",
+              "doc": "The draws made at most, 1 to MRHI_INDIRECT_DRAWS."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the pass"
+          },
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "vkCmdDrawIndirectCount (drawIndirectCount and multiDrawIndirect)"
+            },
+            "d3d12": {
+              "class": "emulated",
+              "note": "ExecuteIndirect with the count buffer; for a pipeline reading its vertex or instance index, the records first expanded by a compute pass of the library's, each after its first vertex and instance",
+              "cost": "for such a pipeline, a dispatch and the most records' scratch per draw"
+            },
+            "metal": {
+              "class": "emulated",
+              "note": "a compute pass before the pass clamping the records into scratch, every record past the count drawing no instances, then the most indirect draws from the scratch",
+              "cost": "a dispatch per pass with counted draws, and the most draws encoded whatever the count"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "no multi-draw indirect"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "draw_indexed_indirect_count",
+          "doc": "Draws up to maxCount indexed draws with the pass's pipeline, tables and buffers, each from its own record of the single indirect draw's layout (20 bytes, packed one after another), the number drawn read on the GPU from a 32-bit count and clamped to maxCount. Each record follows the single draw's rules. Needs the multi_draw_indirect_count feature.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` for a device without the multi_draw_indirect_count feature; `mrhi_errorInvalid` for a NULL device, a maxCount of 0 or past MRHI_INDIRECT_DRAWS, a pass without targets, or an arguments or count resource that is not a buffer the pass declares with the indirect access, or an offset not a multiple of 4 or without maxCount records, or the count's 4 bytes, after it; `mrhi_errorStale` for a pass of another frame, a destroyed pipeline, or a resource that is not live; `mrhi_errorState` for a pass that is not recording, has no pipeline set, lacks a table or vertex buffer the pipeline reads, or has no index buffer of the pipeline's strip index format; `mrhi_errorCapacity` when the frame's commands are full, or its counted draws would pass the device's frameIndirectDraws."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "pass",
+              "type": "id.pass_id",
+              "doc": "The pass, recording, with a graphics pipeline and an index buffer set."
+            },
+            {
+              "name": "resource",
+              "type": "id.resource_id",
+              "doc": "A buffer of the open frame the pass declares with the indirect access, holding the records."
+            },
+            {
+              "name": "offset",
+              "type": "uint64",
+              "doc": "The first record's first byte, a multiple of 4, with maxCount records after it in the buffer."
+            },
+            {
+              "name": "count_resource",
+              "type": "id.resource_id",
+              "doc": "A buffer of the open frame the pass declares with the indirect access, holding the count; it may be the records' buffer."
+            },
+            {
+              "name": "count_offset",
+              "type": "uint64",
+              "doc": "The count's first byte, a multiple of 4, with 4 bytes after it in the buffer."
+            },
+            {
+              "name": "max_count",
+              "type": "uint32",
+              "doc": "The draws made at most, 1 to MRHI_INDIRECT_DRAWS."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the pass"
+          },
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "vkCmdDrawIndexedIndirectCount (drawIndirectCount and multiDrawIndirect)"
+            },
+            "d3d12": {
+              "class": "emulated",
+              "note": "ExecuteIndirect with the count buffer; for a pipeline reading its vertex or instance index, the records first expanded by a compute pass of the library's, each after its first vertex and instance",
+              "cost": "for such a pipeline, a dispatch and the most records' scratch per draw"
+            },
+            "metal": {
+              "class": "emulated",
+              "note": "a compute pass before the pass clamping the records into scratch, every record past the count drawing no instances, then the most indirect draws from the scratch",
+              "cost": "a dispatch per pass with counted draws, and the most draws encoded whatever the count"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "no multi-draw indirect"
+            }
+          }
+        },
+        {
           "kind": "function",
           "name": "dispatch_indirect",
           "doc": "Dispatches workgroups with the pass's compute pipeline and tables, the counts in x, y and z read on the GPU, 32-bit each. A count past the device's workgroupsPerDimension makes the dispatch do nothing.",
@@ -18725,11 +19636,109 @@
         },
         {
           "kind": "function",
-          "name": "resolve_queries",
-          "doc": "Writes queries of a set into a buffer as 64-bit values: an occlusion query's result, or a timestamp in ticks. A query not written earlier in the frame reads 0.",
+          "name": "begin_statistics_query",
+          "doc": "Begins a pipeline statistics query: the pass's work until its end is counted. A query is written at most once in a frame.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL device, a pass with targets or not of the graphics class, queries past the set's count or a first query at or past it, a resource that is not a buffer the pass declares with the query resolve access, or an offset not a multiple of 256 or without 8 bytes per query after it; `mrhi_errorStale` for a pass of another frame, a destroyed query set, or a resource that is not live; `mrhi_errorState` for a pass that is not recording; `mrhi_errorCapacity` when the frame's commands are full."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL device, a pass not of the graphics class or rendering several views, a set that is not of statistics queries, a query past the set's count or already written in this frame, or a statistics query already open in the pass; `mrhi_errorStale` for a pass of another frame or a destroyed query set; `mrhi_errorState` for a pass that is not recording; `mrhi_errorCapacity` when the frame's commands are full."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "pass",
+              "type": "id.pass_id",
+              "doc": "The pass, recording, of the graphics class, rendering one view."
+            },
+            {
+              "name": "set",
+              "type": "id.query_set_id",
+              "doc": "A query set of pipeline statistics queries."
+            },
+            {
+              "name": "query",
+              "type": "uint32",
+              "doc": "The query, below the set's count."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the pass"
+          },
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "vkCmdBeginQuery"
+            },
+            "d3d12": {
+              "class": "direct",
+              "note": "BeginQuery"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "no pipeline statistics"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "no pipeline statistics"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "end_statistics_query",
+          "doc": "Ends the pass's open statistics query. One refused for capacity still ends it, so the pass can end.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL device or a pass without an open statistics query; `mrhi_errorStale` for a pass of another frame; `mrhi_errorState` for a pass that is not recording; `mrhi_errorCapacity` when the frame's commands are full."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "pass",
+              "type": "id.pass_id",
+              "doc": "The pass, recording, with a statistics query open."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the pass"
+          },
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "vkCmdEndQuery"
+            },
+            "d3d12": {
+              "class": "direct",
+              "note": "EndQuery"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "no pipeline statistics"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "no pipeline statistics"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "resolve_queries",
+          "doc": "Writes queries of a set into a buffer as 64-bit values: an occlusion query's result, a timestamp in ticks, or a statistics query's eleven counters. A query not written earlier in the frame reads zeros.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL device, a pass with targets or not of the graphics class, queries past the set's count or a first query at or past it, a resource that is not a buffer the pass declares with the query resolve access, or an offset not a multiple of 256 or without the queries' bytes after it (88 per statistics query, 8 per other); `mrhi_errorStale` for a pass of another frame, a destroyed query set, or a resource that is not live; `mrhi_errorState` for a pass that is not recording; `mrhi_errorCapacity` when the frame's commands are full."
           },
           "args": [
             {
@@ -18859,6 +19868,66 @@
             "web_gpu": {
               "class": "direct",
               "note": "copyBufferToBuffer"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "clear_buffer",
+          "doc": "Writes zeros into a range of a buffer of the frame (mrhi-0022).",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL device, a pass with targets, an offset or a size not a multiple of 4, a range past the buffer, or a resource that is not a buffer the pass declares a covering copy destination access of; `mrhi_errorStale` for a pass of another frame or a resource that is not live; `mrhi_errorState` for a pass that is not recording; `mrhi_errorCapacity` when the frame's commands are full."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "pass",
+              "type": "id.pass_id",
+              "doc": "The pass, recording, without targets."
+            },
+            {
+              "name": "resource",
+              "type": "id.resource_id",
+              "doc": "The buffer."
+            },
+            {
+              "name": "offset",
+              "type": "uint64",
+              "doc": "The range's first byte, a multiple of 4."
+            },
+            {
+              "name": "size",
+              "type": "uint64",
+              "doc": "Its bytes, a multiple of 4, or MRHI_WHOLE_SIZE for the rest; 0 writes nothing."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the pass"
+          },
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "vkCmdFillBuffer with 0"
+            },
+            "d3d12": {
+              "class": "emulated",
+              "note": "CopyBufferRegion from a device-owned buffer of zeros, in 64 KiB pieces",
+              "cost": "64 KiB per device and one copy per 64 KiB cleared"
+            },
+            "metal": {
+              "class": "direct",
+              "note": "fillBuffer:range:value: with 0"
+            },
+            "web_gpu": {
+              "class": "direct",
+              "note": "clearBuffer"
             }
           }
         },
@@ -19773,6 +20842,918 @@
       ]
     },
     {
+      "name": "vulkan",
+      "doc": "Vulkan objects made outside the library, for OpenXR (XR_KHR_vulkan_enable2): instances and devices adopted with what they were made with, a device described for the runtime to make, its swapchain images adopted as textures, the queries a session binds with, and the native objects and passes an upscaler records with. Every other driver refuses the structs and answers the functions unsupported.",
+      "includes": [
+        "device",
+        "frame"
+      ],
+      "items": [
+        {
+          "kind": "struct",
+          "name": "instance_vulkan_adopt",
+          "chained": true,
+          "doc": "A VkInstance made elsewhere (by an OpenXR runtime through XR_KHR_vulkan_enable2), which the instance adopts and never destroys, chained on an instance def with the type mrhi_structInstanceVulkanAdopt. Vulkan only. An instance older than 1.3, or one whose functions cannot be read, is refused with mrhi_errorUnsupported; so is the struct alongside the test driver's.",
+          "members": [
+            {
+              "name": "instance",
+              "type": "void",
+              "pointer": "mutable",
+              "doc": "The VkInstance, made with Vulkan 1.3 or later."
+            },
+            {
+              "name": "get_instance_proc_addr",
+              "type": "void",
+              "pointer": "mutable",
+              "doc": "Its vkGetInstanceProcAddr."
+            },
+            {
+              "name": "api_version",
+              "type": "uint32",
+              "doc": "The API version it was made with, at least VK_API_VERSION_1_3."
+            },
+            {
+              "name": "extensions",
+              "type": "char",
+              "pointer": "const",
+              "doc": "The names of the extensions it was made with, each ended by a NUL, in extensionsLength bytes. Only read during the call: surfaces and labels are used only where their extensions are named."
+            },
+            {
+              "name": "extensions_length",
+              "type": "size",
+              "doc": "The bytes of extensions."
+            }
+          ],
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "the instance XR_KHR_vulkan_enable2's xrCreateVulkanInstanceKHR made"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            }
+          }
+        },
+        {
+          "kind": "struct",
+          "name": "instance_vulkan_extensions",
+          "chained": true,
+          "doc": "Extensions the Vulkan instance enables beyond the library's own (an OpenXR runtime's, through XR_KHR_vulkan_enable), chained on an instance def with the type mrhi_structInstanceVulkanExtensions. Vulkan only. An instance the loader cannot make with them is refused with mrhi_errorUnsupported, as is the struct alongside the test driver's or an adopted instance's (mrhi_errorInvalid).",
+          "members": [
+            {
+              "name": "extensions",
+              "type": "char",
+              "pointer": "const",
+              "doc": "The extensions' names, each ended by a NUL, in extensionsLength bytes. Only read during the call."
+            },
+            {
+              "name": "extensions_length",
+              "type": "size",
+              "doc": "The bytes of extensions."
+            }
+          ],
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "ppEnabledExtensionNames"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            }
+          }
+        },
+        {
+          "kind": "struct",
+          "name": "device_vulkan_adopt",
+          "chained": true,
+          "doc": "A VkDevice made from the instance's last description (mrhiDescribeVulkanDevice) of an equal device def, which the device adopts and never destroys, chained on a device def with the type mrhi_structDeviceVulkanAdopt. Vulkan only. Without such a description the def is refused with mrhi_errorInvalid; on another driver's adapter with mrhi_errorUnsupported.",
+          "members": [
+            {
+              "name": "device",
+              "type": "void",
+              "pointer": "mutable",
+              "doc": "The VkDevice."
+            }
+          ],
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "the device XR_KHR_vulkan_enable2's xrCreateVulkanDeviceKHR made"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            }
+          }
+        },
+        {
+          "kind": "struct",
+          "name": "device_vulkan_extensions",
+          "chained": true,
+          "doc": "Extensions and features the Vulkan device enables beyond the library's own (an upscaler's, such as XeSS's or Streamline's), chained on a device def with the type mrhi_structDeviceVulkanExtensions; a description includes them. Vulkan only. The names are copied at the call, and those the library enables itself are named once; on another driver's adapter the def is refused with mrhi_errorUnsupported.",
+          "members": [
+            {
+              "name": "extensions",
+              "type": "char",
+              "pointer": "const",
+              "doc": "The extensions' names, each ended by a NUL, in extensionsLength bytes. Only read during the call."
+            },
+            {
+              "name": "extensions_length",
+              "type": "size",
+              "doc": "The bytes of extensions."
+            },
+            {
+              "name": "features",
+              "type": "void",
+              "pointer": "const",
+              "doc": "A chain of Vulkan feature structs (VkBaseInStructure) to enable as well, or NULL: VkPhysicalDeviceFeatures2 and the 1.1, 1.2 and 1.3 feature structs, whose true members are merged into the library's; a def with any other struct is refused with mrhi_errorUnsupported, since the library cannot place a struct it does not know the size of. Only read during the call."
+            }
+          ],
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "ppEnabledExtensionNames"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            }
+          }
+        },
+        {
+          "kind": "struct",
+          "name": "texture_vulkan_adopt",
+          "chained": true,
+          "doc": "A VkImage made elsewhere (an OpenXR runtime's swapchain image), which the device adopts as a texture and never destroys, nor its memory, chained on a texture def given to mrhiCreateTexture with the type mrhi_structTextureVulkanAdopt. The def states the image's format, kind, size, layers, mips, samples, usage and view formats, which Vulkan cannot report; its usage includes mrhi_textureRenderTarget. Between frames the image rests as a render target, in VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL for a color format or VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL for a depth one, owned by the device's queue: it must be so when adopted, and every frame that uses it leaves it so, as OpenXR hands images over and takes them back. It cannot be sealed. On another driver's device the def is refused with mrhi_errorUnsupported.",
+          "members": [
+            {
+              "name": "image",
+              "type": "void",
+              "pointer": "mutable",
+              "doc": "The VkImage."
+            }
+          ],
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "the image xrEnumerateSwapchainImages gives"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "describe_vulkan_device",
+          "doc": "Describes the Vulkan device a device def would make: the VkDeviceCreateInfo and the VkPhysicalDevice the driver would pass to vkCreateDevice, for a program whose OpenXR runtime makes the device (xrCreateVulkanDeviceKHR). The description stays valid until the instance's next description, refused or not, or its end; a device made from it is adopted with mrhiDeviceVulkanAdopt.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the instance's driver is not Vulkan, or for a def the adapter cannot take; `mrhi_errorStale` for an adapter the instance no longer has; `mrhi_errorInvalid` for a NULL argument or a malformed def."
+          },
+          "args": [
+            {
+              "name": "instance",
+              "type": "opaque.instance",
+              "pointer": "mutable",
+              "doc": "The instance."
+            },
+            {
+              "name": "def",
+              "type": "struct.device_def",
+              "pointer": "const",
+              "doc": "The device def, its adapter set."
+            },
+            {
+              "name": "create_info_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the const VkDeviceCreateInfo*."
+            },
+            {
+              "name": "physical_device_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the VkPhysicalDevice."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the instance"
+          },
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "VkDeviceCreateInfo"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "get_vulkan_physical_device",
+          "doc": "Reads an adapter's VkPhysicalDevice, to find the adapter an OpenXR runtime names (xrGetVulkanGraphicsDevice2KHR).",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the instance's driver is not Vulkan; `mrhi_errorStale` for an adapter the instance no longer has; `mrhi_errorInvalid` for a NULL argument."
+          },
+          "args": [
+            {
+              "name": "instance",
+              "type": "opaque.instance",
+              "pointer": "mutable",
+              "doc": "The instance."
+            },
+            {
+              "name": "adapter",
+              "type": "id.adapter_id",
+              "doc": "The adapter."
+            },
+            {
+              "name": "physical_device_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the VkPhysicalDevice."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the instance"
+          },
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "VkPhysicalDevice"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "get_vulkan_queue",
+          "doc": "Reads the queue family and index a Vulkan device submits on, for XrGraphicsBindingVulkan2KHR.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not Vulkan; `mrhi_errorInvalid` for a NULL argument."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "family_out",
+              "type": "uint32",
+              "pointer": "mutable",
+              "doc": "Receives the queue family index."
+            },
+            {
+              "name": "index_out",
+              "type": "uint32",
+              "pointer": "mutable",
+              "doc": "Receives the queue index."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "queueFamilyIndex and queueIndex"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "get_vulkan_device",
+          "doc": "Reads a Vulkan device's native objects, borrowed for the device's life: what an upscaler's context is made from (XeSS's xessVKCreateContext, Streamline's Vulkan setup).",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not Vulkan; `mrhi_errorInvalid` for a NULL argument."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "instance_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the VkInstance."
+            },
+            {
+              "name": "physical_device_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the VkPhysicalDevice."
+            },
+            {
+              "name": "device_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the VkDevice."
+            },
+            {
+              "name": "get_instance_proc_addr_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the vkGetInstanceProcAddr the library uses."
+            },
+            {
+              "name": "get_device_proc_addr_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the vkGetDeviceProcAddr the library uses."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "the instance, physical device and device"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            }
+          }
+        },
+        {
+          "kind": "struct",
+          "name": "vulkan_texture_info",
+          "doc": "A device texture's Vulkan image, as an upscaler's resource description takes it (Streamline's sl::Resource, XeSS's xess_vk_image_view_info, with a view the program makes).",
+          "members": [
+            {
+              "name": "image",
+              "type": "void",
+              "pointer": "mutable",
+              "doc": "The VkImage."
+            },
+            {
+              "name": "memory",
+              "type": "void",
+              "pointer": "mutable",
+              "doc": "The VkDeviceMemory it is bound to, or NULL for an adopted image."
+            },
+            {
+              "name": "memory_offset",
+              "type": "uint64",
+              "doc": "Its offset in that memory."
+            },
+            {
+              "name": "format",
+              "type": "uint32",
+              "doc": "Its VkFormat."
+            },
+            {
+              "name": "usage",
+              "type": "uint32",
+              "doc": "Its VkImageUsageFlags."
+            },
+            {
+              "name": "create_flags",
+              "type": "uint32",
+              "doc": "Its VkImageCreateFlags."
+            }
+          ],
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "VkImage"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Vulkan only"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "get_vulkan_texture",
+          "doc": "Reads a device texture's Vulkan image. In a native pass the texture is in the layout its access puts it in: VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL for mrhi_accessSampled, VK_IMAGE_LAYOUT_GENERAL for the storage accesses, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL and VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL for the copies.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not Vulkan; `mrhi_errorStale` for a texture the device no longer has; `mrhi_errorInvalid` for a NULL argument."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "texture",
+              "type": "id.texture_id",
+              "doc": "The texture."
+            },
+            {
+              "name": "texture_out",
+              "type": "struct.vulkan_texture_info",
+              "pointer": "mutable",
+              "doc": "Receives the image."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "VkImage"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "set_vulkan_pass_commands",
+          "doc": "Hands a native pass the command buffer the program recorded for it: a primary VkCommandBuffer from the program's own pool on the device's queue family, ended and not submitted. The library submits it at the pass's place in the frame, after the library's commands before it and before those after it; it must leave every declared resource in its access's layout (mrhiGetVulkanTexture), and may change any other state. The program keeps it alive until the frame is done.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not Vulkan; `mrhi_errorState` outside the pass's recording, or for a pass that already has one; `mrhi_errorInvalid` for a NULL command buffer or a pass that is not native."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "pass",
+              "type": "id.pass_id",
+              "doc": "The native pass, begun."
+            },
+            {
+              "name": "command_buffer",
+              "type": "void",
+              "pointer": "mutable",
+              "doc": "The VkCommandBuffer."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "mapping": {
+            "vulkan": {
+              "class": "direct",
+              "note": "vkQueueSubmit2's command buffers, in order"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Vulkan only: unsupported"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "d3d12",
+      "doc": "D3D12 objects for vendor upscalers (mrhi-0019): the device's native objects, a texture's resource, and the command list a native pass runs. Every other driver answers the functions unsupported.",
+      "includes": [
+        "frame"
+      ],
+      "items": [
+        {
+          "kind": "function",
+          "name": "get_d3d12_device",
+          "doc": "Reads a D3D12 device's native objects, borrowed for the device's life with no reference added: what an upscaler's context is made from (the FidelityFX SDK's backend, XeSS's xessD3D12CreateContext).",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not D3D12; `mrhi_errorInvalid` for a NULL argument."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "device_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the ID3D12Device*."
+            },
+            {
+              "name": "queue_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the ID3D12CommandQueue* the device submits on."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "mapping": {
+            "d3d12": {
+              "class": "direct",
+              "note": "the device and its direct queue"
+            },
+            "vulkan": {
+              "class": "absent_rejected",
+              "note": "D3D12 only: unsupported"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "D3D12 only: unsupported"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "D3D12 only: unsupported"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "get_d3d12_texture",
+          "doc": "Reads a device texture's ID3D12Resource, borrowed with no reference added. In a native pass the texture is in the state its access puts it in: D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE for mrhi_accessSampled, D3D12_RESOURCE_STATE_UNORDERED_ACCESS for the storage accesses, D3D12_RESOURCE_STATE_COPY_SOURCE and D3D12_RESOURCE_STATE_COPY_DEST for the copies; a buffer is in D3D12_RESOURCE_STATE_COMMON, promoted on its first use, as buffers decay between command lists.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not D3D12; `mrhi_errorStale` for a texture the device no longer has; `mrhi_errorInvalid` for a NULL argument."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "texture",
+              "type": "id.texture_id",
+              "doc": "The texture."
+            },
+            {
+              "name": "resource_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the ID3D12Resource*."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "mapping": {
+            "d3d12": {
+              "class": "direct",
+              "note": "ID3D12Resource"
+            },
+            "vulkan": {
+              "class": "absent_rejected",
+              "note": "D3D12 only: unsupported"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "D3D12 only: unsupported"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "D3D12 only: unsupported"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "set_d3d12_pass_commands",
+          "doc": "Hands a native pass the command list the program recorded for it: an ID3D12GraphicsCommandList of the direct type, closed and not executed. The library executes it at the pass's place in the frame, after the library's lists before it and before those after it, each in its own ExecuteCommandLists; it must leave every declared texture in its access's state (mrhiGetD3d12Texture), and may change any other state, its descriptor heaps and root signatures included. The program keeps it alive until the frame is done.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not D3D12; `mrhi_errorState` outside the pass's recording, or for a pass that already has one; `mrhi_errorInvalid` for a NULL list or a pass that is not native."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "pass",
+              "type": "id.pass_id",
+              "doc": "The native pass, begun."
+            },
+            {
+              "name": "command_list",
+              "type": "void",
+              "pointer": "mutable",
+              "doc": "The ID3D12GraphicsCommandList*."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "mapping": {
+            "d3d12": {
+              "class": "direct",
+              "note": "ExecuteCommandLists, in order"
+            },
+            "vulkan": {
+              "class": "absent_rejected",
+              "note": "D3D12 only: unsupported"
+            },
+            "metal": {
+              "class": "absent_rejected",
+              "note": "D3D12 only: unsupported"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "D3D12 only: unsupported"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "metal",
+      "doc": "Metal objects for vendor upscalers and MetalFX (mrhi-0019): the device's native objects, a texture, and the command buffer a native pass runs. Every other driver answers the functions unsupported.",
+      "includes": [
+        "frame"
+      ],
+      "items": [
+        {
+          "kind": "function",
+          "name": "get_metal_device",
+          "doc": "Reads a Metal device's native objects, borrowed for the device's life with no reference added: what an upscaler is made from (MetalFX's MTLFXTemporalScalerDescriptor makes its scaler from the MTLDevice).",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not Metal; `mrhi_errorInvalid` for a NULL argument."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "device_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the id<MTLDevice>."
+            },
+            {
+              "name": "queue_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the id<MTLCommandQueue> the device commits to."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "mapping": {
+            "metal": {
+              "class": "direct",
+              "note": "the device and its queue"
+            },
+            "vulkan": {
+              "class": "absent_rejected",
+              "note": "Metal only: unsupported"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Metal only: unsupported"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Metal only: unsupported"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "get_metal_texture",
+          "doc": "Reads a device texture's id<MTLTexture>, borrowed with no reference added. Metal tracks its hazards, so a native pass needs no state.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not Metal; `mrhi_errorStale` for a texture the device no longer has; `mrhi_errorInvalid` for a NULL argument."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "texture",
+              "type": "id.texture_id",
+              "doc": "The texture."
+            },
+            {
+              "name": "texture_out",
+              "type": "void",
+              "pointer": "out",
+              "doc": "Receives the id<MTLTexture>."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "mapping": {
+            "metal": {
+              "class": "direct",
+              "note": "MTLTexture"
+            },
+            "vulkan": {
+              "class": "absent_rejected",
+              "note": "Metal only: unsupported"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Metal only: unsupported"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Metal only: unsupported"
+            }
+          }
+        },
+        {
+          "kind": "function",
+          "name": "set_metal_pass_commands",
+          "doc": "Hands a native pass the command buffer the program encoded for it: an id<MTLCommandBuffer> from the device's queue (mrhiGetMetalDevice), with no encoder open, neither enqueued nor committed. The library commits it at the pass's place in the frame, after the library's command buffer before it and before the one after it, and the frame is done only once it has completed too. The program keeps it alive until then.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not Metal; `mrhi_errorState` outside the pass's recording, or for a pass that already has one; `mrhi_errorInvalid` for a NULL command buffer or a pass that is not native."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "pass",
+              "type": "id.pass_id",
+              "doc": "The native pass, begun."
+            },
+            {
+              "name": "command_buffer",
+              "type": "void",
+              "pointer": "mutable",
+              "doc": "The id<MTLCommandBuffer>."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "mapping": {
+            "metal": {
+              "class": "direct",
+              "note": "command buffers committed in order"
+            },
+            "vulkan": {
+              "class": "absent_rejected",
+              "note": "Metal only: unsupported"
+            },
+            "d3d12": {
+              "class": "absent_rejected",
+              "note": "Metal only: unsupported"
+            },
+            "web_gpu": {
+              "class": "absent_rejected",
+              "note": "Metal only: unsupported"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "test",
       "doc": "The test driver (MAUL_RHI_TEST_DRIVER): a driver without a GPU whose adapters a test describes, for the library's tests and a program's own.",
       "includes": [
@@ -20010,5 +21991,5 @@
       ]
     }
   ],
-  "contract_version": 1
+  "contract_version": 2
 }

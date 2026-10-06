@@ -9,7 +9,11 @@
 # then crosses each entry alone to DIR/NAME.metal with SPIRV-Cross's
 # --msl-decoration-binding, which takes those numbers as the MSL indices.
 # The root block, which has no binding, takes buffer 0. The MSL is made
-# for macOS at MSL_VERSION. spirv-cross must be on the path.
+# for macOS at MSL_VERSION. An entry reading the view index (record
+# mrhi-0020) runs under vertex amplification: SPIRV-Cross writes its view
+# index as the constant line VIEW_INDEX, which becomes a parameter, the
+# amplification id in a vertex entry and the render target array index,
+# its view's layer, in a fragment one. spirv-cross must be on the path.
 #
 # usage: mrhi_msl.py SPIRV REFLECTION DIR
 
@@ -23,6 +27,28 @@ import tempfile
 
 MSL_VERSION = "20300"
 STAGES = {"vertex": "vert", "fragment": "frag", "compute": "comp"}
+# SPIRV-Cross's view index without its multiview option, and what each
+# stage reads it from under vertex amplification.
+VIEW_INDEX = "    const uint gl_ViewIndex = 0;\n"
+VIEW_SOURCES = {"vertex": "uint gl_ViewIndex [[amplification_id]]",
+                "fragment": "uint gl_ViewIndex [[render_target_array_index]]"}
+
+
+def read_view_index(writer, text, entry):
+    """The MSL of an entry reading the view index, its constant replaced
+    by its stage's parameter."""
+    writer.need(text.count(VIEW_INDEX) == 1,
+                f"{entry['name']}: no single view index line in SPIRV-Cross's MSL")
+    text = text.replace(VIEW_INDEX, "")
+    keyword = "vertex " if entry["stage"] == "vertex" else "fragment "
+    lines = text.split("\n")
+    heads = [i for i, line in enumerate(lines) if line.startswith(keyword) and "(" in line]
+    writer.need(len(heads) == 1, f"{entry['name']}: no single {keyword.strip()} function")
+    head = lines[heads[0]]
+    at = head.index("(") + 1
+    source = VIEW_SOURCES[entry["stage"]]
+    lines[heads[0]] = head[:at] + source + ("" if head[at] == ")" else ", ") + head[at:]
+    return "\n".join(lines)
 
 
 def load_writer():
@@ -97,6 +123,16 @@ def main():
                 print(f"mrhi_msl: spirv-cross failed on {entry['name']}:\n{result.stdout}"
                       f"{result.stderr}", file=sys.stderr)
                 return 1
+            if "view_index" in entry.get("builtins", []):
+                path = os.path.join(folder, entry["name"] + ".metal")
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        text = read_view_index(writer, f.read(), entry)
+                except writer.ContainerError as error:
+                    print(f"mrhi_msl: {error}", file=sys.stderr)
+                    return 1
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(text)
     return 0
 
 if __name__ == "__main__":

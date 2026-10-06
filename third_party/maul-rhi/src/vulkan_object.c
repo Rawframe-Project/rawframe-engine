@@ -8,10 +8,13 @@
 #include "vulkan_object.h"
 
 #include "capabilities_core.h"
+#include "chain.h"
 #include "invariant.h"
 #include "vulkan_adapter.h"
 #include "vulkan_label.h"
 #include "vulkan_resource.h"
+
+#include "maul-rhi/vulkan.h"
 
 void mrhiVulkanSlotsInit(mrhiVulkanSlots* slots, uint32_t* next, uint32_t capacity)
 {
@@ -93,6 +96,16 @@ mrhiResult mrhiVulkanCreateTexture(mrhiVulkanObjects* objects, const mrhiTexture
         return mrhi_errorCapacity;
     }
     mrhiVulkanTexture* made = &objects->textures[handle - 1];
+    const mrhiTextureVulkanAdopt* adopt =
+        (const mrhiTextureVulkanAdopt*)mrhiFindStruct(def->next, mrhi_structTextureVulkanAdopt);
+    if (adopt != nullptr)
+    {
+        *made = (mrhiVulkanTexture){.image = (VkImage)adopt->image, .adopted = true};
+        mrhiVulkanName(objects->api, objects->device, VK_OBJECT_TYPE_IMAGE,
+                       MRHI_VULKAN_HANDLE(made->image), def->label, def->labelLength);
+        *handleOut = handle;
+        return mrhi_success;
+    }
     mrhiVulkanImage image;
     mrhiVulkanImageOf(def, objects->depthStencil, &image);
     VkResult result =
@@ -118,8 +131,11 @@ mrhiResult mrhiVulkanCreateTexture(mrhiVulkanObjects* objects, const mrhiTexture
 void mrhiVulkanDestroyTexture(mrhiVulkanObjects* objects, uint64_t handle)
 {
     mrhiVulkanTexture* texture = &objects->textures[handle - 1];
-    objects->api->vkDestroyImage(objects->device, texture->image, nullptr);
-    mrhiVulkanRelease(objects->memory, &texture->allocation);
+    if (!texture->adopted)
+    {
+        objects->api->vkDestroyImage(objects->device, texture->image, nullptr);
+        mrhiVulkanRelease(objects->memory, &texture->allocation);
+    }
     *texture = (mrhiVulkanTexture){0};
     mrhiVulkanGiveSlot(&objects->textureSlots, handle);
 }
@@ -272,14 +288,22 @@ mrhiResult mrhiVulkanCreateQuerySet(mrhiVulkanObjects* objects, const mrhiQueryS
     {
         return mrhi_errorCapacity;
     }
+    static const VkQueryType types[] = {
+        [mrhi_queryOcclusion] = VK_QUERY_TYPE_OCCLUSION,
+        [mrhi_queryTimestamp] = VK_QUERY_TYPE_TIMESTAMP,
+        [mrhi_queryPipelineStatistics] = VK_QUERY_TYPE_PIPELINE_STATISTICS,
+    };
+    // Every counter, in bit order, which is the order a resolve writes
+    // them in (mrhi-0023).
     const VkQueryPoolCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
-        .queryType =
-            def->type == mrhi_queryTimestamp ? VK_QUERY_TYPE_TIMESTAMP : VK_QUERY_TYPE_OCCLUSION,
+        .queryType = types[def->type],
         .queryCount = def->count,
+        .pipelineStatistics =
+            def->type == mrhi_queryPipelineStatistics ? (1u << MRHI_STATISTICS_COUNTERS) - 1 : 0,
     };
     mrhiVulkanQuerySet* set = &objects->querySets[handle - 1];
-    *set = (mrhiVulkanQuerySet){.count = def->count};
+    *set = (mrhiVulkanQuerySet){.count = def->count, .type = def->type};
     VkResult result = objects->api->vkCreateQueryPool(objects->device, &info, nullptr, &set->pool);
     if (result != VK_SUCCESS)
     {

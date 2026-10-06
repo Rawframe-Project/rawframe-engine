@@ -9,6 +9,7 @@
 #ifndef MAUL_RHI_SRC_INSTANCE_CORE_H
 #define MAUL_RHI_SRC_INSTANCE_CORE_H
 
+#include "diagnostics.h"
 #include "driver.h"
 #include "pool.h"
 
@@ -58,10 +59,16 @@ struct mrhiInstance
     mrhiAllocator allocator;
     mrhiInstanceLimits limits;
     size_t bytes;
-    // Calls refused as invalid input.
+    // Calls refused as invalid input, and the records of those refusals.
     uint64_t misuse;
-    // No driver when its vtable is NULL.
+    mrhiDiagnosticQueue diagnostics;
+    // No driver when its vtable is NULL; external for one the program
+    // made (mrhi-0024), whose adapters the core reports as such.
     mrhiInstanceDriver driver;
+    bool external;
+    // Breaches of the SPI the validation layer found (mrhi-0025), its
+    // devices' included, which may count on their threads.
+    _Atomic uint64_t driverFaults;
     uint32_t nextRequest;
     uint32_t deviceCount;
     // A ring of limits.notifications records.
@@ -83,9 +90,9 @@ struct mrhiInstance
     mrhiSurfaceSlot* surfaceSlots;
 };
 
-// Counts one misuse and returns mrhi_errorInvalid, for a refusal of
-// invalid input on a live instance.
-mrhiResult mrhiMisuse(mrhiInstance* instance);
+// Counts one misuse refused by a check, records it, and returns
+// mrhi_errorInvalid, for a refusal of invalid input on a live instance.
+mrhiResult mrhiMisuse(mrhiInstance* instance, mrhiDiagnosticCode code);
 
 // Appends a record; the caller has made sure there is room.
 void mrhiPushInstanceNotification(mrhiInstance* instance, mrhiInstanceNotification notification);

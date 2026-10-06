@@ -9,6 +9,9 @@
 #include "chain.h"
 #include "instance_core.h"
 #include "invariant.h"
+#include "validation.h"
+
+#include "maul-rhi/vulkan.h"
 
 #ifdef MAUL_RHI_TEST_DRIVER
 #include "driver_test.h"
@@ -32,11 +35,43 @@
 
 // The chained structs an instance def accepts.
 static const mrhiStructType s_instanceStructs[] = {
+    mrhi_structExternalDriver,
 #ifdef MAUL_RHI_TEST_DRIVER
     mrhi_structTestDriver,
 #endif
+#ifdef MAUL_RHI_VULKAN_DRIVER
+    mrhi_structInstanceVulkanAdopt,
+    mrhi_structInstanceVulkanExtensions,
+#endif
     mrhi_structNone,
 };
+
+// Whether the def's Vulkan structs are well formed (mrhi-0018): name lists,
+// an adopted instance, and no extra extensions for an instance the
+// program made.
+static bool AreVulkanStructsValid(const mrhiInstanceDef* def)
+{
+    const mrhiInstanceVulkanAdopt* adopt =
+        (const mrhiInstanceVulkanAdopt*)mrhiFindStruct(def->next, mrhi_structInstanceVulkanAdopt);
+    const mrhiInstanceVulkanExtensions* extra = (const mrhiInstanceVulkanExtensions*)mrhiFindStruct(
+        def->next, mrhi_structInstanceVulkanExtensions);
+    bool adopted =
+        adopt == nullptr || (adopt->instance != nullptr && adopt->getInstanceProcAddr != nullptr &&
+                             mrhiIsNameList(adopt->extensions, adopt->extensionsLength));
+    bool extended = extra == nullptr || mrhiIsNameList(extra->extensions, extra->extensionsLength);
+    return adopted && extended && (adopt == nullptr || extra == nullptr);
+}
+
+// Whether the def asks for more than one driver: the test driver, an
+// external one (mrhi-0024), or the Vulkan driver through its structs.
+static bool MixesDrivers(const mrhiInstanceDef* def)
+{
+    bool vulkan = mrhiFindStruct(def->next, mrhi_structInstanceVulkanAdopt) != nullptr ||
+                  mrhiFindStruct(def->next, mrhi_structInstanceVulkanExtensions) != nullptr;
+    bool test = mrhiFindStruct(def->next, mrhi_structTestDriver) != nullptr;
+    bool external = mrhiFindStruct(def->next, mrhi_structExternalDriver) != nullptr;
+    return (vulkan && test) || (external && (vulkan || test));
+}
 
 mrhiInstanceDef mrhiDefaultInstanceDef(void)
 {
@@ -64,7 +99,16 @@ static mrhiResult CheckDef(const mrhiInstanceDef* def)
         return mrhi_errorVersion;
     }
     size_t accepted = sizeof(s_instanceStructs) / sizeof(s_instanceStructs[0]) - 1;
-    return mrhiCheckChain(def->next, s_instanceStructs, accepted, limits->chainDepth);
+    mrhiResult chain = mrhiCheckChain(def->next, s_instanceStructs, accepted, limits->chainDepth);
+    if (chain != mrhi_success)
+    {
+        return chain;
+    }
+    if (!AreVulkanStructsValid(def))
+    {
+        return mrhi_errorInvalid;
+    }
+    return MixesDrivers(def) ? mrhi_errorUnsupported : mrhi_success;
 }
 
 // The instance's block: the struct, then its arrays.
@@ -88,6 +132,8 @@ static mrhiInstance* Allocate(const mrhiInstanceDef* def)
         mrhiLayoutAdd(&layout, limits->surfaces, sizeof(uint32_t), alignof(uint32_t));
     size_t surfaceSlotsAt =
         mrhiLayoutAdd(&layout, limits->surfaces, sizeof(mrhiSurfaceSlot), alignof(mrhiSurfaceSlot));
+    size_t diagnosticsAt = mrhiLayoutAdd(&layout, limits->diagnostics, sizeof(mrhiDiagnostic),
+                                         alignof(mrhiDiagnostic));
     unsigned char* block = layout.overflow
                                ? nullptr
                                : mrhiAllocate(&def->allocator, layout.size, alignof(mrhiInstance));
@@ -109,6 +155,8 @@ static mrhiInstance* Allocate(const mrhiInstanceDef* def)
     };
     mrhiPoolInit(&instance->surfaces, limits->surfaces, (uint32_t*)(block + generationsAt),
                  (uint32_t*)(block + nextFreeAt));
+    mrhiInitDiagnostics(&instance->diagnostics, (mrhiDiagnostic*)(block + diagnosticsAt),
+                        limits->diagnostics);
     for (uint32_t i = 0; i < limits->adapters; ++i)
     {
         instance->slots[i] = (mrhiAdapterSlot){.generation = 1};
@@ -122,13 +170,27 @@ static mrhiResult StartDriver(mrhiInstance* instance, const mrhiInstanceDef* def
 {
     for (const mrhiChain* node = def->next; node != nullptr; node = node->next)
     {
+        if (node->type == mrhi_structExternalDriver)
+        {
+            // Owned from here only when it passes the handshake.
+            const mrhiExternalDriverDef* external = (const mrhiExternalDriverDef*)node;
+            const mrhiInstanceDriverVtable* vtable = external->vtable;
+            mrhiResult status = mrhiCheckInstanceVtable(vtable);
+            if (status == mrhi_success)
+            {
+                instance->driver = (mrhiInstanceDriver){vtable, external->driver};
+                instance->external = true;
+            }
+            return status;
+        }
 #ifdef MAUL_RHI_TEST_DRIVER
         if (node->type == mrhi_structTestDriver)
         {
             mrhiResult status =
                 mrhiCreateTestDriver(&instance->allocator, (const mrhiTestDriverDef*)node,
                                      def->limits.notifications, &instance->driver);
-            MRHI_ASSERT(status != mrhi_success || mrhiIsDriverVtableValid(instance->driver.vtable));
+            MRHI_ASSERT(status != mrhi_success ||
+                        mrhiCheckInstanceVtable(instance->driver.vtable) == mrhi_success);
             return status;
         }
 #endif
@@ -140,10 +202,11 @@ static mrhiResult StartDriver(mrhiInstance* instance, const mrhiInstanceDef* def
     return mrhiCreateMetalDriver(&instance->allocator, def->limits.notifications,
                                  &instance->driver);
 #elif defined(MAUL_RHI_VULKAN_DRIVER)
-    mrhiResult status = mrhiCreateVulkanDriver(&instance->allocator, def->limits.notifications,
-                                               def->limits.adapters, &instance->driver);
+    mrhiResult status =
+        mrhiCreateVulkanDriver(&instance->allocator, def->next, def->limits.notifications,
+                               def->limits.adapters, &instance->driver);
     MRHI_ASSERT(instance->driver.vtable == nullptr ||
-                mrhiIsDriverVtableValid(instance->driver.vtable));
+                mrhiCheckInstanceVtable(instance->driver.vtable) == mrhi_success);
     return status;
 #elif defined(MAUL_RHI_WEBGPU_DRIVER)
     return mrhiCreateWebGpuDriver(&instance->allocator, def->limits.notifications,
@@ -176,6 +239,18 @@ mrhiResult mrhiCreateInstance(const mrhiInstanceDef* def, mrhiInstance** instanc
         return mrhi_errorCapacity;
     }
     status = StartDriver(instance, def);
+#ifdef MAUL_RHI_VALIDATION
+    if (status == mrhi_success && instance->driver.vtable != nullptr)
+    {
+        status = mrhiWrapDriver(&instance->allocator, def->limits.notifications,
+                                &instance->driverFaults, &instance->diagnostics, &instance->driver);
+        // An external driver stays the program's when the instance fails.
+        if (status != mrhi_success && instance->external)
+        {
+            instance->driver = (mrhiInstanceDriver){0};
+        }
+    }
+#endif
     if (status != mrhi_success)
     {
         mrhiDestroyInstance(instance);
@@ -193,7 +268,7 @@ void mrhiDestroyInstance(mrhiInstance* instance)
     }
     if (instance->deviceCount > 0)
     {
-        mrhiMisuse(instance);
+        mrhiMisuse(instance, mrhi_diagnosticInstanceHasDevices);
         return;
     }
     if (instance->driver.vtable != nullptr)
@@ -205,13 +280,34 @@ void mrhiDestroyInstance(mrhiInstance* instance)
     mrhiRelease(&allocator, instance, instance->bytes, alignof(mrhiInstance));
 }
 
-mrhiResult mrhiMisuse(mrhiInstance* instance)
+mrhiResult mrhiMisuse(mrhiInstance* instance, mrhiDiagnosticCode code)
 {
     ++instance->misuse;
+    mrhiRecordDiagnostic(&instance->diagnostics, code);
     return mrhi_errorInvalid;
+}
+
+mrhiResult mrhiNextInstanceDiagnostic(mrhiInstance* instance, mrhiDiagnostic* diagnosticOut)
+{
+    if (instance == nullptr)
+    {
+        return mrhi_errorInvalid;
+    }
+    if (diagnosticOut == nullptr)
+    {
+        return mrhiMisuse(instance, mrhi_diagnosticNullArgument);
+    }
+    return mrhiTakeDiagnostic(&instance->diagnostics, diagnosticOut);
 }
 
 uint64_t mrhiGetInstanceMisuse(mrhiInstance* instance)
 {
     return instance == nullptr ? 0 : instance->misuse;
+}
+
+uint64_t mrhiGetDriverFaults(const mrhiInstance* instance)
+{
+    return instance == nullptr
+               ? 0
+               : atomic_load_explicit(&instance->driverFaults, memory_order_relaxed);
 }

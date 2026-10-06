@@ -56,7 +56,7 @@ mrhiResult mrhiCreateSampler(mrhiDevice* device, const mrhiSamplerDef* def,
     }
     if (def == nullptr || samplerOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhiCheckObjectDef(device, MRHI_DEF_HEAD(def), SAMPLER_DEF_COOKIE);
     if (status != mrhi_success)
@@ -65,7 +65,7 @@ mrhiResult mrhiCreateSampler(mrhiDevice* device, const mrhiSamplerDef* def,
     }
     if (!IsSamplerDefValid(def))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticSamplerDef);
     }
     status = mrhiDeviceUsable(device);
     if (status != mrhi_success)
@@ -132,7 +132,7 @@ mrhiResult mrhiCheckBufferShape(mrhiDevice* device, const mrhiBufferDef* def)
     }
     if (def->size == 0 || def->size % 4 != 0)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticBufferSize);
     }
     return def->size > device->limits.bufferBytes ? mrhi_errorUnsupported : mrhi_success;
 }
@@ -145,7 +145,7 @@ mrhiResult mrhiCreateBuffer(mrhiDevice* device, const mrhiBufferDef* def, mrhiBu
     }
     if (def == nullptr || bufferOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhiCheckBufferShape(device, def);
     if (status != mrhi_success)
@@ -154,7 +154,7 @@ mrhiResult mrhiCreateBuffer(mrhiDevice* device, const mrhiBufferDef* def, mrhiBu
     }
     if (def->usage == 0 || (def->usage & ~mrhiBufferUsageKnown) != 0)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticBufferUsage);
     }
     status = mrhiDeviceUsable(device);
     if (status != mrhi_success)

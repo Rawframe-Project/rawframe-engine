@@ -54,7 +54,15 @@ typedef struct mrhiVulkanRange
 typedef struct mrhiVulkanSlot
 {
     VkCommandPool pool;
+    // The command buffer the frame records into now: the first of its
+    // parts, then after each native pass the next (mrhi-0018).
     VkCommandBuffer commands;
+    VkCommandBuffer parts[1 + MRHI_NATIVE_PASSES];
+    uint32_t partsUsed;
+    // The command buffers the frame submits, in order: its parts with the
+    // native passes' between them.
+    VkCommandBufferSubmitInfo submits[1 + 2 * MRHI_NATIVE_PASSES];
+    uint32_t submitCount;
     // The core's tag while its frame runs; 0 when idle.
     uint64_t tag;
     // The frame's serial, the timeline value its end signals.

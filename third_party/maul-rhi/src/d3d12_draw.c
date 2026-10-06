@@ -16,6 +16,7 @@
 
 #include "d3d12_barrier.h"
 #include "d3d12_bind.h"
+#include "d3d12_copy.h"
 #include "d3d12_resource.h"
 #include "invariant.h"
 
@@ -79,7 +80,11 @@ static bool TakeScratch(mrhiD3d12Recorder* recorder, uint64_t bytes, uint64_t* o
 {
     if (*recorder->scratch == nullptr)
     {
-        const mrhiBufferDef def = {.size = recorder->scratchBytes};
+        // The kernel expanding counted draws writes it as a UAV.
+        const mrhiBufferDef def = {
+            .size = recorder->scratchBytes,
+            .usage = recorder->expand != nullptr ? mrhi_bufferStorage : 0,
+        };
         *recorder->scratch = mrhiD3d12CommitBuffer(recorder->objects, &def);
     }
     if (*recorder->scratch == nullptr || recorder->scratchBytes - recorder->scratchUsed < bytes)
@@ -144,6 +149,66 @@ static void Indirect(mrhiD3d12Recorder* recorder, uint32_t object, uint64_t offs
                                               0);
 }
 
+// A counted multi-draw (mrhi-0020), reading its records in place; or,
+// for a pipeline reading the vertex information, its records first
+// expanded into the scratch buffer by the library's kernel, each after
+// a copy of its base vertex and first instance for the pipeline's
+// command signature.
+static void Counted(mrhiD3d12Recorder* recorder, const mrhiCommand* command, bool indexed,
+                    bool expanded)
+{
+    ID3D12GraphicsCommandList* list = recorder->list;
+    uint32_t object = command->a;
+    uint32_t count = (uint32_t)command->b;
+    uint32_t most = (uint32_t)(command->b >> 32);
+    ID3D12Resource* records = recorder->table[object - 1].resource;
+    ID3D12Resource* counts = recorder->table[count - 1].resource;
+    if (!expanded)
+    {
+        mrhiD3d12Use(recorder, object, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+        mrhiD3d12Use(recorder, count, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+        mrhiD3d12Ready(recorder);
+        ID3D12GraphicsCommandList_ExecuteIndirect(
+            list,
+            recorder->signatures[indexed ? mrhiD3d12IndirectDrawIndexed : mrhiD3d12IndirectDraw],
+            most, records, command->c, counts, command->d);
+        return;
+    }
+    const mrhiD3d12Pipeline* pipeline = recorder->pipeline;
+    // A record's words, and where its base vertex and first instance lie.
+    uint32_t words = indexed ? 5 : 4;
+    uint32_t first = indexed ? 3 : 2;
+    uint64_t at = 0;
+    if (!TakeScratch(recorder, (uint64_t)most * (words + 2) * sizeof(uint32_t), &at))
+    {
+        return;
+    }
+    mrhiD3d12Use(recorder, object, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    MoveScratch(recorder, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    mrhiD3d12FlushBarriers(recorder);
+    // The kernel replaces the compute root signature, so the next compute
+    // pipeline sets its own again, and the graphics pipeline state, which
+    // is set back after it.
+    ID3D12GraphicsCommandList_SetComputeRootSignature(list, recorder->expandRoot);
+    recorder->computeRoot = recorder->expandRoot;
+    memset(recorder->boundCounts[1], 0, sizeof(recorder->boundCounts[1]));
+    ID3D12GraphicsCommandList_SetPipelineState(list, recorder->expand);
+    const uint32_t shape[3] = {most, words, first};
+    ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(list, 0, 3, shape, 0);
+    ID3D12GraphicsCommandList_SetComputeRootShaderResourceView(
+        list, 1, ID3D12Resource_GetGPUVirtualAddress(records) + command->c);
+    ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(
+        list, 2, ID3D12Resource_GetGPUVirtualAddress(*recorder->scratch) + at);
+    ID3D12GraphicsCommandList_Dispatch(list, (most + 63) / 64, 1, 1);
+    ID3D12GraphicsCommandList_SetPipelineState(list, pipeline->state);
+    MoveScratch(recorder, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+    mrhiD3d12Use(recorder, count, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+    mrhiD3d12Ready(recorder);
+    ID3D12GraphicsCommandList_ExecuteIndirect(list,
+                                              indexed ? pipeline->drawIndexed : pipeline->draw,
+                                              most, *recorder->scratch, at, counts, command->d);
+}
+
 void mrhiD3d12Draw(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
 {
     ID3D12GraphicsCommandList* list = recorder->list;
@@ -185,6 +250,10 @@ void mrhiD3d12Draw(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
         }
         break;
     }
+    case mrhiCommandDrawIndirectCount:
+    case mrhiCommandDrawIndexedIndirectCount:
+        Counted(recorder, command, command->type == mrhiCommandDrawIndexedIndirectCount, info);
+        break;
     default:
         MRHI_ASSERT(command->type == mrhiCommandDispatchIndirect);
         Indirect(recorder, command->a, command->c, mrhiD3d12IndirectDispatch);
@@ -227,6 +296,7 @@ static void Resolve(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
     ID3D12Resource* buffer = recorder->table[object - 1].resource;
     uint32_t first = (uint32_t)command->c;
     uint32_t count = (uint32_t)(command->c >> 32);
+    uint64_t stride = set->stride;
     uint32_t i = 0;
     while (i < count)
     {
@@ -236,7 +306,7 @@ static void Resolve(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
         {
             ++run;
         }
-        uint64_t offset = command->d + (uint64_t)i * sizeof(uint64_t);
+        uint64_t offset = command->d + i * stride;
         if (written)
         {
             ID3D12GraphicsCommandList_ResolveQueryData(recorder->list, set->heap, set->type,
@@ -244,9 +314,7 @@ static void Resolve(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
         }
         else
         {
-            ID3D12GraphicsCommandList_CopyBufferRegion(recorder->list, buffer, offset,
-                                                       recorder->zeros, 0,
-                                                       (uint64_t)run * sizeof(uint64_t));
+            mrhiD3d12CopyZeros(recorder, buffer, offset, run * stride);
         }
         i += run;
     }
@@ -283,6 +351,18 @@ void mrhiD3d12Query(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
         ID3D12GraphicsCommandList_EndQuery(recorder->list,
                                            SetOf(recorder, recorder->pass->occlusionSet)->heap,
                                            D3D12_QUERY_TYPE_BINARY_OCCLUSION, recorder->openQuery);
+        break;
+    case mrhiCommandBeginStatisticsQuery:
+    {
+        mrhiD3d12QuerySet* set = SetOf(recorder, command->b);
+        Mark(recorder, set, command->a);
+        ID3D12GraphicsCommandList_BeginQuery(recorder->list, set->heap,
+                                             D3D12_QUERY_TYPE_PIPELINE_STATISTICS, command->a);
+        break;
+    }
+    case mrhiCommandEndStatisticsQuery:
+        ID3D12GraphicsCommandList_EndQuery(recorder->list, SetOf(recorder, command->b)->heap,
+                                           D3D12_QUERY_TYPE_PIPELINE_STATISTICS, command->a);
         break;
     default:
         Resolve(recorder, command);

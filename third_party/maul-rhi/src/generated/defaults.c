@@ -43,5 +43,6 @@ mrhiLimits mrhiDefaultLimits(void)
         .heapSize = 0,
         .samplerHeapSize = 0,
         .framesInFlight = 2,
+        .multiviewViews = 1,
     };
 }

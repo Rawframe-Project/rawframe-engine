@@ -4,6 +4,7 @@ What a user of the engine has to know between versions. Newest first.
 
 ## Unreleased
 
+- Maul RHI 0.2.0, a release: coded diagnostics for every refusal, the WebGPU driver in a worker, multiview, counted indirect draws, pipeline statistics and buffer clears, none of which the engine needed a change for.
 - Agents steer round each other: a game with a `navigation` line has the `rawframe.navigation.agent` component (Kest's `rawframe.navigation.Agent`), and the `rawframe.navigation.avoid` system, before the 3D physics step, turns the velocity a game set into the nearest one that keeps clear of the other agents (ORCA, over Maul Nav's). Stalls' customers step aside for each other.
 - A server watching its game's sources (`kest.reload_every`) follows the game's scenes too: a scene edited while the game runs, by `rawframe-author session` or an editor, reaches the World as the difference between what it authored and what it authors now, entities made and destroyed and values written only where the scene changed them.
 - The tooling endpoint lists a World's entities a page at a time (`tooling.entities`, by component if asked) and reads one's components by field name (`tooling.read_entity`), from `world_runtime::ComponentFields`, which a Kest game provides from its program's layouts.

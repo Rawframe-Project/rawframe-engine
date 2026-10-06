@@ -30,6 +30,9 @@ typedef struct mrhiVulkanTexture
 {
     VkImage image;
     mrhiVulkanAllocation allocation;
+    // Made elsewhere and adopted (mrhi-0018): neither it nor its memory is
+    // the library's to destroy.
+    bool adopted;
 } mrhiVulkanTexture;
 
 // The most queries a set has (mrhi-0012), and the words of a set's
@@ -37,12 +40,14 @@ typedef struct mrhiVulkanTexture
 #define MRHI_VULKAN_SET_QUERIES 4096
 #define MRHI_VULKAN_SET_WORDS   (MRHI_VULKAN_SET_QUERIES / 64)
 
-// A query set: its pool, its queries, the frame that reset it last, and
-// the queries that frame has written so far as it records.
+// A query set: its pool, its queries and their type, the frame that
+// reset it last, and the queries that frame has written so far as it
+// records.
 typedef struct mrhiVulkanQuerySet
 {
     VkQueryPool pool;
     uint32_t count;
+    mrhiQueryType type;
     uint64_t resetSerial;
     uint64_t written[MRHI_VULKAN_SET_WORDS];
 } mrhiVulkanQuerySet;

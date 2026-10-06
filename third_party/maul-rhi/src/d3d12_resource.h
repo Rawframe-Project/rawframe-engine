@@ -43,13 +43,14 @@ typedef struct mrhiD3d12View
 #define MRHI_D3D12_SET_QUERIES 4096
 #define MRHI_D3D12_SET_WORDS   (MRHI_D3D12_SET_QUERIES / 64)
 
-// A query set: its heap, the type its queries resolve as, its queries,
-// and the queries the frame of a serial has written so far as it
-// records.
+// A query set: its heap, the type its queries resolve as and the bytes
+// each resolves to, its queries, and the queries the frame of a serial
+// has written so far as it records.
 typedef struct mrhiD3d12QuerySet
 {
     ID3D12QueryHeap* heap;
     D3D12_QUERY_TYPE type;
+    uint64_t stride;
     uint32_t count;
     uint64_t serial;
     uint64_t written[MRHI_D3D12_SET_WORDS];

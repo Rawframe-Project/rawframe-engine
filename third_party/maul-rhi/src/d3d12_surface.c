@@ -120,6 +120,8 @@ void mrhiD3d12SurfaceCaps(IDXGIFactory4* factory, uint64_t surface, mrhiSurfaceC
     capsOut->alphaModes = mrhi_alphaOpaque;
     capsOut->usages = mrhi_textureRenderTarget | mrhi_textureSampled | mrhi_textureCopySource |
                       mrhi_textureCopyDestination;
+    // The flip model takes no sRGB buffer, only sRGB views of one.
+    capsOut->twinViews = true;
 }
 
 DXGI_COLOR_SPACE_TYPE mrhiD3d12ColorSpace(const mrhiSurfaceColor* color)

@@ -126,12 +126,14 @@ static mrhiAdapterInfo InfoOf(const DXGI_ADAPTER_DESC1* desc, ID3D12Device* devi
 // all that formats' caps depend on.
 static const mrhiFeatures s_floorFeatures = {
     .timestampQuery = true,
+    .pipelineStatisticsQuery = true,
     .textureCompressionBc = true,
     .float32Filterable = true,
     .rg11b10Renderable = true,
     .dualSourceBlending = true,
     .unclippedDepth = true,
     .indirectFirstInstance = true,
+    .multiDrawIndirectCount = true,
 };
 
 // The optional features a device grants.
@@ -151,6 +153,16 @@ static mrhiFeatures FeaturesOf(ID3D12Device* device)
         features.shaderInt64 = options1.Int64ShaderOps;
         features.subgroups = options1.WaveOps;
     }
+    // Multiview through view instancing, its shaders reading SV_ViewID
+    // of shader model 6.1 (mrhi-0020).
+    D3D12_FEATURE_DATA_D3D12_OPTIONS3 options3 = {0};
+    D3D12_FEATURE_DATA_SHADER_MODEL model = {.HighestShaderModel = D3D_SHADER_MODEL_6_1};
+    features.multiview = SUCCEEDED(ID3D12Device_CheckFeatureSupport(
+                             device, D3D12_FEATURE_D3D12_OPTIONS3, &options3, sizeof(options3))) &&
+                         options3.ViewInstancingTier >= D3D12_VIEW_INSTANCING_TIER_1 &&
+                         SUCCEEDED(ID3D12Device_CheckFeatureSupport(
+                             device, D3D12_FEATURE_SHADER_MODEL, &model, sizeof(model))) &&
+                         model.HighestShaderModel >= D3D_SHADER_MODEL_6_1;
     return features;
 }
 
@@ -168,6 +180,7 @@ static mrhiLimits LimitsOf(const mrhiFeatures* features)
         limits.heapSize = D3D12_HEAP_SIZE;
         limits.samplerHeapSize = D3D12_SAMPLER_HEAP_SIZE;
     }
+    limits.multiviewViews = features->multiview ? D3D12_MAX_VIEW_INSTANCE_COUNT : 1;
     return limits;
 }
 
@@ -294,7 +307,7 @@ static mrhiResult CreateDevice(void* self, uint64_t adapter, const mrhiDeviceDef
     {
         return mrhi_errorPlatform;
     }
-    mrhiResult status = mrhiCreateD3d12Device(&driver->allocator, &driver->api, driver->factory,
+    mrhiResult status = mrhiCreateD3d12Device(&def->allocator, &driver->api, driver->factory,
                                               device, def, deviceOut);
     if (status == mrhi_success)
     {

@@ -9,6 +9,7 @@
 
 #include "vulkan_surface.h"
 
+#include "capabilities_core.h"
 #include "vulkan_adapter.h"
 
 #include <string.h>
@@ -326,8 +327,42 @@ static mrhiTextureUsage UsagesOf(VkImageUsageFlags flags)
     return usages;
 }
 
+// Whether a surface format is 8-bit sRGB, which a configuration may take
+// as its images' own format.
+static bool IsSrgbImage(VkFormat format)
+{
+    return format == VK_FORMAT_B8G8R8A8_SRGB || format == VK_FORMAT_R8G8B8A8_SRGB;
+}
+
+bool mrhiVulkanTwinImages(const VkSurfaceFormatKHR* formats, uint32_t count,
+                          const mrhiSurfaceCaps* caps)
+{
+    uint32_t eight = 0;
+    uint32_t twinned = 0;
+    for (uint32_t i = 0; i < caps->colorCount; ++i)
+    {
+        mrhiSurfaceColor color = caps->colors[i];
+        mrhiFormat twin = mrhiFormatSrgbPair(color.format);
+        VkFormat srgb = mrhiVulkanFormat(twin, VK_FORMAT_UNDEFINED);
+        if (!IsSrgbImage(srgb))
+        {
+            continue;
+        }
+        eight += 1;
+        bool listed = false;
+        for (uint32_t j = 0; j < count && !listed; ++j)
+        {
+            mrhiSurfaceColor as;
+            listed =
+                formats[j].format == srgb && ColorOf(formats[j], &as) && IsSameColor(as, color);
+        }
+        twinned += listed ? 1 : 0;
+    }
+    return eight > 0 && twinned == eight;
+}
+
 void mrhiVulkanSurfaceCaps(const mrhiVulkan* vulkan, VkPhysicalDevice device, bool swapchain,
-                           VkSurfaceKHR surface, mrhiSurfaceCaps* capsOut)
+                           bool mutableFormat, VkSurfaceKHR surface, mrhiSurfaceCaps* capsOut)
 {
     *capsOut = (mrhiSurfaceCaps){0};
     VkBool32 presents = VK_FALSE;
@@ -343,7 +378,10 @@ void mrhiVulkanSurfaceCaps(const mrhiVulkan* vulkan, VkPhysicalDevice device, bo
     }
     mrhiSurfaceCaps caps = {0};
     VkSurfaceFormatKHR formats[64];
-    AddColors(formats, ReadFormats(vulkan, device, surface, formats, 64), &caps);
+    uint32_t formatCount = ReadFormats(vulkan, device, surface, formats, 64);
+    AddColors(formats, formatCount, &caps);
+    caps.twinViews = mutableFormat;
+    caps.twinImages = mrhiVulkanTwinImages(formats, formatCount, &caps);
     caps.presentModes = ModesOf(vulkan, device, surface);
     VkCompositeAlphaFlagsKHR alpha = surfaceCaps.supportedCompositeAlpha;
     caps.alphaModes |=
@@ -353,10 +391,12 @@ void mrhiVulkanSurfaceCaps(const mrhiVulkan* vulkan, VkPhysicalDevice device, bo
     caps.alphaModes |=
         (alpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) != 0 ? mrhi_alphaPremultiplied : 0u;
     caps.usages = UsagesOf(surfaceCaps.supportedUsageFlags);
-    // The floors: a color, FIFO, opaque alpha and render targets.
+    // The floors: a color, FIFO, opaque alpha, render targets and a way to
+    // sRGB.
     caps.presentable = caps.colorCount > 0 && (caps.presentModes & mrhi_presentFifo) != 0 &&
                        (caps.alphaModes & mrhi_alphaOpaque) != 0 &&
-                       (caps.usages & mrhi_textureRenderTarget) != 0;
+                       (caps.usages & mrhi_textureRenderTarget) != 0 &&
+                       (caps.twinViews || caps.twinImages);
     if (caps.presentable)
     {
         *capsOut = caps;
@@ -369,14 +409,17 @@ bool mrhiVulkanSurfaceFormat(const mrhiVulkan* vulkan, VkPhysicalDevice device,
 {
     VkSurfaceFormatKHR formats[64];
     uint32_t count = ReadFormats(vulkan, device, surface, formats, 64);
+    // An sRGB color (twin images) is listed as its unorm twin.
+    VkFormat exact = mrhiVulkanFormat(color.format, VK_FORMAT_UNDEFINED);
+    mrhiSurfaceColor listedAs = color;
+    listedAs.format = IsSrgbImage(exact) ? mrhiFormatSrgbPair(color.format) : color.format;
     bool found = false;
     for (uint32_t i = 0; i < count; ++i)
     {
         mrhiSurfaceColor listed;
-        bool same = ColorOf(formats[i], &listed) && IsSameColor(listed, color);
-        // The unorm format wins over its sRGB twin.
-        if (same &&
-            (!found || formats[i].format == mrhiVulkanFormat(color.format, VK_FORMAT_UNDEFINED)))
+        bool same = ColorOf(formats[i], &listed) && IsSameColor(listed, listedAs);
+        // The color's own format wins over its twin.
+        if (same && (!found || formats[i].format == exact))
         {
             *formatOut = formats[i];
             found = true;

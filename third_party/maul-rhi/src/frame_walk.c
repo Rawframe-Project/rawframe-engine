@@ -1,33 +1,42 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The test driver's walk of a submitted frame (mrhi-0013): each
-// resource, pass and barrier of the view, and each command record of
-// each pass, checked against the frame and the device's handles.
+// The walk of a submitted frame (mrhi-0013): each resource, pass and
+// barrier of the view, and each command record of each pass, checked
+// against the frame and the device's handles. The test driver traps on
+// what it finds; the validation layer counts it (mrhi-0025).
 
-#include "driver_test_frame.h"
+#include "frame_walk.h"
 
 #include "label.h"
 
 #include <string.h>
 
-// A walk's check, kept in every build the test driver is part of: a
-// program's own tests rely on it whatever NDEBUG says. A broken check
-// means the core recorded what no driver could translate.
-#define WALK_CHECK(cond) ((cond) ? (void)0 : __builtin_trap())
-
-// What a walk checks names against, and what it has counted.
+// What a walk checks names against, what it has counted, and the
+// faults it has found: records the core made that no driver could
+// translate.
 typedef struct Walk
 {
     const mrhiDriverFrame* frame;
-    uint64_t firstHandle;
-    uint64_t lastHandle;
+    mrhiHandleCheck isHandle;
+    const void* handles;
+    uint64_t faults;
     mrhiTestFrameLog counts;
 } Walk;
 
+// A check: whether it held, counting a fault when it did not. Where a
+// failed check leaves later reads unsafe, the walk stops there.
+static bool Holds(Walk* walk, bool condition)
+{
+    walk->faults += condition ? 0 : 1;
+    return condition;
+}
+
+#define WALK_CHECK(cond) Holds(walk, (cond))
+
 static bool IsHandle(const Walk* walk, uint64_t handle)
 {
-    return handle >= walk->firstHandle && handle <= walk->lastHandle;
+    return walk->isHandle(walk->handles, handle);
 }
 
 static bool IsBuffer(mrhiDriverResourceKind kind)
@@ -45,7 +54,7 @@ static bool Names(const Walk* walk, uint64_t object, bool buffer)
 
 // Checks a table's bindings: frame resources, or samplers by handle,
 // each with its slot's kind.
-static void CheckBindings(const Walk* walk, const mrhiCommand* command)
+static void CheckBindings(Walk* walk, const mrhiCommand* command)
 {
     for (uint32_t i = 0; i < command->payload; ++i)
     {
@@ -72,7 +81,10 @@ static uint64_t SideBytes(const mrhiCommand* command, const mrhiCommandBufferSid
 // frame's staging or readback ring.
 static void CheckCopy(Walk* walk, const mrhiCommand* command, bool fromBuffer, bool toBuffer)
 {
-    WALK_CHECK(command->payload == 2);
+    if (!WALK_CHECK(command->payload == 2))
+    {
+        return;
+    }
     mrhiCommandBufferSide from;
     mrhiCommandBufferSide to;
     memcpy(&from, &command[1], sizeof(from));
@@ -129,7 +141,13 @@ static void CheckCommand(Walk* walk, const mrhiCommand* command)
     case mrhiCommandDispatchIndirect:
         WALK_CHECK(Names(walk, command->a, true));
         break;
+    case mrhiCommandDrawIndirectCount:
+    case mrhiCommandDrawIndexedIndirectCount:
+        WALK_CHECK(Names(walk, command->a, true) && Names(walk, (uint32_t)command->b, true));
+        break;
     case mrhiCommandBeginOcclusionQuery:
+    case mrhiCommandBeginStatisticsQuery:
+    case mrhiCommandEndStatisticsQuery:
         WALK_CHECK(IsHandle(walk, command->b));
         break;
     case mrhiCommandResolveQueries:
@@ -151,6 +169,10 @@ static void CheckCommand(Walk* walk, const mrhiCommand* command)
     case mrhiCommandCopyTexture:
         CheckCopy(walk, command, false, false);
         break;
+    case mrhiCommandClearBuffer:
+        WALK_CHECK(Names(walk, command->a, true) && command->c % 4 == 0 && command->d > 0 &&
+                   command->d % 4 == 0);
+        break;
     default:
         WALK_CHECK(command->type != 0 && command->type < mrhiCommandTypeEnd);
         break;
@@ -164,14 +186,23 @@ static void WalkCommands(Walk* walk, const mrhiDriverPass* pass)
     uint32_t visited = 0;
     for (uint32_t chunk = pass->firstChunk; chunk != 0; chunk = frame->chunks[chunk - 1].next)
     {
-        WALK_CHECK(chunk <= frame->chunkCount && ++visited <= frame->chunkCount);
+        if (!WALK_CHECK(chunk <= frame->chunkCount && ++visited <= frame->chunkCount))
+        {
+            return;
+        }
         const mrhiCommandChunk* at = &frame->chunks[chunk - 1];
-        WALK_CHECK(at->count <= MRHI_CHUNK_COMMANDS);
+        if (!WALK_CHECK(at->count <= MRHI_CHUNK_COMMANDS))
+        {
+            return;
+        }
         uint32_t i = 0;
         while (i < at->count)
         {
             const mrhiCommand* command = &at->commands[i];
-            WALK_CHECK(command->payload < at->count - i);
+            if (!WALK_CHECK(command->payload < at->count - i))
+            {
+                return;
+            }
             CheckCommand(walk, command);
             ++walk->counts.commands;
             walk->counts.records += 1u + command->payload;
@@ -236,20 +267,21 @@ static void CheckResource(Walk* walk, const mrhiDriverResource* resource)
     walk->counts.presented += image ? 1 : 0;
 }
 
-void mrhiWalkTestFrame(const mrhiDriverFrame* frame, uint64_t firstHandle, uint64_t lastHandle,
+uint64_t mrhiWalkFrame(const mrhiDriverFrame* frame, mrhiHandleCheck isHandle, const void* handles,
                        mrhiTestFrameLog* log)
 {
-    Walk walk = {.frame = frame, .firstHandle = firstHandle, .lastHandle = lastHandle};
+    Walk state = {.frame = frame, .isHandle = isHandle, .handles = handles};
+    Walk* walk = &state;
     for (uint32_t i = 0; i < frame->resourceCount; ++i)
     {
-        CheckResource(&walk, &frame->resources[i]);
+        CheckResource(walk, &frame->resources[i]);
     }
     for (uint32_t i = 0; i < frame->passCount; ++i)
     {
-        WalkPass(&walk, &frame->passes[i]);
+        WalkPass(walk, &frame->passes[i]);
     }
     // Every chunk the frame took belongs to a kept pass.
-    WALK_CHECK(walk.counts.chunks == frame->chunkCount);
+    WALK_CHECK(walk->counts.chunks == frame->chunkCount);
     for (size_t i = 0; i < frame->barrierCount; ++i)
     {
         WALK_CHECK(frame->barriers[i].resource.index1 != 0 &&
@@ -259,11 +291,12 @@ void mrhiWalkTestFrame(const mrhiDriverFrame* frame, uint64_t firstHandle, uint6
     }
     if (log != nullptr)
     {
-        walk.counts.passes = frame->passCount;
-        walk.counts.barriers = (uint32_t)frame->barrierCount;
-        walk.counts.resources = frame->resourceCount;
-        walk.counts.stagingBytes = frame->stagingBytes;
-        walk.counts.memoryBytes = frame->memoryBytes;
-        *log = walk.counts;
+        walk->counts.passes = frame->passCount;
+        walk->counts.barriers = (uint32_t)frame->barrierCount;
+        walk->counts.resources = frame->resourceCount;
+        walk->counts.stagingBytes = frame->stagingBytes;
+        walk->counts.memoryBytes = frame->memoryBytes;
+        *log = walk->counts;
     }
+    return walk->faults;
 }

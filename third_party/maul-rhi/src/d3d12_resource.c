@@ -265,7 +265,20 @@ mrhiResult mrhiD3d12CreateQuerySet(mrhiD3d12Objects* objects, const mrhiQuerySet
                                    uint64_t* handleOut)
 {
     MRHI_ASSERT(def->count <= MRHI_D3D12_SET_QUERIES);
-    bool occlusion = def->type == mrhi_queryOcclusion;
+    static const D3D12_QUERY_HEAP_TYPE heapTypes[] = {
+        [mrhi_queryOcclusion] = D3D12_QUERY_HEAP_TYPE_OCCLUSION,
+        [mrhi_queryTimestamp] = D3D12_QUERY_HEAP_TYPE_TIMESTAMP,
+        [mrhi_queryPipelineStatistics] = D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS,
+    };
+    static const D3D12_QUERY_TYPE types[] = {
+        [mrhi_queryOcclusion] = D3D12_QUERY_TYPE_BINARY_OCCLUSION,
+        [mrhi_queryTimestamp] = D3D12_QUERY_TYPE_TIMESTAMP,
+        [mrhi_queryPipelineStatistics] = D3D12_QUERY_TYPE_PIPELINE_STATISTICS,
+    };
+    // D3D12's record is Maul RHI's eleven counters in order (mrhi-0023).
+    static_assert(sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS) ==
+                      MRHI_STATISTICS_COUNTERS * sizeof(uint64_t),
+                  "statistics resolve as D3D12 writes them");
     *handleOut = 0;
     uint32_t handle = mrhiD3d12TakeSlot(&objects->querySetSlots);
     if (handle == 0)
@@ -273,7 +286,7 @@ mrhiResult mrhiD3d12CreateQuerySet(mrhiD3d12Objects* objects, const mrhiQuerySet
         return mrhi_errorCapacity;
     }
     D3D12_QUERY_HEAP_DESC desc = {
-        .Type = occlusion ? D3D12_QUERY_HEAP_TYPE_OCCLUSION : D3D12_QUERY_HEAP_TYPE_TIMESTAMP,
+        .Type = heapTypes[def->type],
         .Count = def->count,
     };
     ID3D12QueryHeap* heap = nullptr;
@@ -286,7 +299,8 @@ mrhiResult mrhiD3d12CreateQuerySet(mrhiD3d12Objects* objects, const mrhiQuerySet
     mrhiD3d12Label((ID3D12Object*)heap, def->label, def->labelLength);
     objects->querySets[handle - 1] = (mrhiD3d12QuerySet){
         .heap = heap,
-        .type = occlusion ? D3D12_QUERY_TYPE_BINARY_OCCLUSION : D3D12_QUERY_TYPE_TIMESTAMP,
+        .type = types[def->type],
+        .stride = mrhiQueryBytes(def->type),
         .count = def->count,
     };
     *handleOut = handle;

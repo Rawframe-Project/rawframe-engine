@@ -15,15 +15,22 @@
 
 // The chained structs a surface def accepts: the sources.
 static const mrhiStructType s_sources[] = {
-    mrhi_structSurfaceSourceWin32,      mrhi_structSurfaceSourceWayland,
-    mrhi_structSurfaceSourceXcb,        mrhi_structSurfaceSourceAndroid,
-    mrhi_structSurfaceSourceMetalLayer, mrhi_structSurfaceSourceCanvas,
+    mrhi_structSurfaceSourceWin32,
+    mrhi_structSurfaceSourceWayland,
+    mrhi_structSurfaceSourceXcb,
+    mrhi_structSurfaceSourceAndroid,
+    mrhi_structSurfaceSourceMetalLayer,
+    mrhi_structSurfaceSourceCanvas,
 #ifdef MAUL_RHI_TEST_DRIVER
     mrhi_structSurfaceSourceTest,
 #endif
+    // Last: an outside driver's own sources (mrhi-0024), which only an
+    // instance of such a driver accepts.
+    MRHI_STRUCT_DRIVER_DEFINED,
 };
 
-#define SOURCE_COUNT (sizeof(s_sources) / sizeof(s_sources[0]))
+// The sources every instance accepts.
+#define SOURCE_COUNT (sizeof(s_sources) / sizeof(s_sources[0]) - 1)
 
 mrhiSurfaceDef mrhiDefaultSurfaceDef(void)
 {
@@ -32,8 +39,14 @@ mrhiSurfaceDef mrhiDefaultSurfaceDef(void)
     return def;
 }
 
-static bool IsSource(mrhiStructType type)
+// Whether a type is a source: one of the library's, or, for an instance
+// of an outside driver, a critical driver-defined one.
+static bool IsSource(mrhiStructType type, bool external)
 {
+    if (external && (type & MRHI_STRUCT_DRIVER_DEFINED) != 0 && (type & MRHI_CHAIN_HINT) == 0)
+    {
+        return true;
+    }
     for (size_t i = 0; i < SOURCE_COUNT; ++i)
     {
         if (s_sources[i] == type)
@@ -46,12 +59,12 @@ static bool IsSource(mrhiStructType type)
 
 // The one source on a checked chain, or NULL when there is none or
 // more than one.
-static const mrhiChain* FindSource(const mrhiChain* head)
+static const mrhiChain* FindSource(const mrhiChain* head, bool external)
 {
     const mrhiChain* source = nullptr;
     for (const mrhiChain* node = head; node != nullptr; node = node->next)
     {
-        if (IsSource(node->type))
+        if (IsSource(node->type, external))
         {
             if (source != nullptr)
             {
@@ -68,12 +81,12 @@ static const mrhiChain* FindSource(const mrhiChain* head)
 static const mrhiChain* CheckDef(mrhiInstance* instance, const mrhiSurfaceDef* def,
                                  mrhiResult* statusOut)
 {
-    mrhiResult chain =
-        mrhiCheckChain(def->next, s_sources, SOURCE_COUNT, instance->limits.chainDepth);
+    size_t accepted = instance->external ? SOURCE_COUNT + 1 : SOURCE_COUNT;
+    mrhiResult chain = mrhiCheckChain(def->next, s_sources, accepted, instance->limits.chainDepth);
     if (def->cookie != SURFACE_DEF_COOKIE || chain == mrhi_errorInvalid ||
         !mrhiIsLabelValid(def->label, def->labelLength))
     {
-        *statusOut = mrhiMisuse(instance);
+        *statusOut = mrhiMisuse(instance, mrhi_diagnosticDefHeader);
         return nullptr;
     }
     if (chain != mrhi_success)
@@ -81,10 +94,10 @@ static const mrhiChain* CheckDef(mrhiInstance* instance, const mrhiSurfaceDef* d
         *statusOut = chain;
         return nullptr;
     }
-    const mrhiChain* source = FindSource(def->next);
+    const mrhiChain* source = FindSource(def->next, instance->external);
     if (source == nullptr)
     {
-        *statusOut = mrhiMisuse(instance);
+        *statusOut = mrhiMisuse(instance, mrhi_diagnosticSurfaceSource);
         return nullptr;
     }
     if (instance->driver.vtable == nullptr)
@@ -104,7 +117,7 @@ mrhiResult mrhiCreateSurface(mrhiInstance* instance, const mrhiSurfaceDef* def,
     }
     if (def == nullptr || surfaceOut == nullptr)
     {
-        return mrhiMisuse(instance);
+        return mrhiMisuse(instance, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhi_success;
     const mrhiChain* source = CheckDef(instance, def, &status);
@@ -182,7 +195,8 @@ mrhiResult mrhiGetSurfaceCaps(mrhiInstance* instance, mrhiSurfaceId surface, mrh
 {
     if (instance == nullptr || capsOut == nullptr)
     {
-        return instance == nullptr ? mrhi_errorInvalid : mrhiMisuse(instance);
+        return instance == nullptr ? mrhi_errorInvalid
+                                   : mrhiMisuse(instance, mrhi_diagnosticNullArgument);
     }
     uint64_t handle = mrhiFindSurface(instance, surface);
     const mrhiDriverAdapter* found = mrhiFindAdapter(instance, adapter);
@@ -192,11 +206,11 @@ mrhiResult mrhiGetSurfaceCaps(mrhiInstance* instance, mrhiSurfaceId surface, mrh
     }
     mrhiSurfaceCaps caps = {0};
     instance->driver.vtable->getSurfaceCaps(instance->driver.self, handle, found->handle, &caps);
-    MRHI_ASSERT(!caps.presentable ||
-                (caps.colorCount >= 1 && caps.colorCount <= MRHI_SURFACE_COLORS &&
-                 (caps.presentModes & mrhi_presentFifo) != 0 &&
-                 (caps.alphaModes & mrhi_alphaOpaque) != 0 &&
-                 (caps.usages & mrhi_textureRenderTarget) != 0));
+    MRHI_ASSERT(
+        !caps.presentable ||
+        (caps.colorCount >= 1 && caps.colorCount <= MRHI_SURFACE_COLORS &&
+         (caps.presentModes & mrhi_presentFifo) != 0 && (caps.alphaModes & mrhi_alphaOpaque) != 0 &&
+         (caps.usages & mrhi_textureRenderTarget) != 0 && (caps.twinViews || caps.twinImages)));
     // Nothing a driver fills for an adapter that cannot present is passed on.
     *capsOut = caps.presentable ? caps : (mrhiSurfaceCaps){0};
     return mrhi_success;

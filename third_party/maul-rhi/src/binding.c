@@ -275,7 +275,7 @@ mrhiResult mrhiSetBindings(mrhiDevice* device, mrhiPassId id, uint32_t table,
     }
     if (bindings == nullptr && count > 0)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhi_success;
     mrhiFramePass* pass = mrhiRecordingPass(device, id, &status);
@@ -285,7 +285,7 @@ mrhiResult mrhiSetBindings(mrhiDevice* device, mrhiPassId id, uint32_t table,
     }
     if (mrhiWorkOf(pass) == mrhiWorkTransfer || table >= device->limits.bindingTables)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticBindingsTable);
     }
     const mrhiReflection* reflection = ReflectionOf(device, pass, &status);
     if (reflection == nullptr)
@@ -294,7 +294,7 @@ mrhiResult mrhiSetBindings(mrhiDevice* device, mrhiPassId id, uint32_t table,
     }
     if (count != TableSize(reflection, table))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticBindingsCount);
     }
     // Checked first, so that a refused table takes no room.
     mrhiCommandBinding recorded[MRHI_TABLE_BINDINGS];
@@ -305,13 +305,15 @@ mrhiResult mrhiSetBindings(mrhiDevice* device, mrhiPassId id, uint32_t table,
         const mrhiShaderBinding* slot = SlotOf(reflection, table, bindings[i].slot, &position);
         if (slot == nullptr || seen[position])
         {
-            return mrhiDeviceMisuse(device);
+            return mrhiDeviceMisuse(device, mrhi_diagnosticBindingsSlot);
         }
         seen[position] = true;
         status = CheckBinding(device, pass, slot, &bindings[i], &recorded[i]);
         if (status != mrhi_success)
         {
-            return status == mrhi_errorInvalid ? mrhiDeviceMisuse(device) : status;
+            return status == mrhi_errorInvalid
+                       ? mrhiDeviceMisuse(device, mrhi_diagnosticBindingResource)
+                       : status;
         }
     }
     mrhiCommand* records = mrhiTakeCommands(device, pass, 1 + count);

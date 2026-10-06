@@ -9,6 +9,7 @@
 
 #include "capabilities_core.h"
 #include "invariant.h"
+#include "stage_limits.h"
 
 #include <string.h>
 
@@ -379,29 +380,44 @@ static uint32_t SamplerHeapSize(const DeviceFacts* facts)
     return Net(size, TABLES_RESERVE);
 }
 
+void mrhiVulkanBindingLimits(const VkPhysicalDeviceLimits* limits, mrhiLimits* granted)
+{
+    const mrhiLimits floor = mrhiDefaultLimits();
+    // A slot's number: Vulkan bounds no binding number, and the
+    // contract's value is every driver's, as WebGPU's is.
+    granted->bindingsPerTable = floor.bindingsPerTable;
+    granted->sampledTexturesPerStage = limits->maxPerStageDescriptorSampledImages;
+    granted->samplersPerStage = limits->maxPerStageDescriptorSamplers;
+    granted->storageBuffersPerStage = limits->maxPerStageDescriptorStorageBuffers;
+    granted->storageTexturesPerStage = limits->maxPerStageDescriptorStorageImages;
+    granted->uniformBuffersPerStage = limits->maxPerStageDescriptorUniformBuffers;
+    // A fragment stage's color attachments count toward the stage's
+    // resources too.
+    mrhiFitStageLimits(granted, Net(limits->maxPerStageResources, limits->maxColorAttachments));
+    // Vulkan bounds tables and vertex buffers apart, never together: their
+    // sum is the most a pipeline reaches, and any larger value bounds
+    // nothing more, so a sum below the contract's value (four tables, as
+    // many devices have) reads as that value.
+    uint32_t sum = Clamp32((uint64_t)granted->bindingTables + granted->vertexBuffers);
+    granted->tablesPlusVertexBuffers =
+        sum > floor.tablesPlusVertexBuffers ? sum : floor.tablesPlusVertexBuffers;
+}
+
 static mrhiLimits LimitsOf(const DeviceFacts* facts)
 {
     const VkPhysicalDeviceLimits* limits = &facts->properties.properties.limits;
     uint32_t tables = limits->maxBoundDescriptorSets;
     uint32_t vertexBuffers = Smaller(limits->maxVertexInputBindings, MRHI_VULKAN_VERTEX_BUFFERS);
-    return (mrhiLimits){
+    mrhiLimits granted = {
         .textureDimension2d = limits->maxImageDimension2D,
         .textureDimension3d = limits->maxImageDimension3D,
         .textureArrayLayers = limits->maxImageArrayLayers,
         .bindingTables = tables,
-        .bindingsPerTable = limits->maxPerStageResources,
-        .sampledTexturesPerStage = limits->maxPerStageDescriptorSampledImages,
-        .samplersPerStage = limits->maxPerStageDescriptorSamplers,
-        .storageBuffersPerStage = limits->maxPerStageDescriptorStorageBuffers,
-        .storageTexturesPerStage = limits->maxPerStageDescriptorStorageImages,
-        .uniformBuffersPerStage = limits->maxPerStageDescriptorUniformBuffers,
         .uniformBindingBytes = limits->maxUniformBufferRange,
         .storageBindingBytes = limits->maxStorageBufferRange,
         .uniformOffsetAlignment = Clamp32(limits->minUniformBufferOffsetAlignment),
         .storageOffsetAlignment = Clamp32(limits->minStorageBufferOffsetAlignment),
         .vertexBuffers = vertexBuffers,
-        // Vulkan bounds the two apart, never together.
-        .tablesPlusVertexBuffers = Clamp32((uint64_t)tables + vertexBuffers),
         .bufferBytes = facts->properties13.maxBufferSize,
         .vertexAttributes =
             Smaller(limits->maxVertexInputAttributes, MRHI_VULKAN_VERTEX_ATTRIBUTES),
@@ -423,7 +439,13 @@ static mrhiLimits LimitsOf(const DeviceFacts* facts)
         .framesInFlight = VULKAN_FRAMES_IN_FLIGHT,
         .heapSize = HeapSize(facts),
         .samplerHeapSize = SamplerHeapSize(facts),
+        // A view mask holds 32 views.
+        .multiviewViews = facts->features11.multiview
+                              ? Smaller(facts->properties11.maxMultiviewViewCount, 32)
+                              : 1,
     };
+    mrhiVulkanBindingLimits(limits, &granted);
+    return granted;
 }
 
 bool mrhiDescribeVulkanAdapter(const mrhiVulkan* vulkan, const mrhiAllocator* allocator,

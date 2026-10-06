@@ -443,6 +443,10 @@ extern "C"
         const mrhiConstantValue* constants;
         // The values.
         uint32_t constantCount;
+        // The views of the passes the pipeline draws in, as mrhiPassDef's
+        // viewCount: 0 and 1 mean one view. More needs the multiview feature
+        // and at most the device's multiviewViews limit.
+        uint32_t viewCount;
     } mrhiGraphicsPipelineDef;
 
     /// Returns the default graphics pipeline def: triangle lists, no culling,
@@ -472,10 +476,11 @@ extern "C"
     /// `mrhi_errorUnsupported` for vertex buffers, attributes, strides, inter-
     /// stage variables or color bytes past the device's limits, target formats
     /// the device cannot render, blend or multisample as asked, unclipped depth
-    /// without its feature, a critical extension the library does not know;
-    /// `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity`
-    /// when the device's pipeline limit is reached or its queue has no room for
-    /// the answer; `mrhi_errorPlatform` when the driver refuses at once.
+    /// without its feature, views past one without multiview or past its limit,
+    /// a critical extension the library does not know; `mrhi_errorState` for a
+    /// device that is not ready; `mrhi_errorCapacity` when the device's
+    /// pipeline limit is reached or its queue has no room for the answer;
+    /// `mrhi_errorPlatform` when the driver refuses at once.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult

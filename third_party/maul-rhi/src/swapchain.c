@@ -65,12 +65,36 @@ static bool IsColorReported(const mrhiSurfaceCaps* caps, mrhiSurfaceColor color)
     return false;
 }
 
+// Whether the surface takes the config's color: one it reports, or the
+// sRGB twin of one's format where its images may be sRGB, and the twin
+// as a view only where views may be.
+static bool IsColorTaken(const mrhiSurfaceCaps* caps, const mrhiSurfaceConfig* config)
+{
+    bool views = false;
+    for (uint32_t i = 0; i < MRHI_VIEW_FORMATS; ++i)
+    {
+        views = views || config->viewFormats[i] != mrhi_formatNone;
+    }
+    if (views && !caps->twinViews)
+    {
+        return false;
+    }
+    if (IsColorReported(caps, config->color))
+    {
+        return true;
+    }
+    mrhiSurfaceColor reported = config->color;
+    reported.format = mrhiFormatSrgbPair(config->color.format);
+    return caps->twinImages && reported.format != mrhi_formatNone &&
+           IsColorReported(caps, reported);
+}
+
 // Whether the surface and the device can take the config.
 static bool IsSupported(const mrhiDevice* device, const mrhiSurfaceCaps* caps,
                         const mrhiSurfaceConfig* config)
 {
     uint32_t most = device->limits.textureDimension2d;
-    return caps->presentable && IsColorReported(caps, config->color) &&
+    return caps->presentable && IsColorTaken(caps, config) &&
            (config->usage & ~caps->usages) == 0 &&
            (config->presentMode & caps->presentModes) != 0 &&
            (config->alphaMode & caps->alphaModes) != 0 &&
@@ -91,7 +115,7 @@ static mrhiResult CheckNames(mrhiDevice* device, const mrhiSurfaceConfig* config
     }
     if (!IsWellFormed(config))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticSurfaceConfig);
     }
     status = mrhiDeviceUsable(device);
     if (status != mrhi_success)
@@ -146,7 +170,7 @@ mrhiResult mrhiConfigureSurface(mrhiDevice* device, const mrhiSurfaceConfig* con
     }
     if (config == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhi_success;
     mrhiSurfaceSlot* surface = CheckConfig(device, config, &status);

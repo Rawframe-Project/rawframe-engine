@@ -39,18 +39,36 @@ typedef struct MetalDriver
     uint32_t pendingLimit;
 } MetalDriver;
 
-// The system's Metal devices, retained by the array the caller releases.
+// Whether a device meets the contract's floor beyond what every Metal
+// device has: cube array textures, which Apple's GPUs have from the
+// Apple4 family on and every Mac's have; the iOS simulator's lacks them.
+static bool MeetsFloor(id<MTLDevice> device)
+{
+    return [device supportsFamily:MTLGPUFamilyApple4] || [device supportsFamily:MTLGPUFamilyMac2];
+}
+
+// The system's Metal devices that meet the floor, retained by the array
+// the caller releases.
 static NSArray<id<MTLDevice>>* CopyDevices(void)
 {
 #if TARGET_OS_OSX
-    return MTLCopyAllDevices();
+    NSArray<id<MTLDevice>>* all = MTLCopyAllDevices();
 #else
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
-    NSArray<id<MTLDevice>>* devices =
+    NSArray<id<MTLDevice>>* all =
         device == nil ? [[NSArray alloc] init] : [[NSArray alloc] initWithObjects:device, nil];
     [device release];
-    return devices;
 #endif
+    NSMutableArray<id<MTLDevice>>* devices = [[NSMutableArray alloc] init];
+    for (id<MTLDevice> candidate in all)
+    {
+        if (MeetsFloor(candidate))
+        {
+            [devices addObject:candidate];
+        }
+    }
+    [all release];
+    return devices;
 }
 
 // A device's adapter handle: its registry id, never zero.
@@ -98,6 +116,21 @@ static uint32_t Clamp32(uint64_t value)
     return value < UINT32_MAX ? (uint32_t)value : UINT32_MAX;
 }
 
+// The views a multiview pass may render, by vertex amplification onto
+// layers (mrhi-0020): the largest count the device amplifies to, where
+// it renders layers; 1 otherwise.
+static uint32_t ViewsOf(id<MTLDevice> device)
+{
+    bool layered =
+        [device supportsFamily:MTLGPUFamilyMac2] || [device supportsFamily:MTLGPUFamilyApple5];
+    uint32_t views = 1;
+    for (uint32_t count = 2; layered && count <= MRHI_METAL_VIEWS; ++count)
+    {
+        views = [device supportsVertexAmplificationCount:count] ? count : views;
+    }
+    return views;
+}
+
 // WebGPU's floor, raised where Metal's feature set tables promise more
 // for the device's family and where the device reports its own.
 static mrhiLimits LimitsOf(id<MTLDevice> device)
@@ -112,7 +145,18 @@ static mrhiLimits LimitsOf(id<MTLDevice> device)
     limits.workgroupStorageBytes = Clamp32(device.maxThreadgroupMemoryLength);
     limits.rootBlockBytes = METAL_ROOT_BLOCK_BYTES;
     limits.framesInFlight = MRHI_METAL_FRAMES;
+    limits.multiviewViews = ViewsOf(device);
     return limits;
+}
+
+// BC compression, which iOS reports from 16.4.
+static bool HasBc(id<MTLDevice> device)
+{
+    if (@available(macOS 11.0, iOS 16.4, *))
+    {
+        return device.supportsBCTextureCompression;
+    }
+    return false;
 }
 
 static mrhiFeatures FeaturesOf(id<MTLDevice> device)
@@ -120,7 +164,7 @@ static mrhiFeatures FeaturesOf(id<MTLDevice> device)
     bool apple7 = [device supportsFamily:MTLGPUFamilyApple7];
     bool mac2 = [device supportsFamily:MTLGPUFamilyMac2];
     return (mrhiFeatures){
-        .textureCompressionBc = device.supportsBCTextureCompression,
+        .textureCompressionBc = HasBc(device),
         .textureCompressionEtc2 = [device supportsFamily:MTLGPUFamilyApple2],
         .textureCompressionAstc = [device supportsFamily:MTLGPUFamilyApple2],
         .float32Filterable = device.supports32BitFloatFiltering,
@@ -131,6 +175,8 @@ static mrhiFeatures FeaturesOf(id<MTLDevice> device)
         .subgroups = apple7 || mac2,
         .shaderInt64 = apple7 || mac2,
         .indirectFirstInstance = true,
+        .multiDrawIndirectCount = true,
+        .multiview = ViewsOf(device) > 1,
     };
 }
 
@@ -257,6 +303,7 @@ static void GetSurfaceCaps(const void* self, uint64_t surface, uint64_t adapter,
         .alphaModes = mrhi_alphaOpaque | mrhi_alphaPremultiplied,
         .usages = mrhi_textureRenderTarget | mrhi_textureSampled | mrhi_textureCopySource |
                   mrhi_textureCopyDestination,
+        .twinViews = true,
     };
 #if TARGET_OS_OSX
     capsOut->presentModes |= mrhi_presentImmediate;
@@ -280,7 +327,7 @@ static mrhiResult CreateDevice(void* self, uint64_t adapter, const mrhiDeviceDef
         id<MTLDevice> device = DeviceOf(devices, adapter);
         if (device != nil)
         {
-            status = mrhiCreateMetalDevice(&driver->allocator, device, def, deviceOut);
+            status = mrhiCreateMetalDevice(&def->allocator, device, def, deviceOut);
         }
         [devices release];
     }

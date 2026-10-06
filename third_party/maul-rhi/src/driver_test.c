@@ -8,8 +8,8 @@
 
 #include "allocator.h"
 #include "capabilities_core.h"
-#include "driver_test_frame.h"
 #include "format_caps.h"
+#include "frame_walk.h"
 #include "invariant.h"
 
 #include <stdalign.h>
@@ -110,6 +110,8 @@ static void GetSurfaceCaps(const void* self, uint64_t surface, uint64_t adapter,
     caps.presentModes |= mrhi_presentFifo;
     caps.alphaModes |= mrhi_alphaOpaque;
     caps.usages |= mrhi_textureRenderTarget;
+    // The sRGB floor: views of the twin unless the test gives images.
+    caps.twinViews = caps.twinViews || !caps.twinImages;
     *capsOut = caps;
 }
 
@@ -394,8 +396,8 @@ static void DestroyHeap(void* self, uint64_t handle)
     --device->heaps;
 }
 
-// Whether a handle is one the device made (used only by asserts).
-[[maybe_unused]] static bool IsMade(const TestDevice* device, uint64_t handle)
+// Whether a handle is one the device made.
+static bool IsMade(const TestDevice* device, uint64_t handle)
 {
     return handle > HANDLE_BASE && handle <= device->nextHandle;
 }
@@ -437,8 +439,11 @@ static mrhiResult CreateShader(void* self, const mrhiShaderDef* def, const mrhiC
 {
     TestDevice* device = self;
     Name(device, def->label, def->labelLength);
+    // A container has WGSL exactly when no entry uses a heap or the view
+    // index.
     MRHI_ASSERT(container->entryCount > 0 && container->spirvBytes >= 20 &&
-                (container->wgslBytes > 0) == (container->heapUses == 0));
+                (container->wgslBytes > 0) == (container->heapUses == 0 &&
+                                               (container->builtins & mrhi_builtinViewIndex) == 0));
     mrhiResult status = MakeObject(device, handleOut);
     device->shaders += status == mrhi_success ? 1 : 0;
     return status;
@@ -620,6 +625,12 @@ static void BufferMemory(const void* self, const mrhiBufferDef* def, uint64_t* b
     *alignmentOut = 256;
 }
 
+// IsMade, as a frame walk checks handles.
+static bool IsHandleOf(const void* self, uint64_t handle)
+{
+    return IsMade(self, handle);
+}
+
 // Walks the frame as a driver would translate it, then runs it at once.
 static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t tag)
 {
@@ -630,8 +641,14 @@ static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t
         device->lossTold = true;
         return mrhi_errorDeviceLost;
     }
+    // A fault means the core recorded what no driver could translate:
+    // the walk is kept in every build the test driver is part of, since
+    // a program's own tests rely on it whatever NDEBUG says.
     mrhiTestFrameLog log = {0};
-    mrhiWalkTestFrame(frame, HANDLE_BASE + 1, device->nextHandle, &log);
+    if (mrhiWalkFrame(frame, IsHandleOf, device, &log) != 0)
+    {
+        __builtin_trap();
+    }
     // Every image the frame acquired is presented.
     MRHI_ASSERT(log.presented <= device->imagesOut);
     device->imagesOut -= log.presented;
@@ -789,13 +806,13 @@ static mrhiResult CreateDevice(void* self, uint64_t adapter, const mrhiDeviceDef
     {
         return mrhi_errorCapacity;
     }
-    TestDevice* device = mrhiAllocate(&driver->allocator, sizeof(TestDevice), alignof(TestDevice));
+    TestDevice* device = mrhiAllocate(&def->allocator, sizeof(TestDevice), alignof(TestDevice));
     if (device == nullptr)
     {
         return mrhi_errorCapacity;
     }
     *device = (TestDevice){
-        .allocator = driver->allocator,
+        .allocator = def->allocator,
         .nextHandle = HANDLE_BASE,
         .madeBeforeFailure = driver->adapters[adapter - 1].objectsBeforeFailure,
         .holdFrames = driver->adapters[adapter - 1].holdFrames,

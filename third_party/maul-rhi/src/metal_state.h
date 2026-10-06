@@ -24,6 +24,8 @@
 #define MRHI_METAL_LABELS 32
 // The root block's bytes at most.
 #define MRHI_METAL_ROOT_BYTES 256
+// The views a multiview pass amplifies to at most (mrhi-0020).
+#define MRHI_METAL_VIEWS 32
 
 // A table's binding as bound: its slot, kind, Metal object (a buffer, a
 // texture or its view, or a sampler state), and a buffer's offset and
@@ -45,6 +47,12 @@ typedef struct mrhiMetalEncoder
     id* objects;
     id<MTLBuffer> staging;
     id<MTLBuffer> readback;
+    // The kernel clamping counted multi-draws' records, the buffer they
+    // are clamped into, and where the next counted draw's records lie in
+    // it (mrhi-0020).
+    id<MTLComputePipelineState> clamp;
+    id<MTLBuffer> clamped;
+    uint64_t clampedAt;
     id<MTLCommandBuffer> commands;
     id<MTLDepthStencilState> noDepth;
     id<MTLRenderCommandEncoder> render;

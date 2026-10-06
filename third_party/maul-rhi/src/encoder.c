@@ -70,13 +70,45 @@ uint64_t mrhiBufferBytesOf(const mrhiFrameResource* resource)
     return resource->size;
 }
 
-mrhiFramePass* mrhiRecordingPass(mrhiDevice* device, mrhiPassId id, mrhiResult* statusOut)
+mrhiFramePass* mrhiOpenPass(mrhiDevice* device, mrhiPassId id, mrhiResult* statusOut)
 {
     mrhiFramePass* pass = Find(device, id, statusOut);
     if (pass != nullptr &&
         atomic_load_explicit(&pass->recording, memory_order_relaxed) != mrhiRecordingOpen)
     {
         *statusOut = mrhi_errorState;
+        return nullptr;
+    }
+    return pass;
+}
+
+mrhiResult mrhiSetNativeCommands(mrhiDevice* device, mrhiPassId id, void* commands)
+{
+    mrhiResult status = mrhi_success;
+    mrhiFramePass* pass = mrhiOpenPass(device, id, &status);
+    if (pass == nullptr)
+    {
+        return status;
+    }
+    if (commands == nullptr || !pass->native)
+    {
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNativeCommands);
+    }
+    if (pass->nativeCommands != nullptr)
+    {
+        return mrhi_errorState;
+    }
+    pass->nativeCommands = commands;
+    return mrhi_success;
+}
+
+mrhiFramePass* mrhiRecordingPass(mrhiDevice* device, mrhiPassId id, mrhiResult* statusOut)
+{
+    mrhiFramePass* pass = mrhiOpenPass(device, id, statusOut);
+    // A native pass's commands are the program's own (mrhi-0018).
+    if (pass != nullptr && pass->native)
+    {
+        *statusOut = mrhiDeviceMisuse(device, mrhi_diagnosticRecordedInNativePass);
         return nullptr;
     }
     return pass;
@@ -170,14 +202,14 @@ mrhiResult mrhiEndPass(mrhiDevice* device, mrhiPassId id)
         return mrhi_errorInvalid;
     }
     mrhiResult status = mrhi_success;
-    mrhiFramePass* pass = mrhiRecordingPass(device, id, &status);
+    mrhiFramePass* pass = mrhiOpenPass(device, id, &status);
     if (pass == nullptr)
     {
         return status;
     }
-    if (pass->debugDepth > 0 || pass->occlusionOpen)
+    if (pass->debugDepth > 0 || pass->occlusionOpen || pass->statisticsOpen)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticPassEndOpen);
     }
     atomic_store_explicit(&pass->recording, mrhiRecordingEnded, memory_order_release);
     return mrhi_success;
@@ -194,7 +226,7 @@ static bool AreTargetsEqual(const mrhiRenderLayout* a, const mrhiRenderLayout* b
             return false;
         }
     }
-    return a->depth == b->depth && a->samples == b->samples;
+    return a->depth == b->depth && a->samples == b->samples && a->views == b->views;
 }
 
 // The pipeline slot a live, ready id of a kind names: or NULL with the
@@ -233,7 +265,7 @@ mrhiResult mrhiSetGraphicsPipeline(mrhiDevice* device, mrhiPassId id,
     }
     if (mrhiWorkOf(pass) != mrhiWorkRender)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticRenderStateOutsideRenderPass);
     }
     const mrhiPipelineSlot* slot =
         ReadyPipeline(device, mrhiPipelineGraphics, pipeline.index1, pipeline.generation, &status);
@@ -246,7 +278,7 @@ mrhiResult mrhiSetGraphicsPipeline(mrhiDevice* device, mrhiPassId id,
         (readOnly && (slot->layout.writesDepth || slot->layout.writesStencil)) ||
         (slot->heapUses != 0 && pass->heap == 0))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticGraphicsPipelineMismatch);
     }
     pass->pipeline = pipeline.index1;
     pass->pipelineGeneration = pipeline.generation;
@@ -268,7 +300,7 @@ mrhiResult mrhiSetComputePipeline(mrhiDevice* device, mrhiPassId id, mrhiCompute
     }
     if (mrhiWorkOf(pass) != mrhiWorkCompute)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticComputeOutsideComputePass);
     }
     const mrhiPipelineSlot* slot =
         ReadyPipeline(device, mrhiPipelineCompute, pipeline.index1, pipeline.generation, &status);
@@ -279,7 +311,7 @@ mrhiResult mrhiSetComputePipeline(mrhiDevice* device, mrhiPassId id, mrhiCompute
     // A pipeline reading a heap needs the pass's.
     if (slot->heapUses != 0 && pass->heap == 0)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticComputePipelineHeap);
     }
     pass->pipeline = pipeline.index1;
     pass->pipelineGeneration = pipeline.generation;
@@ -296,7 +328,7 @@ mrhiResult mrhiSetRootBlock(mrhiDevice* device, mrhiPassId id, uint32_t offset, 
     }
     if (bytes == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhi_success;
     mrhiFramePass* pass = mrhiRecordingPass(device, id, &status);
@@ -306,7 +338,7 @@ mrhiResult mrhiSetRootBlock(mrhiDevice* device, mrhiPassId id, uint32_t offset, 
     }
     if (mrhiWorkOf(pass) == mrhiWorkTransfer || offset % 4 != 0 || size % 4 != 0 || size == 0)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticRootBlock);
     }
     if ((uint64_t)offset + size > device->limits.rootBlockBytes)
     {
@@ -323,7 +355,7 @@ static mrhiFramePass* RenderPass(mrhiDevice* device, mrhiPassId id, mrhiResult* 
     mrhiFramePass* pass = mrhiRecordingPass(device, id, statusOut);
     if (pass != nullptr && mrhiWorkOf(pass) != mrhiWorkRender)
     {
-        *statusOut = mrhiDeviceMisuse(device);
+        *statusOut = mrhiDeviceMisuse(device, mrhi_diagnosticRenderStateOutsideRenderPass);
         return nullptr;
     }
     return pass;
@@ -351,7 +383,7 @@ mrhiResult mrhiSetViewport(mrhiDevice* device, mrhiPassId id, const mrhiViewport
     }
     if (viewport == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhi_success;
     mrhiFramePass* pass = RenderPass(device, id, &status);
@@ -361,7 +393,7 @@ mrhiResult mrhiSetViewport(mrhiDevice* device, mrhiPassId id, const mrhiViewport
     }
     if (!IsViewportValid(device, viewport))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticViewport);
     }
     mrhiCommand command = {.type = mrhiCommandViewport};
     return Record(device, pass, command, viewport, sizeof(*viewport));
@@ -375,7 +407,7 @@ mrhiResult mrhiSetScissor(mrhiDevice* device, mrhiPassId id, const mrhiScissorRe
     }
     if (rect == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhi_success;
     mrhiFramePass* pass = RenderPass(device, id, &status);
@@ -386,7 +418,7 @@ mrhiResult mrhiSetScissor(mrhiDevice* device, mrhiPassId id, const mrhiScissorRe
     if ((uint64_t)rect->x + rect->width > pass->width ||
         (uint64_t)rect->y + rect->height > pass->height)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticScissor);
     }
     mrhiCommand command = {
         .type = mrhiCommandScissor,
@@ -406,7 +438,7 @@ mrhiResult mrhiSetBlendConstant(mrhiDevice* device, mrhiPassId id, const mrhiCle
     }
     if (color == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhi_success;
     mrhiFramePass* pass = RenderPass(device, id, &status);
@@ -417,7 +449,7 @@ mrhiResult mrhiSetBlendConstant(mrhiDevice* device, mrhiPassId id, const mrhiCle
     if (!isfinite(color->red) || !isfinite(color->green) || !isfinite(color->blue) ||
         !isfinite(color->alpha))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticBlendConstant);
     }
     mrhiCommand command = {.type = mrhiCommandBlendConstant};
     return Record(device, pass, command, color, sizeof(*color));
@@ -451,7 +483,7 @@ static mrhiResult Label(mrhiDevice* device, mrhiPassId id, mrhiCommandType type,
     }
     if (length == 0 || !mrhiIsLabelValid(label, length))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticDebugLabel);
     }
     mrhiResult status = mrhi_success;
     mrhiFramePass* pass = mrhiRecordingPass(device, id, &status);
@@ -493,7 +525,7 @@ mrhiResult mrhiPopDebugGroup(mrhiDevice* device, mrhiPassId id)
     }
     if (pass->debugDepth == 0)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticDebugGroupUnderflow);
     }
     --pass->debugDepth;
     mrhiCommand command = {.type = mrhiCommandPopDebugGroup};

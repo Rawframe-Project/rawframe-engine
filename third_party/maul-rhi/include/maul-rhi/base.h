@@ -22,12 +22,12 @@ extern "C"
 
 // The library version. CMake reads it from here.
 #define MRHI_VERSION_MAJOR 0
-#define MRHI_VERSION_MINOR 0
-#define MRHI_VERSION_PATCH 1
+#define MRHI_VERSION_MINOR 2
+#define MRHI_VERSION_PATCH 0
 
 // The contract version a program is built against. An instance refuses any
 // other before 1.0.
-#define MRHI_CONTRACT_VERSION 1
+#define MRHI_CONTRACT_VERSION 2
 
 // MRHI_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_rhi_EXPORTS is defined while building
@@ -46,8 +46,10 @@ extern "C"
 
 // MRHI_NODISCARD marks a function whose result must be read: every
 // function that returns a status. The attribute is standard in C23 and
-// C++17 and left out for older dialects.
-#if defined(__cplusplus) && __cplusplus >= 201703L
+// C++17 and left out for older dialects. MSVC keeps __cplusplus at
+// 199711L unless /Zc:__cplusplus is given, so _MSVC_LANG is read too.
+#if (defined(__cplusplus) && __cplusplus >= 201703L) ||                                            \
+    (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L)
 #define MRHI_NODISCARD [[nodiscard]]
 #elif !defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
 #define MRHI_NODISCARD [[nodiscard]]
@@ -118,7 +120,8 @@ extern "C"
 
     // The type of a chained struct. Bit 31 clear marks a critical extension,
     // which a library that does not know it refuses; bit 31 set marks a hint it
-    // may skip.
+    // may skip. Types with bit 30 set (MRHI_STRUCT_DRIVER_DEFINED) belong to
+    // drivers built outside the tree (mrhi-0024).
     typedef uint32_t mrhiStructType;
 
     enum
@@ -142,7 +145,29 @@ extern "C"
         // mrhiSurfaceSourceTest, on a surface def: a surface of the test
         // driver.
         mrhi_structSurfaceSourceTest = 8,
+        // mrhiInstanceVulkanAdopt, on an instance def: a VkInstance made
+        // elsewhere.
+        mrhi_structInstanceVulkanAdopt = 9,
+        // mrhiInstanceVulkanExtensions, on an instance def: extensions the
+        // Vulkan instance also enables.
+        mrhi_structInstanceVulkanExtensions = 10,
+        // mrhiDeviceVulkanAdopt, on a device def: a VkDevice made from the
+        // instance's description.
+        mrhi_structDeviceVulkanAdopt = 11,
+        // mrhiDeviceVulkanExtensions, on a device def: extensions the Vulkan
+        // device also enables.
+        mrhi_structDeviceVulkanExtensions = 12,
+        // mrhiTextureVulkanAdopt, on a texture def: a VkImage made elsewhere.
+        mrhi_structTextureVulkanAdopt = 13,
+        // mrhiExternalDriverDef, on an instance def: a driver made outside the
+        // library (mrhi-0024).
+        mrhi_structExternalDriver = 14,
     };
+
+// The bit of a chained struct type defined by a driver built outside the tree:
+// such a struct is a surface's source on an instance of that driver, handed to
+// it unexamined, and refused everywhere else (mrhi-0024).
+#define MRHI_STRUCT_DRIVER_DEFINED 0x40000000u
 
     // The header every chained struct opens with. A def's next field, or a
     // chained struct's chain.next, points at the next struct of the chain, or
@@ -178,6 +203,311 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread.
     MRHI_API const char* mrhiResultName(mrhiResult result);
+
+    // The check a diagnostic record reports (mrhi-0027): one check of the core
+    // that refused a call as invalid input, or, in a build with the validation
+    // layer, one rule of the driver SPI that the driver broke (the driver
+    // codes, recorded in the instance's queue). Codes are fixed from the first
+    // release that carries them, and only added after it; mrhiDiagnosticText
+    // gives each one's text.
+    typedef uint16_t mrhiDiagnosticCode;
+
+    enum
+    {
+        // A required pointer is NULL, or an array is NULL with a nonzero count.
+        mrhi_diagnosticNullArgument = 1,
+        // A def lacks its cookie (start from its default def), carries a
+        // malformed extension chain or one deeper than the chainDepth limit, or
+        // a label that is not UTF-8 of at most MRHI_LABEL_BYTES.
+        mrhi_diagnosticDefHeader = 2,
+        // An adapter request def is NULL, lacks its cookie or names an unknown
+        // power preference.
+        mrhi_diagnosticAdapterRequestDef = 3,
+        // An instance was destroyed while devices made on it live; nothing was
+        // destroyed.
+        mrhi_diagnosticInstanceHasDevices = 5,
+        // A surface def names no surface source, or more than one.
+        mrhi_diagnosticSurfaceSource = 6,
+        // A surface config names an unknown format, primaries, transfer or
+        // range, or a view format that is not its format's twin.
+        mrhi_diagnosticSurfaceConfig = 7,
+        // Native commands set without a command buffer, or on a pass not added
+        // as native.
+        mrhi_diagnosticNativeCommands = 8,
+        // A command recorded through the library in a native pass, whose
+        // commands are the program's own.
+        mrhi_diagnosticRecordedInNativePass = 9,
+        // A native pass def with targets, query sets or a heap, or with an
+        // access that resolves queries or names a resource that is not
+        // imported.
+        mrhi_diagnosticNativePassDef = 10,
+        // A pass ended with a debug group or a query still open.
+        mrhi_diagnosticPassEndOpen = 13,
+        // A draw, a graphics pipeline or other draw state recorded in a pass
+        // without targets.
+        mrhi_diagnosticRenderStateOutsideRenderPass = 14,
+        // A dispatch, a compute pipeline or a query resolve recorded in a pass
+        // that is not a compute pass.
+        mrhi_diagnosticComputeOutsideComputePass = 15,
+        // A copy, clear, upload or readback recorded in a pass with targets.
+        mrhi_diagnosticTransferInRenderPass = 16,
+        // A graphics pipeline whose targets differ from the pass's, which
+        // writes depth or stencil the pass only reads, or which uses a heap the
+        // pass has none of.
+        mrhi_diagnosticGraphicsPipelineMismatch = 17,
+        // A compute pipeline that uses a heap, set in a pass without one.
+        mrhi_diagnosticComputePipelineHeap = 18,
+        // Bindings set in a transfer pass, or for a table past the
+        // bindingTables limit.
+        mrhi_diagnosticBindingsTable = 19,
+        // A binding count that is not the number of slots the pipeline's
+        // reflection gives the table.
+        mrhi_diagnosticBindingsCount = 20,
+        // A binding naming a slot the table lacks, or one already bound in the
+        // same call.
+        mrhi_diagnosticBindingsSlot = 21,
+        // A binding whose resource does not fit its slot: its kind, usage,
+        // range, format or the access the pass declares.
+        mrhi_diagnosticBindingResource = 22,
+        // A root block set in a transfer pass, empty, or at an offset or size
+        // not a multiple of 4.
+        mrhi_diagnosticRootBlock = 23,
+        // A vertex buffer set at a slot past the vertexBuffers limit.
+        mrhi_diagnosticVertexBufferSlot = 24,
+        // A draw reading vertices or instances past the end of a vertex buffer
+        // it uses.
+        mrhi_diagnosticVertexBufferTooSmall = 26,
+        // An index buffer set with an unknown format.
+        mrhi_diagnosticIndexBufferFormat = 27,
+        // A dispatch of more workgroups in a dimension than the
+        // workgroupsPerDimension limit.
+        mrhi_diagnosticDispatchSize = 29,
+        // A counted indirect draw whose maxCount is zero or past
+        // MRHI_INDIRECT_DRAWS.
+        mrhi_diagnosticIndirectCountLimit = 31,
+        // A viewport wider or taller than the textureDimension2d limit, outside
+        // twice that range, or with depths outside [0, 1] or in reverse order.
+        mrhi_diagnosticViewport = 32,
+        // A scissor rectangle reaching past the pass's targets.
+        mrhi_diagnosticScissor = 33,
+        // A blend constant that is not finite.
+        mrhi_diagnosticBlendConstant = 34,
+        // A debug label that is empty, not UTF-8, or longer than
+        // MRHI_LABEL_BYTES.
+        mrhi_diagnosticDebugLabel = 35,
+        // A debug group popped with none open.
+        mrhi_diagnosticDebugGroupUnderflow = 36,
+        // A texture given where a buffer is wanted, or a buffer where a texture
+        // is.
+        mrhi_diagnosticResourceKind = 37,
+        // A copy between a buffer and a texture whose layout the buffer cannot
+        // hold: an offset not a multiple of the texel block's bytes (4 for
+        // depth), bytes per row not a multiple of 256, rows or images shorter
+        // than the copy needs, or a region past the buffer.
+        mrhi_diagnosticBufferTextureCopy = 40,
+        // A texture region off the format's blocks or past the mip, of a
+        // multisampled texture, or of an aspect that cannot be copied, or a
+        // buffer named as the texture.
+        mrhi_diagnosticTextureRegion = 41,
+        // A texture copy between formats that are neither equal nor sRGB twins,
+        // between sample counts that differ, or naming one aspect of a format
+        // that has two.
+        mrhi_diagnosticCopyTextureMismatch = 42,
+        // A texture write whose layout the bytes cannot hold: rows or images
+        // shorter than the write needs, or a region past the bytes given.
+        mrhi_diagnosticWriteTextureLayout = 44,
+        // A frame token this device never returned.
+        mrhi_diagnosticFrameToken = 47,
+        // A transient resource declared with a usage; the frame derives its
+        // usages from the passes' accesses.
+        mrhi_diagnosticTransientUsage = 48,
+        // A resource sealed or unsealed that is not imported.
+        mrhi_diagnosticSealNotImported = 49,
+        // A texture sealed without sampled usage, or an adopted image, which
+        // rests as a target.
+        mrhi_diagnosticSealTexture = 50,
+        // A heap def with no entries.
+        mrhi_diagnosticHeapDef = 53,
+        // A heap index past the heap's entries or samplers.
+        mrhi_diagnosticHeapIndex = 54,
+        // A heap entry of an unknown kind.
+        mrhi_diagnosticHeapEntry = 55,
+        // A heap entry's view without the usage its kind needs, a storage view
+        // of more than one mip, or a sampled view marked writable.
+        mrhi_diagnosticHeapView = 56,
+        // A heap entry's buffer without storage usage, or a range misaligned,
+        // empty, not a multiple of 4 or past the buffer.
+        mrhi_diagnosticHeapBuffer = 57,
+        // A query set def of an unknown type, or of zero or too many queries.
+        mrhi_diagnosticQuerySetDef = 58,
+        // An occlusion query begun in a pass without an occlusion set, while
+        // one is open, past the set or written twice in a frame; or ended with
+        // none open.
+        mrhi_diagnosticOcclusionQuery = 59,
+        // A statistics query begun outside a graphics-class pass of one view,
+        // while one is open, on a set of another type, past the set or written
+        // twice in a frame; or ended with none open.
+        mrhi_diagnosticStatisticsQuery = 60,
+        // A sampler def with an unknown filter, address mode or compare
+        // function, a negative or reversed level of detail range, or anisotropy
+        // outside 1 to 16 or above 1 without linear filtering.
+        mrhi_diagnosticSamplerDef = 62,
+        // A buffer size of zero or not a multiple of 4.
+        mrhi_diagnosticBufferSize = 63,
+        // A buffer def with no usage, or an unknown one.
+        mrhi_diagnosticBufferUsage = 64,
+        // Shader bytes that are NULL or not 8-byte aligned.
+        mrhi_diagnosticShaderBytes = 65,
+        // Shader bytes that are not a well-formed container: its bounds,
+        // version, digest or reflection.
+        mrhi_diagnosticShaderContainer = 66,
+        // A texture def with a usage that is unknown or that its format, kind
+        // or sample count cannot take.
+        mrhi_diagnosticTextureUsage = 68,
+        // A texture adopting a Vulkan image without an image, or without render
+        // target usage.
+        mrhi_diagnosticTextureAdopt = 69,
+        // A view def with an unknown kind or aspect.
+        mrhi_diagnosticViewDef = 70,
+        // A view whose mips, layers, format, aspect or kind its texture cannot
+        // give.
+        mrhi_diagnosticViewRange = 71,
+        // A request reached the driver past the notifications limit, so its
+        // answer could not be matched.
+        mrhi_diagnosticDriverRequestTags = 72,
+        // A driver answered a request it was never asked, or answered one
+        // twice.
+        mrhi_diagnosticDriverUnaskedAnswer = 73,
+        // A driver reported more events than the room it was given; the layer
+        // kept the room's worth.
+        mrhi_diagnosticDriverEventsOverrun = 74,
+        // A device driver reported an event without a tag that is not a device
+        // loss.
+        mrhi_diagnosticDriverEventTag = 75,
+        // A driver listed an adapter with a zero or repeated handle, a name
+        // longer than MRHI_ADAPTER_NAME_BYTES, or an unknown kind.
+        mrhi_diagnosticDriverAdapter = 76,
+        // A driver reported format caps naming sample counts other than 1, 2
+        // and 4.
+        mrhi_diagnosticDriverSampleCounts = 77,
+        // A driver reported success for an object, surface or surface image
+        // with a zero handle.
+        mrhi_diagnosticDriverZeroHandle = 78,
+        // A driver made a device whose vtable fails the SPI version and size
+        // handshake.
+        mrhi_diagnosticDriverDeviceHandshake = 79,
+        // A driver reported a negative timestamp period.
+        mrhi_diagnosticDriverTimestampPeriod = 80,
+        // A driver reported a memory alignment of zero or not a power of two.
+        mrhi_diagnosticDriverMemoryAlignment = 81,
+        // A submitted frame failed the layer's walk: a handle, payload or range
+        // no driver could translate.
+        mrhi_diagnosticDriverFrameWalk = 82,
+        // A pipeline def names an entry point its shader lacks for the stage,
+        // gives a fragment entry length without a name, or names no vertex
+        // entry.
+        mrhi_diagnosticPipelineEntry = 83,
+        // A pipeline def's constant values name an id the shader lacks, give
+        // one twice, hold a value its type cannot, or leave out one without a
+        // default.
+        mrhi_diagnosticPipelineConstants = 84,
+        // A graphics pipeline's vertex state is malformed: its buffers or
+        // attributes, two attributes at one location, or a vertex input with no
+        // attribute of its scalar class.
+        mrhi_diagnosticGraphicsVertex = 85,
+        // A graphics pipeline's primitive state has an unknown value, a strip
+        // index format for a list, or more than one view without multiview.
+        mrhi_diagnosticGraphicsPrimitive = 86,
+        // A graphics pipeline's depth and stencil state has an unknown value,
+        // an aspect's fields set without the aspect in the format, a bias that
+        // is not finite or set for points and lines, or no depth format while
+        // the fragment entry writes depth.
+        mrhi_diagnosticGraphicsDepthStencil = 87,
+        // A graphics pipeline's color targets are more than MRHI_COLOR_TARGETS,
+        // present without a fragment entry, malformed (format, blend or
+        // writes), not written by the fragment entry's outputs as their types
+        // allow, or absent with no depth either.
+        mrhi_diagnosticGraphicsTargets = 88,
+        // A graphics pipeline's sample count is not a power of two, or alpha to
+        // coverage is asked single-sampled, without a first target that has
+        // alpha, or while the fragment entry writes the sample mask.
+        mrhi_diagnosticGraphicsMultisample = 89,
+        // A graphics pipeline's fragment input has no vertex output of the same
+        // location, type and interpolation, or a point list leaves no room for
+        // its point size.
+        mrhi_diagnosticGraphicsInterface = 90,
+        // A chained struct the def carries is malformed: an adopted Vulkan
+        // object that is NULL, or an extension list that is not a list of
+        // names.
+        mrhi_diagnosticChainedStruct = 91,
+        // A device def's device limits include a zero, fewer than 2
+        // notifications, a command arena under one chunk, or readback bytes not
+        // a multiple of 512.
+        mrhi_diagnosticDeviceLimits = 92,
+        // A device def asks for limits below the floor every adapter reaches.
+        mrhi_diagnosticLimitsFloor = 93,
+        // An allocator with one function set and the other not.
+        mrhi_diagnosticAllocator = 94,
+        // A pipeline cache size given without its bytes.
+        mrhi_diagnosticPipelineCacheBytes = 95,
+        // A texture def names an unknown format.
+        mrhi_diagnosticTextureFormat = 96,
+        // A texture def's size or layers do not fit its kind and its format's
+        // block, or its mips are more than a full chain.
+        mrhi_diagnosticTextureSize = 97,
+        // A texture def's sample count is not 1, 2 or 4, or several samples are
+        // asked for a texture that is not 2D with one mip.
+        mrhi_diagnosticTextureSamples = 98,
+        // A texture def's view format is neither unused nor its format's twin.
+        mrhi_diagnosticTextureViewFormats = 99,
+        // An offset or size not a multiple of what the command needs: 4 for
+        // buffer copies, clears, uploads, readbacks, vertex buffers and
+        // indirect arguments, the index size for index buffers, 256 for query
+        // resolves.
+        mrhi_diagnosticTransferAlignment = 100,
+        // A range reaching past the end of its buffer, or past its query set.
+        mrhi_diagnosticTransferRange = 101,
+        // A command reaching a resource the pass declares no covering access of
+        // the kind it needs.
+        mrhi_diagnosticUndeclaredAccess = 102,
+        // A pass def with an unknown pass class.
+        mrhi_diagnosticPassClass = 103,
+        // A pass def with more than MRHI_COLOR_TARGETS color targets.
+        mrhi_diagnosticPassColorTargets = 104,
+        // A pass def with several views on a native pass or on one without
+        // targets.
+        mrhi_diagnosticPassViews = 105,
+        // A pass def's query sets do not fit: an occlusion set that is not one
+        // or on a pass without targets, or timestamps that are not a graphics
+        // pass's two different queries, in range and not yet written this
+        // frame.
+        mrhi_diagnosticPassQueries = 106,
+        // A pass def's accesses or targets do not fit: a kind the resource's
+        // usage lacks, a range past it, a write to a sealed resource, targets
+        // whose sizes, samples, mips or layers disagree, uses that conflict
+        // within the pass, or a read of a declared resource no earlier pass
+        // wrote.
+        mrhi_diagnosticPassUses = 107,
+    };
+
+    // A record from an instance's or a device's diagnostic queue.
+    typedef struct mrhiDiagnostic
+    {
+        // The check that refused the call.
+        mrhiDiagnosticCode code;
+        // How many refusals in a row the record stands for: a refusal by the
+        // newest record's check adds to its count instead of taking room.
+        uint32_t count;
+    } mrhiDiagnostic;
+
+    /// Returns the text of a diagnostic code, for people; programs compare
+    /// codes, never texts.
+    ///
+    /// @param code  Any value; an unknown one has a text saying so.
+    /// @return A static, NUL-terminated English sentence.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MRHI_API const char* mrhiDiagnosticText(mrhiDiagnosticCode code);
 
 #ifdef __cplusplus
 }

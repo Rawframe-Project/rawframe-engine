@@ -201,7 +201,7 @@ mrhiResult mrhiGetPassPlan(mrhiDevice* device, mrhiPassId pass, mrhiPassPlan* pl
     }
     if (planOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     if (!device->frameOpen || !device->frameCompiled)
     {
@@ -233,7 +233,7 @@ mrhiResult mrhiGetFrameMemory(mrhiDevice* device, uint64_t* bytesOut)
     }
     if (bytesOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     if (!device->frameOpen || !device->frameCompiled)
     {

@@ -20,8 +20,11 @@
 #include "vulkan_label.h"
 #include "vulkan_object.h"
 #include "vulkan_pipeline.h"
+#include "vulkan_recipe.h"
 #include "vulkan_resource.h"
 #include "vulkan_swapchain.h"
+
+#include "maul-rhi/vulkan.h"
 
 #include <stdalign.h>
 #include <stdckdint.h>
@@ -48,6 +51,8 @@ typedef struct VulkanDevice
     // transient targets on chip.
     uint32_t lazyTypes;
     double timestampPeriod;
+    // Made elsewhere and adopted (mrhi-0018): never destroyed here.
+    bool adopted;
     size_t bytes;
     mrhiVulkanMemory memory;
     mrhiVulkanObjects objects;
@@ -56,79 +61,6 @@ typedef struct VulkanDevice
     mrhiVulkanFrames frames;
     mrhiVulkanSwapchains swapchains;
 } VulkanDevice;
-
-// The features a device enables, chained.
-typedef struct Enabled
-{
-    VkPhysicalDeviceFeatures2 features;
-    VkPhysicalDeviceVulkan11Features features11;
-    VkPhysicalDeviceVulkan12Features features12;
-    VkPhysicalDeviceVulkan13Features features13;
-    VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT mutableType;
-} Enabled;
-
-// The floor's features, and the granted ones as the contract's Vulkan
-// rows name them.
-static void Enable(const mrhiFeatures* granted, Enabled* enabled)
-{
-    *enabled = (Enabled){
-        .features = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2},
-        .features11 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES},
-        .features12 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES},
-        .features13 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES},
-        .mutableType = {.sType =
-                            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT},
-    };
-    enabled->features.pNext = &enabled->features11;
-    enabled->features11.pNext = &enabled->features12;
-    enabled->features12.pNext = &enabled->features13;
-    VkPhysicalDeviceFeatures* core = &enabled->features.features;
-    core->fullDrawIndexUint32 = VK_TRUE;
-    core->imageCubeArray = VK_TRUE;
-    core->independentBlend = VK_TRUE;
-    core->sampleRateShading = VK_TRUE;
-    core->depthBiasClamp = VK_TRUE;
-    core->fragmentStoresAndAtomics = VK_TRUE;
-    core->samplerAnisotropy = VK_TRUE;
-    core->shaderStorageImageExtendedFormats = VK_TRUE;
-    core->pipelineStatisticsQuery = granted->pipelineStatisticsQuery;
-    core->textureCompressionBC = granted->textureCompressionBc;
-    core->textureCompressionETC2 = granted->textureCompressionEtc2;
-    core->textureCompressionASTC_LDR = granted->textureCompressionAstc;
-    core->dualSrcBlend = granted->dualSourceBlending;
-    core->depthClamp = granted->unclippedDepth;
-    core->shaderInt64 = granted->shaderInt64;
-    core->drawIndirectFirstInstance = granted->indirectFirstInstance;
-    core->multiDrawIndirect = granted->multiDrawIndirectCount;
-    enabled->features11.multiview = granted->multiview;
-    enabled->features11.storageBuffer16BitAccess = granted->shaderF16;
-    enabled->features11.uniformAndStorageBuffer16BitAccess = granted->shaderF16;
-    enabled->features12.shaderFloat16 = granted->shaderF16;
-    enabled->features12.drawIndirectCount = granted->multiDrawIndirectCount;
-    enabled->features12.timelineSemaphore = VK_TRUE;
-    enabled->features12.bufferDeviceAddress = VK_TRUE;
-    enabled->features12.descriptorIndexing = VK_TRUE;
-    enabled->features13.dynamicRendering = VK_TRUE;
-    enabled->features13.synchronization2 = VK_TRUE;
-    // Heaps (mrhi-0015): descriptor indexing over sampled images and samplers,
-    // and over storage images and buffers through mutable descriptors.
-    VkPhysicalDeviceVulkan12Features* indexing = &enabled->features12;
-    bool sampling = granted->bindlessSampling;
-    bool heterogeneous = granted->bindlessHeterogeneous;
-    indexing->runtimeDescriptorArray = sampling;
-    indexing->descriptorBindingPartiallyBound = sampling;
-    indexing->descriptorBindingUpdateUnusedWhilePending = sampling;
-    indexing->descriptorBindingSampledImageUpdateAfterBind = sampling;
-    indexing->shaderSampledImageArrayNonUniformIndexing = sampling;
-    indexing->descriptorBindingStorageImageUpdateAfterBind = heterogeneous;
-    indexing->descriptorBindingStorageBufferUpdateAfterBind = heterogeneous;
-    indexing->shaderStorageImageArrayNonUniformIndexing = heterogeneous;
-    indexing->shaderStorageBufferArrayNonUniformIndexing = heterogeneous;
-    core->shaderStorageImageReadWithoutFormat = heterogeneous;
-    core->shaderStorageImageWriteWithoutFormat = heterogeneous;
-    enabled->mutableType.mutableDescriptorType = heterogeneous;
-    enabled->features13.pNext = heterogeneous ? &enabled->mutableType : nullptr;
-}
 
 static mrhiResult StatusOf(VkResult result)
 {
@@ -184,7 +116,10 @@ static void Destroy(void* self)
     DestroyObjects(&device->objects);
     mrhiVulkanMemoryDestroy(&device->memory);
     device->api.vkDestroySemaphore(device->device, device->timeline, nullptr);
-    device->api.vkDestroyDevice(device->device, nullptr);
+    if (!device->adopted)
+    {
+        device->api.vkDestroyDevice(device->device, nullptr);
+    }
     mrhiAllocator allocator = device->allocator;
     mrhiRelease(&allocator, device, device->bytes, alignof(VulkanDevice));
 }
@@ -492,61 +427,55 @@ static void ReadPhysical(VulkanDevice* device, VkPhysicalDeviceMemoryProperties*
 }
 
 // Makes the device, its queue and its timeline.
-static VkResult Open(VulkanDevice* device, const mrhiDeviceDef* def)
+// The VkDevice a def adopts (mrhiDeviceVulkanAdopt), or none.
+static VkDevice AdoptedOf(const mrhiDeviceDef* def)
 {
-    uint32_t family = mrhiVulkanQueueFamily(device->vulkan, device->physical);
-    device->family = family;
-    const float priority = 1.0f;
-    const VkDeviceQueueCreateInfo queue = {
-        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .queueFamilyIndex = family,
-        .queueCount = 1,
-        .pQueuePriorities = &priority,
-    };
-    Enabled enabled;
-    Enable(&def->features, &enabled);
-    // Presenting needs VK_KHR_swapchain, and a swapchain whose images
-    // take their sRGB twin's views VK_KHR_swapchain_mutable_format.
-    static const char* const s_wanted[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-                                           VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_EXTENSION_NAME};
-    uint32_t offered =
-        mrhiVulkanExtensions(device->vulkan, &device->allocator, device->physical, s_wanted, 2);
-    // The mutable format extension needs the swapchain.
-    offered = (offered & 1u) != 0 ? offered : 0;
-    const char* names[3];
-    uint32_t count = 0;
-    for (uint32_t i = 0; i < 2; ++i)
+    for (const mrhiChain* node = def->next; node != nullptr; node = node->next)
     {
-        if ((offered >> i & 1u) != 0)
+        if (node->type == mrhi_structDeviceVulkanAdopt)
         {
-            names[count++] = s_wanted[i];
+            return (VkDevice)((const mrhiDeviceVulkanAdopt*)node)->device;
         }
     }
-    // Heterogeneous heaps are granted only where mutable descriptors are
-    // offered.
-    if (def->features.bindlessHeterogeneous)
+    return VK_NULL_HANDLE;
+}
+
+static VkResult Open(VulkanDevice* device, const mrhiDeviceDef* def)
+{
+    mrhiVulkanRecipe recipe;
+    mrhiResult composed =
+        mrhiVulkanComposeDevice(device->vulkan, &device->allocator, device->physical, def, &recipe);
+    if (composed != mrhi_success)
     {
-        names[count++] = VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME;
+        return composed == mrhi_errorCapacity ? VK_ERROR_OUT_OF_HOST_MEMORY
+                                              : VK_ERROR_INITIALIZATION_FAILED;
     }
-    device->swapchains.mutableFormat = (offered & 2u) != 0;
-    const VkDeviceCreateInfo info = {
-        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = &enabled.features,
-        .queueCreateInfoCount = 1,
-        .pQueueCreateInfos = &queue,
-        .enabledExtensionCount = count,
-        .ppEnabledExtensionNames = names,
-    };
-    VkResult result =
-        device->vulkan->vkCreateDevice(device->physical, &info, nullptr, &device->device);
+    uint32_t family = recipe.queue.queueFamilyIndex;
+    device->family = family;
+    device->swapchains.mutableFormat = recipe.mutableFormat;
+    bool swapchain = recipe.swapchain;
+    // A device made elsewhere from this recipe is adopted, never made or
+    // destroyed here (mrhi-0018).
+    device->adopted = AdoptedOf(def) != VK_NULL_HANDLE;
+    VkResult result = VK_SUCCESS;
+    if (device->adopted)
+    {
+        device->device = AdoptedOf(def);
+    }
+    else
+    {
+        result = device->vulkan->vkCreateDevice(device->physical, &recipe.info, nullptr,
+                                                &device->device);
+    }
+    mrhiVulkanEndRecipe(&device->allocator, &recipe);
     if (result != VK_SUCCESS)
     {
         return result;
     }
-    if (!mrhiLoadVulkanDevice(device->vulkan, device->device, (offered & 1u) != 0, &device->api))
+    if (!mrhiLoadVulkanDevice(device->vulkan, device->device, swapchain, &device->api))
     {
         PFN_vkDestroyDevice destroy = device->api.vkDestroyDevice;
-        if (destroy != nullptr)
+        if (destroy != nullptr && !device->adopted)
         {
             destroy(device->device, nullptr);
         }
@@ -564,7 +493,7 @@ static VkResult Open(VulkanDevice* device, const mrhiDeviceDef* def)
         .pNext = &timeline,
     };
     result = device->api.vkCreateSemaphore(device->device, &semaphore, nullptr, &device->timeline);
-    if (result != VK_SUCCESS)
+    if (result != VK_SUCCESS && !device->adopted)
     {
         device->api.vkDestroyDevice(device->device, nullptr);
     }
@@ -874,4 +803,55 @@ mrhiResult mrhiCreateVulkanDevice(const mrhiAllocator* allocator, const mrhiVulk
     }
     *deviceOut = (mrhiDeviceDriver){.vtable = &s_vtable, .self = device};
     return mrhi_success;
+}
+
+bool mrhiVulkanDeviceQueue(const mrhiDeviceDriver* driver, uint32_t* familyOut, uint32_t* indexOut)
+{
+    if (driver->vtable != &s_vtable)
+    {
+        return false;
+    }
+    const VulkanDevice* device = driver->self;
+    *familyOut = device->family;
+    *indexOut = 0;
+    return true;
+}
+
+bool mrhiVulkanDeviceNative(const mrhiDeviceDriver* driver, mrhiVulkanNative* nativeOut)
+{
+    if (driver->vtable != &s_vtable)
+    {
+        return false;
+    }
+    const VulkanDevice* device = driver->self;
+    *nativeOut = (mrhiVulkanNative){
+        .instance = device->vulkan->instance,
+        .physical = device->physical,
+        .device = device->device,
+        .getInstanceProcAddr = device->vulkan->vkGetInstanceProcAddr,
+        .getDeviceProcAddr = device->vulkan->vkGetDeviceProcAddr,
+    };
+    return true;
+}
+
+bool mrhiVulkanDeviceTexture(const mrhiDeviceDriver* driver, uint64_t handle,
+                             const mrhiTextureDef* def, mrhiVulkanTextureInfo* textureOut)
+{
+    if (driver->vtable != &s_vtable)
+    {
+        return false;
+    }
+    const VulkanDevice* device = driver->self;
+    const mrhiVulkanTexture* texture = &device->objects.textures[handle - 1];
+    mrhiVulkanImage image;
+    mrhiVulkanImageOf(def, device->objects.depthStencil, &image);
+    *textureOut = (mrhiVulkanTextureInfo){
+        .image = (void*)texture->image,
+        .memory = (void*)texture->allocation.memory,
+        .memoryOffset = texture->allocation.offset,
+        .format = (uint32_t)image.info.format,
+        .usage = image.info.usage,
+        .createFlags = image.info.flags,
+    };
+    return true;
 }

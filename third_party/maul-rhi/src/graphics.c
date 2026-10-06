@@ -183,7 +183,8 @@ static mrhiResult CheckVertex(const mrhiDevice* device, const mrhiGraphicsPipeli
 }
 
 // The primitive state: known values, a strip index format only for
-// strips, and unclipped depth only with its feature.
+// strips, unclipped depth only with its feature, and views past one only
+// with multiview, within its limit.
 static mrhiResult CheckPrimitive(const mrhiDevice* device, const mrhiGraphicsPipelineDef* def)
 {
     bool strip =
@@ -192,7 +193,10 @@ static mrhiResult CheckPrimitive(const mrhiDevice* device, const mrhiGraphicsPip
         def->topology <= mrhi_topologyTriangleStrip && def->stripIndexFormat <= mrhi_indexUint32 &&
         (strip || def->stripIndexFormat == mrhi_indexNone) &&
         def->frontFace <= mrhi_frontClockwise && def->cullMode <= mrhi_cullBack);
-    return Worse(status, Within(!def->unclippedDepth || device->features.unclippedDepth));
+    status = Worse(status, Within(!def->unclippedDepth || device->features.unclippedDepth));
+    return Worse(status,
+                 Within(def->viewCount <= 1 || (device->features.multiview &&
+                                                def->viewCount <= device->limits.multiviewViews)));
 }
 
 // Whether a comparison is a test: never through always.
@@ -408,6 +412,7 @@ static mrhiRenderLayout LayoutOf(const mrhiGraphicsPipelineDef* def)
     mrhiRenderLayout layout = {
         .depth = def->depthStencilFormat,
         .samples = def->sampleCount,
+        .views = def->viewCount > 1 ? def->viewCount : 1,
         .writesDepth = def->depthWrite,
         .writesStencil = def->stencilWriteMask != 0 &&
                          ((def->cullMode != mrhi_cullFront && ChangesStencil(&def->stencilFront)) ||
@@ -476,18 +481,39 @@ static mrhiShaderSlot* CheckGraphicsDef(mrhiDevice* device, const mrhiGraphicsPi
     {
         return nullptr;
     }
-    mrhiResult status = mrhi_errorInvalid;
-    if (FindStages(shader, def, stagesOut) &&
-        mrhiAreConstantsValid(shader->reflection, def->constants, def->constantCount))
+    if (!FindStages(shader, def, stagesOut))
     {
-        status = CheckVertex(device, def, *stagesOut);
-        status = Worse(status, CheckPrimitive(device, def));
-        status = Worse(status, CheckDepthStencil(device, def, *stagesOut));
-        status = Worse(status, CheckTargets(device, def, *stagesOut));
-        status = Worse(status, CheckMultisample(device, def, *stagesOut));
-        status = Worse(status, CheckInterface(device, def, *stagesOut));
+        *statusOut = mrhiDeviceMisuse(device, mrhi_diagnosticPipelineEntry);
+        return nullptr;
     }
-    *statusOut = status == mrhi_errorInvalid ? mrhiDeviceMisuse(device) : status;
+    if (!mrhiAreConstantsValid(shader->reflection, def->constants, def->constantCount))
+    {
+        *statusOut = mrhiDeviceMisuse(device, mrhi_diagnosticPipelineConstants);
+        return nullptr;
+    }
+    // Every state is checked, and invalid input outranks what the device
+    // cannot do; the first invalid state names the refusal.
+    const mrhiResult states[] = {
+        CheckVertex(device, def, *stagesOut),       CheckPrimitive(device, def),
+        CheckDepthStencil(device, def, *stagesOut), CheckTargets(device, def, *stagesOut),
+        CheckMultisample(device, def, *stagesOut),  CheckInterface(device, def, *stagesOut),
+    };
+    static const mrhiDiagnosticCode codes[] = {
+        mrhi_diagnosticGraphicsVertex,       mrhi_diagnosticGraphicsPrimitive,
+        mrhi_diagnosticGraphicsDepthStencil, mrhi_diagnosticGraphicsTargets,
+        mrhi_diagnosticGraphicsMultisample,  mrhi_diagnosticGraphicsInterface,
+    };
+    mrhiResult status = mrhi_success;
+    for (size_t i = 0; i < sizeof(states) / sizeof(states[0]); ++i)
+    {
+        if (states[i] == mrhi_errorInvalid)
+        {
+            *statusOut = mrhiDeviceMisuse(device, codes[i]);
+            return nullptr;
+        }
+        status = Worse(status, states[i]);
+    }
+    *statusOut = status;
     return status == mrhi_success ? shader : nullptr;
 }
 
@@ -501,7 +527,7 @@ mrhiResult mrhiCreateGraphicsPipeline(mrhiDevice* device, const mrhiGraphicsPipe
     }
     if (def == nullptr || pipelineOut == nullptr || requestOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     Stages stages;
     mrhiResult status = mrhi_success;

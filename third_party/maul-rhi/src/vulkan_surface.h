@@ -25,14 +25,21 @@ mrhiResult mrhiVulkanCreateSurface(const mrhiVulkan* vulkan, VkInstance instance
                                    const mrhiChain* source, VkSurfaceKHR* surfaceOut);
 
 // Fills what a surface can do on a physical device, given whether it
-// offers VK_KHR_swapchain; nothing but presentable, false, when it
-// cannot present there.
+// offers VK_KHR_swapchain and VK_KHR_swapchain_mutable_format (twin
+// views); nothing but presentable, false, when it cannot present there.
 void mrhiVulkanSurfaceCaps(const mrhiVulkan* vulkan, VkPhysicalDevice device, bool swapchain,
-                           VkSurfaceKHR surface, mrhiSurfaceCaps* capsOut);
+                           bool mutableFormat, VkSurfaceKHR surface, mrhiSurfaceCaps* capsOut);
 
-// The Vulkan format and color space a surface lists for a color: the
-// unorm format, or its sRGB twin when the surface lists only that; false
-// when it lists neither.
+// Whether a surface's formats list the sRGB format of every 8-bit unorm
+// color the caps report, in the same color space, and there is one: then
+// any of them may be configured as sRGB images (twinImages).
+bool mrhiVulkanTwinImages(const VkSurfaceFormatKHR* formats, uint32_t count,
+                          const mrhiSurfaceCaps* caps);
+
+// The Vulkan format and color space a surface lists for a color: for a
+// unorm color the unorm format, or its sRGB twin when the surface lists
+// only that; for an sRGB color (twin images) the sRGB format itself;
+// false when it lists none.
 bool mrhiVulkanSurfaceFormat(const mrhiVulkan* vulkan, VkPhysicalDevice device,
                              VkSurfaceKHR surface, mrhiSurfaceColor color,
                              VkSurfaceFormatKHR* formatOut);

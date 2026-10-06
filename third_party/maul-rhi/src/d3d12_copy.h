@@ -13,4 +13,9 @@
 // Records a copy command with its payload.
 void mrhiD3d12Copy(mrhiD3d12Recorder* recorder, const mrhiCommand* command);
 
+// Copies bytes of the device's zeros into a buffer in the copy
+// destination state, in pieces of at most their size.
+void mrhiD3d12CopyZeros(const mrhiD3d12Recorder* recorder, ID3D12Resource* target, uint64_t offset,
+                        uint64_t bytes);
+
 #endif // MAUL_RHI_SRC_D3D12_COPY_H

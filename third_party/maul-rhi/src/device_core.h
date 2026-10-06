@@ -9,6 +9,7 @@
 
 #include "capabilities_core.h"
 #include "command.h"
+#include "diagnostics.h"
 #include "driver.h"
 #include "pool.h"
 #include "reflection.h"
@@ -124,8 +125,10 @@ typedef struct mrhiTextureSlot
     mrhiTextureDef def;
     uint32_t firstView;
     mrhiImport import;
-    // The state frames leave it in.
+    // The state frames leave it in, and the one every frame ends an
+    // adopted image in (undefined for the others).
     mrhiResourceState state;
+    mrhiResourceState resting;
 } mrhiTextureSlot;
 
 // A view as its device keeps it: its resolved def (without its chain),
@@ -171,6 +174,9 @@ typedef struct mrhiFrameResource
     // only the reads of the sealed state, and whether it ends sealed.
     bool sealed;
     bool seal;
+    // The state an adopted image ends every frame in, undefined for the
+    // others.
+    mrhiResourceState resting;
     // A surface image's driver image; its handle is its swapchain's.
     uint64_t image;
     // Whether a pass declared so far writes it; imports count as written.
@@ -242,6 +248,8 @@ typedef struct mrhiRenderLayout
     mrhiFormat colors[MRHI_COLOR_TARGETS];
     mrhiFormat depth;
     uint32_t samples;
+    // The views rendered (mrhi-0020): 1 without multiview.
+    uint32_t views;
     bool writesDepth;
     bool writesStencil;
 } mrhiRenderLayout;
@@ -261,11 +269,17 @@ typedef struct mrhiFramePass
     mrhiPassClass passClass;
     bool neverCull;
     bool kept;
+    // Whether the program records it in a native command buffer, and
+    // that buffer once handed over (0 before).
+    bool native;
+    void* nativeCommands;
     uint32_t firstUse;
     uint32_t useCount;
     mrhiColorTarget colorTargets[MRHI_COLOR_TARGETS];
     uint32_t colorTargetCount;
     mrhiDepthTarget depthTarget;
+    // The views it renders (mrhi-0020): 1 without multiview.
+    uint32_t viewCount;
     // The stores the compile derived for its targets.
     mrhiStoreOp colorStores[MRHI_COLOR_TARGETS];
     mrhiStoreOp depthStore;
@@ -298,6 +312,11 @@ typedef struct mrhiFramePass
     uint32_t occlusionGeneration;
     uint64_t occlusionHandle;
     bool occlusionOpen;
+    // Its open statistics query (mrhi-0023): the query and its set's
+    // driver handle, which its end records.
+    uint32_t statisticsQuery;
+    uint64_t statisticsSet;
+    bool statisticsOpen;
     // Its timestamp query set's driver handle (0 for none) and the
     // queries written at its start and end (MRHI_NO_QUERY for none).
     uint64_t timestampSet;
@@ -388,8 +407,10 @@ struct mrhiDevice
     mrhiDeviceState state;
     // The open request, answered when the device leaves opening.
     uint32_t request;
-    // Calls refused as invalid input, counted from any recording thread.
+    // Calls refused as invalid input, counted from any recording thread,
+    // and the records of those refusals.
     _Atomic uint64_t misuse;
+    mrhiDiagnosticQueue diagnostics;
     mrhiDeviceDriver driver;
     // Who made the device, for its pipeline cache's envelope, and what
     // became of the cache its def gave.
@@ -477,6 +498,9 @@ struct mrhiDevice
     uint8_t* frameStaging;
     uint32_t stagingRegion;
     _Atomic uint64_t stagingTaken;
+    // The draws the open frame's counted multi-draws make at most, in all
+    // (mrhi-0020), never past frameIndirectDraws.
+    _Atomic uint64_t countedTaken;
     uint32_t* runningRegions;
     // Each pass's vertex buffers' bytes plus one (0 for unset),
     // vertexBuffers per pass.
@@ -513,8 +537,15 @@ struct mrhiDevice
 // mrhi_success for a ready device, mrhi_errorState for one that is not.
 mrhiResult mrhiDeviceUsable(const mrhiDevice* device);
 
-// Counts one misuse on the device and returns mrhi_errorInvalid.
-mrhiResult mrhiDeviceMisuse(mrhiDevice* device);
+// Checks a device def against the instance, the adapter and the floor,
+// and returns the adapter it names; NULL with the refusal in statusOut
+// (a misuse counted for a malformed def).
+const mrhiDriverAdapter* mrhiCheckDeviceDef(mrhiInstance* instance, const mrhiDeviceDef* def,
+                                            mrhiResult* statusOut);
+
+// Counts one misuse refused by a check on the device, records it, and
+// returns mrhi_errorInvalid.
+mrhiResult mrhiDeviceMisuse(mrhiDevice* device, mrhiDiagnosticCode code);
 
 // The head every object def opens with.
 typedef struct mrhiDefHead
@@ -533,10 +564,14 @@ typedef struct mrhiDefHead
 // device: success, or the refusal (invalid input counted as misuse).
 mrhiResult mrhiCheckObjectDef(mrhiDevice* device, mrhiDefHead head, uint32_t expected);
 
+// mrhiCheckObjectDef for a def that takes the known chained structs.
+mrhiResult mrhiCheckObjectDefWith(mrhiDevice* device, mrhiDefHead head, uint32_t expected,
+                                  const mrhiStructType* known, size_t knownCount);
+
 // Checks what a texture def says of its shape on a live device (its
 // cookie, chain and label, format, size, layers, mips, samples and view
 // formats): success, or the refusal, invalid input counted as misuse.
-mrhiResult mrhiCheckTextureShape(mrhiDevice* device, const mrhiTextureDef* def);
+mrhiResult mrhiCheckTextureShape(mrhiDevice* device, const mrhiTextureDef* def, bool created);
 
 // Checks what a buffer def says of its shape on a live device (its
 // cookie, chain and label, and size): success, or the refusal.

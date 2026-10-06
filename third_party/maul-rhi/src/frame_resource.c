@@ -34,16 +34,16 @@ mrhiResult mrhiDeclareTexture(mrhiDevice* device, const mrhiTextureDef* def,
     }
     if (def == nullptr || resourceOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
-    mrhiResult status = mrhiCheckTextureShape(device, def);
+    mrhiResult status = mrhiCheckTextureShape(device, def, false);
     if (status != mrhi_success)
     {
         return status;
     }
     if (def->usage != 0)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticTransientUsage);
     }
     mrhiFrameResource resource = {.kind = mrhiFrameTexture, .texture = *def};
     resource.texture.next = nullptr;
@@ -61,7 +61,7 @@ mrhiResult mrhiDeclareBuffer(mrhiDevice* device, const mrhiBufferDef* def,
     }
     if (def == nullptr || resourceOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     mrhiResult status = mrhiCheckBufferShape(device, def);
     if (status != mrhi_success)
@@ -70,7 +70,7 @@ mrhiResult mrhiDeclareBuffer(mrhiDevice* device, const mrhiBufferDef* def,
     }
     if (def->usage != 0)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticTransientUsage);
     }
     return Add(device, (mrhiFrameResource){.kind = mrhiFrameBuffer, .size = def->size},
                resourceOut);
@@ -102,7 +102,7 @@ mrhiResult mrhiImportTexture(mrhiDevice* device, mrhiTextureId texture, mrhiReso
     }
     if (resourceOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     if (!mrhiPoolIsLive(&device->textures, texture.index1, texture.generation))
     {
@@ -117,6 +117,7 @@ mrhiResult mrhiImportTexture(mrhiDevice* device, mrhiTextureId texture, mrhiReso
         .generation = texture.generation,
         .initialState = slot->state,
         .sealed = slot->state == mrhi_stateSealed,
+        .resting = slot->resting,
     };
     return Import(device, &device->textureSlots[texture.index1 - 1].import, resource, resourceOut);
 }
@@ -129,7 +130,7 @@ mrhiResult mrhiImportBuffer(mrhiDevice* device, mrhiBufferId buffer, mrhiResourc
     }
     if (resourceOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     if (!mrhiPoolIsLive(&device->buffers, buffer.index1, buffer.generation))
     {
@@ -169,7 +170,9 @@ static mrhiFrameResource* FindSealable(mrhiDevice* device, mrhiResourceId id, mr
         return nullptr;
     }
     mrhiFrameResource* resource = &device->frameResources[slot - 1];
-    *statusOut = mrhiIsImported(resource) ? mrhi_success : mrhiDeviceMisuse(device);
+    *statusOut = mrhiIsImported(resource)
+                     ? mrhi_success
+                     : mrhiDeviceMisuse(device, mrhi_diagnosticSealNotImported);
     return *statusOut == mrhi_success ? resource : nullptr;
 }
 
@@ -185,10 +188,11 @@ mrhiResult mrhiSealResource(mrhiDevice* device, mrhiResourceId resource)
     {
         return status;
     }
-    // A sealed texture is sampled.
-    if (found->kind == mrhiImportedTexture && (found->texture.usage & mrhi_textureSampled) == 0)
+    // A sealed texture is sampled, and an adopted image rests as a target.
+    if (found->kind == mrhiImportedTexture && ((found->texture.usage & mrhi_textureSampled) == 0 ||
+                                               found->resting != mrhi_stateUndefined))
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticSealTexture);
     }
     found->seal = true;
     return mrhi_success;
@@ -236,7 +240,7 @@ mrhiResult mrhiAcquireSurfaceImage(mrhiDevice* device, mrhiSurfaceId surface,
     }
     if (imageOut == nullptr)
     {
-        return mrhiDeviceMisuse(device);
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     *imageOut = (mrhiResourceId){0};
     if (mrhiFindSurface(device->instance, surface) == 0)

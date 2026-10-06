@@ -359,6 +359,7 @@ static void Lay(D3d12Device* made, const Room* room, const mrhiDeviceDef* def)
         .heapCount = heaps ? limits->heaps : 0,
         .heapEntries = heaps ? def->limits.heapSize : 0,
         .heapSamplers = heaps ? def->limits.samplerHeapSize : 0,
+        .counted = def->features.multiDrawIndirectCount,
     };
     mrhiD3d12LayFrames(&made->frames, block, &room->frames, limits, MRHI_D3D12_FRAMES);
 }
@@ -411,4 +412,29 @@ mrhiResult mrhiCreateD3d12Device(const mrhiAllocator* allocator, const mrhiD3d12
     }
     *deviceOut = (mrhiDeviceDriver){.vtable = &s_vtable, .self = made};
     return mrhi_success;
+}
+
+bool mrhiD3d12DeviceNative(const mrhiDeviceDriver* driver, ID3D12Device** deviceOut,
+                           ID3D12CommandQueue** queueOut)
+{
+    if (driver->vtable != &s_vtable)
+    {
+        return false;
+    }
+    const D3d12Device* device = driver->self;
+    *deviceOut = device->device;
+    *queueOut = device->queue;
+    return true;
+}
+
+bool mrhiD3d12DeviceTexture(const mrhiDeviceDriver* driver, uint64_t handle,
+                            ID3D12Resource** resourceOut)
+{
+    if (driver->vtable != &s_vtable)
+    {
+        return false;
+    }
+    const D3d12Device* device = driver->self;
+    *resourceOut = device->objects.textures[handle - 1].resource;
+    return true;
 }

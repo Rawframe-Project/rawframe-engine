@@ -37,11 +37,20 @@ uint32_t mrhiMetalSurfaceColors(mrhiSurfaceColor* colors)
         {mrhi_formatRgba16Float, mrhi_primariesDisplayP3, mrhi_transferLinear, mrhi_rangeStandard},
         {mrhi_formatRgba16Float, mrhi_primariesDisplayP3, mrhi_transferLinear, mrhi_rangeExtended},
     };
-    uint32_t count = sizeof(kColors) / sizeof(kColors[0]);
     static_assert(sizeof(kColors) / sizeof(kColors[0]) <= MRHI_SURFACE_COLORS, "colors fit");
-    for (uint32_t i = 0; i < count; ++i)
+    // A layer takes extended range content on iOS from 16 only.
+    bool extended = false;
+    if (@available(macOS 10.11, iOS 16.0, *))
     {
-        colors[i] = kColors[i];
+        extended = true;
+    }
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < sizeof(kColors) / sizeof(kColors[0]); ++i)
+    {
+        if (extended || kColors[i].range != mrhi_rangeExtended)
+        {
+            colors[count++] = kColors[i];
+        }
     }
     return count;
 }
@@ -73,7 +82,10 @@ static void Set(CAMetalLayer* layer, id<MTLDevice> device, const mrhiSurfaceConf
     CGColorSpaceRef space = NewColorSpace(&config->color);
     layer.colorspace = space;
     CGColorSpaceRelease(space);
-    layer.wantsExtendedDynamicRangeContent = config->color.range == mrhi_rangeExtended;
+    if (@available(macOS 10.11, iOS 16.0, *))
+    {
+        layer.wantsExtendedDynamicRangeContent = config->color.range == mrhi_rangeExtended;
+    }
     layer.drawableSize = CGSizeMake(config->width, config->height);
     layer.framebufferOnly = config->usage == mrhi_textureRenderTarget;
     layer.maximumDrawableCount = 3;

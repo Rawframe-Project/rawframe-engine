@@ -205,12 +205,30 @@ static void StartRender(mrhiMetalEncoder* encoder)
     }
     descriptor.renderTargetWidth = pass->width;
     descriptor.renderTargetHeight = pass->height;
+    if (pass->viewCount > 1)
+    {
+        // A layer per view from the attachments' slices (mrhi-0020).
+        descriptor.renderTargetArrayLength = pass->viewCount;
+    }
     if (pass->occlusionSet != 0)
     {
         descriptor.visibilityResultBuffer = mrhiMetalObject(pass->occlusionSet);
     }
     encoder->render = [encoder->commands renderCommandEncoderWithDescriptor:descriptor];
     Opened(encoder, encoder->render);
+    if (pass->viewCount > 1)
+    {
+        // View i amplifies the vertices onto the i-th layer.
+        MTLVertexAmplificationViewMapping mappings[MRHI_METAL_VIEWS];
+        for (uint32_t view = 0; view < pass->viewCount; ++view)
+        {
+            mappings[view] = (MTLVertexAmplificationViewMapping){
+                .viewportArrayIndexOffset = 0,
+                .renderTargetArrayIndexOffset = view,
+            };
+        }
+        [encoder->render setVertexAmplificationCount:pass->viewCount viewMappings:mappings];
+    }
 }
 
 // The texture a binding sees: the texture itself when the binding sees
@@ -532,6 +550,110 @@ static void Indirect(mrhiMetalEncoder* encoder, const mrhiCommand* command)
     }
 }
 
+// Whether a command is a counted multi-draw, and its records' bytes.
+static bool IsCounted(const mrhiCommand* command)
+{
+    return command->type == mrhiCommandDrawIndirectCount ||
+           command->type == mrhiCommandDrawIndexedIndirectCount;
+}
+
+static uint64_t RecordBytesOf(const mrhiCommand* command)
+{
+    return command->type == mrhiCommandDrawIndexedIndirectCount ? 20 : 16;
+}
+
+uint64_t mrhiMetalClampedBytes(const mrhiDriverFrame* frame)
+{
+    uint64_t bytes = 0;
+    for (uint32_t p = 0; p < frame->passCount; ++p)
+    {
+        for (uint32_t chunk = frame->passes[p].firstChunk; chunk != 0;
+             chunk = frame->chunks[chunk - 1].next)
+        {
+            const mrhiCommandChunk* at = &frame->chunks[chunk - 1];
+            for (uint32_t i = 0; i < at->count; i += 1u + at->commands[i].payload)
+            {
+                if (IsCounted(&at->commands[i]))
+                {
+                    bytes += (at->commands[i].b >> 32) * RecordBytesOf(&at->commands[i]);
+                }
+            }
+        }
+    }
+    return bytes;
+}
+
+// Clamps the records of the pass's counted multi-draws into the clamped
+// buffer, in a compute encoder before the pass's render encoder, so that
+// each record past its draw's count draws no instances (mrhi-0020).
+// Metal orders the render encoder's indirect reads after the writes.
+static void ClampPass(const mrhiMetalEncoder* encoder)
+{
+    id<MTLComputeCommandEncoder> compute = nil;
+    uint64_t clampedAt = encoder->clampedAt;
+    for (uint32_t chunk = encoder->pass->firstChunk; chunk != 0;
+         chunk = encoder->frame->chunks[chunk - 1].next)
+    {
+        const mrhiCommandChunk* at = &encoder->frame->chunks[chunk - 1];
+        for (uint32_t i = 0; i < at->count; i += 1u + at->commands[i].payload)
+        {
+            const mrhiCommand* command = &at->commands[i];
+            if (!IsCounted(command))
+            {
+                continue;
+            }
+            if (compute == nil)
+            {
+                compute = [encoder->commands computeCommandEncoder];
+                [compute setComputePipelineState:encoder->clamp];
+            }
+            uint32_t most = (uint32_t)(command->b >> 32);
+            const uint32_t shape[2] = {most, (uint32_t)(RecordBytesOf(command) / 4)};
+            [compute setBuffer:encoder->objects[command->a - 1]
+                        offset:(NSUInteger)command->c
+                       atIndex:0];
+            [compute setBuffer:encoder->objects[(uint32_t)command->b - 1]
+                        offset:(NSUInteger)command->d
+                       atIndex:1];
+            [compute setBuffer:encoder->clamped offset:(NSUInteger)clampedAt atIndex:2];
+            [compute setBytes:shape length:sizeof(shape) atIndex:3];
+            [compute dispatchThreadgroups:MTLSizeMake((most + 63) / 64, 1, 1)
+                    threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
+            clampedAt += most * RecordBytesOf(command);
+        }
+    }
+    [compute endEncoding];
+}
+
+// A counted multi-draw: as many indirect draws as its most, from its
+// clamped records.
+static void Counted(mrhiMetalEncoder* encoder, const mrhiCommand* command)
+{
+    uint32_t most = (uint32_t)(command->b >> 32);
+    uint64_t bytes = RecordBytesOf(command);
+    Flush(encoder);
+    for (uint32_t draw = 0; draw < most; ++draw)
+    {
+        NSUInteger offset = (NSUInteger)(encoder->clampedAt + draw * bytes);
+        if (command->type == mrhiCommandDrawIndirectCount)
+        {
+            [encoder->render drawPrimitives:encoder->pipeline->raster.primitive
+                             indirectBuffer:encoder->clamped
+                       indirectBufferOffset:offset];
+        }
+        else
+        {
+            [encoder->render drawIndexedPrimitives:encoder->pipeline->raster.primitive
+                                         indexType:encoder->indexType
+                                       indexBuffer:encoder->indexBuffer
+                                 indexBufferOffset:encoder->indexOffset
+                                    indirectBuffer:encoder->clamped
+                              indirectBufferOffset:offset];
+        }
+    }
+    encoder->clampedAt += most * bytes;
+}
+
 static void Draw(mrhiMetalEncoder* encoder, const mrhiCommand* command)
 {
     switch (command->type)
@@ -558,6 +680,10 @@ static void Draw(mrhiMetalEncoder* encoder, const mrhiCommand* command)
     case mrhiCommandDrawIndexed:
         Flush(encoder);
         DrawIndexed(encoder, command);
+        break;
+    case mrhiCommandDrawIndirectCount:
+    case mrhiCommandDrawIndexedIndirectCount:
+        Counted(encoder, command);
         break;
     case mrhiCommandDispatch:
         Flush(encoder);
@@ -662,6 +788,10 @@ void mrhiMetalEncodePass(mrhiMetalEncoder* encoder, const mrhiDriverPass* pass)
     Work work = WorkOf(pass);
     if (work == WORK_RENDER)
     {
+        if (encoder->clamp != nil)
+        {
+            ClampPass(encoder);
+        }
         StartRender(encoder);
     }
     else if (work == WORK_COMPUTE)

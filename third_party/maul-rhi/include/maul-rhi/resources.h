@@ -478,6 +478,14 @@ extern "C"
         // The GPU's time at a pass's start or end, in ticks of the device's
         // timestamp period. Needs the timestamp_query feature.
         mrhi_queryTimestamp = 1,
+        // Eleven 64-bit counters of the work between a begin and an end in a
+        // pass of the graphics class, in this order: input assembly vertices
+        // and primitives, vertex invocations, geometry invocations and
+        // primitives, clipping invocations and primitives, fragment
+        // invocations, tessellation control patches and evaluation invocations,
+        // compute invocations. The geometry and tessellation counters are 0.
+        // Needs the pipeline_statistics_query feature.
+        mrhi_queryPipelineStatistics = 2,
     };
 
     // A query set of a device.
@@ -525,7 +533,8 @@ extern "C"
     /// MRHI_LABEL_BYTES, an unknown type, or a count of 0 or past 4096;
     /// `mrhi_errorState` for a device that is not ready;
     /// `mrhi_errorUnsupported` for a critical extension the library does not
-    /// know, or timestamps without the timestamp_query feature;
+    /// know, timestamps without the timestamp_query feature, or pipeline
+    /// statistics without the pipeline_statistics_query feature;
     /// `mrhi_errorCapacity` when the device's querySets limit is reached or its
     /// queries limit lacks a run of count queries.
     /// @par Thread safety
