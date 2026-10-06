@@ -1,6 +1,7 @@
 #include "presentation.h"
 
 #include "animation_doors.h"
+#include "command_doors.h"
 #include "effect_doors.h"
 #include "hover_doors.h"
 #include "message_doors.h"
@@ -53,6 +54,7 @@ struct ClientPresentation::State {
     std::unique_ptr<ModServices> services;
     std::unique_ptr<EffectDoors> effects;
     std::unique_ptr<MessageDoors> messages;
+    std::unique_ptr<CommandDoors> commands;
 
     /// What is bound to the mirror, made again for another one.
     const world::World* bound = nullptr;
@@ -118,6 +120,7 @@ struct ClientPresentation::State {
             RAWFRAME_TRY(services->addDoors(doors));
             RAWFRAME_TRY(effects->addDoors(doors));
             RAWFRAME_TRY(messages->addDoors(doors));
+            RAWFRAME_TRY(commands->addDoors(doors));
             if (game.physics.has_value()) {
                 RAWFRAME_TRY(addPhysicsDoors(doors, game.physics->dimensions, &physicsDoors));
             }
@@ -220,6 +223,7 @@ result::Result<std::unique_ptr<ClientPresentation>> ClientPresentation::create(P
     state->services = std::make_unique<ModServices>(game, sizes);
     state->effects = std::make_unique<EffectDoors>(game, false);
     RAWFRAME_TRY_ASSIGN(state->messages, MessageDoors::create(game, *settings.program, MessageDoors::Role::Read));
+    RAWFRAME_TRY_ASSIGN(state->commands, CommandDoors::create(game, *settings.program, CommandDoors::Role::Quiet));
     state->settings = std::move(settings);
     return std::unique_ptr<ClientPresentation>{new ClientPresentation{std::move(state)}};
 }

@@ -742,6 +742,16 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     "a message line is `message <lower_snake name> <Kest type>`, each name once, at most 64");
             }
             game.messages.push_back(GameMessage{.name = std::string{kWords[1]}, .kestType = std::string{kWords[2]}});
+        } else if (kKeyword == "command") {
+            if (kWords.size() != 3 || !lowerSnake(kWords[1]) ||
+                std::ranges::contains(game.commands, kWords[1], &GameCommand::name) ||
+                game.commands.size() >= kMaximumCommands) {
+                return badLine(
+                    number,
+                    WorldKestError::BadGameLine,
+                    "a command line is `command <lower_snake name> <Kest type>`, each name once, at most 64");
+            }
+            game.commands.push_back(GameCommand{.name = std::string{kWords[1]}, .kestType = std::string{kWords[2]}});
         } else if (kKeyword == "interest") {
             // interest <component> <field>... within <radius>
             double radius = 0;

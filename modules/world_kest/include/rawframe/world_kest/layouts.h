@@ -60,6 +60,12 @@ componentLayout(const GameDescription& game, const kest::Program& program, const
                                                  const kest::Program& program,
                                                  std::span<const kest::TypeLayout> layouts);
 
+/// Whether a layout holds an entity: `rawframe.world.Entity`'s two pieces,
+/// `slot` and then `generation` four bytes on, under one field's name or
+/// none. A value that crosses between the server's World and a client's
+/// may not, for it names one World only.
+[[nodiscard]] bool holdsEntity(const kest::TypeLayout& layout);
+
 /// Each of the game's components field by field for a reader of the World
 /// (D409), from `layouts` in the components' order: an entity field whole,
 /// an enum by its cases, a field of no plain kind left out.

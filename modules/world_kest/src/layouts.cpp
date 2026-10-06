@@ -323,4 +323,19 @@ std::vector<world_runtime::ComponentFieldSet> componentFieldSets(const GameDescr
     return made;
 }
 
+bool holdsEntity(const kest::TypeLayout& layout) {
+    for (std::size_t index = 0; index + 1 < layout.fields.size(); ++index) {
+        const kest::Field& kSlot = layout.fields[index];
+        const kest::Field& kGeneration = layout.fields[index + 1];
+        if (!kSlot.name.ends_with("slot") || kGeneration.offset != kSlot.offset + 4) {
+            continue;
+        }
+        const std::string_view kOwner = std::string_view{kSlot.name}.substr(0, kSlot.name.size() - 4);
+        if ((kOwner.empty() || kOwner.ends_with('.')) && kGeneration.name == std::string{kOwner} + "generation") {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace rawframe::world_kest

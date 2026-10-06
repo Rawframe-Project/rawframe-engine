@@ -48,7 +48,7 @@ public:
 
     [[nodiscard]] result::Status addDoors(kest::DoorTable& doors);
 
-    void begin() noexcept override;
+    void begin(world::TickIndex tick) noexcept override;
     void end(bool kept) noexcept override;
 
     /// Send: appends what kept runs sent since last taken, in order.

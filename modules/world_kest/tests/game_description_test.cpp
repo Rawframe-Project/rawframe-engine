@@ -667,3 +667,21 @@ RAWFRAME_TEST(MessagesAreDeclaredByLine) {
         RAWFRAME_EXPECT(!parseGame(kHead + std::string{kLines}).has_value());
     }
 }
+
+RAWFRAME_TEST(CommandsAreDeclaredByLine) {
+    const std::string kHead = "program p.kest\n";
+    const auto kGame = parseGame(kHead + "command collect controls.Collect\ncommand push Push\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->commands.size() == 2 && kGame->commands[0].name == "collect" &&
+                    kGame->commands[0].kestType == "controls.Collect");
+    for (const std::string_view kLines : {"command push\n",
+                                          "command Push Push\n",
+                                          "command push Push extra\n",
+                                          "command push Push\ncommand push Other\n"}) {
+        RAWFRAME_EXPECT(!parseGame(kHead + std::string{kLines}).has_value());
+    }
+    std::string many = kHead;
+    for (std::size_t index = 0; index <= world_kest::kMaximumCommands; ++index) {
+        many += "command c" + std::to_string(index) + " Push\n";
+    }
+    RAWFRAME_EXPECT(!parseGame(many).has_value());
+}

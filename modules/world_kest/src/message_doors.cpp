@@ -1,6 +1,7 @@
 #include "message_doors.h"
 
 #include "rawframe/world_kest/errors.h"
+#include "rawframe/world_kest/layouts.h"
 
 #include <algorithm>
 #include <iterator>
@@ -13,24 +14,6 @@ constexpr std::array<kest::Parameter, 1> kCountGives = {kest::Parameter{kest::Sl
 constexpr std::array<kest::Parameter, 1> kReadTakes = {kest::Parameter{kest::Slot::I32}};
 constexpr std::array<kest::Parameter, 2> kTerminateTakes = {kest::Parameter{kest::Slot::Value, kEntityType},
                                                             kest::Parameter{kest::Slot::Text}};
-
-/// Whether a layout holds an entity: `rawframe.world.Entity`'s two pieces,
-/// `slot` and then `generation` four bytes on, under one field's name or
-/// none.
-bool holdsEntity(const kest::TypeLayout& layout) {
-    for (std::size_t index = 0; index + 1 < layout.fields.size(); ++index) {
-        const kest::Field& kSlot = layout.fields[index];
-        const kest::Field& kGeneration = layout.fields[index + 1];
-        if (!kSlot.name.ends_with("slot") || kGeneration.offset != kSlot.offset + 4) {
-            continue;
-        }
-        const std::string_view kOwner = std::string_view{kSlot.name}.substr(0, kSlot.name.size() - 4);
-        if ((kOwner.empty() || kOwner.ends_with('.')) && kGeneration.name == std::string{kOwner} + "generation") {
-            return true;
-        }
-    }
-    return false;
-}
 
 } // namespace
 
@@ -85,7 +68,7 @@ result::Status MessageDoors::addDoors(kest::DoorTable& doors) {
     return {};
 }
 
-void MessageDoors::begin() noexcept {
+void MessageDoors::begin(world::TickIndex /*tick*/) noexcept {
     pending_.clear();
     pendingTerminations_.clear();
 }

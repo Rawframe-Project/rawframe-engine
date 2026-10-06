@@ -1,6 +1,7 @@
 #include "admission.h"
 #include "animation_doors.h"
 #include "animation_plan.h"
+#include "command_doors.h"
 #include "effect_doors.h"
 #include "game_files_participant.h"
 #include "game_persistence.h"
@@ -183,6 +184,8 @@ public:
         // where they run, run where the World is authoritative: what they
         // send goes out after the tick.
         RAWFRAME_TRY_ASSIGN(messages_, MessageDoors::create(game_, *program_, MessageDoors::Role::Send));
+        // And the command lane, by the commands' sizes (D425).
+        RAWFRAME_TRY_ASSIGN(commands_, CommandDoors::create(game_, *program_, CommandDoors::Role::Read));
         if (planOnly_) {
             // A process that plays the game elsewhere needs what replicates,
             // not the game running here.
@@ -266,7 +269,8 @@ public:
         effects_ = std::make_unique<EffectDoors>(game_, false);
         RAWFRAME_TRY(effects_->addDoors(doors));
         RAWFRAME_TRY(messages_->addDoors(doors));
-        staging_[0] = messages_.get();
+        RAWFRAME_TRY(commands_->addDoors(doors));
+        staging_ = {messages_.get(), commands_.get()};
         for (const GameEffect& effect : game_.effects) {
             effectClasses_.push_back(effect.effectClass);
         }
@@ -554,6 +558,14 @@ public:
         }
     }
 
+    std::span<const std::size_t> commandSizes() const noexcept override {
+        return commands_ != nullptr ? commands_->sizes() : std::span<const std::size_t>{};
+    }
+    void deliverCommands(std::span<const world_replication::ReceivedCommand> commands) noexcept override {
+        if (commands_ != nullptr) {
+            commands_->deliver(commands);
+        }
+    }
     void takeTerminations(std::vector<world_replication::PostedTermination>& into) noexcept override {
         if (messages_ != nullptr) {
             messages_->takeTerminations(into);
@@ -895,7 +907,8 @@ private:
     std::unique_ptr<KestTiming> timing_;
     std::unique_ptr<EffectDoors> effects_;
     std::unique_ptr<MessageDoors> messages_;
-    std::array<KestStaging*, 1> staging_{};
+    std::unique_ptr<CommandDoors> commands_;
+    std::array<KestStaging*, 2> staging_{};
     std::vector<world_replication::EffectClass> effectClasses_;
     std::unique_ptr<KestSystems> systems_;
     /// Each taken mod's handlers, on its own machine.

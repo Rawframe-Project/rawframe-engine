@@ -1,6 +1,7 @@
 #include "predictor.h"
 
 #include "animation_doors.h"
+#include "command_doors.h"
 #include "effect_doors.h"
 #include "hover_doors.h"
 #include "message_doors.h"
@@ -115,6 +116,8 @@ public:
         // A client sends no message and reads none while it predicts.
         RAWFRAME_TRY_ASSIGN(messages_, MessageDoors::create(game, *settings.program, MessageDoors::Role::Quiet));
         RAWFRAME_TRY(messages_->addDoors(doors));
+        RAWFRAME_TRY_ASSIGN(commands_, CommandDoors::create(game, *settings.program, CommandDoors::Role::Quiet));
+        RAWFRAME_TRY(commands_->addDoors(doors));
         dimensions_ = settings.physics3d.has_value() ? 3 : settings.physics.has_value() ? 2 : 0;
         if (dimensions_ != 0) {
             RAWFRAME_TRY(addPhysicsDoors(doors, dimensions_, &doorContext_));
@@ -278,6 +281,7 @@ private:
     /// What each step's predicted systems emitted (D219).
     std::unique_ptr<EffectDoors> effects_;
     std::unique_ptr<MessageDoors> messages_;
+    std::unique_ptr<CommandDoors> commands_;
     std::unique_ptr<KestSystems> systems_;
     /// The game's physics dimensions, nought for none, and its physics.
     std::uint8_t dimensions_ = 0;

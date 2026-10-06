@@ -245,6 +245,22 @@ struct GameMessage {
 /// Messages a game declares at most.
 inline constexpr std::size_t kMaximumMessages = 64;
 
+/// A player's command (D425), from a `command <lower_snake name> <Kest
+/// type>` line: a value of the type a client's sample function sends
+/// through `Commands.<name>(value)`, which arrives at the server on the
+/// game's command lane and which the server's systems read on the next tick
+/// through `CommandCount.<name>()`, `Command.<name>(index)`, and
+/// `CommandFrom.<name>(index)`, the sending player's entity. It holds no
+/// entity: one would name the client's World. Untrusted: the server checks
+/// its size and how many wait before any system reads it.
+struct GameCommand {
+    std::string name;
+    std::string kestType;
+};
+
+/// Commands a game declares at most.
+inline constexpr std::size_t kMaximumCommands = 64;
+
 struct GameFieldValue {
     std::string field;
     std::string value;
@@ -557,6 +573,7 @@ struct GameDescription {
     std::vector<GamePresentation> presentation;
     std::vector<GameEffect> effects;
     std::vector<GameMessage> messages;
+    std::vector<GameCommand> commands;
     std::vector<GameSpawn> spawns;
     /// Scene documents (rawframe/scene/scene.h) whose entities the World
     /// starts with, beside any `spawn` lines, from `scene <file>` lines.
