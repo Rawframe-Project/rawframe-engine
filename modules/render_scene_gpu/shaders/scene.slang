@@ -29,6 +29,12 @@
 // their alpha cutoff, and each point's normal and roughness where a
 // screen-space effect asks for them.
 
+import material;
+
+// The material the scene is linked with (D481, D482): the blob's for the
+// containers the engine ships, or one compiled for a game.
+extern struct Material : IMaterial;
+
 struct Frame
 {
     float4x4 viewProjection;
@@ -132,28 +138,6 @@ struct Decal
 [[vk::binding(6, 0)]] DepthTexture2D lightShadowMap;
 [[vk::binding(7, 0)]] StructuredBuffer<ShadowSlot> slots;
 [[vk::binding(8, 0)]] StructuredBuffer<Exposure> exposure;
-// Every material's blob (D303), nine vectors each: the base color and
-// metalness; the specular color times its weight, and the roughness; the
-// emission in nits, and the index of refraction; the opacity, the
-// occlusion, the alpha cutoff, and its flags: one when unlit, two when its
-// base texture's color multiplies the base color, four when its alpha
-// multiplies the opacity, eight when the emission texture's color
-// multiplies the emission, sixteen when the normal texture bends the
-// normal; the base, packed, emission, and normal textures' scale and
-// offset (D311); the packed texture's channels for the metalness, the
-// roughness, and the occlusion, and the normal's scale (D312, D313).
-[[vk::binding(9, 0)]] StructuredBuffer<float4> materials;
-// The texture the draw's material samples, and how (D309): white for one
-// sampling none. The packed and the emission textures (D312), and the
-// normal texture (D313).
-[[vk::binding(10, 0)]] Texture2D baseTexture;
-[[vk::binding(11, 0)]] SamplerState baseSampler;
-[[vk::binding(12, 0)]] Texture2D packedTexture;
-[[vk::binding(13, 0)]] SamplerState packedSampler;
-[[vk::binding(14, 0)]] Texture2D emissionTexture;
-[[vk::binding(15, 0)]] SamplerState emissionSampler;
-[[vk::binding(16, 0)]] Texture2D normalTexture;
-[[vk::binding(17, 0)]] SamplerState normalSampler;
 // The sky's picture (D322), each level its light as a rougher surface
 // reflects it.
 [[vk::binding(18, 0)]] TextureCube environmentTexture;
@@ -240,16 +224,6 @@ Corner vs(Vertex vertex)
     return corner;
 }
 
-// The first vector of material `material`'s blob, held to the blobs there
-// are.
-uint blobOf(uint material)
-{
-    uint count;
-    uint stride;
-    materials.GetDimensions(count, stride);
-    return min(material, count / 9u - 1u) * 9u;
-}
-
 // Every input of a prepass entry read, though it needs only some (D418):
 // Slang leaves an input never read out of the entry, and Direct3D 12 links
 // stages by place, so the rest would not line up with the vertex entry's.
@@ -327,13 +301,6 @@ float4 cutNormal(Corner corner) : SV_Target0
 }
 
 static const float kPi = 3.14159265;
-
-// A texture's channel a number is read from: one to four, red to alpha;
-// nought for none, which reads one.
-float channelOf(float4 texel, float channel)
-{
-    return channel < 0.5 ? 1.0 : channel < 1.5 ? texel.r : channel < 2.5 ? texel.g : channel < 3.5 ? texel.b : texel.a;
-}
 
 // A point's surface as the BRDF takes it: the diffuse color (the base
 // color less what metal takes), what it reflects head on (a dielectric's
@@ -701,19 +668,6 @@ Lit shade(Corner corner, bool decaled)
 {
     const float2 pixel = corner.position.xy;
     const float3 toEye = normalize(-corner.placed);
-    const uint at = blobOf(corner.material);
-    const float4 base = materials[at];
-    const float4 specular = materials[at + 1u];
-    const float4 emission = materials[at + 2u];
-    const float4 rest = materials[at + 3u];
-    // Where each texture is sampled (D311), and what the packed and the
-    // emission textures feed (D312).
-    const float4 baseMap = materials[at + 4u];
-    const float4 packedMap = materials[at + 5u];
-    const float4 emissionMap = materials[at + 6u];
-    const float4 normalMap = materials[at + 7u];
-    const float4 channels = materials[at + 8u];
-    const uint flags = uint(rest.w);
     // The coordinates' derivatives, taken before anything branches, so a
     // texture is sampled only where its material has one; and the place's,
     // for the decals' textures (D339).
@@ -724,72 +678,41 @@ Lit shade(Corner corner, bool decaled)
     // The cluster's lights, decals, and probes, where any is clustered
     // (D339, D340).
     const uint4 range = frame.clusterDepth.y > 0.0 ? clusterOf(corner.placed) : uint4(0u);
-    float4 sampled = float4(1.0);
-    if ((flags & 6u) != 0u)
-    {
-        sampled = baseTexture.SampleGrad(
-            baseSampler, corner.uv * baseMap.xy + baseMap.zw, dx * baseMap.xy, dy * baseMap.xy);
-    }
-    float4 packedTexel = float4(1.0);
-    if (channels.x + channels.y + channels.z > 0.5)
-    {
-        packedTexel = packedTexture.SampleGrad(
-            packedSampler, corner.uv * packedMap.xy + packedMap.zw, dx * packedMap.xy, dy * packedMap.xy);
-    }
-    float3 glow = float3(1.0);
-    if ((flags & 8u) != 0u)
-    {
-        glow = emissionTexture
-                   .SampleGrad(emissionSampler,
-                               corner.uv * emissionMap.xy + emissionMap.zw,
-                               dx * emissionMap.xy,
-                               dy * emissionMap.xy)
-                   .rgb;
-    }
-    // The normal, bent by the normal texture across the tangent frame
-    // (D313): its x and y scaled, glTF's green up the image.
-    float3 normal = normalize(corner.normal);
-    if ((flags & 16u) != 0u)
-    {
-        float3 bent = normalTexture
-                          .SampleGrad(normalSampler,
-                                      corner.uv * normalMap.xy + normalMap.zw,
-                                      dx * normalMap.xy,
-                                      dy * normalMap.xy)
-                          .xyz *
-                          2.0 -
-                      1.0;
-        bent.xy *= channels.w;
-        const float3 across = normalize(corner.tangent.xyz - normal * dot(normal, corner.tangent.xyz));
-        const float3 up = cross(normal, across) * corner.tangent.w;
-        normal = normalize(across * bent.x + up * bent.y + normal * bent.z);
-    }
-    float3 color = corner.color.rgb * base.rgb * ((flags & 2u) != 0u ? sampled.rgb : float3(1.0));
-    float roughness = specular.w * channelOf(packedTexel, channels.y);
+    // The surface the material gives (D482).
+    Point point;
+    point.uv = corner.uv;
+    point.dx = dx;
+    point.dy = dy;
+    point.normal = normalize(corner.normal);
+    point.tangent = corner.tangent;
+    point.color = corner.color;
+    point.material = corner.material;
+    const Evaluated evaluated = Material.evaluate(point);
+    float3 color = evaluated.color;
+    float3 normal = evaluated.normal;
+    float roughness = evaluated.roughness;
     // Entry "fsDecaled", for frames with decals: under them.
     if (decaled && frame.decals.x > 0.5)
     {
         decalled(range, corner.placed, normalize(corner.normal), along, aside, color, normal, roughness);
     }
-    // How much of what is behind it a translucent model hides (D305): its
-    // material's opacity times its color's alpha.
-    const float opacity = rest.x * corner.color.a * ((flags & 4u) != 0u ? sampled.a : 1.0);
-    const float metalness = base.w * channelOf(packedTexel, channels.x);
-    const float occlusion = rest.y * channelOf(packedTexel, channels.z);
-    const float3 glowing = emission.rgb * glow;
+    const float opacity = evaluated.opacity;
+    const float metalness = evaluated.metalness;
+    const float occlusion = evaluated.occlusion;
+    const float3 glowing = evaluated.glowing;
     Lit lit;
     lit.motion = (corner.now.xy / corner.now.z - corner.before.xy / corner.before.z) * float2(0.5, -0.5);
     // Unlit (KHR_materials_unlit): its color stands in the picture as it
     // is, whatever the exposure.
-    if ((flags & 1u) != 0u)
+    if (evaluated.unlit)
     {
         lit.color = float4(color, opacity);
         return lit;
     }
-    const float reflectance = (emission.w - 1.0) / (emission.w + 1.0);
+    const float reflectance = (evaluated.ior - 1.0) / (evaluated.ior + 1.0);
     Surface surface;
     surface.diffuse = color * (1.0 - metalness);
-    surface.headOn = lerp(reflectance * reflectance * specular.rgb, color, metalness);
+    surface.headOn = lerp(reflectance * reflectance * evaluated.specular, color, metalness);
     surface.roughness = roughness;
     const int2 texel = int2(pixel);
     // What of the sun's light the contact shadows let through (D338), for

@@ -20,6 +20,7 @@
 #
 # usage: tools/gen_shaders.py
 
+import json
 import os
 import re
 import subprocess
@@ -37,6 +38,11 @@ SLANGC = os.environ.get("RAWFRAME_SLANGC", "slangc")
 SLANG_VERSION = "2026.19"
 # The containers whose vertex position must be invariant (D475).
 INVARIANT = ("scene",)
+# Containers whose shading reads its surface through a material
+# (D481, D482): the scene declares its material extern and is linked with
+# the module that exports it, the blob's for the containers the engine
+# ships, beside the module of what a material is.
+LINKED = {"scene": ("blob_material", "material")}
 # Each container: its module and its name.
 CONTAINERS = (
     ("render", "display"),
@@ -64,8 +70,8 @@ CONTAINERS = (
 )
 
 
-def run(*command):
-    result = subprocess.run(command, capture_output=True, text=True)
+def run(*command, cwd=None):
+    result = subprocess.run(command, capture_output=True, text=True, cwd=cwd)
     if result.returncode != 0:
         sys.exit(f"{command[0]} failed:\n{result.stdout}{result.stderr}")
 
@@ -112,9 +118,26 @@ def build(work, shaders, name):
     # entries, so Slang's overlap warning (39001) is no fault. A source
     # imports the modules beside it (screen.slang).
     quiet = ("-warnings-disable", "39001", "-I", shaders)
-    run(SLANGC, source, *quiet, "-target", "spirv", "-profile", "spirv_1_6", "-fvk-use-entrypoint-name", "-o", linked)
+    inputs = (source,)
+    if name in LINKED:
+        # Each module compiled alone, then linked: two sources on one
+        # command line would be one module, where the extern and the
+        # export collide. The entries follow the module that holds them,
+        # and the link runs beside the modules, where alone Slang finds
+        # the ones they import.
+        modules = []
+        for module in (name, *LINKED[name]):
+            compiled = os.path.join(work, f"{module}.slang-module")
+            run(SLANGC, os.path.join(shaders, f"{module}.slang"), *quiet, "-o", compiled)
+            modules.append(os.path.basename(compiled))
+        with open(os.path.join(shaders, f"{name}.json"), encoding="utf-8") as told:
+            entries = json.load(told)["entries"]
+        named = [part for entry in entries for part in ("-entry", entry["name"], "-stage", entry["stage"])]
+        inputs = (modules[0], *named, *modules[1:])
+    run(SLANGC, *inputs, *quiet, "-target", "spirv", "-profile", "spirv_1_6", "-fvk-use-entrypoint-name", "-o", linked,
+        cwd=work)
     wgsl = os.path.join(work, f"{name}.wgsl")
-    run(SLANGC, source, *quiet, "-target", "wgsl", "-o", wgsl)
+    run(SLANGC, *inputs, *quiet, "-target", "wgsl", "-o", wgsl, cwd=work)
     if name in INVARIANT:
         invariantPosition(linked, wgsl)
     run("spirv-val", "--target-env", "vulkan1.3", linked)
