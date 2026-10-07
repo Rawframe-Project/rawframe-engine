@@ -71,10 +71,10 @@ RAWFRAME_TEST(AViewsTextureIsSampledByTheSceneItShows) {
         (**view).prepare(drawnInto, kMeshes);
         missed = (**view).missed();
         (**scene).prepare(&shown, kMeshes, {}, kViews);
-        RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+        RAWFRAME_EXPECT((*framer)->finish(scene_fixture::kFrameWait).has_value());
         RAWFRAME_EXPECT(
             (*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).value_or(false));
-        RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+        RAWFRAME_EXPECT((*framer)->finish(scene_fixture::kFrameWait).has_value());
         return (*framer)->pixels();
     };
     // Before the view has drawn, white.
@@ -91,7 +91,7 @@ RAWFRAME_TEST(AViewsTextureIsSampledByTheSceneItShows) {
     (**view).prepare(&seen, kMeshes);
     const std::array<render::FrameRecorder*, 1> kWithout = {scene->get()};
     RAWFRAME_EXPECT((*framer)->make(kWithout, {.width = kSide, .height = kSide}).value_or(false));
-    RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+    RAWFRAME_EXPECT((*framer)->finish(scene_fixture::kFrameWait).has_value());
     pixels = kDraw(&seen);
     RAWFRAME_EXPECT(missed);
     // Once it has drawn, its red, and nothing missed.
@@ -166,7 +166,7 @@ RAWFRAME_TEST(SplitScreenViewsArePlacedInTheirRegions) {
         (**scene).prepare(nullptr, kMeshes);
         RAWFRAME_EXPECT(
             (*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).value_or(false));
-        RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+        RAWFRAME_EXPECT((*framer)->finish(scene_fixture::kFrameWait).has_value());
         pixels = (*framer)->pixels();
     }
     RAWFRAME_EXPECT(pixels.has_value());
@@ -225,7 +225,7 @@ RAWFRAME_TEST(AViewDrawnAtItsRenderScaleFillsItsRegion) {
         (**scene).prepare(nullptr, kMeshes);
         RAWFRAME_EXPECT(
             (*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).value_or(false));
-        RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+        RAWFRAME_EXPECT((*framer)->finish(scene_fixture::kFrameWait).has_value());
         pixels = (*framer)->pixels();
     }
     RAWFRAME_EXPECT(pixels.has_value());

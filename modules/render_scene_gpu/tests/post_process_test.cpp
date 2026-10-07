@@ -159,10 +159,10 @@ RAWFRAME_TEST(PostProcessesRunWhereTheyAreInserted) {
     const std::uint64_t kStillOut = (*made)->statistics().postProcessesLeftOut;
     for (int attempt = 0; attempt < 1000 && (*made)->statistics().postProcessesRun < kRun + 2; ++attempt) {
         (*made)->prepare(&composed, kMeshes, kTextures);
-        RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+        RAWFRAME_EXPECT((*framer)->finish(kFrameWait).has_value());
         RAWFRAME_EXPECT((*framer)->make(kBoth, {.width = kSide, .height = kSide, .readBack = true}).has_value());
     }
-    RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+    RAWFRAME_EXPECT((*framer)->finish(kFrameWait).has_value());
     const auto kComposedPixels = (*framer)->pixels();
     RAWFRAME_EXPECT(kComposedPixels.has_value() && (*made)->statistics().postProcessesLeftOut == kStillOut);
     if (kComposedPixels.has_value()) {

@@ -9,6 +9,7 @@
 #include "rawframe/test/test.h"
 
 #include <array>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -17,6 +18,12 @@
 #include <vector>
 
 namespace rawframe::scene_fixture {
+
+/// How long a test waits for a frame it drew: lavapipe compiles a
+/// pipeline on the CPU the first time a frame uses it, which a machine
+/// loaded by other builds takes far longer over than its five seconds
+/// alone (D476); past this, a frame that never ends still fails.
+inline constexpr std::uint64_t kFrameWait = 60'000'000'000;
 
 /// Whether a device must answer: skipping is failing (the check sets it).
 inline bool required() {
@@ -91,7 +98,7 @@ inline std::optional<std::vector<std::byte>> drawn(render::Framer& framer,
     const std::uint64_t kBefore = renderer.statistics().frames;
     for (int attempt = 0; attempt < 1000 && renderer.statistics().frames == kBefore; ++attempt) {
         renderer.prepare(&frame, meshes, textures);
-        RAWFRAME_EXPECT(framer.finish(5'000'000'000).has_value());
+        RAWFRAME_EXPECT(framer.finish(kFrameWait).has_value());
         const auto kMade = framer.make(kRecorders, {.width = kSide, .height = kSide, .readBack = true});
         RAWFRAME_EXPECT(kMade.has_value());
         if (!kMade.has_value()) {
@@ -102,7 +109,7 @@ inline std::optional<std::vector<std::byte>> drawn(render::Framer& framer,
             return std::nullopt;
         }
     }
-    RAWFRAME_EXPECT(framer.finish(5'000'000'000).has_value());
+    RAWFRAME_EXPECT(framer.finish(kFrameWait).has_value());
     return framer.pixels();
 }
 

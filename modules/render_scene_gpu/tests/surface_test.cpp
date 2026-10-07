@@ -221,11 +221,11 @@ RAWFRAME_TEST(AMaterialsTextureColorsItsModel) {
         std::optional<std::vector<std::byte>> pixels;
         const std::uint64_t kBefore = (**made).statistics().frames;
         for (int attempt = 0; attempt < 1000 && (**made).statistics().frames == kBefore; ++attempt) {
-            RAWFRAME_EXPECT((**framer).finish(5'000'000'000).has_value());
+            RAWFRAME_EXPECT((**framer).finish(kFrameWait).has_value());
             RAWFRAME_EXPECT(
                 (**framer).make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).has_value());
         }
-        RAWFRAME_EXPECT((**framer).finish(5'000'000'000).has_value());
+        RAWFRAME_EXPECT((**framer).finish(kFrameWait).has_value());
         pixels = (**framer).pixels();
         RAWFRAME_EXPECT(pixels.has_value());
         return pixels.has_value()
@@ -317,10 +317,10 @@ RAWFRAME_TEST(AMaskedMaterialIsCutWhereItsTextureIsClear) {
     const std::array<render::FrameRecorder*, 1> kRecorders = {&**made};
     const std::uint64_t kBefore = (**made).statistics().frames;
     for (int attempt = 0; attempt < 1000 && (**made).statistics().frames == kBefore; ++attempt) {
-        RAWFRAME_EXPECT((**framer).finish(5'000'000'000).has_value());
+        RAWFRAME_EXPECT((**framer).finish(kFrameWait).has_value());
         RAWFRAME_EXPECT((**framer).make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).has_value());
     }
-    RAWFRAME_EXPECT((**framer).finish(5'000'000'000).has_value());
+    RAWFRAME_EXPECT((**framer).finish(kFrameWait).has_value());
     const auto kPixels = (**framer).pixels();
     RAWFRAME_EXPECT(kPixels.has_value());
     if (!kPixels.has_value()) {
