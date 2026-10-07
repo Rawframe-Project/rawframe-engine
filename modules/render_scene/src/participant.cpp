@@ -280,7 +280,8 @@ public:
             diagnostics::field("players", static_cast<std::uint64_t>(localPlayers_.size() + 1)),
             diagnostics::field("playerFrames", playerFrames_),
             diagnostics::field("framesPreviewed", previewed_),
-            diagnostics::field("marksShown", marksDrawn_)};
+            diagnostics::field("marksShown", marksDrawn_),
+            diagnostics::field("marksLit", marksLit_)};
         emitter_.log(diagnostics::Severity::Info, kSceneSummary, "what one client's scene drew", fields);
         if (!textureViews_.empty()) {
             emitter_.log(diagnostics::Severity::Info,
@@ -412,15 +413,29 @@ private:
             lines_.clear();
             if (const auto& kAt = preview_->marked(); kAt.has_value()) {
                 ++marksDrawn_;
+                // The part under the pointer drawn white and wider (D468).
+                const view::MarkPart kLit = preview_->lit();
+                marksLit_ += kLit != view::MarkPart::None ? 1 : 0;
+                const auto kWidth = [](bool lit) {
+                    return lit ? 1.0F / 90 : 1.0F / 150;
+                };
                 for (std::size_t axis = 0; axis < 3; ++axis) {
                     std::array<double, 3> to = *kAt;
                     to[axis] += 1;
+                    const bool kAxisLit = static_cast<std::size_t>(kLit) == axis + 1;
                     std::array<float, 4> color{0, 0, 0, 1};
                     color[axis] = 1;
+                    if (kAxisLit) {
+                        color = {1, 1, 1, 1};
+                    }
                     // A hundred and fiftieth of the view wide, over
                     // everything: the mark stands out as a gizmo does.
-                    lines_.push_back(SceneLine{
-                        .from = *kAt, .to = to, .color = color, .width = 1.0F / 150, .ofView = true, .over = true});
+                    lines_.push_back(SceneLine{.from = *kAt,
+                                               .to = to,
+                                               .color = color,
+                                               .width = kWidth(kAxisLit),
+                                               .ofView = true,
+                                               .over = true});
                 }
                 // And a yellow ring about it on the level plane, its turn's
                 // handle (D467).
@@ -434,8 +449,10 @@ private:
                     };
                     lines_.push_back(SceneLine{.from = kOn(piece),
                                                .to = kOn(piece + 1),
-                                               .color = {1, 0.8F, 0, 1},
-                                               .width = 1.0F / 150,
+                                               .color = kLit == view::MarkPart::Ring
+                                                            ? std::array<float, 4>{1, 1, 1, 1}
+                                                            : std::array<float, 4>{1, 0.8F, 0, 1},
+                                               .width = kWidth(kLit == view::MarkPart::Ring),
                                                .ofView = true,
                                                .over = true});
                 }
@@ -800,6 +817,8 @@ private:
     std::uint64_t marksShown_ = 0;
     /// The preview's marks drawn, a point each (D464).
     std::uint64_t marksDrawn_ = 0;
+    /// Those drawn with a part lit (D468).
+    std::uint64_t marksLit_ = 0;
     /// Each local player's view drawn at this share of its region's pixels
     /// each way (D373).
     float renderScale_ = 1;

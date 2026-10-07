@@ -226,8 +226,20 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         }
         if (event->kind == window::EventKind::CursorMoved) {
             pointing_.pointAt(event->pointer.position.x, event->pointer.position.y);
+            // And where it points in a preview, so the handle under it is
+            // drawn lit (D468).
+            if (settings_.preview != nullptr && settings_.preview->looking().has_value()) {
+                const auto kRay = view::pointToRay(*settings_.preview->looking(),
+                                                   views_.window(),
+                                                   event->pointer.position.x,
+                                                   event->pointer.position.y);
+                settings_.preview->pointed(kRay.has_value() ? std::optional<view::Ray>{*kRay} : std::nullopt);
+            }
         } else if (event->kind == window::EventKind::CursorLeft || event->kind == window::EventKind::FocusLost) {
             pointing_.left();
+            if (settings_.preview != nullptr) {
+                settings_.preview->pointed(std::nullopt);
+            }
         }
         // A field holding focus takes what is typed (D426); the keys still
         // reach the players' input, whose gated actions they no longer move.

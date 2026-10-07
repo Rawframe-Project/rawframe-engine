@@ -37,6 +37,11 @@ struct Clicked {
     std::uint64_t released = 0;
     std::array<double, 3> releaseOrigin{};
     std::array<double, 3> releaseToward{};
+    /// Where the pointer is, as a ray the same way, while it is in the
+    /// window (D468).
+    bool pointing = false;
+    std::array<double, 3> pointOrigin{};
+    std::array<double, 3> pointToward{};
 };
 
 class Previewer {
@@ -58,8 +63,10 @@ public:
         return std::nullopt;
     }
     /// Marks a point of the World in the preview, as an author chose
-    /// something there, or none (D464); whether the Runtime shows a mark.
-    virtual bool mark(const std::optional<std::array<double, 3>>& /*at*/) {
+    /// something there, or none (D464), its part `lit` drawn lit: 0 none, 1
+    /// to 3 the X, Y, and Z axes, 4 the ring (D468); whether the Runtime
+    /// shows a mark.
+    virtual bool mark(const std::optional<std::array<double, 3>>& /*at*/, std::uint8_t /*lit*/) {
         return false;
     }
 };

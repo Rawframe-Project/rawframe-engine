@@ -25,6 +25,15 @@ namespace rawframe::view {
 inline constexpr double kMarkRingRadius = 1.25;
 inline constexpr std::size_t kMarkRingPieces = 48;
 
+/// A part of a mark: none, an axis (X, Y, Z), or the ring (D468).
+enum class MarkPart : std::uint8_t {
+    None,
+    X,
+    Y,
+    Z,
+    Ring
+};
+
 class PreviewCamera {
 public:
     PreviewCamera() = default;
@@ -39,13 +48,18 @@ public:
     [[nodiscard]] const std::optional<Perspective>& looking() const noexcept {
         return view_;
     }
-    /// A press in the window while the preview looks, as its ray.
     /// A point the preview marks, where an author chose something (D464),
     /// drawn as three axes there; none for none. Counted, so a reader tells
     /// a new mark.
-    void mark(const std::optional<std::array<double, 3>>& at) noexcept {
+    void mark(const std::optional<std::array<double, 3>>& at, MarkPart lit = MarkPart::None) noexcept {
         marked_ = at;
+        lit_ = lit;
         ++marks_;
+    }
+    /// The part of the mark drawn lit, the handle the pointer is over
+    /// (D468).
+    [[nodiscard]] MarkPart lit() const noexcept {
+        return lit_;
     }
     [[nodiscard]] const std::optional<std::array<double, 3>>& marked() const noexcept {
         return marked_;
@@ -54,6 +68,16 @@ public:
         return marks_;
     }
 
+    /// Where the pointer is while the preview looks, as its ray, none once
+    /// it left the window (D468): the handle under it is drawn lit.
+    void pointed(const std::optional<Ray>& ray) noexcept {
+        pointing_ = ray;
+    }
+    [[nodiscard]] const std::optional<Ray>& pointing() const noexcept {
+        return pointing_;
+    }
+
+    /// A press in the window while the preview looks, as its ray.
     /// `modifiers` are the window's modifier bits held with the press: a
     /// drag with Shift moves height, with Control turns (D463).
     void clicked(const Ray& ray, std::uint16_t modifiers = 0) noexcept {
@@ -93,6 +117,8 @@ private:
     std::uint16_t clickModifiers_ = 0;
     std::optional<std::array<double, 3>> marked_;
     std::uint64_t marks_ = 0;
+    MarkPart lit_ = MarkPart::None;
+    std::optional<Ray> pointing_;
     std::optional<Ray> lastRelease_;
     std::uint64_t releases_ = 0;
 };

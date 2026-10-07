@@ -96,23 +96,32 @@ public:
         camera.look(kView);
         return true;
     }
-    bool mark(const std::optional<std::array<double, 3>>& at) override {
-        camera.mark(at);
+    bool mark(const std::optional<std::array<double, 3>>& at, std::uint8_t lit) override {
+        camera.mark(at,
+                    lit <= static_cast<std::uint8_t>(view::MarkPart::Ring) ? static_cast<view::MarkPart>(lit)
+                                                                           : view::MarkPart::None);
         return true;
     }
     std::optional<world_tooling::Clicked> clicked() const override {
         const std::optional<view::Ray>& kRay = camera.lastClick();
-        if (!kRay.has_value()) {
+        const std::optional<view::Ray>& kPointing = camera.pointing();
+        if (!kRay.has_value() && !kPointing.has_value()) {
             return std::nullopt;
         }
         // A thousand metres along the press's direction: past anything a
         // scene an author edits holds.
         constexpr double kReach = 1000;
-        world_tooling::Clicked made{
-            .count = camera.clicks(),
-            .origin = kRay->origin,
-            .toward = {kRay->direction[0] * kReach, kRay->direction[1] * kReach, kRay->direction[2] * kReach},
-            .modifiers = camera.clickModifiers()};
+        world_tooling::Clicked made{.count = camera.clicks(), .modifiers = camera.clickModifiers()};
+        if (kRay.has_value()) {
+            made.origin = kRay->origin;
+            made.toward = {kRay->direction[0] * kReach, kRay->direction[1] * kReach, kRay->direction[2] * kReach};
+        }
+        if (kPointing.has_value()) {
+            made.pointing = true;
+            made.pointOrigin = kPointing->origin;
+            made.pointToward = {
+                kPointing->direction[0] * kReach, kPointing->direction[1] * kReach, kPointing->direction[2] * kReach};
+        }
         if (const std::optional<view::Ray>& kRelease = camera.lastRelease(); kRelease.has_value()) {
             made.released = camera.releases();
             made.releaseOrigin = kRelease->origin;

@@ -525,7 +525,19 @@ struct ToolingServer::State {
             }
             Value made = Value::object();
             made.add("kind", Value::string("tooling.marked"));
-            made.add("marked", Value::boolean(settings.previewer != nullptr && settings.previewer->mark(kPoint)));
+            // The part drawn lit, by name; none unless named (D468).
+            const Value* kLit = parsed->find("lit");
+            constexpr std::array<std::string_view, 5> kParts = {"", "x", "y", "z", "ring"};
+            std::uint8_t lit = 0;
+            if (kLit != nullptr && !kLit->isNull()) {
+                const auto kNamed = kLit->text() != nullptr ? std::ranges::find(kParts, *kLit->text()) : kParts.end();
+                if (kNamed == kParts.end() || kNamed == kParts.begin()) {
+                    send(connection, client, errorLine(id, ToolingError::Malformed, "lit is x, y, z, ring, or null"));
+                    return;
+                }
+                lit = static_cast<std::uint8_t>(kNamed - kParts.begin());
+            }
+            made.add("marked", Value::boolean(settings.previewer != nullptr && settings.previewer->mark(kPoint, lit)));
             send(connection, client, replyLine(id, "answer", std::move(made)));
             return;
         }
@@ -540,14 +552,19 @@ struct ToolingServer::State {
             Value made = Value::object();
             made.add("kind", Value::string("tooling.clicked"));
             made.add("count", Value::integer(kClicked.has_value() ? static_cast<std::int64_t>(kClicked->count) : 0));
-            if (kClicked.has_value()) {
-                const auto kPoint = [](const std::array<double, 3>& at) {
-                    Value point = Value::array();
-                    for (const double kAt : at) {
-                        point.push(Value::real(kAt));
-                    }
-                    return point;
-                };
+            const auto kPoint = [](const std::array<double, 3>& at) {
+                Value point = Value::array();
+                for (const double kAt : at) {
+                    point.push(Value::real(kAt));
+                }
+                return point;
+            };
+            // Where the pointer is, press or none (D468).
+            if (kClicked.has_value() && kClicked->pointing) {
+                made.add("pointOrigin", kPoint(kClicked->pointOrigin));
+                made.add("pointToward", kPoint(kClicked->pointToward));
+            }
+            if (kClicked.has_value() && kClicked->count != 0) {
                 made.add("origin", kPoint(kClicked->origin));
                 made.add("toward", kPoint(kClicked->toward));
                 made.add("modifiers", Value::integer(kClicked->modifiers));
