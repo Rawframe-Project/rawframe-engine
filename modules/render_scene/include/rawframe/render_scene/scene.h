@@ -86,6 +86,10 @@ struct SceneMaterial {
     /// D305).
     bool translucent = false;
     SceneTextures textures;
+    /// Its own program, where the blob cannot say it (D484, D485): the
+    /// scene's containers linked with it, its models lit by them. Its blob
+    /// then holds its declared states only.
+    std::shared_ptr<const material::ProgramMaterial> program;
 };
 
 /// A game's post-process material (D348, D349): its identity, where it
@@ -613,6 +617,9 @@ struct SceneFrame {
     std::vector<MaterialBlob> materials;
     /// Every material's texture, at its blob's place (D309).
     std::vector<SceneTextures> textures;
+    /// Every material's own program, at its blob's place (D485): none for
+    /// one the blob says, and for every place past the list's end.
+    std::vector<std::shared_ptr<const material::ProgramMaterial>> programs;
     std::size_t overLimit = 0;
 };
 

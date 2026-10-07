@@ -15,7 +15,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <functional>
 #include <map>
 #include <numbers>
 #include <tuple>
@@ -534,14 +533,24 @@ struct Scene::State {
         std::ranges::stable_sort(kTranslucent, [&kAway](const SceneDraw& left, const SceneDraw& right) {
             return kAway(left) > kAway(right);
         });
-        // The opaque by their material's texture, so a device binds each
-        // once (D309); within one, by mesh as they were.
+        // The opaque by their material's program, so a device sets each
+        // once (D485), then by its texture, so it binds each once (D309);
+        // within one, by mesh as they were.
         const auto kTextureOf = [this](const SceneDraw& draw) {
             return draw.material < frame.textures.size() ? frame.textures[draw.material] : SceneTextures{};
         };
+        // A program is its material's alone, so it is known by the
+        // material's place; the engine's own program, nought, first.
+        const auto kProgramOf = [this](const SceneDraw& draw) {
+            return draw.material < frame.programs.size() && frame.programs[draw.material] != nullptr ? draw.material
+                                                                                                     : 0U;
+        };
         std::ranges::stable_sort(std::ranges::subrange(frame.draws.begin(), kTranslucent.begin()),
-                                 [&kTextureOf](const SceneDraw& left, const SceneDraw& right) {
-                                     return kTextureOf(left) < kTextureOf(right);
+                                 [&kTextureOf, &kProgramOf](const SceneDraw& left, const SceneDraw& right) {
+                                     const std::uint32_t kLeftProgram = kProgramOf(left);
+                                     const std::uint32_t kRightProgram = kProgramOf(right);
+                                     return kLeftProgram != kRightProgram ? kLeftProgram < kRightProgram
+                                                                          : kTextureOf(left) < kTextureOf(right);
                                  });
         castIntoCascades();
         temporal(camera, kSees);
@@ -735,6 +744,7 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
     // an identity replaces an earlier.
     state->frame.materials = {noMaterial()};
     state->frame.textures = {SceneTextures{}};
+    state->frame.programs = {nullptr};
     state->translucent = {false};
     for (const SceneMaterial& kMaterial : settings.materials) {
         if (kMaterial.id == 0) {
@@ -745,10 +755,12 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
         if (kNew) {
             state->frame.materials.push_back(kMaterial.blob);
             state->frame.textures.push_back(kMaterial.textures);
+            state->frame.programs.push_back(kMaterial.program);
             state->translucent.push_back(kMaterial.translucent);
         } else {
             state->frame.materials[kAt->second] = kMaterial.blob;
             state->frame.textures[kAt->second] = kMaterial.textures;
+            state->frame.programs[kAt->second] = kMaterial.program;
             state->translucent[kAt->second] = kMaterial.translucent;
         }
     }

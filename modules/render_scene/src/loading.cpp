@@ -6,6 +6,10 @@
 #include "rawframe/render_scene/errors.h"
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <utility>
 
 namespace rawframe::render_scene {
 
@@ -29,12 +33,39 @@ readCooked(content::ContentStore& store, base::Bits128 id, base::Bits128 type) {
                                                               .description = "a material's read was cancelled"});
 }
 
-/// A surface material, decoded at `quality` (D303).
-result::Result<material::Material>
-readMaterial(content::ContentStore& store, base::Bits128 id, material::Quality quality) {
+/// A surface material as the scene draws it: its blob at `quality` (D303),
+/// or, cooked with its own program (D484), that program, its states in the
+/// blob and its textures at their slots (D485).
+result::Result<SceneMaterial>
+readMaterial(content::ContentStore& store, std::uint64_t identity, base::Bits128 id, material::Quality quality) {
     RAWFRAME_TRY_ASSIGN(const content::VerifiedContent kRead, readCooked(store, id, material::kMaterialType));
+    if (kRead.descriptor().representation.text() == material::kProgramRepresentation) {
+        RAWFRAME_TRY_ASSIGN(material::ProgramMaterial program, material::decodeProgram(kRead.bytes()));
+        const material::Material kStates{.shading = program.shading,
+                                         .blend = program.blend,
+                                         .alphaCutoff = program.alphaCutoff,
+                                         .doubleSided = program.doubleSided};
+        std::array<SceneTexture, 4> slots{};
+        for (std::size_t at = 0; at < program.textures.size(); ++at) {
+            slots.at(at) = sceneTextureOf(program.textures[at]);
+        }
+        return SceneMaterial{
+            .id = identity,
+            .blob = material::blobOf(kStates),
+            .translucent = program.blend == material::Blend::Translucent,
+            .textures = {.base = slots[0], .packed = slots[1], .emission = slots[2], .normal = slots[3]},
+            .program = std::make_shared<const material::ProgramMaterial>(std::move(program))};
+    }
     RAWFRAME_TRY_ASSIGN(const material::Qualities kQualities, material::decode(kRead.bytes()));
-    return kQualities.at(static_cast<std::size_t>(quality));
+    const material::Material& kMaterial = kQualities.at(static_cast<std::size_t>(quality));
+    return SceneMaterial{.id = identity,
+                         .blob = material::blobOf(kMaterial),
+                         .translucent = kMaterial.blend == material::Blend::Translucent,
+                         .textures = {.base = sceneTextureOf(kMaterial.textures.base),
+                                      .packed = sceneTextureOf(kMaterial.textures.packed),
+                                      .emission = sceneTextureOf(kMaterial.textures.emission),
+                                      .normal = sceneTextureOf(kMaterial.textures.normal)},
+                         .program = nullptr};
 }
 
 /// Whether a read found no resource of that identity, or (`other`) one of
@@ -175,16 +206,19 @@ result::Status readGameMaterials(composition::ParticipantContext& context,
     if (!files.materials().empty() && context.has(game_content::kGameContent.name)) {
         RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
         if (content->held()) {
-            const std::array<content::AdmittedRepresentation, 2> kAdmitted = {
+            const std::array<content::AdmittedRepresentation, 3> kAdmitted = {
                 content::AdmittedRepresentation{
                     .type = content::ResourceTypeId{material::kMaterialType},
                     .representation = *content::RepresentationId::parse(material::kMaterialRepresentation)},
+                content::AdmittedRepresentation{
+                    .type = content::ResourceTypeId{material::kMaterialType},
+                    .representation = *content::RepresentationId::parse(material::kProgramRepresentation)},
                 content::AdmittedRepresentation{
                     .type = content::ResourceTypeId{material::kPostProcessType},
                     .representation = *content::RepresentationId::parse(material::kPostProcessRepresentation)}};
             RAWFRAME_TRY(content->admit(kAdmitted));
             for (const world_kest::GameMaterialResource& each : files.materials()) {
-                auto read = readMaterial(content->store(), each.material, quality);
+                auto read = readMaterial(content->store(), each.id, each.material, quality);
                 // One of another type may be a post process.
                 if (!read.has_value() && missing(read.error(), content::ContentError::ResourceTypeMismatch)) {
                     auto cooked = readCooked(content->store(), each.material, material::kPostProcessType);
@@ -207,13 +241,7 @@ result::Status readGameMaterials(composition::ParticipantContext& context,
                     read = std::unexpected{std::move(process).error()};
                 }
                 if (read.has_value()) {
-                    materials.push_back({.id = each.id,
-                                         .blob = material::blobOf(*read),
-                                         .translucent = read->blend == material::Blend::Translucent,
-                                         .textures = {.base = sceneTextureOf(read->textures.base),
-                                                      .packed = sceneTextureOf(read->textures.packed),
-                                                      .emission = sceneTextureOf(read->textures.emission),
-                                                      .normal = sceneTextureOf(read->textures.normal)}});
+                    materials.push_back(std::move(*read));
                 } else if (!each.subasset || !missing(read.error(), content::ContentError::ResourceNotFound)) {
                     // A mesh's subasset its source no longer has names
                     // no resource and is no material (D314).
