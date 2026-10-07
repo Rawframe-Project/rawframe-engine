@@ -19,6 +19,9 @@ work=$5
 
 rm -rf "$work"
 mkdir -p "$work"
+# A step that fails says where, with what the debugger and the server
+# said, so a failure seen only in a loaded check can be read.
+trap 'echo "failed at line $LINENO"; cat "$work"/replies "$work"/held 2>/dev/null; tail -40 "$work"/server.log 2>/dev/null' ERR
 port=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
 python3 -c 'import secrets; print(secrets.token_hex(24))' >"$work/token"
 cat "$content" >"$work/server.conf"
