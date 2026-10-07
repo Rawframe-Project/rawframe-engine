@@ -403,9 +403,10 @@ private:
     std::uint64_t marked_ = 0;
     std::vector<std::array<float, 4>> wheels_;
     std::uint64_t wheeled_ = 0;
-    /// Whether a press was acted on since the tree was last laid out: the
-    /// next is hit against it laid out again, so presses read in one frame
-    /// each find what the one before brought (D486).
+    /// Whether a press was acted on, or keys taken before one, since the
+    /// tree was last laid out: the next press is hit against it laid out
+    /// again, so input read in one frame each finds what came before it
+    /// brought (D486, D489).
     bool pressedSinceLayout_ = false;
     std::chrono::steady_clock::time_point began_ = std::chrono::steady_clock::now();
     std::size_t entityAt_ = 0;

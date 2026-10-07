@@ -21,6 +21,16 @@ ShellParticipant::read(const std::string& scene, std::string_view operation, std
 }
 
 void ShellParticipant::pressAt(float x, float y) {
+    // Keys read before the press are taken before it, in the order they
+    // came (D489): a field's text submitted, and the history row it adds,
+    // are there for the press that follows them in one frame.
+    if (!typed_.empty()) {
+        for (const view::Typing& kTyping : typed_) {
+            take(kTyping);
+        }
+        typed_.clear();
+        pressedSinceLayout_ = true;
+    }
     // A press read in one frame with one before it is hit against what that
     // one brought, as a wheel is (D479, D486): selecting a row brings its
     // components, which the next press may be on.
