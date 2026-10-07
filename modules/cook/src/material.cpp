@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iterator>
+#include <random>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -64,26 +65,33 @@ std::unexpected<result::Error> toolFailed(std::string why) {
         result::fail(result::ErrorClass::FailedPrecondition, kCookDomain, code(CookError::ToolFailed), why).error()};
 }
 
-/// A directory of its own under the system's temporary one, made afresh:
-/// the first of a counted series named by the source's digest that no one
-/// holds, so the two cooks of one source build in one place, and what the
-/// toolchain writes cannot differ by where it was written.
-result::Result<std::filesystem::path> freshDirectory(std::span<const std::byte> source) {
-    const base::Sha256Digest kDigest = base::sha256(source);
-    std::string named = "rawframe-material-";
-    for (std::size_t at = 0; at < 8; ++at) {
-        named += "0123456789abcdef"[std::to_integer<unsigned>(kDigest.at(at)) >> 4U];
-        named += "0123456789abcdef"[std::to_integer<unsigned>(kDigest.at(at)) & 0xFU];
-    }
+/// A directory of its own under the system's temporary one, made afresh
+/// and open to its owner alone: a random name no one else can guess or
+/// hold first, so nothing another user put there is read or written. What
+/// the toolchain builds does not depend on where (the two cooks of one
+/// source build in two places and are compared).
+result::Result<std::filesystem::path> freshDirectory() {
+    std::random_device random;
     std::error_code failed;
     const std::filesystem::path kTemporary = std::filesystem::temp_directory_path(failed);
-    for (std::size_t each = 0; !failed && each < 1000; ++each) {
-        const std::filesystem::path kMade = kTemporary / (named + "-" + std::to_string(each));
+    for (std::size_t each = 0; !failed && each < 100; ++each) {
+        const std::uint64_t kName = (std::uint64_t{random()} << 32U) | std::uint64_t{random()};
+        std::string named = "rawframe-material-";
+        for (std::size_t at = 0; at < 16; ++at) {
+            named += "0123456789abcdef"[(kName >> (60 - (4 * at))) & 0xFU];
+        }
+        const std::filesystem::path kMade = kTemporary / named;
         if (std::filesystem::create_directory(kMade, failed)) {
+            std::filesystem::permissions(kMade, std::filesystem::perms::owner_all, failed);
+            if (failed) {
+                std::error_code ignored;
+                std::filesystem::remove(kMade, ignored);
+                break;
+            }
             return kMade;
         }
     }
-    return toolFailed("no directory could be made to build a program material in");
+    return toolFailed("no directory of its own could be made to build a program material in");
 }
 
 std::vector<std::byte> bytesOf(const std::filesystem::path& path) {
@@ -99,10 +107,9 @@ std::vector<std::byte> bytesOf(const std::filesystem::path& path) {
 /// A graph the blob cannot fold, written as Slang and linked into the
 /// scene's containers by the shader toolchain (D484): a program material,
 /// one variant at the high quality.
-result::Result<Artifact>
-cookProgram(std::span<const std::byte> source, const graph::Document& document, const ShaderTools& tools) {
+result::Result<Artifact> cookProgram(const graph::Document& document, const ShaderTools& tools) {
     RAWFRAME_TRY_ASSIGN(const material::GeneratedSlang kGenerated, material::generateSlang(document));
-    RAWFRAME_TRY_ASSIGN(const std::filesystem::path kWork, freshDirectory(source));
+    RAWFRAME_TRY_ASSIGN(const std::filesystem::path kWork, freshDirectory());
     const auto kRemove = [&kWork] {
         std::error_code ignored;
         std::filesystem::remove_all(kWork, ignored);
@@ -172,7 +179,7 @@ result::Result<Artifact> cookMaterial(std::span<const std::byte> source, const s
                           "cook was given none: " +
                           std::string{compiled.error().description()});
     }
-    return cookProgram(source, kDocument, *tools);
+    return cookProgram(kDocument, *tools);
 }
 
 /// A post process folds to one form (D348): one variant.
