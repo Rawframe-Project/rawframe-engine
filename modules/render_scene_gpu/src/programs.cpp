@@ -2,7 +2,8 @@
 // containers linked with the material at cook time (D484), the one the
 // build's driver reads made a shader, and the engine's own models'
 // pipelines that run its code made again with it as a frame first wants
-// each: the lit ones, and the prepass's that cut or leave surfaces.
+// each: the lit ones, the prepass's that cut or leave surfaces, and, from
+// the shadow's container, the masked casters' (D488).
 
 #include "pipelines.h"
 
@@ -22,7 +23,7 @@ namespace {
 constexpr std::size_t kContainer = RAWFRAME_PROGRAM_CONTAINER;
 static_assert(kContainer < material::kProgramContainers);
 
-constexpr std::array<std::string_view, 18> kLabels = {"rawframe.scene.program.lit",
+constexpr std::array<std::string_view, 19> kLabels = {"rawframe.scene.program.lit",
                                                       "rawframe.scene.program.masked",
                                                       "rawframe.scene.program.glass",
                                                       "rawframe.scene.program.lit.decaled",
@@ -39,7 +40,8 @@ constexpr std::array<std::string_view, 18> kLabels = {"rawframe.scene.program.li
                                                       "rawframe.scene.program.depth.surfaces.masked",
                                                       "rawframe.scene.program.depth.masked.multisampled",
                                                       "rawframe.scene.program.depth.surfaces.multisampled",
-                                                      "rawframe.scene.program.depth.surfaces.masked.multisampled"};
+                                                      "rawframe.scene.program.depth.surfaces.masked.multisampled",
+                                                      "rawframe.scene.program.shadows.masked"};
 
 } // namespace
 
@@ -54,28 +56,32 @@ void Pipelines::wantPrograms(std::span<const std::shared_ptr<const material::Pro
         ProgramShading& shading = at->second;
         if (made) {
             shading.program = kProgram;
-            const std::vector<std::byte>& kBytes = kProgram->containers.at(kContainer);
-            const std::span<const std::uint8_t> kContainerBytes{reinterpret_cast<const std::uint8_t*>(kBytes.data()),
-                                                                kBytes.size()};
-            shading.refused = !makeShader(kContainerBytes, shading.shader).has_value();
+            const auto kBytesOf = [](const std::vector<std::byte>& bytes) {
+                return std::span<const std::uint8_t>{reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()};
+            };
+            shading.refused = !makeShader(kBytesOf(kProgram->containers.at(kContainer)), shading.shader).has_value() ||
+                              !makeShader(kBytesOf(kProgram->shadows.at(kContainer)), shading.shadowShader).has_value();
         }
         // The prepass's surfaces are wanted once a view wants them (D337).
         const bool kSurfaced = asked_.at(static_cast<std::size_t>(Effect::Surfaces));
         const std::array<mrhiGraphicsPipelineDef, 2> kSurfacing = surfacing(prepass_);
         for (std::size_t variant = 0; variant < shading.variants.size() && !shading.refused; ++variant) {
-            // The lit twelve, then the prepass's six (`variantOf`).
+            // The lit twelve, the prepass's six, then the masked casters'
+            // (`variantOf`).
             const bool kLit = variant < 12;
-            const std::size_t kPrepass = kLit ? 0 : (variant - 12) % 3;
+            const bool kCasting = variant == 18;
+            const std::size_t kPrepass = kLit || kCasting ? 0 : (variant - 12) % 3;
             const bool kDecaled = kLit && (variant % 6) >= 3;
-            const bool kMultisampled = kLit ? variant >= 6 : variant >= 15;
+            const bool kMultisampled = kLit ? variant >= 6 : !kCasting && variant >= 15;
             if (shading.asked.at(variant) || (kDecaled && !decaled) || (kMultisampled && !sampled) ||
-                (!kLit && kPrepass > 0 && !kSurfaced)) {
+                (!kLit && !kCasting && kPrepass > 0 && !kSurfaced)) {
                 continue;
             }
             mrhiGraphicsPipelineDef def = kLit            ? shading_.at(variant % 3)
+                                          : kCasting      ? cutCasting_
                                           : kPrepass == 0 ? cut_
                                                           : kSurfacing.at(kPrepass - 1);
-            def.shader = shading.shader;
+            def.shader = kCasting ? shading.shadowShader : shading.shader;
             def.label = kLabels.at(variant).data();
             def.labelLength = kLabels.at(variant).size();
             if (kDecaled) {

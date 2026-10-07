@@ -142,10 +142,12 @@ result::Result<Artifact> cookProgram(const graph::Document& document, const Shad
                                    .alphaCutoff = kGenerated.alphaCutoff,
                                    .doubleSided = kGenerated.doubleSided,
                                    .textures = kGenerated.textures};
-    constexpr std::array<std::string_view, material::kProgramContainers> kNames = {
-        "scene.mrsc", "scene.metal.mrsc", "scene.d3d12.mrsc"};
-    for (std::size_t at = 0; at < kNames.size(); ++at) {
-        made.containers.at(at) = bytesOf(kWork / kNames.at(at));
+    // The scene's containers and the shadow's (D488), a backend each.
+    constexpr std::array<std::string_view, material::kProgramContainers> kSuffixes = {
+        ".mrsc", ".metal.mrsc", ".d3d12.mrsc"};
+    for (std::size_t at = 0; at < kSuffixes.size(); ++at) {
+        made.containers.at(at) = bytesOf(kWork / ("scene" + std::string{kSuffixes.at(at)}));
+        made.shadows.at(at) = bytesOf(kWork / ("shadow" + std::string{kSuffixes.at(at)}));
     }
     kRemove();
     std::vector<std::byte> bytes = material::encodeProgram(made);

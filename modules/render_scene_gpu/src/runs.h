@@ -24,8 +24,9 @@ struct Run {
     std::uint32_t first = 0;
     std::uint32_t count = 0;
     render_scene::SceneTextures texture;
-    /// Its material's own program, which lights it (D485); none for the
-    /// engine's own, and for every shadow's casters.
+    /// Its material's own program, which draws it (D485, D487), and cuts
+    /// it as a masked caster (D488); none for the engine's own, and for
+    /// the solid casters.
     const material::ProgramMaterial* program = nullptr;
 };
 using Runs = std::vector<Run>;

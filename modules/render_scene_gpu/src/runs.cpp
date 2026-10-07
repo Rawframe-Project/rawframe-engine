@@ -8,8 +8,8 @@ namespace rawframe::render_scene_gpu {
 
 namespace {
 
-/// The draws' placements, and their runs; a shadow's casters' by mesh
-/// and texture alone (`materialPrograms` none).
+/// The draws' placements, and their runs; the solid casters' by mesh
+/// alone (`materialTextures` and `materialPrograms` none).
 void append(std::span<const render_scene::SceneDraw> draws,
             const std::map<std::uint64_t, const HeldMesh*>& usable,
             std::span<const render_scene::SceneTextures> materialTextures,
@@ -102,7 +102,7 @@ Placed placeDraws(const render_scene::SceneFrame& scene,
         append(kCastMasked,
                usable,
                scene.textures,
-               {},
+               scene.programs,
                placed,
                placed.cascadeRuns[at].masked,
                count,
@@ -114,7 +114,8 @@ Placed placeDraws(const render_scene::SceneFrame& scene,
         const auto [kCastSolid, kCastMasked] = kSplit(kCasters.subspan(slot.firstCaster, slot.casterCount));
         Casters& casters = placed.slotRuns.emplace_back();
         append(kCastSolid, usable, {}, {}, placed, casters.solid, count, false, modelsLeftOut);
-        append(kCastMasked, usable, scene.textures, {}, placed, casters.masked, count, false, modelsLeftOut);
+        append(
+            kCastMasked, usable, scene.textures, scene.programs, placed, casters.masked, count, false, modelsLeftOut);
     }
     return placed;
 }

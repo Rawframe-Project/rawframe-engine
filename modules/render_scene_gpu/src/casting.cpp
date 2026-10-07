@@ -26,10 +26,19 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
         if (kSquare.casters->empty()) {
             continue;
         }
-        std::array<mrhiBinding, 4> binding = {bufferAt(0, kSquare.view, sizeof(Matrix4)),
-                                              bufferAt(1, with.materials, with.materialsBytes),
-                                              textureAt(2, resourceOf(with.textures->resource(0))),
-                                              samplerAt(3, pipelines.materialSamplers[0])};
+        // The cascade's square, then the material's bindings, as the
+        // material module puts them (D488).
+        const mrhiResourceId kWhite = resourceOf(with.textures->resource(0));
+        std::array<mrhiBinding, 10> binding = {bufferAt(0, kSquare.view, sizeof(Matrix4)),
+                                               bufferAt(9, with.materials, with.materialsBytes),
+                                               textureAt(10, kWhite),
+                                               samplerAt(11, pipelines.materialSamplers[0]),
+                                               textureAt(12, kWhite),
+                                               samplerAt(13, pipelines.materialSamplers[0]),
+                                               textureAt(14, kWhite),
+                                               samplerAt(15, pipelines.materialSamplers[0]),
+                                               textureAt(16, kWhite),
+                                               samplerAt(17, pipelines.materialSamplers[0])};
         if (mrhiSetViewport(native, pass, &kSquare.viewport) != mrhi_success) {
             return failed("a shadow square could not be set up", mrhi_errorState);
         }
@@ -46,18 +55,38 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
         if (kSquare.casters->masked.empty()) {
             continue;
         }
-        if (mrhiSetGraphicsPipeline(native, pass, pipelines.cutCasting.pipeline) != mrhi_success ||
+        mrhiGraphicsPipelineId set = pipelines.cutCasting.pipeline;
+        if (mrhiSetGraphicsPipeline(native, pass, set) != mrhi_success ||
             mrhiSetVertexBuffer(native, pass, 1, with.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
             return failed("the masked casters could not be set up", mrhi_errorState);
         }
-        std::optional<render_scene::SceneTexture> bound;
+        // A caster whose material has its own program is cut by it, once
+        // its pipeline is made (D488); the table set again after a switch.
+        std::optional<render_scene::SceneTextures> bound;
         for (const Run& run : kSquare.casters->masked) {
-            if (bound != run.texture.base) {
+            mrhiGraphicsPipelineId wanted = pipelines.cutCasting.pipeline;
+            if (const Asked* kOwn = run.program != nullptr
+                                        ? pipelines.programPipeline(run.program, Shade::CutCasting, false, false)
+                                        : nullptr;
+                kOwn != nullptr) {
+                wanted = kOwn->pipeline;
+            }
+            if (wanted.index1 != set.index1 || wanted.generation != set.generation) {
+                if (mrhiSetGraphicsPipeline(native, pass, wanted) != mrhi_success) {
+                    return failed("a material's program could not be set", mrhi_errorState);
+                }
+                set = wanted;
+                bound.reset();
+            }
+            if (bound != run.texture) {
                 bindTexture(*with.textures, pipelines, binding[2], binding[3], run.texture.base);
+                bindTexture(*with.textures, pipelines, binding[4], binding[5], run.texture.packed);
+                bindTexture(*with.textures, pipelines, binding[6], binding[7], run.texture.emission);
+                bindTexture(*with.textures, pipelines, binding[8], binding[9], run.texture.normal);
                 if (mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
                     return failed("a masked caster's texture could not be bound", mrhi_errorState);
                 }
-                bound = run.texture.base;
+                bound = run.texture;
             }
             RAWFRAME_TRY(kDraw(run));
         }

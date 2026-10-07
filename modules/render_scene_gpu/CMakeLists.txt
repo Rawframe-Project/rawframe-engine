@@ -23,6 +23,9 @@ if(TARGET rawframe_render_scene_gpu_tests)
     # The material written for the tests, built by tools/gen_shaders.py
     # with the scene (D485), in the container the build's driver reads.
     rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
-                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/checker${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/checker.scene${RAWFRAME_SHADER_SUFFIX}.mrsc"
                            HEADER "checker_container.h" SYMBOL "kCheckerContainer")
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/checker.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "checker_shadow_container.h" SYMBOL "kCheckerShadowContainer")
 endif()

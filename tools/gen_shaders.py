@@ -18,10 +18,11 @@
 # of these tools; the containers are committed, and this is run again
 # whenever a source changes (D278). spirv-cross and dxc must be on the path.
 #
-# With `--material`, the scene's three containers are built linked with
-# the material module given in place of the engine's own, and written to
-# the directory given, as the cook builds them for a game's material
-# (D484).
+# With `--material`, the three containers of each container linked with a
+# material, the scene's and the shadow's, are built linked with the
+# material module given in place of the engine's own, and written to the
+# directory given, as the cook builds them for a game's material (D484,
+# D488).
 #
 # usage: tools/gen_shaders.py
 #        tools/gen_shaders.py --material <material.slang> <directory>
@@ -48,10 +49,10 @@ INVARIANT = ("scene",)
 # (D481, D482): the scene declares its material extern and is linked with
 # the module that exports it, the blob's for the containers the engine
 # ships, beside the module of what a material is.
-LINKED = {"scene": ("blob_material", "material")}
+LINKED = {"scene": ("blob_material", "material"), "shadow": ("blob_material", "material")}
 # Materials written for a module's tests (D485): its module and its name,
-# built from tests/materials/NAME.slang with the scene, as `--material`
-# builds a game's, into tests/generated.
+# built from tests/materials/NAME.slang with each linked container, as
+# `--material` builds a game's, into tests/generated/NAME.CONTAINER.
 TEST_MATERIALS = (("render_scene_gpu", "checker"),)
 # Each container: its module and its name.
 CONTAINERS = (
@@ -174,15 +175,16 @@ def build(work, shaders, name, material=None):
 
 def main():
     checkSlang()
-    # `--material <source> <directory>`: the scene's containers linked with
+    # `--material <source> <directory>`: each linked container built with
     # that material, written to the directory, as the cook asks for a
-    # material the blob cannot fold (D484).
+    # material the blob cannot fold (D484, D488).
     if len(sys.argv) == 4 and sys.argv[1] == "--material":
         shaders = os.path.join(ROOT, "modules", "render_scene_gpu", "shaders")
         with tempfile.TemporaryDirectory() as work:
-            for suffix, data in build(work, shaders, "scene", os.path.abspath(sys.argv[2])).items():
-                with open(os.path.join(sys.argv[3], f"scene{suffix}.mrsc"), "wb") as file:
-                    file.write(data)
+            for name in LINKED:
+                for suffix, data in build(work, shaders, name, os.path.abspath(sys.argv[2])).items():
+                    with open(os.path.join(sys.argv[3], f"{name}{suffix}.mrsc"), "wb") as file:
+                        file.write(data)
         return
     with tempfile.TemporaryDirectory() as work:
         for module, name in TEST_MATERIALS:
@@ -191,11 +193,12 @@ def main():
             source = os.path.join(tests, "materials", f"{name}.slang")
             generated = os.path.join(tests, "generated")
             os.makedirs(generated, exist_ok=True)
-            for suffix, data in build(work, shaders, "scene", source).items():
-                target = os.path.join(generated, f"{name}{suffix}.mrsc")
-                with open(target, "wb") as file:
-                    file.write(data)
-                print(f"{target}: {len(data)} bytes")
+            for linked in LINKED:
+                for suffix, data in build(work, shaders, linked, source).items():
+                    target = os.path.join(generated, f"{name}.{linked}{suffix}.mrsc")
+                    with open(target, "wb") as file:
+                        file.write(data)
+                    print(f"{target}: {len(data)} bytes")
     with tempfile.TemporaryDirectory() as work:
         for module, name in CONTAINERS:
             shaders = os.path.join(ROOT, "modules", module, "shaders")

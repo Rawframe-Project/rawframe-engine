@@ -70,14 +70,15 @@ struct Multisampled {
 /// The models' pipelines a material's program draws with, by what they
 /// draw: lit, the opaque, the masked (D310), and the translucent (D305);
 /// in the prepass, the masked cut, and each point's surface, whole and
-/// masked (D327, D487).
+/// masked (D327, D487); and the masked casters into the shadow maps (D488).
 enum class Shade : std::uint8_t {
     Lit,
     Masked,
     Glass,
     Cut,
     Surfaces,
-    CutSurfaces
+    CutSurfaces,
+    CutCasting
 };
 
 /// A material's own program's pipelines (D485, D487): the engine's own
@@ -88,15 +89,21 @@ enum class Shade : std::uint8_t {
 struct ProgramShading {
     std::shared_ptr<const material::ProgramMaterial> program;
     mrhiShaderId shader{};
-    std::array<Asked, 18> variants{};
-    std::array<bool, 18> asked{};
+    /// The shadow's shader, which its masked casters are cut by (D488).
+    mrhiShaderId shadowShader{};
+    std::array<Asked, 19> variants{};
+    std::array<bool, 19> asked{};
     bool refused = false;
 };
 
 /// Where a program's pipeline for `shade` lies among its variants: the lit
-/// twelve, then the prepass's six, which no decal changes.
+/// twelve, then the prepass's six, which no decal changes, then the masked
+/// casters', which no view multisamples.
 [[nodiscard]] constexpr std::size_t variantOf(Shade shade, bool decaled, bool multisampled) noexcept {
     const auto kShade = static_cast<std::size_t>(shade);
+    if (shade == Shade::CutCasting) {
+        return 18;
+    }
     if (kShade >= 3) {
         return 12U + (kShade - 3U) + (multisampled ? 3U : 0U);
     }
@@ -275,6 +282,9 @@ private:
     /// which the multisampled ones are made from too.
     std::array<mrhiGraphicsPipelineDef, 3> shading_{};
     mrhiGraphicsPipelineDef cut_{};
+    /// The masked casters' pipeline, which a material's program's is made
+    /// from (D488).
+    mrhiGraphicsPipelineDef cutCasting_{};
     mrhiGraphicsPipelineDef sky_{};
 };
 

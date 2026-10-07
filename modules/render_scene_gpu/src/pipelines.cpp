@@ -123,6 +123,7 @@ Pipelines::~Pipelines() {
             }
         }
         static_cast<void>(mrhiDestroyShader(native, shading.shader));
+        static_cast<void>(mrhiDestroyShader(native, shading.shadowShader));
     }
 }
 
@@ -226,7 +227,7 @@ result::Status Pipelines::make() {
     // The casters into the sun's shadow map: the vertex's place alone,
     // pushed from the sun by its slope (the depth half of ADR-0051's
     // bias; the normal half is where the map is read).
-    constexpr std::array<mrhiVertexAttribute, 4> kCasterAttributes = {
+    static constexpr std::array<mrhiVertexAttribute, 4> kCasterAttributes = {
         kAttributes[0], kAttributes[3], kAttributes[4], kAttributes[5]};
     mrhiGraphicsPipelineDef casters = prepass;
     constexpr std::string_view kCastingLabel = "rawframe.scene.shadows";
@@ -239,13 +240,13 @@ result::Status Pipelines::make() {
     casters.depthBiasSlopeScale = -2.0F;
     RAWFRAME_TRY(ask(casters, casting));
     // Masked casters: their color, material, and texture coordinates too.
-    constexpr std::array<mrhiVertexAttribute, 7> kCutAttributes = {kAttributes[0],
-                                                                   kAttributes[3],
-                                                                   kAttributes[4],
-                                                                   kAttributes[5],
-                                                                   kAttributes[9],
-                                                                   kAttributes[13],
-                                                                   kAttributes[2]};
+    static constexpr std::array<mrhiVertexAttribute, 7> kCutAttributes = {kAttributes[0],
+                                                                          kAttributes[3],
+                                                                          kAttributes[4],
+                                                                          kAttributes[5],
+                                                                          kAttributes[9],
+                                                                          kAttributes[13],
+                                                                          kAttributes[2]};
     mrhiGraphicsPipelineDef cutCasters = casters;
     constexpr std::string_view kCutCastingLabel = "rawframe.scene.shadows.masked";
     cutCasters.label = kCutCastingLabel.data();
@@ -390,6 +391,7 @@ result::Status Pipelines::make() {
     prepass_ = prepass;
     shading_ = {models, maskedDef, glassDef};
     cut_ = cutDef;
+    cutCasting_ = cutCasters;
     sky_ = behind;
     picture_ = picture;
     return {};

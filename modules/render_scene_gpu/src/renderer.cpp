@@ -485,9 +485,14 @@ struct SceneRenderer::State {
                 if (kRun.program == nullptr) {
                     continue;
                 }
-                const bool kOwn = pipelines->programPipeline(kRun.program, kShade, kDecaled, kSampling) != nullptr &&
-                                  (!kPrepass.has_value() ||
-                                   pipelines->programPipeline(kRun.program, *kPrepass, false, kSampling) != nullptr);
+                // A masked model casting shadows is cut by its program there
+                // too (D488).
+                const bool kOwn =
+                    pipelines->programPipeline(kRun.program, kShade, kDecaled, kSampling) != nullptr &&
+                    (!kPrepass.has_value() ||
+                     pipelines->programPipeline(kRun.program, *kPrepass, false, kSampling) != nullptr) &&
+                    (!kMasked || frame->shadows.count == 0 ||
+                     pipelines->programPipeline(kRun.program, Shade::CutCasting, false, false) != nullptr);
                 (kOwn ? statistics.programModelsDrawn : statistics.programModelsWaiting) += kRun.count;
             }
         }

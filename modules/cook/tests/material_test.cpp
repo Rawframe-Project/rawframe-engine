@@ -236,11 +236,14 @@ RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
             const auto kRead = material::decodeProgram(std::as_bytes(std::span{kBytes.data(), kBytes.size()}));
             found = kRead.has_value() && kRead->textures.size() == 1 &&
                     kRead->textures[0].id == 0xa44ecb4a39ac5cc8ULL && kRead->shading == material::Shading::Lit;
-            std::printf("program material: %zu bytes, containers %zu %zu %zu\n",
+            std::printf("program material: %zu bytes, containers %zu %zu %zu, shadows %zu %zu %zu\n",
                         kBytes.size(),
                         kRead.has_value() ? kRead->containers[0].size() : 0,
                         kRead.has_value() ? kRead->containers[1].size() : 0,
-                        kRead.has_value() ? kRead->containers[2].size() : 0);
+                        kRead.has_value() ? kRead->containers[2].size() : 0,
+                        kRead.has_value() ? kRead->shadows[0].size() : 0,
+                        kRead.has_value() ? kRead->shadows[1].size() : 0,
+                        kRead.has_value() ? kRead->shadows[2].size() : 0);
         }
     }
     RAWFRAME_EXPECT(found);
