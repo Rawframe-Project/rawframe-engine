@@ -238,7 +238,7 @@ std::vector<std::byte> encodeProgram(const ProgramMaterial& made) {
     for (const char kLetter : {'R', 'F', 'M', 'P'}) {
         bytes.push_back(static_cast<std::byte>(kLetter));
     }
-    putWord(bytes, 1);
+    putWord(bytes, 2);
     bytes.push_back(static_cast<std::byte>(made.shading));
     bytes.push_back(static_cast<std::byte>(made.blend));
     bytes.push_back(static_cast<std::byte>(made.doubleSided ? 1 : 0));
@@ -253,9 +253,11 @@ std::vector<std::byte> encodeProgram(const ProgramMaterial& made) {
         bytes.push_back(std::byte{0});
         bytes.push_back(std::byte{0});
     }
-    for (const std::vector<std::byte>& kContainer : made.containers) {
-        putWord(bytes, static_cast<std::uint32_t>(kContainer.size()));
-        bytes.insert(bytes.end(), kContainer.begin(), kContainer.end());
+    for (const auto* kContainers : {&made.containers, &made.shadows}) {
+        for (const std::vector<std::byte>& kContainer : *kContainers) {
+            putWord(bytes, static_cast<std::uint32_t>(kContainer.size()));
+            bytes.insert(bytes.end(), kContainer.begin(), kContainer.end());
+        }
     }
     return bytes;
 }
@@ -282,8 +284,8 @@ result::Result<ProgramMaterial> decodeProgram(std::span<const std::byte> bytes) 
                    return each == static_cast<std::byte>(letter);
                });
     };
-    if (!kIs(kTake(4), "RFMP") || kWord() != 1) {
-        return invalid("a program material is RFMP, format 1");
+    if (!kIs(kTake(4), "RFMP") || kWord() != 2) {
+        return invalid("a program material is RFMP, format 2");
     }
     ProgramMaterial made;
     const std::span<const std::byte> kStates = kTake(4);
@@ -315,12 +317,14 @@ result::Result<ProgramMaterial> decodeProgram(std::span<const std::byte> bytes) 
         texture.address = static_cast<Address>(kSampler[1]);
         made.textures.push_back(texture);
     }
-    for (std::vector<std::byte>& container : made.containers) {
-        const std::span<const std::byte> kContainer = kTake(kWord());
-        if (!fits || !kIs(kContainer.first(std::min<std::size_t>(4, kContainer.size())), "MRSC")) {
-            return invalid("a program material's containers are Maul RHI's, one a backend");
+    for (auto* containers : {&made.containers, &made.shadows}) {
+        for (std::vector<std::byte>& container : *containers) {
+            const std::span<const std::byte> kContainer = kTake(kWord());
+            if (!fits || !kIs(kContainer.first(std::min<std::size_t>(4, kContainer.size())), "MRSC")) {
+                return invalid("a program material's containers are Maul RHI's, one a backend");
+            }
+            container.assign(kContainer.begin(), kContainer.end());
         }
-        container.assign(kContainer.begin(), kContainer.end());
     }
     if (at != bytes.size()) {
         return invalid("a program material's bytes end with its last container");

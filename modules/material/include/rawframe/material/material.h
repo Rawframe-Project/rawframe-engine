@@ -292,7 +292,8 @@ inline constexpr std::size_t kProgramContainers = 3;
 
 /// A program material, cooked (D484): its declared states (its Surface and
 /// textures are its program's), the textures bound at the slots in order,
-/// and the scene's containers linked with its program, one a backend.
+/// and the scene's containers linked with its program, one a backend; and
+/// the shadow's, which its masked casters are cut by (D488).
 struct ProgramMaterial {
     Shading shading = Shading::Lit;
     Blend blend = Blend::Opaque;
@@ -300,15 +301,18 @@ struct ProgramMaterial {
     bool doubleSided = false;
     std::vector<SampledTexture> textures;
     std::array<std::vector<std::byte>, kProgramContainers> containers;
+    std::array<std::vector<std::byte>, kProgramContainers> shadows;
 
     friend bool operator==(const ProgramMaterial&, const ProgramMaterial&) = default;
 };
 
-/// A program material's bytes: `RFMP`, format 1; its states (shading,
-/// blend, double sided, a byte each and one of nought) and alpha cutoff;
-/// the count of its textures, then each one's identity (low word first),
-/// filter, address, and two bytes of nought; then each container's length
-/// and bytes. Little-endian.
+/// A program material's bytes: `RFMP`, format 2 (D488); its states
+/// (shading, blend, double sided, a byte each and one of nought) and alpha
+/// cutoff; the count of its textures, then each one's identity (low word
+/// first), filter, address, and two bytes of nought; then each scene
+/// container's length and bytes, then each shadow container's. Little-endian.
+/// Format 1, which carried no shadow's, is read no more: a cook's key
+/// changes with its toolchain, so what was cooked so is cooked again.
 [[nodiscard]] std::vector<std::byte> encodeProgram(const ProgramMaterial& made);
 /// Refuses (`Invalid`) bytes `encodeProgram` would not write: states out of
 /// their sets, more than four textures or one naming none, a container

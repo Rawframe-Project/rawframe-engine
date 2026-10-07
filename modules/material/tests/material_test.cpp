@@ -613,17 +613,19 @@ RAWFRAME_TEST(WhatTheBlobCannotFoldIsWrittenAsSlang) {
 }
 
 RAWFRAME_TEST(AProgramMaterialRoundTripsAndRefusesWhatItWouldNotWrite) {
-    // States, two textures at their slots, and a container a backend (D484).
+    // States, two textures at their slots, and a scene's and a shadow's
+    // container a backend (D484, D488).
     ProgramMaterial made{.shading = Shading::Unlit, .blend = Blend::Masked, .alphaCutoff = 0.25F, .doubleSided = true};
     made.textures = {{.id = 0xa44ecb4a39ac5cc8ULL}, {.id = 7, .filter = Filter::Nearest, .address = Address::Clamp}};
     for (std::size_t at = 0; at < made.containers.size(); ++at) {
         made.containers.at(at) = {std::byte{'M'}, std::byte{'R'}, std::byte{'S'}, std::byte{'C'}, std::byte(at)};
+        made.shadows.at(at) = {std::byte{'M'}, std::byte{'R'}, std::byte{'S'}, std::byte{'C'}, std::byte(at + 3)};
     }
     const std::vector<std::byte> kBytes = encodeProgram(made);
     const auto kRead = decodeProgram(kBytes);
     RAWFRAME_EXPECT(kRead.has_value() && *kRead == made);
-    // Every prefix, a byte more, a container not Maul RHI's, a texture
-    // naming none, a fifth texture, and states out of their sets.
+    // Every prefix, a byte more, a container not Maul RHI's or none, a
+    // texture naming none, a fifth texture, and states out of their sets.
     for (std::size_t length = 0; length < kBytes.size(); ++length) {
         RAWFRAME_EXPECT(refusedWith(decodeProgram(std::span{kBytes}.first(length)), MaterialError::Invalid));
     }
@@ -633,6 +635,13 @@ RAWFRAME_TEST(AProgramMaterialRoundTripsAndRefusesWhatItWouldNotWrite) {
     ProgramMaterial bad = made;
     bad.containers[1][0] = std::byte{'X'};
     RAWFRAME_EXPECT(refusedWith(decodeProgram(encodeProgram(bad)), MaterialError::Invalid));
+    bad = made;
+    bad.shadows[2].clear();
+    RAWFRAME_EXPECT(refusedWith(decodeProgram(encodeProgram(bad)), MaterialError::Invalid));
+    // Format 1, without the shadow's, is read no more.
+    std::vector<std::byte> older = kBytes;
+    older[4] = std::byte{1};
+    RAWFRAME_EXPECT(refusedWith(decodeProgram(older), MaterialError::Invalid));
     bad = made;
     bad.textures[1].id = 0;
     RAWFRAME_EXPECT(refusedWith(decodeProgram(encodeProgram(bad)), MaterialError::Invalid));
