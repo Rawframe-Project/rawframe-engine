@@ -7,3 +7,6 @@ content.root = @TYCOON_CONTENT@
 # What is checked is where presses and keys go, not how fast a loaded
 # machine draws: the client's World may fall behind without stopping it.
 world.overload_ms = 0
+# The machine's gamepads left out: another program's virtual pads would
+# play this client's player (D467).
+input.gamepads = false

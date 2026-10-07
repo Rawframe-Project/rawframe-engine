@@ -43,6 +43,10 @@ public:
     /// malformed value is `invalid_argument`.
     [[nodiscard]] result::Result<std::uint64_t> unsignedInteger(std::string_view key, std::uint64_t fallback) const;
 
+    /// The value as true or false: absent gives `fallback`, and anything
+    /// but `true` or `false` is `invalid_argument` (D467).
+    [[nodiscard]] result::Result<bool> truth(std::string_view key, bool fallback) const;
+
     [[nodiscard]] std::size_t size() const noexcept {
         return entries_.size();
     }

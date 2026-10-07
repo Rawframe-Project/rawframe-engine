@@ -132,4 +132,15 @@ result::Result<std::uint64_t> Configuration::unsignedInteger(std::string_view ke
     return parsed;
 }
 
+result::Result<bool> Configuration::truth(std::string_view key, bool fallback) const {
+    const auto kValue = text(key);
+    if (!kValue) {
+        return fallback;
+    }
+    if (*kValue != "true" && *kValue != "false") {
+        return invalid("a configuration value is not true or false", key);
+    }
+    return *kValue == "true";
+}
+
 } // namespace rawframe::composition

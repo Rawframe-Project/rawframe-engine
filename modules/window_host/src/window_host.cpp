@@ -147,6 +147,10 @@ result::Status WindowHost::start(window::Windows& windows) {
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeight, kConfiguration->unsignedInteger("window.height", 720));
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kX, kConfiguration->unsignedInteger("window.x", 0));
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kY, kConfiguration->unsignedInteger("window.y", 0));
+        // A machine's gamepads may be left out, as a player who plays with
+        // none keeps one lying there from moving them, or a test keeps the
+        // pads another program made (D467).
+        RAWFRAME_TRY_ASSIGN(gamepads_, kConfiguration->truth("input.gamepads", true));
         made.size = {.width = static_cast<float>(kWidth), .height = static_cast<float>(kHeight)};
         if (kConfiguration->text("window.x").has_value() || kConfiguration->text("window.y").has_value()) {
             place = window::Position{.x = static_cast<float>(kX), .y = static_cast<float>(kY)};
@@ -177,6 +181,12 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         if (typing_.editing() != toldEditing_) {
             toldEditing_ = typing_.editing();
             feed_.textEditing(toldEditing_);
+        }
+        if (!gamepads_ &&
+            (event->kind == window::EventKind::GamepadAdded || event->kind == window::EventKind::GamepadRemoved ||
+             event->kind == window::EventKind::GamepadButtonDown || event->kind == window::EventKind::GamepadButtonUp ||
+             event->kind == window::EventKind::GamepadAxisMoved)) {
+            continue;
         }
         bridge_->take(*event);
         // Where the mouse is, for what the UI shows under it (D422), where a

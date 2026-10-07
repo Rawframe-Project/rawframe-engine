@@ -24,6 +24,19 @@ RAWFRAME_TEST(ConfigurationParsesKeyValueLines) {
     RAWFRAME_EXPECT(!kParsed->text("world.missing").has_value());
 }
 
+RAWFRAME_TEST(ConfigurationReadsTrueOrFalse) {
+    const auto kParsed = Configuration::parse("input.gamepads = false\nbots.player = true\nworld.name = yes\n");
+    RAWFRAME_EXPECT(kParsed.has_value());
+    if (!kParsed.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(kParsed->truth("input.gamepads", true) == false);
+    RAWFRAME_EXPECT(kParsed->truth("bots.player", false) == true);
+    RAWFRAME_EXPECT(kParsed->truth("world.missing", true) == true);
+    // Only the two words: yes, one, and True are refused.
+    RAWFRAME_EXPECT(!kParsed->truth("world.name", false).has_value());
+}
+
 RAWFRAME_TEST(MalformedConfigurationIsRefused) {
     for (const std::string_view kText :
          {"no_equals_here", "Upper.key = 1", "a = 1\na = 2", "= value", "key with space = 1", "9starts.digit = 1"}) {

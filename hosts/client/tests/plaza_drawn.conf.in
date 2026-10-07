@@ -11,3 +11,6 @@ render.capture = @CAPTURE@
 # under the full check's load draws few frames.
 scene.shadow_side = 256
 render.read_every = 20
+# The machine's gamepads left out: another program's virtual pads would
+# play this client's player (D467).
+input.gamepads = false

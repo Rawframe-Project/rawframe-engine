@@ -6,3 +6,6 @@ bots.player = true
 render.device = any
 content.root = @CONTENT@
 render.capture = @CAPTURE@
+# The machine's gamepads left out: another program's virtual pads would
+# play this client's player (D467).
+input.gamepads = false

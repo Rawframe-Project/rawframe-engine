@@ -80,6 +80,9 @@ private:
     view::UiNavigation navigation_;
     /// Whether the feed was last told a field takes text.
     bool toldEditing_ = false;
+    /// Whether the players' gamepads play: `input.gamepads`, true unless
+    /// told false (D467).
+    bool gamepads_ = true;
     /// The caret the platform was last asked for text input at, none while
     /// it was not asked.
     std::optional<view::UiTyping::Caret> textInput_;
