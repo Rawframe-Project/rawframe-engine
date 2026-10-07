@@ -404,7 +404,8 @@ private:
             ++previewed_;
         }
         // What the preview marks, as three axes a meter long, red along X,
-        // green along Y, blue along Z (D464).
+        // green along Y, blue along Z, drawn over everything at a width the
+        // view keeps (D464).
         if (preview_ != nullptr && preview_->marks() != marksShown_) {
             marksShown_ = preview_->marks();
             lines_.clear();
@@ -415,7 +416,10 @@ private:
                     to[axis] += 1;
                     std::array<float, 4> color{0, 0, 0, 1};
                     color[axis] = 1;
-                    lines_.push_back(SceneLine{.from = *kAt, .to = to, .color = color, .width = 0.04F});
+                    // A hundred and fiftieth of the view wide, over
+                    // everything: the mark stands out as a gizmo does.
+                    lines_.push_back(SceneLine{
+                        .from = *kAt, .to = to, .color = color, .width = 1.0F / 150, .ofView = true, .over = true});
                 }
             }
             scene_->show(lines_);

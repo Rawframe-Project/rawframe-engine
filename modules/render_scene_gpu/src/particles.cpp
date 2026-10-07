@@ -56,14 +56,18 @@ std::vector<particles_gpu::Material> particleMaterialsOf(std::span<const render_
                                                .color = kBound(kTextures.base),
                                                .emission = kBound(kTextures.emission)});
     }
-    // The lines' (D464), after the frame's own: white, whole, untextured,
-    // so a line's color stands as it is, whatever the exposure.
-    made.push_back(particles_gpu::Material{
-        .block =
-            particles_gpu::MaterialBlock{.color = {1, 1, 1, 1}, .baseMap = {1, 1, 0, 0}, .emissionMap = {1, 1, 0, 0}},
-        .blend = particles_gpu::Blend::Over,
-        .color = kBound(render_scene::SceneTexture{}),
-        .emission = kBound(render_scene::SceneTexture{})});
+    // The lines' two (D464), after the frame's own: white, whole,
+    // untextured, so a line's color stands as it is, whatever the
+    // exposure; the second drawn over everything.
+    for (const std::uint32_t kFlags : {0U, particles_gpu::kOverEverything}) {
+        made.push_back(particles_gpu::Material{.block = particles_gpu::MaterialBlock{.color = {1, 1, 1, 1},
+                                                                                     .baseMap = {1, 1, 0, 0},
+                                                                                     .emissionMap = {1, 1, 0, 0},
+                                                                                     .flags = {kFlags, 0, 0, 0}},
+                                               .blend = particles_gpu::Blend::Over,
+                                               .color = kBound(render_scene::SceneTexture{}),
+                                               .emission = kBound(render_scene::SceneTexture{})});
+    }
     return made;
 }
 

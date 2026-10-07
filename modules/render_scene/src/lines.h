@@ -16,7 +16,9 @@ namespace rawframe::render_scene {
 [[nodiscard]] std::vector<SceneLine> soundLines(std::span<const SceneLine> lines);
 
 /// `lines` added to `frame` as ribbons of two points about `eye`, on the
-/// material after the frame's own.
+/// first material after the frame's own, or the second for a line drawn
+/// over everything; a width of the view made meters where each end is,
+/// through the frame's view and projection.
 void addLines(SceneFrame& frame, std::span<const SceneLine> lines, const std::array<double, 3>& eye);
 
 } // namespace rawframe::render_scene

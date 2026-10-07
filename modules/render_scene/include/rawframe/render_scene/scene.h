@@ -893,14 +893,20 @@ struct SceneSettings {
 };
 
 /// A line a scene draws over the World (D464): from one point to another,
-/// in World meters, its linear color and alpha, and its width in meters.
-/// Drawn as a ribbon, unlit, with the scene's beams, on the material after
-/// the frame's own (`SceneFrame::materials`), which the device half makes.
+/// in World meters, its linear color and alpha, and its width: meters, or,
+/// `ofView`, a share of the view's height wherever it is, as a gizmo
+/// keeps its size on the screen. Hidden behind what is nearer, as beams
+/// are, unless drawn `over` everything. Drawn as a ribbon, unlit, with the
+/// scene's beams, on one of the two materials after the frame's own
+/// (`SceneFrame::materials`), the hidden's then the over's, which the
+/// device half makes.
 struct SceneLine {
     std::array<double, 3> from{};
     std::array<double, 3> to{};
     std::array<float, 4> color{1, 1, 1, 1};
     float width = 0.02F;
+    bool ofView = false;
+    bool over = false;
 };
 
 /// The lines a scene draws at most (a limit point, ADR-0014).

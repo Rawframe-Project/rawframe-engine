@@ -270,4 +270,19 @@ RAWFRAME_TEST(ALineIsDrawnInItsOwnColor) {
         std::printf("line: middle %d %d %d\n", kMiddle[0], kMiddle[1], kMiddle[2]);
         RAWFRAME_EXPECT(kMiddle[0] <= 1 && kMiddle[1] == 255 && kMiddle[2] <= 1);
     }
+    // Behind a grey box between it and the eye: hidden on the first of
+    // the lines' materials, and drawn over the box on the second.
+    lined.draws = {box(3, 0.5F, {0.5F, 0.5F, 0.5F, 1})};
+    const auto kHidden = drawn(**framer, **made, lined, kMeshes);
+    lined.particles.ribbons[0].material = 2;
+    const auto kOver = drawn(**framer, **made, lined, kMeshes);
+    lined.particles.ribbons.clear();
+    const auto kBox = drawn(**framer, **made, lined, kMeshes);
+    RAWFRAME_EXPECT(kHidden.has_value() && kOver.has_value() && kBox.has_value());
+    if (kHidden.has_value() && kOver.has_value() && kBox.has_value()) {
+        const auto kOverMiddle = at(*kOver, 32, 31);
+        std::printf("line over a box: %d %d %d\n", kOverMiddle[0], kOverMiddle[1], kOverMiddle[2]);
+        RAWFRAME_EXPECT(at(*kHidden, 32, 31) == at(*kBox, 32, 31));
+        RAWFRAME_EXPECT(kOverMiddle[0] <= 1 && kOverMiddle[1] == 255 && kOverMiddle[2] <= 1);
+    }
 }
