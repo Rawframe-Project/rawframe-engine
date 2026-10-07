@@ -278,7 +278,8 @@ public:
             diagnostics::field("decalsCulled", decalsCulled_),
             diagnostics::field("players", static_cast<std::uint64_t>(localPlayers_.size() + 1)),
             diagnostics::field("playerFrames", playerFrames_),
-            diagnostics::field("framesPreviewed", previewed_)};
+            diagnostics::field("framesPreviewed", previewed_),
+            diagnostics::field("marksShown", marksDrawn_)};
         emitter_.log(diagnostics::Severity::Info, kSceneSummary, "what one client's scene drew", fields);
         if (!textureViews_.empty()) {
             emitter_.log(diagnostics::Severity::Info,
@@ -382,6 +383,7 @@ private:
                 return;
             }
             scene_ = std::move(*made);
+            scene_->show(lines_);
         }
         scene_->extract(*kView.world);
         extracted_ = true;
@@ -400,6 +402,23 @@ private:
             camera_.pitch = kLook.pitch;
             camera_.fovY = kLook.fovY;
             ++previewed_;
+        }
+        // What the preview marks, as three axes a meter long, red along X,
+        // green along Y, blue along Z (D464).
+        if (preview_ != nullptr && preview_->marks() != marksShown_) {
+            marksShown_ = preview_->marks();
+            lines_.clear();
+            if (const auto& kAt = preview_->marked(); kAt.has_value()) {
+                ++marksDrawn_;
+                for (std::size_t axis = 0; axis < 3; ++axis) {
+                    std::array<double, 3> to = *kAt;
+                    to[axis] += 1;
+                    std::array<float, 4> color{0, 0, 0, 1};
+                    color[axis] = 1;
+                    lines_.push_back(SceneLine{.from = *kAt, .to = to, .color = color, .width = 0.04F});
+                }
+            }
+            scene_->show(lines_);
         }
         extractViews(*kView.world);
         extractPlayers();
@@ -747,6 +766,8 @@ private:
     /// Frames seen through a preview's camera (D432).
     std::uint64_t previewed_ = 0;
     std::unique_ptr<Scene> scene_;
+    /// The lines the player's view shows (D464).
+    std::vector<SceneLine> lines_;
     bool extracted_ = false;
     const SceneFrame* queued_ = nullptr;
     std::uint32_t width_ = 1280;
@@ -754,6 +775,9 @@ private:
     /// The local players' views, told each frame (D367).
     view::PlayerViews* views_ = nullptr;
     view::PreviewCamera* preview_ = nullptr;
+    std::uint64_t marksShown_ = 0;
+    /// The preview's marks drawn, a point each (D464).
+    std::uint64_t marksDrawn_ = 0;
     /// Each local player's view drawn at this share of its region's pixels
     /// each way (D373).
     float renderScale_ = 1;

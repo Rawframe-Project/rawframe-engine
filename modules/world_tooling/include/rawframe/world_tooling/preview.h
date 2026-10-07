@@ -57,6 +57,11 @@ public:
     [[nodiscard]] virtual std::optional<Clicked> clicked() const {
         return std::nullopt;
     }
+    /// Marks a point of the World in the preview, as an author chose
+    /// something there, or none (D464); whether the Runtime shows a mark.
+    virtual bool mark(const std::optional<std::array<double, 3>>& /*at*/) {
+        return false;
+    }
 };
 
 inline constexpr composition::Capability<Previewer> kPreviewer{"rawframe.tooling.previewer"};

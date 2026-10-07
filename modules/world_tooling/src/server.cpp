@@ -509,6 +509,26 @@ struct ToolingServer::State {
             send(connection, client, replyLine(id, "answer", std::move(made)));
             return;
         }
+        if (kind != nullptr && *kind == "tooling.mark") {
+            // A point the preview marks, or none (D464): the view's.
+            if (!settings.grants.view) {
+                send(connection, client, errorLine(id, ToolingError::NotGranted, "marking needs the view grant"));
+                return;
+            }
+            const Value* kAt = parsed->find("at");
+            const std::optional<std::array<double, 3>> kPoint = pointOf(kAt);
+            if (kAt == nullptr || (!kAt->isNull() && !kPoint.has_value())) {
+                send(connection,
+                     client,
+                     errorLine(id, ToolingError::Malformed, "at is a point of three finite numbers, or null"));
+                return;
+            }
+            Value made = Value::object();
+            made.add("kind", Value::string("tooling.marked"));
+            made.add("marked", Value::boolean(settings.previewer != nullptr && settings.previewer->mark(kPoint)));
+            send(connection, client, replyLine(id, "answer", std::move(made)));
+            return;
+        }
         if (kind != nullptr && *kind == "tooling.clicked") {
             // Where the author pressed in the preview (D456): the view's.
             if (!settings.grants.view) {

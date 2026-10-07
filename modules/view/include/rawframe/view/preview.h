@@ -12,6 +12,7 @@
 #include "rawframe/composition/participant.h"
 #include "rawframe/view/view.h"
 
+#include <array>
 #include <cstdint>
 #include <optional>
 
@@ -32,6 +33,20 @@ public:
         return view_;
     }
     /// A press in the window while the preview looks, as its ray.
+    /// A point the preview marks, where an author chose something (D464),
+    /// drawn as three axes there; none for none. Counted, so a reader tells
+    /// a new mark.
+    void mark(const std::optional<std::array<double, 3>>& at) noexcept {
+        marked_ = at;
+        ++marks_;
+    }
+    [[nodiscard]] const std::optional<std::array<double, 3>>& marked() const noexcept {
+        return marked_;
+    }
+    [[nodiscard]] std::uint64_t marks() const noexcept {
+        return marks_;
+    }
+
     /// `modifiers` are the window's modifier bits held with the press: a
     /// drag with Shift moves height, with Control turns (D463).
     void clicked(const Ray& ray, std::uint16_t modifiers = 0) noexcept {
@@ -69,6 +84,8 @@ private:
     std::optional<Ray> lastClick_;
     std::uint64_t clicks_ = 0;
     std::uint16_t clickModifiers_ = 0;
+    std::optional<std::array<double, 3>> marked_;
+    std::uint64_t marks_ = 0;
     std::optional<Ray> lastRelease_;
     std::uint64_t releases_ = 0;
 };

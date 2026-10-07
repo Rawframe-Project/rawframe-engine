@@ -96,6 +96,10 @@ public:
         camera.look(kView);
         return true;
     }
+    bool mark(const std::optional<std::array<double, 3>>& at) override {
+        camera.mark(at);
+        return true;
+    }
     std::optional<world_tooling::Clicked> clicked() const override {
         const std::optional<view::Ray>& kRay = camera.lastClick();
         if (!kRay.has_value()) {
