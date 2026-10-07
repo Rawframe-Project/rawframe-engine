@@ -18,7 +18,13 @@
 # of these tools; the containers are committed, and this is run again
 # whenever a source changes (D278). spirv-cross and dxc must be on the path.
 #
+# With `--material`, the scene's three containers are built linked with
+# the material module given in place of the engine's own, and written to
+# the directory given, as the cook builds them for a game's material
+# (D484).
+#
 # usage: tools/gen_shaders.py
+#        tools/gen_shaders.py --material <material.slang> <directory>
 
 import json
 import os
@@ -110,7 +116,7 @@ def checkSlang():
         sys.exit(f"{SLANGC} is {version or 'missing'}; the containers are built with Slang {SLANG_VERSION}")
 
 
-def build(work, shaders, name):
+def build(work, shaders, name, material=None):
     linked = os.path.join(work, f"{name}.spv")
     source = os.path.join(shaders, f"{name}.slang")
     # Entries of one container may read one slot as different records (a
@@ -125,10 +131,15 @@ def build(work, shaders, name):
         # export collide. The entries follow the module that holds them,
         # and the link runs beside the modules, where alone Slang finds
         # the ones they import.
+        # A material given in place of the first linked module, the
+        # engine's own (D484): a game's, generated or written by hand.
+        sources = [os.path.join(shaders, f"{module}.slang") for module in (name, *LINKED[name])]
+        if material is not None:
+            sources[1] = material
         modules = []
-        for module in (name, *LINKED[name]):
-            compiled = os.path.join(work, f"{module}.slang-module")
-            run(SLANGC, os.path.join(shaders, f"{module}.slang"), *quiet, "-o", compiled)
+        for each in sources:
+            compiled = os.path.join(work, os.path.splitext(os.path.basename(each))[0] + ".slang-module")
+            run(SLANGC, each, *quiet, "-o", compiled)
             modules.append(os.path.basename(compiled))
         with open(os.path.join(shaders, f"{name}.json"), encoding="utf-8") as told:
             entries = json.load(told)["entries"]
@@ -159,6 +170,16 @@ def build(work, shaders, name):
 
 def main():
     checkSlang()
+    # `--material <source> <directory>`: the scene's containers linked with
+    # that material, written to the directory, as the cook asks for a
+    # material the blob cannot fold (D484).
+    if len(sys.argv) == 4 and sys.argv[1] == "--material":
+        shaders = os.path.join(ROOT, "modules", "render_scene_gpu", "shaders")
+        with tempfile.TemporaryDirectory() as work:
+            for suffix, data in build(work, shaders, "scene", os.path.abspath(sys.argv[2])).items():
+                with open(os.path.join(sys.argv[3], f"scene{suffix}.mrsc"), "wb") as file:
+                    file.write(data)
+        return
     with tempfile.TemporaryDirectory() as work:
         for module, name in CONTAINERS:
             shaders = os.path.join(ROOT, "modules", module, "shaders")

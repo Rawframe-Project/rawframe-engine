@@ -7,7 +7,14 @@
 //
 //   rawframe-cook <sources> <output> [<cache>]
 //   rawframe-cook --map <sources>
+//
+// A material whose graph the blob cannot fold is built with the shader
+// toolchain (D484): the engine's tools/gen_shaders.py run by the python3 on
+// the path, with the pinned Slang compiler RAWFRAME_SLANGC names or the
+// slangc on the path, and dxc and spirv-cross on the path. Without them
+// such a material is refused, and every other source cooks as before.
 
+#include "rawframe/base/sha256.h"
 #include "rawframe/cook/animation.h"
 #include "rawframe/cook/audio.h"
 #include "rawframe/cook/cook.h"
@@ -22,13 +29,17 @@
 #include "rawframe/cook/texture.h"
 #include "rawframe/process/self.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <random>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace {
 
@@ -67,6 +78,65 @@ rawframe::content::ResourceId freshIdentity() {
     return rawframe::content::ResourceId{made};
 }
 
+/// The file named `name` in the first directory of the path that has one;
+/// an empty path for none.
+std::filesystem::path onPath(std::string_view name) {
+    const char* kPath = std::getenv("PATH");
+    std::string_view path = kPath != nullptr ? kPath : "";
+    while (!path.empty()) {
+        const std::size_t kEnd = std::min(path.find(':'), path.size());
+        const std::filesystem::path kFound = std::filesystem::path{std::string{path.substr(0, kEnd)}} / name;
+        if (std::filesystem::is_regular_file(kFound)) {
+            return kFound;
+        }
+        path.remove_prefix(std::min(kEnd + 1, path.size()));
+    }
+    return {};
+}
+
+/// The shader toolchain where all of it is found (D484), its identity the
+/// digest of every file it runs or reads: the generator, Maul RHI's tools,
+/// the scene's Slang sources, the Slang compiler with its libraries, dxc,
+/// and spirv-cross; none where any is missing.
+std::optional<rawframe::cook::ShaderTools> shaderTools() {
+    namespace fs = std::filesystem;
+    const fs::path kGenerator = RAWFRAME_SHADER_GENERATOR;
+    const char* kNamed = std::getenv("RAWFRAME_SLANGC");
+    const fs::path kSlangc = kNamed != nullptr ? fs::path{kNamed} : onPath("slangc");
+    const fs::path kPython = onPath("python3");
+    const fs::path kDxc = onPath("dxc");
+    const fs::path kCross = onPath("spirv-cross");
+    if (!fs::is_regular_file(kGenerator) || !fs::is_regular_file(kSlangc) || kPython.empty() || kDxc.empty() ||
+        kCross.empty()) {
+        return std::nullopt;
+    }
+    const fs::path kRoot = kGenerator.parent_path().parent_path();
+    std::vector<fs::path> files = {kGenerator, kSlangc, kDxc, kCross};
+    std::error_code failed;
+    for (const fs::path& kDirectory : {kRoot / "third_party" / "maul-rhi" / "tools",
+                                       kRoot / "modules" / "render_scene_gpu" / "shaders",
+                                       kSlangc.parent_path().parent_path() / "lib"}) {
+        std::vector<fs::path> held;
+        for (const fs::directory_entry& each : fs::directory_iterator{kDirectory, failed}) {
+            if (each.is_regular_file()) {
+                held.push_back(each.path());
+            }
+        }
+        std::ranges::sort(held);
+        files.insert(files.end(), held.begin(), held.end());
+    }
+    rawframe::base::Sha256 identity;
+    for (const fs::path& kFile : files) {
+        const auto kDigest = rawframe::cook::digestOfFile(kFile);
+        if (!kDigest.has_value()) {
+            return std::nullopt;
+        }
+        identity.update(kFile.filename().string());
+        identity.update(*kDigest);
+    }
+    return rawframe::cook::ShaderTools{.python = kPython, .generator = kGenerator, .identity = identity.finish()};
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -87,7 +157,7 @@ int main(int argc, char** argv) {
                                                                  rawframe::cook::fontImporter(),
                                                                  rawframe::cook::gameImporter(),
                                                                  rawframe::cook::kestImporter(),
-                                                                 rawframe::cook::materialImporter(),
+                                                                 rawframe::cook::materialImporter(shaderTools()),
                                                                  rawframe::cook::meshImporter(),
                                                                  rawframe::cook::modImporter(),
                                                                  rawframe::cook::postProcessImporter(),

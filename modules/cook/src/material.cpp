@@ -2,12 +2,23 @@
 
 #include "rawframe/cook/errors.h"
 #include "rawframe/material/canvas.h"
+#include "rawframe/material/errors.h"
 #include "rawframe/material/material.h"
 #include "rawframe/material/post_process.h"
+#include "rawframe/process/child.h"
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cstdint>
+#include <fstream>
+#include <iterator>
+#include <string>
 #include <string_view>
+#include <system_error>
+#include <thread>
+#include <utility>
+#include <vector>
 
 namespace rawframe::cook {
 
@@ -48,15 +59,120 @@ std::vector<std::pair<std::string, std::int64_t>> reportOf(const material::Quali
             {"variantsHeadroom", kVariantsPerMaterial - variants}};
 }
 
-result::Result<Artifact> cookMaterial(std::span<const std::byte> source, std::string_view, Reads&) {
+std::unexpected<result::Error> toolFailed(std::string why) {
+    return std::unexpected<result::Error>{
+        result::fail(result::ErrorClass::FailedPrecondition, kCookDomain, code(CookError::ToolFailed), why).error()};
+}
+
+/// A directory of its own under the system's temporary one, made afresh:
+/// the first of a counted series named by the source's digest that no one
+/// holds, so the two cooks of one source build in one place, and what the
+/// toolchain writes cannot differ by where it was written.
+result::Result<std::filesystem::path> freshDirectory(std::span<const std::byte> source) {
+    const base::Sha256Digest kDigest = base::sha256(source);
+    std::string named = "rawframe-material-";
+    for (std::size_t at = 0; at < 8; ++at) {
+        named += "0123456789abcdef"[std::to_integer<unsigned>(kDigest.at(at)) >> 4U];
+        named += "0123456789abcdef"[std::to_integer<unsigned>(kDigest.at(at)) & 0xFU];
+    }
+    std::error_code failed;
+    const std::filesystem::path kTemporary = std::filesystem::temp_directory_path(failed);
+    for (std::size_t each = 0; !failed && each < 1000; ++each) {
+        const std::filesystem::path kMade = kTemporary / (named + "-" + std::to_string(each));
+        if (std::filesystem::create_directory(kMade, failed)) {
+            return kMade;
+        }
+    }
+    return toolFailed("no directory could be made to build a program material in");
+}
+
+std::vector<std::byte> bytesOf(const std::filesystem::path& path) {
+    std::ifstream file{path, std::ios::binary};
+    const std::vector<char> kRead{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    std::vector<std::byte> made(kRead.size());
+    std::ranges::transform(kRead, made.begin(), [](char each) {
+        return static_cast<std::byte>(each);
+    });
+    return made;
+}
+
+/// A graph the blob cannot fold, written as Slang and linked into the
+/// scene's containers by the shader toolchain (D484): a program material,
+/// one variant at the high quality.
+result::Result<Artifact>
+cookProgram(std::span<const std::byte> source, const graph::Document& document, const ShaderTools& tools) {
+    RAWFRAME_TRY_ASSIGN(const material::GeneratedSlang kGenerated, material::generateSlang(document));
+    RAWFRAME_TRY_ASSIGN(const std::filesystem::path kWork, freshDirectory(source));
+    const auto kRemove = [&kWork] {
+        std::error_code ignored;
+        std::filesystem::remove_all(kWork, ignored);
+    };
+    {
+        std::ofstream written{kWork / "program.slang", std::ios::binary};
+        written << kGenerated.source;
+    }
+    auto child = process::Child::start(process::ChildSettings{
+        .program = tools.python,
+        .arguments = {tools.generator.string(), "--material", (kWork / "program.slang").string(), kWork.string()},
+        .output = kWork / "toolchain.log"});
+    if (!child.has_value()) {
+        kRemove();
+        return toolFailed("the shader toolchain did not start: " + std::string{child.error().description()});
+    }
+    std::optional<int> exited;
+    while (!(exited = child->exited()).has_value()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{20});
+    }
+    if (*exited != 0) {
+        const std::vector<std::byte> kLog = bytesOf(kWork / "toolchain.log");
+        kRemove();
+        return toolFailed(
+            "the shader toolchain failed building a program material: " +
+            std::string{reinterpret_cast<const char*>(kLog.data()), std::min<std::size_t>(kLog.size(), 2000)});
+    }
+    material::ProgramMaterial made{.shading = kGenerated.shading,
+                                   .blend = kGenerated.blend,
+                                   .alphaCutoff = kGenerated.alphaCutoff,
+                                   .doubleSided = kGenerated.doubleSided,
+                                   .textures = kGenerated.textures};
+    constexpr std::array<std::string_view, material::kProgramContainers> kNames = {
+        "scene.mrsc", "scene.metal.mrsc", "scene.d3d12.mrsc"};
+    for (std::size_t at = 0; at < kNames.size(); ++at) {
+        made.containers.at(at) = bytesOf(kWork / kNames.at(at));
+    }
+    kRemove();
+    std::vector<std::byte> bytes = material::encodeProgram(made);
+    // What the toolchain wrote, checked as a runtime reads it.
+    RAWFRAME_TRY(material::decodeProgram(bytes));
+    return Artifact{.type = content::ResourceTypeId{material::kMaterialType},
+                    .representation = *content::RepresentationId::parse(material::kProgramRepresentation),
+                    .bytes = std::move(bytes),
+                    .subassets = {},
+                    .report = {{"variants", 1}, {"axes", 0}, {"variantsHeadroom", kVariantsPerMaterial - 1}}};
+}
+
+result::Result<Artifact> cookMaterial(std::span<const std::byte> source, const std::optional<ShaderTools>& tools) {
     const std::string_view kText{reinterpret_cast<const char*>(source.data()), source.size()};
     RAWFRAME_TRY_ASSIGN(const graph::Document kDocument, material::readMaterial(kText));
-    RAWFRAME_TRY_ASSIGN(const material::Qualities kCompiled, material::compileQualities(kDocument));
-    return Artifact{.type = content::ResourceTypeId{material::kMaterialType},
-                    .representation = *content::RepresentationId::parse(material::kMaterialRepresentation),
-                    .bytes = material::encode(kCompiled),
-                    .subassets = {},
-                    .report = reportOf(kCompiled)};
+    auto compiled = material::compileQualities(kDocument);
+    if (compiled.has_value()) {
+        return Artifact{.type = content::ResourceTypeId{material::kMaterialType},
+                        .representation = *content::RepresentationId::parse(material::kMaterialRepresentation),
+                        .bytes = material::encode(*compiled),
+                        .subassets = {},
+                        .report = reportOf(*compiled)};
+    }
+    // What the blob cannot fold, a program says (D484).
+    if (compiled.error().domain() != material::kMaterialDomain ||
+        compiled.error().code() != material::code(material::MaterialError::Unsupported)) {
+        return std::unexpected<result::Error>{std::move(compiled).error()};
+    }
+    if (!tools.has_value()) {
+        return toolFailed("this material's graph needs its own program, which the shader toolchain builds, and the "
+                          "cook was given none: " +
+                          std::string{compiled.error().description()});
+    }
+    return cookProgram(source, kDocument, *tools);
 }
 
 /// A post process folds to one form (D348): one variant.
@@ -85,8 +201,15 @@ result::Result<Artifact> cookCanvas(std::span<const std::byte> source, std::stri
 
 } // namespace
 
-Importer materialImporter() noexcept {
-    return Importer{.identity = "rawframe.material", .normalize = &normalize, .cook = &cookMaterial};
+Importer materialImporter(std::optional<ShaderTools> tools) {
+    const base::Sha256Digest kIdentity = tools.has_value() ? tools->identity : base::Sha256Digest{};
+    return Importer{.identity = "rawframe.material",
+                    .normalize = &normalize,
+                    .cook =
+                        [tools = std::move(tools)](std::span<const std::byte> source, std::string_view, Reads&) {
+                            return cookMaterial(source, tools);
+                        },
+                    .tools = kIdentity};
 }
 
 Importer postProcessImporter() noexcept {

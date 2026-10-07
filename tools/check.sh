@@ -43,6 +43,16 @@ lavapipe=$(compgen -G "/usr/share/vulkan/icd.d/lvp_icd*.json" | head -1 || true)
 if [ -n "$lavapipe" ]; then
     export RAWFRAME_REQUIRE_GPU=1 VK_DRIVER_FILES="$lavapipe"
 fi
+# Where the shader toolchain is installed, as on the machine the CI runs on,
+# the pinned Slang compiler where tools/gen_shaders.py looks for it and the
+# cross compilers on the path, a material that needs its own program is
+# cooked through it, and a test that finds no toolchain fails instead of
+# skipping (D484).
+slangc="${RAWFRAME_SLANGC:-$HOME/.cache/rawframe/slang-2026.19/bin/slangc}"
+dxc_bin=$(compgen -G "/opt/dxc/*/bin" | head -1 || true)
+if [ -x "$slangc" ] && [ -n "$dxc_bin" ] && command -v spirv-cross >/dev/null; then
+    export RAWFRAME_REQUIRE_SHADER_TOOLCHAIN=1 RAWFRAME_SLANGC="$slangc" PATH="$dxc_bin:$PATH"
+fi
 
 step "repository rules"
 python3 tools/check_repo.py || fail "repository rules"

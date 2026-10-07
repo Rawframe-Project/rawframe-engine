@@ -35,6 +35,9 @@ enum class CookError : std::uint32_t {
     UnmappedSubasset = 10,
     /// More material variants than the request's ceiling allows (D319).
     OverLimit = 11,
+    /// A tool an importer runs besides the cook: absent, or failing, its
+    /// output in the error (D484).
+    ToolFailed = 12,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(CookError error) noexcept {
