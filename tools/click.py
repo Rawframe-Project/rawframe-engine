@@ -24,7 +24,10 @@
 # Control_L (D463). An argument `frozen=` and X key names presses them with
 # the program stopped, so it reads them in one frame (D458), and
 # `frozenclick=` and a point with its text clicks there and types it with
-# the program stopped, once the mouse is over the point (D477). An argument
+# the program stopped, once the mouse is over the point (D477). The
+# arguments `freeze` and `thaw` stop the program and let it go on, so what
+# comes between, clicks and the wheel among it, is read in one frame
+# (D479). An argument
 # `move=` and a point moves the pointer there with no press, a second
 # before going on (D468), and `orbit=` and two points drags as `drag=`
 # does with the right button (D469), a key a fifth part names held through
@@ -40,7 +43,7 @@
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
 #                 | wheel=<x>,<y>,<turns>[,<key>] | drag=<x>,<y>,<x>,<y>[,<key>]
 #                 | frozen=<key>[,<key>...] | frozenclick=<x>,<y>:<text>
-#                 | move=<x>,<y>
+#                 | move=<x>,<y> | freeze | thaw
 #                 | orbit=<x>,<y>,<x>,<y>[,<key>] | wait=<seconds>
 #                 | until=<code>[,<field>=<value>]
 #                 [...]
@@ -136,6 +139,9 @@ def main():
         if argument.startswith("frozen="):
             points.append((None, "frozen", argument[len("frozen="):].split(",")))
             continue
+        if argument in ("freeze", "thaw"):
+            points.append((None, None, (argument,)))
+            continue
         if argument.startswith("until="):
             points.append((None, None, ("until", argument[len("until="):])))
             continue
@@ -224,6 +230,12 @@ def main():
             x.XFlush(display)
             print(f"turned the wheel {text[1]} at {at},{y} holding {text[2]}")
             time.sleep(1)
+            continue
+        if isinstance(text, tuple) and text[0] in ("freeze", "thaw"):
+            with open(pid_file, encoding="utf-8") as told:
+                os.kill(int(told.read().strip()), signal.SIGSTOP if text[0] == "freeze" else signal.SIGCONT)
+            print("froze the program" if text[0] == "freeze" else "let the program go on")
+            time.sleep(0.5 if text[0] == "freeze" else 1.5)
             continue
         if isinstance(text, tuple) and text[0] == "move":
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)

@@ -149,6 +149,14 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     const double kSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began_).count() + 1;
     attachPlayed(kSeconds);
     pollPicks(kSeconds);
+    // A press is acted on as the window's records come and may have
+    // changed what a column holds; the wheel is turned over it laid out,
+    // so a click and a turn read in one frame scroll what the click
+    // brought, not only what was shown before it (D479).
+    if (!wheels_.empty() &&
+        !tree_->layOut(root_, static_cast<float>(width_), static_cast<float>(height_), kSeconds).has_value()) {
+        return;
+    }
     for (const auto& [kX, kY, kDeltaX, kDeltaY] : wheels_) {
         ++wheeled_;
         static_cast<void>(tree_->wheel(root_, kX, kY, kDeltaX, kDeltaY, kSeconds));

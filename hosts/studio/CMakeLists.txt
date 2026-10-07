@@ -199,6 +199,18 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "turned the wheel 6 at 1000,400.*typed 9 at 1100,457.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"components\":4,\"applied\":1,\"refused\":0,[^\n]*\"wheeled\":6,\"componentsScrolled\":600,[^\n]*\"status\":\"width set to 9\".*\"exit\":\"clean_stop\"")
+    # The same, the slope clicked and the wheel turned in one frame, as a
+    # slow machine reads them (D479): the wheel still scrolls the rows the
+    # click brought, not only those shown before it.
+    add_test(NAME studio_scrolls_frozen
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene 200,126 freeze 640,225 wheel=1000,400,6 thaw 1100,457:9
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_scrolls_frozen PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "turned the wheel 6 at 1000,400.*typed 9 at 1100,457.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"components\":4,\"applied\":1,\"refused\":0,[^\n]*\"wheeled\":6,\"componentsScrolled\":600,[^\n]*\"status\":\"width set to 9\".*\"exit\":\"clean_stop\"")
     # Studio reverting (D443): runners' level brings a platform whose pose
     # its instance sets; the instance's x reverted drops its own value for
     # its source's, written to the level.
