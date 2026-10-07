@@ -89,6 +89,7 @@ class Editor:
         self.child = subprocess.Popen([adapter], stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
         self.seq = 0
         self.seen = []
+        self.kept = []
 
     def send(self, command, arguments=None):
         self.seq += 1
@@ -130,12 +131,19 @@ class Editor:
     # What the adapter tells waits on the game, which on a loaded machine
     # may take a while to run a tick; a minute still fails a silent one
     # well inside the test's own limit (D476).
+    # A message a wait passes over is kept for the next: the adapter tells
+    # an event once, and the game may stop before a request's answer comes
+    # (D478).
     def until(self, test, what, seconds=60):
+        for at, message in enumerate(self.kept):
+            if test(message):
+                return self.kept.pop(at)
         end = time.time() + seconds
         while time.time() < end:
             message = self.receive(end, what)
             if test(message):
                 return message
+            self.kept.append(message)
             self.seen.append(message.get("event") or message.get("command") or message.get("type", "?"))
         explain(self.seen)
         raise SystemExit("never " + what)
