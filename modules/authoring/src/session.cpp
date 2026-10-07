@@ -27,7 +27,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 12> kVerbs = {
+constexpr std::array<VerbName, 13> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -39,6 +39,7 @@ constexpr std::array<VerbName, 12> kVerbs = {
     VerbName{.kind = "authoring.preview", .verb = SessionVerb::Preview},
     VerbName{.kind = "authoring.create_scene", .verb = SessionVerb::CreateScene},
     VerbName{.kind = "authoring.history", .verb = SessionVerb::History},
+    VerbName{.kind = "authoring.assets", .verb = SessionVerb::Assets},
     VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
 
 /// The members a verb's record may hold beside `kind` and `id`, and those
@@ -53,6 +54,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Hello:
         return Members{.required = 1, .optional = 0};
     case SessionVerb::Describe:
+    case SessionVerb::Assets:
     case SessionVerb::End:
         return Members{.required = 0, .optional = 0};
     case SessionVerb::Apply:
@@ -91,7 +93,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     }
     if (named == nullptr) {
         return malformed("a session record's kind is hello, describe, apply, read, undo, redo, select, view, preview, "
-                         "create_scene, history, or end");
+                         "create_scene, history, assets, or end");
     }
     SessionRecord record{.verb = named->verb, .id = idRead};
     const Members kMembers = membersOf(record.verb);
@@ -116,6 +118,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         return record;
     }
     case SessionVerb::Describe:
+    case SessionVerb::Assets:
     case SessionVerb::End:
         return record;
     case SessionVerb::Apply:

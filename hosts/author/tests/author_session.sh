@@ -204,4 +204,12 @@ rename='{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operatio
 } | "$author" session "$game" "$work/history" >"$work/replies" || true
 reply 2 | grep -q '"answer":{"kind":"authoring.history","reopened":false,"entries":\[\]}'
 reply 6 | grep -q '"entries":\[{"summary":"rename to floor","deltas":1,"applied":true},{"summary":"create entity crate[^"]*","deltas":[0-9]*,"applied":false}\]'
+# The assets runners declares (D455), each by kind, identity, and name.
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.assets","id":2}'
+} | "$author" session "$game" "$work/root" >"$work/replies" || true
+reply 2 | grep -q '"answer":{"kind":"authoring.assets","assets":\[{"kind":"texture","id":"[0-9a-f]\{16\}","name":"runner.png"}'
+reply 2 | grep -q '{"kind":"texture","id":"c067c4be8ce86d12","name":"hud.png"}'
+reply 2 | grep -q '{"kind":"sound","id":"[0-9a-f]\{16\}","name":"jump.sound"}'
 echo "authored runners in a session"

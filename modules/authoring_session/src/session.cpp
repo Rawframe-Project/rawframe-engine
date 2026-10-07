@@ -140,6 +140,12 @@ private:
             return created(record);
         case authoring::SessionVerb::History:
             return historyOf(record);
+        case authoring::SessionVerb::Assets: {
+            Value made = Value::object();
+            made.add("kind", Value::string("authoring.assets"));
+            made.add("assets", assets_);
+            return made;
+        }
         }
         return std::unexpected{failure(
             authoring::AuthoringError::Internal, result::ErrorClass::Internal, "a session record went unhandled")};
@@ -157,6 +163,7 @@ private:
         }
         RAWFRAME_TRY_ASSIGN(catalog_, catalogOf(*files));
         beside_ = scenesBeside(game_);
+        assets_ = assetsOf(files->description());
         return {};
     }
 
@@ -232,6 +239,49 @@ private:
             }
             return rawframe::scene::readScene(*kText);
         };
+    }
+
+    /// The assets a game declares by line (D455): each by its kind, its
+    /// identity as 16 hex digits (what a component's field holds, as an
+    /// unsigned number), and its name, a file beside the description or a
+    /// label's table and key, in line order within each kind.
+    static Value assetsOf(const rawframe::world_kest::GameDescription& game) {
+        Value made = Value::array();
+        const auto kAdd = [&made](std::string_view kind, std::uint64_t id, std::string name) {
+            std::array<char, 16> digits{};
+            for (std::size_t at = 0; at < digits.size(); ++at) {
+                digits[at] = "0123456789abcdef"[(id >> (60 - 4 * at)) & 0xFU];
+            }
+            Value each = Value::object();
+            each.add("kind", Value::string(std::string{kind}));
+            each.add("id", Value::string(std::string{digits.data(), digits.size()}));
+            each.add("name", Value::string(std::move(name)));
+            made.push(std::move(each));
+        };
+        for (const auto& each : game.textures) {
+            kAdd("texture", each.id, each.path);
+        }
+        for (const auto& each : game.meshes) {
+            kAdd("mesh", each.id, each.path);
+        }
+        for (const auto& each : game.materials) {
+            kAdd("material", each.id, each.path);
+        }
+        if (game.audio.has_value()) {
+            for (const auto& each : game.audio->sounds) {
+                kAdd("sound", each.id, each.path);
+            }
+        }
+        for (const auto& each : game.fonts) {
+            kAdd("font", each.id, each.path);
+        }
+        for (const auto& each : game.prefabs) {
+            kAdd("prefab", each.id, each.path);
+        }
+        for (const auto& each : game.labels) {
+            kAdd("label", each.id, each.table + "/" + each.key);
+        }
+        return made;
     }
 
     /// A scene's history (D454): each entry, oldest first, summed up, with
@@ -569,6 +619,7 @@ private:
     std::filesystem::path root_;
     std::optional<authoring::ComponentCatalog> catalog_;
     std::vector<std::pair<rawframe::base::Bits128, std::filesystem::path>> beside_;
+    Value assets_ = Value::array();
     std::map<std::string, OpenScene> scenes_;
     bool greeted_ = false;
     /// The preview and the scene it shows (D433), the view it was last

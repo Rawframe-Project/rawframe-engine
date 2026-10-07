@@ -43,6 +43,9 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     const auto kUndo =
         readSessionRecord(R"({"kind":"authoring.undo","id":4,"scene":"a.scene","expects":"sha256:00"})", id);
     RAWFRAME_EXPECT(kUndo.has_value() && kUndo->verb == SessionVerb::Undo && kUndo->expects == "sha256:00");
+    const auto kAssets = readSessionRecord(R"({"kind":"authoring.assets","id":9})", id);
+    RAWFRAME_EXPECT(kAssets.has_value() && kAssets->verb == SessionVerb::Assets);
+    RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.assets","id":9,"scene":"b.scene"})", id).has_value());
     const auto kHistory = readSessionRecord(R"({"kind":"authoring.history","id":7,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kHistory.has_value() && kHistory->verb == SessionVerb::History && kHistory->scene == "b.scene");
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.history","id":8})", id).has_value());

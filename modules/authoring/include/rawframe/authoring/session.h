@@ -65,6 +65,9 @@ enum class SessionVerb : std::uint8_t {
     CreateScene,
     /// A scene's history, oldest first, each entry summed up (D454).
     History,
+    /// The assets the game declares, each by its kind, identity, and name
+    /// (D455).
+    Assets,
     End,
 };
 
