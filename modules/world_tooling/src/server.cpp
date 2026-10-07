@@ -503,6 +503,11 @@ struct ToolingServer::State {
                 };
                 made.add("origin", kPoint(kClicked->origin));
                 made.add("toward", kPoint(kClicked->toward));
+                if (kClicked->released != 0) {
+                    made.add("released", Value::integer(static_cast<std::int64_t>(kClicked->released)));
+                    made.add("releaseOrigin", kPoint(kClicked->releaseOrigin));
+                    made.add("releaseToward", kPoint(kClicked->releaseToward));
+                }
             }
             send(connection, client, replyLine(id, "answer", std::move(made)));
             return;

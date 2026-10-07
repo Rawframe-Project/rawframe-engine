@@ -29,6 +29,11 @@ struct Clicked {
     std::uint64_t count = 0;
     std::array<double, 3> origin{};
     std::array<double, 3> toward{};
+    /// Which press was last let go (its count), and the ray where it was
+    /// let go (D457); nought before any.
+    std::uint64_t released = 0;
+    std::array<double, 3> releaseOrigin{};
+    std::array<double, 3> releaseToward{};
 };
 
 class Previewer {

@@ -199,6 +199,17 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             pointing_.pressed(event->touch.position.x, event->touch.position.y);
         } else if (event->kind == window::EventKind::ButtonUp || event->kind == window::EventKind::TouchUp) {
             pointing_.released();
+            // And where the press was let go, for a drag (D457).
+            if (event->kind == window::EventKind::ButtonUp && settings_.preview != nullptr &&
+                settings_.preview->looking().has_value() && event->pointer.button == window::MouseButton::Left) {
+                if (const auto kRay = view::pointToRay(*settings_.preview->looking(),
+                                                       views_.window(),
+                                                       event->pointer.position.x,
+                                                       event->pointer.position.y);
+                    kRay.has_value()) {
+                    settings_.preview->released(*kRay);
+                }
+            }
         }
         if (event->kind == window::EventKind::Wheel) {
             pointing_.wheeled(event->motion.x, event->motion.y);

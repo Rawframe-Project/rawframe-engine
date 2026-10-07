@@ -104,10 +104,17 @@ public:
         // A thousand metres along the press's direction: past anything a
         // scene an author edits holds.
         constexpr double kReach = 1000;
-        return world_tooling::Clicked{
+        world_tooling::Clicked made{
             .count = camera.clicks(),
             .origin = kRay->origin,
             .toward = {kRay->direction[0] * kReach, kRay->direction[1] * kReach, kRay->direction[2] * kReach}};
+        if (const std::optional<view::Ray>& kRelease = camera.lastRelease(); kRelease.has_value()) {
+            made.released = camera.releases();
+            made.releaseOrigin = kRelease->origin;
+            made.releaseToward = {
+                kRelease->direction[0] * kReach, kRelease->direction[1] * kReach, kRelease->direction[2] * kReach};
+        }
+        return made;
     }
 
     view::PreviewCamera camera;

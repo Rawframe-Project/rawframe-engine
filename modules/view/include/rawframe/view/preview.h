@@ -44,11 +44,26 @@ public:
     [[nodiscard]] const std::optional<Ray>& lastClick() const noexcept {
         return lastClick_;
     }
+    /// The press let go while the preview looks, as the ray where it was
+    /// let go (D457): with the press's, a drag.
+    void released(const Ray& ray) noexcept {
+        lastRelease_ = ray;
+        releases_ = clicks_;
+    }
+    /// Which press was last let go (its count), and where; none before.
+    [[nodiscard]] std::uint64_t releases() const noexcept {
+        return releases_;
+    }
+    [[nodiscard]] const std::optional<Ray>& lastRelease() const noexcept {
+        return lastRelease_;
+    }
 
 private:
     std::optional<Perspective> view_;
     std::optional<Ray> lastClick_;
     std::uint64_t clicks_ = 0;
+    std::optional<Ray> lastRelease_;
+    std::uint64_t releases_ = 0;
 };
 
 inline constexpr composition::Capability<PreviewCamera> kPreviewCamera{"rawframe.view.preview_camera"};
