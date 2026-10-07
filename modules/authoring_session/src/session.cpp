@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <map>
@@ -534,6 +535,7 @@ private:
             previewed_ = std::nullopt;
             told_ = false;
             clicks_ = 0;
+            pressed_.reset();
         }
         Value made = Value::object();
         made.add("kind", Value::string("authoring.preview"));
@@ -550,6 +552,22 @@ private:
         preview_.reset();
         server_.reset();
         previewScene_.clear();
+    }
+
+    /// A point of three numbers, as the tooling endpoint writes one.
+    static std::optional<std::array<double, 3>> pointOf(const Value* point) {
+        if (point == nullptr || point->kind() != Value::Kind::Array || point->items().size() != 3) {
+            return std::nullopt;
+        }
+        std::array<double, 3> at{};
+        for (std::size_t each = 0; each < 3; ++each) {
+            const std::optional<double> kNumber = point->items()[each].real();
+            if (!kNumber.has_value() || !std::isfinite(*kNumber)) {
+                return std::nullopt;
+            }
+            at[each] = *kNumber;
+        }
+        return at;
     }
 
     /// What the author last clicked in the scene's preview (D456): the
@@ -574,6 +592,7 @@ private:
         Value scene;
         Value source;
         if (kClicks > clicks_ && kAnswer->find("origin") != nullptr && kAnswer->find("toward") != nullptr) {
+            pressed_.reset();
             Value pick = Value::object();
             pick.add("kind", Value::string("tooling.pick"));
             pick.add("id", Value::integer(0));
@@ -585,12 +604,41 @@ private:
             if (kHit != nullptr && kHit->find("scene") != nullptr && kHit->find("source") != nullptr) {
                 scene = *kHit->find("scene");
                 source = *kHit->find("source");
+                const auto kPoint = pointOf(kHit->find("point"));
+                if (kPoint.has_value() && scene.text() != nullptr && source.text() != nullptr) {
+                    pressed_ =
+                        Pressed{.count = kClicks, .scene = *scene.text(), .source = *source.text(), .point = *kPoint};
+                }
             }
         }
         clicks_ = std::max(clicks_, kClicks);
         made.add("clicks", Value::integer(kClicks));
         made.add("scene", std::move(scene));
         made.add("source", std::move(source));
+        // The press that met an authored entity, let go elsewhere: how far
+        // its point moved across the level plane through it (D457).
+        const Value* kReleased = kAnswer != nullptr ? kAnswer->find("released") : nullptr;
+        const std::int64_t kRelease = kReleased != nullptr ? kReleased->integer().value_or(0) : 0;
+        Value moved;
+        if (pressed_.has_value() && kRelease == pressed_->count) {
+            const auto kOrigin = pointOf(kAnswer->find("releaseOrigin"));
+            const auto kToward = pointOf(kAnswer->find("releaseToward"));
+            if (kOrigin.has_value() && kToward.has_value() && std::abs((*kToward)[1]) > 1e-9) {
+                const double kAlong = (pressed_->point[1] - (*kOrigin)[1]) / (*kToward)[1];
+                if (kAlong > 0 && kAlong <= 1) {
+                    Value by = Value::array();
+                    by.push(Value::real((*kOrigin)[0] + kAlong * (*kToward)[0] - pressed_->point[0]));
+                    by.push(Value::real(0));
+                    by.push(Value::real((*kOrigin)[2] + kAlong * (*kToward)[2] - pressed_->point[2]));
+                    moved = Value::object();
+                    moved.add("scene", Value::string(pressed_->scene));
+                    moved.add("source", Value::string(pressed_->source));
+                    moved.add("by", std::move(by));
+                }
+            }
+            pressed_.reset();
+        }
+        made.add("moved", std::move(moved));
         return made;
     }
 
@@ -694,6 +742,15 @@ private:
     /// already answered.
     std::unique_ptr<ToolingLink> server_;
     std::int64_t clicks_ = 0;
+    /// The newest press, while it is held, when it met an authored entity:
+    /// which press, what it met, and where (D457).
+    struct Pressed {
+        std::int64_t count = 0;
+        std::string scene;
+        std::string source;
+        std::array<double, 3> point{};
+    };
+    std::optional<Pressed> pressed_;
     std::string previewScene_;
     std::optional<authoring::SceneView> previewed_;
     bool told_ = false;
