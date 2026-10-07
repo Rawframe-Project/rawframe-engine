@@ -21,6 +21,14 @@ ShellParticipant::read(const std::string& scene, std::string_view operation, std
 }
 
 void ShellParticipant::pressAt(float x, float y) {
+    // A press read in one frame with one before it is hit against what that
+    // one brought, as a wheel is (D479, D486): selecting a row brings its
+    // components, which the next press may be on.
+    if (pressedSinceLayout_) {
+        const double kSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began_).count() + 1;
+        static_cast<void>(tree_->layOut(root_, static_cast<float>(width_), static_cast<float>(height_), kSeconds));
+    }
+    pressedSinceLayout_ = true;
     const auto kHit = tree_->hit(root_, x, y);
     if (!kHit.has_value() || !kHit->node.has_value()) {
         return;

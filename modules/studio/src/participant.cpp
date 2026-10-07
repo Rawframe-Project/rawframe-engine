@@ -165,6 +165,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     if (!tree_->layOut(root_, static_cast<float>(width_), static_cast<float>(height_), kSeconds).has_value()) {
         return;
     }
+    pressedSinceLayout_ = false;
     list_ = {};
     if (tree_->draw(root_, 1.0F, list_).has_value()) {
         if (edit_ != nullptr) {
