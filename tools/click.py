@@ -22,7 +22,9 @@
 # left button at the first, carries it to the second, and lets it go there
 # (D457), holding the X key a fifth part names through it, Shift_L or
 # Control_L (D463). An argument `frozen=` and X key names presses them with
-# the program stopped, so it reads them in one frame (D458). An argument
+# the program stopped, so it reads them in one frame (D458), and
+# `frozenclick=` and a point with its text clicks there and types it with
+# the program stopped, once the mouse is over the point (D477). An argument
 # `move=` and a point moves the pointer there with no press, a second
 # before going on (D468), and `orbit=` and two points drags as `drag=`
 # does with the right button (D469), a key a fifth part names held through
@@ -37,7 +39,8 @@
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
 #                 | wheel=<x>,<y>,<turns>[,<key>] | drag=<x>,<y>,<x>,<y>[,<key>]
-#                 | frozen=<key>[,<key>...] | move=<x>,<y>
+#                 | frozen=<key>[,<key>...] | frozenclick=<x>,<y>:<text>
+#                 | move=<x>,<y>
 #                 | orbit=<x>,<y>,<x>,<y>[,<key>] | wait=<seconds>
 #                 | until=<code>[,<field>=<value>]
 #                 [...]
@@ -69,6 +72,10 @@ def alive(pid):
     except OSError:
         return False
     return True
+
+
+class Frozen(str):
+    """A click's text typed with the program stopped (D477)."""
 
 
 def logged(log, code):
@@ -154,8 +161,9 @@ def main():
             at, y, turns = (int(part) for part in parts[:3])
             points.append((at, y, ("wheel", turns, parts[3]) if len(parts) > 3 else turns))
             continue
-        place, _, text = argument.partition(":")
-        points.append((*(int(side) for side in place.split(",")), text))
+        frozen = argument.startswith("frozenclick=")
+        place, _, text = argument[len("frozenclick=") if frozen else 0:].partition(":")
+        points.append((*(int(side) for side in place.split(",")), Frozen(text) if frozen else text))
     x = ctypes.CDLL(ctypes.util.find_library("X11"))
     xtest = ctypes.CDLL("libXtst.so.6")
     x.XOpenDisplay.restype = ctypes.c_void_p
@@ -337,12 +345,17 @@ def main():
                 break
         print(f"at {at},{y} the screen was {before:.0f} bright before the mouse and {after:.0f} under it: "
               f"{'lighter' if after >= before + 8 else 'not lighter'}")
+        stopped = None
+        if isinstance(text, Frozen):
+            with open(pid_file, encoding="utf-8") as told:
+                stopped = int(told.read().strip())
+            os.kill(stopped, signal.SIGSTOP)
         xtest.XTestFakeButtonEvent(display, 1, 1, 0)
         x.XFlush(display)
         time.sleep(0.2)
         xtest.XTestFakeButtonEvent(display, 1, 0, 0)
         x.XFlush(display)
-        print(f"clicked at {at},{y}")
+        print(f"{'clicked frozen' if stopped else 'clicked'} at {at},{y}")
         time.sleep(1)
         if text:
             shift = x.XKeysymToKeycode(display, x.XStringToKeysym(b"Shift_L"))
@@ -358,6 +371,10 @@ def main():
                 time.sleep(0.1)
             print(f"typed {text} at {at},{y}")
             time.sleep(1)
+        if stopped is not None:
+            time.sleep(0.5)
+            os.kill(stopped, signal.SIGCONT)
+            time.sleep(1.5)
     time.sleep(5)
     stop(pid_file)
     while alive(pid):
