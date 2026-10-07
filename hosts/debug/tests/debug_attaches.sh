@@ -115,13 +115,17 @@ class Editor:
                 return message
         raise SystemExit("never " + what)
 
-    def answer(self, request):
-        return self.until(lambda m: m.get("type") == "response" and m.get("request_seq") == request, "answered")
+    def answer(self, request, seconds=20):
+        return self.until(lambda m: m.get("type") == "response" and m.get("request_seq") == request, "answered",
+                          seconds)
 
     def attach(self, arguments):
         initialized = self.answer(self.send("initialize", {"adapterID": "rawframe"}))
         assert initialized["success"] and initialized["body"]["supportsFunctionBreakpoints"], initialized
-        return self.answer(self.send("attach", arguments))
+        # The adapter waits up to ten seconds to connect and ten for the
+        # game's welcome, so its answer may take twenty on a loaded machine;
+        # past both, it answers a refusal itself (D474).
+        return self.answer(self.send("attach", arguments), 45)
 
     def leave(self):
         assert self.answer(self.send("disconnect"))["success"]
