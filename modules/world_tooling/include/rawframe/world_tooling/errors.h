@@ -26,6 +26,9 @@ enum class ToolingError : std::uint32_t {
     Configuration = 6,
     /// An entity not alive in the World, or no World running.
     NotFound = 7,
+    /// The game is stopped at a breakpoint, or not, as the verb needs
+    /// (D460).
+    Stopped = 8,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(ToolingError error) noexcept {

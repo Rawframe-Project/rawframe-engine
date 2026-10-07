@@ -1,6 +1,8 @@
 #include "rawframe/composition/composition.h"
+#include "rawframe/execution/time.h"
 #include "rawframe/network/transport.h"
 #include "rawframe/world_runtime/component_fields.h"
+#include "rawframe/world_runtime/debugging.h"
 #include "rawframe/world_runtime/simulation.h"
 #include "rawframe/world_tooling/errors.h"
 #include "rawframe/world_tooling/registrar.h"
@@ -27,7 +29,9 @@ constexpr std::string_view kMaybe[] = {world_runtime::kSimulation.name,
                                        network::kTransport.name,
                                        world_runtime::kComponentFields.name,
                                        kPreviewer.name,
-                                       world_runtime::kPicking.name};
+                                       world_runtime::kPicking.name,
+                                       world_runtime::kDebugging.name,
+                                       composition::kStopRequest.name};
 
 /// A token file's bytes at most.
 constexpr std::size_t kMaximumTokenBytes = 4096;
@@ -86,8 +90,10 @@ public:
                 settings.grants.inspect = true;
             } else if (kGrant == "view") {
                 settings.grants.view = true;
+            } else if (kGrant == "debug") {
+                settings.grants.debug = true;
             } else if (!kGrant.empty()) {
-                return misconfigured("tooling.grants names inspect and view, apart by spaces");
+                return misconfigured("tooling.grants names inspect, view, and debug, apart by spaces");
             }
             at = kEnd + 1;
         }
@@ -96,6 +102,13 @@ public:
         }
         if (context.has(world_runtime::kPicking.name)) {
             RAWFRAME_TRY_ASSIGN(settings.picking, context.capability(world_runtime::kPicking));
+        }
+        if (settings.grants.debug && context.has(world_runtime::kDebugging.name)) {
+            RAWFRAME_TRY_ASSIGN(settings.debugging, context.capability(world_runtime::kDebugging));
+            debugging_ = settings.debugging;
+            if (context.has(composition::kStopRequest.name)) {
+                RAWFRAME_TRY_ASSIGN(stopRequest_, context.capability(composition::kStopRequest));
+            }
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kClients,
                             context.configuration().unsignedInteger("tooling.maximum_clients", 4));
@@ -114,6 +127,14 @@ public:
             return {};
         }
         RAWFRAME_TRY(provider_->listen(network::Endpoint{endpoint_}));
+        // A stopped game is served from inside its tick until a debugger
+        // says to carry on (D460).
+        if (debugging_ != nullptr) {
+            // A Host asked to stop carries on, so it can drain.
+            debugging_->whileStopped([this] {
+                return server_->serveStopped(clock_.now()) || (stopRequest_ != nullptr && stopRequest_->requested());
+            });
+        }
         emitter_.log(diagnostics::Severity::Info,
                      kListening,
                      "the tooling endpoint is listening",
@@ -141,6 +162,9 @@ public:
                       diagnostics::field("admitted", kStatistics.admitted),
                       diagnostics::field("refused", kStatistics.refused),
                       diagnostics::field("records", kStatistics.records)});
+        if (debugging_ != nullptr) {
+            debugging_->whileStopped({});
+        }
         server_.reset();
         provider_.reset();
     }
@@ -151,6 +175,9 @@ private:
     ToolingSettings settings_;
     std::unique_ptr<network::Provider> provider_;
     std::unique_ptr<ToolingServer> server_;
+    world_runtime::Debugging* debugging_ = nullptr;
+    composition::StopRequest* stopRequest_ = nullptr;
+    execution::SteadyClock clock_;
     diagnostics::Emitter emitter_;
 };
 

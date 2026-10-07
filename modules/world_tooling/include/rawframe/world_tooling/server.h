@@ -54,6 +54,7 @@
 #include "rawframe/world/time.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_runtime/component_fields.h"
+#include "rawframe/world_runtime/debugging.h"
 #include "rawframe/world_runtime/picking.h"
 #include "rawframe/world_tooling/preview.h"
 
@@ -72,6 +73,9 @@ struct ToolingGrants {
     bool inspect = false;
     /// Move a preview's camera (D432).
     bool view = false;
+    /// Debug the game's scripts: breakpoints, a stopped game's frames, and
+    /// carrying on (D460).
+    bool debug = false;
 };
 
 struct ToolingSettings {
@@ -91,6 +95,9 @@ struct ToolingSettings {
     /// What a ray meets, for `tooling.pick` (D456), if the composition can
     /// say; it outlives the server.
     const world_runtime::Picking* picking = nullptr;
+    /// The game's scripts debugged (D460), if the composition can; it
+    /// outlives the server.
+    world_runtime::Debugging* debugging = nullptr;
 };
 
 /// The provider bounds a tooling endpoint asks for, `clients` at once.
@@ -111,6 +118,11 @@ public:
     /// while there is no World) as it is between ticks, `tick` the next to
     /// run, and closes connections past their hello's deadline.
     void serve(const world::World* world, world::TickIndex tick, execution::MonotonicInstant now);
+    /// The same while the game is stopped at a breakpoint (D460): only
+    /// debug verbs are answered, the World being in the middle of a tick.
+    /// Whether to carry on: a client said so, or no admitted client is left
+    /// to.
+    [[nodiscard]] bool serveStopped(execution::MonotonicInstant now);
 
     struct Statistics {
         std::uint64_t accepted = 0;

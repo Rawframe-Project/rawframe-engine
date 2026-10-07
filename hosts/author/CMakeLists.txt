@@ -68,6 +68,15 @@ if(RAWFRAME_BUILD_TESTS)
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf ${CMAKE_CURRENT_BINARY_DIR}/author_picks)
         set_tests_properties(author_picks PROPERTIES FIXTURES_REQUIRED plaza_content
                              PASS_REGULAR_EXPRESSION "picked the plaza's gate post through the tooling endpoint")
+        # A game's scripts debugged through the tooling endpoint (D460): a
+        # breakpoint at plaza's stroll stops the server in its tick, the
+        # stopped frame read, other verbs refused, and the game carries on.
+        add_test(NAME author_debugs
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_debugs.sh $<TARGET_FILE:rawframe_host_author>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf ${CMAKE_CURRENT_BINARY_DIR}/author_debugs)
+        set_tests_properties(author_debugs PROPERTIES FIXTURES_REQUIRED plaza_content
+                             PASS_REGULAR_EXPRESSION "stopped the plaza at its stroll system and carried on")
     endif()
     # A scene edited by an authoring session while a dedicated server plays
     # it (D410): the running World makes, writes, and lets go of the crate

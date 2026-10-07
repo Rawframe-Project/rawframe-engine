@@ -48,6 +48,8 @@ std::string_view codeName(ToolingError error) noexcept {
         return "configuration";
     case ToolingError::NotFound:
         return "not_found";
+    case ToolingError::Stopped:
+        return "stopped";
     }
     return "malformed";
 }
@@ -202,6 +204,10 @@ struct Client {
     std::optional<execution::MonotonicInstant> closingSince;
 };
 
+/// What `debug.break` takes at most: names, and a name's bytes.
+constexpr std::size_t kMostBreakpoints = 64;
+constexpr std::size_t kMostFunctionName = 256;
+
 constexpr execution::MonotonicDuration kLastReplyWithin = execution::MonotonicDuration::fromSeconds(1);
 
 } // namespace
@@ -212,6 +218,11 @@ struct ToolingServer::State {
     std::map<std::uint64_t, Client> clients;
     std::vector<network::Event> events;
     Statistics statistics;
+    /// Serving from inside a stopped tick, and whether a client said to
+    /// carry on (D460).
+    bool stopped = false;
+    bool carryOn = false;
+    world::TickIndex lastTick;
 
     void send(network::ConnectionId connection, Client& client, std::string_view line) {
         if (!client.stream.has_value()) {
@@ -409,11 +420,27 @@ struct ToolingServer::State {
             if (settings.grants.view) {
                 grants.push(Value::string("view"));
             }
+            if (settings.grants.debug && settings.debugging != nullptr) {
+                grants.push(Value::string("debug"));
+            }
             Value made = Value::object();
             made.add("kind", Value::string("tooling.welcome"));
             made.add("protocolVersion", Value::integer(kToolingProtocolVersion));
             made.add("grants", std::move(grants));
             send(connection, client, replyLine(id, "answer", std::move(made)));
+            return;
+        }
+        // Inside a stopped tick the World is half-stepped: only the
+        // debugger is answered (D460).
+        const bool kDebugVerb = kind != nullptr && kind->starts_with("debug.");
+        if (stopped && !kDebugVerb) {
+            send(connection,
+                 client,
+                 errorLine(id, ToolingError::Stopped, "the game is stopped at a breakpoint; only debug verbs answer"));
+            return;
+        }
+        if (kDebugVerb) {
+            debug(connection, client, id, *kind, *parsed);
             return;
         }
         if (kind != nullptr && *kind == "tooling.status") {
@@ -562,6 +589,69 @@ struct ToolingServer::State {
         send(connection, client, errorLine(id, ToolingError::Unsupported, "this endpoint has no such verb"));
     }
 
+    /// `debug.break` (`functions`, names), `debug.status`, and
+    /// `debug.continue`, under the debug grant (D460).
+    void debug(
+        network::ConnectionId connection, Client& client, const Value& id, std::string_view kind, const Value& record) {
+        if (!settings.grants.debug || settings.debugging == nullptr) {
+            send(connection, client, errorLine(id, ToolingError::NotGranted, "debugging needs the debug grant"));
+            return;
+        }
+        world_runtime::Debugging& debugging = *settings.debugging;
+        Value made = Value::object();
+        if (kind == "debug.break") {
+            const Value* kFunctions = record.find("functions");
+            std::vector<std::string> names;
+            bool named = kFunctions != nullptr && kFunctions->kind() == Value::Kind::Array &&
+                         kFunctions->items().size() <= kMostBreakpoints;
+            for (const Value& each : named ? kFunctions->items() : std::span<const Value>{}) {
+                named = named && each.kind() == Value::Kind::String && !each.text()->empty() &&
+                        each.text()->size() <= kMostFunctionName;
+                if (named) {
+                    names.push_back(*each.text());
+                }
+            }
+            if (!named) {
+                send(connection,
+                     client,
+                     errorLine(id, ToolingError::Malformed, "functions is a list of up to 64 function names"));
+                return;
+            }
+            made.add("kind", Value::string("debug.broken"));
+            made.add("found", Value::integer(static_cast<std::int64_t>(debugging.breakAt(std::move(names)))));
+        } else if (kind == "debug.status") {
+            made.add("kind", Value::string("debug.status"));
+            made.add("stopped", Value::boolean(debugging.stopped()));
+            made.add("stops", Value::integer(static_cast<std::int64_t>(debugging.stops())));
+            Value frames = Value::array();
+            for (const world_runtime::DebugFrame& each : debugging.stack()) {
+                Value locals = Value::array();
+                for (const auto& [kName, kValue] : each.locals) {
+                    Value local = Value::object();
+                    local.add("name", Value::string(kName));
+                    local.add("value", Value::string(kValue));
+                    locals.push(std::move(local));
+                }
+                Value frame = Value::object();
+                frame.add("function", Value::string(each.function));
+                frame.add("locals", std::move(locals));
+                frames.push(std::move(frame));
+            }
+            made.add("frames", std::move(frames));
+        } else if (kind == "debug.continue") {
+            if (!stopped) {
+                send(connection, client, errorLine(id, ToolingError::Stopped, "the game is not stopped"));
+                return;
+            }
+            carryOn = true;
+            made.add("kind", Value::string("debug.continued"));
+        } else {
+            send(connection, client, errorLine(id, ToolingError::Unsupported, "this endpoint has no such verb"));
+            return;
+        }
+        send(connection, client, replyLine(id, "answer", std::move(made)));
+    }
+
     void bytes(network::ConnectionId connection,
                Client& client,
                const network::Event& event,
@@ -623,8 +713,23 @@ ToolingServer::ToolingServer(std::unique_ptr<State> state) noexcept : state_(std
 
 ToolingServer::~ToolingServer() = default;
 
+bool ToolingServer::serveStopped(execution::MonotonicInstant now) {
+    State& state = *state_;
+    state.stopped = true;
+    state.carryOn = false;
+    serve(nullptr, state.lastTick, now);
+    state.stopped = false;
+    const bool kAnyAdmitted = std::ranges::any_of(state.clients, [](const auto& kEach) {
+        return kEach.second.admitted && !kEach.second.closing;
+    });
+    return state.carryOn || !kAnyAdmitted;
+}
+
 void ToolingServer::serve(const world::World* world, world::TickIndex tick, execution::MonotonicInstant now) {
     State& state = *state_;
+    if (!state.stopped) {
+        state.lastTick = tick;
+    }
     state.events.clear();
     state.provider->poll(state.events, 1024);
     for (const network::Event& event : state.events) {
