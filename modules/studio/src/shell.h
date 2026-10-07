@@ -48,6 +48,9 @@ inline constexpr diagnostics::EventIdentity kMarked{"studio", "studio_marked"};
 /// A drag in the played game committed to the chosen scene (D457, D463,
 /// D466, D467): how, and what it moved.
 inline constexpr diagnostics::EventIdentity kDragged{"studio", "studio_dragged"};
+/// The view moved in the played game (D469): how far its eye is from its
+/// target now.
+inline constexpr diagnostics::EventIdentity kViewMoved{"studio", "studio_view_moved"};
 
 /// Studio's colors, 0xRRGGBBAA: the window behind everything, a panel, a
 /// row, and the header.
@@ -365,6 +368,8 @@ private:
     std::vector<ui::Node> viewRows_;
     std::vector<FieldRow> viewFields_;
     std::uint64_t viewsSet_ = 0;
+    /// Views moved in the played game (D469).
+    std::uint64_t viewsMoved_ = 0;
     std::optional<PlaySettings> play_;
     std::optional<Play> playing_;
     std::optional<Play> stopping_;

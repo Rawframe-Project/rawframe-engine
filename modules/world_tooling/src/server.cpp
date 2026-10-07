@@ -559,6 +559,14 @@ struct ToolingServer::State {
                 }
                 return point;
             };
+            // The wheel and the right button's drags, totals (D469).
+            if (kClicked.has_value()) {
+                made.add("wheel", Value::real(kClicked->wheel));
+                Value orbit = Value::array();
+                orbit.push(Value::real(kClicked->orbit[0]));
+                orbit.push(Value::real(kClicked->orbit[1]));
+                made.add("orbit", std::move(orbit));
+            }
             // Where the pointer is, press or none (D468).
             if (kClicked.has_value() && kClicked->pointing) {
                 made.add("pointOrigin", kPoint(kClicked->pointOrigin));

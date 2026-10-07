@@ -42,6 +42,11 @@ struct Clicked {
     bool pointing = false;
     std::array<double, 3> pointOrigin{};
     std::array<double, 3> pointToward{};
+    /// The wheel's detents (toward the author positive) and the pixels the
+    /// pointer was carried with the right button held, totals from the
+    /// start (D469).
+    double wheel = 0;
+    std::array<double, 2> orbit{};
 };
 
 class Previewer {

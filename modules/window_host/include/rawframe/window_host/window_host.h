@@ -31,6 +31,7 @@
 #include "rawframe/window/surfaces.h"
 #include "rawframe/window/windows.h"
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -69,6 +70,8 @@ private:
     /// Asks the platform for text input, at the caret, while a UI field
     /// holds focus, and to stop when none does (D426).
     void followTextInput(window::Windows& windows);
+    /// Tells a preview the wheel and the right button's drags (D469).
+    void moveView(const window::Event& event);
 
     host::HostRequest request_;
     WindowHostSettings settings_;
@@ -83,6 +86,9 @@ private:
     /// Whether the players' gamepads play: `input.gamepads`, true unless
     /// told false (D467).
     bool gamepads_ = true;
+    /// Where the pointer was while the right button is held in a preview,
+    /// so its moves orbit the preview's view (D469); none while it is not.
+    std::optional<std::array<float, 2>> orbiting_;
     /// The caret the platform was last asked for text input at, none while
     /// it was not asked.
     std::optional<view::UiTyping::Caret> textInput_;

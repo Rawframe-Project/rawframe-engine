@@ -336,6 +336,16 @@ std::optional<std::string> pickedIn(std::string_view reply, std::string_view sce
     return *source->text();
 }
 
+std::optional<Value> viewedIn(std::string_view reply) {
+    const auto kParsed = document::parse(reply);
+    const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* viewed = answer != nullptr ? answer->find("viewed") : nullptr;
+    if (viewed == nullptr || viewed->kind() != Value::Kind::Object) {
+        return std::nullopt;
+    }
+    return *viewed;
+}
+
 std::optional<Moved> movedIn(std::string_view reply, std::string_view scene) {
     const auto kParsed = document::parse(reply);
     const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;

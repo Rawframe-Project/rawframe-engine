@@ -224,6 +224,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         if (event->kind == window::EventKind::Wheel) {
             pointing_.wheeled(event->motion.x, event->motion.y);
         }
+        moveView(*event);
         if (event->kind == window::EventKind::CursorMoved) {
             pointing_.pointAt(event->pointer.position.x, event->pointer.position.y);
             // And where it points in a preview, so the handle under it is
@@ -281,6 +282,29 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     }
 #endif
     return window::FrameOutcome::Continue;
+}
+
+void WindowHost::moveView(const window::Event& event) {
+    // A preview's view moved as an editor's viewport is (D469): the wheel
+    // zooms and a drag with the right button orbits, both told to the
+    // preview, which the author's session reads.
+    if (settings_.preview == nullptr || !settings_.preview->looking().has_value()) {
+        orbiting_.reset();
+        return;
+    }
+    if (event.kind == window::EventKind::Wheel) {
+        // The window's wheel turned away is positive; the preview counts
+        // toward the author so.
+        settings_.preview->wheeled(-event.motion.y);
+    } else if (event.kind == window::EventKind::ButtonDown && event.pointer.button == window::MouseButton::Right) {
+        orbiting_ = std::array<float, 2>{event.pointer.position.x, event.pointer.position.y};
+    } else if (event.kind == window::EventKind::ButtonUp && event.pointer.button == window::MouseButton::Right) {
+        orbiting_.reset();
+    } else if (event.kind == window::EventKind::CursorMoved && orbiting_.has_value()) {
+        settings_.preview->orbited(event.pointer.position.x - (*orbiting_)[0],
+                                   event.pointer.position.y - (*orbiting_)[1]);
+        orbiting_ = std::array<float, 2>{event.pointer.position.x, event.pointer.position.y};
+    }
 }
 
 void WindowHost::followTextInput(window::Windows& windows) {

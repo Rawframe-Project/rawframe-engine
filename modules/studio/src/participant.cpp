@@ -200,6 +200,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("undoable", static_cast<std::uint64_t>(undoable_)),
                   diagnostics::field("redoable", static_cast<std::uint64_t>(redoable_)),
                   diagnostics::field("viewsSet", viewsSet_),
+                  diagnostics::field("viewsMoved", viewsMoved_),
                   diagnostics::field("wheeled", wheeled_),
                   diagnostics::field("componentsScrolled", static_cast<double>(tree_->scrollOf(componentsColumn_)[1])),
                   diagnostics::field("previewing", previewing_),

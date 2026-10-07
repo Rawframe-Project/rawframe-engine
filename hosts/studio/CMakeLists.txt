@@ -307,6 +307,24 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "moved to 999,520.*\"code\":\"scene_summary\"[^\n]*\"marksLit\":[1-9]")
+        # The view moved in the played game (D469): the wheel turned three
+        # detents away over the played client's window brings the eye
+        # nearer, a drag with the right button carries it round, and Studio
+        # shows the view moved.
+        add_test(NAME studio_orbits_plaza
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
+                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 wheel=980,520,-3 orbit=980,520,1080,520 wait=3
+                         1096,23
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_orbits_plaza PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "orbited from 980,520 to 1080,520.*\"code\":\"studio_view_moved\"[^\n]*\"distance\":6\\.[0-9]*}.*\"code\":\"studio_summary\"[^\n]*\"viewsMoved\":[1-9]")
         # The mark's ring dragged (D467): seen from above, the post chosen,
         # its ring pressed left of it and let go in front of it, a quarter
         # turn about its upright.
@@ -355,7 +373,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # A played game is three programs, Studio, its server, and a client
         # drawing on the device: each counts as three of the tree's jobs, so
         # a check starts fewer at once and none starves the others (D467).
-        set_tests_properties(studio_plays_plaza studio_picks_plaza studio_drags_plaza studio_handles_plaza studio_hovers_plaza
+        set_tests_properties(studio_plays_plaza studio_picks_plaza studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza
                              studio_rings_plaza studio_raises_plaza studio_turns_plaza PROPERTIES PROCESSORS 3)
     endif()
 endif()

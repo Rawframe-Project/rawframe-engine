@@ -102,6 +102,27 @@ void ShellParticipant::pollPicks(double seconds) {
     if (kMoved.has_value()) {
         moveDragged(*kMoved);
     }
+    // The view moved in the played game, shown in the view's fields
+    // (D469).
+    if (auto viewed = viewedIn(kReply); viewed.has_value()) {
+        view_ = std::move(viewed);
+        ++viewsMoved_;
+        showViewText();
+        const Value* kEye = view_->find("eye");
+        const Value* kTarget = view_->find("target");
+        double distance = 0;
+        if (kEye != nullptr && kTarget != nullptr && kEye->items().size() == 3 && kTarget->items().size() == 3) {
+            for (std::size_t axis = 0; axis < 3; ++axis) {
+                const double kApart =
+                    kEye->items()[axis].real().value_or(0) - kTarget->items()[axis].real().value_or(0);
+                distance += kApart * kApart;
+            }
+        }
+        emitter_.log(diagnostics::Severity::Info,
+                     kViewMoved,
+                     "the view moved in the played game",
+                     {diagnostics::field("distance", std::sqrt(distance))});
+    }
 }
 
 std::optional<std::map<std::string, double, std::less<>>> ShellParticipant::poseOf(const std::string& source) {

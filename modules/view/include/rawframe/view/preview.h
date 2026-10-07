@@ -77,6 +77,24 @@ public:
         return pointing_;
     }
 
+    /// The wheel turned while the preview looks, detents toward the user
+    /// positive, and the pointer carried with the right button held, in
+    /// pixels: each kept as a total from the start, so a reader tells what
+    /// moved since it last read (D469).
+    void wheeled(double detents) noexcept {
+        wheel_ += detents;
+    }
+    void orbited(double x, double y) noexcept {
+        orbit_[0] += x;
+        orbit_[1] += y;
+    }
+    [[nodiscard]] double wheel() const noexcept {
+        return wheel_;
+    }
+    [[nodiscard]] const std::array<double, 2>& orbit() const noexcept {
+        return orbit_;
+    }
+
     /// A press in the window while the preview looks, as its ray.
     /// `modifiers` are the window's modifier bits held with the press: a
     /// drag with Shift moves height, with Control turns (D463).
@@ -119,6 +137,8 @@ private:
     std::uint64_t marks_ = 0;
     MarkPart lit_ = MarkPart::None;
     std::optional<Ray> pointing_;
+    double wheel_ = 0;
+    std::array<double, 2> orbit_{};
     std::optional<Ray> lastRelease_;
     std::uint64_t releases_ = 0;
 };

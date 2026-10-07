@@ -131,6 +131,11 @@ struct Moved {
 /// drag, or one of another scene's entity.
 [[nodiscard]] std::optional<Moved> movedIn(std::string_view reply, std::string_view scene);
 
+/// The view `authoring.pick`'s answer says the played game moved the
+/// scene's to by its wheel or a drag with the right button (D469); none
+/// where nothing moved.
+[[nodiscard]] std::optional<Value> viewedIn(std::string_view reply);
+
 /// `authoring.create_scene` for `scene` (D449).
 [[nodiscard]] Value createSceneRecord(std::int64_t id, std::string_view scene);
 

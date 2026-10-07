@@ -24,7 +24,8 @@
 # Control_L (D463). An argument `frozen=` and X key names presses them with
 # the program stopped, so it reads them in one frame (D458). An argument
 # `move=` and a point moves the pointer there with no press, a second
-# before going on (D468). An argument
+# before going on (D468), and `orbit=` and two points drags as `drag=`
+# does with the right button (D469). An argument
 # `wait=` and a number of seconds waits that long, and `until=` and a
 # record's code waits, up to three minutes, until the log holds it (D445).
 # Five seconds after, it stops the program whose pid its pid file holds
@@ -34,7 +35,8 @@
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
 #                 | wheel=<x>,<y>,<turns> | drag=<x>,<y>,<x>,<y>[,<key>]
-#                 | frozen=<key>[,<key>...] | move=<x>,<y> | wait=<seconds>
+#                 | frozen=<key>[,<key>...] | move=<x>,<y>
+#                 | orbit=<x>,<y>,<x>,<y> | wait=<seconds>
 #                 | until=<code>
 #                 [...]
 
@@ -127,7 +129,11 @@ def main():
         if argument.startswith("drag="):
             parts = argument[len("drag="):].split(",")
             fromX, fromY, toX, toY = (int(part) for part in parts[:4])
-            points.append((fromX, fromY, ("drag", toX, toY, parts[4] if len(parts) > 4 else "")))
+            points.append((fromX, fromY, ("drag", toX, toY, parts[4] if len(parts) > 4 else "", 1)))
+            continue
+        if argument.startswith("orbit="):
+            fromX, fromY, toX, toY = (int(part) for part in argument[len("orbit="):].split(","))
+            points.append((fromX, fromY, ("drag", toX, toY, "", 3)))
             continue
         if argument.startswith("wheel="):
             at, y, turns = (int(part) for part in argument[len("wheel="):].split(","))
@@ -194,7 +200,7 @@ def main():
                 xtest.XTestFakeKeyEvent(display, held, 1, 0)
                 x.XFlush(display)
                 time.sleep(0.2)
-            xtest.XTestFakeButtonEvent(display, 1, 1, 0)
+            xtest.XTestFakeButtonEvent(display, text[4], 1, 0)
             x.XFlush(display)
             for step in range(1, 11):
                 time.sleep(0.05)
@@ -202,13 +208,14 @@ def main():
                                            y + (text[2] - y) * step // 10, 0)
                 x.XFlush(display)
             time.sleep(0.2)
-            xtest.XTestFakeButtonEvent(display, 1, 0, 0)
+            xtest.XTestFakeButtonEvent(display, text[4], 0, 0)
             x.XFlush(display)
             if held:
                 time.sleep(0.2)
                 xtest.XTestFakeKeyEvent(display, held, 0, 0)
                 x.XFlush(display)
-            print(f"dragged from {at},{y} to {text[1]},{text[2]}{' holding ' + text[3] if text[3] else ''}")
+            print(f"{'orbited' if text[4] == 3 else 'dragged'} from {at},{y} to {text[1]},{text[2]}"
+                  f"{' holding ' + text[3] if text[3] else ''}")
             time.sleep(1)
             continue
         if isinstance(text, tuple):
