@@ -231,18 +231,16 @@ def check_launcher(files, allowed, findings):
                 findings.append(f"{relative}: includes OpenSSL's TLS, which only the launcher may")
 
 
-FRAGMENT_INPUT = re.compile(r"layout\(location\s*=\s*\d+\)\s*(?:flat\s+)?in\s+\w+\s+(\w+)\s*;")
+# Slang is the one first-party GPU language (ADR-0026, D475): a shader's
+# source is Slang, and every target language is compiled from it.
+OTHER_GPU_SOURCES = {".vert", ".frag", ".comp", ".geom", ".tesc", ".tese", ".glsl", ".hlsl", ".wgsl", ".metal"}
 
 
-def check_fragment_inputs(files, findings):
+def check_gpu_language(files, findings):
     for path in files:
         relative = path.relative_to(ROOT)
-        if relative.parts[0] != "modules" or path.suffix != ".frag":
-            continue
-        text = path.read_text(errors="replace")
-        for name in FRAGMENT_INPUT.findall(text):
-            if len(re.findall(r"\b" + name + r"\b", text)) < 2:
-                findings.append(f"{relative}: input {name} is declared and never read (D418)")
+        if relative.parts[0] in ("modules", "hosts") and path.suffix in OTHER_GPU_SOURCES:
+            findings.append(f"{relative}: a GPU source not in Slang, the one first-party GPU language (ADR-0026)")
 
 
 def check_owner_rules(files, findings):
@@ -279,7 +277,7 @@ def main():
     check_providers(files, findings)
     check_clusters(files, findings)
     check_launcher(files, modules, findings)
-    check_fragment_inputs(files, findings)
+    check_gpu_language(files, findings)
     check_value_calls(files, findings)
     check_bounds_literals(files, findings)
     check_sizes(files, findings, notes)
