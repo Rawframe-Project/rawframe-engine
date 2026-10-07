@@ -54,6 +54,9 @@ inline constexpr diagnostics::EventIdentity kViewMoved{"studio", "studio_view_mo
 /// The entity column shows what a search found (D473): how many, and the
 /// name and component searched for.
 inline constexpr diagnostics::EventIdentity kSearched{"studio", "studio_searched"};
+/// Each status the status line shows, as it shows it: what a test waits on
+/// before it stops Studio, however slowly frames come (D489).
+inline constexpr diagnostics::EventIdentity kSaid{"studio", "studio_said"};
 
 /// Studio's colors, 0xRRGGBBAA: the window behind everything, a panel, a
 /// row, and the header.

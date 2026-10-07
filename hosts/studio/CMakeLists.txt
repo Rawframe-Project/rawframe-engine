@@ -28,11 +28,14 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # chosen in the session; its body's width typed as 12 and given with
     # Enter is set by the session, which writes the level; an x typed
     # first is refused before it reaches the session. Undo then Redo in
-    # the header leave the edit standing.
+    # the header leave the edit standing. This test and those after it that
+    # end in an edit wait for its status (studio_said) before Studio is
+    # stopped, so a loaded machine drawing a frame a second still takes
+    # the last input (D489).
     add_test(NAME studio_clicked
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene 200,126 640,129 1100,353:x 1100,353:12 1166,23 1236,23
+                     games/runners/runners.game level.scene 200,126 640,129 1100,353:x 1100,353:12 1166,23 1236,23 "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_clicked PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -46,7 +49,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game level.scene 200,126 463,97 1100,97:crate 1100,129:runners.tile
-                     1236,129 517,97 1166,23
+                     1236,129 517,97 1166,23 "until=studio_said,status=\"undone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_operates PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -61,7 +64,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game level.scene 200,126 463,97 1100,129:attach 1100,161:west
                      1100,161:ground
-                     1100,161:gr 1100,161 keys=BackSpace,Return
+                     1100,161:gr 1100,161 keys=BackSpace,Return "until=studio_said,status=\"parent cleared\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_references PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -77,7 +80,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game hall.scene 200,97 674,193:x 674,193:platform 640,161 517,97
-                     589,97 690,97
+                     589,97 690,97 "until=studio_said,status=\"instance removed\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_instances PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -88,7 +91,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_makes_scenes
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game crate.scene 248,193:crate 463,97
+                     games/runners/runners.game crate.scene 248,193:crate 463,97 "until=studio_said,status=\"entity created\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_makes_scenes PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -99,7 +102,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_moves
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene 200,126 640,129 756,97 800,97 800,97
+                     games/runners/runners.game level.scene 200,126 640,129 756,97 800,97 800,97 "until=studio_said,status=\"moved down\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_moves PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -112,7 +115,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_duplicates
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene 200,126 640,129 800,65
+                     games/runners/runners.game level.scene 200,126 640,129 800,65 "until=studio_said,status=\"ground copy made\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_duplicates PROPERTIES
                          ENVIRONMENT "STUDIO_SHOW_WRITTEN=1"
@@ -126,7 +129,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_updates
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene 200,126 640,129 1178,129
+                     games/runners/runners.game level.scene 200,126 640,129 1178,129 "until=studio_said,status=\"rawframe.physics2d.body updated\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_updates PROPERTIES
                          ENVIRONMENT "STUDIO_SCENE_EDIT=s/\"rawframe.physics2d.body\": \"593035e6aa3af5e7\"/\"rawframe.physics2d.body\": \"0000000000000001\"/"
@@ -167,7 +170,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game level.scene 200,129 640,129 1100,97:first 1100,97:second
-                     1100,97:third 200,417 200,481
+                     1100,97:third 200,417 200,481 "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_steps_history PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -193,7 +196,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_scrolls
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene 200,126 640,225 wheel=1000,400,6 1100,457:9
+                     games/runners/runners.game level.scene 200,126 640,225 wheel=1000,400,6 1100,457:9 "until=studio_said,status=\"width set to 9\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_scrolls PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -205,7 +208,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_scrolls_frozen
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene 200,126 freeze 640,225 wheel=1000,400,6 thaw 1100,457:9
+                     games/runners/runners.game level.scene 200,126 freeze 640,225 wheel=1000,400,6 thaw 1100,457:9 "until=studio_said,status=\"width set to 9\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_scrolls_frozen PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -216,7 +219,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_clicks_frozen
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene freeze 200,126 640,225 wheel=1000,400,6 thaw 1100,457:9
+                     games/runners/runners.game level.scene freeze 200,126 640,225 wheel=1000,400,6 thaw 1100,457:9 "until=studio_said,status=\"width set to 9\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_clicks_frozen PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -241,7 +244,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_reverts
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene 200,126 640,321 1240,129
+                     games/runners/runners.game level.scene 200,126 640,321 1240,129 "until=studio_said,status=\"x reverted\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_reverts PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"

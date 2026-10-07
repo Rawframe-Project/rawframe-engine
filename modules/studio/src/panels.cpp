@@ -530,6 +530,12 @@ result::Status ShellParticipant::showHistory() {
 void ShellParticipant::say(std::string text) {
     status_ = std::move(text);
     static_cast<void>(words(statusNode_, status_, kQuiet, 14));
+    if (!status_.empty()) {
+        emitter_.log(diagnostics::Severity::Info,
+                     kSaid,
+                     "Studio's status line says",
+                     {diagnostics::field("status", std::string_view{status_})});
+    }
 }
 
 } // namespace rawframe::studio
