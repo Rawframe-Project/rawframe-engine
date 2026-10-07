@@ -1,4 +1,5 @@
 #include "generated/studio_font.h"
+#include "rawframe/authoring_session/attach.h"
 #include "shell.h"
 
 namespace rawframe::studio {
@@ -45,15 +46,16 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     }
     if (kPlayServer.has_value()) {
         std::error_code error;
-        const std::filesystem::path kTemporary = std::filesystem::temp_directory_path(error);
         play_ = PlaySettings{
             .server = std::string{*kPlayServer},
             .client = std::string{*kPlayClient},
             .game = std::filesystem::absolute(kDescription, error),
             .serverSettings = std::string{configuration.path("studio.play.server_settings").value_or("")},
             .clientSettings = std::string{configuration.path("studio.play.client_settings").value_or("")},
+            // The game's own play directory, where a debugger given the game
+            // finds it (D462).
             .directory = std::string{configuration.path("studio.play.directory")
-                                         .value_or((kTemporary / ("rawframe-studio-" + mintedIdentity())).string())}};
+                                         .value_or(authoring_session::playDirectoryOf(kDescription).string())}};
     }
     session_ = std::make_unique<authoring_session::Session>(kDescription, kRoot);
     description_ = kDescription;

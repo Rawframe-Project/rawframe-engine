@@ -44,12 +44,12 @@
         ],
         "configurationAttributes": {
           "attach": {
-            "required": [
-              "endpoint",
-              "pinFile",
-              "tokenFile"
-            ],
             "properties": {
+              "game": {
+                "type": "string",
+                "description": "The game Rawframe Studio plays, its `.game` file: attached through where Studio's Play records it. Or name the endpoint, pinFile, and tokenFile instead.",
+                "default": "${workspaceFolder}/game.game"
+              },
               "endpoint": {
                 "type": "string",
                 "description": "The game's tooling endpoint, its `tooling.endpoint` setting, granting debug (`tooling.grants = inspect debug`)."
@@ -69,7 +69,13 @@
           {
             "type": "rawframe",
             "request": "attach",
-            "name": "Rawframe: attach to the game",
+            "name": "Rawframe: attach to the game Studio plays",
+            "game": "${workspaceFolder}/game.game"
+          },
+          {
+            "type": "rawframe",
+            "request": "attach",
+            "name": "Rawframe: attach to a server",
             "endpoint": "127.0.0.1:7801",
             "pinFile": "${workspaceFolder}/server.fingerprint",
             "tokenFile": "${workspaceFolder}/tooling.token"

@@ -1,5 +1,6 @@
 #include "play.h"
 
+#include "rawframe/authoring_session/attach.h"
 #include "rawframe/studio/errors.h"
 
 #include <algorithm>
@@ -10,6 +11,11 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
+
+#if !defined(_WIN32)
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 namespace rawframe::studio {
 
@@ -50,6 +56,13 @@ result::Status privateDirectory(const std::filesystem::path& path) {
     if (!std::filesystem::is_directory(std::filesystem::symlink_status(path, error))) {
         return failed("the play directory is not a directory of its own");
     }
+#if !defined(_WIN32)
+    // Made by another user first, it is theirs: never written into (D462).
+    struct stat held{};
+    if (::lstat(path.c_str(), &held) != 0 || held.st_uid != ::getuid()) {
+        return failed("the play directory is another user's");
+    }
+#endif
     std::filesystem::permissions(
         path, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace, error);
     if (error) {
@@ -166,7 +179,8 @@ result::Status Play::launch() {
                                      {"replication.endpoint", "127.0.0.1:" + kPort},
                                      {"tooling.endpoint", "127.0.0.1:" + std::to_string(kServerEndpointPort)},
                                      {"tooling.token_file", (kAt / "token").string()},
-                                     {"tooling.grants", "inspect"}})));
+                                     // Picked from (D456) and debugged (D460).
+                                     {"tooling.grants", "inspect debug"}})));
     RAWFRAME_TRY(written(kAt / "client.conf",
                          settingsOf(contents(settings_.clientSettings),
                                     {{"host.iteration_rate", "120"},
@@ -184,6 +198,12 @@ result::Status Play::launch() {
                                      {"tooling.grants", "view"}})));
     endpointPort_ = kEndpointPort;
     serverEndpointPort_ = kServerEndpointPort;
+    // Where a debugger attaches, for rawframe-debug given the game (D462).
+    RAWFRAME_TRY(written(kAt / authoring_session::kAttachFile,
+                         authoring_session::attachText(authoring_session::AttachRecord{
+                             .endpoint = "127.0.0.1:" + std::to_string(kServerEndpointPort),
+                             .pinFile = (kAt / "server.fingerprint").string(),
+                             .tokenFile = (kAt / "token").string()})));
     RAWFRAME_TRY_ASSIGN(server_,
                         process::Child::start({.program = settings_.server,
                                                .arguments = {"--config", (kAt / "server.conf").string()},

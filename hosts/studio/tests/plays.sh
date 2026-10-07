@@ -3,8 +3,8 @@
 # game, so what it writes is the copy's, with the dedicated server's and the
 # client's programs to play it, and clicked at the points given
 # (tools/click.py) once it says it is shown. Prints the clicks, Studio's
-# log, and the played client's and server's logs. A
-# machine with no adapter the configuration allows skips, unless
+# log, the played client's and server's logs, and where a debugger attaches
+# (D462). A machine with no adapter the configuration allows skips, unless
 # RAWFRAME_REQUIRE_GPU is set. Run under an X server whose root window is
 # black (Xvfb -br), from the repository root.
 #
@@ -42,5 +42,5 @@ if grep -q '"device_unavailable"' "$work/studio.log" "$work/play/client.log" 2>/
     echo "skip: no device"
     exit 0
 fi
-cat "$work/studio.log" "$work/play/client.log" "$work/play/server.log" 2>/dev/null
+cat "$work/studio.log" "$work/play/client.log" "$work/play/server.log" "$work/play/debug.attach" 2>/dev/null
 exit "$status"
