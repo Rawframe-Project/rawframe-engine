@@ -55,6 +55,7 @@ printf '{"endpoint":"127.0.0.1:%s","pinFile":"%s","tokenFile":"%s"}\n' "$port" "
 python3 - "$adapter" "127.0.0.1:$port" "$work/fingerprint" "$work/token" "$game" "$played" <<'PY'
 import json
 import os
+import select
 import subprocess
 import sys
 import time
@@ -66,7 +67,8 @@ class Editor:
     """An editor's side of the protocol, over one adapter."""
 
     def __init__(self):
-        self.child = subprocess.Popen([adapter], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        # Unbuffered, so what select says waits is all there is to read.
+        self.child = subprocess.Popen([adapter], stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
         self.seq = 0
 
     def send(self, command, arguments=None):
@@ -77,7 +79,16 @@ class Editor:
         self.child.stdin.flush()
         return self.seq
 
-    def receive(self):
+    def receive(self, end):
+        # A silent adapter fails the step it was in, never hangs the test.
+        if not select.select([self.child.stdout], [], [], max(0.0, end - time.time()))[0]:
+            # Where each of its threads waits, for a hang seen only in a
+            # loaded check (D474).
+            tasks = "/proc/%d/task" % self.child.pid
+            for task in sorted(os.listdir(tasks)) if os.path.isdir(tasks) else []:
+                with open("%s/%s/wchan" % (tasks, task)) as wchan:
+                    print("adapter thread", task, wchan.read(), flush=True)
+            raise SystemExit("the adapter said nothing in time")
         length = 0
         while True:
             line = self.child.stdout.readline()
@@ -88,12 +99,18 @@ class Editor:
                 break
             if line.startswith(b"Content-Length:"):
                 length = int(line.split(b":")[1])
-        return json.loads(self.child.stdout.read(length))
+        body = b""
+        while len(body) < length:
+            more = self.child.stdout.read(length - len(body))
+            if not more:
+                raise SystemExit("the adapter ended")
+            body += more
+        return json.loads(body)
 
     def until(self, test, what, seconds=20):
         end = time.time() + seconds
         while time.time() < end:
-            message = self.receive()
+            message = self.receive(end)
             if test(message):
                 return message
         raise SystemExit("never " + what)
@@ -108,7 +125,11 @@ class Editor:
 
     def leave(self):
         assert self.answer(self.send("disconnect"))["success"]
-        self.child.wait(timeout=10)
+        try:
+            self.child.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            self.child.kill()
+            raise SystemExit("the adapter did not end after disconnect")
 
 
 # A token goes only to this machine: an endpoint elsewhere is refused
@@ -117,12 +138,14 @@ remote = Editor()
 refused = remote.attach({"endpoint": "10.0.0.1:" + endpoint.split(":")[1], "pinFile": pin, "tokenFile": token})
 assert not refused["success"] and "loopback" in refused["message"], refused
 remote.leave()
+print("a remote endpoint refused", flush=True)
 
 # A play directory others may enter is not trusted.
 open_to_others = Editor()
 refused = open_to_others.attach({"game": game})
 assert not refused["success"] and "open to others" in refused["message"], refused
 open_to_others.leave()
+print("a play directory open to others refused", flush=True)
 os.chmod(played, 0o700)
 
 editor = Editor()
@@ -149,7 +172,7 @@ assert editor.answer(editor.send("continue", {"threadId": 1}))["success"]
 # Stopped again at the next tick's stroll: the editor is told again.
 editor.until(lambda m: m.get("event") == "stopped", "stopped again")
 editor.leave()
-print("stroll stopped with count", variables[0]["value"])
+print("stroll stopped with count", variables[0]["value"], flush=True)
 
 # Attached by the game alone, through where Play recorded it.
 by_game = Editor()
