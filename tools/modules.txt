@@ -88,5 +88,6 @@ export_tool: process release content document result base
 scene_tool: world_kest scene kest result base
 studio_tool: studio window_host render render_canvas_gpu host window composition result base
 author: authoring_session authoring world_kest kest content scene schema document execution result base
+debug: authoring_session document result base
 animation_tool: animation_import animation content result base
 bake: scene_bake host game_content input_kest world_audio world_localization network_loopback render render_canvas render_canvas_gpu world_ui render_scene render_scene_gpu physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base

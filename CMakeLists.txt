@@ -176,6 +176,7 @@ add_subdirectory(hosts/build)
 add_subdirectory(hosts/export)
 add_subdirectory(hosts/scene_tool)
 add_subdirectory(hosts/author)
+add_subdirectory(hosts/debug)
 add_subdirectory(hosts/studio)
 add_subdirectory(hosts/animation_tool)
 # The launcher family (ADR-0060, ADR-0074, D414): what fetches, installs,
