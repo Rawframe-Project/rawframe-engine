@@ -164,9 +164,9 @@ Corner vs(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
         // A streak (D360): its segments through where it was over its last
         // `streak` seconds (none before its birth), facing the eye, its
         // size across at its head narrowing to nothing.
-        const uint point = vertex / 6u + (at >> 1u);
+        const uint joint = vertex / 6u + (at >> 1u);
         const float step = streak / float(kStreakSegments);
-        const float back = step * float(point);
+        const float back = step * float(joint);
         const float3 here = start + movedAt(particle, max(age - back, 0.0));
         const float3 runs =
             movedAt(particle, max(age - back + step, 0.0)) - movedAt(particle, max(age - back - step, 0.0));
@@ -174,8 +174,8 @@ Corner vs(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
         float3 across = cross(runs, toEye);
         across = dot(across, across) > 1e-12 ? normalize(across) : view.up.xyz;
         const float side = float(at & 1u) - 0.5;
-        const float width = size * (1.0 - float(point) / float(kStreakSegments));
-        corner.uv = float2(float(point) / float(kStreakSegments), float(at & 1u));
+        const float width = size * (1.0 - float(joint) / float(kStreakSegments));
+        corner.uv = float2(float(joint) / float(kStreakSegments), float(at & 1u));
         corner.shape = float2(0.0, side * 2.0);
         corner.position = mul(view.viewProjection, float4(here + across * (side * width), 1.0));
         return corner;
@@ -207,20 +207,20 @@ Corner ribbon(uint vertex : SV_VulkanVertexID)
     const uint first = drawnRibbon.range.x;
     const uint last = drawnRibbon.range.x + drawnRibbon.range.y - 1u;
     const uint index = first + vertex / 6u + (at >> 1u);
-    const Point point = points[index];
+    const Point node = points[index];
     const float3 runs = points[min(index + 1u, last)].placeWidth.xyz - points[max(index, first + 1u) - 1u].placeWidth.xyz;
     // The way to the eye: back along a flat view's forward, else from the
     // point to the eye.
-    const float3 toEye = view.lens.y > 0.5 ? cross(view.right.xyz, view.up.xyz) : -point.placeWidth.xyz;
+    const float3 toEye = view.lens.y > 0.5 ? cross(view.right.xyz, view.up.xyz) : -node.placeWidth.xyz;
     float3 across = cross(runs, toEye);
     across = dot(across, across) > 1e-12 ? normalize(across) : view.right.xyz;
     const float side = float(at & 1u) - 0.5;
     Corner corner;
-    corner.uv = float2(point.along.x, float(at & 1u));
-    corner.color = point.color;
-    corner.soft = max(0.5 * point.placeWidth.w, 1e-4);
+    corner.uv = float2(node.along.x, float(at & 1u));
+    corner.color = node.color;
+    corner.soft = max(0.5 * node.placeWidth.w, 1e-4);
     corner.shape = float2(0.0, side * 2.0);
-    corner.position = mul(view.viewProjection, float4(point.placeWidth.xyz + across * (side * point.placeWidth.w), 1.0));
+    corner.position = mul(view.viewProjection, float4(node.placeWidth.xyz + across * (side * node.placeWidth.w), 1.0));
     return corner;
 }
 
