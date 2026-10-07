@@ -116,6 +116,14 @@ Pipelines::~Pipelines() {
                                        postShader}) {
         static_cast<void>(mrhiDestroyShader(native, kShader));
     }
+    for (auto& [kProgram, shading] : programs) {
+        for (std::size_t at = 0; at < shading.variants.size(); ++at) {
+            if (shading.asked.at(at)) {
+                static_cast<void>(mrhiDestroyGraphicsPipeline(native, shading.variants.at(at).pipeline));
+            }
+        }
+        static_cast<void>(mrhiDestroyShader(native, shading.shader));
+    }
 }
 
 result::Status Pipelines::makeShader(std::span<const std::uint8_t> container, mrhiShaderId& shader) {
@@ -409,7 +417,8 @@ std::array<mrhiGraphicsPipelineDef, 2> surfacing(const mrhiGraphicsPipelineDef& 
     return {surfacesDef, cutSurfacesDef};
 }
 
-/// A lit pipeline's twin under the decals (D339).
+} // namespace
+
 mrhiGraphicsPipelineDef decaledOf(mrhiGraphicsPipelineDef def, std::string_view label) {
     def.label = label.data();
     def.labelLength = label.size();
@@ -417,8 +426,6 @@ mrhiGraphicsPipelineDef decaledOf(mrhiGraphicsPipelineDef def, std::string_view 
     def.fragmentEntryLength = 9;
     return def;
 }
-
-} // namespace
 
 result::Status Pipelines::askFor(Effect effect) {
     switch (effect) {

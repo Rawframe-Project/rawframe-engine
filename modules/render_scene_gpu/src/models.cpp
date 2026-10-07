@@ -129,19 +129,38 @@ result::Status ModelPasses::drawRuns(const Drawing& with,
                                      mrhiPassId pass,
                                      const Asked& single,
                                      const Asked& many,
-                                     const Runs& runs) {
+                                     const Runs& runs,
+                                     std::optional<Lighting> lighting) {
     if (runs.empty()) {
         return {};
     }
     // Multisampled, every pipeline's twin taking the frame's samples (D343).
-    if (mrhiSetGraphicsPipeline(native_, pass, (samples_ > 1 ? many : single).pipeline) != mrhi_success ||
+    const mrhiGraphicsPipelineId kEngine = (samples_ > 1 ? many : single).pipeline;
+    mrhiGraphicsPipelineId set = kEngine;
+    if (mrhiSetGraphicsPipeline(native_, pass, set) != mrhi_success ||
         mrhiSetVertexBuffer(native_, pass, 1, with.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
         return failed("the models could not be set up", mrhi_errorState);
     }
     // The table set again where a run samples another texture than the one
-    // before (D309), white for none and for one not held this frame.
+    // before (D309), white for none and for one not held this frame, or
+    // where another pipeline is set.
     std::optional<render_scene::SceneTextures> bound;
     for (const Run& run : runs) {
+        mrhiGraphicsPipelineId wanted = kEngine;
+        if (const Asked* kOwn =
+                lighting.has_value() && run.program != nullptr
+                    ? with.pipelines->programPipeline(run.program, lighting->shade, lighting->decaled, samples_ > 1)
+                    : nullptr;
+            kOwn != nullptr) {
+            wanted = kOwn->pipeline;
+        }
+        if (wanted.index1 != set.index1 || wanted.generation != set.generation) {
+            if (mrhiSetGraphicsPipeline(native_, pass, wanted) != mrhi_success) {
+                return failed("a material's program could not be set", mrhi_errorState);
+            }
+            set = wanted;
+            bound.reset();
+        }
         if (bound != run.texture) {
             bindTexture(*with.textures, *with.pipelines, table[10], table[11], run.texture.base);
             bindTexture(*with.textures, *with.pipelines, table[12], table[13], run.texture.packed);
@@ -205,20 +224,30 @@ result::Status ModelPasses::recordLit(const Drawing& with, bool decaled, std::sp
     if (mrhiBeginPass(native_, lit_) != mrhi_success) {
         return failed("a scene pass could not begin", mrhi_errorState);
     }
-    RAWFRAME_TRY(decaled ? drawRuns(with, table, lit_, pipelines.litDecaled, kMany.litDecaled, with.placed->runs)
-                         : drawRuns(with, table, lit_, pipelines.lit, kMany.lit, with.placed->runs));
+    const Lighting kLit{.shade = Shade::Lit, .decaled = decaled};
+    const Lighting kMasked{.shade = Shade::Masked, .decaled = decaled};
+    const Lighting kGlass{.shade = Shade::Glass, .decaled = decaled};
+    RAWFRAME_TRY(decaled ? drawRuns(with, table, lit_, pipelines.litDecaled, kMany.litDecaled, with.placed->runs, kLit)
+                         : drawRuns(with, table, lit_, pipelines.lit, kMany.lit, with.placed->runs, kLit));
     RAWFRAME_TRY(
-        decaled
-            ? drawRuns(with, table, lit_, pipelines.maskedLitDecaled, kMany.maskedLitDecaled, with.placed->maskedRuns)
-            : drawRuns(with, table, lit_, pipelines.maskedLit, kMany.maskedLit, with.placed->maskedRuns));
+        decaled ? drawRuns(with,
+                           table,
+                           lit_,
+                           pipelines.maskedLitDecaled,
+                           kMany.maskedLitDecaled,
+                           with.placed->maskedRuns,
+                           kMasked)
+                : drawRuns(with, table, lit_, pipelines.maskedLit, kMany.maskedLit, with.placed->maskedRuns, kMasked));
     if (mrhiSetGraphicsPipeline(native_, lit_, (samples_ > 1 ? kMany.sky : pipelines.sky).pipeline) != mrhi_success ||
         mrhiSetBindings(native_, lit_, 0, sky.data(), sky.size()) != mrhi_success ||
         mrhiDraw(native_, lit_, 3, 1, 0, 0) != mrhi_success) {
         return failed("the sky could not be drawn", mrhi_errorState);
     }
     RAWFRAME_TRY(
-        decaled ? drawRuns(with, table, lit_, pipelines.glassDecaled, kMany.glassDecaled, with.placed->translucentRuns)
-                : drawRuns(with, table, lit_, pipelines.glass, kMany.glass, with.placed->translucentRuns));
+        decaled
+            ? drawRuns(
+                  with, table, lit_, pipelines.glassDecaled, kMany.glassDecaled, with.placed->translucentRuns, kGlass)
+            : drawRuns(with, table, lit_, pipelines.glass, kMany.glass, with.placed->translucentRuns, kGlass));
     if (mrhiEndPass(native_, lit_) != mrhi_success) {
         return failed("a scene pass could not end", mrhi_errorState);
     }

@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <maul-rhi/encoder.h>
 #include <maul-rhi/frame.h>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -65,14 +66,22 @@ public:
     [[nodiscard]] bool surfaced() const noexcept;
 
 private:
+    /// What lit runs are lit as: their shade, and whether under decals.
+    struct Lighting {
+        Shade shade = Shade::Lit;
+        bool decaled = false;
+    };
+
     /// Runs of models drawn in `pass` by `single`'s pipeline, or by
-    /// `many`'s when multisampled, with `table`.
+    /// `many`'s when multisampled, with `table`; lit, a run whose material
+    /// has its own program by that program's twin, once it is made (D485).
     result::Status drawRuns(const Drawing& with,
                             std::span<mrhiBinding> table,
                             mrhiPassId pass,
                             const Asked& single,
                             const Asked& many,
-                            const Runs& runs);
+                            const Runs& runs,
+                            std::optional<Lighting> lighting = std::nullopt);
     [[nodiscard]] mrhiDepthTarget depthTarget() const noexcept;
 
     mrhiDevice* native_ = nullptr;

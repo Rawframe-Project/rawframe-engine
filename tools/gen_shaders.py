@@ -49,6 +49,10 @@ INVARIANT = ("scene",)
 # the module that exports it, the blob's for the containers the engine
 # ships, beside the module of what a material is.
 LINKED = {"scene": ("blob_material", "material")}
+# Materials written for a module's tests (D485): its module and its name,
+# built from tests/materials/NAME.slang with the scene, as `--material`
+# builds a game's, into tests/generated.
+TEST_MATERIALS = (("render_scene_gpu", "checker"),)
 # Each container: its module and its name.
 CONTAINERS = (
     ("render", "display"),
@@ -180,6 +184,18 @@ def main():
                 with open(os.path.join(sys.argv[3], f"scene{suffix}.mrsc"), "wb") as file:
                     file.write(data)
         return
+    with tempfile.TemporaryDirectory() as work:
+        for module, name in TEST_MATERIALS:
+            tests = os.path.join(ROOT, "modules", module, "tests")
+            shaders = os.path.join(ROOT, "modules", "render_scene_gpu", "shaders")
+            source = os.path.join(tests, "materials", f"{name}.slang")
+            generated = os.path.join(tests, "generated")
+            os.makedirs(generated, exist_ok=True)
+            for suffix, data in build(work, shaders, "scene", source).items():
+                target = os.path.join(generated, f"{name}{suffix}.mrsc")
+                with open(target, "wb") as file:
+                    file.write(data)
+                print(f"{target}: {len(data)} bytes")
     with tempfile.TemporaryDirectory() as work:
         for module, name in CONTAINERS:
             shaders = os.path.join(ROOT, "modules", module, "shaders")

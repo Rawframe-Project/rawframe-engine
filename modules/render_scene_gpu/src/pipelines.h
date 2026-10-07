@@ -7,9 +7,11 @@
 #include <array>
 #include <cstdint>
 #include <initializer_list>
+#include <map>
 #include <maul-rhi/pipeline.h>
 #include <maul-rhi/resources.h>
 #include <maul-rhi/shader.h>
+#include <memory>
 #include <span>
 #include <string_view>
 
@@ -64,6 +66,32 @@ struct Multisampled {
     Asked sky;
     Asked resolveDepth;
 };
+
+/// The lit models' pipelines, by what they draw: the opaque, the masked
+/// (D310), and the translucent (D305).
+enum class Shade : std::uint8_t {
+    Lit,
+    Masked,
+    Glass
+};
+
+/// A material's own program's lit pipelines (D485): the engine's own lit
+/// models' but for the shader, by what they draw, plain and under decals,
+/// single- and multisampled, each asked for when a frame first wants it
+/// (`variantOf`); refused where its shader or a pipeline could not be made,
+/// its models then lit by the engine's own.
+struct ProgramShading {
+    std::shared_ptr<const material::ProgramMaterial> program;
+    mrhiShaderId shader{};
+    std::array<Asked, 12> variants{};
+    std::array<bool, 12> asked{};
+    bool refused = false;
+};
+
+/// Where a program's pipeline for `shade` lies among its variants.
+[[nodiscard]] constexpr std::size_t variantOf(Shade shade, bool decaled, bool multisampled) noexcept {
+    return static_cast<std::size_t>(shade) + (decaled ? 3U : 0U) + (multisampled ? 6U : 0U);
+}
 
 /// The optional effects whose pipelines are asked for only when a view
 /// first wants them (D337): the prepass's surfaces target, which the
@@ -183,6 +211,9 @@ struct Pipelines {
     /// take: set once, before they are first asked for; nought until then.
     Multisampled multisampled;
     std::uint32_t samples = 0;
+    /// Every material's own program a frame has named, by its program
+    /// (D485), held so no other takes its place while its pipelines live.
+    std::map<const material::ProgramMaterial*, ProgramShading> programs;
 
     Pipelines() = default;
     Pipelines(const Pipelines&) = delete;
@@ -201,6 +232,18 @@ struct Pipelines {
     /// frame wants it, so the frames until the device answers go without
     /// it; an error if one could not be made.
     result::Result<bool> wanted(Effect effect);
+
+    /// Each of `named`'s programs' lit pipelines a frame draws with asked
+    /// for, plain and, where the frame wants them, under decals and
+    /// multisampled (`sampled`); those asked before polled (D485). A program refused
+    /// is refused for good, and is no frame's failure.
+    void
+    wantPrograms(std::span<const std::shared_ptr<const material::ProgramMaterial>> named, bool decaled, bool sampled);
+
+    /// The pipeline `program` lights `shade` with, made; none before, and
+    /// for a program refused.
+    [[nodiscard]] const Asked*
+    programPipeline(const material::ProgramMaterial* program, Shade shade, bool decaled, bool sampled) const;
 
 private:
     result::Status askFor(Effect effect);
@@ -233,5 +276,8 @@ private:
 
 /// Maul RHI's refusal, named.
 std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome);
+
+/// A lit pipeline's twin under the decals (D339).
+[[nodiscard]] mrhiGraphicsPipelineDef decaledOf(mrhiGraphicsPipelineDef def, std::string_view label);
 
 } // namespace rawframe::render_scene_gpu

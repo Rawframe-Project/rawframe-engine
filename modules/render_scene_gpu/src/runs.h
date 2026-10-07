@@ -1,7 +1,8 @@
 #pragma once
 
 // A frame's draws placed for the device: each draw's instance data, in
-// order, and the runs of one mesh and one material's textures each, an
+// order, and the runs of one mesh, one material's program, and its textures
+// each, an
 // instanced draw apiece from its first instance; the opaque, masked, and
 // translucent draws', and each shadow's casters'.
 
@@ -23,6 +24,9 @@ struct Run {
     std::uint32_t first = 0;
     std::uint32_t count = 0;
     render_scene::SceneTextures texture;
+    /// Its material's own program, which lights it (D485); none for the
+    /// engine's own, and for every shadow's casters.
+    const material::ProgramMaterial* program = nullptr;
 };
 using Runs = std::vector<Run>;
 

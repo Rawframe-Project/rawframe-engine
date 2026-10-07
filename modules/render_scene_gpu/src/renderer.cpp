@@ -466,6 +466,24 @@ struct SceneRenderer::State {
         // surface beside its depth (D327, D331).
         RAWFRAME_TRY(models->declare(
             open.width, open.height, kSampling ? frame->samples : 1, occlusion->enabled() || reflecting->enabled()));
+        // Each material's own program's lit pipelines, as this frame lights
+        // its models; until they are made, the engine's own light them
+        // (D485).
+        pipelines->wantPrograms(frame->programs, decalAtlas->drawn() > 0, kSampling);
+        for (const Runs* kRuns : {&now.placed.runs, &now.placed.maskedRuns, &now.placed.translucentRuns}) {
+            for (std::size_t at = 0; at < kRuns->size(); ++at) {
+                const Run& kRun = (*kRuns)[at];
+                if (kRun.program == nullptr) {
+                    continue;
+                }
+                const Shade kShade = kRuns == &now.placed.runs         ? Shade::Lit
+                                     : kRuns == &now.placed.maskedRuns ? Shade::Masked
+                                                                       : Shade::Glass;
+                const bool kOwn =
+                    pipelines->programPipeline(kRun.program, kShade, decalAtlas->drawn() > 0, kSampling) != nullptr;
+                (kOwn ? statistics.programModelsDrawn : statistics.programModelsWaiting) += kRun.count;
+            }
+        }
         RAWFRAME_TRY(motionBlur->declare(*frame, kBlurring, open.width, open.height, writes));
         RAWFRAME_TRY(focus->declare(*frame, kFocusing, open.width, open.height, writes));
         RAWFRAME_TRY(bloom->declare(*frame, kBlooming, open.width, open.height));

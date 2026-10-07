@@ -9,10 +9,11 @@ namespace rawframe::render_scene_gpu {
 namespace {
 
 /// The draws' placements, and their runs; a shadow's casters' by mesh
-/// alone (`materialTextures` none).
+/// and texture alone (`materialPrograms` none).
 void append(std::span<const render_scene::SceneDraw> draws,
             const std::map<std::uint64_t, const HeldMesh*>& usable,
             std::span<const render_scene::SceneTextures> materialTextures,
+            std::span<const std::shared_ptr<const material::ProgramMaterial>> materialPrograms,
             Placed& placed,
             Runs& runs,
             std::uint32_t& count,
@@ -44,16 +45,19 @@ void append(std::span<const render_scene::SceneDraw> draws,
         placed.instances.push_back(static_cast<float>(draw.material));
         const render_scene::SceneTextures kTexture =
             draw.material < materialTextures.size() ? materialTextures[draw.material] : render_scene::SceneTextures{};
+        const material::ProgramMaterial* kProgram =
+            draw.material < materialPrograms.size() ? materialPrograms[draw.material].get() : nullptr;
         const auto kIndices = static_cast<std::uint32_t>(kMesh->second->source->indices.size());
         const std::uint32_t kCount = draw.indexCount != 0 ? draw.indexCount : kIndices - draw.firstIndex;
         if (runs.empty() || runs.back().mesh != kMesh->second || runs.back().firstIndex != draw.firstIndex ||
-            runs.back().indexCount != kCount || runs.back().texture != kTexture) {
+            runs.back().indexCount != kCount || runs.back().texture != kTexture || runs.back().program != kProgram) {
             runs.push_back({.mesh = kMesh->second,
                             .firstIndex = draw.firstIndex,
                             .indexCount = kCount,
                             .first = count,
                             .count = 0,
-                            .texture = kTexture});
+                            .texture = kTexture,
+                            .program = kProgram});
         }
         ++runs.back().count;
         ++count;
@@ -79,22 +83,38 @@ Placed placeDraws(const render_scene::SceneFrame& scene,
         return split;
     };
     const auto [kSolid, kMasked] = kSplit(kDraws.first(kOpaque));
-    append(kSolid, usable, scene.textures, placed, placed.runs, count, true, modelsLeftOut);
-    append(kMasked, usable, scene.textures, placed, placed.maskedRuns, count, true, modelsLeftOut);
-    append(kDraws.subspan(kOpaque), usable, scene.textures, placed, placed.translucentRuns, count, true, modelsLeftOut);
+    append(kSolid, usable, scene.textures, scene.programs, placed, placed.runs, count, true, modelsLeftOut);
+    append(kMasked, usable, scene.textures, scene.programs, placed, placed.maskedRuns, count, true, modelsLeftOut);
+    append(kDraws.subspan(kOpaque),
+           usable,
+           scene.textures,
+           scene.programs,
+           placed,
+           placed.translucentRuns,
+           count,
+           true,
+           modelsLeftOut);
     const std::span<const render_scene::SceneDraw> kSunCasters = scene.shadows.casters;
     for (std::size_t at = 0; at < scene.shadows.count && at < placed.cascadeRuns.size(); ++at) {
         const render_scene::ShadowCascade& kCascade = scene.shadows.cascades[at];
         const auto [kCastSolid, kCastMasked] = kSplit(kSunCasters.subspan(kCascade.firstCaster, kCascade.casterCount));
-        append(kCastSolid, usable, {}, placed, placed.cascadeRuns[at].solid, count, false, modelsLeftOut);
-        append(kCastMasked, usable, scene.textures, placed, placed.cascadeRuns[at].masked, count, false, modelsLeftOut);
+        append(kCastSolid, usable, {}, {}, placed, placed.cascadeRuns[at].solid, count, false, modelsLeftOut);
+        append(kCastMasked,
+               usable,
+               scene.textures,
+               {},
+               placed,
+               placed.cascadeRuns[at].masked,
+               count,
+               false,
+               modelsLeftOut);
     }
     const std::span<const render_scene::SceneDraw> kCasters = scene.lightShadows.casters;
     for (const render_scene::ShadowSlot& slot : scene.lightShadows.slots) {
         const auto [kCastSolid, kCastMasked] = kSplit(kCasters.subspan(slot.firstCaster, slot.casterCount));
         Casters& casters = placed.slotRuns.emplace_back();
-        append(kCastSolid, usable, {}, placed, casters.solid, count, false, modelsLeftOut);
-        append(kCastMasked, usable, scene.textures, placed, casters.masked, count, false, modelsLeftOut);
+        append(kCastSolid, usable, {}, {}, placed, casters.solid, count, false, modelsLeftOut);
+        append(kCastMasked, usable, scene.textures, {}, placed, casters.masked, count, false, modelsLeftOut);
     }
     return placed;
 }
