@@ -294,6 +294,10 @@ bool WorldUi::enterNavigation() {
     return true;
 }
 
+std::size_t WorldUi::reachable() {
+    return state_->reachable(false).size();
+}
+
 bool WorldUi::navigate(view::NavigationMove move) {
     return state_->moveFocus(move, false);
 }

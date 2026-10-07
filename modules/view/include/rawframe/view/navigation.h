@@ -45,6 +45,9 @@ public:
         std::function<void()> dismiss;
         /// Whether a node holds focus.
         std::function<bool()> focused;
+        /// Whether navigation reaches any node: one that takes presses or
+        /// a text field, so a key may enter it (D476).
+        std::function<bool()> reachable;
     };
 
     UiNavigation() = default;
@@ -73,6 +76,9 @@ public:
     }
     [[nodiscard]] bool focused() const {
         return answers_.focused ? answers_.focused() : false;
+    }
+    [[nodiscard]] bool reachable() const {
+        return answers_.reachable ? answers_.reachable() : false;
     }
 
 private:

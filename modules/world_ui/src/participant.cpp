@@ -31,6 +31,9 @@ namespace {
 
 constexpr diagnostics::EventIdentity kUiSummary{"ui", "ui_summary"};
 constexpr diagnostics::EventIdentity kFailed{"ui", "ui_failed"};
+// Navigation reaches more nodes than it ever has (D476): how many, so a
+// test or a tool waits for the UI it will press rather than for time.
+constexpr diagnostics::EventIdentity kReachable{"ui", "ui_reachable"};
 constexpr diagnostics::EventIdentity kImageUnknown{"ui", "image_unknown"};
 constexpr diagnostics::EventIdentity kImageUnread{"ui", "image_unavailable"};
 constexpr diagnostics::EventIdentity kFontUnread{"ui", "font_unavailable"};
@@ -376,6 +379,10 @@ public:
                                                             .focused =
                                                                 [this] {
                                                                     return !failed_ && ui_->navigating();
+                                                                },
+                                                            .reachable =
+                                                                [this] {
+                                                                    return !failed_ && ui_->reachable() > 0;
                                                                 }});
         }
         return {};
@@ -424,6 +431,15 @@ public:
             return;
         }
         drawn_ = &ui_->drawn();
+        // Told when it grows past the most so far, so a UI being built is
+        // told a few times, never a frame at a time.
+        if (const std::size_t kNow = ui_->reachable(); kNow > mostReachable_) {
+            mostReachable_ = kNow;
+            emitter_.log(diagnostics::Severity::Info,
+                         kReachable,
+                         "navigation reaches more of the UI than it has",
+                         {diagnostics::field("reachable", static_cast<std::uint64_t>(kNow))});
+        }
         // Where the field holding the keyboard has its caret, for the
         // platform's input method, and what fields gave, for the sample.
         if (typing_ != nullptr) {
@@ -613,6 +629,8 @@ private:
     /// Presses the UI took (D421).
     std::uint64_t presses_ = 0;
     std::uint64_t tick_ = 0;
+    /// The most nodes navigation has reached (D476).
+    std::size_t mostReachable_ = 0;
     bool failed_ = false;
     diagnostics::Emitter emitter_;
 };

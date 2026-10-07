@@ -549,7 +549,10 @@ RAWFRAME_TEST(NavigationMovesFocusAndActivatesWhatItHolds) {
     // In the panel, side by side: a node that takes presses (105, 55),
     // then a field (215, 55).
     rig.put(rig.player, kHudId, panel());
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->reachable() == 0);
+    // Navigation reaches each as it is made (D476).
     rig.put(rig.player, kMeterId, Node{.widthOffset = 100, .heightOffset = 20, .fill = 0x40C040FF, .press = 1});
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->reachable() == 1);
     rig.put(rig.player,
             kRowId,
             Node{.widthOffset = 100,
@@ -560,7 +563,7 @@ RAWFRAME_TEST(NavigationMovesFocusAndActivatesWhatItHolds) {
                  .textColor = 0xFFFFFFFF,
                  .press = 2,
                  .edit = 1});
-    RAWFRAME_EXPECT(rig.frame());
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->reachable() == 2);
     const auto kRinged = [&rig] {
         return rig.frame() ? rig.ui->drawn().shadows.size() : std::size_t{99};
     };

@@ -253,8 +253,13 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         // keyboard may move focus or give a field the keyboard, which the
         // iterations do; the events after it wait for the next frame, so a
         // key typed after one that gave a field the keyboard reaches that
-        // field however many a slow frame gathers (D458).
-        if (event->kind == window::EventKind::KeyDown && !typing_.editing() && navigation_.focused()) {
+        // field however many a slow frame gathers (D458). So may a key
+        // pressed while navigation reaches a node but is not entered: the
+        // game's sample may enter it, after the frame's navigation is
+        // done, and a key after it would find navigation not yet entered
+        // (D476).
+        if (event->kind == window::EventKind::KeyDown && !typing_.editing() &&
+            (navigation_.focused() || navigation_.reachable())) {
             break;
         }
     }

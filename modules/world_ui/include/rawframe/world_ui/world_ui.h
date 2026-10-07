@@ -224,6 +224,9 @@ public:
     /// to the first in reading order of the first view with any, unless a
     /// node holds it; whether one holds it after.
     bool enterNavigation();
+    /// How many nodes navigation reaches now: those that take presses and
+    /// the text fields of the first view with any.
+    [[nodiscard]] std::size_t reachable();
     /// Focus moved from the node holding it, the nearest node in a
     /// direction or the next in reading order; whether it moved.
     bool navigate(view::NavigationMove move);
