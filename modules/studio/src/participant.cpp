@@ -146,6 +146,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     // Scroll steps ease over the layouts that follow, by this clock.
     const double kSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began_).count() + 1;
     attachPlayed(kSeconds);
+    pollPicks(kSeconds);
     for (const auto& [kX, kY, kDeltaX, kDeltaY] : wheels_) {
         ++wheeled_;
         static_cast<void>(tree_->wheel(root_, kX, kY, kDeltaX, kDeltaY, kSeconds));
@@ -203,6 +204,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("played", played_),
                   diagnostics::field("playing", playing_.has_value() && playing_->running()),
                   diagnostics::field("opened", opened_),
+                  diagnostics::field("picked", picked_),
                   diagnostics::field("status", std::string_view{status_}),
                   diagnostics::field("framesDrawn", framesDrawn_),
                   diagnostics::field("boxes", static_cast<std::uint64_t>(list_.boxes.size())),

@@ -264,6 +264,10 @@ private:
     /// then admits a session once its player is in.
     void attachPlayed(double seconds);
 
+    /// Selects what the author last clicked in the preview, if it is new
+    /// and the chosen scene brought it (D456); asked four times a second.
+    void pollPicks(double seconds);
+
     /// Attaches the chosen scene's preview to `preview_`, saying how it
     /// went and logging `studio_previewing` once it is live.
     void attachPreview();
@@ -336,6 +340,8 @@ private:
     ui::Node playNode_{};
     std::uint64_t played_ = 0;
     double nextAttach_ = 0;
+    double nextPick_ = 0;
+    std::uint64_t picked_ = 0;
     std::vector<std::array<float, 4>> wheels_;
     std::uint64_t wheeled_ = 0;
     std::chrono::steady_clock::time_point began_ = std::chrono::steady_clock::now();

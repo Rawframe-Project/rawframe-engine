@@ -140,6 +140,8 @@ private:
             return created(record);
         case authoring::SessionVerb::History:
             return historyOf(record);
+        case authoring::SessionVerb::Pick:
+            return picked(record);
         case authoring::SessionVerb::Assets: {
             Value made = Value::object();
             made.add("kind", Value::string("authoring.assets"));
@@ -509,9 +511,29 @@ private:
                                                result::ErrorClass::PermissionDenied,
                                                "the preview's endpoint does not grant view")};
             }
+            // The server the game plays on, for picking (D456): a loopback
+            // client too, granting inspect.
+            if (record.preview->serverEndpoint.has_value()) {
+                const std::optional<std::string> kServer = loopbackEndpoint(*record.preview->serverEndpoint);
+                std::string welcomed;
+                server_ = kServer.has_value() ? ToolingLink::open(*kServer,
+                                                                  record.preview->serverPinFile->c_str(),
+                                                                  record.preview->tokenFile.c_str(),
+                                                                  welcomed)
+                                              : nullptr;
+                if (server_ == nullptr || welcomed.find("\"inspect\"") == std::string::npos) {
+                    letGo();
+                    return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
+                                                   result::ErrorClass::Unavailable,
+                                                   "the previewed game's server could not be reached, or does not "
+                                                   "grant inspect")
+                                               .withContext("said", welcomed)};
+                }
+            }
             previewScene_ = record.scene;
             previewed_ = std::nullopt;
             told_ = false;
+            clicks_ = 0;
         }
         Value made = Value::object();
         made.add("kind", Value::string("authoring.preview"));
@@ -526,7 +548,50 @@ private:
             (void)preview_->ask(R"({"kind":"tooling.look","id":0,"view":null})");
         }
         preview_.reset();
+        server_.reset();
         previewScene_.clear();
+    }
+
+    /// What the author last clicked in the scene's preview (D456): the
+    /// preview's newest press, if it is new, asked of the server as a pick.
+    /// Answers how many presses there have been, and what the newest met:
+    /// its scene and its id there, both null for nothing authored or no new
+    /// press.
+    result::Result<Value> picked(const authoring::SessionRecord& record) {
+        if (preview_ == nullptr || server_ == nullptr || record.scene != previewScene_) {
+            return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
+                                           result::ErrorClass::FailedPrecondition,
+                                           "picking needs the scene previewed, with its game's server")
+                                       .withContext("scene", record.scene)};
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.picked"));
+        const auto kClicked = preview_->ask(R"({"kind":"tooling.clicked","id":0})");
+        const auto kParsed = rawframe::document::parse(kClicked.value_or(std::string{}));
+        const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+        const Value* kCount = kAnswer != nullptr ? kAnswer->find("count") : nullptr;
+        const std::int64_t kClicks = kCount != nullptr ? kCount->integer().value_or(0) : 0;
+        Value scene;
+        Value source;
+        if (kClicks > clicks_ && kAnswer->find("origin") != nullptr && kAnswer->find("toward") != nullptr) {
+            Value pick = Value::object();
+            pick.add("kind", Value::string("tooling.pick"));
+            pick.add("id", Value::integer(0));
+            pick.add("origin", *kAnswer->find("origin"));
+            pick.add("toward", *kAnswer->find("toward"));
+            const auto kPicked = server_->ask(rawframe::document::writeCompact(pick));
+            const auto kRead = rawframe::document::parse(kPicked.value_or(std::string{}));
+            const Value* kHit = kRead.has_value() ? kRead->find("answer") : nullptr;
+            if (kHit != nullptr && kHit->find("scene") != nullptr && kHit->find("source") != nullptr) {
+                scene = *kHit->find("scene");
+                source = *kHit->find("source");
+            }
+        }
+        clicks_ = std::max(clicks_, kClicks);
+        made.add("clicks", Value::integer(kClicks));
+        made.add("scene", std::move(scene));
+        made.add("source", std::move(source));
+        return made;
     }
 
     /// Hands the preview the scene's view where it previews that scene and
@@ -625,6 +690,10 @@ private:
     /// The preview and the scene it shows (D433), the view it was last
     /// told, and the looks asked of it.
     std::unique_ptr<ToolingLink> preview_;
+    /// The previewed game's server, for picking (D456), and the presses
+    /// already answered.
+    std::unique_ptr<ToolingLink> server_;
+    std::int64_t clicks_ = 0;
     std::string previewScene_;
     std::optional<authoring::SceneView> previewed_;
     bool told_ = false;

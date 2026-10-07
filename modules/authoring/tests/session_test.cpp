@@ -46,6 +46,20 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     const auto kAssets = readSessionRecord(R"({"kind":"authoring.assets","id":9})", id);
     RAWFRAME_EXPECT(kAssets.has_value() && kAssets->verb == SessionVerb::Assets);
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.assets","id":9,"scene":"b.scene"})", id).has_value());
+    const auto kPick = readSessionRecord(R"({"kind":"authoring.pick","id":10,"scene":"b.scene"})", id);
+    RAWFRAME_EXPECT(kPick.has_value() && kPick->verb == SessionVerb::Pick && kPick->scene == "b.scene");
+    const auto kServed = readSessionRecord(
+        R"({"kind":"authoring.preview","id":11,"scene":"b.scene","preview":{"endpoint":"127.0.0.1:2","pinFile":"c",)"
+        R"("tokenFile":"t","server":{"endpoint":"127.0.0.1:3","pinFile":"s"}}})",
+        id);
+    RAWFRAME_EXPECT(kServed.has_value() && kServed->preview->serverEndpoint == "127.0.0.1:3" &&
+                    kServed->preview->serverPinFile == "s");
+    // A server is an endpoint and a pin file, both.
+    RAWFRAME_EXPECT(
+        !readSessionRecord(R"({"kind":"authoring.preview","scene":"b.scene","preview":{"endpoint":"127.0.0.1:2",)"
+                           R"("pinFile":"c","tokenFile":"t","server":{"endpoint":"127.0.0.1:3"}}})",
+                           id)
+             .has_value());
     const auto kHistory = readSessionRecord(R"({"kind":"authoring.history","id":7,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kHistory.has_value() && kHistory->verb == SessionVerb::History && kHistory->scene == "b.scene");
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.history","id":8})", id).has_value());

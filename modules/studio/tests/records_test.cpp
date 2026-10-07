@@ -85,6 +85,31 @@ RAWFRAME_TEST(AnInstanceNamesOneSceneByPathOrFile) {
     RAWFRAME_EXPECT(!sceneNamed(kScenes, "", why).has_value());
 }
 
+RAWFRAME_TEST(APickNamesTheEntityTheChosenSceneBrought) {
+    RAWFRAME_EXPECT(document::writeCompact(pickRecord(6, "gate.scene")) ==
+                    R"({"kind":"authoring.pick","id":6,"scene":"gate.scene"})");
+    const std::string_view kPicked =
+        R"({"kind":"authoring.reply","id":6,"answer":{"kind":"authoring.picked","clicks":2,"scene":"gate.scene",)"
+        R"("source":"6c632219-53a9-4af4-8781-bb2a8f4fa53b"}})";
+    RAWFRAME_EXPECT(pickedIn(kPicked, "gate.scene") == "6c632219-53a9-4af4-8781-bb2a8f4fa53b");
+    // Another scene's entity, nothing, or a refusal chooses nothing here.
+    RAWFRAME_EXPECT(!pickedIn(kPicked, "level.scene").has_value());
+    RAWFRAME_EXPECT(
+        !pickedIn(R"({"answer":{"kind":"authoring.picked","clicks":2,"scene":null,"source":null}})", "gate.scene")
+             .has_value());
+    RAWFRAME_EXPECT(!pickedIn(R"({"error":{"message":"no"}})", "gate.scene").has_value());
+    // A preview with its game's server names it for picking.
+    const Preview kPreview{.endpoint = "127.0.0.1:2",
+                           .pinFile = "c",
+                           .tokenFile = "t",
+                           .serverEndpoint = "127.0.0.1:3",
+                           .serverPinFile = "s"};
+    RAWFRAME_EXPECT(
+        document::writeCompact(previewRecord(7, "gate.scene", &kPreview)) ==
+        R"({"kind":"authoring.preview","id":7,"scene":"gate.scene","preview":{"endpoint":"127.0.0.1:2","pinFile":"c",)"
+        R"("tokenFile":"t","server":{"endpoint":"127.0.0.1:3","pinFile":"s"}}})");
+}
+
 RAWFRAME_TEST(AHistoryIsReadEntryByEntry) {
     const std::vector<HistoryEntry> kRead = historyOf(
         R"({"kind":"authoring.reply","id":3,"answer":{"kind":"authoring.history","reopened":false,"entries":[)"

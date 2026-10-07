@@ -96,6 +96,12 @@ struct Asset {
 /// How Studio shows `asset` in a field.
 [[nodiscard]] std::string assetShown(const Asset& asset);
 
+/// `authoring.pick` for `scene` (D456), and what its answer says the
+/// author's newest click met in the scene: its id there; none for no new
+/// click, or one that met nothing `scene` brings.
+[[nodiscard]] Value pickRecord(std::int64_t id, std::string_view scene);
+[[nodiscard]] std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene);
+
 /// `authoring.create_scene` for `scene` (D449).
 [[nodiscard]] Value createSceneRecord(std::int64_t id, std::string_view scene);
 
@@ -104,6 +110,11 @@ struct Preview {
     std::string endpoint;
     std::string pinFile;
     std::string tokenFile;
+    /// The previewed game's server, for picking (D456): its tooling
+    /// endpoint and fingerprint file, the token the preview's; empty for
+    /// none.
+    std::string serverEndpoint;
+    std::string serverPinFile;
 };
 
 /// `authoring.view` of `scene`.

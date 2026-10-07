@@ -138,11 +138,13 @@ result::Status Play::launch() {
     admitted_ = false;
     clientLogRead_ = 0;
     std::random_device device;
-    // Two ports below every system's range for outgoing connections (Linux
-    // takes 32768 and up, Windows 49152 and up), so no socket of another
-    // process holds one by chance; the endpoint's after the server's.
-    const auto kServerPort = static_cast<std::uint16_t>(20000 + (device() % 6000) * 2);
+    // Three ports below every system's range for outgoing connections
+    // (Linux takes 32768 and up, Windows 49152 and up), so no socket of
+    // another process holds one by chance: the server's, the client's
+    // endpoint after it, and the server's endpoint, for picking (D456).
+    const auto kServerPort = static_cast<std::uint16_t>(20000 + (device() % 3000) * 4);
     const auto kEndpointPort = static_cast<std::uint16_t>(kServerPort + 1);
+    const auto kServerEndpointPort = static_cast<std::uint16_t>(kServerPort + 2);
     const std::filesystem::path& kAt = directory_;
     for (const char* kLeft : {"server.fingerprint", "client.fingerprint"}) {
         std::error_code error;
@@ -161,7 +163,10 @@ result::Status Play::launch() {
                                     {{"kest.game", kGame},
                                      {"network.quic.self_signed", "true"},
                                      {"network.quic.fingerprint_file", (kAt / "server.fingerprint").string()},
-                                     {"replication.endpoint", "127.0.0.1:" + kPort}})));
+                                     {"replication.endpoint", "127.0.0.1:" + kPort},
+                                     {"tooling.endpoint", "127.0.0.1:" + std::to_string(kServerEndpointPort)},
+                                     {"tooling.token_file", (kAt / "token").string()},
+                                     {"tooling.grants", "inspect"}})));
     RAWFRAME_TRY(written(kAt / "client.conf",
                          settingsOf(contents(settings_.clientSettings),
                                     {{"host.iteration_rate", "120"},
@@ -178,6 +183,7 @@ result::Status Play::launch() {
                                      {"tooling.token_file", (kAt / "token").string()},
                                      {"tooling.grants", "view"}})));
     endpointPort_ = kEndpointPort;
+    serverEndpointPort_ = kServerEndpointPort;
     RAWFRAME_TRY_ASSIGN(server_,
                         process::Child::start({.program = settings_.server,
                                                .arguments = {"--config", (kAt / "server.conf").string()},
@@ -234,9 +240,11 @@ std::optional<Preview> Play::preview() {
             return std::nullopt;
         }
     }
-    return Preview{"127.0.0.1:" + std::to_string(endpointPort_),
-                   (directory_ / "client.fingerprint").string(),
-                   (directory_ / "token").string()};
+    return Preview{.endpoint = "127.0.0.1:" + std::to_string(endpointPort_),
+                   .pinFile = (directory_ / "client.fingerprint").string(),
+                   .tokenFile = (directory_ / "token").string(),
+                   .serverEndpoint = "127.0.0.1:" + std::to_string(serverEndpointPort_),
+                   .serverPinFile = (directory_ / "server.fingerprint").string()};
 }
 
 bool Play::running() noexcept {

@@ -68,6 +68,9 @@ enum class SessionVerb : std::uint8_t {
     /// The assets the game declares, each by its kind, identity, and name
     /// (D455).
     Assets,
+    /// What the author last clicked in a scene's preview, if anything new
+    /// (D456).
+    Pick,
     End,
 };
 
@@ -77,6 +80,11 @@ struct PreviewTarget {
     std::string endpoint;
     std::string pinFile;
     std::string tokenFile;
+    /// The server the previewed game plays on, if picking is wanted
+    /// (D456): its tooling endpoint and the fingerprint to trust, the token
+    /// the preview's.
+    std::optional<std::string> serverEndpoint;
+    std::optional<std::string> serverPinFile;
 };
 
 /// One record from a client, read whole.

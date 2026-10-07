@@ -298,6 +298,22 @@ std::optional<Asset> assetNamed(std::span<const Asset> assets, std::string_view 
     return std::nullopt;
 }
 
+Value pickRecord(std::int64_t id, std::string_view scene) {
+    return recordOf("authoring.pick", id, scene);
+}
+
+std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene) {
+    const auto kParsed = document::parse(reply);
+    const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* picked = answer != nullptr ? answer->find("scene") : nullptr;
+    const Value* source = answer != nullptr ? answer->find("source") : nullptr;
+    if (picked == nullptr || picked->text() == nullptr || *picked->text() != scene || source == nullptr ||
+        source->text() == nullptr) {
+        return std::nullopt;
+    }
+    return *source->text();
+}
+
 Value createSceneRecord(std::int64_t id, std::string_view scene) {
     return recordOf("authoring.create_scene", id, scene);
 }
@@ -312,6 +328,12 @@ Value previewRecord(std::int64_t id, std::string_view scene, const Preview* prev
     made.add("endpoint", Value::string(preview->endpoint));
     made.add("pinFile", Value::string(preview->pinFile));
     made.add("tokenFile", Value::string(preview->tokenFile));
+    if (!preview->serverEndpoint.empty()) {
+        Value server = Value::object();
+        server.add("endpoint", Value::string(preview->serverEndpoint));
+        server.add("pinFile", Value::string(preview->serverPinFile));
+        made.add("server", std::move(server));
+    }
     record.add("preview", std::move(made));
     return record;
 }

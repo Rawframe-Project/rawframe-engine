@@ -27,7 +27,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 13> kVerbs = {
+constexpr std::array<VerbName, 14> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -40,6 +40,7 @@ constexpr std::array<VerbName, 13> kVerbs = {
     VerbName{.kind = "authoring.create_scene", .verb = SessionVerb::CreateScene},
     VerbName{.kind = "authoring.history", .verb = SessionVerb::History},
     VerbName{.kind = "authoring.assets", .verb = SessionVerb::Assets},
+    VerbName{.kind = "authoring.pick", .verb = SessionVerb::Pick},
     VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
 
 /// The members a verb's record may hold beside `kind` and `id`, and those
@@ -68,6 +69,7 @@ Members membersOf(SessionVerb verb) {
         return Members{.required = 1, .optional = 1};
     case SessionVerb::CreateScene:
     case SessionVerb::History:
+    case SessionVerb::Pick:
         return Members{.required = 1, .optional = 0};
     }
     return {};
@@ -93,7 +95,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     }
     if (named == nullptr) {
         return malformed("a session record's kind is hello, describe, apply, read, undo, redo, select, view, preview, "
-                         "create_scene, history, assets, or end");
+                         "create_scene, history, assets, pick, or end");
     }
     SessionRecord record{.verb = named->verb, .id = idRead};
     const Members kMembers = membersOf(record.verb);
@@ -130,6 +132,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Preview:
     case SessionVerb::CreateScene:
     case SessionVerb::History:
+    case SessionVerb::Pick:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -191,16 +194,31 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         if (kPreview != nullptr && kPreview->isNull()) {
             return record;
         }
-        const bool kObject =
-            kPreview != nullptr && kPreview->kind() == Value::Kind::Object && kPreview->names().size() == 3;
+        // The server a pick asks (D456) is optional: its endpoint and pin file
+        // together, the token the preview's.
+        const Value* kServer =
+            kPreview != nullptr && kPreview->kind() == Value::Kind::Object ? kPreview->find("server") : nullptr;
+        const bool kObject = kPreview != nullptr && kPreview->kind() == Value::Kind::Object &&
+                             kPreview->names().size() == (kServer != nullptr ? 4U : 3U);
         const std::string* kEndpoint = kObject ? textOf(kPreview->find("endpoint")) : nullptr;
         const std::string* kPin = kObject ? textOf(kPreview->find("pinFile")) : nullptr;
         const std::string* kToken = kObject ? textOf(kPreview->find("tokenFile")) : nullptr;
+        const bool kServerObject =
+            kServer != nullptr && kServer->kind() == Value::Kind::Object && kServer->names().size() == 2;
+        const std::string* kServerEndpoint = kServerObject ? textOf(kServer->find("endpoint")) : nullptr;
+        const std::string* kServerPin = kServerObject ? textOf(kServer->find("pinFile")) : nullptr;
         if (kEndpoint == nullptr || kPin == nullptr || kToken == nullptr || kEndpoint->empty() || kPin->empty() ||
-            kToken->empty()) {
-            return malformed("preview is null, or holds an endpoint, a pinFile, and a tokenFile");
+            kToken->empty() ||
+            (kServer != nullptr && (kServerEndpoint == nullptr || kServerPin == nullptr || kServerEndpoint->empty() ||
+                                    kServerPin->empty()))) {
+            return malformed("preview is null, or holds an endpoint, a pinFile, and a tokenFile, and perhaps a server "
+                             "of an endpoint and a pinFile");
         }
         record.preview = PreviewTarget{.endpoint = *kEndpoint, .pinFile = *kPin, .tokenFile = *kToken};
+        if (kServer != nullptr) {
+            record.preview->serverEndpoint = *kServerEndpoint;
+            record.preview->serverPinFile = *kServerPin;
+        }
     }
     return record;
 }

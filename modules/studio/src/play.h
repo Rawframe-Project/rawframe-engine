@@ -82,6 +82,7 @@ private:
     PlaySettings settings_;
     /// How many times the server has been started, each on ports of its own.
     int launches_ = 0;
+    std::uint16_t serverEndpointPort_ = 0;
     /// How far the client's log has been read, and whether it said its
     /// player is in.
     std::uintmax_t clientLogRead_ = 0;

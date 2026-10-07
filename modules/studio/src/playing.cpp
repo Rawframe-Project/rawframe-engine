@@ -73,6 +73,26 @@ void ShellParticipant::attachPlayed(double seconds) {
     attachPreview();
 }
 
+void ShellParticipant::pollPicks(double seconds) {
+    if (!previewing_ || !preview_.has_value() || preview_->serverEndpoint.empty() || seconds < nextPick_) {
+        return;
+    }
+    nextPick_ = seconds + 0.25;
+    const std::optional<std::string> kSource = pickedIn(ask(pickRecord(next(), scene_)), scene_);
+    if (!kSource.has_value()) {
+        return;
+    }
+    const auto kAt = std::ranges::find(entities_, *kSource);
+    if (kAt == entities_.end()) {
+        return;
+    }
+    ++picked_;
+    showEntity(static_cast<std::size_t>(kAt - entities_.begin()));
+    say("picked " + (names_[static_cast<std::size_t>(kAt - entities_.begin())].empty()
+                         ? *kSource
+                         : names_[static_cast<std::size_t>(kAt - entities_.begin())]));
+}
+
 void ShellParticipant::attachPreview() {
     const Answered kAttached = answeredOf(ask(previewRecord(next(), scene_, &*preview_)));
     previewing_ = kAttached.previewing;
