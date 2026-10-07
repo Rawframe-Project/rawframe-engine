@@ -7,11 +7,14 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace rawframe::kest {
 
@@ -54,6 +57,14 @@ struct Entry {
 struct Argument {
     Slot slot = Slot::I32;
     bool lent = false;
+};
+
+/// One frame of a stopped machine (D460): the function it is in, as it was
+/// written, and its arguments by name, each as text: the locals a call has
+/// surely written. Others wait for Kest to say which a stop has written.
+struct StoppedFrame {
+    std::string function;
+    std::vector<std::pair<std::string, std::string>> locals;
 };
 
 /// One running program with its own stack and heap. Thread-affine: one thread
@@ -101,6 +112,30 @@ public:
     /// Asks the machine to stop at its next instruction; the call running, or
     /// the next one, answers `cancelled`. Safe from any thread.
     void cancel(execution::CancelReason reason) noexcept;
+
+    /// Debugging (ADR-0066's debugger bridge, D460). Breaks at the start of
+    /// each function named as written, with its module (`game.tick`) or
+    /// without it, and at no other: the program's breakpoints before are
+    /// taken out. Between calls, or while stopped (from the handler). Answers
+    /// how many of the names were functions of the program; none while
+    /// another machine stands on the program, which would run into them on
+    /// whatever thread it runs.
+    ///
+    /// A breakpoint is written into the program. A breakpoint the machine
+    /// stood on is out until the call that met it ends: Kest's public header does not say where the next
+    /// instruction starts. The breakpoints go with the machine that wrote
+    /// them.
+    [[nodiscard]] std::size_t breakAt(std::span<const std::string> functions);
+    /// What runs, on the calling thread, each time a call stops at a
+    /// breakpoint; the call carries on once it returns. While it runs the
+    /// machine is stopped in the middle of the call: `stack` reads it, and
+    /// nothing else may be asked of it.
+    void whenStopped(std::function<void()> handler);
+    /// The frames of a stopped machine, the innermost first; none for one
+    /// not stopped.
+    [[nodiscard]] std::vector<StoppedFrame> stack() const;
+    /// How many times a call stopped.
+    [[nodiscard]] std::uint64_t stops() const noexcept;
 
     [[nodiscard]] std::uint64_t fuelLeft() const noexcept;
     [[nodiscard]] std::size_t heapUsed() const noexcept;

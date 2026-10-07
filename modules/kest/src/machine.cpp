@@ -3,7 +3,12 @@
 #include "rawframe/kest/errors.h"
 #include "state.h"
 
+#include <algorithm>
+#include <array>
 #include <atomic>
+#include <cstdio>
+#include <functional>
+#include <string>
 #include <vector>
 
 namespace rawframe::kest {
@@ -113,9 +118,56 @@ struct Machine::State {
     std::atomic<bool> cancelRequested{false};
     std::atomic<execution::CancelReason> cancelReason{execution::CancelReason::Requested};
 
+    std::function<void()> whenStopped;
+    std::uint64_t stops = 0;
+    /// Whether this machine wrote the program's breakpoints (D460).
+    bool breaking = false;
+
+    [[nodiscard]] Program::State& built() const noexcept {
+        return program->state();
+    }
+
+    /// The breakpoint the machine stands on, taken out so it can move.
+    void takeOutWhereItStands() {
+        const std::int64_t kAt = kest_stopped(runtime);
+        const std::int32_t kIn = kest_stopped_in(runtime);
+        for (Program::State::Written& one : built().written) {
+            if (one.entry == kIn && static_cast<std::int64_t>(one.at) == kAt && !one.out) {
+                built().put(runtime, one, false);
+            }
+        }
+    }
+
+    /// Every breakpoint taken out to carry on, written again.
+    void putBack() {
+        for (Program::State::Written& one : built().written) {
+            if (one.out) {
+                built().put(runtime, one, true);
+            }
+        }
+    }
+
+    /// The program's breakpoints taken out, so it is the program again.
+    void clear() {
+        for (Program::State::Written& one : built().written) {
+            if (!one.out) {
+                built().put(runtime, one, false);
+            }
+        }
+        built().written.clear();
+        breaking = false;
+    }
+
     ~State() {
         // Never inside a call: the machine is thread-affine and its owner is
-        // not in one while destroying it.
+        // not in one while destroying it. The breakpoints it wrote go with
+        // it; the program outlives it.
+        if (breaking && program != nullptr) {
+            clear();
+        }
+        if (runtime != nullptr && program != nullptr) {
+            built().machines.fetch_sub(1, std::memory_order_acq_rel);
+        }
         static_cast<void>(kest_runtime_free(runtime));
     }
 };
@@ -210,6 +262,7 @@ result::Result<std::unique_ptr<Machine>> Machine::start(std::shared_ptr<const Pr
                       KestError::DidNotStart,
                       kText.empty() ? std::string_view{"the machine did not start"} : std::string_view{kText});
     }
+    program->state().machines.fetch_add(1, std::memory_order_acq_rel);
     state->program = std::move(program);
     state->fuelPerCall = limits.fuelPerCall;
     return std::make_unique<Machine>(std::move(state));
@@ -275,7 +328,19 @@ execution::TaskOutcome<void> Machine::call(Entry entry, std::span<Value> frame, 
         return Outcome::cancelled(state_->cancelReason.load(std::memory_order_relaxed));
     }
     KestValue* const kFrame = frame.empty() ? nullptr : reinterpret_cast<KestValue*>(frame.data());
-    if (kest_call(state_->runtime, entry.index, kFrame, static_cast<std::uint32_t>(frame.size()))) {
+    bool went = kest_call(state_->runtime, entry.index, kFrame, static_cast<std::uint32_t>(frame.size()));
+    // Stopped at a breakpoint (D460): the handler sees it, and the call
+    // carries on from it, the breakpoint out until the call ends.
+    while (!went && kest_stopped(state_->runtime) >= 0) {
+        ++state_->stops;
+        if (state_->whenStopped) {
+            state_->whenStopped();
+        }
+        state_->takeOutWhereItStands();
+        went = kest_resume(state_->runtime, kFrame, static_cast<std::uint32_t>(frame.size()));
+    }
+    state_->putBack();
+    if (went) {
         return Outcome::success();
     }
     if (state_->cancelRequested.load(std::memory_order_acquire) && kest_cancelled(state_->runtime)) {
@@ -324,6 +389,123 @@ void Machine::cancel(execution::CancelReason reason) noexcept {
         state_->cancelRequested.store(true, std::memory_order_release);
     }
     kest_cancel(state_->runtime);
+}
+
+std::size_t Machine::breakAt(std::span<const std::string> functions) {
+    State& state = *state_;
+    state.clear();
+    // Only into a program no other machine stands on: another, perhaps on
+    // another thread, would run into them (Kest's D1077).
+    if (state.built().machines.load(std::memory_order_acquire) != 1) {
+        return 0;
+    }
+    std::size_t found = 0;
+    // A function is found by the name it was written with, which every copy
+    // of a generic shares, its module's name before it (`game.tick`).
+    for (std::int32_t index = 0;; ++index) {
+        const char* const kWrote = kest_entry_wrote(state.runtime, index);
+        if (kWrote == nullptr) {
+            break;
+        }
+        const std::string_view kQualified{kWrote};
+        for (const std::string& kName : functions) {
+            // The name with its module, or without it.
+            const bool kNamed =
+                kQualified == kName || (kQualified.size() > kName.size() && kQualified.ends_with(kName) &&
+                                        kQualified[kQualified.size() - kName.size() - 1] == '.');
+            if (!kNamed) {
+                continue;
+            }
+            std::uint32_t count = 0;
+            const std::uint8_t* const kCode = kest_code_of(state.runtime, index, &count);
+            if (kCode == nullptr || count == 0) {
+                continue;
+            }
+            Program::State::Written& one = state.built().written.emplace_back();
+            one.entry = index;
+            one.was = kCode[0];
+            state.built().put(state.runtime, one, true);
+            state.breaking = true;
+            ++found;
+            break;
+        }
+    }
+    // Asked while stopped, in the middle of a call: one where the machine
+    // stands is out until the call ends, or carrying on would stop on it
+    // again at once.
+    if (kest_stopped(state.runtime) >= 0) {
+        state.takeOutWhereItStands();
+    }
+    static_cast<void>(takeReport());
+    return found;
+}
+
+void Machine::whenStopped(std::function<void()> handler) {
+    state_->whenStopped = std::move(handler);
+}
+
+std::vector<StoppedFrame> Machine::stack() const {
+    std::vector<StoppedFrame> frames;
+    const KestRuntime* const kRuntime = state_->runtime;
+    if (kest_stopped(kRuntime) < 0) {
+        return frames;
+    }
+    const std::uint32_t kDeep = kest_frames_deep(kRuntime);
+    for (std::uint32_t at = kDeep; at > 0; --at) {
+        const std::uint32_t kFrame = at - 1;
+        StoppedFrame& made = frames.emplace_back();
+        const char* const kWrote = kest_entry_wrote(state_->runtime, kest_frame_in(kRuntime, kFrame));
+        made.function = kWrote != nullptr ? kWrote : "?";
+        // Its arguments only: written by the call, where every other local a
+        // body names may not yet be, and a slot not yet written holds what
+        // the stack held, an address among it (D460).
+        const std::int32_t kIn = kest_frame_in(kRuntime, kFrame);
+        const std::uint32_t kTakes = kest_frame_takes(state_->runtime, kIn);
+        for (std::uint32_t which = 0; which < kTakes; ++which) {
+            const auto kSlot = static_cast<std::uint16_t>(kest_frame_at(state_->runtime, kIn, which));
+            std::uint16_t slots = 1;
+            std::uint8_t kind = KEST_L_WORD;
+            const char* const kName = kest_frame_name(kRuntime, kFrame, kSlot, &slots, &kind);
+            KestValue value{};
+            if (kName == nullptr || !kest_frame_slot(kRuntime, kFrame, kSlot, &value)) {
+                continue;
+            }
+            // Read as its kind says, and nothing followed: text, a held
+            // object, a reference, or a function would be an address read
+            // as one, and an address told to a debugger says where the
+            // server's memory is. Numbers and truths are said; the rest by
+            // kind.
+            std::string text;
+            if (kest_frame_at_address(kRuntime, kFrame, kSlot)) {
+                text = "(an element)";
+            } else if (kind == KEST_L_F32 || kind == KEST_L_F64) {
+                std::array<char, 32> number{};
+                std::snprintf(number.data(), number.size(), "%.17g", value.real);
+                text = number.data();
+            } else if (kind == KEST_L_BOOL) {
+                text = value.integer != 0 ? "true" : "false";
+            } else if (kind == KEST_L_TEXT) {
+                text = "(text)";
+            } else if (kind >= KEST_L_U8 && kind <= KEST_L_U64) {
+                text = std::to_string(static_cast<std::uint64_t>(value.integer));
+            } else if (kind <= KEST_L_I64 || kind == KEST_L_TAG || (kind >= KEST_L_FLAGS8 && kind <= KEST_L_FLAGS64)) {
+                text = std::to_string(value.integer);
+            } else {
+                text = "(a value)";
+            }
+            // A text's second slot is its length; a wider value's are its
+            // pieces, not read.
+            if (slots > 1 && kind != KEST_L_TEXT) {
+                text += " (of " + std::to_string(slots) + " slots)";
+            }
+            made.locals.emplace_back(kName, std::move(text));
+        }
+    }
+    return frames;
+}
+
+std::uint64_t Machine::stops() const noexcept {
+    return state_->stops;
 }
 
 std::uint64_t Machine::fuelLeft() const noexcept {

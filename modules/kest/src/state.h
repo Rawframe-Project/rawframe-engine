@@ -10,6 +10,7 @@ extern "C" {
 #include "kest.h"
 }
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -20,6 +21,33 @@ namespace rawframe::kest {
 
 struct Program::State {
     KestBuild* build = nullptr;
+
+    /// A byte of the build written over with the breakpoint instruction,
+    /// and what was there (D460). The build's, so every machine of the
+    /// program can take one out to carry on and put it back.
+    struct Written {
+        std::int32_t entry = -1;
+        std::uint32_t at = 0;
+        std::uint8_t was = 0;
+        /// Taken out while a machine carries on from it.
+        bool out = false;
+    };
+    std::vector<Written> written;
+    /// How many machines stand on the program: breakpoints are written only
+    /// into one that a single machine does, so no other, on whatever thread,
+    /// runs into them (D460).
+    std::atomic<std::uint32_t> machines{0};
+
+    /// Puts a written byte back, or writes the breakpoint again, through any
+    /// machine of the program.
+    void put(KestRuntime* runtime, Written& one, bool breaking) const {
+        std::uint32_t count = 0;
+        std::uint8_t* const kCode = kest_code_of(runtime, one.entry, &count);
+        if (kCode != nullptr && one.at < count) {
+            kCode[one.at] = breaking ? kest_break_byte() : one.was;
+        }
+        one.out = !breaking;
+    }
 
     ~State() {
         // Every machine holds the Program alive, so none stands on the build
