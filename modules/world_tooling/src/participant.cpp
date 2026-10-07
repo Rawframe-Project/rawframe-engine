@@ -200,7 +200,10 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .optionalCapabilities = kMaybe,
         // Its stop logs and lets its provider go; a client's composition,
         // where it waits unselected, has little shutdown budget to spare.
-        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(20)},
+        // It closes its QUIC connections as replication does, a debugger
+        // still connected among them, so it has replication's budget: 20
+        // milliseconds overran under the thread sanitizer (D489).
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
         .observabilityIdentity = "tooling.endpoint",
         .budgetOwner = "network",
         .hostPhases = composition::hostPhaseBit(composition::HostPhase::Ingress),

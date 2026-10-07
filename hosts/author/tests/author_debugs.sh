@@ -24,6 +24,9 @@ mkdir -p "$work"
 trap 'echo "failed at line $LINENO"; cat "$work"/replies "$work"/held 2>/dev/null; tail -40 "$work"/server.log 2>/dev/null' ERR
 port=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
 python3 -c 'import secrets; print(secrets.token_hex(24))' >"$work/token"
+# What is asked of the stop is that it is clean, not how fast: under the
+# thread sanitizer the Kest game's destruction alone took 0.37 s, and 5.7 s
+# at the full check's load, past the Host's five (D489).
 cat "$content" >"$work/server.conf"
 cat >>"$work/server.conf" <<CONF
 host.maximum_iterations = 6000
@@ -35,6 +38,7 @@ network.quic.fingerprint_file = $work/fingerprint
 tooling.endpoint = 127.0.0.1:$port
 tooling.token_file = $work/token
 tooling.grants = inspect debug
+host.shutdown_budget_ms = 30000
 CONF
 "$server" --config "$work/server.conf" >"$work/server.log" 2>&1 &
 running=$!

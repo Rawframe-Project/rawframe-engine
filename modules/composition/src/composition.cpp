@@ -7,6 +7,7 @@ namespace rawframe::composition {
 namespace {
 
 constexpr diagnostics::EventIdentity kStopOverran{"composition", "participant_stop_overran"};
+constexpr diagnostics::EventIdentity kDestroyOverran{"composition", "participant_destroy_overran"};
 
 } // namespace
 
@@ -253,7 +254,18 @@ void Composition::unwind(std::size_t started) noexcept {
     // scopes.
     for (std::size_t index = slots_.size(); index-- > 0;) {
         Slot& slot = slots_[index];
+        // Its destruction is its shutdown too: one past its stop budget is
+        // named, as a stop is, so a slow shutdown says whose it was (D489).
+        const execution::MonotonicInstant kDestroying = services_.clock->now();
         slot.object.reset();
+        if (const execution::MonotonicDuration kDestroyed = services_.clock->now() - kDestroying;
+            slot.planned != nullptr && kDestroyed > slot.planned->lifecycle.stopBudget) {
+            services_.emitter.log(diagnostics::Severity::Warning,
+                                  kDestroyOverran,
+                                  "a participant's destruction exceeded its stop budget",
+                                  {diagnostics::field("participant", std::string_view{slot.planned->identity}),
+                                   diagnostics::field("nanoseconds", kDestroyed.nanoseconds)});
+        }
         slot.state = ParticipantState::Destroyed;
         const execution::OwnerId kOwner = ownerFor(slot.planned != nullptr ? slot.planned->identity : "");
         if (slot.cpuAdmitted) {
