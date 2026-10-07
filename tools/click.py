@@ -20,16 +20,20 @@
 # wheel there that many detents toward the user, or away for a count below
 # nought, 0.15 seconds apart (D441), and `drag=` and two points presses the
 # left button at the first, carries it to the second, and lets it go there
-# (D457). An argument `wait=` and a number of seconds waits that long, and
-# `until=` and a record's code waits, up to three minutes, until the log
-# holds it (D445). Five seconds after, it stops the program whose pid its
-# pid file holds (D430), whose iterations only bound it, and waits for the
-# process it watches to end.
+# (D457), holding the X key a fifth part names through it, Shift_L or
+# Control_L (D463). An argument `frozen=` and X key names presses them with
+# the program stopped, so it reads them in one frame (D458). An argument
+# `wait=` and a number of seconds waits that long, and `until=` and a
+# record's code waits, up to three minutes, until the log holds it (D445).
+# Five seconds after, it stops the program whose pid its pid file holds
+# (D430), whose iterations only bound it, and waits for the process it
+# watches to end.
 #
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
-#                 | wheel=<x>,<y>,<turns> | drag=<x>,<y>,<x>,<y>
-#                 | wait=<seconds> | until=<code> [...]
+#                 | wheel=<x>,<y>,<turns> | drag=<x>,<y>,<x>,<y>[,<key>]
+#                 | frozen=<key>[,<key>...] | wait=<seconds> | until=<code>
+#                 [...]
 
 import ctypes
 import ctypes.util
@@ -114,8 +118,9 @@ def main():
             points.append((None, None, float(argument[len("wait="):])))
             continue
         if argument.startswith("drag="):
-            fromX, fromY, toX, toY = (int(part) for part in argument[len("drag="):].split(","))
-            points.append((fromX, fromY, ("drag", toX, toY)))
+            parts = argument[len("drag="):].split(",")
+            fromX, fromY, toX, toY = (int(part) for part in parts[:4])
+            points.append((fromX, fromY, ("drag", toX, toY, parts[4] if len(parts) > 4 else "")))
             continue
         if argument.startswith("wheel="):
             at, y, turns = (int(part) for part in argument[len("wheel="):].split(","))
@@ -170,6 +175,12 @@ def main():
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
             x.XFlush(display)
             time.sleep(0.5)
+            # A key held through the drag, Shift_L or Control_L (D463).
+            held = x.XKeysymToKeycode(display, x.XStringToKeysym(text[3].encode())) if text[3] else 0
+            if held:
+                xtest.XTestFakeKeyEvent(display, held, 1, 0)
+                x.XFlush(display)
+                time.sleep(0.2)
             xtest.XTestFakeButtonEvent(display, 1, 1, 0)
             x.XFlush(display)
             for step in range(1, 11):
@@ -180,7 +191,11 @@ def main():
             time.sleep(0.2)
             xtest.XTestFakeButtonEvent(display, 1, 0, 0)
             x.XFlush(display)
-            print(f"dragged from {at},{y} to {text[1]},{text[2]}")
+            if held:
+                time.sleep(0.2)
+                xtest.XTestFakeKeyEvent(display, held, 0, 0)
+                x.XFlush(display)
+            print(f"dragged from {at},{y} to {text[1]},{text[2]}{' holding ' + text[3] if text[3] else ''}")
             time.sleep(1)
             continue
         if isinstance(text, tuple):

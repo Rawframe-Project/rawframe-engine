@@ -334,12 +334,40 @@ std::optional<Moved> movedIn(std::string_view reply, std::string_view scene) {
         source->text() == nullptr || by == nullptr || by->kind() != Value::Kind::Array || by->items().size() != 3) {
         return std::nullopt;
     }
-    const std::optional<double> kX = by->items()[0].real();
-    const std::optional<double> kZ = by->items()[2].real();
-    if (!kX.has_value() || !kZ.has_value() || !std::isfinite(*kX) || !std::isfinite(*kZ)) {
+    const auto kPoint = [](const Value* point) -> std::optional<std::array<double, 3>> {
+        if (point == nullptr || point->kind() != Value::Kind::Array || point->items().size() != 3) {
+            return std::nullopt;
+        }
+        std::array<double, 3> made{};
+        for (std::size_t at = 0; at < 3; ++at) {
+            const std::optional<double> kEach = point->items()[at].real();
+            if (!kEach.has_value() || !std::isfinite(*kEach)) {
+                return std::nullopt;
+            }
+            made[at] = *kEach;
+        }
+        return made;
+    };
+    const auto kBy = kPoint(by);
+    const Value* how = moved->find("how");
+    const std::string_view kHow = how != nullptr && how->text() != nullptr ? std::string_view{*how->text()} : "move";
+    if (!kBy.has_value()) {
         return std::nullopt;
     }
-    return Moved{.source = *source->text(), .x = *kX, .z = *kZ};
+    Moved made{.source = *source->text(), .x = (*kBy)[0], .y = (*kBy)[1], .z = (*kBy)[2]};
+    if (kHow == "height") {
+        made.how = Moved::How::Height;
+    } else if (kHow == "turn") {
+        const auto kFrom = kPoint(moved->find("from"));
+        const auto kTo = kPoint(moved->find("to"));
+        if (!kFrom.has_value() || !kTo.has_value()) {
+            return std::nullopt;
+        }
+        made.how = Moved::How::Turn;
+        made.from = *kFrom;
+        made.to = *kTo;
+    }
+    return made;
 }
 
 Value createSceneRecord(std::int64_t id, std::string_view scene) {

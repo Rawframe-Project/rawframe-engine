@@ -129,6 +129,25 @@ RAWFRAME_TEST(ADragSaysWhatItCarriedAndHowFar) {
                     R"("kind":"authoring.request","batch":"atomic","operations":["a","b"]}})");
 }
 
+RAWFRAME_TEST(ADragSaysWhetherItMovedRaisedOrTurned) {
+    const auto kRaised = movedIn(
+        R"({"answer":{"moved":{"scene":"gate.scene","source":"a","how":"height","by":[0,0.75,0]}}})", "gate.scene");
+    RAWFRAME_EXPECT(kRaised.has_value() && kRaised->how == Moved::How::Height && kRaised->y == 0.75);
+    const auto kTurned = movedIn(R"({"answer":{"moved":{"scene":"gate.scene","source":"a","how":"turn","by":[1,0,0],)"
+                                 R"("from":[0,2,1],"to":[1,2,0]}}})",
+                                 "gate.scene");
+    RAWFRAME_EXPECT(kTurned.has_value() && kTurned->how == Moved::How::Turn && kTurned->from[2] == 1 &&
+                    kTurned->to[0] == 1);
+    // A turn without where it began and ended is no turn.
+    RAWFRAME_EXPECT(
+        !movedIn(R"({"answer":{"moved":{"scene":"gate.scene","source":"a","how":"turn","by":[1,0,0]}}})", "gate.scene")
+             .has_value());
+    // A move says no how, as before.
+    const auto kMoved =
+        movedIn(R"({"answer":{"moved":{"scene":"gate.scene","source":"a","by":[1,0,2]}}})", "gate.scene");
+    RAWFRAME_EXPECT(kMoved.has_value() && kMoved->how == Moved::How::Move && kMoved->z == 2);
+}
+
 RAWFRAME_TEST(AHistoryIsReadEntryByEntry) {
     const std::vector<HistoryEntry> kRead = historyOf(
         R"({"kind":"authoring.reply","id":3,"answer":{"kind":"authoring.history","reopened":false,"entries":[)"

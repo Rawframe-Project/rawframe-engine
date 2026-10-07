@@ -358,6 +358,9 @@ private:
     double nextPick_ = 0;
     std::uint64_t picked_ = 0;
     std::uint64_t dragged_ = 0;
+    /// Of those, raised and turned (D463).
+    std::uint64_t raised_ = 0;
+    std::uint64_t turned_ = 0;
     std::vector<std::array<float, 4>> wheels_;
     std::uint64_t wheeled_ = 0;
     std::chrono::steady_clock::time_point began_ = std::chrono::steady_clock::now();

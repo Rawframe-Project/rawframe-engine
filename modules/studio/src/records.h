@@ -103,12 +103,23 @@ struct Asset {
 [[nodiscard]] std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene);
 
 /// An entity the author dragged in the preview (D457): its id in the scene,
-/// and how far it was carried across the level plane, in metres along x
-/// and z.
+/// and how: carried across the level plane, in metres along x and z;
+/// raised or lowered, along y, with Shift; or turned about its own place
+/// with Control, from where it was pressed to where it was let go on the
+/// level plane (D463).
 struct Moved {
+    enum class How : std::uint8_t {
+        Move,
+        Height,
+        Turn
+    };
     std::string source;
+    How how = How::Move;
     double x = 0;
+    double y = 0;
     double z = 0;
+    std::array<double, 3> from{};
+    std::array<double, 3> to{};
 };
 
 /// What `authoring.pick`'s answer says was dragged in `scene`; none for no
