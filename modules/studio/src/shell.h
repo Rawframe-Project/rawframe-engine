@@ -42,6 +42,12 @@ namespace rawframe::studio {
 inline constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"};
 inline constexpr diagnostics::EventIdentity kShown{"studio", "studio_shown"};
 inline constexpr diagnostics::EventIdentity kPreviewing{"studio", "studio_previewing"};
+/// The preview shows where the chosen entity stands (D464), so its handles
+/// can be grabbed (D466).
+inline constexpr diagnostics::EventIdentity kMarked{"studio", "studio_marked"};
+/// A drag in the played game committed to the chosen scene (D457, D463,
+/// D466, D467): how, and what it moved.
+inline constexpr diagnostics::EventIdentity kDragged{"studio", "studio_dragged"};
 
 /// Studio's colors, 0xRRGGBBAA: the window behind everything, a panel, a
 /// row, and the header.

@@ -55,6 +55,11 @@ struct Pressed {
     /// The mark's handle the press grabbed, X, Y, or Z (D466); none
     /// for a press that met an entity.
     std::optional<std::size_t> axis;
+    /// Whether it grabbed the mark's ring, `point` where it met its plane
+    /// (D467).
+    bool ring = false;
+    /// The mark a handle was grabbed on, measured from at its release.
+    std::array<double, 3> mark{};
 };
 
 /// An authoring session (D407): the game read once, its scenes opened as
@@ -612,7 +617,7 @@ private:
         if (kClicks > clicks_ && kAnswer->find("origin") != nullptr && kAnswer->find("toward") != nullptr) {
             pressed_ = grabbed(kClicks, *kAnswer);
         }
-        if (pressed_.has_value() && pressed_->count == kClicks && pressed_->axis.has_value()) {
+        if (pressed_.has_value() && pressed_->count == kClicks && (pressed_->axis.has_value() || pressed_->ring)) {
             // A handle of the mark, its chosen entity's (D466): the server
             // is not asked what the ray meets.
             scene = Value::string(pressed_->scene);
@@ -655,7 +660,7 @@ private:
         const Value* kReleased = kAnswer != nullptr ? kAnswer->find("released") : nullptr;
         const std::int64_t kRelease = kReleased != nullptr ? kReleased->integer().value_or(0) : 0;
         Value moved;
-        if (pressed_.has_value() && kRelease == pressed_->count && pressed_->axis.has_value()) {
+        if (pressed_.has_value() && kRelease == pressed_->count && (pressed_->axis.has_value() || pressed_->ring)) {
             moved = movedAlong(*kAnswer);
             pressed_.reset();
         } else if (pressed_.has_value() && kRelease == pressed_->count) {
@@ -723,12 +728,23 @@ private:
             kOpen->second.document->selection().empty()) {
             return std::nullopt;
         }
-        const std::optional<Grabbed> kGrabbed =
-            grabbedAxis(*mark_, *kOrigin, *kToward, previewed_.has_value() ? previewed_->fieldOfView : 60);
-        if (!kGrabbed.has_value()) {
-            return std::nullopt;
-        }
+        const double kField = previewed_.has_value() ? previewed_->fieldOfView : 60;
+        const std::optional<Grabbed> kGrabbed = grabbedAxis(*mark_, *kOrigin, *kToward, kField);
         const auto kSource = rawframe::schema::formatStableIdText(kOpen->second.document->selection().front());
+        if (!kGrabbed.has_value()) {
+            // The ring, past the axes (D467).
+            const std::optional<Point> kMet = levelPoint(*mark_, *kOrigin, *kToward);
+            if (!kMet.has_value() || !grabbedRing(*mark_, *kOrigin, *kToward, kField)) {
+                return std::nullopt;
+            }
+            return Pressed{.count = count,
+                           .scene = previewScene_,
+                           .source = std::string{kSource.data(), kSource.size()},
+                           .point = *kMet,
+                           .toward = *kToward,
+                           .ring = true,
+                           .mark = *mark_};
+        }
         Point at = *mark_;
         at[kGrabbed->axis] += kGrabbed->along;
         return Pressed{.count = count,
@@ -736,7 +752,8 @@ private:
                        .source = std::string{kSource.data(), kSource.size()},
                        .point = at,
                        .toward = *kToward,
-                       .axis = kGrabbed->axis};
+                       .axis = kGrabbed->axis,
+                       .mark = *mark_};
     }
 
     /// A handle let go (D466): how far along its axis, from where it was
@@ -746,22 +763,52 @@ private:
     Value movedAlong(const Value& clicked) const {
         const auto kOrigin = pointOf(clicked.find("releaseOrigin"));
         const auto kToward = pointOf(clicked.find("releaseToward"));
+        if (pressed_->ring) {
+            return turnedAround(kOrigin, kToward);
+        }
         const std::size_t kAxis = *pressed_->axis;
-        const std::optional<double> kTo = kOrigin.has_value() && kToward.has_value() && mark_.has_value()
-                                              ? alongAxis(*mark_, kAxis, *kOrigin, *kToward)
-                                              : std::nullopt;
+        const Point& kMark = pressed_->mark;
+        const std::optional<double> kTo =
+            kOrigin.has_value() && kToward.has_value() ? alongAxis(kMark, kAxis, *kOrigin, *kToward) : std::nullopt;
         if (!kTo.has_value()) {
             return Value{};
         }
         Value by = Value::array();
         for (std::size_t each = 0; each < 3; ++each) {
-            by.push(Value::real(each == kAxis ? *kTo - (pressed_->point[kAxis] - (*mark_)[kAxis]) : 0.0));
+            by.push(Value::real(each == kAxis ? *kTo - (pressed_->point[kAxis] - kMark[kAxis]) : 0.0));
         }
         Value moved = Value::object();
         moved.add("scene", Value::string(pressed_->scene));
         moved.add("source", Value::string(pressed_->source));
         moved.add("how", Value::string(kAxis == 1 ? "height" : "move"));
         moved.add("by", std::move(by));
+        return moved;
+    }
+
+    /// The ring let go (D467): a turn about the mark from where its plane
+    /// was met at the press to where the release meets it, as Studio's
+    /// turns are told. Null where the release meets no plane.
+    Value turnedAround(const std::optional<Point>& origin, const std::optional<Point>& toward) const {
+        const std::optional<Point> kTo =
+            origin.has_value() && toward.has_value() ? levelPoint(pressed_->mark, *origin, *toward) : std::nullopt;
+        if (!kTo.has_value()) {
+            return Value{};
+        }
+        const auto kPoint = [](const Point& point) {
+            Value numbers = Value::array();
+            for (const double kEach : point) {
+                numbers.push(Value::real(kEach));
+            }
+            return numbers;
+        };
+        const Point& kFrom = pressed_->point;
+        Value moved = Value::object();
+        moved.add("scene", Value::string(pressed_->scene));
+        moved.add("source", Value::string(pressed_->source));
+        moved.add("how", Value::string("turn"));
+        moved.add("by", kPoint(Point{(*kTo)[0] - kFrom[0], 0, (*kTo)[2] - kFrom[2]}));
+        moved.add("from", kPoint(kFrom));
+        moved.add("to", kPoint(*kTo));
         return moved;
     }
 
@@ -787,8 +834,12 @@ private:
             const Value* kMarked = kAnswer != nullptr ? kAnswer->find("marked") : nullptr;
             shown = kMarked != nullptr && kMarked->truth().value_or(false);
         }
-        // Kept for its handles (D466) while the preview shows it.
-        mark_ = shown ? record.mark : std::nullopt;
+        // Kept for its handles (D466) while the scene is previewed, whether
+        // or not a preview slow to answer said it shows it: the author's
+        // choice stands.
+        if (preview_ != nullptr && record.scene == previewScene_) {
+            mark_ = record.mark;
+        }
         Value made = Value::object();
         made.add("kind", Value::string("authoring.marked"));
         made.add("marked", Value::boolean(shown));

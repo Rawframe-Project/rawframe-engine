@@ -13,10 +13,17 @@
 #include "rawframe/view/view.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
 namespace rawframe::view {
+
+/// The ring a mark is drawn with about its point on the level plane, its
+/// turn's handle (D467): its radius in meters, past the axes' meter, and
+/// the pieces it is drawn in.
+inline constexpr double kMarkRingRadius = 1.25;
+inline constexpr std::size_t kMarkRingPieces = 48;
 
 class PreviewCamera {
 public:

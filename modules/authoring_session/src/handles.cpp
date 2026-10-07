@@ -1,5 +1,7 @@
 #include "handles.h"
 
+#include "rawframe/view/preview.h"
+
 #include <algorithm>
 #include <cmath>
 #include <numbers>
@@ -72,6 +74,28 @@ grabbedAxis(const Point& mark, const Point& origin, const Point& toward, double 
         }
     }
     return grabbed;
+}
+
+std::optional<Point> levelPoint(const Point& mark, const Point& origin, const Point& toward) noexcept {
+    if (std::abs(toward[1]) <= 1e-12) {
+        return std::nullopt;
+    }
+    const double kAlong = (mark[1] - origin[1]) / toward[1];
+    if (!(kAlong > 0) || kAlong > 1) {
+        return std::nullopt;
+    }
+    return Point{origin[0] + (kAlong * toward[0]), mark[1], origin[2] + (kAlong * toward[2])};
+}
+
+bool grabbedRing(const Point& mark, const Point& origin, const Point& toward, double fieldOfView) noexcept {
+    const std::optional<Point> kMet = levelPoint(mark, origin, toward);
+    if (!kMet.has_value() || !(fieldOfView > 0) || !(fieldOfView < 180)) {
+        return false;
+    }
+    const Point kAhead = {(*kMet)[0] - origin[0], (*kMet)[1] - origin[1], (*kMet)[2] - origin[2]};
+    const double kTolerance = std::sqrt(dot(kAhead, kAhead)) * 2 * std::tan(fieldOfView * std::numbers::pi / 360) / 40;
+    const double kOut = std::hypot((*kMet)[0] - mark[0], (*kMet)[2] - mark[2]);
+    return std::abs(kOut - view::kMarkRingRadius) <= kTolerance;
 }
 
 std::optional<double>

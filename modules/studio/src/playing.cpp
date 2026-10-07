@@ -141,7 +141,16 @@ void ShellParticipant::markChosen() {
         }
     }
     const std::string kReply = ask(markRecord(next(), scene_, at));
-    marked_ += kReply.find("\"marked\":true") != std::string::npos ? 1 : 0;
+    if (kReply.find("\"marked\":true") == std::string::npos) {
+        return;
+    }
+    ++marked_;
+    if (at.has_value()) {
+        emitter_.log(diagnostics::Severity::Info,
+                     kMarked,
+                     "the preview marks where the chosen entity stands",
+                     {diagnostics::field("entity", std::string_view{entity_})});
+    }
 }
 
 void ShellParticipant::moveDragged(const Moved& moved) {
@@ -200,6 +209,10 @@ void ShellParticipant::moveDragged(const Moved& moved) {
     }
     ++dragged_;
     commitAll(std::move(operations), done, moved.source);
+    emitter_.log(diagnostics::Severity::Info,
+                 kDragged,
+                 "a drag in the played game was committed",
+                 {diagnostics::field("entity", std::string_view{moved.source}), diagnostics::field("how", done)});
 }
 
 void ShellParticipant::attachPreview() {

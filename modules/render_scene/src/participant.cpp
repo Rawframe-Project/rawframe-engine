@@ -19,6 +19,7 @@
 #include <cmath>
 #include <cstring>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <string>
 
@@ -404,8 +405,8 @@ private:
             ++previewed_;
         }
         // What the preview marks, as three axes a meter long, red along X,
-        // green along Y, blue along Z, drawn over everything at a width the
-        // view keeps (D464).
+        // green along Y, blue along Z, and a ring about it, drawn over
+        // everything at a width the view keeps (D464, D467).
         if (preview_ != nullptr && preview_->marks() != marksShown_) {
             marksShown_ = preview_->marks();
             lines_.clear();
@@ -420,6 +421,23 @@ private:
                     // everything: the mark stands out as a gizmo does.
                     lines_.push_back(SceneLine{
                         .from = *kAt, .to = to, .color = color, .width = 1.0F / 150, .ofView = true, .over = true});
+                }
+                // And a yellow ring about it on the level plane, its turn's
+                // handle (D467).
+                for (std::size_t piece = 0; piece < view::kMarkRingPieces; ++piece) {
+                    const auto kOn = [&](std::size_t at) {
+                        const double kAngle =
+                            2 * std::numbers::pi * static_cast<double>(at) / static_cast<double>(view::kMarkRingPieces);
+                        return std::array<double, 3>{(*kAt)[0] + (view::kMarkRingRadius * std::cos(kAngle)),
+                                                     (*kAt)[1],
+                                                     (*kAt)[2] + (view::kMarkRingRadius * std::sin(kAngle))};
+                    };
+                    lines_.push_back(SceneLine{.from = kOn(piece),
+                                               .to = kOn(piece + 1),
+                                               .color = {1, 0.8F, 0, 1},
+                                               .width = 1.0F / 150,
+                                               .ofView = true,
+                                               .over = true});
                 }
             }
             scene_->show(lines_);
