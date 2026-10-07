@@ -52,6 +52,12 @@ stopped() {
 }
 same=no
 [ "$(stopped client.log exitCode)" = "$status" ] && same=yes
+# Where the client never started, the server's own record says why: how
+# it stopped and its last lines, a sanitizer's report among them.
+if [ ! -f "$out/client.log" ]; then
+    echo "the client never started; the launcher ended $status; the server's log ends:"
+    tail -n 20 "$out/server.log" 2>/dev/null | cut -c1-400
+fi
 echo "export: keys $(ls "$out/library/keys" | tr '\n' ' ')fonts read $(field client.log fontsRead)," \
     "admitted $(field client.log admitted), frames shown $(field client.log framesShown)," \
     "client stopped $(stopped client.log exit), server stopped $(stopped server.log exit)," \
