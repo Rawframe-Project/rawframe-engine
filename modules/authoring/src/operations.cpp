@@ -33,6 +33,8 @@ constexpr std::array<InputDeclaration, 4> kSetReferenceInputs = {{{"entity", Inp
                                                                   {"field", InputType::Field},
                                                                   {"target", InputType::OptionalEntity}}};
 
+constexpr std::array<InputDeclaration, 2> kFindInputs = {
+    {{"named", InputType::Text}, {"having", InputType::OptionalComponent}}};
 constexpr std::array<InputDeclaration, 1> kRemarkInputs = {{{"component", InputType::Component}}};
 constexpr std::array<InputDeclaration, 3> kRevertFieldInputs = {
     {{"entity", InputType::Entity}, {"component", InputType::Component}, {"field", InputType::Field}}};
@@ -40,7 +42,7 @@ constexpr std::array<InputDeclaration, 3> kRevertFieldInputs = {
 constexpr std::array<InputDeclaration, 2> kAddInstanceInputs = {
     {{"scene", InputType::Resource}, {"instance", InputType::Identity}}};
 
-constexpr std::array<OperationDeclaration, 16> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 17> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -60,6 +62,10 @@ constexpr std::array<OperationDeclaration, 16> kDeclarations = {{
      .history = HistoryClass::ReadOnly,
      .targets = "rawframe.scene entity",
      .inputs = kEntityInputs},
+    {.name = "scene.find_entities",
+     .history = HistoryClass::ReadOnly,
+     .targets = "rawframe.scene",
+     .inputs = kFindInputs},
 }};
 static_assert(kDeclarations.size() == std::variant_size_v<Operation> + std::variant_size_v<Query>);
 

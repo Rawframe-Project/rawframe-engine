@@ -1,6 +1,7 @@
 // Read operations (SPEC-0040): every entity a scene holds, its own and its
 // instances', and one entity whole, typed through the catalog; what the
-// catalog does not know answered and marked, never dropped; and an answer's
+// catalog does not know answered and marked, never dropped; a typed search
+// by name and component (D473); and an answer's
 // values in the form a request sets them with, so an agent's next request
 // is built from the answer alone.
 
@@ -187,6 +188,53 @@ RAWFRAME_TEST(AnAnswersValuesAreWhatARequestSets) {
     RAWFRAME_EXPECT(kRequest.has_value());
     const auto kSame = executeAtomic(scene, 0, kRequest->operations, kCatalog);
     RAWFRAME_EXPECT(kSame.has_value() && kSame->deltas == 0);
+}
+
+RAWFRAME_TEST(ASearchFindsByNameAndComponent) {
+    const auto kIds = [](const auto& found) {
+        std::vector<base::Bits128> made;
+        for (const EntityEntry& each : std::get<EntityList>(*found).entities) {
+            made.push_back(each.id);
+        }
+        return made;
+    };
+    // A name in either case; an instance's entity has no own name, so only
+    // an empty one finds it.
+    const auto kSpawned = answer(room(), FindEntities{.named = "SPA", .having = std::nullopt}, catalog());
+    RAWFRAME_EXPECT(kSpawned.has_value() && kIds(kSpawned) == std::vector{kSpawn});
+    const auto kAll = answer(room(), FindEntities{.named = "", .having = std::nullopt}, catalog());
+    RAWFRAME_EXPECT(kAll.has_value() && kIds(kAll).size() == 3);
+    const auto kNone = answer(room(), FindEntities{.named = "door", .having = std::nullopt}, catalog());
+    RAWFRAME_EXPECT(kNone.has_value() && kIds(kNone).empty());
+    // A component: the spawn's own, the crate's by what its patch adds, the
+    // removed shelf's patch adding nothing.
+    const auto kLinked = answer(room(), FindEntities{.named = "", .having = kLink}, catalog());
+    RAWFRAME_EXPECT(kLinked.has_value() && kIds(kLinked) == std::vector{kCrate});
+    const auto kPlaced = answer(room(), FindEntities{.named = "", .having = kPosition}, catalog());
+    RAWFRAME_EXPECT(kPlaced.has_value() && kIds(kPlaced) == (std::vector{kSpawn, kCrate}));
+    const auto kBoth = answer(room(), FindEntities{.named = "spawn", .having = kLink}, catalog());
+    RAWFRAME_EXPECT(kBoth.has_value() && kIds(kBoth).empty());
+    // A component the catalog does not know is refused, not answered empty.
+    RAWFRAME_EXPECT(refusedWith(
+        answer(room(),
+               FindEntities{.named = "",
+                            .having = schema::ComponentTypeId::fromText("5f3a0c2d-9e81-4b74-8a1d-000000000009")},
+               catalog()),
+        AuthoringError::TargetNotFound));
+
+    // As a query document: the component left out, or named by its id.
+    const auto kRead = readQueries(R"({"formatVersion": 1, "kind": "authoring.query", "queries": [
+        {"operation": "scene.find_entities", "named": "sp"},
+        {"operation": "scene.find_entities", "named": "", "having": "5f3a0c2d-9e81-4b74-8a1d-000000000002"}]})");
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->size() == 2 && std::get<FindEntities>((*kRead)[0]).named == "sp" &&
+                    !std::get<FindEntities>((*kRead)[0]).having.has_value() &&
+                    std::get<FindEntities>((*kRead)[1]).having == kLink);
+    RAWFRAME_EXPECT(refusedWith(readQueries(R"({"formatVersion": 1, "kind": "authoring.query", "queries": [
+        {"operation": "scene.find_entities", "named": "sp", "having": "game.link"}]})"),
+                                AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(readQueries(R"({"formatVersion": 1, "kind": "authoring.query", "queries": [
+        {"operation": "scene.find_entities"}]})"),
+                                AuthoringError::ValidationFailed));
 }
 
 RAWFRAME_TEST(QueriesAndRequestsAreKeptApart) {

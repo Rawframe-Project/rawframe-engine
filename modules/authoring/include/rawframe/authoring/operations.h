@@ -215,13 +215,20 @@ using Operation = std::variant<CreateEntity,
                                RemoveInstance>;
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the
-/// scene holds, and one entity whole.
+/// scene holds, one entity whole, and the entities a typed search finds
+/// (ADR-0066's hierarchy search, D473).
 struct ListEntities {};
 struct ReadEntity {
     base::Bits128 entity{};
 };
+/// Entities whose name holds `named` (ASCII letters in either case; empty
+/// for any), and that hold `having` when one is named.
+struct FindEntities {
+    std::string named;
+    std::optional<schema::ComponentTypeId> having;
+};
 
-using Query = std::variant<ListEntities, ReadEntity>;
+using Query = std::variant<ListEntities, ReadEntity, FindEntities>;
 
 /// SPEC-0040's history classes: every operation that changes a scene is
 /// `Undoable`, and every query `ReadOnly`.
@@ -245,6 +252,8 @@ enum class InputType : std::uint8_t {
     Resource,
     /// A fresh identity the caller makes, as UUID text.
     Identity,
+    /// A component that may be left out.
+    OptionalComponent,
 };
 
 struct InputDeclaration {

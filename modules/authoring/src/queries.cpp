@@ -62,11 +62,49 @@ ComponentReading readingOf(const scene::Scene& scene,
     return made;
 }
 
+/// Whether `name` holds `part`, ASCII letters in either case.
+bool holds(std::string_view name, std::string_view part) noexcept {
+    const auto kLower = [](char each) {
+        return each >= 'A' && each <= 'Z' ? static_cast<char>(each - 'A' + 'a') : each;
+    };
+    return !std::ranges::search(name, part, {}, kLower, kLower).empty() || part.empty();
+}
+
+/// Whether the entity `entry` names holds the component named `component`:
+/// the scene's own entity among its components, an instance's entity by
+/// what its patch adds or sets (its source's components are the source
+/// scene's to answer, as `scene.read_entity` has them).
+bool holdsComponent(const scene::Scene& scene, const EntityEntry& entry, std::string_view component) {
+    if (entry.place.has_value()) {
+        return std::ranges::contains(scene.entities[*entry.place].components, component, &scene::SceneComponent::name);
+    }
+    return std::ranges::any_of(
+        scene.instances[entry.brought->instance].overrides, [&entry, component](const scene::Override& each) {
+            return each.entity == entry.id && each.component == component && each.kind != scene::Override::Kind::Remove;
+        });
+}
+
 } // namespace
 
 result::Result<Answer> answer(const scene::Scene& scene, const Query& query, const ComponentCatalog& catalog) {
     std::vector<EntityEntry> entries = entriesOf(scene);
     if (std::holds_alternative<ListEntities>(query)) {
+        return EntityList{.entities = std::move(entries)};
+    }
+    if (const auto* find = std::get_if<FindEntities>(&query)) {
+        const ComponentSchema* having = find->having.has_value() ? catalog.find(*find->having) : nullptr;
+        if (find->having.has_value() && having == nullptr) {
+            return std::unexpected<result::Error>{result::fail(result::ErrorClass::NotFound,
+                                                               kAuthoringDomain,
+                                                               code(AuthoringError::TargetNotFound),
+                                                               "the catalog knows no such component")
+                                                      .error()
+                                                      .withContext("operation", declarationOf(query).name)};
+        }
+        std::erase_if(entries, [&](const EntityEntry& entry) {
+            return !holds(entry.name, find->named) ||
+                   (having != nullptr && !holdsComponent(scene, entry, having->name));
+        });
         return EntityList{.entities = std::move(entries)};
     }
     const base::Bits128 kEntity = std::get<ReadEntity>(query).entity;

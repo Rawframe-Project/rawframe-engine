@@ -25,7 +25,7 @@ constexpr std::array<std::string_view, 10> kCodeNames = {"validation_failed",
                                                          "delta_invalid",
                                                          "delta_mismatch"};
 
-constexpr std::array<std::string_view, 10> kInputTypeNames = {"entity",
+constexpr std::array<std::string_view, 11> kInputTypeNames = {"entity",
                                                               "component",
                                                               "field",
                                                               "text",
@@ -34,7 +34,8 @@ constexpr std::array<std::string_view, 10> kInputTypeNames = {"entity",
                                                               "value",
                                                               "optional_entity",
                                                               "resource",
-                                                              "identity"};
+                                                              "identity",
+                                                              "optional_component"};
 constexpr std::array<std::string_view, 4> kHistoryNames = {
     "undoable", "non_dirtying", "bulk_non_undoable", "read_only"};
 
@@ -125,7 +126,8 @@ result::Result<std::size_t> declaredOf(const Value& value) {
         }
     }
     for (const InputDeclaration& input : kDeclared->inputs) {
-        if (input.type != InputType::OptionalPlace && value.find(input.name) == nullptr) {
+        if (input.type != InputType::OptionalPlace && input.type != InputType::OptionalComponent &&
+            value.find(input.name) == nullptr) {
             return malformed("an operation holds every input its declaration lists");
         }
     }
@@ -142,6 +144,17 @@ result::Result<Query> queryOf(const Value& value) {
     }
     if (kIndex == kChanging) {
         return Query{ListEntities{}};
+    }
+    if (kIndex == kChanging + 2) {
+        const std::string* named = textOf(value.find("named"));
+        const Value* having = value.find("having");
+        const auto kHaving = idOf(having);
+        if (named == nullptr || (having != nullptr && !kHaving.has_value())) {
+            return malformed("an operation's inputs are of their declared types");
+        }
+        return Query{FindEntities{.named = *named,
+                                  .having = kHaving.has_value() ? std::optional{schema::ComponentTypeId{*kHaving}}
+                                                                : std::nullopt}};
     }
     const auto kEntity = idOf(value.find("entity"));
     if (!kEntity.has_value()) {
