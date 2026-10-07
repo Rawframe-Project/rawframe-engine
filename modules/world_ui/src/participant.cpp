@@ -34,6 +34,7 @@ constexpr diagnostics::EventIdentity kFailed{"ui", "ui_failed"};
 // Navigation reaches more nodes than it ever has (D476): how many, so a
 // test or a tool waits for the UI it will press rather than for time.
 constexpr diagnostics::EventIdentity kReachable{"ui", "ui_reachable"};
+constexpr diagnostics::EventIdentity kSubmitted{"ui", "ui_submitted"};
 constexpr diagnostics::EventIdentity kImageUnknown{"ui", "image_unknown"};
 constexpr diagnostics::EventIdentity kImageUnread{"ui", "image_unavailable"};
 constexpr diagnostics::EventIdentity kFontUnread{"ui", "font_unavailable"};
@@ -446,6 +447,12 @@ public:
             typing_->focus(ui_->caret());
             for (view::Submitted& given : ui_->takeSubmitted()) {
                 typing_->submit(std::move(given));
+                // Told each time, as a player submits rarely, so what waits
+                // on a field's text knows it was given (D489).
+                emitter_.log(diagnostics::Severity::Info,
+                             kSubmitted,
+                             "a field's text was submitted",
+                             {diagnostics::field("submitted", ++submittedTold_)});
             }
         }
         boxes_ += drawn_->boxes.size();
@@ -631,6 +638,8 @@ private:
     std::uint64_t tick_ = 0;
     /// The most nodes navigation has reached (D476).
     std::size_t mostReachable_ = 0;
+    /// The fields' texts submitted, told as each is (D489).
+    std::uint64_t submittedTold_ = 0;
     bool failed_ = false;
     diagnostics::Emitter emitter_;
 };

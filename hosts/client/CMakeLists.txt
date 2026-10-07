@@ -125,12 +125,15 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # and the sign is typed and given (D458), every key still reaches
         # what it was pressed for. Both wait until navigation reaches the
         # purse and the field, so a loaded machine does not Tab before the
-        # purse is there (D476).
+        # purse is there (D476); the frozen one waits until the sign is
+        # given before it stops the client, which on the slowest tree at
+        # load drew a frame a second (D489).
         add_test(NAME client_navigates_stalls_frozen
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
                          games/tycoon/tycoon.game until=ui_reachable,reachable=2 frozen=Tab,Return keys=Tab frozen=Return,b,o,Return
+                         until=ui_submitted
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_navigates_stalls_frozen PROPERTIES
                              FIXTURES_REQUIRED tycoon_content
