@@ -210,6 +210,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("dragged", dragged_),
                   diagnostics::field("raised", raised_),
                   diagnostics::field("turned", turned_),
+                  diagnostics::field("marked", marked_),
                   diagnostics::field("status", std::string_view{status_}),
                   diagnostics::field("framesDrawn", framesDrawn_),
                   diagnostics::field("boxes", static_cast<std::uint64_t>(list_.boxes.size())),

@@ -291,6 +291,8 @@ void ShellParticipant::showEntity(std::size_t at) {
     components_ = 0;
     // Chosen in the session, so undo and redo keep it (D417).
     static_cast<void>(ask(selectRecord(next(), scene_, entity_)));
+    // And marked in its preview, where it stands (D464).
+    markChosen();
     // The scene's own entity is named; an instance's is its source's.
     if (catalog_.offers("scene.rename_entity") && !brought_[at]) {
         auto line = fieldRow("name", names_[at]);

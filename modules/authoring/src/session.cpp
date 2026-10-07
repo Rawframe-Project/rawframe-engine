@@ -4,6 +4,7 @@
 #include "rawframe/schema/stable_id.h"
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <utility>
 
@@ -27,7 +28,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 14> kVerbs = {
+constexpr std::array<VerbName, 15> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -41,6 +42,7 @@ constexpr std::array<VerbName, 14> kVerbs = {
     VerbName{.kind = "authoring.history", .verb = SessionVerb::History},
     VerbName{.kind = "authoring.assets", .verb = SessionVerb::Assets},
     VerbName{.kind = "authoring.pick", .verb = SessionVerb::Pick},
+    VerbName{.kind = "authoring.mark", .verb = SessionVerb::Mark},
     VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
 
 /// The members a verb's record may hold beside `kind` and `id`, and those
@@ -63,6 +65,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Select:
     case SessionVerb::View:
     case SessionVerb::Preview:
+    case SessionVerb::Mark:
         return Members{.required = 2, .optional = 0};
     case SessionVerb::Undo:
     case SessionVerb::Redo:
@@ -95,7 +98,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     }
     if (named == nullptr) {
         return malformed("a session record's kind is hello, describe, apply, read, undo, redo, select, view, preview, "
-                         "create_scene, history, assets, pick, or end");
+                         "create_scene, history, assets, pick, mark, or end");
     }
     SessionRecord record{.verb = named->verb, .id = idRead};
     const Members kMembers = membersOf(record.verb);
@@ -133,6 +136,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::CreateScene:
     case SessionVerb::History:
     case SessionVerb::Pick:
+    case SessionVerb::Mark:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -189,6 +193,23 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             return malformed("view holds an eye and a target of three numbers each and a fieldOfView");
         }
         record.view.fieldOfView = *kDegrees;
+    } else if (record.verb == SessionVerb::Mark) {
+        // A point of three finite numbers, or null for none.
+        const Value* kAt = parsed->find("at");
+        if (kAt != nullptr && kAt->isNull()) {
+            return record;
+        }
+        std::array<double, 3> at{};
+        bool sound = kAt != nullptr && kAt->kind() == Value::Kind::Array && kAt->items().size() == 3;
+        for (std::size_t each = 0; sound && each < 3; ++each) {
+            const std::optional<double> kNumber = kAt->items()[each].real();
+            sound = kNumber.has_value() && std::isfinite(*kNumber);
+            at[each] = sound ? *kNumber : 0;
+        }
+        if (!sound) {
+            return malformed("mark's at is a point of three finite numbers, or null");
+        }
+        record.mark = at;
     } else if (record.verb == SessionVerb::Preview) {
         const Value* kPreview = parsed->find("preview");
         if (kPreview != nullptr && kPreview->isNull()) {

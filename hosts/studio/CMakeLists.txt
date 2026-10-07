@@ -214,7 +214,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "clicked at 200,97.*saw studio_previewing.*typed 0,30,0.5 at 300,193.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"gate.scene\",[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":true,[^\n]*\"status\":\"view set and previewed\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}")
+                             "clicked at 200,97.*saw studio_previewing.*typed 0,30,0.5 at 300,193.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"gate.scene\",[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":true,[^\n]*\"status\":\"view set and previewed\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,")
         # Studio playing the plaza itself (D445): Play starts a server and a
         # client with a tooling endpoint; once the client says who it is,
         # the chosen gate's preview is attached to it (the clicks wait for
@@ -235,12 +235,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "clicked at 1096,23.*saw studio_previewing.*typed 0,30,0.5 at 300,193.*clicked at 1096,23.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,[^\n]*\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*}.*\"code\":\"scene_followed\"[^\n]*\"scene\":\"gate.scene\",\"created\":1.*{\"endpoint\":\"127.0.0.1:[0-9]+\",\"pinFile\":\"[^\"]*/server.fingerprint\",\"tokenFile\":\"[^\"]*/token\"}")
+                             "clicked at 1096,23.*saw studio_previewing.*typed 0,30,0.5 at 300,193.*clicked at 1096,23.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,[^\n]*\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,.*\"code\":\"scene_followed\"[^\n]*\"scene\":\"gate.scene\",\"created\":1.*{\"endpoint\":\"127.0.0.1:[0-9]+\",\"pinFile\":\"[^\"]*/server.fingerprint\",\"tokenFile\":\"[^\"]*/token\"}")
         # What the author clicks in the played game, selected in Studio
         # (D456): the gate's view aimed at its post, a click in the middle
         # of the played client's window (placed at 700,340, 560 by 360) is
         # a ray the client keeps; the server says the ray meets the post,
-        # which the gate scene brought, and Studio chooses it.
+        # which the gate scene brought, and Studio chooses it, marked in the
+        # played client where it stands (D464).
         add_test(NAME studio_picks_plaza
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
@@ -253,7 +254,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "clicked at 980,520.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"picked\":1,")
+                             "clicked at 980,520.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"picked\":1,[^\n]*\"marked\":[1-9][0-9]*,.*\"code\":\"scene_summary\"[^\n]*\"marksShown\":[1-9]")
         # A drag in the played game moving what it pressed (D457): the
         # gate's post, aimed at, pressed in the middle of the played client's
         # window and let go a hundred pixels to its right, is chosen, and its

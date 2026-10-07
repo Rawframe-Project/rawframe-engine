@@ -143,6 +143,8 @@ private:
             return historyOf(record);
         case authoring::SessionVerb::Pick:
             return picked(record);
+        case authoring::SessionVerb::Mark:
+            return marked(record);
         case authoring::SessionVerb::Assets: {
             Value made = Value::object();
             made.add("kind", Value::string("authoring.assets"));
@@ -678,6 +680,34 @@ private:
             pressed_.reset();
         }
         made.add("moved", std::move(moved));
+        return made;
+    }
+
+    /// Has the scene's preview mark a point, or none (D464): where the
+    /// author chose something. Whether the preview shows it.
+    result::Result<Value> marked(const authoring::SessionRecord& record) {
+        bool shown = false;
+        if (preview_ != nullptr && record.scene == previewScene_) {
+            Value at;
+            if (record.mark.has_value()) {
+                at = Value::array();
+                for (const double kEach : *record.mark) {
+                    at.push(Value::real(kEach));
+                }
+            }
+            Value mark = Value::object();
+            mark.add("kind", Value::string("tooling.mark"));
+            mark.add("id", Value::integer(0));
+            mark.add("at", std::move(at));
+            const auto kReply = preview_->ask(rawframe::document::writeCompact(mark));
+            const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
+            const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+            const Value* kMarked = kAnswer != nullptr ? kAnswer->find("marked") : nullptr;
+            shown = kMarked != nullptr && kMarked->truth().value_or(false);
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.marked"));
+        made.add("marked", Value::boolean(shown));
         return made;
     }
 

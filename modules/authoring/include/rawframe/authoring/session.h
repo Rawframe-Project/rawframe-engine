@@ -39,6 +39,7 @@
 #include "rawframe/document/json.h"
 #include "rawframe/result/result.h"
 
+#include <array>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -71,6 +72,9 @@ enum class SessionVerb : std::uint8_t {
     /// What the author last clicked in a scene's preview, if anything new
     /// (D456).
     Pick,
+    /// A point the scene's preview marks, where the author chose
+    /// something, or none (D464).
+    Mark,
     End,
 };
 
@@ -109,6 +113,8 @@ struct SessionRecord {
     SceneView view;
     /// Preview's; none to let the preview go (D433).
     std::optional<PreviewTarget> preview;
+    /// Mark's: the point, or none (D464).
+    std::optional<std::array<double, 3>> mark;
 };
 
 /// Reads one record; refuses (`ValidationFailed`) anything out of the form

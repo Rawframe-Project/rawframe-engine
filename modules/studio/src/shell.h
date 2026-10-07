@@ -28,6 +28,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -250,6 +251,15 @@ private:
     /// pose's x and z, in one transaction.
     void moveDragged(const Moved& moved);
 
+    /// The pose of an entity of the chosen scene, its 3D pose's fields by
+    /// name, each at nought where the scene leaves it at its default; none
+    /// for an entity with no such pose (D457, D464).
+    std::optional<std::map<std::string, double, std::less<>>> poseOf(const std::string& source);
+
+    /// Has the preview mark where the chosen entity stands, or nothing for
+    /// none or one with no pose (D464).
+    void markChosen();
+
     /// The chosen scene listed again, `entity` chosen if it stands, the
     /// columns scrolled where they were: a change is not a new place.
     void refresh(const std::optional<std::string>& entity);
@@ -361,6 +371,8 @@ private:
     /// Of those, raised and turned (D463).
     std::uint64_t raised_ = 0;
     std::uint64_t turned_ = 0;
+    /// The marks the preview showed (D464).
+    std::uint64_t marked_ = 0;
     std::vector<std::array<float, 4>> wheels_;
     std::uint64_t wheeled_ = 0;
     std::chrono::steady_clock::time_point began_ = std::chrono::steady_clock::now();

@@ -46,6 +46,14 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     const auto kAssets = readSessionRecord(R"({"kind":"authoring.assets","id":9})", id);
     RAWFRAME_EXPECT(kAssets.has_value() && kAssets->verb == SessionVerb::Assets);
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.assets","id":9,"scene":"b.scene"})", id).has_value());
+    const auto kMark = readSessionRecord(R"({"kind":"authoring.mark","id":12,"scene":"b.scene","at":[1,2.5,-3]})", id);
+    RAWFRAME_EXPECT(kMark.has_value() && kMark->verb == SessionVerb::Mark && kMark->mark.has_value() &&
+                    (*kMark->mark)[1] == 2.5);
+    const auto kUnmarked = readSessionRecord(R"({"kind":"authoring.mark","id":13,"scene":"b.scene","at":null})", id);
+    RAWFRAME_EXPECT(kUnmarked.has_value() && !kUnmarked->mark.has_value());
+    // A mark is a point of three numbers, or null, and nothing else.
+    RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.mark","scene":"b.scene","at":[1,2]})", id).has_value());
+    RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.mark","scene":"b.scene"})", id).has_value());
     const auto kPick = readSessionRecord(R"({"kind":"authoring.pick","id":10,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kPick.has_value() && kPick->verb == SessionVerb::Pick && kPick->scene == "b.scene");
     const auto kServed = readSessionRecord(

@@ -148,6 +148,13 @@ RAWFRAME_TEST(ADragSaysWhetherItMovedRaisedOrTurned) {
     RAWFRAME_EXPECT(kMoved.has_value() && kMoved->how == Moved::How::Move && kMoved->z == 2);
 }
 
+RAWFRAME_TEST(AMarkNamesAPointOrNone) {
+    RAWFRAME_EXPECT(document::writeCompact(markRecord(4, "gate.scene", std::array<double, 3>{-30, 0, -30})) ==
+                    R"({"kind":"authoring.mark","id":4,"scene":"gate.scene","at":[-30,0,-30]})");
+    RAWFRAME_EXPECT(document::writeCompact(markRecord(5, "gate.scene", std::nullopt)) ==
+                    R"({"kind":"authoring.mark","id":5,"scene":"gate.scene","at":null})");
+}
+
 RAWFRAME_TEST(AHistoryIsReadEntryByEntry) {
     const std::vector<HistoryEntry> kRead = historyOf(
         R"({"kind":"authoring.reply","id":3,"answer":{"kind":"authoring.history","reopened":false,"entries":[)"

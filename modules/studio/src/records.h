@@ -7,6 +7,7 @@
 
 #include "rawframe/document/json.h"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -100,6 +101,10 @@ struct Asset {
 /// author's newest click met in the scene: its id there; none for no new
 /// click, or one that met nothing `scene` brings.
 [[nodiscard]] Value pickRecord(std::int64_t id, std::string_view scene);
+
+/// `authoring.mark` for `scene` (D464): the point its preview marks, or
+/// none.
+[[nodiscard]] Value markRecord(std::int64_t id, std::string_view scene, const std::optional<std::array<double, 3>>& at);
 [[nodiscard]] std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene);
 
 /// An entity the author dragged in the preview (D457): its id in the scene,

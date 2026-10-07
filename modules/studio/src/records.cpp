@@ -311,6 +311,19 @@ Value pickRecord(std::int64_t id, std::string_view scene) {
     return recordOf("authoring.pick", id, scene);
 }
 
+Value markRecord(std::int64_t id, std::string_view scene, const std::optional<std::array<double, 3>>& at) {
+    Value made = recordOf("authoring.mark", id, scene);
+    Value point;
+    if (at.has_value()) {
+        point = Value::array();
+        for (const double kEach : *at) {
+            point.push(Value::real(kEach));
+        }
+    }
+    made.add("at", std::move(point));
+    return made;
+}
+
 std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene) {
     const auto kParsed = document::parse(reply);
     const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
