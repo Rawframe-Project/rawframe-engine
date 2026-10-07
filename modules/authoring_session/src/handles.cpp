@@ -107,4 +107,82 @@ alongAxis(const Point& mark, std::size_t axis, const Point& origin, const Point&
     return kNearest->line;
 }
 
+std::uint8_t partUnder(const Point& mark, const Point& origin, const Point& toward, double fieldOfView) noexcept {
+    if (const std::optional<Grabbed> kAxis = grabbedAxis(mark, origin, toward, fieldOfView); kAxis.has_value()) {
+        return static_cast<std::uint8_t>(kAxis->axis + 1);
+    }
+    return grabbedRing(mark, origin, toward, fieldOfView) ? 4 : 0;
+}
+
+std::optional<Handle>
+grabbedHandle(const Point& mark, const Point& origin, const Point& toward, double fieldOfView) noexcept {
+    if (const std::optional<Grabbed> kAxis = grabbedAxis(mark, origin, toward, fieldOfView); kAxis.has_value()) {
+        Point at = mark;
+        at[kAxis->axis] += kAxis->along;
+        return Handle{.axis = kAxis->axis, .point = at};
+    }
+    const std::optional<Point> kMet = levelPoint(mark, origin, toward);
+    if (!kMet.has_value() || !grabbedRing(mark, origin, toward, fieldOfView)) {
+        return std::nullopt;
+    }
+    return Handle{.point = *kMet};
+}
+
+namespace {
+
+document::Value pointValue(const Point& point) {
+    document::Value numbers = document::Value::array();
+    for (const double kEach : point) {
+        numbers.push(document::Value::real(kEach));
+    }
+    return numbers;
+}
+
+} // namespace
+
+document::Value markRecord(const std::optional<Point>& at, std::uint8_t lit) {
+    constexpr std::array<std::string_view, 5> kParts = {"", "x", "y", "z", "ring"};
+    document::Value mark = document::Value::object();
+    mark.add("kind", document::Value::string("tooling.mark"));
+    mark.add("id", document::Value::integer(0));
+    mark.add("at", at.has_value() ? pointValue(*at) : document::Value{});
+    if (lit != 0 && lit < kParts.size()) {
+        mark.add("lit", document::Value::string(std::string{kParts[lit]}));
+    }
+    return mark;
+}
+
+document::Value movedRecord(const std::string& scene,
+                            const std::string& source,
+                            const Point& mark,
+                            const Handle& grabbed,
+                            const Point& origin,
+                            const Point& toward) {
+    document::Value moved = document::Value::object();
+    moved.add("scene", document::Value::string(scene));
+    moved.add("source", document::Value::string(source));
+    if (grabbed.axis.has_value()) {
+        const std::size_t kAxis = *grabbed.axis;
+        const std::optional<double> kTo = alongAxis(mark, kAxis, origin, toward);
+        if (!kTo.has_value()) {
+            return document::Value{};
+        }
+        Point by{};
+        by[kAxis] = *kTo - (grabbed.point[kAxis] - mark[kAxis]);
+        moved.add("how", document::Value::string(kAxis == 1 ? "height" : "move"));
+        moved.add("by", pointValue(by));
+        return moved;
+    }
+    const std::optional<Point> kTo = levelPoint(mark, origin, toward);
+    if (!kTo.has_value()) {
+        return document::Value{};
+    }
+    const Point& kFrom = grabbed.point;
+    moved.add("how", document::Value::string("turn"));
+    moved.add("by", pointValue(Point{(*kTo)[0] - kFrom[0], 0, (*kTo)[2] - kFrom[2]}));
+    moved.add("from", pointValue(kFrom));
+    moved.add("to", pointValue(*kTo));
+    return moved;
+}
+
 } // namespace rawframe::authoring_session

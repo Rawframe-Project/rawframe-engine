@@ -290,6 +290,23 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "dragged from 999,520 to 1079,540.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"dragged\":1,.*scene gate.scene: [^\n]*\"id\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"rawframe.physics3d.pose\":{\"x\":-27\\.[2-6][0-9]*,\"y\":2\\.5,\"z\":-30}")
+        # The handle under the pointer drawn lit (D468): the post chosen and
+        # marked, the pointer moved onto its X handle with no press, and the
+        # played client draws the mark with a part lit.
+        add_test(NAME studio_hovers_plaza
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
+                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 980,520 until=studio_marked move=999,520 wait=3
+                         1096,23
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_hovers_plaza PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "moved to 999,520.*\"code\":\"scene_summary\"[^\n]*\"marksLit\":[1-9]")
         # The mark's ring dragged (D467): seen from above, the post chosen,
         # its ring pressed left of it and let go in front of it, a quarter
         # turn about its upright.
@@ -338,7 +355,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # A played game is three programs, Studio, its server, and a client
         # drawing on the device: each counts as three of the tree's jobs, so
         # a check starts fewer at once and none starves the others (D467).
-        set_tests_properties(studio_plays_plaza studio_picks_plaza studio_drags_plaza studio_handles_plaza
+        set_tests_properties(studio_plays_plaza studio_picks_plaza studio_drags_plaza studio_handles_plaza studio_hovers_plaza
                              studio_rings_plaza studio_raises_plaza studio_turns_plaza PROPERTIES PROCESSORS 3)
     endif()
 endif()

@@ -23,6 +23,8 @@
 # (D457), holding the X key a fifth part names through it, Shift_L or
 # Control_L (D463). An argument `frozen=` and X key names presses them with
 # the program stopped, so it reads them in one frame (D458). An argument
+# `move=` and a point moves the pointer there with no press, a second
+# before going on (D468). An argument
 # `wait=` and a number of seconds waits that long, and `until=` and a
 # record's code waits, up to three minutes, until the log holds it (D445).
 # Five seconds after, it stops the program whose pid its pid file holds
@@ -32,7 +34,8 @@
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
 #                 | wheel=<x>,<y>,<turns> | drag=<x>,<y>,<x>,<y>[,<key>]
-#                 | frozen=<key>[,<key>...] | wait=<seconds> | until=<code>
+#                 | frozen=<key>[,<key>...] | move=<x>,<y> | wait=<seconds>
+#                 | until=<code>
 #                 [...]
 
 import ctypes
@@ -117,6 +120,10 @@ def main():
         if argument.startswith("wait="):
             points.append((None, None, float(argument[len("wait="):])))
             continue
+        if argument.startswith("move="):
+            toX, toY = (int(part) for part in argument[len("move="):].split(","))
+            points.append((toX, toY, ("move",)))
+            continue
         if argument.startswith("drag="):
             parts = argument[len("drag="):].split(",")
             fromX, fromY, toX, toY = (int(part) for part in parts[:4])
@@ -169,6 +176,12 @@ def main():
     for at, y, text in points:
         if not alive(pid):
             break
+        if isinstance(text, tuple) and text[0] == "move":
+            xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
+            x.XFlush(display)
+            print(f"moved to {at},{y}")
+            time.sleep(1)
+            continue
         if isinstance(text, tuple) and text[0] == "drag":
             # Pressed at the point, carried to the other in ten steps a
             # twentieth of a second apart, and let go there (D457).
