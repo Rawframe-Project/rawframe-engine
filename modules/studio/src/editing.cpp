@@ -177,6 +177,18 @@ void ShellParticipant::take(const view::Typing& typing) {
 }
 
 void ShellParticipant::setView(const std::string& part, const std::string& text) {
+    // The snap is Studio's alone: no record (D471).
+    if (part == "snap") {
+        if (const std::optional<Snap> kSnap = snapOf(text); kSnap.has_value()) {
+            snap_ = *kSnap;
+            say(snap_.move == 0 && snap_.turn == 0 ? "no snap" : "drags snap to " + snapText(snap_));
+        } else {
+            ++refused_;
+            say("snap: meters and degrees, or 0");
+        }
+        showViewText();
+        return;
+    }
     const std::optional<Value> kView = viewWith(view_, part, text);
     if (!kView.has_value()) {
         ++refused_;

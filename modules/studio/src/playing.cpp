@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <functional>
 #include <map>
+#include <numbers>
 #include <string>
 #include <utility>
 
@@ -188,18 +189,24 @@ void ShellParticipant::moveDragged(const Moved& moved) {
     std::map<std::string, double, std::less<>>& pose = *held;
     std::vector<std::pair<std::string, double>> changed;
     std::string done;
+    // A place moved is snapped to the grid where it moved, a turn to
+    // whole steps (D471).
+    const auto kPlaced = [this](double was, double by) {
+        return by != 0 ? snapped(was + by, snap_.move) : was;
+    };
     if (moved.how == Moved::How::Move) {
-        changed = {{"x", pose["x"] + moved.x}, {"z", pose["z"] + moved.z}};
+        changed = {{"x", kPlaced(pose["x"], moved.x)}, {"z", kPlaced(pose["z"], moved.z)}};
         done = "moved by dragging";
     } else if (moved.how == Moved::How::Height) {
-        changed = {{"y", pose["y"] + moved.y}};
+        changed = {{"y", kPlaced(pose["y"], moved.y)}};
         done = "raised by dragging";
         ++raised_;
     } else {
         // The angle about +Y from where it was pressed to where it was
         // let go, seen from the entity's place; composed before its turn.
-        const double kTurn = std::atan2(moved.from[2] - pose["z"], moved.from[0] - pose["x"]) -
-                             std::atan2(moved.to[2] - pose["z"], moved.to[0] - pose["x"]);
+        const double kTurn = snapped(std::atan2(moved.from[2] - pose["z"], moved.from[0] - pose["x"]) -
+                                         std::atan2(moved.to[2] - pose["z"], moved.to[0] - pose["x"]),
+                                     snap_.turn * std::numbers::pi / 180);
         const bool kNone = pose["qx"] == 0 && pose["qy"] == 0 && pose["qz"] == 0 && pose["qw"] == 0;
         const std::array<double, 4> kWas = kNone
                                                ? std::array<double, 4>{0, 0, 0, 1}
@@ -229,6 +236,7 @@ void ShellParticipant::moveDragged(const Moved& moved) {
         operations.push_back(std::move(operation));
     }
     ++dragged_;
+    snapped_ += snap_.move > 0 || snap_.turn > 0 ? 1 : 0;
     commitAll(std::move(operations), done, moved.source);
     emitter_.log(diagnostics::Severity::Info,
                  kDragged,

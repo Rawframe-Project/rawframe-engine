@@ -136,6 +136,24 @@ struct Moved {
 /// where nothing moved.
 [[nodiscard]] std::optional<Value> viewedIn(std::string_view reply);
 
+/// What a drag in the played game snaps to (D471): a place to whole steps
+/// of `move` meters, a turn to whole steps of `turn` degrees; nought for
+/// none. Studio's own, never the scene's (ADR-0066).
+struct Snap {
+    double move = 0;
+    double turn = 0;
+};
+
+/// A snap as typed: two numbers, meters and degrees, or one for meters
+/// alone, or `0` for none; none for anything else, or a step below nought.
+[[nodiscard]] std::optional<Snap> snapOf(std::string_view text);
+
+/// A snap as Studio shows it.
+[[nodiscard]] std::string snapText(const Snap& snap);
+
+/// `value` to the nearest whole step of `step`, or as it is for none.
+[[nodiscard]] double snapped(double value, double step) noexcept;
+
 /// `authoring.create_scene` for `scene` (D449).
 [[nodiscard]] Value createSceneRecord(std::int64_t id, std::string_view scene);
 

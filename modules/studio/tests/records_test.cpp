@@ -148,6 +148,17 @@ RAWFRAME_TEST(ADragSaysWhetherItMovedRaisedOrTurned) {
     RAWFRAME_EXPECT(kMoved.has_value() && kMoved->how == Moved::How::Move && kMoved->z == 2);
 }
 
+RAWFRAME_TEST(ASnapIsMetersAndDegreesOrNone) {
+    const auto kBoth = snapOf("0.5 15");
+    RAWFRAME_EXPECT(kBoth.has_value() && kBoth->move == 0.5 && kBoth->turn == 15);
+    const auto kMeters = snapOf(" 1 ");
+    RAWFRAME_EXPECT(kMeters.has_value() && kMeters->move == 1 && kMeters->turn == 0);
+    RAWFRAME_EXPECT(snapOf("0").has_value() && snapText(*snapOf("0")) == "0");
+    RAWFRAME_EXPECT(!snapOf("").has_value() && !snapOf("-1").has_value() && !snapOf("1 2 3").has_value() &&
+                    !snapOf("one").has_value());
+    RAWFRAME_EXPECT(snapped(-27.444, 1) == -27 && snapped(1.26, 0.5) == 1.5 && snapped(1.26, 0) == 1.26);
+}
+
 RAWFRAME_TEST(AMarkNamesAPointOrNone) {
     RAWFRAME_EXPECT(document::writeCompact(markRecord(4, "gate.scene", std::array<double, 3>{-30, 0, -30})) ==
                     R"({"kind":"authoring.mark","id":4,"scene":"gate.scene","at":[-30,0,-30]})");

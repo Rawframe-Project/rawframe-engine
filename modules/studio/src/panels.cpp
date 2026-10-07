@@ -435,7 +435,7 @@ void ShellParticipant::showView() {
         return;
     }
     viewRows_.push_back(*heading);
-    for (const std::string_view kPart : {"eye", "target", "fieldOfView"}) {
+    for (const std::string_view kPart : {"eye", "target", "fieldOfView", "snap"}) {
         auto line = fieldRow(kPart == "fieldOfView" ? "field of view" : kPart, {}, scenesColumn_);
         if (!line.has_value()) {
             return;
@@ -471,7 +471,10 @@ void ShellParticipant::showHistoryList() {
 
 void ShellParticipant::showViewText() {
     for (const FieldRow& kViewField : viewFields_) {
-        static_cast<void>(words(kViewField.value, viewText(view_, kViewField.field), kText, 14));
+        static_cast<void>(words(kViewField.value,
+                                kViewField.field == "snap" ? snapText(snap_) : viewText(view_, kViewField.field),
+                                kText,
+                                14));
     }
 }
 

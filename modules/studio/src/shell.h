@@ -370,6 +370,9 @@ private:
     std::uint64_t viewsSet_ = 0;
     /// Views moved in the played game (D469).
     std::uint64_t viewsMoved_ = 0;
+    /// What drags in the played game snap to, and how many snapped (D471).
+    Snap snap_;
+    std::uint64_t snapped_ = 0;
     std::optional<PlaySettings> play_;
     std::optional<Play> playing_;
     std::optional<Play> stopping_;

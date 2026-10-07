@@ -336,6 +336,41 @@ std::optional<std::string> pickedIn(std::string_view reply, std::string_view sce
     return *source->text();
 }
 
+std::optional<Snap> snapOf(std::string_view text) {
+    std::vector<double> numbers;
+    std::size_t at = 0;
+    while (at < text.size()) {
+        while (at < text.size() && text[at] == ' ') {
+            ++at;
+        }
+        if (at == text.size()) {
+            break;
+        }
+        double number = 0;
+        const auto [kEnd, kError] = std::from_chars(text.data() + at, text.data() + text.size(), number);
+        if (kError != std::errc{} || !std::isfinite(number) || number < 0) {
+            return std::nullopt;
+        }
+        numbers.push_back(number);
+        at = static_cast<std::size_t>(kEnd - text.data());
+    }
+    if (numbers.empty() || numbers.size() > 2) {
+        return std::nullopt;
+    }
+    return Snap{.move = numbers[0], .turn = numbers.size() > 1 ? numbers[1] : 0};
+}
+
+std::string snapText(const Snap& snap) {
+    if (snap.move == 0 && snap.turn == 0) {
+        return "0";
+    }
+    return document::writeCompact(Value::real(snap.move)) + " " + document::writeCompact(Value::real(snap.turn));
+}
+
+double snapped(double value, double step) noexcept {
+    return step > 0 ? std::round(value / step) * step : value;
+}
+
 std::optional<Value> viewedIn(std::string_view reply) {
     const auto kParsed = document::parse(reply);
     const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
