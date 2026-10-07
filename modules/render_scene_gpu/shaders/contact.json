@@ -1,10 +1,8 @@
 {
   "root_block_bytes": 0,
   "entries": [
-    {"name": "vs", "stage": "vertex",
-     "variables": [{"location": 0, "type": "float32", "components": 2}]},
+    {"name": "vs", "stage": "vertex"},
     {"name": "shade", "stage": "fragment",
-     "variables": [{"location": 0, "type": "float32", "components": 2}],
      "outputs": [{"location": 0, "type": "float32", "components": 1}]}
   ],
   "bindings": [

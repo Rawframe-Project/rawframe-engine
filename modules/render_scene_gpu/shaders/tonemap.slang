@@ -49,11 +49,11 @@ float3 contrast(float3 x)
 
 // The ACEScct curve (S-2016-001) and its inverse: linear light to the
 // encoding a grading table is laid out along, and back.
-float3 acescct(float3 linear)
+float3 acescct(float3 light)
 {
-    return lerp(10.5402377416545 * linear + 0.0729055341958355,
-                (log2(max(linear, float3(1e-10))) + 9.72) / 17.52,
-                step(float3(0.0078125), linear));
+    return lerp(10.5402377416545 * light + 0.0729055341958355,
+                (log2(max(light, float3(1e-10))) + 9.72) / 17.52,
+                step(float3(0.0078125), light));
 }
 
 float3 linearOf(float3 encoded)
@@ -110,9 +110,9 @@ float3 neutral(float3 color)
 }
 
 // The sRGB encoding of linear light, and back.
-float3 encoded(float3 linear)
+float3 encoded(float3 light)
 {
-    return lerp(linear * 12.92, 1.055 * pow(linear, float3(1.0 / 2.4)) - 0.055, step(float3(0.0031308), linear));
+    return lerp(light * 12.92, 1.055 * pow(light, float3(1.0 / 2.4)) - 0.055, step(float3(0.0031308), light));
 }
 
 float3 decoded(float3 encoding)

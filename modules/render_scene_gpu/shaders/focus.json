@@ -1,16 +1,12 @@
 {
   "root_block_bytes": 0,
   "entries": [
-    {"name": "vs", "stage": "vertex",
-     "variables": [{"location": 0, "type": "float32", "components": 2}]},
+    {"name": "vs", "stage": "vertex"},
     {"name": "prefilter", "stage": "fragment",
-     "variables": [{"location": 0, "type": "float32", "components": 2}],
      "outputs": [{"location": 0, "type": "float32", "components": 4}]},
     {"name": "bokeh", "stage": "fragment",
-     "variables": [{"location": 0, "type": "float32", "components": 2}],
      "outputs": [{"location": 0, "type": "float32", "components": 4}]},
     {"name": "combine", "stage": "fragment",
-     "variables": [{"location": 0, "type": "float32", "components": 2}],
      "outputs": [{"location": 0, "type": "float32", "components": 4}]}
   ],
   "bindings": [
