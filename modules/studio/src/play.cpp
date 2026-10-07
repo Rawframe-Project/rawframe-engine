@@ -155,7 +155,10 @@ result::Status Play::launch() {
     // (Linux takes 32768 and up, Windows 49152 and up), so no socket of
     // another process holds one by chance: the server's, the client's
     // endpoint after it, and the server's endpoint, for picking (D456).
-    const auto kServerPort = static_cast<std::uint16_t>(20000 + (device() % 3000) * 4);
+    // Below 30000, where the tests' tools/free_port.py draws, so the two
+    // never meet; a port taken all the same is refused (D470) and the game
+    // launched again on others.
+    const auto kServerPort = static_cast<std::uint16_t>(20000 + (device() % 2500) * 4);
     const auto kEndpointPort = static_cast<std::uint16_t>(kServerPort + 1);
     const auto kServerEndpointPort = static_cast<std::uint16_t>(kServerPort + 2);
     const std::filesystem::path& kAt = directory_;
