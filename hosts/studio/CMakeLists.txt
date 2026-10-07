@@ -71,17 +71,18 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # the instance field refuses x, which no scene is, and places platform;
     # the entity it brought chosen, Delete removes it through the instance's
     # patch, Restore takes it back, and Remove instance removes the whole
-    # instance, so the hall is as it was, byte for byte.
+    # instance, so the hall is as it was, byte for byte. The instance field
+    # is under the search's (D473).
     add_test(NAME studio_instances
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game hall.scene 200,97 674,161:x 674,161:platform 640,161 517,97
+                     games/runners/runners.game hall.scene 200,97 674,193:x 674,193:platform 640,161 517,97
                      589,97 690,97
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_instances PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed x at 674,161.*typed platform at 674,161.*clicked at 640,161.*clicked at 517,97.*clicked at 589,97.*clicked at 690,97.*hall.scene written: no.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"hall.scene\",\"entities\":1,[^\n]*\"applied\":4,\"refused\":1,[^\n]*\"status\":\"instance removed\".*\"exit\":\"clean_stop\"")
+                         "typed x at 674,193.*typed platform at 674,193.*clicked at 640,161.*clicked at 517,97.*clicked at 589,97.*clicked at 690,97.*hall.scene written: no.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"hall.scene\",\"entities\":1,[^\n]*\"applied\":4,\"refused\":1,[^\n]*\"status\":\"instance removed\".*\"exit\":\"clean_stop\"")
     # A new scene (D449): typed under runners' scenes, made with its
     # sidecar, listed in order and chosen, and given an entity.
     add_test(NAME studio_makes_scenes
@@ -146,6 +147,18 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "clicked at 76,164.*clicked at 160,164.*controls.kest written: no.*editor opened --goto [^ ]*/game/controls.kest:[0-9]+:1.*\"code\":\"studio_summary\"[^\n]*\"scenes\":3,[^\n]*\"opened\":1,[^\n]*\"status\":\"the game reads\".*\"exit\":\"clean_stop\"")
+    # A search of the entity column (D473): in runners' level, slope finds
+    # the three slopes, and the field, under them now, then takes a wall
+    # holding runners.tile by its last part, which finds the two walls.
+    add_test(NAME studio_finds
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene 200,129 674,417:slope 674,225:wall\ has:tile
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_finds PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "level.scene written: no.*\"code\":\"studio_searched\"[^\n]*\"found\":3,\"named\":\"slope\",\"having\":\"\".*\"code\":\"studio_searched\"[^\n]*\"found\":2,\"named\":\"wall\",\"having\":\"tile\".*\"code\":\"studio_summary\"[^\n]*\"entities\":2,[^\n]*\"searched\":2,.*\"exit\":\"clean_stop\"")
     # A scene's history (D454): ground renamed three times, the history
     # lists the three; its first entry clicked undoes the two after it,
     # and its last clicked redoes them. The history sits under the view's

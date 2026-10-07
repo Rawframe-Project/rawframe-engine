@@ -148,6 +148,19 @@ RAWFRAME_TEST(ADragSaysWhetherItMovedRaisedOrTurned) {
     RAWFRAME_EXPECT(kMoved.has_value() && kMoved->how == Moved::How::Move && kMoved->z == 2);
 }
 
+RAWFRAME_TEST(ASearchIsANameAndAComponent) {
+    const Search kBoth = searchOf("  west has:tile  wall ");
+    RAWFRAME_EXPECT(kBoth.named == "west wall" && kBoth.having == "tile");
+    const Search kName = searchOf("slope");
+    RAWFRAME_EXPECT(kName.named == "slope" && kName.having.empty());
+    RAWFRAME_EXPECT(searchOf("").named.empty() && searchOf("has:pose").named.empty() &&
+                    searchOf("has:pose").having == "pose");
+    const std::string kRecord = document::writeCompact(findRecord(4, "level.scene", "wall", "ab"));
+    RAWFRAME_EXPECT(kRecord.find(R"("operation":"scene.find_entities","named":"wall","having":"ab")") !=
+                    std::string::npos);
+    RAWFRAME_EXPECT(document::writeCompact(findRecord(4, "level.scene", "", "")).find("having") == std::string::npos);
+}
+
 RAWFRAME_TEST(ASnapIsMetersAndDegreesOrNone) {
     const auto kBoth = snapOf("0.5 15");
     RAWFRAME_EXPECT(kBoth.has_value() && kBoth->move == 0.5 && kBoth->turn == 15);

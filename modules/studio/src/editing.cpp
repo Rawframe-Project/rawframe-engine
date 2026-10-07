@@ -107,6 +107,8 @@ void ShellParticipant::pressAt(float x, float y) {
         beginEdit(*kViewAt);
     } else if (newScene_.has_value() && kNode == newScene_->value) {
         beginEdit(*newScene_);
+    } else if (findField_.has_value() && kNode == findField_->value) {
+        beginEdit(*findField_);
     } else if (const auto kSceneAt = std::ranges::find(sceneFields_, kNode, &FieldRow::value);
                kSceneAt != sceneFields_.end()) {
         beginEdit(*kSceneAt);
@@ -158,6 +160,9 @@ void ShellParticipant::take(const view::Typing& typing) {
             place(kTyped);
         } else if (kEdited.role == FieldRow::Role::NewScene) {
             makeScene(kTyped);
+        } else if (kEdited.role == FieldRow::Role::Find) {
+            find_ = kTyped;
+            refresh(entity_.empty() ? std::nullopt : std::optional<std::string>{entity_});
         } else {
             apply(kEdited, kTyped);
         }
@@ -168,7 +173,7 @@ void ShellParticipant::take(const view::Typing& typing) {
             showViewText();
         } else if (kRole == FieldRow::Role::NewScene) {
             static_cast<void>(showScenes());
-        } else if (kRole == FieldRow::Role::Instance) {
+        } else if (kRole == FieldRow::Role::Instance || kRole == FieldRow::Role::Find) {
             refresh(entity_.empty() ? std::nullopt : std::optional<std::string>{entity_});
         } else {
             showEntity(entityAt_);

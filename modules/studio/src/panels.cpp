@@ -205,8 +205,10 @@ void ShellParticipant::showScene(std::size_t at) {
     scene_ = scenes_[at];
     sceneAt_ = at;
     if (kChanged) {
-        // A scene's view is the session's, unknown here until it says.
+        // A scene's view is the session's, unknown here until it says,
+        // and its search starts empty.
         view_.reset();
+        find_.clear();
         static_cast<void>(tree_->scrollTo(entitiesColumn_, 0, 0));
         showView();
         if (preview_.has_value()) {
@@ -228,7 +230,8 @@ void ShellParticipant::showScene(std::size_t at) {
     places_.clear();
     entity_.clear();
     components_ = 0;
-    const std::optional<Value> kList = read(scene_, "scene.list_entities");
+    findField_.reset();
+    const std::optional<Value> kList = entitiesShown();
     const Value* listed = kList.has_value() ? kList->find("entities") : nullptr;
     if (listed == nullptr || listed->kind() != Value::Kind::Array) {
         return;
@@ -263,7 +266,15 @@ void ShellParticipant::showScene(std::size_t at) {
         const Value* place = each.find("place");
         places_.push_back(place != nullptr ? place->integer() : std::nullopt);
     }
-    // Under the scene's entities, the scene an instance placed in it is of.
+    // Under the scene's entities, the search that chose them (D473), then
+    // the scene an instance placed in it is of.
+    if (catalog_.offers("scene.find_entities")) {
+        auto line = fieldRow("find", find_, entitiesColumn_);
+        if (line.has_value()) {
+            sceneFieldRows_.push_back(line->first);
+            findField_ = FieldRow{.value = line->second, .role = FieldRow::Role::Find, .field = "find"};
+        }
+    }
     if (catalog_.offers("scene.add_instance")) {
         auto line = fieldRow("instance of", "", entitiesColumn_);
         if (line.has_value()) {
@@ -272,6 +283,39 @@ void ShellParticipant::showScene(std::size_t at) {
                 FieldRow{.value = line->second, .role = FieldRow::Role::Instance, .field = "instance of"});
         }
     }
+}
+
+std::optional<Value> ShellParticipant::entitiesShown() {
+    if (find_.empty()) {
+        return read(scene_, "scene.list_entities");
+    }
+    const Search kSearch = searchOf(find_);
+    std::string having;
+    if (!kSearch.having.empty()) {
+        std::string why;
+        const std::optional<Catalog::Component> kComponent = componentNamed(catalog_, kSearch.having, why);
+        if (!kComponent.has_value()) {
+            // Nothing found rather than everything: the search is still
+            // shown, and what it lacks said.
+            say("find: " + why);
+            Value none = Value::object();
+            none.add("entities", Value::array());
+            return none;
+        }
+        having = kComponent->id;
+    }
+    std::optional<Value> found = firstAnswer(ask(findRecord(next(), scene_, kSearch.named, having)));
+    const Value* entities = found.has_value() ? found->find("entities") : nullptr;
+    if (entities != nullptr && entities->kind() == Value::Kind::Array) {
+        ++searched_;
+        emitter_.log(diagnostics::Severity::Info,
+                     kSearched,
+                     "the entity column shows what a search found",
+                     {diagnostics::field("found", static_cast<std::uint64_t>(entities->items().size())),
+                      diagnostics::field("named", kSearch.named),
+                      diagnostics::field("having", kSearch.having)});
+    }
+    return found;
 }
 
 void ShellParticipant::showEntity(std::size_t at) {

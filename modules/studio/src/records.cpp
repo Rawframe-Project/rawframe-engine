@@ -336,6 +336,46 @@ std::optional<std::string> pickedIn(std::string_view reply, std::string_view sce
     return *source->text();
 }
 
+Search searchOf(std::string_view text) {
+    Search made;
+    std::size_t at = 0;
+    while (at < text.size()) {
+        while (at < text.size() && text[at] == ' ') {
+            ++at;
+        }
+        const std::size_t kEnd = std::min(text.find(' ', at), text.size());
+        const std::string_view kWord = text.substr(at, kEnd - at);
+        at = kEnd;
+        if (kWord.empty()) {
+            continue;
+        }
+        if (kWord.starts_with("has:")) {
+            made.having = kWord.substr(4);
+        } else {
+            made.named += (made.named.empty() ? "" : " ") + std::string{kWord};
+        }
+    }
+    return made;
+}
+
+Value findRecord(std::int64_t id, std::string_view scene, std::string_view named, std::string_view having) {
+    Value query = Value::object();
+    query.add("operation", Value::string("scene.find_entities"));
+    query.add("named", Value::string(std::string{named}));
+    if (!having.empty()) {
+        query.add("having", Value::string(std::string{having}));
+    }
+    Value queries = Value::array();
+    queries.push(std::move(query));
+    Value document = Value::object();
+    document.add("formatVersion", Value::integer(1));
+    document.add("kind", Value::string("authoring.query"));
+    document.add("queries", std::move(queries));
+    Value record = recordOf("authoring.read", id, scene);
+    record.add("queries", std::move(document));
+    return record;
+}
+
 std::optional<Snap> snapOf(std::string_view text) {
     std::vector<double> numbers;
     std::size_t at = 0;

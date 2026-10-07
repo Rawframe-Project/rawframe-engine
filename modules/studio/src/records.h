@@ -136,6 +136,21 @@ struct Moved {
 /// where nothing moved.
 [[nodiscard]] std::optional<Value> viewedIn(std::string_view reply);
 
+/// An entity search as typed (D473): its words a name the entities' hold,
+/// and a `has:` word the component they hold, by any name `componentNamed`
+/// takes; sugar over `scene.find_entities`'s typed inputs.
+struct Search {
+    std::string named;
+    std::string having;
+};
+
+[[nodiscard]] Search searchOf(std::string_view text);
+
+/// A `scene.find_entities` query of `scene`: `having` a component id, or
+/// empty for none.
+[[nodiscard]] Value
+findRecord(std::int64_t id, std::string_view scene, std::string_view named, std::string_view having);
+
 /// What a drag in the played game snaps to (D471): a place to whole steps
 /// of `move` meters, a turn to whole steps of `turn` degrees; nought for
 /// none. Studio's own, never the scene's (ADR-0066).

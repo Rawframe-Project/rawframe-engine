@@ -14,7 +14,7 @@
 # before and up to fifteen seconds after (D453b). A point followed by `:`
 # and lower-case text has the text typed after its click, a key at a time,
 # then Return (D426); a dot, a comma, a minus, and a space are typed as
-# their keys. An argument `keys=` and X key names apart by commas presses
+# their keys, and a colon with Shift (D473). An argument `keys=` and X key names apart by commas presses
 # those keys alone, a third of a second apart, and waits a second and a half
 # after them (D430). An argument `wheel=`, a point, and a count turns the
 # wheel there that many detents toward the user, or away for a count below
@@ -58,6 +58,8 @@ class XImage(ctypes.Structure):
 
 # Characters typed whose X key names are words.
 KEYS = {".": "period", ",": "comma", "-": "minus", " ": "space"}
+# Characters typed with Shift held, by the key that types them (D473).
+SHIFTED = {":": "semicolon"}
 
 
 def alive(pid):
@@ -323,8 +325,16 @@ def main():
         print(f"clicked at {at},{y}")
         time.sleep(1)
         if text:
-            for name in [*(KEYS.get(letter, letter) for letter in text), "Return"]:
-                press(name, 0.05)
+            shift = x.XKeysymToKeycode(display, x.XStringToKeysym(b"Shift_L"))
+            for letter in [*text, "Return"]:
+                if letter in SHIFTED:
+                    xtest.XTestFakeKeyEvent(display, shift, 1, 0)
+                    x.XFlush(display)
+                    press(SHIFTED[letter], 0.05)
+                    xtest.XTestFakeKeyEvent(display, shift, 0, 0)
+                    x.XFlush(display)
+                else:
+                    press(letter if letter == "Return" else KEYS.get(letter, letter), 0.05)
                 time.sleep(0.1)
             print(f"typed {text} at {at},{y}")
             time.sleep(1)
