@@ -78,7 +78,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
-                         games/tycoon/tycoon.game 60,95:ann
+                         games/tycoon/tycoon.game 60,95:ann until=ui_submitted
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_types_stalls PROPERTIES
                              FIXTURES_REQUIRED tycoon_content
@@ -94,7 +94,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
-                         games/tycoon/tycoon.game until=ui_reachable,reachable=2 frozenclick=60,95:ann
+                         games/tycoon/tycoon.game until=ui_reachable,reachable=2 frozenclick=60,95:ann until=ui_submitted
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_types_stalls_frozen PROPERTIES
                              FIXTURES_REQUIRED tycoon_content
@@ -177,5 +177,11 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"id\":2,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":true}.*\"id\":3,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":4,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":5,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":false}.*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,")
+        # Each draws a window on lavapipe beside a server, and bots or a
+        # second client in some: three of a preset's processors each, so a
+        # full check, eight trees at once, starts fewer at once and none is
+        # starved past its input (D491), as Studio's played tests (D467).
+        set_tests_properties(client_plays_runners client_drawn client_clicks_stalls client_types_stalls client_types_stalls_frozen client_navigates_stalls client_navigates_stalls_frozen client_plaza_drawn client_previews_plaza
+                             PROPERTIES PROCESSORS 3)
     endif()
 endif()
