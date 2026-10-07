@@ -205,6 +205,20 @@ RAWFRAME_TEST(TheContractOverQuic) {
     RAWFRAME_EXPECT(!client->send(*kConnection, *kStream, bytesOf("late")).has_value());
 }
 
+RAWFRAME_TEST(APortAnotherServerHoldsIsRefused) {
+    // A second server on a port one already holds is refused, not given a
+    // share of it, which would let a client's handshake reach either
+    // (D470).
+    Pair first;
+    Pair second;
+    auto held = *first.server->provider(kProfile);
+    auto other = *second.server->provider(kProfile);
+    RAWFRAME_EXPECT(held->listen({endpointAt(first.port)}).has_value());
+    const auto kTaken = other->listen({endpointAt(first.port)});
+    RAWFRAME_EXPECT(!kTaken.has_value() && kTaken.error().errorClass() == result::ErrorClass::AlreadyExists);
+    RAWFRAME_EXPECT(other->listen({endpointAt(second.port)}).has_value());
+}
+
 RAWFRAME_TEST(AnotherCertificateIsNotTrusted) {
     Pair pair;
     const network_quic::Certificate kImpostor = *network_quic::makeSelfSignedCertificate("rawframe-test", 1);

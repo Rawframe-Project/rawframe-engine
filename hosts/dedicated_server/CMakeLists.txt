@@ -37,6 +37,11 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(dedicated_server_quic PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"code\":\"ready\".*\"code\":\"listening\".*\"code\":\"stopped\"")
+    # A port one server holds is refused to a second, not shared (D470).
+    add_test(NAME dedicated_server_port_taken
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/taken.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(dedicated_server_port_taken PROPERTIES PASS_REGULAR_EXPRESSION "server B refused the port A holds")
     # A checkpoint restores: a server restored at tick 50 and run to 100
     # captures the same bytes as the server that ran there itself.
     add_test(NAME dedicated_server_checkpoint

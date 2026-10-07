@@ -24,6 +24,12 @@
 #include <utility>
 #include <vector>
 
+#if !defined(_WIN32)
+#include <cerrno>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 #if defined(__linux__)
 #include <sched.h>
 #endif
@@ -45,6 +51,47 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, NetworkErro
 
 std::unexpected<result::Error> fail(result::ErrorClass errorClass, QuicError error, std::string_view why) {
     return result::fail(errorClass, kQuicDomain, code(error), why);
+}
+
+/// Whether another socket holds `address`'s port (D470). MsQuic shares a
+/// server's port across its partitions (SO_REUSEPORT), so a second server
+/// of the same user binds one already held with no error, and the system
+/// then splits the datagrams sent to it between the two: a client's
+/// handshake reaches the other. A plain socket bound first, sharing
+/// nothing, is refused where any other socket holds the port. Windows
+/// gives no such sharing, so is not asked.
+bool portHeld(const QUIC_ADDR& address) noexcept {
+#if defined(_WIN32)
+    static_cast<void>(address);
+    return false;
+#else
+    const int kFamily = address.Ip.sa_family == AF_INET ? AF_INET : AF_INET6;
+    const int kProbe = ::socket(kFamily, SOCK_DGRAM, 0);
+    if (kProbe < 0) {
+        return false;
+    }
+    sockaddr_storage at{};
+    socklen_t length = 0;
+    if (kFamily == AF_INET) {
+        std::memcpy(&at, &address.Ipv4, sizeof(address.Ipv4));
+        length = sizeof(address.Ipv4);
+    } else if (address.Ip.sa_family == AF_INET6) {
+        std::memcpy(&at, &address.Ipv6, sizeof(address.Ipv6));
+        length = sizeof(address.Ipv6);
+    } else {
+        // Any address, both families, as MsQuic binds it.
+        int both = 0;
+        static_cast<void>(::setsockopt(kProbe, IPPROTO_IPV6, IPV6_V6ONLY, &both, sizeof(both)));
+        sockaddr_in6 any{};
+        any.sin6_family = AF_INET6;
+        any.sin6_port = address.Ipv6.sin6_port;
+        std::memcpy(&at, &any, sizeof(any));
+        length = sizeof(any);
+    }
+    const bool kHeld = ::bind(kProbe, reinterpret_cast<const sockaddr*>(&at), length) != 0 && errno == EADDRINUSE;
+    ::close(kProbe);
+    return kHeld;
+#endif
 }
 
 /// Whether a provider's listener also takes browsers: only a game's, where
@@ -169,6 +216,9 @@ public:
         if (core_->listener != nullptr) {
             return refuse(
                 result::ErrorClass::AlreadyExists, NetworkError::Unreachable, "this provider already listens");
+        }
+        if (portHeld(address)) {
+            return refuse(result::ErrorClass::AlreadyExists, NetworkError::Unreachable, "the endpoint is taken");
         }
         HQUIC listener = nullptr;
         if (QUIC_FAILED(core_->api->ListenerOpen(core_->registration, &listenerCallback, core_.get(), &listener))) {
