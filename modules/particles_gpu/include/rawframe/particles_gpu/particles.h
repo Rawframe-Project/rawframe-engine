@@ -58,9 +58,10 @@ static_assert(sizeof(MaterialBlock) == 112, "the particles' shaders read a mater
 
 /// A material's flags: its texture's alpha shapes it (else a particle is
 /// a soft disc, a ribbon soft along its sides); it multiplies what is
-/// behind.
+/// behind; it is drawn over everything, nothing hiding it (D464).
 inline constexpr std::uint32_t kShapedByTexture = 1;
 inline constexpr std::uint32_t kMultiplies = 2;
+inline constexpr std::uint32_t kOverEverything = 4;
 
 /// How a material blends over what is behind, as SPEC-0026's canvas set
 /// has it: over it, its coverage hiding it; added to it; or multiplying

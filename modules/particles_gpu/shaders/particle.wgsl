@@ -181,7 +181,12 @@ fn fs(@builtin(position) position: vec4f,
     // Sampled before anything branches, as WGSL's uniformity asks.
     let sampled = textureSample(baseTexture, baseSampler, uv * material.baseMap.xy + material.baseMap.zw);
     let glowing = textureSample(emissionTexture, emissionSampler, uv * material.emissionMap.xy + material.emissionMap.zw).rgb;
-    let behind = textureLoad(depth, min(vec2i(position.xy), vec2i(textureDimensions(depth)) - 1), 0);
+    // A material drawn over everything (flag four, D464) is neither hidden
+    // nor faded.
+    var behind = textureLoad(depth, min(vec2i(position.xy), vec2i(textureDimensions(depth)) - 1), 0);
+    if ((material.flags.x & 4u) != 0u) {
+        behind = 0.0;
+    }
     if (position.z < behind) {
         discard;
     }

@@ -33,7 +33,8 @@ exposure;
 // The material (D357): its color, and what multiplies its texture's; its
 // emission, and what multiplies its emission texture's color; each
 // texture's scale and offset; and its flags: one where its texture's
-// alpha shapes it, two where it multiplies what is behind.
+// alpha shapes it, two where it multiplies what is behind, four where it
+// is drawn over everything, nothing hiding it (D464).
 layout(set = 0, binding = 4, std140) uniform Material
 {
     vec4 color;
@@ -71,7 +72,11 @@ void main()
     // once its textures are sampled; nearer, faded in over half its size.
     // The sky is never in front.
     // Its texel, held to the depth's sides: a canvas's is one texel.
-    const float kBehind = texelFetch(depth, min(ivec2(gl_FragCoord.xy), textureSize(depth, 0) - 1), 0).r;
+    // A material drawn over everything (flag four, a line's, D464) is
+    // neither hidden nor faded: the depth is taken as the farthest.
+    const bool kOver = (material.flags.x & 4u) != 0u;
+    const float kBehind =
+        kOver ? 0.0 : texelFetch(depth, min(ivec2(gl_FragCoord.xy), textureSize(depth, 0) - 1), 0).r;
     if (gl_FragCoord.z < kBehind) {
         discard;
     }
