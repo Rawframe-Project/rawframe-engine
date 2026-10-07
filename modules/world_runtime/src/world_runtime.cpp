@@ -135,6 +135,12 @@ public:
         ++generation_;
     }
 
+    void excuse(execution::MonotonicDuration stood) noexcept override {
+        if (pacer_.has_value()) {
+            pacer_->excuse(stood);
+        }
+    }
+
     void holdAt(std::optional<world::TickIndex> limit) noexcept override {
         hold_ = limit;
     }

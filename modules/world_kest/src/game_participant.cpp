@@ -340,6 +340,10 @@ public:
             RAWFRAME_TRY(simulation_->addSystems(*navmesh_));
         }
         debugging_.attach(systems_->machine());
+        // Time a breakpoint holds a tick is not owed (D492).
+        debugging_.tellStood(context.clock(), [this](execution::MonotonicDuration stood) {
+            simulation_->excuse(stood);
+        });
         return simulation_->addSystems(*systems_);
     }
 

@@ -67,6 +67,10 @@ public:
     /// Runs no tick at or past `limit` until the limit moves or is lifted, so
     /// something can happen at an exact tick between two of them.
     virtual void holdAt(std::optional<world::TickIndex> limit) noexcept = 0;
+    /// Time the World stood still on purpose inside a tick, a debugger's
+    /// breakpoint holding it (D492): owed no ticks, so carrying on runs the
+    /// game from where it stood, not ahead to catch up; nor is it behind.
+    virtual void excuse(execution::MonotonicDuration stood) noexcept = 0;
 };
 
 inline constexpr composition::Capability<Simulation> kSimulation{"rawframe.world.simulation"};

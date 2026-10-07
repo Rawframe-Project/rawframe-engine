@@ -48,6 +48,13 @@ public:
     void ran(std::uint32_t ticks) noexcept {
         executed_ += ticks;
     }
+    /// Time the World stood still on purpose, a debugger's breakpoint
+    /// holding a tick (D492): not owed, as though it began that much later.
+    void excuse(execution::MonotonicDuration stood) noexcept {
+        if (stood.nanoseconds > 0) {
+            start_ = start_ + stood;
+        }
+    }
 
     [[nodiscard]] std::uint64_t executed() const noexcept {
         return executed_;

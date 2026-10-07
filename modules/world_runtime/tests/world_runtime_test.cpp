@@ -44,6 +44,10 @@ public:
     explicit Movement(world_runtime::Simulation& simulation) noexcept : simulation_(&simulation) {
     }
 
+    [[nodiscard]] world_runtime::Simulation& simulation() const noexcept {
+        return *simulation_;
+    }
+
     result::Status declareSystems(const schema::SchemaRegistry& registry,
                                   std::vector<world::SystemDeclaration>& systems) noexcept override {
         RAWFRAME_TRY_ASSIGN(query_, (world::Query<world::Write<Position>, world::Read<Velocity>>::resolve(registry)));
@@ -212,6 +216,44 @@ RAWFRAME_TEST(AWorldBehindTooLongIsOverloaded) {
         iterate(composition, iteration++, clock.now());
     }
     RAWFRAME_EXPECT(composition.health().health == composition::Health::Unhealthy);
+    composition.stop();
+    movement = nullptr;
+}
+
+RAWFRAME_TEST(TimeAWorldStoodStillForIsNotOwed) {
+    // A debugger's breakpoint holds a tick for two seconds (D492): excused,
+    // the World owes nothing for it, so it neither runs ahead to catch up
+    // nor reports itself behind; the same two seconds unexcused are owed.
+    const auto kPlan = plan();
+    RAWFRAME_EXPECT(kPlan.has_value());
+    const auto kConfiguration =
+        composition::Configuration::parse("world.tick_rate = 10\nworld.maximum_ticks_per_iteration = 1\n");
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{*kPlan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
+    RAWFRAME_EXPECT(composition.start().has_value());
+    std::uint64_t iteration = 0;
+    iterate(composition, iteration++, clock.now());
+    world_runtime::Simulation& simulation = movement->simulation();
+    const world::TickIndex kBefore = simulation.tick();
+    clock.advance(MonotonicDuration::fromSeconds(2));
+    simulation.excuse(MonotonicDuration::fromSeconds(2));
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(composition.health().health == composition::Health::Healthy && simulation.tick() == kBefore);
+    // A tenth of a second later, one tick, as though no time had stood.
+    clock.advance(MonotonicDuration::fromMilliseconds(100));
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(simulation.tick() == world::TickIndex{kBefore.value + 1});
+    // Unexcused, two seconds are owed and the World is behind.
+    clock.advance(MonotonicDuration::fromSeconds(2));
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(composition.health().health == composition::Health::Degraded &&
+                    composition.health().reason == "tick_debt");
     composition.stop();
     movement = nullptr;
 }

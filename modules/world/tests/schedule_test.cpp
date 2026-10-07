@@ -271,6 +271,11 @@ RAWFRAME_TEST(PacingBoundsCatchUpAndKeepsTheDebt) {
     // One tick is owed only once its whole duration has passed.
     RAWFRAME_EXPECT(pacer.due(kOneSecond + MonotonicDuration{16'666'666}).run == 0);
     RAWFRAME_EXPECT(pacer.due(kOneSecond + MonotonicDuration{16'666'667}).run == 1);
+    // Time excused, a debugger's breakpoint holding a tick (D492), is not
+    // owed: a second stood still owes none of its sixty ticks.
+    pacer.excuse(MonotonicDuration::fromSeconds(1));
+    RAWFRAME_EXPECT(pacer.due(kOneSecond + MonotonicDuration::fromSeconds(1)).run == 0);
+    RAWFRAME_EXPECT(pacer.due(kOneSecond + MonotonicDuration::fromSeconds(1) + MonotonicDuration{16'666'667}).run == 1);
 
     // NTSC-style rates stay exact.
     const TickRate kNtsc = *TickRate::of(30000, 1001);
