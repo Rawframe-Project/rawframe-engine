@@ -42,6 +42,10 @@ if cmp -s "$(dirname "$2")/$3" "$work/game/$3"; then
     echo "$3 written: no"
 else
     echo "$3 written: yes"
+    # The scene as written, where a test reads what an edit wrote (D458).
+    if [ -n "${STUDIO_SHOW_WRITTEN:-}" ]; then
+        cat "$work/game/$3"
+    fi
 fi
 if grep -q '"device_unavailable"' "$work/log" && [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then
     echo "skip: no device"

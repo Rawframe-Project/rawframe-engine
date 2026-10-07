@@ -60,6 +60,9 @@ void ShellParticipant::pressAt(float x, float y) {
         commit(operationOn("scene.destroy_entity"),
                kBrought ? "removed from its instance" : "entity deleted",
                kBrought ? std::optional<std::string>{entity_} : std::nullopt);
+    } else if (kNode == duplicateNode_ && !entity_.empty()) {
+        endEdit();
+        duplicate();
     } else if ((kNode == upNode_ || kNode == downNode_) && !entity_.empty()) {
         endEdit();
         move(kNode == upNode_ ? -1 : 1);
@@ -304,6 +307,67 @@ void ShellParticipant::openEditor() {
     editors_.push_back(std::move(*started));
     ++opened_;
     say("opened " + diagnostic_->file.substr(5) + " at line " + std::to_string(diagnostic_->line));
+}
+
+void ShellParticipant::duplicate() {
+    const bool kBrought = entityAt_ < brought_.size() && brought_[entityAt_];
+    const std::optional<Value> kRead = read(scene_, "scene.read_entity", entity_);
+    const Value* components = kRead.has_value() ? kRead->find("components") : nullptr;
+    if (kBrought || components == nullptr || components->kind() != Value::Kind::Array) {
+        ++refused_;
+        say(kBrought ? "an instance's entity is its source's to copy" : "nothing to copy");
+        return;
+    }
+    const std::string kCopy = mintedIdentity();
+    const std::string kName = (entityAt_ < names_.size() ? names_[entityAt_] : std::string{}) + " copy";
+    std::vector<Value> operations;
+    Value made = Value::object();
+    made.add("operation", Value::string("scene.create_entity"));
+    made.add("entity", Value::string(kCopy));
+    made.add("name", Value::string(kName));
+    operations.push_back(std::move(made));
+    for (const Value& each : components->items()) {
+        const Value* component = each.find("component");
+        if (component == nullptr || component->text() == nullptr) {
+            continue;
+        }
+        Value added = Value::object();
+        added.add("operation", Value::string("scene.add_component"));
+        added.add("entity", Value::string(kCopy));
+        added.add("component", *component);
+        operations.push_back(std::move(added));
+        // Each value the scene gives, as it reads: a reference names its
+        // target again, and every other field takes its value. A value only
+        // recorded, its field no longer the catalog's, is left behind, as a
+        // component the catalog no longer knows is above.
+        const Value* fields = each.find("fields");
+        for (const Value& field :
+             fields != nullptr && fields->kind() == Value::Kind::Array ? fields->items() : std::span<const Value>{}) {
+            const Value* name = field.find("name");
+            const Value* value = field.find("value");
+            if (name == nullptr || name->text() == nullptr || value == nullptr ||
+                value->kind() != Value::Kind::Object || value->names().size() != 1) {
+                continue;
+            }
+            const std::string& kKind = value->names().front();
+            if (kKind == "recorded") {
+                continue;
+            }
+            Value set = Value::object();
+            set.add("entity", Value::string(kCopy));
+            set.add("component", *component);
+            set.add("field", *name);
+            if (kKind == "entity") {
+                set.add("operation", Value::string("scene.set_reference"));
+                set.add("target", *value->find("entity"));
+            } else {
+                set.add("operation", Value::string("scene.set_field"));
+                set.add("value", *value);
+            }
+            operations.push_back(std::move(set));
+        }
+    }
+    commitAll(std::move(operations), kName + " made", kCopy);
 }
 
 void ShellParticipant::move(int by) {

@@ -196,6 +196,11 @@ private:
     /// (D438), chosen once made.
     void create();
 
+    /// Copies the chosen entity: a new entity named after it, with each of
+    /// its components and the values the scene gives them, in one
+    /// transaction (D458).
+    void duplicate();
+
     /// Moves the chosen entity one place earlier (`by` -1) or later (+1)
     /// among the scene's own entities.
     void move(int by);
@@ -327,6 +332,9 @@ private:
     ui::Node restoreNode_{};
     ui::Node uninstanceNode_{};
     ui::Node upNode_{};
+    ui::Node duplicateNode_{};
+    /// The heading `column` made last.
+    ui::Node lastHeading_{};
     ui::Node downNode_{};
     std::vector<ActionButton> actions_;
     view::UiPointing* pointing_ = nullptr;

@@ -29,8 +29,16 @@ result::Result<ui::Node> ShellParticipant::column(ui::Node parent, std::string_v
                             kPanel));
     // A column scrolls what does not fit (D441), so its rows keep their
     // heights rather than shrinking to fit.
-    RAWFRAME_TRY_ASSIGN(const ui::Node kHeading, box(kColumn, ui::Layout{.height = ui::pixels(22), .shrink = 0}, 0));
-    RAWFRAME_TRY(words(kHeading, heading, kQuiet, 13));
+    // The heading's words at its start, and room for a button at its end.
+    RAWFRAME_TRY_ASSIGN(lastHeading_,
+                        box(kColumn,
+                            ui::Layout{.height = ui::pixels(22),
+                                       .justify = ui::Justify::SpaceBetween,
+                                       .alignItems = ui::Align::Center,
+                                       .shrink = 0},
+                            0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(lastHeading_, ui::Layout{}, 0));
+    RAWFRAME_TRY(words(kTitle, heading, kQuiet, 13));
     return kColumn;
 }
 
@@ -78,6 +86,12 @@ result::Status ShellParticipant::build() {
             kBackground));
     RAWFRAME_TRY_ASSIGN(scenesColumn_, column(kColumns, "Scenes"));
     RAWFRAME_TRY_ASSIGN(entitiesColumn_, column(kColumns, "Entities"));
+    // The chosen entity copied whole (D458), its operations the catalog's.
+    if (catalog_.offers("scene.create_entity") && catalog_.offers("scene.add_component") &&
+        catalog_.offers("scene.set_field")) {
+        RAWFRAME_TRY_ASSIGN(duplicateNode_, box(lastHeading_, ui::Layout{.padding = {8, 2, 8, 2}}, kRow));
+        RAWFRAME_TRY(words(duplicateNode_, "Duplicate", kText, 13));
+    }
     RAWFRAME_TRY_ASSIGN(componentsColumn_, column(kColumns, "Components"));
     // The entities' operations above their rows.
     if (catalog_.offers("scene.create_entity") || catalog_.offers("scene.destroy_entity")) {
