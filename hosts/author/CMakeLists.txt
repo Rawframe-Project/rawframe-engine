@@ -58,6 +58,17 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}
                      ${CMAKE_CURRENT_BINARY_DIR}/author_tooling)
     set_tests_properties(author_tooling PROPERTIES PASS_REGULAR_EXPRESSION "inspected runners through the tooling endpoint")
+    # A ray cast into a running World names what it meets and where an
+    # author wrote it (D456): the plaza's gate post, by its id in the gate
+    # scene.
+    if(TARGET rawframe_host_client)
+        add_test(NAME author_picks
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_picks.sh $<TARGET_FILE:rawframe_host_author>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf ${CMAKE_CURRENT_BINARY_DIR}/author_picks)
+        set_tests_properties(author_picks PROPERTIES FIXTURES_REQUIRED plaza_content
+                             PASS_REGULAR_EXPRESSION "picked the plaza's gate post through the tooling endpoint")
+    endif()
     # A scene edited by an authoring session while a dedicated server plays
     # it (D410): the running World makes, writes, and lets go of the crate
     # as the scene changes, read through the tooling endpoint.

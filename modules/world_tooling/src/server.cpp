@@ -1,6 +1,7 @@
 #include "rawframe/world_tooling/server.h"
 
 #include "rawframe/document/json.h"
+#include "rawframe/schema/stable_id.h"
 #include "rawframe/world_tooling/errors.h"
 
 #include <algorithm>
@@ -72,6 +73,23 @@ std::string entityName(world::EntityHandle entity) {
 }
 
 /// `slot:generation`, both decimal.
+/// A point of three finite numbers within a million metres, as `tooling.look`
+/// and `tooling.pick` give one; none otherwise.
+std::optional<std::array<double, 3>> pointOf(const Value* point) {
+    if (point == nullptr || point->kind() != Value::Kind::Array || point->items().size() != 3) {
+        return std::nullopt;
+    }
+    std::array<double, 3> at{};
+    for (std::size_t each = 0; each < 3; ++each) {
+        const std::optional<double> kNumber = point->items()[each].real();
+        if (!kNumber.has_value() || !std::isfinite(*kNumber) || std::abs(*kNumber) > 1e6) {
+            return std::nullopt;
+        }
+        at[each] = *kNumber;
+    }
+    return at;
+}
+
 /// What `tooling.look` asks: an eye looking at a target with a field of
 /// view in degrees (1 to 179), or none to give the player's camera back;
 /// nothing, with `refusal` said, for a record out of form (D432).
@@ -80,23 +98,9 @@ std::optional<std::optional<Look>> lookOf(const Value& record, std::string& refu
     if (kView != nullptr && kView->isNull()) {
         return std::optional<Look>{};
     }
-    const auto kPoint = [](const Value* point) -> std::optional<std::array<double, 3>> {
-        if (point == nullptr || point->kind() != Value::Kind::Array || point->items().size() != 3) {
-            return std::nullopt;
-        }
-        std::array<double, 3> at{};
-        for (std::size_t each = 0; each < 3; ++each) {
-            const std::optional<double> kNumber = point->items()[each].real();
-            if (!kNumber.has_value() || !std::isfinite(*kNumber) || std::abs(*kNumber) > 1e6) {
-                return std::nullopt;
-            }
-            at[each] = *kNumber;
-        }
-        return at;
-    };
     const bool kObject = kView != nullptr && kView->kind() == Value::Kind::Object && kView->names().size() == 3;
-    const auto kEye = kObject ? kPoint(kView->find("eye")) : std::nullopt;
-    const auto kTarget = kObject ? kPoint(kView->find("target")) : std::nullopt;
+    const auto kEye = kObject ? pointOf(kView->find("eye")) : std::nullopt;
+    const auto kTarget = kObject ? pointOf(kView->find("target")) : std::nullopt;
     const Value* kAngle = kObject ? kView->find("fieldOfView") : nullptr;
     const std::optional<double> kDegrees = kAngle != nullptr ? kAngle->real() : std::nullopt;
     if (!kEye.has_value() || !kTarget.has_value() || !kDegrees.has_value() || !(*kDegrees >= 1 && *kDegrees <= 179)) {
@@ -475,6 +479,46 @@ struct ToolingServer::State {
             Value made = Value::object();
             made.add("kind", Value::string("tooling.looking"));
             made.add("previewing", Value::boolean(kLook->has_value()));
+            send(connection, client, replyLine(id, "answer", std::move(made)));
+            return;
+        }
+        if (kind != nullptr && *kind == "tooling.pick") {
+            // What a ray from an author's view meets, and where it was
+            // authored (D456): reading, so the inspect grant's.
+            if (!settings.grants.inspect) {
+                send(connection, client, errorLine(id, ToolingError::NotGranted, "picking needs the inspect grant"));
+                return;
+            }
+            if (settings.picking == nullptr) {
+                send(connection, client, errorLine(id, ToolingError::NotFound, "this Runtime has no bodies to pick"));
+                return;
+            }
+            const auto kOrigin = pointOf(parsed->find("origin"));
+            const auto kToward = pointOf(parsed->find("toward"));
+            if (!kOrigin.has_value() || !kToward.has_value() || parsed->names().size() != 4) {
+                send(connection,
+                     client,
+                     errorLine(id,
+                               ToolingError::Malformed,
+                               "a pick is an origin and a toward of three numbers within a million metres"));
+                return;
+            }
+            const std::optional<world_runtime::Picked> kPicked = settings.picking->pick(*kOrigin, *kToward);
+            Value made = Value::object();
+            made.add("kind", Value::string("tooling.picked"));
+            made.add("entity", kPicked.has_value() ? Value::string(entityName(kPicked->entity)) : Value{});
+            if (kPicked.has_value()) {
+                Value point = Value::array();
+                for (const double kAt : kPicked->point) {
+                    point.push(Value::real(kAt));
+                }
+                made.add("point", std::move(point));
+                made.add("scene", kPicked->scene.empty() ? Value{} : Value::string(kPicked->scene));
+                made.add("source",
+                         kPicked->scene.empty()
+                             ? Value{}
+                             : Value::string(std::string{schema::formatStableIdText(kPicked->source).data(), 36}));
+            }
             send(connection, client, replyLine(id, "answer", std::move(made)));
             return;
         }

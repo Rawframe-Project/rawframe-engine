@@ -92,6 +92,16 @@ std::vector<std::string> SceneFollower::paths() const {
     return made;
 }
 
+std::optional<std::pair<std::string, base::Bits128>> SceneFollower::sourceOf(world::EntityHandle entity) const {
+    for (const FollowedScene& scene : scenes_) {
+        const auto kAt = std::ranges::find(scene.entities, entity);
+        if (kAt != scene.entities.end()) {
+            return std::pair{scene.path, scene.ids[static_cast<std::size_t>(kAt - scene.entities.begin())]};
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<SceneChanges> SceneFollower::follow(world::World& world,
                                                 const GameScenes& scenes,
                                                 const GameFiles& files,

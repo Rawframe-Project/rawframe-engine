@@ -68,6 +68,9 @@ public:
 
     /// Each followed scene's path, in order.
     [[nodiscard]] std::vector<std::string> paths() const;
+    /// The scene `entity` came from and its id there, if a followed scene
+    /// brought it (D456).
+    [[nodiscard]] std::optional<std::pair<std::string, base::Bits128>> sourceOf(world::EntityHandle entity) const;
 
     /// Applies to `world` what changed in each scene whose text `texts`
     /// gives now (in the order of `paths`, none for one that cannot be

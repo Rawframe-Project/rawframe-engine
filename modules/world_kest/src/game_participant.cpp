@@ -34,6 +34,7 @@
 #include "rawframe/world_replication/perception.h"
 #include "rawframe/world_replication/plan.h"
 #include "rawframe/world_runtime/checkpoint.h"
+#include "rawframe/world_runtime/picking.h"
 #include "rawframe/world_runtime/save.h"
 #include "scene_follower.h"
 
@@ -61,6 +62,7 @@ constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.na
                                           physics3d::kPhysics3DPlan.name,
                                           world_animation::kAnimationPlan.name,
                                           world_runtime::kComponentFields.name,
+                                          world_runtime::kPicking.name,
                                           kPresentationPlan.name};
 /// A presenting client's machine (D260): its heap, and the fuel of one call.
 constexpr kest::MachineLimits kPresentationLimits{.heapBytes = std::size_t{4} << 20U, .fuelPerCall = 1'000'000};
@@ -112,6 +114,7 @@ class GameParticipant final : public composition::Participant,
                               public physics3d::Physics3DPlan,
                               public world_animation::AnimationPlan,
                               public world_runtime::ComponentFields,
+                              public world_runtime::Picking,
                               public PresentationPlan {
 public:
     GameParticipant() noexcept = default;
@@ -684,7 +687,36 @@ public:
         if (capability == kPresentationPlan.name) {
             return composition::provideAs<PresentationPlan>(*this);
         }
+        if (capability == world_runtime::kPicking.name) {
+            return composition::provideAs<world_runtime::Picking>(*this);
+        }
         return {};
+    }
+
+    /// The first 3D body along the ray, and the scene that brought it
+    /// (D456): the physics' answer from its last step, and the scenes the
+    /// World follows.
+    std::optional<world_runtime::Picked> pick(const std::array<double, 3>& origin,
+                                              const std::array<double, 3>& toward) const noexcept override {
+        if (doorContext_.queries3d == nullptr) {
+            return std::nullopt;
+        }
+        const physics3d::RayHit3D kHit = doorContext_.queries3d->castRay(origin[0],
+                                                                         origin[1],
+                                                                         origin[2],
+                                                                         static_cast<float>(toward[0]),
+                                                                         static_cast<float>(toward[1]),
+                                                                         static_cast<float>(toward[2]),
+                                                                         physics::kEveryClass);
+        if (!kHit.hit) {
+            return std::nullopt;
+        }
+        world_runtime::Picked made{.entity = kHit.entity, .point = {kHit.x, kHit.y, kHit.z}};
+        if (const auto kSource = scenes_.sourceOf(kHit.entity); kSource.has_value()) {
+            made.scene = kSource->first;
+            made.source = kSource->second;
+        }
+        return made;
     }
 
 private:

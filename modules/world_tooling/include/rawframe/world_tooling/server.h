@@ -54,6 +54,7 @@
 #include "rawframe/world/time.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_runtime/component_fields.h"
+#include "rawframe/world_runtime/picking.h"
 #include "rawframe/world_tooling/preview.h"
 
 #include <cstddef>
@@ -87,6 +88,9 @@ struct ToolingSettings {
     /// Where `tooling.look` goes, where the Runtime shows a preview; it
     /// outlives the server.
     Previewer* previewer = nullptr;
+    /// What a ray meets, for `tooling.pick` (D456), if the composition can
+    /// say; it outlives the server.
+    const world_runtime::Picking* picking = nullptr;
 };
 
 /// The provider bounds a tooling endpoint asks for, `clients` at once.

@@ -23,8 +23,11 @@ constexpr EventIdentity kSummary{"tooling", "summary"};
 
 // A client has no simulation of its own, and a preview's endpoint reads no
 // World (D432).
-constexpr std::string_view kMaybe[] = {
-    world_runtime::kSimulation.name, network::kTransport.name, world_runtime::kComponentFields.name, kPreviewer.name};
+constexpr std::string_view kMaybe[] = {world_runtime::kSimulation.name,
+                                       network::kTransport.name,
+                                       world_runtime::kComponentFields.name,
+                                       kPreviewer.name,
+                                       world_runtime::kPicking.name};
 
 /// A token file's bytes at most.
 constexpr std::size_t kMaximumTokenBytes = 4096;
@@ -90,6 +93,9 @@ public:
         }
         if (context.has(world_runtime::kComponentFields.name)) {
             RAWFRAME_TRY_ASSIGN(settings.fields, context.capability(world_runtime::kComponentFields));
+        }
+        if (context.has(world_runtime::kPicking.name)) {
+            RAWFRAME_TRY_ASSIGN(settings.picking, context.capability(world_runtime::kPicking));
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kClients,
                             context.configuration().unsignedInteger("tooling.maximum_clients", 4));
