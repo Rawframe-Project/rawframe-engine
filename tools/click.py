@@ -272,7 +272,21 @@ def main():
                 x.XFlush(display)
                 time.sleep(0.15)
             print(f"turned the wheel {text} at {at},{y}")
-            time.sleep(1)
+            # What scrolls eases into place over frames, slower on a loaded
+            # machine: wait until the column about the wheel holds still,
+            # four looks in a row, before the next step (D475).
+            def column():
+                return [brightness(x, display, root, at, y + offset) for offset in (-150, -75, 0, 75, 150)]
+            before = column()
+            steady = 0
+            for _ in range(60):
+                if steady >= 4:
+                    break
+                time.sleep(0.25)
+                now = column()
+                steady = steady + 1 if all(abs(a - b) < 1 for a, b in zip(now, before)) else 0
+                before = now
+            time.sleep(0.25)
             continue
         if at is None:
             # Frozen keys are pressed while the program is stopped, so it
