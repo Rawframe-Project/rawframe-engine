@@ -18,6 +18,9 @@ native() {
 }
 rm -rf "$work"
 mkdir -p "$work"
+# A step that fails says where, with what the server and the author said,
+# so a failure seen only in a loaded check can be read.
+trap 'echo "failed at line $LINENO"; for each in "$work"/*; do [ -f "$each" ] && { echo "== $each"; tail -20 "$each"; }; done' ERR
 work="$(native "$work")"
 port=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
 printf '%s\n' "$(python3 -c 'import secrets; print(secrets.token_hex(24))')" >"$work/token"
