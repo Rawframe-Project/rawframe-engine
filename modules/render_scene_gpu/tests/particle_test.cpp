@@ -239,3 +239,35 @@ RAWFRAME_TEST(ARibbonIsDrawnAcrossItsPoints) {
         RAWFRAME_EXPECT(at(*kCrossed, 32, 20) == at(*kSky, 32, 20));
     }
 }
+
+RAWFRAME_TEST(ALineIsDrawnInItsOwnColor) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A line (D464) across the view five meters ahead, green, on the
+    // material after the frame's one, which the renderer makes: its color
+    // stands as it is.
+    SceneFrame lined = seen({}, red(), 0);
+    lined.particles.emitters.clear();
+    lined.particles.ribbonPoints = {{.place = {-3, 0, -5}, .width = 0.5F, .color = {0, 1, 0, 1}},
+                                    {.place = {3, 0, -5}, .width = 0.5F, .color = {0, 1, 0, 1}, .along = 1}};
+    lined.particles.ribbons = {{.material = 1, .first = 0, .count = 2}};
+    const auto kLined =
+        drawnWith(**framer, **made, lined, kMeshes, &render_scene_gpu::RendererStatistics::ribbonsDrawn);
+    RAWFRAME_EXPECT(kLined.has_value());
+    if (kLined.has_value()) {
+        const auto kMiddle = at(*kLined, 32, 31);
+        std::printf("line: middle %d %d %d\n", kMiddle[0], kMiddle[1], kMiddle[2]);
+        RAWFRAME_EXPECT(kMiddle[0] <= 1 && kMiddle[1] == 255 && kMiddle[2] <= 1);
+    }
+}

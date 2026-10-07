@@ -3,6 +3,7 @@
 #include "camera.h"
 #include "decals.h"
 #include "lights.h"
+#include "lines.h"
 #include "probes.h"
 #include "rawframe/material/material.h"
 #include "rawframe/physics3d/components.h"
@@ -133,6 +134,8 @@ struct Scene::State {
     std::vector<TrailInstance> trails;
     std::vector<BeamInstance> beams;
     rawframe::particles::Particles particles;
+    /// The lines shown (D464).
+    std::vector<SceneLine> lines;
     std::vector<LightInstance> punctual;
     std::optional<schema::ComponentRuntimeId> pose;
     std::map<std::uint64_t, Bounded> meshes;
@@ -585,6 +588,8 @@ struct Scene::State {
                          materials,
                          settings.limits.particles,
                          camera.elapsed);
+        // The lines shown, on the material after the frame's own (D464).
+        addLines(frame, lines, camera.eye);
         return frame;
     }
 
@@ -904,6 +909,10 @@ void Scene::extract(world::World& world) {
 
 const SceneFrame& Scene::queue(const SceneCamera& camera) {
     return state_->queue(camera);
+}
+
+void Scene::show(std::span<const SceneLine> lines) {
+    state_->lines = soundLines(lines);
 }
 
 std::array<float, 2> temporalJitter(std::uint64_t frame) noexcept {

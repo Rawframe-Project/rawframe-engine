@@ -892,6 +892,20 @@ struct SceneSettings {
     std::uint32_t multisamples = kDefaultMultisamples;
 };
 
+/// A line a scene draws over the World (D464): from one point to another,
+/// in World meters, its linear color and alpha, and its width in meters.
+/// Drawn as a ribbon, unlit, with the scene's beams, on the material after
+/// the frame's own (`SceneFrame::materials`), which the device half makes.
+struct SceneLine {
+    std::array<double, 3> from{};
+    std::array<double, 3> to{};
+    std::array<float, 4> color{1, 1, 1, 1};
+    float width = 0.02F;
+};
+
+/// The lines a scene draws at most (a limit point, ADR-0014).
+inline constexpr std::size_t kMostSceneLines = 256;
+
 class Scene {
 public:
     [[nodiscard]] static result::Result<std::unique_ptr<Scene>> create(const schema::SchemaRegistry& registry,
@@ -911,6 +925,10 @@ public:
     /// through `camera` and culled to its view, those in view in the order
     /// of their meshes, then of their entities, then of their components.
     const SceneFrame& queue(const SceneCamera& camera);
+
+    /// The lines each frame from the next draws (D464), in place of those
+    /// before, at most `kMostSceneLines`.
+    void show(std::span<const SceneLine> lines);
 
     [[nodiscard]] std::span<const ModelInstance> extracted() const noexcept;
     [[nodiscard]] std::span<const LightInstance> extractedLights() const noexcept;

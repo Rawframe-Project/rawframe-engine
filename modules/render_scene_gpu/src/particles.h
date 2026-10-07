@@ -25,7 +25,8 @@ namespace rawframe::render_scene_gpu {
 /// shapes it; and its emission, times its emission texture's color where
 /// that multiplies it. Its textures (`textures`, by place) as `held` holds
 /// them this frame, white for none and for one not held, sampled as
-/// `pipelines` sample a material's.
+/// `pipelines` sample a material's. Then the lines' (D464), white and
+/// untextured, at the place after the frame's materials.
 [[nodiscard]] std::vector<particles_gpu::Material>
 particleMaterialsOf(std::span<const render_scene::MaterialBlob> materials,
                     std::span<const render_scene::SceneTextures> textures,
