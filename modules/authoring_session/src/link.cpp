@@ -7,6 +7,7 @@
 #include <array>
 #include <charconv>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -87,7 +88,23 @@ public:
     /// Sends one record and waits for its reply line; none when the
     /// endpoint closed or kept silent.
     std::optional<std::string> ask(std::string_view record) {
+        // Each question numbered afresh, and only the reply with its number
+        // taken: one that came after its asker stopped waiting is left
+        // behind, not read as the next question's answer (D467).
+        const auto kParsed = document::parse(record);
+        const bool kNumbered = kParsed.has_value() && kParsed->kind() == document::Value::Kind::Object;
+        const std::int64_t kId = ++asked_;
         std::string line{record};
+        if (kNumbered) {
+            document::Value numbered = document::Value::object();
+            for (const std::string& kName : kParsed->names()) {
+                if (kName != "id") {
+                    numbered.add(kName, *kParsed->find(kName));
+                }
+            }
+            numbered.add("id", document::Value::integer(kId));
+            line = document::writeCompact(numbered);
+        }
         line += '\n';
         const std::span<const std::byte> kBytes{reinterpret_cast<const std::byte*>(line.data()), line.size()};
         if (!provider_.send(connection_, stream_, kBytes).has_value()) {
@@ -96,11 +113,28 @@ public:
         const auto kUntil = std::chrono::steady_clock::now() + kReplyWithin;
         while (std::chrono::steady_clock::now() < kUntil) {
             pump();
-            const std::size_t kEnd = received_.find('\n');
-            if (kEnd != std::string::npos) {
-                std::string reply = received_.substr(0, kEnd);
-                received_.erase(0, kEnd + 1);
-                return reply;
+            for (std::size_t end = received_.find('\n'); end != std::string::npos; end = received_.find('\n')) {
+                std::string reply = received_.substr(0, end);
+                received_.erase(0, end + 1);
+                const auto kReply = document::parse(reply);
+                const document::Value* kAnswers = kReply.has_value() ? kReply->find("id") : nullptr;
+                if (!kNumbered) {
+                    return reply;
+                }
+                if (kAnswers != nullptr && kAnswers->integer() == kId) {
+                    // Answered under the caller's own id, where its record
+                    // had one, in its place.
+                    const document::Value* kAsked = kParsed->find("id");
+                    document::Value answered = document::Value::object();
+                    for (const std::string& kName : kReply->names()) {
+                        if (kName != "id") {
+                            answered.add(kName, *kReply->find(kName));
+                        } else if (kAsked != nullptr) {
+                            answered.add(kName, *kAsked);
+                        }
+                    }
+                    return document::writeCompact(answered);
+                }
             }
             if (closed_) {
                 return std::nullopt;
@@ -136,6 +170,8 @@ private:
     std::string received_;
     bool ready_ = false;
     bool closed_ = false;
+    /// The questions asked, each one's number.
+    std::int64_t asked_ = 0;
 };
 
 ToolingLink::ToolingLink() = default;
