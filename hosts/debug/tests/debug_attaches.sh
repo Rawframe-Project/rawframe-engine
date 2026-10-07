@@ -52,7 +52,7 @@ played="$XDG_RUNTIME_DIR/rawframe-play-$(python3 -c 'import hashlib, os, sys; pr
 mkdir -p -m 755 "$played"
 printf '{"endpoint":"127.0.0.1:%s","pinFile":"%s","tokenFile":"%s"}\n' "$port" "$work/fingerprint" "$work/token" >"$played/debug.attach"
 
-python3 - "$adapter" "127.0.0.1:$port" "$work/fingerprint" "$work/token" "$game" "$played" <<'PY'
+python3 - "$adapter" "127.0.0.1:$port" "$work/fingerprint" "$work/token" "$game" "$played" "$work/server.log" <<'PY'
 import json
 import os
 import select
@@ -60,7 +60,25 @@ import subprocess
 import sys
 import time
 
-adapter, endpoint, pin, token, game, played = sys.argv[1:7]
+adapter, endpoint, pin, token, game, played, server_log = sys.argv[1:8]
+
+
+def explain(seen):
+    """What a failed wait saw, and the server's last words, so a failure
+    seen only in a loaded check says why (D478): the adapter's messages
+    the wait passed over, whether the server is still there, and its last
+    records."""
+    print("passed over:", " ".join(seen[-20:]) or "nothing", flush=True)
+    with open(server_log, encoding="utf-8", errors="replace") as records:
+        lines = records.read().splitlines()
+    for line in lines[-12:]:
+        try:
+            record = json.loads(line)
+            said = "%s.%s: %s %s" % (record.get("domain"), record.get("code"), record.get("message"),
+                                     json.dumps(record.get("fields", {}))[:200])
+        except ValueError:
+            said = line[:200]
+        print("server:", said, flush=True)
 
 
 class Editor:
@@ -70,6 +88,7 @@ class Editor:
         # Unbuffered, so what select says waits is all there is to read.
         self.child = subprocess.Popen([adapter], stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
         self.seq = 0
+        self.seen = []
 
     def send(self, command, arguments=None):
         self.seq += 1
@@ -88,6 +107,7 @@ class Editor:
             for task in sorted(os.listdir(tasks)) if os.path.isdir(tasks) else []:
                 with open("%s/%s/wchan" % (tasks, task)) as wchan:
                     print("adapter thread", task, wchan.read(), flush=True)
+            explain(self.seen)
             raise SystemExit("the adapter said nothing in time, waiting to be " + what)
         length = 0
         while True:
@@ -116,6 +136,8 @@ class Editor:
             message = self.receive(end, what)
             if test(message):
                 return message
+            self.seen.append(message.get("event") or message.get("command") or message.get("type", "?"))
+        explain(self.seen)
         raise SystemExit("never " + what)
 
     def answer(self, request, seconds=60):
