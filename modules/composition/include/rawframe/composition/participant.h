@@ -3,6 +3,7 @@
 #include "rawframe/execution/time.h"
 #include "rawframe/result/result.h"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
@@ -70,6 +71,23 @@ struct LentCapability {
     std::string_view name;
     CapabilityObject object;
 };
+
+/// Whether the Host was asked to stop (D460), for a participant that waits
+/// inside a phase, where the Host cannot drain: a game stopped at a
+/// breakpoint. The Host lends it to every composition.
+class StopRequest {
+public:
+    explicit StopRequest(const std::atomic<bool>* flag) noexcept : flag_(flag) {
+    }
+    [[nodiscard]] bool requested() const noexcept {
+        return flag_ != nullptr && flag_->load(std::memory_order_acquire);
+    }
+
+private:
+    const std::atomic<bool>* flag_;
+};
+
+inline constexpr Capability<StopRequest> kStopRequest{"rawframe.host.stop_request"};
 
 /// A runtime participant: a service or system that composition constructs,
 /// starts, quiesces, stops, and destroys (SPEC-0005 service lifecycle).

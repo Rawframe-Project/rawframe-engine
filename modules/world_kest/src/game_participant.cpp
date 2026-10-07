@@ -3,6 +3,7 @@
 #include "animation_plan.h"
 #include "command_doors.h"
 #include "effect_doors.h"
+#include "game_debugging.h"
 #include "game_files_participant.h"
 #include "game_persistence.h"
 #include "game_plans.h"
@@ -34,6 +35,7 @@
 #include "rawframe/world_replication/perception.h"
 #include "rawframe/world_replication/plan.h"
 #include "rawframe/world_runtime/checkpoint.h"
+#include "rawframe/world_runtime/debugging.h"
 #include "rawframe/world_runtime/picking.h"
 #include "rawframe/world_runtime/save.h"
 #include "scene_follower.h"
@@ -63,6 +65,7 @@ constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.na
                                           world_animation::kAnimationPlan.name,
                                           world_runtime::kComponentFields.name,
                                           world_runtime::kPicking.name,
+                                          world_runtime::kDebugging.name,
                                           kPresentationPlan.name};
 /// A presenting client's machine (D260): its heap, and the fuel of one call.
 constexpr kest::MachineLimits kPresentationLimits{.heapBytes = std::size_t{4} << 20U, .fuelPerCall = 1'000'000};
@@ -336,6 +339,7 @@ public:
         if (navmesh_ != nullptr) {
             RAWFRAME_TRY(simulation_->addSystems(*navmesh_));
         }
+        debugging_.attach(systems_->machine());
         return simulation_->addSystems(*systems_);
     }
 
@@ -468,6 +472,9 @@ public:
         }
         if (reloaded.has_value()) {
             reloaded = systems_->reload(*program);
+            if (reloaded.has_value()) {
+                debugging_.attach(systems_->machine());
+            }
         }
         if (reloaded.has_value() && admission != nullptr) {
             admission_ = std::move(admission);
@@ -689,6 +696,9 @@ public:
         }
         if (capability == world_runtime::kPicking.name) {
             return composition::provideAs<world_runtime::Picking>(*this);
+        }
+        if (capability == world_runtime::kDebugging.name) {
+            return composition::provideAs<world_runtime::Debugging>(debugging_);
         }
         return {};
     }
@@ -942,6 +952,8 @@ private:
     std::unique_ptr<CommandDoors> commands_;
     std::array<KestStaging*, 2> staging_{};
     std::vector<world_replication::EffectClass> effectClasses_;
+    /// Before the systems, so it outlives the machine that calls it (D460).
+    GameDebugging debugging_;
     std::unique_ptr<KestSystems> systems_;
     /// Each taken mod's handlers, on its own machine.
     std::vector<std::unique_ptr<KestSystems>> modHandlers_;

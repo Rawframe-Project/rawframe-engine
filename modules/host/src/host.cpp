@@ -334,8 +334,13 @@ struct Host::State {
         root.emplace(clock);
 
         std::vector<composition::Problem> problems;
+        // What the caller lends, and whether the Host was asked to stop
+        // (D460).
+        lentAll.assign(request.lent.begin(), request.lent.end());
+        lentAll.push_back(
+            composition::LentCapability{composition::kStopRequest.name, composition::provideAs(stopRequest)});
         std::vector<std::string_view> lent;
-        for (const composition::LentCapability& each : request.lent) {
+        for (const composition::LentCapability& each : lentAll) {
             lent.push_back(each.name);
         }
         auto composed = composition::compose(composition::CompositionRequest{.registrars = request.registrars,
@@ -371,7 +376,7 @@ struct Host::State {
                                                       .configuration = &configuration,
                                                       .lifecycle = &lifecycle,
                                                       .files = request.files,
-                                                      .lent = request.lent});
+                                                      .lent = lentAll});
         if (auto started = composition->start(); !started.has_value()) {
             // What the failure was about, as its owners recorded it: `key:
             // value` pairs, such as a Kest program's first diagnostic.
@@ -625,6 +630,8 @@ struct Host::State {
     }
 
     const HostRequest request;
+    composition::StopRequest stopRequest{request.stopRequested};
+    std::vector<composition::LentCapability> lentAll;
     const composition::Configuration& configuration;
     const diagnostics::WriteBytes write;
     const execution::SteadyClock clock;
