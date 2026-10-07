@@ -85,24 +85,42 @@ std::vector<Value> Adapter::handle(const Value& request) {
         out.push_back(response(request, true, std::move(body)));
     } else if (kCommand == "attach") {
         // The game's tooling endpoint, the certificate to trust, and the
-        // token: what the endpoint's own settings name.
-        const std::string kEndpoint = textOf(arguments, "endpoint");
-        const std::string kPin = textOf(arguments, "pinFile");
-        const std::string kToken = textOf(arguments, "tokenFile");
-        std::string said;
-        if (!kEndpoint.empty() && !kPin.empty() && !kToken.empty()) {
-            link_ = authoring_session::ToolingLink::open(kEndpoint, kPin.c_str(), kToken.c_str(), said);
+        // token: as its settings name them, or as Studio's Play recorded
+        // them for the game named (D462).
+        authoring_session::AttachRecord record{.endpoint = textOf(arguments, "endpoint"),
+                                               .pinFile = textOf(arguments, "pinFile"),
+                                               .tokenFile = textOf(arguments, "tokenFile")};
+        const std::string kGame = textOf(arguments, "game");
+        std::string refusal;
+        if (!kGame.empty()) {
+            const auto kRecorded = authoring_session::attachIn(authoring_session::playDirectoryOf(kGame), refusal);
+            if (kRecorded.has_value()) {
+                record = *kRecorded;
+            }
+        } else if (record.endpoint.empty() || record.pinFile.empty() || record.tokenFile.empty()) {
+            refusal = "attach names the game, or its endpoint, pinFile, and tokenFile";
         }
-        if (link_ == nullptr) {
-            out.push_back(response(request,
-                                   false,
-                                   {},
-                                   kEndpoint.empty() || kPin.empty() || kToken.empty()
-                                       ? "attach names the game's endpoint, pinFile, and tokenFile"
-                                       : "the game's tooling endpoint could not be reached: " + said));
-        } else if (said.find("\"debug\"") == std::string::npos) {
-            link_.reset();
-            out.push_back(response(request, false, {}, "the game's tooling endpoint does not grant debug"));
+        // A token goes only to this machine: a configuration a cloned
+        // workspace brings could name another's endpoint, and any file as
+        // the token, which would leave with the hello.
+        const std::optional<std::string> kLoopback =
+            refusal.empty() ? authoring_session::loopbackEndpoint(record.endpoint) : std::nullopt;
+        if (refusal.empty() && !kLoopback.has_value()) {
+            refusal = "the game's endpoint is a loopback address literal, on this machine";
+        }
+        std::string said;
+        if (refusal.empty()) {
+            link_ = authoring_session::ToolingLink::open(
+                *kLoopback, record.pinFile.c_str(), record.tokenFile.c_str(), said);
+            if (link_ == nullptr) {
+                refusal = "the game's tooling endpoint could not be reached: " + said;
+            } else if (said.find("\"debug\"") == std::string::npos) {
+                link_.reset();
+                refusal = "the game's tooling endpoint does not grant debug";
+            }
+        }
+        if (!refusal.empty()) {
+            out.push_back(response(request, false, {}, refusal));
         } else {
             out.push_back(response(request, true));
             out.push_back(event("initialized", {}));

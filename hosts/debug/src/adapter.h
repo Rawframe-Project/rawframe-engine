@@ -7,6 +7,7 @@
 // carrying on; line breakpoints and stepping are answered as not yet
 // offered, until Kest's public header says where code was written.
 
+#include "rawframe/authoring_session/attach.h"
 #include "rawframe/authoring_session/link.h"
 #include "rawframe/document/json.h"
 

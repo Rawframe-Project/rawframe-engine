@@ -4,6 +4,9 @@
 # script speaking the Debug Adapter Protocol, attaches, breaks at the stroll
 # system, is told the game stopped, reads the frame and its arguments,
 # carries on, and disconnects, leaving the game running without breakpoints.
+# An endpoint off this machine is refused, and a play directory others may
+# enter; the game alone, through where Studio's Play records it (D462),
+# attaches too.
 #
 # usage: debug_attaches.sh <rawframe-debug> <rawframe-server> <repository>
 #                          <content settings> <work directory>
@@ -39,80 +42,125 @@ for _ in $(seq 200); do
     sleep 0.1
 done
 
-python3 - "$adapter" "127.0.0.1:$port" "$work/fingerprint" "$work/token" <<'PY'
+# Where Studio's Play would have recorded the game, as it names the
+# directory (D462): under the user's runtime directory, by the digest of
+# the game's absolute path, its owner's alone.
+game="$repository/games/plaza/plaza.game"
+export XDG_RUNTIME_DIR="$work/runtime"
+mkdir -p -m 700 "$XDG_RUNTIME_DIR"
+played="$XDG_RUNTIME_DIR/rawframe-play-$(python3 -c 'import hashlib, os, sys; print(hashlib.sha256(os.path.normpath(os.path.abspath(sys.argv[1])).encode()).hexdigest()[:32])' "$game")"
+mkdir -p -m 755 "$played"
+printf '{"endpoint":"127.0.0.1:%s","pinFile":"%s","tokenFile":"%s"}\n' "$port" "$work/fingerprint" "$work/token" >"$played/debug.attach"
+
+python3 - "$adapter" "127.0.0.1:$port" "$work/fingerprint" "$work/token" "$game" "$played" <<'PY'
 import json
+import os
 import subprocess
 import sys
 import time
 
-adapter, endpoint, pin, token = sys.argv[1:5]
-child = subprocess.Popen([adapter], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-seq = 0
+adapter, endpoint, pin, token, game, played = sys.argv[1:7]
 
 
-def send(command, arguments=None):
-    global seq
-    seq += 1
-    body = json.dumps({"seq": seq, "type": "request", "command": command, "arguments": arguments or {}}).encode()
-    child.stdin.write(b"Content-Length: %d\r\n\r\n" % len(body) + body)
-    child.stdin.flush()
-    return seq
+class Editor:
+    """An editor's side of the protocol, over one adapter."""
+
+    def __init__(self):
+        self.child = subprocess.Popen([adapter], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        self.seq = 0
+
+    def send(self, command, arguments=None):
+        self.seq += 1
+        body = json.dumps({"seq": self.seq, "type": "request", "command": command,
+                           "arguments": arguments or {}}).encode()
+        self.child.stdin.write(b"Content-Length: %d\r\n\r\n" % len(body) + body)
+        self.child.stdin.flush()
+        return self.seq
+
+    def receive(self):
+        length = 0
+        while True:
+            line = self.child.stdout.readline()
+            if not line:
+                raise SystemExit("the adapter ended")
+            line = line.strip()
+            if not line:
+                break
+            if line.startswith(b"Content-Length:"):
+                length = int(line.split(b":")[1])
+        return json.loads(self.child.stdout.read(length))
+
+    def until(self, test, what, seconds=20):
+        end = time.time() + seconds
+        while time.time() < end:
+            message = self.receive()
+            if test(message):
+                return message
+        raise SystemExit("never " + what)
+
+    def answer(self, request):
+        return self.until(lambda m: m.get("type") == "response" and m.get("request_seq") == request, "answered")
+
+    def attach(self, arguments):
+        initialized = self.answer(self.send("initialize", {"adapterID": "rawframe"}))
+        assert initialized["success"] and initialized["body"]["supportsFunctionBreakpoints"], initialized
+        return self.answer(self.send("attach", arguments))
+
+    def leave(self):
+        assert self.answer(self.send("disconnect"))["success"]
+        self.child.wait(timeout=10)
 
 
-def receive():
-    length = 0
-    while True:
-        line = child.stdout.readline()
-        if not line:
-            raise SystemExit("the adapter ended")
-        line = line.strip()
-        if not line:
-            break
-        if line.startswith(b"Content-Length:"):
-            length = int(line.split(b":")[1])
-    return json.loads(child.stdout.read(length))
+# A token goes only to this machine: an endpoint elsewhere is refused
+# before anything is sent.
+remote = Editor()
+refused = remote.attach({"endpoint": "10.0.0.1:" + endpoint.split(":")[1], "pinFile": pin, "tokenFile": token})
+assert not refused["success"] and "loopback" in refused["message"], refused
+remote.leave()
 
+# A play directory others may enter is not trusted.
+open_to_others = Editor()
+refused = open_to_others.attach({"game": game})
+assert not refused["success"] and "open to others" in refused["message"], refused
+open_to_others.leave()
+os.chmod(played, 0o700)
 
-def until(test, what, seconds=20):
-    end = time.time() + seconds
-    while time.time() < end:
-        message = receive()
-        if test(message):
-            return message
-    raise SystemExit("never " + what)
-
-
-def answer(request):
-    return until(lambda m: m.get("type") == "response" and m.get("request_seq") == request, "answered")
-
-
-initialized = answer(send("initialize", {"adapterID": "rawframe"}))
-assert initialized["success"] and initialized["body"]["supportsFunctionBreakpoints"], initialized
-attached = send("attach", {"endpoint": endpoint, "pinFile": pin, "tokenFile": token})
-assert answer(attached)["success"]
-until(lambda m: m.get("event") == "initialized", "initialized")
-broken = answer(send("setFunctionBreakpoints", {"breakpoints": [{"name": "stroll"}, {"name": "nowhere"}]}))
+editor = Editor()
+attached = editor.attach({"endpoint": endpoint, "pinFile": pin, "tokenFile": token})
+assert attached["success"], attached
+editor.until(lambda m: m.get("event") == "initialized", "initialized")
+broken = editor.answer(editor.send("setFunctionBreakpoints", {"breakpoints": [{"name": "stroll"}, {"name": "nowhere"}]}))
 assert [each["verified"] for each in broken["body"]["breakpoints"]] == [True, False], broken
-lines = answer(send("setBreakpoints", {"source": {"path": "plaza.kest"}, "breakpoints": [{"line": 160}]}))
+lines = editor.answer(editor.send("setBreakpoints", {"source": {"path": "plaza.kest"}, "breakpoints": [{"line": 160}]}))
 assert lines["body"]["breakpoints"][0]["verified"] is False, lines
-assert answer(send("configurationDone"))["success"]
-stopped = until(lambda m: m.get("event") == "stopped", "stopped")
+assert editor.answer(editor.send("configurationDone"))["success"]
+stopped = editor.until(lambda m: m.get("event") == "stopped", "stopped")
 assert stopped["body"]["reason"] == "function breakpoint", stopped
-assert answer(send("threads"))["body"]["threads"] == [{"id": 1, "name": "game"}]
-stack = answer(send("stackTrace", {"threadId": 1}))
+assert editor.answer(editor.send("threads"))["body"]["threads"] == [{"id": 1, "name": "game"}]
+stack = editor.answer(editor.send("stackTrace", {"threadId": 1}))
 frame = stack["body"]["stackFrames"][0]
 assert frame["name"] == "plaza.stroll", stack
-scopes = answer(send("scopes", {"frameId": frame["id"]}))
+scopes = editor.answer(editor.send("scopes", {"frameId": frame["id"]}))
 reference = scopes["body"]["scopes"][0]["variablesReference"]
-variables = answer(send("variables", {"variablesReference": reference}))["body"]["variables"]
+variables = editor.answer(editor.send("variables", {"variablesReference": reference}))["body"]["variables"]
 assert variables[0]["name"] == "count" and int(variables[0]["value"]) > 0, variables
-assert answer(send("next", {"threadId": 1}))["success"] is False
-assert answer(send("continue", {"threadId": 1}))["success"]
+assert editor.answer(editor.send("next", {"threadId": 1}))["success"] is False
+assert editor.answer(editor.send("continue", {"threadId": 1}))["success"]
 # Stopped again at the next tick's stroll: the editor is told again.
-until(lambda m: m.get("event") == "stopped", "stopped again")
-assert answer(send("disconnect"))["success"]
-child.wait(timeout=10)
+editor.until(lambda m: m.get("event") == "stopped", "stopped again")
+editor.leave()
 print("stroll stopped with count", variables[0]["value"])
+
+# Attached by the game alone, through where Play recorded it.
+by_game = Editor()
+attached = by_game.attach({"game": game})
+assert attached["success"], attached
+by_game.until(lambda m: m.get("event") == "initialized", "initialized")
+broken = by_game.answer(by_game.send("setFunctionBreakpoints", {"breakpoints": [{"name": "plaza.stroll"}]}))
+assert broken["body"]["breakpoints"][0]["verified"], broken
+by_game.until(lambda m: m.get("event") == "stopped", "stopped through the game")
+by_game.leave()
+print("attached by the game through its play directory")
 PY
 
 # Left running: the server is still there to stop.
