@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 # Builds the engine's shader containers offline, as a cook would: no
-# shipped build compiles a shader (ADR-0029). glslangValidator compiles
-# each stage under its entry name, spirv-link joins them into one module,
-# spirv-val checks it for Vulkan 1.3, and Maul RHI's container writer
+# shipped build compiles a shader (ADR-0029). A container whose source is
+# NAME.slang is compiled by slangc (ADR-0026, D475), every entry into one
+# SPIR-V module and into WGSL, from the one source; the pinned compiler's
+# version is checked, and RAWFRAME_SLANGC names it where it is not on the
+# path. One not moved to Slang yet is compiled from GLSL by
+# glslangValidator, a stage at a time under its entry name, and spirv-link
+# joins them, its WGSL written beside it by hand. spirv-val checks either
+# module for Vulkan 1.3, and Maul RHI's container writer
 # (third_party/maul-rhi/tools/mrhi_container.py) writes the containers a
 # build's driver reads (D416), each with the SPIR-V and each entry in WGSL,
 # which the writer asks of every container: NAME.mrsc, for Vulkan and
@@ -26,6 +31,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WRITER = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_container.py")
 METAL = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_msl.py")
 DXIL = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_dxil.py")
+# The Slang compiler every container is built with: its exact release, as
+# the language is defined by the pinned compiler until it is ratified
+# (ADR-0026).
+SLANGC = os.environ.get("RAWFRAME_SLANGC", "slangc")
+SLANG_VERSION = "2026.19"
 # Each container: its module, its name, and its stages' sources and entries,
 # with any names a stage is compiled with defined.
 CONTAINERS = (
@@ -63,22 +73,41 @@ def run(*command):
         sys.exit(f"{command[0]} failed:\n{result.stdout}{result.stderr}")
 
 
+def checkSlang():
+    result = subprocess.run([SLANGC, "-version"], capture_output=True, text=True)
+    version = (result.stdout + result.stderr).strip()
+    if result.returncode != 0 or version != SLANG_VERSION:
+        sys.exit(f"{SLANGC} is {version or 'missing'}; the containers are built with Slang {SLANG_VERSION}")
+
+
 def build(work, shaders, name, stages):
-    modules = []
-    for suffix, entry, *defines in stages:
-        module = os.path.join(work, f"{name}_{entry}.spv")
-        run("glslangValidator", "-V", "--target-env", "vulkan1.3", *(f"-D{define}" for define in defines), "-e",
-            entry, "--source-entrypoint", "main", "-o", module, os.path.join(shaders, f"{name}.{suffix}"))
-        modules.append(module)
     linked = os.path.join(work, f"{name}.spv")
-    run("spirv-link", "--target-env", "vulkan1.3", *modules, "-o", linked)
+    source = os.path.join(shaders, f"{name}.slang")
+    if os.path.exists(source):
+        # Entries of one container may read one slot as different records
+        # (a particle's emitter, a ribbon's range): a pipeline holds only
+        # its own entries, so Slang's overlap warning (39001) is no fault.
+        # A container's source imports the modules beside it (screen.slang).
+        quiet = ("-warnings-disable", "39001", "-I", shaders)
+        run(SLANGC, source, *quiet, "-target", "spirv", "-profile", "spirv_1_6", "-fvk-use-entrypoint-name", "-o",
+            linked)
+        wgsl = os.path.join(work, f"{name}.wgsl")
+        run(SLANGC, source, *quiet, "-target", "wgsl", "-o", wgsl)
+    else:
+        modules = []
+        for suffix, entry, *defines in stages:
+            module = os.path.join(work, f"{name}_{entry}.spv")
+            run("glslangValidator", "-V", "--target-env", "vulkan1.3", *(f"-D{define}" for define in defines),
+                "-e", entry, "--source-entrypoint", "main", "-o", module, os.path.join(shaders, f"{name}.{suffix}"))
+            modules.append(module)
+        run("spirv-link", "--target-env", "vulkan1.3", *modules, "-o", linked)
+        wgsl = os.path.join(shaders, f"{name}.wgsl")
     run("spirv-val", "--target-env", "vulkan1.3", linked)
     reflection = os.path.join(shaders, f"{name}.json")
     metal = os.path.join(work, f"{name}_metal")
     run(sys.executable, METAL, linked, reflection, metal)
     dxil = os.path.join(work, f"{name}_dxil")
     run(sys.executable, DXIL, linked, reflection, dxil)
-    wgsl = os.path.join(shaders, f"{name}.wgsl")
     made = {}
     # Every container carries WGSL, which Maul RHI's writer asks of one
     # using no heap, beside what its own driver reads.
@@ -91,6 +120,7 @@ def build(work, shaders, name, stages):
 
 
 def main():
+    checkSlang()
     with tempfile.TemporaryDirectory() as work:
         for module, name, stages in CONTAINERS:
             shaders = os.path.join(ROOT, "modules", module, "shaders")
