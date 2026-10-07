@@ -96,24 +96,25 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
-                         games/tycoon/tycoon.game wait=2 keys=Tab keys=Return keys=Tab keys=Return keys=b,o,Return
+                         games/tycoon/tycoon.game until=ui_reachable,reachable=2 keys=Tab keys=Return keys=Tab keys=Return keys=b,o,Return
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_navigates_stalls PROPERTIES
                              FIXTURES_REQUIRED tycoon_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "pressed b,o,Return.*\"commandsTaken\":2,\"commandsLimited\":0.*\"code\":\"ui_summary\"[^\n]*\"presses\":0,\"focused\":1,\"typed\":[3-9][0-9]*,\"submitted\":1,\"typedShown\":[1-9][0-9]*,\"navigated\":[2-9][0-9]*,\"activated\":1,")
-        # The same keys, the last group read in one frame as a slow
-        # machine's (D458): the client stopped while Return gives the sign
-        # field the keyboard and the sign is typed and given, every key
-        # still reaches the field. Both wait two seconds after admission
-        # for the stall's UI, so a loaded check does not Tab before its
-        # button is there (D475).
+        # The same keys, groups read in one frame as a slow machine's: the
+        # client stopped while Tab enters navigation and Return presses the
+        # purse (D476), and while Return gives the sign field the keyboard
+        # and the sign is typed and given (D458), every key still reaches
+        # what it was pressed for. Both wait until navigation reaches the
+        # purse and the field, so a loaded machine does not Tab before the
+        # purse is there (D476).
         add_test(NAME client_navigates_stalls_frozen
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
-                         games/tycoon/tycoon.game wait=2 keys=Tab keys=Return keys=Tab frozen=Return,b,o,Return
+                         games/tycoon/tycoon.game until=ui_reachable,reachable=2 frozen=Tab,Return keys=Tab frozen=Return,b,o,Return
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_navigates_stalls_frozen PROPERTIES
                              FIXTURES_REQUIRED tycoon_content

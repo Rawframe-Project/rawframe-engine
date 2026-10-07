@@ -28,7 +28,8 @@
 # does with the right button (D469), a key a fifth part names held through
 # it too (D472). An argument
 # `wait=` and a number of seconds waits that long, and `until=` and a
-# record's code waits, up to three minutes, until the log holds it (D445).
+# record's code waits, up to three minutes, until the log holds it (D445),
+# one whose field has a value where `,name=value` follows (D476).
 # Five seconds after, it stops the program whose pid its pid file holds
 # (D430), whose iterations only bound it, and waits for the process it
 # watches to end.
@@ -38,7 +39,7 @@
 #                 | wheel=<x>,<y>,<turns>[,<key>] | drag=<x>,<y>,<x>,<y>[,<key>]
 #                 | frozen=<key>[,<key>...] | move=<x>,<y>
 #                 | orbit=<x>,<y>,<x>,<y>[,<key>] | wait=<seconds>
-#                 | until=<code>
+#                 | until=<code>[,<field>=<value>]
 #                 [...]
 
 import ctypes
@@ -70,16 +71,25 @@ def alive(pid):
     return True
 
 
+def logged(log, code):
+    """Whether the log holds the record `code`; a code followed by
+    `,name=value`, a record of it whose field `name` is `value` (D476)."""
+    code, _, field = code.partition(",")
+    name, _, value = field.partition("=")
+    wanted = f'"{name}":{value}' if field else ""
+    try:
+        with open(log, encoding="utf-8", errors="replace") as records:
+            return any(f'"code":"{code}"' in line and wanted in line for line in records)
+    except OSError:
+        return False
+
+
 def ready(pid, log, code):
     """Waits until the log holds the record `code`, while the watched
     process runs; whether it did."""
     while alive(pid):
-        try:
-            with open(log, encoding="utf-8", errors="replace") as records:
-                if f'"code":"{code}"' in records.read():
-                    return True
-        except OSError:
-            pass
+        if logged(log, code):
+            return True
         time.sleep(0.25)
     return False
 
@@ -247,11 +257,7 @@ def main():
             # Up to three minutes for the record, however loaded the machine.
             found = False
             for _ in range(720):
-                try:
-                    with open(log, encoding="utf-8", errors="replace") as records:
-                        found = f'"code":"{text[1]}"' in records.read()
-                except OSError:
-                    pass
+                found = logged(log, text[1])
                 if found or not alive(pid):
                     break
                 time.sleep(0.25)
