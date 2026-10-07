@@ -226,6 +226,14 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
                 typing_.type(*kTyping);
             }
         }
+        // A key pressed while the UI is navigated and no field holds the
+        // keyboard may move focus or give a field the keyboard, which the
+        // iterations do; the events after it wait for the next frame, so a
+        // key typed after one that gave a field the keyboard reaches that
+        // field however many a slow frame gathers (D458).
+        if (event->kind == window::EventKind::KeyDown && !typing_.editing() && navigation_.focused()) {
+            break;
+        }
     }
     if (closing) {
         return end();

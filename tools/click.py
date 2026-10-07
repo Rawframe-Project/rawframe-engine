@@ -104,6 +104,9 @@ def main():
         if argument.startswith("keys="):
             points.append((None, None, argument[len("keys="):].split(",")))
             continue
+        if argument.startswith("frozen="):
+            points.append((None, "frozen", argument[len("frozen="):].split(",")))
+            continue
         if argument.startswith("until="):
             points.append((None, None, ("until", argument[len("until="):])))
             continue
@@ -212,10 +215,19 @@ def main():
             time.sleep(1)
             continue
         if at is None:
+            # Frozen keys are pressed while the program is stopped, so it
+            # reads them all in one frame, as a slow machine's does (D458).
+            if y == "frozen":
+                with open(pid_file, encoding="utf-8") as told:
+                    frozen = int(told.read().strip())
+                os.kill(frozen, signal.SIGSTOP)
             for name in text:
                 press(name, 0.1)
                 time.sleep(0.33)
-            print(f"pressed {','.join(text)}")
+            if y == "frozen":
+                time.sleep(0.5)
+                os.kill(frozen, signal.SIGCONT)
+            print(f"{'pressed frozen' if y == 'frozen' else 'pressed'} {','.join(text)}")
             time.sleep(1.5)
             continue
         # Moved there first, so the press is where the pointer already is.
