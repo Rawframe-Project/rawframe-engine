@@ -282,8 +282,11 @@ RAWFRAME_TEST(AStalledExecutorIsDegradedThenUnhealthy) {
     counts.holdWorkerAt = 2;
     // The one worker is held, and the task behind it waits: nothing
     // finishes. The observer lets the worker go once the Host is unhealthy.
-    const auto kExit = run(
-        "host.iteration_rate = 1000\nhost.cpu_workers = 1\nhost.stall_ms = 100\nhost.maximum_iterations = 100000", log);
+    // Degraded from half the stall limit: a second, so a Host's thread kept
+    // off the processor by a loaded machine still looks in that half (D489).
+    const auto kExit =
+        run("host.iteration_rate = 1000\nhost.cpu_workers = 1\nhost.stall_ms = 2000\nhost.maximum_iterations = 100000",
+            log);
     RAWFRAME_EXPECT(kExit == host::HostExit::RuntimeFailure);
     std::vector<composition::Health> seen;
     for (const host::HostStatus& kStatus : counts.statuses) {
