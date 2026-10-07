@@ -1,0 +1,86 @@
+#include "handles.h"
+
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+
+namespace rawframe::authoring_session {
+
+namespace {
+
+double dot(const Point& a, const Point& b) noexcept {
+    return (a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2]);
+}
+
+/// The ray's and the axis line's parameters at their nearest points: along
+/// the ray (a share of `toward`) and along the line (meters); none for
+/// lines that run together.
+struct Nearest {
+    double ray = 0;
+    double line = 0;
+};
+
+std::optional<Nearest>
+nearestOf(const Point& mark, std::size_t axis, const Point& origin, const Point& toward) noexcept {
+    const Point kFrom = {origin[0] - mark[0], origin[1] - mark[1], origin[2] - mark[2]};
+    const double kLength = dot(toward, toward);
+    const double kAcross = toward[axis];
+    const double kRayFrom = dot(toward, kFrom);
+    const double kLineFrom = kFrom[axis];
+    const double kApart = kLength - (kAcross * kAcross);
+    if (kLength <= 0 || kApart <= 1e-12 * kLength) {
+        return std::nullopt;
+    }
+    return Nearest{.ray = ((kAcross * kLineFrom) - kRayFrom) / kApart,
+                   .line = ((kLength * kLineFrom) - (kAcross * kRayFrom)) / kApart};
+}
+
+} // namespace
+
+std::optional<Grabbed>
+grabbedAxis(const Point& mark, const Point& origin, const Point& toward, double fieldOfView) noexcept {
+    const double kLength = dot(toward, toward);
+    if (!(kLength > 0) || !(fieldOfView > 0) || !(fieldOfView < 180)) {
+        return std::nullopt;
+    }
+    const double kShare = 2 * std::tan(fieldOfView * std::numbers::pi / 360) / 40;
+    std::optional<Grabbed> grabbed;
+    double nearest = 1;
+    for (std::size_t axis = 0; axis < 3; ++axis) {
+        const std::optional<Nearest> kNearest = nearestOf(mark, axis, origin, toward);
+        if (!kNearest.has_value()) {
+            continue;
+        }
+        // The axis's point nearest the ray, held to its outer three
+        // quarters, and the ray's point nearest that, ahead of the eye.
+        const double kAlong = std::clamp(kNearest->line, 0.25, 1.0);
+        Point on = mark;
+        on[axis] += kAlong;
+        const Point kTo = {on[0] - origin[0], on[1] - origin[1], on[2] - origin[2]};
+        const double kRay = std::min(dot(kTo, toward) / kLength, 1.0);
+        if (kRay <= 0) {
+            continue;
+        }
+        const Point kGap = {origin[0] + (kRay * toward[0]) - on[0],
+                            origin[1] + (kRay * toward[1]) - on[1],
+                            origin[2] + (kRay * toward[2]) - on[2]};
+        // How near, as a share of what the view's height spans there.
+        const double kNear = std::sqrt(dot(kGap, kGap)) / (kRay * std::sqrt(kLength) * kShare);
+        if (kNear <= nearest) {
+            nearest = kNear;
+            grabbed = Grabbed{.axis = axis, .along = kAlong};
+        }
+    }
+    return grabbed;
+}
+
+std::optional<double>
+alongAxis(const Point& mark, std::size_t axis, const Point& origin, const Point& toward) noexcept {
+    const std::optional<Nearest> kNearest = axis < 3 ? nearestOf(mark, axis, origin, toward) : std::nullopt;
+    if (!kNearest.has_value() || !std::isfinite(kNearest->line) || std::abs(kNearest->line) > 1e4) {
+        return std::nullopt;
+    }
+    return kNearest->line;
+}
+
+} // namespace rawframe::authoring_session

@@ -1,5 +1,6 @@
 #include "rawframe/authoring_session/session.h"
 
+#include "handles.h"
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/delta.h"
 #include "rawframe/authoring/operations.h"
@@ -39,6 +40,21 @@ using document::Value;
 struct OpenScene {
     std::unique_ptr<authoring::AuthoredScene> document;
     std::string onDisk;
+};
+
+/// A press in a preview that met an authored entity or grabbed a
+/// handle of the mark (D457, D466).
+struct Pressed {
+    std::int64_t count = 0;
+    std::string scene;
+    std::string source;
+    std::array<double, 3> point{};
+    /// The press's ray, along it, and the modifiers held (D463).
+    std::array<double, 3> toward{};
+    std::int64_t modifiers = 0;
+    /// The mark's handle the press grabbed, X, Y, or Z (D466); none
+    /// for a press that met an entity.
+    std::optional<std::size_t> axis;
 };
 
 /// An authoring session (D407): the game read once, its scenes opened as
@@ -594,6 +610,14 @@ private:
         Value scene;
         Value source;
         if (kClicks > clicks_ && kAnswer->find("origin") != nullptr && kAnswer->find("toward") != nullptr) {
+            pressed_ = grabbed(kClicks, *kAnswer);
+        }
+        if (pressed_.has_value() && pressed_->count == kClicks && pressed_->axis.has_value()) {
+            // A handle of the mark, its chosen entity's (D466): the server
+            // is not asked what the ray meets.
+            scene = Value::string(pressed_->scene);
+            source = Value::string(pressed_->source);
+        } else if (kClicks > clicks_ && kAnswer->find("origin") != nullptr && kAnswer->find("toward") != nullptr) {
             pressed_.reset();
             Value pick = Value::object();
             pick.add("kind", Value::string("tooling.pick"));
@@ -631,7 +655,10 @@ private:
         const Value* kReleased = kAnswer != nullptr ? kAnswer->find("released") : nullptr;
         const std::int64_t kRelease = kReleased != nullptr ? kReleased->integer().value_or(0) : 0;
         Value moved;
-        if (pressed_.has_value() && kRelease == pressed_->count) {
+        if (pressed_.has_value() && kRelease == pressed_->count && pressed_->axis.has_value()) {
+            moved = movedAlong(*kAnswer);
+            pressed_.reset();
+        } else if (pressed_.has_value() && kRelease == pressed_->count) {
             const auto kOrigin = pointOf(kAnswer->find("releaseOrigin"));
             const auto kToward = pointOf(kAnswer->find("releaseToward"));
             constexpr std::int64_t kShift = 1;
@@ -683,6 +710,61 @@ private:
         return made;
     }
 
+    /// The press numbered `count` grabbing a handle of the preview's mark,
+    /// if it does (D466): the scene's first chosen entity's, the mark being
+    /// where it stands.
+    std::optional<Pressed> grabbed(std::int64_t count, const Value& clicked) const {
+        const auto kOrigin = pointOf(clicked.find("origin"));
+        const auto kToward = pointOf(clicked.find("toward"));
+        // Open scenes are held by their paths.
+        const auto kPath = pathOf(previewScene_);
+        const auto kOpen = kPath.has_value() ? scenes_.find(kPath->string()) : scenes_.end();
+        if (!mark_.has_value() || !kOrigin.has_value() || !kToward.has_value() || kOpen == scenes_.end() ||
+            kOpen->second.document->selection().empty()) {
+            return std::nullopt;
+        }
+        const std::optional<Grabbed> kGrabbed =
+            grabbedAxis(*mark_, *kOrigin, *kToward, previewed_.has_value() ? previewed_->fieldOfView : 60);
+        if (!kGrabbed.has_value()) {
+            return std::nullopt;
+        }
+        const auto kSource = rawframe::schema::formatStableIdText(kOpen->second.document->selection().front());
+        Point at = *mark_;
+        at[kGrabbed->axis] += kGrabbed->along;
+        return Pressed{.count = count,
+                       .scene = previewScene_,
+                       .source = std::string{kSource.data(), kSource.size()},
+                       .point = at,
+                       .toward = *kToward,
+                       .axis = kGrabbed->axis};
+    }
+
+    /// A handle let go (D466): how far along its axis, from where it was
+    /// grabbed to where the release's ray points along the axis's line; a
+    /// move along X or Z, or a height along Y. Null where the release
+    /// points along the line.
+    Value movedAlong(const Value& clicked) const {
+        const auto kOrigin = pointOf(clicked.find("releaseOrigin"));
+        const auto kToward = pointOf(clicked.find("releaseToward"));
+        const std::size_t kAxis = *pressed_->axis;
+        const std::optional<double> kTo = kOrigin.has_value() && kToward.has_value() && mark_.has_value()
+                                              ? alongAxis(*mark_, kAxis, *kOrigin, *kToward)
+                                              : std::nullopt;
+        if (!kTo.has_value()) {
+            return Value{};
+        }
+        Value by = Value::array();
+        for (std::size_t each = 0; each < 3; ++each) {
+            by.push(Value::real(each == kAxis ? *kTo - (pressed_->point[kAxis] - (*mark_)[kAxis]) : 0.0));
+        }
+        Value moved = Value::object();
+        moved.add("scene", Value::string(pressed_->scene));
+        moved.add("source", Value::string(pressed_->source));
+        moved.add("how", Value::string(kAxis == 1 ? "height" : "move"));
+        moved.add("by", std::move(by));
+        return moved;
+    }
+
     /// Has the scene's preview mark a point, or none (D464): where the
     /// author chose something. Whether the preview shows it.
     result::Result<Value> marked(const authoring::SessionRecord& record) {
@@ -705,6 +787,8 @@ private:
             const Value* kMarked = kAnswer != nullptr ? kAnswer->find("marked") : nullptr;
             shown = kMarked != nullptr && kMarked->truth().value_or(false);
         }
+        // Kept for its handles (D466) while the preview shows it.
+        mark_ = shown ? record.mark : std::nullopt;
         Value made = Value::object();
         made.add("kind", Value::string("authoring.marked"));
         made.add("marked", Value::boolean(shown));
@@ -813,16 +897,9 @@ private:
     std::int64_t clicks_ = 0;
     /// The newest press, while it is held, when it met an authored entity:
     /// which press, what it met, and where (D457).
-    struct Pressed {
-        std::int64_t count = 0;
-        std::string scene;
-        std::string source;
-        std::array<double, 3> point{};
-        /// The press's ray, along it, and the modifiers held (D463).
-        std::array<double, 3> toward{};
-        std::int64_t modifiers = 0;
-    };
     std::optional<Pressed> pressed_;
+    /// Where the preview marks, while it shows a mark (D464).
+    std::optional<Point> mark_;
     std::string previewScene_;
     std::optional<authoring::SceneView> previewed_;
     bool told_ = false;

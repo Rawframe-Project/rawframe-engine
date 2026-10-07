@@ -43,4 +43,9 @@ if grep -q '"device_unavailable"' "$work/studio.log" "$work/play/client.log" 2>/
     exit 0
 fi
 cat "$work/studio.log" "$work/play/client.log" "$work/play/server.log" "$work/play/debug.attach" 2>/dev/null
+# The game's scenes as the session left them, each on one line.
+for scene in "$work"/game/*.scene; do
+    printf 'scene %s: ' "$(basename "$scene")"
+    python3 -c 'import json, sys; print(json.dumps(json.load(open(sys.argv[1])), separators=(",", ":")))' "$scene"
+done
 exit "$status"
