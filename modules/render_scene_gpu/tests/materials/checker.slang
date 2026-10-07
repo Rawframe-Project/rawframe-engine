@@ -1,6 +1,7 @@
 // A material written by hand for the scene's tests (ADR-0026, D485): a
 // checkerboard of eight cells across the mesh's first coordinates, red and
-// green, standing unlit as it is. tools/gen_shaders.py builds the scene
+// green, standing unlit as it is; the red cells clear, so a masked model
+// of it is cut there (D487). tools/gen_shaders.py builds the scene
 // with it as the cook builds a game's program material (D484), so the
 // renderer's program path is tested on what a game would give it.
 import material;
@@ -19,7 +20,7 @@ struct Checker : IMaterial
         made.roughness = 0.5;
         made.glowing = float3(0.0);
         made.ior = 1.5;
-        made.opacity = point.color.a;
+        made.opacity = point.color.a * odd;
         made.occlusion = 1.0;
         made.normal = point.normal;
         made.unlit = true;

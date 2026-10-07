@@ -234,25 +234,35 @@ bool unreadable(Corner corner)
                  float(corner.material) + corner.uv.x + corner.tangent.x);
 }
 
-// Whether a masked model is cut away at `corner`: where its material's
-// opacity falls below its alpha cutoff (D310), its texture sampled where
-// its map puts the point (D311).
-bool cutAway(Corner corner)
+// Where the material is evaluated at `corner` (D482): the coordinates'
+// derivatives taken before anything branches.
+Point pointOf(Corner corner)
 {
-    const uint at = blobOf(corner.material);
-    const float4 rest = materials[at + 3u];
-    const float4 mapped = materials[at + 4u];
-    const float4 sampled = baseTexture.Sample(baseSampler, corner.uv * mapped.xy + mapped.zw);
-    const float opacity = rest.x * corner.color.a * ((uint(rest.w) & 4u) != 0u ? sampled.a : 1.0);
-    return opacity < rest.z;
+    Point point;
+    point.uv = corner.uv;
+    point.dx = ddx(corner.uv);
+    point.dy = ddy(corner.uv);
+    point.normal = normalize(corner.normal);
+    point.tangent = corner.tangent;
+    point.color = corner.color;
+    point.material = corner.material;
+    return point;
 }
 
-// Each point's normal in the World's axes, turned toward the eye, and its
-// material's roughness (D327).
-float4 surfaceOf(Corner corner)
+// Whether a masked model is cut away where its material gives `evaluated`:
+// where its opacity falls below its alpha cutoff (D310), a declared state
+// every material's blob holds (D487).
+bool cutAway(Corner corner, Evaluated evaluated)
+{
+    return evaluated.opacity < materials[blobOf(corner.material) + 3u].z;
+}
+
+// Each point's normal in the World's axes, turned toward the eye, and the
+// roughness its material gives (D327, D487).
+float4 surfaceOf(Corner corner, Evaluated evaluated)
 {
     const float3 normal = normalize(corner.normal);
-    return float4(dot(normal, corner.placed) > 0.0 ? -normal : normal, materials[blobOf(corner.material) + 1u].w);
+    return float4(dot(normal, corner.placed) > 0.0 ? -normal : normal, evaluated.roughness);
 }
 
 // The masked models in the depth prepass (D310): where the material's
@@ -267,7 +277,7 @@ void cut(Corner corner)
     // Sampled before anything branches: WGSL samples a texture with
     // implicit derivatives only in uniform control flow, which a
     // short-circuit would leave.
-    const bool away = cutAway(corner);
+    const bool away = cutAway(corner, Material.evaluate(pointOf(corner)));
     if (unreadable(corner) || away)
     {
         discard;
@@ -279,11 +289,12 @@ void cut(Corner corner)
 [shader("fragment")]
 float4 normal(Corner corner) : SV_Target0
 {
+    const Evaluated evaluated = Material.evaluate(pointOf(corner));
     if (unreadable(corner))
     {
         discard;
     }
-    return surfaceOf(corner);
+    return surfaceOf(corner, evaluated);
 }
 
 // The masked models in the depth prepass when a screen-space effect asks
@@ -292,12 +303,13 @@ float4 normal(Corner corner) : SV_Target0
 [shader("fragment")]
 float4 cutNormal(Corner corner) : SV_Target0
 {
-    const bool away = cutAway(corner);
+    const Evaluated evaluated = Material.evaluate(pointOf(corner));
+    const bool away = cutAway(corner, evaluated);
     if (unreadable(corner) || away)
     {
         discard;
     }
-    return surfaceOf(corner);
+    return surfaceOf(corner, evaluated);
 }
 
 static const float kPi = 3.14159265;

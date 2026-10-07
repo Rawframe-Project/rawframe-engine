@@ -67,30 +67,40 @@ struct Multisampled {
     Asked resolveDepth;
 };
 
-/// The lit models' pipelines, by what they draw: the opaque, the masked
-/// (D310), and the translucent (D305).
+/// The models' pipelines a material's program draws with, by what they
+/// draw: lit, the opaque, the masked (D310), and the translucent (D305);
+/// in the prepass, the masked cut, and each point's surface, whole and
+/// masked (D327, D487).
 enum class Shade : std::uint8_t {
     Lit,
     Masked,
-    Glass
+    Glass,
+    Cut,
+    Surfaces,
+    CutSurfaces
 };
 
-/// A material's own program's lit pipelines (D485): the engine's own lit
-/// models' but for the shader, by what they draw, plain and under decals,
-/// single- and multisampled, each asked for when a frame first wants it
-/// (`variantOf`); refused where its shader or a pipeline could not be made,
-/// its models then lit by the engine's own.
+/// A material's own program's pipelines (D485, D487): the engine's own
+/// models' but for the shader, by what they draw; lit, plain and under
+/// decals; each single- and multisampled; each asked for when a frame first
+/// wants it (`variantOf`); refused where its shader or a pipeline could not
+/// be made, its models then drawn by the engine's own.
 struct ProgramShading {
     std::shared_ptr<const material::ProgramMaterial> program;
     mrhiShaderId shader{};
-    std::array<Asked, 12> variants{};
-    std::array<bool, 12> asked{};
+    std::array<Asked, 18> variants{};
+    std::array<bool, 18> asked{};
     bool refused = false;
 };
 
-/// Where a program's pipeline for `shade` lies among its variants.
+/// Where a program's pipeline for `shade` lies among its variants: the lit
+/// twelve, then the prepass's six, which no decal changes.
 [[nodiscard]] constexpr std::size_t variantOf(Shade shade, bool decaled, bool multisampled) noexcept {
-    return static_cast<std::size_t>(shade) + (decaled ? 3U : 0U) + (multisampled ? 6U : 0U);
+    const auto kShade = static_cast<std::size_t>(shade);
+    if (kShade >= 3) {
+        return 12U + (kShade - 3U) + (multisampled ? 3U : 0U);
+    }
+    return kShade + (decaled ? 3U : 0U) + (multisampled ? 6U : 0U);
 }
 
 /// The optional effects whose pipelines are asked for only when a view
@@ -240,7 +250,7 @@ struct Pipelines {
     void
     wantPrograms(std::span<const std::shared_ptr<const material::ProgramMaterial>> named, bool decaled, bool sampled);
 
-    /// The pipeline `program` lights `shade` with, made; none before, and
+    /// The pipeline `program` draws `shade` with, made; none before, and
     /// for a program refused.
     [[nodiscard]] const Asked*
     programPipeline(const material::ProgramMaterial* program, Shade shade, bool decaled, bool sampled) const;
@@ -279,5 +289,9 @@ std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome);
 
 /// A lit pipeline's twin under the decals (D339).
 [[nodiscard]] mrhiGraphicsPipelineDef decaledOf(mrhiGraphicsPipelineDef def, std::string_view label);
+
+/// The prepass also leaving each point's surface (D327, D331), whole and
+/// masked, from the prepass's pipeline.
+[[nodiscard]] std::array<mrhiGraphicsPipelineDef, 2> surfacing(const mrhiGraphicsPipelineDef& prepass);
 
 } // namespace rawframe::render_scene_gpu

@@ -466,21 +466,28 @@ struct SceneRenderer::State {
         // surface beside its depth (D327, D331).
         RAWFRAME_TRY(models->declare(
             open.width, open.height, kSampling ? frame->samples : 1, occlusion->enabled() || reflecting->enabled()));
-        // Each material's own program's lit pipelines, as this frame lights
-        // its models; until they are made, the engine's own light them
-        // (D485).
-        pipelines->wantPrograms(frame->programs, decalAtlas->drawn() > 0, kSampling);
+        // Each material's own program's pipelines, as this frame draws its
+        // models; until they are made, the engine's own draw them (D485,
+        // D487). A model is drawn by its program when every pass it is
+        // drawn in that runs a material's code has its program's pipeline.
+        const bool kDecaled = decalAtlas->drawn() > 0;
+        const bool kSurfaced = occlusion->enabled() || reflecting->enabled();
+        pipelines->wantPrograms(frame->programs, kDecaled, kSampling);
         for (const Runs* kRuns : {&now.placed.runs, &now.placed.maskedRuns, &now.placed.translucentRuns}) {
-            for (std::size_t at = 0; at < kRuns->size(); ++at) {
-                const Run& kRun = (*kRuns)[at];
+            const bool kOpaque = kRuns == &now.placed.runs;
+            const bool kMasked = kRuns == &now.placed.maskedRuns;
+            const Shade kShade = kOpaque ? Shade::Lit : kMasked ? Shade::Masked : Shade::Glass;
+            // The prepass's pipeline running the material's code, if any.
+            const std::optional<Shade> kPrepass = kMasked ? std::optional{kSurfaced ? Shade::CutSurfaces : Shade::Cut}
+                                                  : kOpaque && kSurfaced ? std::optional{Shade::Surfaces}
+                                                                         : std::nullopt;
+            for (const Run& kRun : *kRuns) {
                 if (kRun.program == nullptr) {
                     continue;
                 }
-                const Shade kShade = kRuns == &now.placed.runs         ? Shade::Lit
-                                     : kRuns == &now.placed.maskedRuns ? Shade::Masked
-                                                                       : Shade::Glass;
-                const bool kOwn =
-                    pipelines->programPipeline(kRun.program, kShade, decalAtlas->drawn() > 0, kSampling) != nullptr;
+                const bool kOwn = pipelines->programPipeline(kRun.program, kShade, kDecaled, kSampling) != nullptr &&
+                                  (!kPrepass.has_value() ||
+                                   pipelines->programPipeline(kRun.program, *kPrepass, false, kSampling) != nullptr);
                 (kOwn ? statistics.programModelsDrawn : statistics.programModelsWaiting) += kRun.count;
             }
         }

@@ -66,22 +66,24 @@ public:
     [[nodiscard]] bool surfaced() const noexcept;
 
 private:
-    /// What lit runs are lit as: their shade, and whether under decals.
-    struct Lighting {
+    /// What runs a material's program may draw are drawn as: their shade,
+    /// and, lit, whether under decals.
+    struct Shaded {
         Shade shade = Shade::Lit;
         bool decaled = false;
     };
 
     /// Runs of models drawn in `pass` by `single`'s pipeline, or by
-    /// `many`'s when multisampled, with `table`; lit, a run whose material
-    /// has its own program by that program's twin, once it is made (D485).
+    /// `many`'s when multisampled, with `table`; `shaded`, a run whose
+    /// material has its own program by that program's twin, once it is
+    /// made (D485, D487).
     result::Status drawRuns(const Drawing& with,
                             std::span<mrhiBinding> table,
                             mrhiPassId pass,
                             const Asked& single,
                             const Asked& many,
                             const Runs& runs,
-                            std::optional<Lighting> lighting = std::nullopt);
+                            std::optional<Shaded> shaded = std::nullopt);
     [[nodiscard]] mrhiDepthTarget depthTarget() const noexcept;
 
     mrhiDevice* native_ = nullptr;

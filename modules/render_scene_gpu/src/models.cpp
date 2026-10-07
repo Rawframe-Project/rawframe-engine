@@ -130,7 +130,7 @@ result::Status ModelPasses::drawRuns(const Drawing& with,
                                      const Asked& single,
                                      const Asked& many,
                                      const Runs& runs,
-                                     std::optional<Lighting> lighting) {
+                                     std::optional<Shaded> shaded) {
     if (runs.empty()) {
         return {};
     }
@@ -148,8 +148,8 @@ result::Status ModelPasses::drawRuns(const Drawing& with,
     for (const Run& run : runs) {
         mrhiGraphicsPipelineId wanted = kEngine;
         if (const Asked* kOwn =
-                lighting.has_value() && run.program != nullptr
-                    ? with.pipelines->programPipeline(run.program, lighting->shade, lighting->decaled, samples_ > 1)
+                shaded.has_value() && run.program != nullptr
+                    ? with.pipelines->programPipeline(run.program, shaded->shade, shaded->decaled, samples_ > 1)
                     : nullptr;
             kOwn != nullptr) {
             wanted = kOwn->pipeline;
@@ -191,11 +191,30 @@ result::Status ModelPasses::recordPrepass(const Drawing& with) {
     if (mrhiBeginPass(native_, prepass_) != mrhi_success) {
         return failed("a scene pass could not begin", mrhi_errorState);
     }
-    RAWFRAME_TRY(surfaced_ ? drawRuns(with, table, prepass_, pipelines.surfaces, kMany.surfaces, with.placed->runs)
+    // A material's program cuts its masked models and gives its surfaces
+    // (D487); the opaque models' depth alone runs none of its code.
+    RAWFRAME_TRY(surfaced_ ? drawRuns(with,
+                                      table,
+                                      prepass_,
+                                      pipelines.surfaces,
+                                      kMany.surfaces,
+                                      with.placed->runs,
+                                      Shaded{.shade = Shade::Surfaces})
                            : drawRuns(with, table, prepass_, pipelines.depth, kMany.depth, with.placed->runs));
-    RAWFRAME_TRY(
-        surfaced_ ? drawRuns(with, table, prepass_, pipelines.cutSurfaces, kMany.cutSurfaces, with.placed->maskedRuns)
-                  : drawRuns(with, table, prepass_, pipelines.cutout, kMany.cutout, with.placed->maskedRuns));
+    RAWFRAME_TRY(surfaced_ ? drawRuns(with,
+                                      table,
+                                      prepass_,
+                                      pipelines.cutSurfaces,
+                                      kMany.cutSurfaces,
+                                      with.placed->maskedRuns,
+                                      Shaded{.shade = Shade::CutSurfaces})
+                           : drawRuns(with,
+                                      table,
+                                      prepass_,
+                                      pipelines.cutout,
+                                      kMany.cutout,
+                                      with.placed->maskedRuns,
+                                      Shaded{.shade = Shade::Cut}));
     if (mrhiEndPass(native_, prepass_) != mrhi_success) {
         return failed("a scene pass could not end", mrhi_errorState);
     }
@@ -224,9 +243,9 @@ result::Status ModelPasses::recordLit(const Drawing& with, bool decaled, std::sp
     if (mrhiBeginPass(native_, lit_) != mrhi_success) {
         return failed("a scene pass could not begin", mrhi_errorState);
     }
-    const Lighting kLit{.shade = Shade::Lit, .decaled = decaled};
-    const Lighting kMasked{.shade = Shade::Masked, .decaled = decaled};
-    const Lighting kGlass{.shade = Shade::Glass, .decaled = decaled};
+    const Shaded kLit{.shade = Shade::Lit, .decaled = decaled};
+    const Shaded kMasked{.shade = Shade::Masked, .decaled = decaled};
+    const Shaded kGlass{.shade = Shade::Glass, .decaled = decaled};
     RAWFRAME_TRY(decaled ? drawRuns(with, table, lit_, pipelines.litDecaled, kMany.litDecaled, with.placed->runs, kLit)
                          : drawRuns(with, table, lit_, pipelines.lit, kMany.lit, with.placed->runs, kLit));
     RAWFRAME_TRY(

@@ -111,9 +111,10 @@ struct RendererStatistics {
     std::uint64_t particlesSpawned = 0;
     /// Trails and beams drawn, summed over the frames (D354).
     std::uint64_t ribbonsDrawn = 0;
-    /// Models lit by their material's own program, summed over the frames,
-    /// and those lit by the engine's own until its pipelines are made, or
-    /// for good where they were refused (D485).
+    /// Models drawn by their material's own program in every pass that runs
+    /// a material's code, summed over the frames, and those drawn by the
+    /// engine's own in any until its pipelines are made, or for good where
+    /// they were refused (D485, D487).
     std::uint64_t programModelsDrawn = 0;
     std::uint64_t programModelsWaiting = 0;
 };

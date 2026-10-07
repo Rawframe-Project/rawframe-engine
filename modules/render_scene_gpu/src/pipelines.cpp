@@ -395,10 +395,6 @@ result::Status Pipelines::make() {
     return {};
 }
 
-namespace {
-
-/// The prepass also leaving each point's surface (D327, D331), whole and
-/// masked, from the prepass's pipeline.
 std::array<mrhiGraphicsPipelineDef, 2> surfacing(const mrhiGraphicsPipelineDef& prepass) {
     mrhiGraphicsPipelineDef surfacesDef = prepass;
     constexpr std::string_view kSurfacesLabel = "rawframe.scene.depth.surfaces";
@@ -416,8 +412,6 @@ std::array<mrhiGraphicsPipelineDef, 2> surfacing(const mrhiGraphicsPipelineDef& 
     cutSurfacesDef.fragmentEntryLength = 9;
     return {surfacesDef, cutSurfacesDef};
 }
-
-} // namespace
 
 mrhiGraphicsPipelineDef decaledOf(mrhiGraphicsPipelineDef def, std::string_view label) {
     def.label = label.data();
