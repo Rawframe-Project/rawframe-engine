@@ -482,6 +482,31 @@ struct ToolingServer::State {
             send(connection, client, replyLine(id, "answer", std::move(made)));
             return;
         }
+        if (kind != nullptr && *kind == "tooling.clicked") {
+            // Where the author pressed in the preview (D456): the view's.
+            if (!settings.grants.view) {
+                send(connection, client, errorLine(id, ToolingError::NotGranted, "clicks need the view grant"));
+                return;
+            }
+            const std::optional<Clicked> kClicked =
+                settings.previewer != nullptr ? settings.previewer->clicked() : std::nullopt;
+            Value made = Value::object();
+            made.add("kind", Value::string("tooling.clicked"));
+            made.add("count", Value::integer(kClicked.has_value() ? static_cast<std::int64_t>(kClicked->count) : 0));
+            if (kClicked.has_value()) {
+                const auto kPoint = [](const std::array<double, 3>& at) {
+                    Value point = Value::array();
+                    for (const double kAt : at) {
+                        point.push(Value::real(kAt));
+                    }
+                    return point;
+                };
+                made.add("origin", kPoint(kClicked->origin));
+                made.add("toward", kPoint(kClicked->toward));
+            }
+            send(connection, client, replyLine(id, "answer", std::move(made)));
+            return;
+        }
         if (kind != nullptr && *kind == "tooling.pick") {
             // What a ray from an author's view meets, and where it was
             // authored (D456): reading, so the inspect grant's.

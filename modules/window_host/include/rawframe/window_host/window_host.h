@@ -26,6 +26,7 @@
 #include "rawframe/view/navigation.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
+#include "rawframe/view/preview.h"
 #include "rawframe/view/typing.h"
 #include "rawframe/window/surfaces.h"
 #include "rawframe/window/windows.h"
@@ -42,6 +43,10 @@ struct WindowHostSettings {
     /// What else the host lends its participants beside the player's
     /// devices (a page's sound, D259), each outliving the WindowHost.
     std::vector<composition::LentCapability> lent;
+    /// The camera an authoring preview looks through, if the host shows
+    /// one: a left press while it looks is kept as the ray it makes
+    /// (D456). It outlives the WindowHost.
+    view::PreviewCamera* preview = nullptr;
 };
 
 class WindowHost final : public window::Program {

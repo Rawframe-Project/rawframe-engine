@@ -184,6 +184,17 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         // and the wheel turned there, for what scrolls (D441).
         if (event->kind == window::EventKind::ButtonDown) {
             pointing_.pressed(event->pointer.position.x, event->pointer.position.y);
+            // Where an author clicked in the preview, as a ray (D456).
+            if (settings_.preview != nullptr && settings_.preview->looking().has_value() &&
+                event->pointer.button == window::MouseButton::Left) {
+                if (const auto kRay = view::pointToRay(*settings_.preview->looking(),
+                                                       views_.window(),
+                                                       event->pointer.position.x,
+                                                       event->pointer.position.y);
+                    kRay.has_value()) {
+                    settings_.preview->clicked(*kRay);
+                }
+            }
         } else if (event->kind == window::EventKind::TouchDown) {
             pointing_.pressed(event->touch.position.x, event->touch.position.y);
         } else if (event->kind == window::EventKind::ButtonUp || event->kind == window::EventKind::TouchUp) {

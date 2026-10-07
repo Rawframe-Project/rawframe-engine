@@ -96,6 +96,19 @@ public:
         camera.look(kView);
         return true;
     }
+    std::optional<world_tooling::Clicked> clicked() const override {
+        const std::optional<view::Ray>& kRay = camera.lastClick();
+        if (!kRay.has_value()) {
+            return std::nullopt;
+        }
+        // A thousand metres along the press's direction: past anything a
+        // scene an author edits holds.
+        constexpr double kReach = 1000;
+        return world_tooling::Clicked{
+            .count = camera.clicks(),
+            .origin = kRay->origin,
+            .toward = {kRay->direction[0] * kReach, kRay->direction[1] * kReach, kRay->direction[2] * kReach}};
+    }
 
     view::PreviewCamera camera;
 };
@@ -107,7 +120,8 @@ host::HostExit play(const host::HostRequest& request) noexcept {
         window_host::WindowHostSettings{
             .lent = {composition::LentCapability{view::kPreviewCamera.name, composition::provideAs(previewer.camera)},
                      composition::LentCapability{world_tooling::kPreviewer.name,
-                                                 composition::provideAs<world_tooling::Previewer>(previewer)}}}};
+                                                 composition::provideAs<world_tooling::Previewer>(previewer)}},
+            .preview = &previewer.camera}};
     const result::Status kRan = window::run(client, window::RunSettings{});
     if (client.exit().has_value()) {
         return *client.exit();

@@ -9,6 +9,7 @@
 #include "rawframe/composition/participant.h"
 
 #include <array>
+#include <cstdint>
 #include <optional>
 
 namespace rawframe::world_tooling {
@@ -19,6 +20,15 @@ struct Look {
     std::array<double, 3> eye{};
     std::array<double, 3> target{};
     double fieldOfView = 60;
+};
+
+/// The presses an author made in a preview while it looked (D456): how many
+/// so far, and the last one as a ray from where it starts toward a point
+/// far past it, in metres.
+struct Clicked {
+    std::uint64_t count = 0;
+    std::array<double, 3> origin{};
+    std::array<double, 3> toward{};
 };
 
 class Previewer {
@@ -32,6 +42,13 @@ public:
     /// player's camera back; false, changing nothing, for a look it cannot
     /// take (an eye at its target).
     virtual bool look(const std::optional<Look>& look) = 0;
+    /// How many presses there have been in the preview while it looked,
+    /// and the last one's ray from its eye: its origin, and how far and
+    /// which way it goes (D456); none before the first, or for a Runtime
+    /// that keeps none.
+    [[nodiscard]] virtual std::optional<Clicked> clicked() const {
+        return std::nullopt;
+    }
 };
 
 inline constexpr composition::Capability<Previewer> kPreviewer{"rawframe.tooling.previewer"};
