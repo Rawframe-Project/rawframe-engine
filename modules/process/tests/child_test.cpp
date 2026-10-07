@@ -10,9 +10,11 @@
 #include "rawframe/test/test.h"
 
 #include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 
 using namespace rawframe;
@@ -43,6 +45,22 @@ bool waitForText(const std::filesystem::path& path, const std::string& text) {
     return false;
 }
 
+/// Whether `started` started, saying why where it did not.
+bool startedAll(const result::Result<Child>& started) {
+    if (!started.has_value()) {
+        const std::string_view kWhy = started.error().description();
+        std::printf("not started: %.*s\n", static_cast<int>(kWhy.size()), kWhy.data());
+        for (const result::ContextField& kEach : started.error().context()) {
+            std::printf("  %.*s = %.*s\n",
+                        static_cast<int>(kEach.key.size()),
+                        kEach.key.data(),
+                        static_cast<int>(kEach.value.size()),
+                        kEach.value.data());
+        }
+    }
+    return started.has_value();
+}
+
 std::filesystem::path scratch(const char* name) {
     std::filesystem::path directory = test::scratchDirectory("process");
     std::filesystem::create_directories(directory);
@@ -64,7 +82,7 @@ RAWFRAME_TEST(AChildEndsWithItsCodeAndSaysWhatItWasGiven) {
     auto said = Child::start({.program = RAWFRAME_PROCESS_CHILD,
                               .arguments = {"say", "two words", "a \"quote\"", "back\\slash\\", ""},
                               .output = kSaid});
-    RAWFRAME_EXPECT(said.has_value());
+    RAWFRAME_EXPECT(startedAll(said));
     if (said.has_value()) {
         RAWFRAME_EXPECT(waitFor(*said) == 0);
         RAWFRAME_EXPECT(test::readFile(kSaid.string()) == "two words|a \"quote\"|back\\slash\\||said\n");
@@ -74,7 +92,7 @@ RAWFRAME_TEST(AChildEndsWithItsCodeAndSaysWhatItWasGiven) {
 RAWFRAME_TEST(AChildStopsWhenAskedAndIsKilledOtherwise) {
     const std::filesystem::path kHeard = scratch("heard.txt");
     auto waiting = Child::start({.program = RAWFRAME_PROCESS_CHILD, .arguments = {"wait"}, .output = kHeard});
-    RAWFRAME_EXPECT(waiting.has_value());
+    RAWFRAME_EXPECT(startedAll(waiting));
     if (waiting.has_value()) {
         // Asked once it listens, it stops as a Host stops; asked again, it
         // has ended.

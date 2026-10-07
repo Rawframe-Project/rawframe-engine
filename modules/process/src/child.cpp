@@ -2,6 +2,7 @@
 
 #include "rawframe/process/errors.h"
 
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -247,7 +248,11 @@ result::Result<Child> Child::start(const ChildSettings& settings) {
     posix_spawnattr_destroy(&attributes);
     posix_spawn_file_actions_destroy(&actions);
     if (failed != 0) {
-        return refuse(ProcessError::StartFailed, "the system would not start the program");
+        // The system's error number says why: the program, its output's
+        // file, or no room for another process.
+        return std::unexpected{refuse(ProcessError::StartFailed, "the system would not start the program")
+                                   .error()
+                                   .withContext("errno", std::to_string(failed))};
     }
     Child child;
     child.id_ = static_cast<std::uint64_t>(pid);
