@@ -580,3 +580,34 @@ RAWFRAME_TEST(AQualitySwitchGivesEachQualityItsInput) {
     RAWFRAME_EXPECT(compile(kRange).has_value() && refusedWith(compile(kRange, Quality::Low), MaterialError::Invalid));
     RAWFRAME_EXPECT(refusedWith(compileQualities(kRange), MaterialError::Invalid));
 }
+
+RAWFRAME_TEST(WhatTheBlobCannotFoldIsWrittenAsSlang) {
+    // A texture's color times its own alpha, and the roughness that alpha
+    // too: the blob folds neither, the generated material says both,
+    // sampling the texture once, bound at the base slot (D483).
+    const graph::Document kSurface =
+        surfaceOf(objectOf({{"base_color", from(kNode + 3, "out")}, {"specular_roughness", from(kSampler, "alpha")}}),
+                  {samplerOf({}), mathOf(kNode + 3, kMultiplyType, from(kSampler, "color"), from(kSampler, "alpha"))});
+    RAWFRAME_EXPECT(refusedWith(compile(kSurface), MaterialError::Unsupported));
+    const auto kMade = generateSlang(kSurface);
+    RAWFRAME_EXPECT(kMade.has_value());
+    if (!kMade.has_value()) {
+        return;
+    }
+    const std::string& kSource = kMade->source;
+    RAWFRAME_EXPECT(kSource.contains("import material;") &&
+                    kSource.contains("const float4 v0 = baseTexture.Sample(baseSampler, point.uv);") &&
+                    kSource.contains("const float3 v1 = v0.rgb * v0.a;") &&
+                    kSource.contains("made.color = point.color.rgb * (v1);") &&
+                    kSource.contains("made.roughness = v0.a;") && kSource.contains("made.metalness = 0.0;") &&
+                    kSource.contains("made.normal = point.normal;") &&
+                    kSource.contains("export struct Material : IMaterial = Generated;"));
+    RAWFRAME_EXPECT(kMade->textures.size() == 1 && kMade->textures[0].id == 0xa44ecb4a39ac5cc8ULL);
+    std::size_t sampled = 0;
+    for (std::size_t at = kSource.find(".Sample("); at != std::string::npos; at = kSource.find(".Sample(", at + 1)) {
+        ++sampled;
+    }
+    RAWFRAME_EXPECT(sampled == 1);
+    // Coordinates past a mesh's first are refused, as the blob refuses them.
+    RAWFRAME_EXPECT(refusedWith(generateSlang(sampledAt(1)), MaterialError::Unsupported));
+}

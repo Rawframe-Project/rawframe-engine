@@ -259,6 +259,24 @@ using Qualities = std::array<Material, 3>;
 /// The surface compiled at each quality, as `compile` refuses it.
 [[nodiscard]] result::Result<Qualities> compileQualities(const graph::Document& surface);
 
+/// A surface material written as Slang (ADR-0026, D481 to D483): a module
+/// importing the scene's `material` module and exporting `Material`, a
+/// struct meeting its `IMaterial`, which the scene is linked with in place
+/// of the blob's. Each node output is computed once, in graph order; a
+/// texture is bound at the slots in the order it is first sampled, base,
+/// packed, emission, and normal, `textures` naming them.
+struct GeneratedSlang {
+    std::string source;
+    std::vector<SampledTexture> textures;
+};
+
+/// The surface written as Slang at a quality, for a graph the blob cannot
+/// fold. Refuses (`Unsupported`) a node of a type this family does not
+/// know, a mesh's coordinates past its first, and more than four textures;
+/// (`Invalid`) what `validateSurface` refuses.
+[[nodiscard]] result::Result<GeneratedSlang> generateSlang(const graph::Document& surface,
+                                                           Quality quality = Quality::High);
+
 /// SPEC-0028's semantic hash: from the surface node down, and the states,
 /// blind to ids and drawings. Refuses (`Unsupported`) a document holding a
 /// node of a type this family does not know.
