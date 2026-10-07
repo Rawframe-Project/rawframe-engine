@@ -95,6 +95,7 @@ bool ShellParticipant::openGame() {
     // What the session offers decides what Studio offers (ADR-0032).
     catalog_ = catalogOf(session_->answer(R"({"kind":"authoring.describe","id":2})", ended));
     ++records_;
+    assets_ = assetsOf(ask(assetsRecord(next())));
     std::vector<std::pair<std::string, std::string>> scenes;
     for (const auto& [kIdentity, kPath] : authoring_session::scenesBeside(description_)) {
         std::error_code error;

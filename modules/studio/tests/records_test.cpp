@@ -142,11 +142,41 @@ RAWFRAME_TEST(AnEditorIsFoundOnThePathAsAShellFindsIt) {
     std::filesystem::remove_all(kRoot, error);
 }
 
+RAWFRAME_TEST(AnAssetIsShownAndNamedForItsIdentity) {
+    const std::vector<Asset> kAssets =
+        assetsOf(R"({"kind":"authoring.reply","id":3,"answer":{"kind":"authoring.assets","assets":[)"
+                 R"({"kind":"texture","id":"c067c4be8ce86d12","name":"hud.png"},)"
+                 R"({"kind":"texture","id":"a44ecb4a39ac5cc8","name":"art/tiles.png"},)"
+                 R"({"kind":"label","id":"0000000000000001","name":"hud.strings/coins"},)"
+                 R"({"kind":"texture","id":"short","name":"bad.png"}]}})");
+    RAWFRAME_EXPECT(kAssets.size() == 3 && kAssets[0].id == 0xc067c4be8ce86d12U && kAssets[1].name == "art/tiles.png");
+    // A field's number, as the scene writes it, names its asset.
+    const Asset* held = assetHeld(kAssets, "13864266300570234130");
+    RAWFRAME_EXPECT(held != nullptr && held->name == "hud.png" && assetShown(*held) == "hud.png (texture)");
+    RAWFRAME_EXPECT(assetHeld(kAssets, "7") == nullptr && assetHeld(kAssets, "x") == nullptr);
+    std::string why;
+    RAWFRAME_EXPECT(assetNamed(kAssets, "hud.png (texture)", why)->id == 0xc067c4be8ce86d12U);
+    RAWFRAME_EXPECT(assetNamed(kAssets, "hud.png", why)->id == 0xc067c4be8ce86d12U);
+    RAWFRAME_EXPECT(assetNamed(kAssets, "tiles.png", why)->id == 0xa44ecb4a39ac5cc8U);
+    RAWFRAME_EXPECT(assetNamed(kAssets, "art", why)->id == 0xa44ecb4a39ac5cc8U);
+    RAWFRAME_EXPECT(!assetNamed(kAssets, "hud", why).has_value() && why == "2 assets match hud");
+    RAWFRAME_EXPECT(!assetNamed(kAssets, "wall", why).has_value() && why == "no asset matches wall");
+    RAWFRAME_EXPECT(document::writeCompact(assetsRecord(5)) == R"({"kind":"authoring.assets","id":5})");
+}
+
 RAWFRAME_TEST(TypedTextIsAValueOfItsFieldsKindOrNone) {
     RAWFRAME_EXPECT(document::writeCompact(*typedValue("real", "2.5")) == R"({"real":2.5})");
     RAWFRAME_EXPECT(!typedValue("real", "x").has_value());
     RAWFRAME_EXPECT(!typedValue("real", "\"2\"").has_value());
     RAWFRAME_EXPECT(document::writeCompact(*typedValue("unsigned", "7")) == R"({"unsigned":"7"})");
+    RAWFRAME_EXPECT(document::writeCompact(*typedValue("unsigned", "18446744073709551615")) ==
+                    R"({"unsigned":"18446744073709551615"})");
+    RAWFRAME_EXPECT(document::writeCompact(*typedValue("signed", "-3")) == R"({"signed":"-3"})");
+    // A whole number is digits in its range, or none, so a name can be tried.
+    for (const std::string_view kNot : {"hud.png", "", "7x", "-7", "18446744073709551616", " 7"}) {
+        RAWFRAME_EXPECT(!typedValue("unsigned", kNot).has_value());
+    }
+    RAWFRAME_EXPECT(!typedValue("signed", "9223372036854775808").has_value());
     RAWFRAME_EXPECT(document::writeCompact(*typedValue("truth", "true")) == R"({"truth":true})");
     RAWFRAME_EXPECT(!typedValue("truth", "yes").has_value());
     RAWFRAME_EXPECT(!typedValue("reference", "x").has_value());

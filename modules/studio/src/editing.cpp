@@ -238,9 +238,19 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
             done = row.field + " set to " + text;
         }
     } else {
-        const std::optional<Value> kValue = typedValue(row.kind, text);
+        std::optional<Value> kValue = typedValue(row.kind, text);
+        // An unsigned field takes an asset by its name, as its identity.
+        std::string why;
+        const std::optional<Asset> kAsset =
+            !kValue.has_value() && row.kind == "unsigned" ? assetNamed(assets_, text, why) : std::nullopt;
+        if (kAsset.has_value()) {
+            kValue = typedValue("unsigned", std::to_string(kAsset->id));
+        }
         if (!kValue.has_value()) {
-            refuse(row.field + ": " + (row.kind.empty() ? std::string{"not edited here"} : "not a " + row.kind));
+            refuse(row.field + ": " +
+                   (row.kind.empty() ? std::string{"not edited here"}
+                    : row.kind == "unsigned" && !why.empty() && why.rfind("no asset", 0) != 0 ? why
+                                                                                              : "not a " + row.kind));
             return;
         }
         operation = operationOn("scene.set_field");

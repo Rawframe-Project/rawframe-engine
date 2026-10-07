@@ -33,6 +33,23 @@ std::optional<Value> typedValue(std::string_view kind, std::string_view text) {
         made.add("real", *kParsed);
         return made;
     }
+    // A whole number is all its digits, signed or not, in its range: what
+    // is not is no number, so an asset's name can be tried (D455).
+    if (kind == "signed" || kind == "unsigned") {
+        bool whole = false;
+        if (kind == "signed") {
+            std::int64_t value = 0;
+            const auto [kStop, kError] = std::from_chars(text.data(), text.data() + text.size(), value);
+            whole = kError == std::errc{} && kStop == text.data() + text.size();
+        } else {
+            std::uint64_t value = 0;
+            const auto [kStop, kError] = std::from_chars(text.data(), text.data() + text.size(), value);
+            whole = kError == std::errc{} && kStop == text.data() + text.size();
+        }
+        if (!whole) {
+            return std::nullopt;
+        }
+    }
     if (kind == "signed" || kind == "unsigned" || kind == "case") {
         Value made = Value::object();
         made.add(std::string{kind}, Value::string(std::string{text}));
@@ -191,6 +208,94 @@ std::vector<HistoryEntry> historyOf(std::string_view reply) {
                          .applied = applied != nullptr && applied->truth().value_or(false)});
     }
     return made;
+}
+
+Value assetsRecord(std::int64_t id) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.assets"));
+    record.add("id", Value::integer(id));
+    return record;
+}
+
+std::vector<Asset> assetsOf(std::string_view reply) {
+    std::vector<Asset> made;
+    const auto kParsed = document::parse(reply);
+    const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* assets = answer != nullptr ? answer->find("assets") : nullptr;
+    if (assets == nullptr || assets->kind() != Value::Kind::Array) {
+        return made;
+    }
+    for (const Value& each : assets->items()) {
+        const Value* kind = each.find("kind");
+        const Value* id = each.find("id");
+        const Value* name = each.find("name");
+        if (kind == nullptr || kind->text() == nullptr || id == nullptr || id->text() == nullptr ||
+            id->text()->size() != 16 || name == nullptr || name->text() == nullptr) {
+            continue;
+        }
+        std::uint64_t value = 0;
+        const std::string& digits = *id->text();
+        if (std::from_chars(digits.data(), digits.data() + digits.size(), value, 16).ptr !=
+            digits.data() + digits.size()) {
+            continue;
+        }
+        made.push_back(Asset{.kind = *kind->text(), .id = value, .name = *name->text()});
+    }
+    return made;
+}
+
+const Asset* assetHeld(std::span<const Asset> assets, std::string_view value) {
+    std::uint64_t number = 0;
+    const auto [kStop, kError] = std::from_chars(value.data(), value.data() + value.size(), number);
+    if (kError != std::errc{} || kStop != value.data() + value.size() || number == 0) {
+        return nullptr;
+    }
+    const auto kFound = std::ranges::find(assets, number, &Asset::id);
+    return kFound != assets.end() ? &*kFound : nullptr;
+}
+
+std::string assetShown(const Asset& asset) {
+    return asset.name + " (" + asset.kind + ")";
+}
+
+std::optional<Asset> assetNamed(std::span<const Asset> assets, std::string_view text, std::string& why) {
+    if (text.empty()) {
+        why = "name an asset";
+        return std::nullopt;
+    }
+    const auto kFile = [](std::string_view name) {
+        const std::size_t kSlash = name.rfind('/');
+        return kSlash == std::string_view::npos ? name : name.substr(kSlash + 1);
+    };
+    const std::array<std::function<bool(const Asset&)>, 4> kRules = {[&text](const Asset& asset) {
+                                                                         return assetShown(asset) == text;
+                                                                     },
+                                                                     [&text](const Asset& asset) {
+                                                                         return asset.name == text;
+                                                                     },
+                                                                     [&text, &kFile](const Asset& asset) {
+                                                                         return kFile(asset.name) == text;
+                                                                     },
+                                                                     [&text](const Asset& asset) {
+                                                                         return asset.name.starts_with(text);
+                                                                     }};
+    for (const auto& kRule : kRules) {
+        std::vector<const Asset*> met;
+        for (const Asset& asset : assets) {
+            if (kRule(asset)) {
+                met.push_back(&asset);
+            }
+        }
+        if (met.size() == 1) {
+            return *met.front();
+        }
+        if (met.size() > 1) {
+            why = std::to_string(met.size()) + " assets match " + std::string{text};
+            return std::nullopt;
+        }
+    }
+    why = "no asset matches " + std::string{text};
+    return std::nullopt;
 }
 
 Value createSceneRecord(std::int64_t id, std::string_view scene) {

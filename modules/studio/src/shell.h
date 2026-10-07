@@ -294,6 +294,8 @@ private:
     ui::Node retryNode_{};
     std::uint64_t opened_ = 0;
     std::vector<std::string> scenes_;
+    /// The assets the game declares, read as it opens (D455).
+    std::vector<Asset> assets_;
     /// Each scene's identity, from its sidecar, as 32 hex digits.
     std::vector<std::string> sceneSources_;
     /// The chosen scene's own field rows under its entities.

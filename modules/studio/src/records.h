@@ -71,6 +71,31 @@ struct HistoryEntry {
 [[nodiscard]] Value historyRecord(std::int64_t id, std::string_view scene);
 [[nodiscard]] std::vector<HistoryEntry> historyOf(std::string_view reply);
 
+/// An asset the game declares (D455): its kind, the identity a field
+/// holds it by, and its name.
+struct Asset {
+    std::string kind;
+    std::uint64_t id = 0;
+    std::string name;
+};
+
+/// `authoring.assets`, and the assets its answer lists; none for a refusal
+/// or an entry out of shape.
+[[nodiscard]] Value assetsRecord(std::int64_t id);
+[[nodiscard]] std::vector<Asset> assetsOf(std::string_view reply);
+
+/// The asset an unsigned field's value names, its number as the scene
+/// writes it; none when it names none.
+[[nodiscard]] const Asset* assetHeld(std::span<const Asset> assets, std::string_view value);
+
+/// The asset `text` names: as Studio shows it (`name (kind)`), by its whole
+/// name, by its file's name, or by the start of its name, when one alone
+/// matches; else none, and `why` says so.
+[[nodiscard]] std::optional<Asset> assetNamed(std::span<const Asset> assets, std::string_view text, std::string& why);
+
+/// How Studio shows `asset` in a field.
+[[nodiscard]] std::string assetShown(const Asset& asset);
+
 /// `authoring.create_scene` for `scene` (D449).
 [[nodiscard]] Value createSceneRecord(std::int64_t id, std::string_view scene);
 

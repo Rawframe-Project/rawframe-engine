@@ -312,6 +312,12 @@ void ShellParticipant::showEntity(std::size_t at) {
                     text = names_[static_cast<std::size_t>(kAt - entities_.begin())];
                 }
             }
+            // A number naming a declared asset shows the asset (D455).
+            if (kEach.kind == "unsigned") {
+                if (const Asset* held = assetHeld(assets_, text); held != nullptr) {
+                    text = assetShown(*held);
+                }
+            }
             auto line = fieldRow(kEach.name, text, std::nullopt, kEach.text.has_value());
             if (!line.has_value()) {
                 return;
