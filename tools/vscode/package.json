@@ -1,0 +1,81 @@
+{
+  "name": "rawframe",
+  "displayName": "Rawframe",
+  "description": "Debug a running Rawframe game's Kest scripts.",
+  "version": "0.0.1",
+  "publisher": "rawframe",
+  "license": "SEE LICENSE IN ../../LICENSE.md",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onDebug"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "restrictedConfigurations": [
+        "rawframe.debugPath"
+      ]
+    }
+  },
+  "contributes": {
+    "configuration": {
+      "title": "Rawframe",
+      "properties": {
+        "rawframe.debugPath": {
+          "type": "string",
+          "default": "rawframe-debug",
+          "description": "The `rawframe-debug` command: the debug adapter that attaches to a running game. Read from user settings only: a workspace never names the program run.",
+          "scope": "machine"
+        }
+      }
+    },
+    "debuggers": [
+      {
+        "type": "rawframe",
+        "label": "Rawframe game",
+        "languages": [
+          "kest"
+        ],
+        "configurationAttributes": {
+          "attach": {
+            "required": [
+              "endpoint",
+              "pinFile",
+              "tokenFile"
+            ],
+            "properties": {
+              "endpoint": {
+                "type": "string",
+                "description": "The game's tooling endpoint, its `tooling.endpoint` setting, granting debug (`tooling.grants = inspect debug`)."
+              },
+              "pinFile": {
+                "type": "string",
+                "description": "The file holding the fingerprint of the game's certificate, its `network.quic.fingerprint_file`."
+              },
+              "tokenFile": {
+                "type": "string",
+                "description": "The file holding the endpoint's token, its `tooling.token_file`."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "rawframe",
+            "request": "attach",
+            "name": "Rawframe: attach to the game",
+            "endpoint": "127.0.0.1:7801",
+            "pinFile": "${workspaceFolder}/server.fingerprint",
+            "tokenFile": "${workspaceFolder}/tooling.token"
+          }
+        ]
+      }
+    ]
+  }
+}
