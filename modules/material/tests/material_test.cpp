@@ -611,3 +611,35 @@ RAWFRAME_TEST(WhatTheBlobCannotFoldIsWrittenAsSlang) {
     // Coordinates past a mesh's first are refused, as the blob refuses them.
     RAWFRAME_EXPECT(refusedWith(generateSlang(sampledAt(1)), MaterialError::Unsupported));
 }
+
+RAWFRAME_TEST(AProgramMaterialRoundTripsAndRefusesWhatItWouldNotWrite) {
+    // States, two textures at their slots, and a container a backend (D484).
+    ProgramMaterial made{.shading = Shading::Unlit, .blend = Blend::Masked, .alphaCutoff = 0.25F, .doubleSided = true};
+    made.textures = {{.id = 0xa44ecb4a39ac5cc8ULL}, {.id = 7, .filter = Filter::Nearest, .address = Address::Clamp}};
+    for (std::size_t at = 0; at < made.containers.size(); ++at) {
+        made.containers.at(at) = {std::byte{'M'}, std::byte{'R'}, std::byte{'S'}, std::byte{'C'}, std::byte(at)};
+    }
+    const std::vector<std::byte> kBytes = encodeProgram(made);
+    const auto kRead = decodeProgram(kBytes);
+    RAWFRAME_EXPECT(kRead.has_value() && *kRead == made);
+    // Every prefix, a byte more, a container not Maul RHI's, a texture
+    // naming none, a fifth texture, and states out of their sets.
+    for (std::size_t length = 0; length < kBytes.size(); ++length) {
+        RAWFRAME_EXPECT(refusedWith(decodeProgram(std::span{kBytes}.first(length)), MaterialError::Invalid));
+    }
+    std::vector<std::byte> longer = kBytes;
+    longer.push_back(std::byte{0});
+    RAWFRAME_EXPECT(refusedWith(decodeProgram(longer), MaterialError::Invalid));
+    ProgramMaterial bad = made;
+    bad.containers[1][0] = std::byte{'X'};
+    RAWFRAME_EXPECT(refusedWith(decodeProgram(encodeProgram(bad)), MaterialError::Invalid));
+    bad = made;
+    bad.textures[1].id = 0;
+    RAWFRAME_EXPECT(refusedWith(decodeProgram(encodeProgram(bad)), MaterialError::Invalid));
+    bad = made;
+    bad.textures.resize(5, SampledTexture{.id = 1});
+    RAWFRAME_EXPECT(refusedWith(decodeProgram(encodeProgram(bad)), MaterialError::Invalid));
+    std::vector<std::byte> blended = kBytes;
+    blended[9] = std::byte{3};
+    RAWFRAME_EXPECT(refusedWith(decodeProgram(blended), MaterialError::Invalid));
+}

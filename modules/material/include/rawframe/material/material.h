@@ -215,6 +215,10 @@ struct Material {
 /// document.
 inline constexpr base::Bits128 kMaterialType = base::parseBits128Hex("06e95486decf73eaeea9ad8ca0cc02a8").value;
 inline constexpr std::string_view kMaterialRepresentation = "rawframe.material";
+/// A material with its own program (D484): the representation of a
+/// material whose graph the blob cannot fold, cooked with the scene's
+/// containers linked with what `generateSlang` wrote.
+inline constexpr std::string_view kProgramRepresentation = "rawframe.material.program";
 
 /// The one type a surface material's output is, and the node library's
 /// types this family knows.
@@ -268,6 +272,11 @@ using Qualities = std::array<Material, 3>;
 struct GeneratedSlang {
     std::string source;
     std::vector<SampledTexture> textures;
+    /// The material's declared states, which its program does not say.
+    Shading shading = Shading::Lit;
+    Blend blend = Blend::Opaque;
+    float alphaCutoff = 0.5F;
+    bool doubleSided = false;
 };
 
 /// The surface written as Slang at a quality, for a graph the blob cannot
@@ -276,6 +285,35 @@ struct GeneratedSlang {
 /// (`Invalid`) what `validateSurface` refuses.
 [[nodiscard]] result::Result<GeneratedSlang> generateSlang(const graph::Document& surface,
                                                            Quality quality = Quality::High);
+
+/// The backends a program material carries a container for, in its order:
+/// Vulkan and WebGPU's, Metal's, Direct3D 12's (D416).
+inline constexpr std::size_t kProgramContainers = 3;
+
+/// A program material, cooked (D484): its declared states (its Surface and
+/// textures are its program's), the textures bound at the slots in order,
+/// and the scene's containers linked with its program, one a backend.
+struct ProgramMaterial {
+    Shading shading = Shading::Lit;
+    Blend blend = Blend::Opaque;
+    float alphaCutoff = 0.5F;
+    bool doubleSided = false;
+    std::vector<SampledTexture> textures;
+    std::array<std::vector<std::byte>, kProgramContainers> containers;
+
+    friend bool operator==(const ProgramMaterial&, const ProgramMaterial&) = default;
+};
+
+/// A program material's bytes: `RFMP`, format 1; its states (shading,
+/// blend, double sided, a byte each and one of nought) and alpha cutoff;
+/// the count of its textures, then each one's identity (low word first),
+/// filter, address, and two bytes of nought; then each container's length
+/// and bytes. Little-endian.
+[[nodiscard]] std::vector<std::byte> encodeProgram(const ProgramMaterial& made);
+/// Refuses (`Invalid`) bytes `encodeProgram` would not write: states out of
+/// their sets, more than four textures or one naming none, a container
+/// empty or not a Maul RHI container (`MRSC`), or bytes left over.
+[[nodiscard]] result::Result<ProgramMaterial> decodeProgram(std::span<const std::byte> bytes);
 
 /// SPEC-0028's semantic hash: from the surface node down, and the states,
 /// blind to ids and drawings. Refuses (`Unsupported`) a document holding a

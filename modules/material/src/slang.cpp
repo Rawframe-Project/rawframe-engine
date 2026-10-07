@@ -265,6 +265,10 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
                   "}\n\n"
                   "export struct Material : IMaterial = Generated;\n";
     made.textures = writer.takeTextures();
+    made.shading = kStates.shading;
+    made.blend = kStates.blend;
+    made.alphaCutoff = kStates.alphaCutoff;
+    made.doubleSided = kStates.doubleSided;
     return made;
 }
 

@@ -12,3 +12,4 @@ rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/material
 rawframe_module_fuzz(NAME material TARGET documents RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_material.cpp)
 rawframe_module_fuzz(NAME material TARGET post_processes RUNS 10000 SEEDS tests/post_seeds SOURCES tests/fuzz_post_process.cpp)
 rawframe_module_fuzz(NAME material TARGET canvases RUNS 10000 SEEDS tests/canvas_seeds SOURCES tests/fuzz_canvas.cpp)
+rawframe_module_fuzz(NAME material TARGET programs RUNS 10000 SEEDS tests/program_seeds SOURCES tests/fuzz_program.cpp)

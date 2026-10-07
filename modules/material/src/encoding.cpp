@@ -4,7 +4,10 @@
 
 #include <algorithm>
 #include <bit>
+#include <cstddef>
+#include <cstdint>
 #include <span>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -228,6 +231,101 @@ std::array<float, kBlobFloats> blobOf(const Material& made) noexcept {
     blob[34] = static_cast<float>(kTextures.occlusion);
     blob[35] = kTextures.normalScale;
     return blob;
+}
+
+std::vector<std::byte> encodeProgram(const ProgramMaterial& made) {
+    std::vector<std::byte> bytes;
+    for (const char kLetter : {'R', 'F', 'M', 'P'}) {
+        bytes.push_back(static_cast<std::byte>(kLetter));
+    }
+    putWord(bytes, 1);
+    bytes.push_back(static_cast<std::byte>(made.shading));
+    bytes.push_back(static_cast<std::byte>(made.blend));
+    bytes.push_back(static_cast<std::byte>(made.doubleSided ? 1 : 0));
+    bytes.push_back(std::byte{0});
+    putWord(bytes, std::bit_cast<std::uint32_t>(made.alphaCutoff));
+    putWord(bytes, static_cast<std::uint32_t>(made.textures.size()));
+    for (const SampledTexture& kTexture : made.textures) {
+        putWord(bytes, static_cast<std::uint32_t>(kTexture.id));
+        putWord(bytes, static_cast<std::uint32_t>(kTexture.id >> 32U));
+        bytes.push_back(static_cast<std::byte>(kTexture.filter));
+        bytes.push_back(static_cast<std::byte>(kTexture.address));
+        bytes.push_back(std::byte{0});
+        bytes.push_back(std::byte{0});
+    }
+    for (const std::vector<std::byte>& kContainer : made.containers) {
+        putWord(bytes, static_cast<std::uint32_t>(kContainer.size()));
+        bytes.insert(bytes.end(), kContainer.begin(), kContainer.end());
+    }
+    return bytes;
+}
+
+result::Result<ProgramMaterial> decodeProgram(std::span<const std::byte> bytes) {
+    std::size_t at = 0;
+    bool fits = true;
+    const auto kTake = [&bytes, &at, &fits](std::size_t count) {
+        fits = fits && count <= bytes.size() - at;
+        const std::span<const std::byte> kTaken = fits ? bytes.subspan(at, count) : std::span<const std::byte>{};
+        at += fits ? count : 0;
+        return kTaken;
+    };
+    const auto kWord = [&kTake]() {
+        const std::span<const std::byte> kBytes = kTake(4);
+        std::uint32_t word = 0;
+        for (std::size_t each = 0; each < kBytes.size(); ++each) {
+            word |= std::to_integer<std::uint32_t>(kBytes[each]) << (each * 8);
+        }
+        return word;
+    };
+    const auto kIs = [](std::span<const std::byte> taken, std::string_view letters) {
+        return taken.size() == letters.size() && std::ranges::equal(taken, letters, [](std::byte each, char letter) {
+                   return each == static_cast<std::byte>(letter);
+               });
+    };
+    if (!kIs(kTake(4), "RFMP") || kWord() != 1) {
+        return invalid("a program material is RFMP, format 1");
+    }
+    ProgramMaterial made;
+    const std::span<const std::byte> kStates = kTake(4);
+    const float kCutoff = std::bit_cast<float>(kWord());
+    if (!fits || std::to_integer<std::uint8_t>(kStates[0]) > 1 || std::to_integer<std::uint8_t>(kStates[1]) > 2 ||
+        std::to_integer<std::uint8_t>(kStates[2]) > 1 || kStates[3] != std::byte{0} || !(kCutoff >= 0) ||
+        !(kCutoff <= 1)) {
+        return invalid("a program material's states are in their sets, its cutoff from nought to one");
+    }
+    made.shading = static_cast<Shading>(kStates[0]);
+    made.blend = static_cast<Blend>(kStates[1]);
+    made.doubleSided = kStates[2] != std::byte{0};
+    made.alphaCutoff = kCutoff;
+    const std::uint32_t kTextures = kWord();
+    if (!fits || kTextures > 4) {
+        return invalid("a program material binds at most four textures");
+    }
+    for (std::uint32_t each = 0; each < kTextures; ++each) {
+        SampledTexture texture;
+        texture.id = kWord();
+        texture.id |= static_cast<std::uint64_t>(kWord()) << 32U;
+        const std::span<const std::byte> kSampler = kTake(4);
+        if (!fits || texture.id == 0 || std::to_integer<std::uint8_t>(kSampler[0]) > 1 ||
+            std::to_integer<std::uint8_t>(kSampler[1]) > 1 || kSampler[2] != std::byte{0} ||
+            kSampler[3] != std::byte{0}) {
+            return invalid("a program material's texture names one, its sampler state in its sets");
+        }
+        texture.filter = static_cast<Filter>(kSampler[0]);
+        texture.address = static_cast<Address>(kSampler[1]);
+        made.textures.push_back(texture);
+    }
+    for (std::vector<std::byte>& container : made.containers) {
+        const std::span<const std::byte> kContainer = kTake(kWord());
+        if (!fits || !kIs(kContainer.first(std::min<std::size_t>(4, kContainer.size())), "MRSC")) {
+            return invalid("a program material's containers are Maul RHI's, one a backend");
+        }
+        container.assign(kContainer.begin(), kContainer.end());
+    }
+    if (at != bytes.size()) {
+        return invalid("a program material's bytes end with its last container");
+    }
+    return made;
 }
 
 } // namespace rawframe::material
