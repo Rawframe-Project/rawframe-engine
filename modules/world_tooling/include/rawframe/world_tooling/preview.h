@@ -29,6 +29,9 @@ struct Clicked {
     std::uint64_t count = 0;
     std::array<double, 3> origin{};
     std::array<double, 3> toward{};
+    /// The window's modifier bits held with the press: Shift 1, Control 2
+    /// (D463).
+    std::uint16_t modifiers = 0;
     /// Which press was last let go (its count), and the ray where it was
     /// let go (D457); nought before any.
     std::uint64_t released = 0;

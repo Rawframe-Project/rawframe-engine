@@ -192,7 +192,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
                                                        event->pointer.position.x,
                                                        event->pointer.position.y);
                     kRay.has_value()) {
-                    settings_.preview->clicked(*kRay);
+                    settings_.preview->clicked(*kRay, event->pointer.modifiers);
                 }
             }
         } else if (event->kind == window::EventKind::TouchDown) {

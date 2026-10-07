@@ -107,7 +107,8 @@ public:
         world_tooling::Clicked made{
             .count = camera.clicks(),
             .origin = kRay->origin,
-            .toward = {kRay->direction[0] * kReach, kRay->direction[1] * kReach, kRay->direction[2] * kReach}};
+            .toward = {kRay->direction[0] * kReach, kRay->direction[1] * kReach, kRay->direction[2] * kReach},
+            .modifiers = camera.clickModifiers()};
         if (const std::optional<view::Ray>& kRelease = camera.lastRelease(); kRelease.has_value()) {
             made.released = camera.releases();
             made.releaseOrigin = kRelease->origin;

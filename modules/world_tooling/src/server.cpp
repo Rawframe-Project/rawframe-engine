@@ -530,6 +530,7 @@ struct ToolingServer::State {
                 };
                 made.add("origin", kPoint(kClicked->origin));
                 made.add("toward", kPoint(kClicked->toward));
+                made.add("modifiers", Value::integer(kClicked->modifiers));
                 if (kClicked->released != 0) {
                     made.add("released", Value::integer(static_cast<std::int64_t>(kClicked->released)));
                     made.add("releaseOrigin", kPoint(kClicked->releaseOrigin));

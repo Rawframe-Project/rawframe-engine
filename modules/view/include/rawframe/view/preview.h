@@ -32,9 +32,15 @@ public:
         return view_;
     }
     /// A press in the window while the preview looks, as its ray.
-    void clicked(const Ray& ray) noexcept {
+    /// `modifiers` are the window's modifier bits held with the press: a
+    /// drag with Shift moves height, with Control turns (D463).
+    void clicked(const Ray& ray, std::uint16_t modifiers = 0) noexcept {
         lastClick_ = ray;
+        clickModifiers_ = modifiers;
         ++clicks_;
+    }
+    [[nodiscard]] std::uint16_t clickModifiers() const noexcept {
+        return clickModifiers_;
     }
     /// How many presses there have been, so a reader tells a new one, and
     /// the last one's ray; none before the first.
@@ -62,6 +68,7 @@ private:
     std::optional<Perspective> view_;
     std::optional<Ray> lastClick_;
     std::uint64_t clicks_ = 0;
+    std::uint16_t clickModifiers_ = 0;
     std::optional<Ray> lastRelease_;
     std::uint64_t releases_ = 0;
 };
