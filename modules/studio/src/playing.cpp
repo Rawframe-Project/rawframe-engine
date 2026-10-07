@@ -1,5 +1,11 @@
 #include "shell.h"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdlib>
+#include <utility>
+
 namespace rawframe::studio {
 
 void ShellParticipant::startPlaying() {
@@ -78,19 +84,64 @@ void ShellParticipant::pollPicks(double seconds) {
         return;
     }
     nextPick_ = seconds + 0.25;
-    const std::optional<std::string> kSource = pickedIn(ask(pickRecord(next(), scene_)), scene_);
-    if (!kSource.has_value()) {
+    const std::string kReply = ask(pickRecord(next(), scene_));
+    const std::optional<std::string> kSource = pickedIn(kReply, scene_);
+    const std::optional<Moved> kMoved = movedIn(kReply, scene_);
+    if (kSource.has_value()) {
+        if (const auto kAt = std::ranges::find(entities_, *kSource); kAt != entities_.end()) {
+            ++picked_;
+            showEntity(static_cast<std::size_t>(kAt - entities_.begin()));
+            say("picked " + (names_[static_cast<std::size_t>(kAt - entities_.begin())].empty()
+                                 ? *kSource
+                                 : names_[static_cast<std::size_t>(kAt - entities_.begin())]));
+        }
+    }
+    if (kMoved.has_value()) {
+        moveDragged(*kMoved);
+    }
+}
+
+void ShellParticipant::moveDragged(const Moved& moved) {
+    // A press let go where it went down is a click, not a drag.
+    if (std::abs(moved.x) < 0.01 && std::abs(moved.z) < 0.01) {
         return;
     }
-    const auto kAt = std::ranges::find(entities_, *kSource);
-    if (kAt == entities_.end()) {
+    std::string why;
+    const std::optional<Catalog::Component> kPose = componentNamed(catalog_, "rawframe.physics3d.pose", why);
+    const std::optional<Value> kRead = read(scene_, "scene.read_entity", moved.source);
+    const Value* components = kRead.has_value() ? kRead->find("components") : nullptr;
+    if (!kPose.has_value() || components == nullptr || components->kind() != Value::Kind::Array) {
         return;
     }
-    ++picked_;
-    showEntity(static_cast<std::size_t>(kAt - entities_.begin()));
-    say("picked " + (names_[static_cast<std::size_t>(kAt - entities_.begin())].empty()
-                         ? *kSource
-                         : names_[static_cast<std::size_t>(kAt - entities_.begin())]));
+    for (const Value& each : components->items()) {
+        const Value* name = each.find("name");
+        if (name == nullptr || name->text() == nullptr || *name->text() != kPose->name) {
+            continue;
+        }
+        // Where it stands now, a field at its default nought, carried by the
+        // drag, to the millimetre.
+        std::array<double, 2> at{};
+        for (const FieldShown& kPart : fieldsShown(&*kPose, each.find("fields"))) {
+            if ((kPart.name == "x" || kPart.name == "z") && kPart.text.has_value()) {
+                at[kPart.name == "x" ? 0 : 1] = std::strtod(kPart.text->c_str(), nullptr);
+            }
+        }
+        std::vector<Value> operations;
+        for (const auto& [kPart, kValue] : {std::pair{"x", at[0] + moved.x}, std::pair{"z", at[1] + moved.z}}) {
+            Value operation = Value::object();
+            operation.add("operation", Value::string("scene.set_field"));
+            operation.add("entity", Value::string(moved.source));
+            operation.add("component", Value::string(kPose->id));
+            operation.add("field", Value::string(kPart));
+            Value value = Value::object();
+            value.add("real", Value::real(std::round(kValue * 1000) / 1000));
+            operation.add("value", std::move(value));
+            operations.push_back(std::move(operation));
+        }
+        ++dragged_;
+        commitAll(std::move(operations), "moved by dragging", moved.source);
+        return;
+    }
 }
 
 void ShellParticipant::attachPreview() {

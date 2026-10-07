@@ -110,6 +110,25 @@ RAWFRAME_TEST(APickNamesTheEntityTheChosenSceneBrought) {
         R"("tokenFile":"t","server":{"endpoint":"127.0.0.1:3","pinFile":"s"}}})");
 }
 
+RAWFRAME_TEST(ADragSaysWhatItCarriedAndHowFar) {
+    const std::string_view kMoved =
+        R"({"answer":{"kind":"authoring.picked","clicks":1,"scene":null,"source":null,"moved":{"scene":"gate.scene",)"
+        R"("source":"6c632219-53a9-4af4-8781-bb2a8f4fa53b","by":[1.25,0,-0.5]}}})";
+    const std::optional<Moved> kRead = movedIn(kMoved, "gate.scene");
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->source == "6c632219-53a9-4af4-8781-bb2a8f4fa53b" && kRead->x == 1.25 &&
+                    kRead->z == -0.5);
+    RAWFRAME_EXPECT(!movedIn(kMoved, "level.scene").has_value());
+    RAWFRAME_EXPECT(
+        !movedIn(R"({"answer":{"kind":"authoring.picked","clicks":1,"moved":null}})", "gate.scene").has_value());
+    // Several operations go as one atomic request.
+    std::vector<Value> operations;
+    operations.push_back(Value::string("a"));
+    operations.push_back(Value::string("b"));
+    RAWFRAME_EXPECT(document::writeCompact(applyRecord(3, "gate.scene", std::move(operations))) ==
+                    R"({"kind":"authoring.apply","id":3,"scene":"gate.scene","request":{"formatVersion":1,)"
+                    R"("kind":"authoring.request","batch":"atomic","operations":["a","b"]}})");
+}
+
 RAWFRAME_TEST(AHistoryIsReadEntryByEntry) {
     const std::vector<HistoryEntry> kRead = historyOf(
         R"({"kind":"authoring.reply","id":3,"answer":{"kind":"authoring.history","reopened":false,"entries":[)"

@@ -369,7 +369,15 @@ void ShellParticipant::refuse(const std::string& why) {
 }
 
 void ShellParticipant::commit(Value operation, const std::string& done, const std::optional<std::string>& choose) {
-    const Outcome kOutcome = outcomeOf(ask(applyRecord(next(), scene_, std::move(operation))));
+    std::vector<Value> operations;
+    operations.push_back(std::move(operation));
+    commitAll(std::move(operations), done, choose);
+}
+
+void ShellParticipant::commitAll(std::vector<Value> operations,
+                                 const std::string& done,
+                                 const std::optional<std::string>& choose) {
+    const Outcome kOutcome = outcomeOf(ask(applyRecord(next(), scene_, std::move(operations))));
     told(kOutcome);
     if (kOutcome.done) {
         ++applied_;

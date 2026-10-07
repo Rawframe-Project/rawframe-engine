@@ -102,6 +102,19 @@ struct Asset {
 [[nodiscard]] Value pickRecord(std::int64_t id, std::string_view scene);
 [[nodiscard]] std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene);
 
+/// An entity the author dragged in the preview (D457): its id in the scene,
+/// and how far it was carried across the level plane, in metres along x
+/// and z.
+struct Moved {
+    std::string source;
+    double x = 0;
+    double z = 0;
+};
+
+/// What `authoring.pick`'s answer says was dragged in `scene`; none for no
+/// drag, or one of another scene's entity.
+[[nodiscard]] std::optional<Moved> movedIn(std::string_view reply, std::string_view scene);
+
 /// `authoring.create_scene` for `scene` (D449).
 [[nodiscard]] Value createSceneRecord(std::int64_t id, std::string_view scene);
 
@@ -138,6 +151,8 @@ viewWith(const std::optional<Value>& current, std::string_view part, std::string
 readRecord(std::int64_t id, std::string_view scene, std::string_view operation, std::string_view entity = {});
 /// `authoring.apply` to `scene` of one operation, atomic.
 [[nodiscard]] Value applyRecord(std::int64_t id, std::string_view scene, Value operation);
+/// The same with several operations, applied together or not at all.
+[[nodiscard]] Value applyRecord(std::int64_t id, std::string_view scene, std::vector<Value> operations);
 /// `authoring.select` of `entity` in `scene`.
 [[nodiscard]] Value selectRecord(std::int64_t id, std::string_view scene, std::string_view entity);
 /// `authoring.undo` or `authoring.redo` (`kind`) of `scene`.

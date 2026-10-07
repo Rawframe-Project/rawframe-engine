@@ -9,24 +9,27 @@
 # so they reach the window as a real mouse's do. Before each press it prints
 # how bright a patch of five by five pixels at the point was before the
 # mouse came and after, and whether it grew lighter by 8 or more of 255
-# (D422), waiting up to three seconds for that; with CLICK_CURSOR set, for
-# a program drawing its own cursor, it waits for the point to hold still
-# before and up to fifteen seconds after (D453b). A point followed by `:` and lower-case text has the text typed
-# after its click, a key at a time, then Return (D426); a dot, a comma, a
-# minus, and a space are typed as their keys. An argument `keys=` and X key
-# names apart by commas presses those keys alone, a third of a second apart,
-# and waits a second and a half after them (D430). An argument `wheel=`, a
-# point, and a count turns the wheel there that many detents toward the
-# user, or away for a count below nought, 0.15 seconds apart (D441). An
-# argument `wait=` and a number of seconds waits that long, and `until=` and
-# a record's code waits, up to three minutes, until the log holds it (D445).
-# Five seconds after, it stops the program whose pid its pid file holds
-# (D430), whose iterations only bound it, and waits for the process it
-# watches to end.
+# (D422), waiting up to three seconds for that; with CLICK_CURSOR set, for a
+# program drawing its own cursor, it waits for the point to hold still
+# before and up to fifteen seconds after (D453b). A point followed by `:`
+# and lower-case text has the text typed after its click, a key at a time,
+# then Return (D426); a dot, a comma, a minus, and a space are typed as
+# their keys. An argument `keys=` and X key names apart by commas presses
+# those keys alone, a third of a second apart, and waits a second and a half
+# after them (D430). An argument `wheel=`, a point, and a count turns the
+# wheel there that many detents toward the user, or away for a count below
+# nought, 0.15 seconds apart (D441), and `drag=` and two points presses the
+# left button at the first, carries it to the second, and lets it go there
+# (D457). An argument `wait=` and a number of seconds waits that long, and
+# `until=` and a record's code waits, up to three minutes, until the log
+# holds it (D445). Five seconds after, it stops the program whose pid its
+# pid file holds (D430), whose iterations only bound it, and waits for the
+# process it watches to end.
 #
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
-#                 | wheel=<x>,<y>,<turns> | wait=<seconds> | until=<code> [...]
+#                 | wheel=<x>,<y>,<turns> | drag=<x>,<y>,<x>,<y>
+#                 | wait=<seconds> | until=<code> [...]
 
 import ctypes
 import ctypes.util
@@ -107,6 +110,10 @@ def main():
         if argument.startswith("wait="):
             points.append((None, None, float(argument[len("wait="):])))
             continue
+        if argument.startswith("drag="):
+            fromX, fromY, toX, toY = (int(part) for part in argument[len("drag="):].split(","))
+            points.append((fromX, fromY, ("drag", toX, toY)))
+            continue
         if argument.startswith("wheel="):
             at, y, turns = (int(part) for part in argument[len("wheel="):].split(","))
             points.append((at, y, turns))
@@ -154,6 +161,25 @@ def main():
     for at, y, text in points:
         if not alive(pid):
             break
+        if isinstance(text, tuple) and text[0] == "drag":
+            # Pressed at the point, carried to the other in ten steps a
+            # twentieth of a second apart, and let go there (D457).
+            xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
+            x.XFlush(display)
+            time.sleep(0.5)
+            xtest.XTestFakeButtonEvent(display, 1, 1, 0)
+            x.XFlush(display)
+            for step in range(1, 11):
+                time.sleep(0.05)
+                xtest.XTestFakeMotionEvent(display, -1, at + (text[1] - at) * step // 10,
+                                           y + (text[2] - y) * step // 10, 0)
+                x.XFlush(display)
+            time.sleep(0.2)
+            xtest.XTestFakeButtonEvent(display, 1, 0, 0)
+            x.XFlush(display)
+            print(f"dragged from {at},{y} to {text[1]},{text[2]}")
+            time.sleep(1)
+            continue
         if isinstance(text, tuple):
             # Up to three minutes for the record, however loaded the machine.
             found = False

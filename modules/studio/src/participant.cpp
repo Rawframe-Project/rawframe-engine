@@ -205,6 +205,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("playing", playing_.has_value() && playing_->running()),
                   diagnostics::field("opened", opened_),
                   diagnostics::field("picked", picked_),
+                  diagnostics::field("dragged", dragged_),
                   diagnostics::field("status", std::string_view{status_}),
                   diagnostics::field("framesDrawn", framesDrawn_),
                   diagnostics::field("boxes", static_cast<std::uint64_t>(list_.boxes.size())),

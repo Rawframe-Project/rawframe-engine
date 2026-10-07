@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cmath>
 #include <cstddef>
 #include <functional>
 #include <iterator>
@@ -158,8 +159,16 @@ Value readRecord(std::int64_t id, std::string_view scene, std::string_view opera
 }
 
 Value applyRecord(std::int64_t id, std::string_view scene, Value operation) {
+    std::vector<Value> operations;
+    operations.push_back(std::move(operation));
+    return applyRecord(id, scene, std::move(operations));
+}
+
+Value applyRecord(std::int64_t id, std::string_view scene, std::vector<Value> given) {
     Value operations = Value::array();
-    operations.push(std::move(operation));
+    for (Value& operation : given) {
+        operations.push(std::move(operation));
+    }
     Value request = Value::object();
     request.add("formatVersion", Value::integer(1));
     request.add("kind", Value::string("authoring.request"));
@@ -312,6 +321,25 @@ std::optional<std::string> pickedIn(std::string_view reply, std::string_view sce
         return std::nullopt;
     }
     return *source->text();
+}
+
+std::optional<Moved> movedIn(std::string_view reply, std::string_view scene) {
+    const auto kParsed = document::parse(reply);
+    const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* moved = answer != nullptr ? answer->find("moved") : nullptr;
+    const Value* where = moved != nullptr ? moved->find("scene") : nullptr;
+    const Value* source = moved != nullptr ? moved->find("source") : nullptr;
+    const Value* by = moved != nullptr ? moved->find("by") : nullptr;
+    if (where == nullptr || where->text() == nullptr || *where->text() != scene || source == nullptr ||
+        source->text() == nullptr || by == nullptr || by->kind() != Value::Kind::Array || by->items().size() != 3) {
+        return std::nullopt;
+    }
+    const std::optional<double> kX = by->items()[0].real();
+    const std::optional<double> kZ = by->items()[2].real();
+    if (!kX.has_value() || !kZ.has_value() || !std::isfinite(*kX) || !std::isfinite(*kZ)) {
+        return std::nullopt;
+    }
+    return Moved{.source = *source->text(), .x = *kX, .z = *kZ};
 }
 
 Value createSceneRecord(std::int64_t id, std::string_view scene) {

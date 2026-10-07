@@ -237,6 +237,13 @@ private:
     /// the session's message said; the scene shown again with `choose`
     /// chosen if it stands.
     void commit(Value operation, const std::string& done, const std::optional<std::string>& choose);
+    /// The same with several operations, one transaction, one history
+    /// entry (ADR-0065).
+    void commitAll(std::vector<Value> operations, const std::string& done, const std::optional<std::string>& choose);
+
+    /// Moves the chosen scene's entity a drag carried (D457): its 3D
+    /// pose's x and z, in one transaction.
+    void moveDragged(const Moved& moved);
 
     /// The chosen scene listed again, `entity` chosen if it stands, the
     /// columns scrolled where they were: a change is not a new place.
@@ -342,6 +349,7 @@ private:
     double nextAttach_ = 0;
     double nextPick_ = 0;
     std::uint64_t picked_ = 0;
+    std::uint64_t dragged_ = 0;
     std::vector<std::array<float, 4>> wheels_;
     std::uint64_t wheeled_ = 0;
     std::chrono::steady_clock::time_point began_ = std::chrono::steady_clock::now();
