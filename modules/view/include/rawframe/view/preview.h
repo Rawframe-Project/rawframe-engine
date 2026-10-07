@@ -94,6 +94,21 @@ public:
     [[nodiscard]] const std::array<double, 2>& orbit() const noexcept {
         return orbit_;
     }
+    /// The same with Shift held, freelook's (D472): a drag turns the view
+    /// about its eye, the wheel flies along it. Totals likewise.
+    void looked(double x, double y) noexcept {
+        look_[0] += x;
+        look_[1] += y;
+    }
+    void flown(double detents) noexcept {
+        fly_ += detents;
+    }
+    [[nodiscard]] const std::array<double, 2>& look() const noexcept {
+        return look_;
+    }
+    [[nodiscard]] double fly() const noexcept {
+        return fly_;
+    }
 
     /// A press in the window while the preview looks, as its ray.
     /// `modifiers` are the window's modifier bits held with the press: a
@@ -139,6 +154,8 @@ private:
     std::optional<Ray> pointing_;
     double wheel_ = 0;
     std::array<double, 2> orbit_{};
+    std::array<double, 2> look_{};
+    double fly_ = 0;
     std::optional<Ray> lastRelease_;
     std::uint64_t releases_ = 0;
 };

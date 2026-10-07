@@ -292,17 +292,46 @@ void WindowHost::moveView(const window::Event& event) {
         orbiting_.reset();
         return;
     }
+    // With Shift held, freelook's: the view turned about its eye and flown
+    // along (D472).
+    // A wheel's record names no modifiers, so the last a key or the
+    // pointer told are kept.
+    if (event.kind == window::EventKind::KeyDown || event.kind == window::EventKind::KeyUp) {
+        modifiers_ = event.key.modifiers;
+        // A Shift key's own record may tell the modifiers before it, so it
+        // is read by its place: HID's left and right Shift.
+        constexpr std::uint16_t kLeftShift = 0xE1;
+        constexpr std::uint16_t kRightShift = 0xE5;
+        if (event.key.usage == kLeftShift || event.key.usage == kRightShift) {
+            const auto kShift = static_cast<std::uint16_t>(window::Modifier::Shift);
+            modifiers_ = event.kind == window::EventKind::KeyDown ? static_cast<std::uint16_t>(modifiers_ | kShift)
+                                                                  : static_cast<std::uint16_t>(modifiers_ & ~kShift);
+        }
+    } else if (event.kind == window::EventKind::CursorMoved || event.kind == window::EventKind::ButtonDown ||
+               event.kind == window::EventKind::ButtonUp) {
+        modifiers_ = event.pointer.modifiers;
+    }
+    const bool kFree = (modifiers_ & static_cast<std::uint16_t>(window::Modifier::Shift)) != 0;
     if (event.kind == window::EventKind::Wheel) {
         // The window's wheel turned away is positive; the preview counts
         // toward the author so.
-        settings_.preview->wheeled(-event.motion.y);
+        if (kFree) {
+            settings_.preview->flown(-event.motion.y);
+        } else {
+            settings_.preview->wheeled(-event.motion.y);
+        }
     } else if (event.kind == window::EventKind::ButtonDown && event.pointer.button == window::MouseButton::Right) {
         orbiting_ = std::array<float, 2>{event.pointer.position.x, event.pointer.position.y};
     } else if (event.kind == window::EventKind::ButtonUp && event.pointer.button == window::MouseButton::Right) {
         orbiting_.reset();
     } else if (event.kind == window::EventKind::CursorMoved && orbiting_.has_value()) {
-        settings_.preview->orbited(event.pointer.position.x - (*orbiting_)[0],
-                                   event.pointer.position.y - (*orbiting_)[1]);
+        const double kAcross = event.pointer.position.x - (*orbiting_)[0];
+        const double kUp = event.pointer.position.y - (*orbiting_)[1];
+        if (kFree) {
+            settings_.preview->looked(kAcross, kUp);
+        } else {
+            settings_.preview->orbited(kAcross, kUp);
+        }
         orbiting_ = std::array<float, 2>{event.pointer.position.x, event.pointer.position.y};
     }
 }

@@ -325,7 +325,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "orbited from 980,520 to 1080,520.*\"code\":\"studio_view_moved\"[^\n]*\"distance\":6\\.[0-9]*}.*\"code\":\"studio_summary\"[^\n]*\"viewsMoved\":[1-9]")
+                             "orbited from 980,520 to 1080,520.*\"code\":\"studio_view_moved\"[^\n]*\"distance\":6\\.[0-9]*,.*\"code\":\"studio_summary\"[^\n]*\"viewsMoved\":[1-9]")
         # A drag snapped to the grid (D471): the snap set to a meter and 15
         # degrees in Studio's view fields, the post dragged right, and it
         # lands on a whole meter along X, Z as it was.
@@ -343,6 +343,25 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"studio_summary\"[^\n]*\"snapped\":1,.*scene gate.scene: [^\n]*\"id\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"rawframe.physics3d.pose\":{\"x\":-2[0-9],\"y\":2\\.5,\"z\":-30}")
+        # Freelook (D472): a drag with the right button and Shift held turns
+        # the view about its eye, the eye staying where it was typed and the
+        # target carried round it; the wheel turned away with Shift held then
+        # flies eye and target along it, the eye leaving -30 along X, its
+        # distance from the target as it was.
+        add_test(NAME studio_looks_plaza
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
+                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 orbit=980,520,1080,520,Shift_L
+                         until=studio_view_moved wait=2 wheel=980,520,-3,Shift_L wait=2 1096,23
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_looks_plaza PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "orbited from 980,520 to 1080,520 holding Shift_L.*turned the wheel -3 at 980,520 holding Shift_L.*\"code\":\"studio_view_moved\"[^\n]*\"eyeX\":-30,\"eyeY\":3,\"eyeZ\":-20,\"targetX\":-[23][0-9]\\.[0-9]+.*\"code\":\"studio_view_moved\"[^\n]*\"distance\":10\\.01[0-9]*,\"eyeX\":-2[0-9]\\.[0-9]+")
         # The mark's ring dragged (D467): seen from above, the post chosen,
         # its ring pressed left of it and let go in front of it, a quarter
         # turn about its upright.
@@ -391,7 +410,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # A played game is three programs, Studio, its server, and a client
         # drawing on the device: each counts as three of the tree's jobs, so
         # a check starts fewer at once and none starves the others (D467).
-        set_tests_properties(studio_plays_plaza studio_picks_plaza studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza studio_snaps_plaza
+        set_tests_properties(studio_plays_plaza studio_picks_plaza studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza studio_snaps_plaza studio_looks_plaza
                              studio_rings_plaza studio_raises_plaza studio_turns_plaza PROPERTIES PROCESSORS 3)
     endif()
 endif()

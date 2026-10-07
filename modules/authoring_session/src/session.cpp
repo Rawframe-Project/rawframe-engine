@@ -574,8 +574,7 @@ private:
         server_.reset();
         previewScene_.clear();
         // A preview to come counts its wheel and drags afresh (D469).
-        wheelRead_ = 0;
-        orbitRead_ = {};
+        motionRead_ = {};
     }
 
     /// A point of three numbers, as the tooling endpoint writes one.
@@ -724,24 +723,16 @@ private:
     /// they were last read (D469), told the preview as any view is: the
     /// view, or null where nothing moved.
     Value viewMovedBy(const Value& clicked) {
-        const Value* kWheel = clicked.find("wheel");
-        const Value* kOrbit = clicked.find("orbit");
-        const double kWheelNow = kWheel != nullptr ? kWheel->real().value_or(0) : 0;
-        std::array<double, 2> orbitNow{};
-        if (kOrbit != nullptr && kOrbit->kind() == Value::Kind::Array && kOrbit->items().size() == 2) {
-            orbitNow = {kOrbit->items()[0].real().value_or(0), kOrbit->items()[1].real().value_or(0)};
-        }
-        const double kDetents = kWheelNow - wheelRead_;
-        const std::array<double, 2> kCarried = {orbitNow[0] - orbitRead_[0], orbitNow[1] - orbitRead_[1]};
-        wheelRead_ = kWheelNow;
-        orbitRead_ = orbitNow;
+        const ViewMotion kNow = motionOf(clicked);
+        const ViewMotion kChange = motionSince(kNow, motionRead_);
+        motionRead_ = kNow;
         const auto kPath = pathOf(previewScene_);
         const auto kOpen = kPath.has_value() ? scenes_.find(kPath->string()) : scenes_.end();
-        if ((kDetents == 0 && kCarried == std::array<double, 2>{}) || kOpen == scenes_.end()) {
+        if (kChange == ViewMotion{} || kOpen == scenes_.end()) {
             return Value{};
         }
         const authoring::SceneView kWas = kOpen->second.document->view().value_or(authoring::SceneView{});
-        if (!kOpen->second.document->setView(movedView(kWas, kDetents, kCarried[0], kCarried[1])).has_value()) {
+        if (!kOpen->second.document->setView(movedBy(kWas, kChange)).has_value()) {
             return Value{};
         }
         forward(previewScene_, kOpen->second);
@@ -936,9 +927,8 @@ private:
     std::optional<Pressed> pressed_;
     /// Where the preview marks, while it shows a mark (D464).
     std::optional<Point> mark_;
-    /// The preview's wheel and right-drag totals as last read (D469).
-    double wheelRead_ = 0;
-    std::array<double, 2> orbitRead_{};
+    /// The preview's wheel and right-drag totals as last read (D469, D472).
+    ViewMotion motionRead_;
     /// The part of it drawn lit: 0 none, 1 to 3 an axis, 4 the ring (D468).
     std::uint8_t lit_ = 0;
     std::string previewScene_;

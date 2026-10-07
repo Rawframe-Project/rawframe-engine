@@ -25,7 +25,8 @@
 # the program stopped, so it reads them in one frame (D458). An argument
 # `move=` and a point moves the pointer there with no press, a second
 # before going on (D468), and `orbit=` and two points drags as `drag=`
-# does with the right button (D469). An argument
+# does with the right button (D469), a key a fifth part names held through
+# it too (D472). An argument
 # `wait=` and a number of seconds waits that long, and `until=` and a
 # record's code waits, up to three minutes, until the log holds it (D445).
 # Five seconds after, it stops the program whose pid its pid file holds
@@ -34,9 +35,9 @@
 #
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
-#                 | wheel=<x>,<y>,<turns> | drag=<x>,<y>,<x>,<y>[,<key>]
+#                 | wheel=<x>,<y>,<turns>[,<key>] | drag=<x>,<y>,<x>,<y>[,<key>]
 #                 | frozen=<key>[,<key>...] | move=<x>,<y>
-#                 | orbit=<x>,<y>,<x>,<y> | wait=<seconds>
+#                 | orbit=<x>,<y>,<x>,<y>[,<key>] | wait=<seconds>
 #                 | until=<code>
 #                 [...]
 
@@ -132,12 +133,14 @@ def main():
             points.append((fromX, fromY, ("drag", toX, toY, parts[4] if len(parts) > 4 else "", 1)))
             continue
         if argument.startswith("orbit="):
-            fromX, fromY, toX, toY = (int(part) for part in argument[len("orbit="):].split(","))
-            points.append((fromX, fromY, ("drag", toX, toY, "", 3)))
+            parts = argument[len("orbit="):].split(",")
+            fromX, fromY, toX, toY = (int(part) for part in parts[:4])
+            points.append((fromX, fromY, ("drag", toX, toY, parts[4] if len(parts) > 4 else "", 3)))
             continue
         if argument.startswith("wheel="):
-            at, y, turns = (int(part) for part in argument[len("wheel="):].split(","))
-            points.append((at, y, turns))
+            parts = argument[len("wheel="):].split(",")
+            at, y, turns = (int(part) for part in parts[:3])
+            points.append((at, y, ("wheel", turns, parts[3]) if len(parts) > 3 else turns))
             continue
         place, _, text = argument.partition(":")
         points.append((*(int(side) for side in place.split(",")), text))
@@ -182,6 +185,26 @@ def main():
     for at, y, text in points:
         if not alive(pid):
             break
+        if isinstance(text, tuple) and text[0] == "wheel":
+            # The wheel turned with a key held through it (D472).
+            xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
+            x.XFlush(display)
+            time.sleep(0.25)
+            held = x.XKeysymToKeycode(display, x.XStringToKeysym(text[2].encode()))
+            xtest.XTestFakeKeyEvent(display, held, 1, 0)
+            x.XFlush(display)
+            time.sleep(0.2)
+            for _ in range(abs(text[1])):
+                xtest.XTestFakeButtonEvent(display, 5 if text[1] > 0 else 4, 1, 0)
+                xtest.XTestFakeButtonEvent(display, 5 if text[1] > 0 else 4, 0, 0)
+                x.XFlush(display)
+                time.sleep(0.15)
+            time.sleep(0.2)
+            xtest.XTestFakeKeyEvent(display, held, 0, 0)
+            x.XFlush(display)
+            print(f"turned the wheel {text[1]} at {at},{y} holding {text[2]}")
+            time.sleep(1)
+            continue
         if isinstance(text, tuple) and text[0] == "move":
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
             x.XFlush(display)

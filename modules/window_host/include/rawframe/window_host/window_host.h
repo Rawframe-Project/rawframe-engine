@@ -89,6 +89,9 @@ private:
     /// Where the pointer was while the right button is held in a preview,
     /// so its moves orbit the preview's view (D469); none while it is not.
     std::optional<std::array<float, 2>> orbiting_;
+    /// The modifiers last told while a preview looks, for the wheel's
+    /// records, which name none (D472).
+    std::uint16_t modifiers_ = 0;
     /// The caret the platform was last asked for text input at, none while
     /// it was not asked.
     std::optional<view::UiTyping::Caret> textInput_;

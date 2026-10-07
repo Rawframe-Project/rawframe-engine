@@ -105,8 +105,8 @@ public:
     std::optional<world_tooling::Clicked> clicked() const override {
         const std::optional<view::Ray>& kRay = camera.lastClick();
         const std::optional<view::Ray>& kPointing = camera.pointing();
-        if (!kRay.has_value() && !kPointing.has_value() && camera.wheel() == 0 &&
-            camera.orbit() == std::array<double, 2>{}) {
+        if (!kRay.has_value() && !kPointing.has_value() && camera.wheel() == 0 && camera.fly() == 0 &&
+            camera.orbit() == std::array<double, 2>{} && camera.look() == std::array<double, 2>{}) {
             return std::nullopt;
         }
         // A thousand metres along the press's direction: past anything a
@@ -115,7 +115,9 @@ public:
         world_tooling::Clicked made{.count = camera.clicks(),
                                     .modifiers = camera.clickModifiers(),
                                     .wheel = camera.wheel(),
-                                    .orbit = camera.orbit()};
+                                    .orbit = camera.orbit(),
+                                    .look = camera.look(),
+                                    .fly = camera.fly()};
         if (kRay.has_value()) {
             made.origin = kRay->origin;
             made.toward = {kRay->direction[0] * kReach, kRay->direction[1] * kReach, kRay->direction[2] * kReach};

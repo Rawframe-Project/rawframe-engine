@@ -119,10 +119,20 @@ void ShellParticipant::pollPicks(double seconds) {
                 distance += kApart * kApart;
             }
         }
+        // Where the eye and the target are now too (D472).
+        const auto kAt = [](const Value* point, std::size_t axis) {
+            return point != nullptr && point->items().size() == 3 ? point->items()[axis].real().value_or(0) : 0.0;
+        };
         emitter_.log(diagnostics::Severity::Info,
                      kViewMoved,
                      "the view moved in the played game",
-                     {diagnostics::field("distance", std::sqrt(distance))});
+                     {diagnostics::field("distance", std::sqrt(distance)),
+                      diagnostics::field("eyeX", kAt(kEye, 0)),
+                      diagnostics::field("eyeY", kAt(kEye, 1)),
+                      diagnostics::field("eyeZ", kAt(kEye, 2)),
+                      diagnostics::field("targetX", kAt(kTarget, 0)),
+                      diagnostics::field("targetY", kAt(kTarget, 1)),
+                      diagnostics::field("targetZ", kAt(kTarget, 2))});
     }
 }
 

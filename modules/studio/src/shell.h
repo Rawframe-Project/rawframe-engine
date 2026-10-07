@@ -49,7 +49,7 @@ inline constexpr diagnostics::EventIdentity kMarked{"studio", "studio_marked"};
 /// D466, D467): how, and what it moved.
 inline constexpr diagnostics::EventIdentity kDragged{"studio", "studio_dragged"};
 /// The view moved in the played game (D469): how far its eye is from its
-/// target now.
+/// target now, and where each is (D472).
 inline constexpr diagnostics::EventIdentity kViewMoved{"studio", "studio_view_moved"};
 
 /// Studio's colors, 0xRRGGBBAA: the window behind everything, a panel, a

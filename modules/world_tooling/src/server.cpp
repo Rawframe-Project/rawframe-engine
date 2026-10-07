@@ -566,6 +566,12 @@ struct ToolingServer::State {
                 orbit.push(Value::real(kClicked->orbit[0]));
                 orbit.push(Value::real(kClicked->orbit[1]));
                 made.add("orbit", std::move(orbit));
+                // With Shift, freelook's (D472).
+                Value look = Value::array();
+                look.push(Value::real(kClicked->look[0]));
+                look.push(Value::real(kClicked->look[1]));
+                made.add("look", std::move(look));
+                made.add("fly", Value::real(kClicked->fly));
             }
             // Where the pointer is, press or none (D468).
             if (kClicked.has_value() && kClicked->pointing) {

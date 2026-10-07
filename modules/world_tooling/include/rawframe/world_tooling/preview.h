@@ -47,6 +47,10 @@ struct Clicked {
     /// start (D469).
     double wheel = 0;
     std::array<double, 2> orbit{};
+    /// The same with Shift held, for freelook: the drag's pixels and the
+    /// wheel's detents (D472).
+    std::array<double, 2> look{};
+    double fly = 0;
 };
 
 class Previewer {
