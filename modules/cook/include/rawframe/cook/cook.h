@@ -127,10 +127,13 @@ struct Importer {
     result::Result<std::string> (*normalize)(const document::Value* settings) = nullptr;
     /// Cooks the source's bytes under normalized settings, reading anything
     /// else it needs through `reads`. Must give the same bytes for the same
-    /// inputs: every cook is done twice and compared.
-    result::Result<Artifact> (*cook)(std::span<const std::byte> source,
-                                     std::string_view settings,
-                                     Reads& reads) = nullptr;
+    /// inputs: every cook is done twice and compared. It may hold what it
+    /// runs besides this tool (D484).
+    std::function<result::Result<Artifact>(std::span<const std::byte> source, std::string_view settings, Reads& reads)>
+        cook;
+    /// The digest of the tools the importer runs besides this one, in its
+    /// key (ADR-0024: tool identity is always in the key); nought for none.
+    base::Sha256Digest tools{};
 };
 
 struct CookRequest {

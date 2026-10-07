@@ -130,14 +130,16 @@ result::Result<Artifact> gather(std::span<const std::byte> source, std::string_v
                     .bytes = std::move(bytes)};
 }
 
-CookReport cookGathered(const Project& project) {
-    static const std::array<Importer, 2> kImporters = {
+/// The tools `test.gather` says it runs besides the cook (D484).
+CookReport cookGathered(const Project& project, base::Sha256Digest tools = {}) {
+    const std::array<Importer, 2> kImporters = {
         audioImporter(),
         Importer{.identity = "test.gather",
                  .normalize = [](const document::Value*) -> result::Result<std::string> {
                      return std::string{};
                  },
-                 .cook = &gather}};
+                 .cook = &gather,
+                 .tools = tools}};
     auto report = cookSources(CookRequest{
         .sources = project.sources, .output = project.output, .cache = project.cache, .importers = kImporters});
     RAWFRAME_EXPECT(report.has_value());
@@ -160,6 +162,14 @@ RAWFRAME_TEST(WhatAnImporterReadsIsAnInputToo) {
     RAWFRAME_EXPECT(kReceipt.find("\"path\": \"bundle/parts/a.part\"") != std::string::npos &&
                     kReceipt.find("\"path\": \"bundle/parts/b.part\"") != std::string::npos &&
                     kReceipt.find("\"suffix\": \".part\"") != std::string::npos);
+    RAWFRAME_EXPECT(cookGathered(kProject).reused == 3);
+    // The tools the importer runs changed: the bundle again; the same
+    // tools again, nothing (D484).
+    base::Sha256Digest tools{};
+    tools[0] = std::byte{1};
+    const CookReport kTooled = cookGathered(kProject, tools);
+    RAWFRAME_EXPECT(kTooled.cooked == 1 && kTooled.reused == 2);
+    RAWFRAME_EXPECT(cookGathered(kProject, tools).reused == 3);
     RAWFRAME_EXPECT(cookGathered(kProject).reused == 3);
 
     // A part read changed: the bundle again, the sounds reused.

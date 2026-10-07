@@ -159,6 +159,10 @@ base::Sha256Digest keyOf(const CookRequest& request, const Planned& planned) {
     kField("rawframe.cook.key.v1");
     key.update(request.toolchain);
     kField(planned.importer->identity);
+    // What the importer runs besides this tool, where it runs anything.
+    if (planned.importer->tools != base::Sha256Digest{}) {
+        key.update(planned.importer->tools);
+    }
     kField(planned.settings);
     key.update(planned.digest);
     // The subasset map: what the artifacts name each other by.
