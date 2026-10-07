@@ -79,7 +79,7 @@ class Editor:
         self.child.stdin.flush()
         return self.seq
 
-    def receive(self, end):
+    def receive(self, end, what):
         # A silent adapter fails the step it was in, never hangs the test.
         if not select.select([self.child.stdout], [], [], max(0.0, end - time.time()))[0]:
             # Where each of its threads waits, for a hang seen only in a
@@ -88,7 +88,7 @@ class Editor:
             for task in sorted(os.listdir(tasks)) if os.path.isdir(tasks) else []:
                 with open("%s/%s/wchan" % (tasks, task)) as wchan:
                     print("adapter thread", task, wchan.read(), flush=True)
-            raise SystemExit("the adapter said nothing in time")
+            raise SystemExit("the adapter said nothing in time, waiting to be " + what)
         length = 0
         while True:
             line = self.child.stdout.readline()
@@ -107,15 +107,18 @@ class Editor:
             body += more
         return json.loads(body)
 
-    def until(self, test, what, seconds=20):
+    # What the adapter tells waits on the game, which on a loaded machine
+    # may take a while to run a tick; a minute still fails a silent one
+    # well inside the test's own limit (D476).
+    def until(self, test, what, seconds=60):
         end = time.time() + seconds
         while time.time() < end:
-            message = self.receive(end)
+            message = self.receive(end, what)
             if test(message):
                 return message
         raise SystemExit("never " + what)
 
-    def answer(self, request, seconds=20):
+    def answer(self, request, seconds=60):
         return self.until(lambda m: m.get("type") == "response" and m.get("request_seq") == request, "answered",
                           seconds)
 
@@ -123,9 +126,8 @@ class Editor:
         initialized = self.answer(self.send("initialize", {"adapterID": "rawframe"}))
         assert initialized["success"] and initialized["body"]["supportsFunctionBreakpoints"], initialized
         # The adapter waits up to ten seconds to connect and ten for the
-        # game's welcome, so its answer may take twenty on a loaded machine;
-        # past both, it answers a refusal itself (D474).
-        return self.answer(self.send("attach", arguments), 45)
+        # game's welcome, then answers a refusal itself.
+        return self.answer(self.send("attach", arguments))
 
     def leave(self):
         assert self.answer(self.send("disconnect"))["success"]
