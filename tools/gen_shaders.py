@@ -53,7 +53,7 @@ LINKED = {"scene": ("blob_material", "material"), "shadow": ("blob_material", "m
 # Materials written for a module's tests (D485): its module and its name,
 # built from tests/materials/NAME.slang with each linked container, as
 # `--material` builds a game's, into tests/generated/NAME.CONTAINER.
-TEST_MATERIALS = (("render_scene_gpu", "checker"),)
+TEST_MATERIALS = (("render_scene_gpu", "checker"), ("render_scene_gpu", "faded"), ("render_scene_gpu", "faded_graph"))
 # Each container: its module and its name.
 CONTAINERS = (
     ("render", "display"),

@@ -28,4 +28,18 @@ if(TARGET rawframe_render_scene_gpu_tests)
     rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
                            FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/checker.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
                            HEADER "checker_shadow_container.h" SYMBOL "kCheckerShadowContainer")
+    # ADR-0026's proof (D490): a graph's material as rawframe.material writes
+    # it, and the same written by hand.
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/faded.scene${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "faded_scene_container.h" SYMBOL "kFadedScene")
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/faded.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "faded_shadow_container.h" SYMBOL "kFadedShadow")
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/faded_graph.scene${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "faded_graph_scene_container.h" SYMBOL "kFadedGraphScene")
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/faded_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "faded_graph_shadow_container.h" SYMBOL "kFadedGraphShadow")
 endif()

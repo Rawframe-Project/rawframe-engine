@@ -9,6 +9,15 @@ rawframe_module(NAME material
 )
 
 rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/material_test.cpp tests/post_process_test.cpp)
+if(TARGET rawframe_material_tests)
+    # ADR-0026's proof (D490): a graph and the Slang written from it, which
+    # the scene's tests build beside its handwritten twin.
+    rawframe_embedded_file(TARGET rawframe_material_tests FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/seeds/faded.material"
+                           HEADER "faded_material.h" SYMBOL "kFadedMaterial")
+    rawframe_embedded_file(TARGET rawframe_material_tests
+                           FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/faded_graph.slang"
+                           HEADER "faded_graph.h" SYMBOL "kFadedGraph")
+endif()
 rawframe_module_fuzz(NAME material TARGET documents RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_material.cpp)
 rawframe_module_fuzz(NAME material TARGET post_processes RUNS 10000 SEEDS tests/post_seeds SOURCES tests/fuzz_post_process.cpp)
 rawframe_module_fuzz(NAME material TARGET canvases RUNS 10000 SEEDS tests/canvas_seeds SOURCES tests/fuzz_canvas.cpp)

@@ -4,6 +4,8 @@
 // color and opacity, and what generation 1 cannot compile refused, never
 // guessed at.
 
+#include "generated/faded_graph.h"
+#include "generated/faded_material.h"
 #include "rawframe/material/errors.h"
 #include "rawframe/material/material.h"
 #include "rawframe/test/test.h"
@@ -11,6 +13,7 @@
 #include <algorithm>
 #include <iterator>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -651,4 +654,23 @@ RAWFRAME_TEST(AProgramMaterialRoundTripsAndRefusesWhatItWouldNotWrite) {
     std::vector<std::byte> blended = kBytes;
     blended[9] = std::byte{3};
     RAWFRAME_EXPECT(refusedWith(decodeProgram(blended), MaterialError::Invalid));
+}
+
+RAWFRAME_TEST(AGraphIsWrittenAsTheSlangItsHandwrittenTwinIsCheckedAgainst) {
+    // ADR-0026's proof (D490): faded.material, which the blob cannot fold,
+    // is written as faded_graph.slang word for word; the scene's tests
+    // build that and faded.slang, written by hand, through one pipeline
+    // and find the same pixels. A change to the writer shows here first.
+    const std::string_view kDocument{reinterpret_cast<const char*>(kFadedMaterial.data()), kFadedMaterial.size()};
+    const auto kRead = readMaterial(kDocument);
+    RAWFRAME_EXPECT(kRead.has_value());
+    if (!kRead.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(refusedWith(compileQualities(*kRead), MaterialError::Unsupported));
+    const auto kWritten = generateSlang(*kRead);
+    const std::string_view kGolden{reinterpret_cast<const char*>(kFadedGraph.data()), kFadedGraph.size()};
+    RAWFRAME_EXPECT(kWritten.has_value() && kWritten->source == kGolden);
+    RAWFRAME_EXPECT(kWritten.has_value() && kWritten->textures.size() == 1 &&
+                    kWritten->textures[0].id == 0xa44ecb4a39ac5cc8ULL);
 }

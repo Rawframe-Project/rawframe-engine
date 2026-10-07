@@ -7,12 +7,18 @@
 #include "fixture.h"
 #include "generated/checker_container.h"
 #include "generated/checker_shadow_container.h"
+#include "generated/faded_graph_scene_container.h"
+#include "generated/faded_graph_shadow_container.h"
+#include "generated/faded_scene_container.h"
+#include "generated/faded_shadow_container.h"
 #include "rawframe/material/material.h"
 #include "rawframe/render/device.h"
 #include "rawframe/render/frame.h"
 #include "rawframe/render_scene_gpu/renderer.h"
 #include "rawframe/test/test.h"
+#include "rawframe/texture/texture.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -30,11 +36,12 @@ using namespace rawframe::scene_fixture;
 
 namespace {
 
-/// The checkerboard's program material: unlit, the scene's and the
-/// shadow's container the build's driver reads in each place, which is the
-/// one the renderer takes.
-std::shared_ptr<const material::ProgramMaterial> checker() {
-    material::ProgramMaterial made{.shading = material::Shading::Unlit};
+/// A program material of `shading`, the scene's and the shadow's container
+/// the build's driver reads in each place, which is the one the renderer
+/// takes.
+std::shared_ptr<const material::ProgramMaterial>
+programOf(std::span<const std::uint8_t> scene, std::span<const std::uint8_t> shadow, material::Shading shading) {
+    material::ProgramMaterial made{.shading = shading};
     const auto kBytes = [](std::span<const std::uint8_t> embedded) {
         std::vector<std::byte> copied(embedded.size());
         for (std::size_t at = 0; at < embedded.size(); ++at) {
@@ -42,9 +49,14 @@ std::shared_ptr<const material::ProgramMaterial> checker() {
         }
         return copied;
     };
-    made.containers.fill(kBytes(kCheckerContainer));
-    made.shadows.fill(kBytes(kCheckerShadowContainer));
+    made.containers.fill(kBytes(scene));
+    made.shadows.fill(kBytes(shadow));
     return std::make_shared<const material::ProgramMaterial>(std::move(made));
+}
+
+/// The checkerboard's program material, unlit.
+std::shared_ptr<const material::ProgramMaterial> checker() {
+    return programOf(kCheckerContainer, kCheckerShadowContainer, material::Shading::Unlit);
 }
 
 } // namespace
@@ -239,4 +251,92 @@ RAWFRAME_TEST(AMaskedProgramMaterialCastsOnlyWhatItsProgramLeaves) {
                 kCutShade,
                 kNoShade);
     RAWFRAME_EXPECT(kWholeShade + 200 < kCutShade && kCutShade + 200 < kNoShade);
+}
+
+RAWFRAME_TEST(AGraphMaterialDrawsAsItsHandwrittenTwinDoes) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // ADR-0026's proof (D490): faded.material as rawframe.material writes it
+    // (faded_graph.slang, checked word for word by material's tests) and
+    // the same written by hand (faded.slang), each built by gen_shaders.py
+    // as the cook builds a game's, draw a box lit by the default sun, its
+    // texture four texels of four colors and alphas, pixel for pixel alike.
+    texture::Texture four{.format = texture::Format::Rgba8Srgb};
+    four.levels.push_back({.width = 2,
+                           .height = 2,
+                           .bytes = {std::byte{230},
+                                     std::byte{40},
+                                     std::byte{40},
+                                     std::byte{255},
+                                     std::byte{40},
+                                     std::byte{200},
+                                     std::byte{60},
+                                     std::byte{96},
+                                     std::byte{50},
+                                     std::byte{70},
+                                     std::byte{220},
+                                     std::byte{180},
+                                     std::byte{240},
+                                     std::byte{240},
+                                     std::byte{200},
+                                     std::byte{24}}});
+    const auto kFour = std::make_shared<const texture::Texture>(std::move(four));
+    const render_scene_gpu::TextureSource kTextures = [&kFour](std::uint64_t id) {
+        return id == 0xa44ecb4a39ac5cc8ULL ? kFour : nullptr;
+    };
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    SceneDraw shown = box(4, 1.5F, {1, 1, 1, 1});
+    shown.material = 1;
+    frame.draws = {shown};
+    frame.materials = {render_scene::noMaterial(), render_scene::noMaterial()};
+    frame.textures = {{}, {.base = {.id = 0xa44ecb4a39ac5cc8ULL}}};
+    frame.programs = {nullptr, programOf(kFadedGraphScene, kFadedGraphShadow, material::Shading::Lit)};
+    const auto kGraph = drawnWith(
+        **framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn, kTextures);
+    frame.programs = {nullptr, programOf(kFadedScene, kFadedShadow, material::Shading::Lit)};
+    const auto kHand = drawnWith(
+        **framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn, kTextures);
+    frame.programs = {nullptr, nullptr};
+    const auto kBlob = drawn(**framer, **made, frame, kMeshes, kTextures);
+    RAWFRAME_EXPECT(kGraph.has_value() && kHand.has_value() && kBlob.has_value());
+    if (!kGraph.has_value() || !kHand.has_value() || !kBlob.has_value()) {
+        return;
+    }
+    // Not a picture both would draw anyway: the blob's white material draws
+    // another, and the box's face shows more than one texel's shade.
+    std::size_t differing = 0;
+    std::size_t fromBlob = 0;
+    std::array<int, 3> least{255, 255, 255};
+    std::array<int, 3> most{};
+    for (std::uint32_t y = 16; y < 48; ++y) {
+        for (std::uint32_t x = 16; x < 48; ++x) {
+            const std::array<int, 3> kGraphAt = at(*kGraph, x, y);
+            differing += kGraphAt != at(*kHand, x, y) ? 1 : 0;
+            fromBlob += kGraphAt != at(*kBlob, x, y) ? 1 : 0;
+            for (std::size_t channel = 0; channel < 3; ++channel) {
+                least.at(channel) = std::min(least.at(channel), kGraphAt.at(channel));
+                most.at(channel) = std::max(most.at(channel), kGraphAt.at(channel));
+            }
+        }
+    }
+    std::printf("graph against hand: %zu pixels differ; against the blob %zu; red %d to %d, green %d to %d\n",
+                differing,
+                fromBlob,
+                least[0],
+                most[0],
+                least[1],
+                most[1]);
+    RAWFRAME_EXPECT(*kGraph == *kHand && fromBlob > 500 && most[0] - least[0] > 40 && most[1] - least[1] > 40);
 }
