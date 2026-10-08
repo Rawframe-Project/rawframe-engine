@@ -286,7 +286,9 @@ public:
             diagnostics::field("playerFrames", playerFrames_),
             diagnostics::field("framesPreviewed", previewed_),
             diagnostics::field("marksShown", marksDrawn_),
-            diagnostics::field("marksLit", marksLit_)};
+            diagnostics::field("marksLit", marksLit_),
+            // Where the player's view last looked, about +Y (D521).
+            diagnostics::field("yaw", camera_.yaw)};
         emitter_.log(diagnostics::Severity::Info, kSceneSummary, "what one client's scene drew", fields);
         if (!textureViews_.empty()) {
             emitter_.log(diagnostics::Severity::Info,
