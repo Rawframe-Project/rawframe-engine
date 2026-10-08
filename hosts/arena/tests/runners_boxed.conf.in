@@ -16,4 +16,5 @@ render.device = any
 render.offscreen = true
 render.width = 640
 render.height = 480
+render.read_every = 8
 render.capture = @CAPTURE@

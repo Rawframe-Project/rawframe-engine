@@ -1,8 +1,9 @@
 # Four bots play the sample platformer for three seconds while the first
 # two's canvases are drawn split-screen on the one device into an offscreen
 # picture, as two local players would see them (D279, D285, D364), one
-# over the other: one frame in sixty is read back, and its sprites cover
-# pixels; the last is written to a TGA image in the build tree. Its textures are read from the game's content
+# over the other: one frame in eight is read back, so a loaded machine
+# that draws fifty frames still reads some (it drew no sixtieth), and its
+# sprites cover pixels; the last is written to a TGA image in the build tree. Its textures are read from the game's content
 # cooked into the build tree. A software rasterizer may serve.
 host.maximum_iterations = 360
 host.iteration_rate = 120
@@ -18,4 +19,5 @@ render.device = any
 render.offscreen = true
 render.width = 640
 render.height = 360
+render.read_every = 8
 render.capture = @CAPTURE@
