@@ -413,7 +413,11 @@ RAWFRAME_TEST(APlayedGamesFilesAreItsOwnersAlone) {
     std::getline(std::ifstream{kElsewhere}, kept);
     RAWFRAME_EXPECT(kept == "kept");
     RAWFRAME_EXPECT(std::filesystem::is_regular_file(std::filesystem::symlink_status(kDirectory / "token")));
+    // Windows keeps it to its owner by its ACL, which no permission bit
+    // shows (D501).
+#if !defined(_WIN32)
     RAWFRAME_EXPECT(std::filesystem::status(kDirectory).permissions() == std::filesystem::perms::owner_all);
+#endif
     // A play directory that is a link is no directory of its own.
     std::filesystem::create_directory_symlink(kDirectory, kRoot / "linked", error);
     RAWFRAME_EXPECT(!Play::start(PlaySettings{.server = "/nonexistent",

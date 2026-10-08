@@ -73,12 +73,15 @@ std::optional<AttachRecord> attachIn(const std::filesystem::path& directory, std
         why = "the game is not being played here: no play directory";
         return std::nullopt;
     }
+#if !defined(_WIN32)
+    // Windows keeps the user's temporary directory to the user by its ACL,
+    // and std::filesystem reports every permission bit set there, so the
+    // bits say nothing of it (D501).
     using std::filesystem::perms;
     if ((kStatus.permissions() & (perms::group_all | perms::others_all)) != perms::none) {
         why = "the play directory is open to others, so not trusted";
         return std::nullopt;
     }
-#if !defined(_WIN32)
     struct stat held{};
     if (::lstat(directory.c_str(), &held) != 0 || held.st_uid != ::getuid()) {
         why = "the play directory is not this user's, so not trusted";
