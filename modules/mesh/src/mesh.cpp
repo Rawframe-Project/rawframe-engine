@@ -12,8 +12,11 @@ namespace {
 
 constexpr std::uint8_t kNormals = 1;
 constexpr std::uint8_t kUvs = 2;
+constexpr std::uint8_t kSkinned = 4;
 constexpr std::size_t kHeaderBytes = 4 + 1 + 1 + (3 * 4);
 constexpr std::size_t kPartBytes = 4 + 4 + 8;
+constexpr std::size_t kJointBytes = 16 + (16 * 4);
+constexpr std::size_t kInfluenceBytes = (4 * 2) + (4 * 4);
 
 std::unexpected<result::Error> bad(std::string_view why) {
     return result::fail(result::ErrorClass::InvalidArgument, kMeshDomain, code(MeshError::BadMesh), why);
@@ -53,6 +56,11 @@ void putU32(std::vector<std::byte>& out, std::uint32_t value) {
     }
 }
 
+void putU64(std::vector<std::byte>& out, std::uint64_t value) {
+    putU32(out, static_cast<std::uint32_t>(value));
+    putU32(out, static_cast<std::uint32_t>(value >> 32U));
+}
+
 void putFloats(std::vector<std::byte>& out, std::span<const float> values) {
     for (const float kValue : values) {
         putU32(out, std::bit_cast<std::uint32_t>(kValue));
@@ -65,6 +73,51 @@ std::uint32_t getU32(std::span<const std::byte> bytes, std::size_t& at) noexcept
         value |= std::to_integer<std::uint32_t>(bytes[at++]) << shift;
     }
     return value;
+}
+
+std::uint64_t getU64(std::span<const std::byte> bytes, std::size_t& at) noexcept {
+    const std::uint64_t kLow = getU32(bytes, at);
+    return kLow | (std::uint64_t{getU32(bytes, at)} << 32U);
+}
+
+result::Status validateSkin(const Mesh& mesh, const MeshLimits& limits) {
+    const Skin& kSkin = mesh.skin;
+    if (kSkin.joints.size() > limits.maximumJoints) {
+        return overLimit("a skin holds more joints than its limits allow");
+    }
+    if (kSkin.joints.empty()) {
+        if (!kSkin.influences.empty() || !kSkin.weights.empty()) {
+            return bad("a mesh without joints has no influences or weights");
+        }
+        return {};
+    }
+    if (kSkin.influences.size() != mesh.positions.size() || kSkin.weights.size() != mesh.positions.size()) {
+        return bad("a skin's influences and weights are one per vertex");
+    }
+    for (const Joint& kJoint : kSkin.joints) {
+        for (const float kValue : kJoint.inverseBind) {
+            if (!std::isfinite(kValue)) {
+                return bad("every value of a mesh is finite");
+            }
+        }
+    }
+    for (std::size_t vertex = 0; vertex < kSkin.weights.size(); ++vertex) {
+        float sum = 0.0F;
+        for (std::size_t each = 0; each < 4; ++each) {
+            const float kWeight = kSkin.weights[vertex][each];
+            if (!std::isfinite(kWeight) || kWeight < 0.0F) {
+                return bad("a skin's weights are finite and not negative");
+            }
+            if (kSkin.influences[vertex][each] >= kSkin.joints.size()) {
+                return bad("a skin's influence names a joint it does not hold");
+            }
+            sum += kWeight;
+        }
+        if (std::abs(sum - 1.0F) > 1.0e-3F) {
+            return bad("a vertex's weights sum to one");
+        }
+    }
+    return {};
 }
 
 template <std::size_t N>
@@ -110,13 +163,14 @@ result::Status validate(const Mesh& mesh, const MeshLimits& limits) {
     if (next != mesh.indices.size()) {
         return bad("a mesh's parts cover all of its indices");
     }
-    return {};
+    return validateSkin(mesh, limits);
 }
 
 result::Result<std::vector<std::byte>> encode(const Mesh& mesh, const MeshLimits& limits) {
     RAWFRAME_TRY(validate(mesh, limits));
     const std::uint8_t kAttributes =
-        static_cast<std::uint8_t>((mesh.normals.empty() ? 0U : kNormals) | (mesh.uvs.empty() ? 0U : kUvs));
+        static_cast<std::uint8_t>((mesh.normals.empty() ? 0U : kNormals) | (mesh.uvs.empty() ? 0U : kUvs) |
+                                  (mesh.skin.joints.empty() ? 0U : kSkinned));
     std::vector<std::byte> out;
     out.reserve(kHeaderBytes + (mesh.parts.size() * kPartBytes) + (mesh.positions.size() * 32) +
                 (mesh.indices.size() * 4));
@@ -144,6 +198,21 @@ result::Result<std::vector<std::byte>> encode(const Mesh& mesh, const MeshLimits
     for (const std::uint32_t kIndex : mesh.indices) {
         putU32(out, kIndex);
     }
+    if (!mesh.skin.joints.empty()) {
+        putU32(out, static_cast<std::uint32_t>(mesh.skin.joints.size()));
+        for (const Joint& kJoint : mesh.skin.joints) {
+            putU64(out, kJoint.bone.high);
+            putU64(out, kJoint.bone.low);
+            putFloats(out, kJoint.inverseBind);
+        }
+        for (std::size_t vertex = 0; vertex < mesh.positions.size(); ++vertex) {
+            for (const std::uint16_t kJoint : mesh.skin.influences[vertex]) {
+                out.push_back(static_cast<std::byte>(kJoint & 0xFFU));
+                out.push_back(static_cast<std::byte>(kJoint >> 8U));
+            }
+            putFloats(out, mesh.skin.weights[vertex]);
+        }
+    }
     return out;
 }
 
@@ -156,7 +225,7 @@ result::Result<Mesh> decode(std::span<const std::byte> bytes, const MeshLimits& 
         return bad("a cooked mesh of a version this engine does not read");
     }
     const std::uint8_t kAttributes = std::to_integer<std::uint8_t>(bytes[5]);
-    if ((kAttributes & ~(kNormals | kUvs)) != 0) {
+    if ((kAttributes & ~(kNormals | kUvs | kSkinned)) != 0) {
         return bad("a cooked mesh with attributes this engine does not know");
     }
     std::size_t at = 6;
@@ -166,7 +235,24 @@ result::Result<Mesh> decode(std::span<const std::byte> bytes, const MeshLimits& 
     RAWFRAME_TRY(withinLimits(kVertices, kIndices, kParts, limits));
     // Within the limits, none of this can overflow a 64-bit size.
     const std::size_t kPerVertex = 3 + ((kAttributes & kNormals) != 0 ? 3 : 0) + ((kAttributes & kUvs) != 0 ? 2 : 0);
-    if (bytes.size() != kHeaderBytes + (kParts * kPartBytes) + (kVertices * kPerVertex * 4) + (kIndices * 4)) {
+    const std::size_t kUnskinned = kHeaderBytes + (kParts * kPartBytes) + (kVertices * kPerVertex * 4) + (kIndices * 4);
+    std::size_t joints = 0;
+    if ((kAttributes & kSkinned) != 0) {
+        if (bytes.size() < kUnskinned + 4) {
+            return bad("a cooked mesh is not as long as its counts say");
+        }
+        std::size_t countAt = kUnskinned;
+        joints = getU32(bytes, countAt);
+        if (joints > limits.maximumJoints) {
+            return overLimit("a skin holds more joints than its limits allow");
+        }
+        if (joints == 0) {
+            return bad("a cooked mesh's skin holds joints");
+        }
+    }
+    const std::size_t kSkinBytes =
+        (kAttributes & kSkinned) != 0 ? 4 + (joints * kJointBytes) + (kVertices * kInfluenceBytes) : 0;
+    if (bytes.size() != kUnskinned + kSkinBytes) {
         return bad("a cooked mesh is not as long as its counts say");
     }
     Mesh mesh;
@@ -190,6 +276,29 @@ result::Result<Mesh> decode(std::span<const std::byte> bytes, const MeshLimits& 
     mesh.indices.resize(kIndices);
     for (std::uint32_t& index : mesh.indices) {
         index = getU32(bytes, at);
+    }
+    if (joints != 0) {
+        at += 4;
+        mesh.skin.joints.resize(joints);
+        for (Joint& joint : mesh.skin.joints) {
+            joint.bone.high = getU64(bytes, at);
+            joint.bone.low = getU64(bytes, at);
+            for (float& value : joint.inverseBind) {
+                value = std::bit_cast<float>(getU32(bytes, at));
+            }
+        }
+        mesh.skin.influences.resize(kVertices);
+        mesh.skin.weights.resize(kVertices);
+        for (std::size_t vertex = 0; vertex < kVertices; ++vertex) {
+            for (std::uint16_t& joint : mesh.skin.influences[vertex]) {
+                joint = static_cast<std::uint16_t>(std::to_integer<std::uint16_t>(bytes[at]) |
+                                                   (std::to_integer<std::uint16_t>(bytes[at + 1]) << 8U));
+                at += 2;
+            }
+            for (float& weight : mesh.skin.weights[vertex]) {
+                weight = std::bit_cast<float>(getU32(bytes, at));
+            }
+        }
     }
     RAWFRAME_TRY(validate(mesh, limits));
     return mesh;

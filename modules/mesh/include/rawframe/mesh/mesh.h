@@ -38,8 +38,31 @@ struct Part {
     friend bool operator==(const Part&, const Part&) noexcept = default;
 };
 
+/// A bone a skinned mesh's vertices follow (D508): the skeleton's bone by
+/// its target identity (SPEC-0035), and the matrix taking the mesh's space
+/// into the bone's at its bind, column-major.
+struct Joint {
+    base::Bits128 bone{};
+    std::array<float, 16> inverseBind{};
+
+    friend bool operator==(const Joint&, const Joint&) noexcept = default;
+};
+
+/// What a mesh's vertices follow as a skeleton moves (D508): its joints,
+/// and for each vertex up to four of them by index and their weights,
+/// which sum to one. No joints, no skin.
+struct Skin {
+    std::vector<Joint> joints;
+    std::vector<std::array<std::uint16_t, 4>> influences;
+    std::vector<std::array<float, 4>> weights;
+
+    friend bool operator==(const Skin&, const Skin&) noexcept = default;
+};
+
 /// Triangles as indices into the vertices, counter-clockwise from the front.
-/// Normals and texture coordinates are either absent or one per vertex.
+/// Normals and texture coordinates are either absent or one per vertex; a
+/// skinned mesh's positions and normals are in the space its joints' binds
+/// take from (D508).
 struct Mesh {
     std::vector<Vector3> positions;
     std::vector<Vector3> normals;
@@ -48,6 +71,7 @@ struct Mesh {
     std::vector<std::uint32_t> indices;
     /// In order, together covering every index exactly once.
     std::vector<Part> parts;
+    Skin skin;
 
     friend bool operator==(const Mesh&, const Mesh&) noexcept = default;
 };
@@ -57,19 +81,27 @@ struct MeshLimits {
     std::size_t maximumVertices = std::size_t{1} << 22U;
     std::size_t maximumIndices = std::size_t{3} << 22U;
     std::size_t maximumParts = std::size_t{1} << 12U;
+    /// What one draw's bone palette holds (D508).
+    std::size_t maximumJoints = 256;
 };
 
 /// Refuses (`BadMesh`) a mesh with no triangles, an index past the vertices,
 /// a value that is not finite, attributes not one per vertex, or parts that
 /// are empty, hold partial triangles, or do not tile the indices in order;
-/// and (`OverLimit`) one past the limits.
+/// a skin whose influences or weights are not one per vertex, that names a
+/// joint it does not hold, or whose weights are negative or do not sum to
+/// one within a thousandth; and (`OverLimit`) one past the limits.
 [[nodiscard]] result::Status validate(const Mesh& mesh, const MeshLimits& limits = {});
 
 /// The cooked form, all little-endian: the signature, the version, a byte of
-/// attributes (1 normals, 2 texture coordinates), the vertex, index, and
-/// part counts as 32 bits each, then the parts (first index and count as
-/// 32 bits each, the material as 64), the positions, the normals and
-/// texture coordinates when present, and the indices as 32 bits each.
+/// attributes (1 normals, 2 texture coordinates, 4 a skin), the vertex,
+/// index, and part counts as 32 bits each, then the parts (first index and
+/// count as 32 bits each, the material as 64), the positions, the normals
+/// and texture coordinates when present, and the indices as 32 bits each.
+/// A skin follows them (D508): its joint count as 32 bits, each joint's
+/// bone (high then low 64 bits) and inverse bind's sixteen floats, then
+/// each vertex's four joint indices as 16 bits each and four weights. A
+/// mesh without one keeps the bytes it had.
 inline constexpr std::array<char, 4> kCookedMeshSignature = {'R', 'F', 'M', 'S'};
 inline constexpr std::uint8_t kCookedMeshVersion = 2;
 
