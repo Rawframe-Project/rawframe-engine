@@ -200,21 +200,25 @@ jobs:
             done
             ls "played/$game"
           done
-      # A copy of the exported Plaza played for five seconds, as a player would
-      # start it: whether its client is admitted and shows frames on this
+      # A copy of each exported game played for five seconds, as a player
+      # would start it: its client admitted and showing frames on this
       # machine, which has no GPU but Direct3D 12's software one (D517).
-      - name: Play the exported Plaza
+      - name: Play the exported games
         shell: bash
         run: |
           set -uo pipefail
-          cp -r played/plaza "$RUNNER_TEMP/plaza"
-          printf 'host.maximum_iterations = 600\n' >>"$RUNNER_TEMP/plaza/client.conf"
-          (cd "$RUNNER_TEMP/plaza" && timeout 180 ./rawframe-play.exe; echo "rawframe-play: exit $?")
-          for log in server client; do
-            grep -o '"code":"\(bots_admitted\|frame_summary\|device_ready\|device_unavailable\|start_failed\)"[^}]*}[^}]*}' \
-              "$RUNNER_TEMP/plaza/$log.log" || echo "$log: nothing of note"
+          failed=0
+          for game in plaza tycoon runners; do
+            cp -r "played/$game" "$RUNNER_TEMP/$game"
+            printf 'host.maximum_iterations = 600\n' >>"$RUNNER_TEMP/$game/client.conf"
+            (cd "$RUNNER_TEMP/$game" && timeout 180 ./rawframe-play.exe; echo "$game: rawframe-play exit $?")
+            for log in server client; do
+              grep -o '"code":"\(bots_admitted\|frame_summary\|device_ready\|device_unavailable\|start_failed\)"[^}]*}[^}]*}' \
+                "$RUNNER_TEMP/$game/$log.log" || echo "$game $log: nothing of note"
+            done
+            grep -q '"framesShown":[1-9]' "$RUNNER_TEMP/$game/client.log" || { echo "$game showed no frame"; failed=1; }
           done
-          grep -q '"framesShown":[1-9]' "$RUNNER_TEMP/plaza/client.log"
+          exit "$failed"
       - name: Keep the sample games
         uses: actions/upload-artifact@v7
         with:
