@@ -66,6 +66,13 @@ private:
     std::filesystem::path log_;
     std::uintmax_t read_ = 0;
     std::string partial_;
+    /// Its account, as the lines that give it are read, which may be
+    /// before it has ended.
+    std::string firstFailure_;
+    std::size_t failures_ = 0;
+    unsigned long long cooked_ = 0;
+    unsigned long long reused_ = 0;
+    bool accounted_ = false;
     /// Why it was asked to stop, if it was: `requested` or `ended`.
     std::string stopping_;
 };

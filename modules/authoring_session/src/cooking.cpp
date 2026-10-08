@@ -111,6 +111,11 @@ result::Status Cooking::start(const document::Value& id,
     read_ = 0;
     partial_.clear();
     stopping_.clear();
+    firstFailure_.clear();
+    failures_ = 0;
+    cooked_ = 0;
+    reused_ = 0;
+    accounted_ = false;
     return {};
 }
 
@@ -152,18 +157,13 @@ std::vector<std::string> Cooking::poll(bool& failed) {
         lines.push_back(partial_.substr(0, at));
         partial_.erase(0, at + 1);
     }
-    std::string firstFailure;
-    std::size_t failures = 0;
-    unsigned long long cooked = 0;
-    unsigned long long reused = 0;
-    bool ended = false;
     for (const std::string& kLine : lines) {
         if (std::optional<std::string> progress = progressOf(id_, kLine)) {
             said.push_back(std::move(*progress));
         } else if (constexpr std::string_view kTool = "rawframe-cook: "; kLine.starts_with(kTool)) {
-            firstFailure = failures++ == 0 ? kLine.substr(kTool.size()) : firstFailure;
-        } else if (counted(kLine, "cooked ", cooked, reused)) {
-            ended = true;
+            firstFailure_ = failures_++ == 0 ? kLine.substr(kTool.size()) : firstFailure_;
+        } else if (counted(kLine, "cooked ", cooked_, reused_)) {
+            accounted_ = true;
         }
     }
     if (!kExit.has_value()) {
@@ -175,11 +175,11 @@ std::vector<std::string> Cooking::poll(bool& failed) {
         said.push_back(authoring::writeCancelled(id_, stopping_));
         return said;
     }
-    if (*kExit == 0 && ended) {
+    if (*kExit == 0 && accounted_) {
         Value made = Value::object();
         made.add("kind", Value::string("authoring.cooked"));
-        made.add("cooked", Value::integer(static_cast<std::int64_t>(cooked)));
-        made.add("reused", Value::integer(static_cast<std::int64_t>(reused)));
+        made.add("cooked", Value::integer(static_cast<std::int64_t>(cooked_)));
+        made.add("reused", Value::integer(static_cast<std::int64_t>(reused_)));
         said.push_back(authoring::writeReply(id_, std::move(made)));
         return said;
     }
@@ -194,8 +194,8 @@ std::vector<std::string> Cooking::poll(bool& failed) {
                            result::ErrorClass::Internal,
                            "the cook tool ended without its account");
     error = std::move(error).withContext("exit", std::to_string(*kExit));
-    if (failures > 0) {
-        error = std::move(error).withContext("failures", std::to_string(failures)).withContext("first", firstFailure);
+    if (failures_ > 0) {
+        error = std::move(error).withContext("failures", std::to_string(failures_)).withContext("first", firstFailure_);
     }
     said.push_back(authoring::writeRefusal(id_, error));
     return said;
