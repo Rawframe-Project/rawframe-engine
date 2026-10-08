@@ -19,6 +19,8 @@ component 0097c04f-e081-44c5-b93d-ba7a6836d3e8 tycoon.hand Hand
 component 4143f760-31c1-469d-bda7-7946878bcaba tycoon.owner Owner
 component 20f1dacf-e8f6-4c1f-be56-5fc36f9ade8e tycoon.stall Stall
 component bd13f2d3-dc87-46f2-b480-ff2eaf5fcdf1 tycoon.customer Customer
+# How fast a customer walks, which its figure's animator plays (D512).
+component d00b9d85-270c-4c13-a1ee-f423ffa148c8 tycoon.amble Amble
 component 160c062b-09b3-46a0-8435-9575f99339c1 tycoon.till Till
 component 11a256e6-f691-4f0f-8feb-aef4694891f0 tycoon.gate Gate
 component 7c496087-7144-4230-85e9-fd119433276c tycoon.round Round
@@ -41,7 +43,7 @@ system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write raw
 # the walk and the step; served by the stalls after it; their price taken
 # by the owners.
 system tycoon.open simulation open write tycoon.gate random arrivals lookup tycoon.stall after rawframe.physics3d.step
-system tycoon.walk simulation walk write tycoon.customer read rawframe.physics3d.pose write rawframe.physics3d.velocity entities before rawframe.navigation.avoid
+system tycoon.walk simulation walk write tycoon.customer read rawframe.physics3d.pose write rawframe.physics3d.velocity write tycoon.amble entities before rawframe.navigation.avoid
 system tycoon.serve simulation serve read tycoon.stall write tycoon.till read rawframe.physics3d.pose after tycoon.tend
 system tycoon.earn simulation earn write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.tend after tycoon.serve
 system tycoon.collect simulation collect write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.earn
@@ -61,10 +63,21 @@ command collect controls.Collect
 # What the player writes in its sign field and gives by Enter (D426).
 command sign controls.Sign
 
+# A customer's figure (D512): Plaza's strollers' figure and its walk and
+# run, copied under amble/ with their origin lifted 0.82 so that drawn at
+# 0.6 the figure's feet stand on the ground below a customer's body, and
+# blended by pace alone.
+mesh f08f5a874875ee6c amble/figure.gltf
+animator 4d2c8e71a9f03b56 amble.rfanim parameters tycoon.amble
+
 # Networked play: every owner, stall, and customer is sent to every client,
 # which shows the customers walking between the states it receives (D392);
 # each player's hand is its input, and its pose the plot under its cursor.
 replicate tycoon.owner tycoon.stall tycoon.named rawframe.physics3d.body rawframe.physics3d.pose
+# A customer's figure is posed where it is drawn (D512): its animator, the
+# pace it plays at, and its root motion, which takes the clips' walk out
+# of its pose, as the navmesh moves it.
+replicate tycoon.amble rawframe.animation.animator rawframe.animation.root_motion
 interpolate rawframe.physics3d.pose
 player tycoon.hand tycoon.owner rawframe.physics3d.pose tycoon.named
 input tycoon.hand

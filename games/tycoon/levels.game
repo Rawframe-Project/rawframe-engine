@@ -13,6 +13,8 @@ component 0097c04f-e081-44c5-b93d-ba7a6836d3e8 tycoon.hand Hand
 component 4143f760-31c1-469d-bda7-7946878bcaba tycoon.owner Owner
 component 20f1dacf-e8f6-4c1f-be56-5fc36f9ade8e tycoon.stall Stall
 component bd13f2d3-dc87-46f2-b480-ff2eaf5fcdf1 tycoon.customer Customer
+component d00b9d85-270c-4c13-a1ee-f423ffa148c8 tycoon.amble Amble
+animator 4d2c8e71a9f03b56 amble.rfanim parameters tycoon.amble
 component 160c062b-09b3-46a0-8435-9575f99339c1 tycoon.till Till
 component 11a256e6-f691-4f0f-8feb-aef4694891f0 tycoon.gate Gate
 component 7c496087-7144-4230-85e9-fd119433276c tycoon.round Round
@@ -21,7 +23,7 @@ entity tycoon.stall owner
 system tycoon.join simulation join write tycoon.owner
 system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities lookup tycoon.stall after tycoon.join after rawframe.physics3d.step
 system tycoon.open simulation open write tycoon.gate random arrivals lookup tycoon.stall after rawframe.physics3d.step
-system tycoon.walk simulation walk write tycoon.customer read rawframe.physics3d.pose write rawframe.physics3d.velocity entities before rawframe.navigation.avoid
+system tycoon.walk simulation walk write tycoon.customer read rawframe.physics3d.pose write rawframe.physics3d.velocity write tycoon.amble entities before rawframe.navigation.avoid
 system tycoon.serve simulation serve read tycoon.stall write tycoon.till read rawframe.physics3d.pose after tycoon.tend
 system tycoon.earn simulation earn write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.tend after tycoon.serve
 system tycoon.judge simulation judge write tycoon.round lookup tycoon.owner lookup tycoon.stall lookup tycoon.customer after tycoon.earn

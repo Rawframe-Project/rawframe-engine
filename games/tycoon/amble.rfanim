@@ -1,0 +1,77 @@
+{
+  "formatVersion": 1,
+  "kind": "animation.graph",
+  "interface": {
+    "parameters": {
+      "pace": {
+        "parameter": "7a11000000000004",
+        "type": "float",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 4,
+        "replication": "server_authoritative"
+      }
+    }
+  },
+  "graph": {
+    "51a0000000000001": {
+      "type": "rawframe/clip@1",
+      "params": {
+        "clip": "19fd1d6dfaf2005baefe6aaf4ca61f3f"
+      },
+      "inputs": {}
+    },
+    "51a0000000000002": {
+      "type": "rawframe/clip@1",
+      "params": {
+        "clip": "2a21f3ac3e9f1200b771c20fb4a90487"
+      },
+      "inputs": {}
+    },
+    "51a0000000000003": {
+      "type": "rawframe/clip@1",
+      "params": {
+        "clip": "9aeba419b80f723e0deac180ddaf55e1"
+      },
+      "inputs": {}
+    },
+    "51a0000000000004": {
+      "type": "rawframe/blend_space_1d@1",
+      "params": {
+        "phaseSync": "weight_leader",
+        "points": {
+          "idle": 0,
+          "run": 4,
+          "walk": 1.4
+        },
+        "position": {
+          "parameter": "7a11000000000004"
+        }
+      },
+      "inputs": {
+        "idle": {
+          "node": "51a0000000000001",
+          "output": "pose"
+        },
+        "run": {
+          "node": "51a0000000000003",
+          "output": "pose"
+        },
+        "walk": {
+          "node": "51a0000000000002",
+          "output": "pose"
+        }
+      }
+    },
+    "51a0000000000005": {
+      "type": "rawframe/output@1",
+      "params": {},
+      "inputs": {
+        "pose": {
+          "node": "51a0000000000004",
+          "output": "pose"
+        }
+      }
+    }
+  }
+}

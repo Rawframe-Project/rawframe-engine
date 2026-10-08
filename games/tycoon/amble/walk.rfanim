@@ -1,0 +1,168 @@
+{
+  "formatVersion": 1,
+  "kind": "animation.clip",
+  "skeleton": "a7e854e1bbeb3dbcf69d22059a2b206a",
+  "duration": 1,
+  "loop": "loop",
+  "tracks": [
+    {
+      "bone": "1e895f353806509c756004284b9483ea",
+      "channel": "translation",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            0,
+            0.416667,
+            0
+          ]
+        },
+        {
+          "time": 0.5,
+          "value": [
+            0,
+            0.446667,
+            0.7
+          ]
+        }
+      ],
+      "drift": [
+        0,
+        0,
+        1.4
+      ]
+    },
+    {
+      "bone": "1e895f353806509c756004284b9483ea",
+      "channel": "rotation",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      ],
+      "drift": [
+        0,
+        0.05233595624294383,
+        0,
+        0.9986295347545738
+      ]
+    },
+    {
+      "bone": "e269d823ae8f577e76279baf1f989733",
+      "channel": "rotation",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            -0.21644,
+            0,
+            0,
+            0.976296
+          ]
+        },
+        {
+          "time": 0.5,
+          "value": [
+            0.21644,
+            0,
+            0,
+            0.976296
+          ]
+        }
+      ]
+    },
+    {
+      "bone": "77ca571ff7f3d811e3c40e9defb243d0",
+      "channel": "rotation",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            0.21644,
+            0,
+            0,
+            0.976296
+          ]
+        },
+        {
+          "time": 0.5,
+          "value": [
+            -0.21644,
+            0,
+            0,
+            0.976296
+          ]
+        }
+      ]
+    },
+    {
+      "bone": "e5d393c53d5372a876a9a13be9012a52",
+      "channel": "rotation",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            0.173648,
+            0,
+            0,
+            0.984808
+          ]
+        },
+        {
+          "time": 0.5,
+          "value": [
+            -0.173648,
+            0,
+            0,
+            0.984808
+          ]
+        }
+      ]
+    },
+    {
+      "bone": "ab38d8673ff627fcbc9d616d92259486",
+      "channel": "rotation",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            -0.173648,
+            0,
+            0,
+            0.984808
+          ]
+        },
+        {
+          "time": 0.5,
+          "value": [
+            0.173648,
+            0,
+            0,
+            0.984808
+          ]
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "event": "5f3a0c2d9e81b746",
+      "name": "footstep",
+      "time": 0,
+      "relevance": "presentation"
+    },
+    {
+      "event": "5f3a0c2d9e81b746",
+      "name": "footstep",
+      "time": 0.5,
+      "relevance": "presentation"
+    }
+  ],
+  "syncMarkers": []
+}

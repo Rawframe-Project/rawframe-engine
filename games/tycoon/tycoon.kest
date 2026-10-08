@@ -12,6 +12,7 @@ module tycoon
 // decides every build, sale, and round.
 
 import controls
+import rawframe.animation
 import rawframe.model
 import rawframe.navigation
 import rawframe.physics3d
@@ -25,6 +26,13 @@ import std.math
 // and the customers', the one a stall serves.
 const STALLS: u64 = 0xb0eb8fc52cd9d4ac
 const CUSTOMERS: u64 = 0x1a6375d11861b18d
+// A customer's figure and its animator (tycoon.game, D512).
+const FIGURE: u64 = 0xf08f5a874875ee6c
+const AMBLE: u64 = 0x4d2c8e71a9f03b56
+// The figure's scale, 1.23 meters tall: its rig's origin is lifted so that
+// its feet stand on the ground at this scale where a customer's body, a
+// ball 0.35 high at its middle, is (tycoon.game).
+const FIGURE_SCALE: f32 = 0.6
 
 // The lot: PLOTS plots a side, PLOT meters each, HALF meters from the
 // origin to each edge.
@@ -114,6 +122,14 @@ struct Customer {
     ticks: u32
 }
 
+// How fast a customer walks, in its figure's own meters a second, at
+// most the run's four: the figure is drawn at six tenths of the stroller
+// it was made for, so a customer's 2.4 meters a second is a run to it
+// (D512).
+struct Amble {
+    pace: f64
+}
+
 // The round being played, from the first.
 struct Round {
     number: u32
@@ -153,6 +169,9 @@ extern fn Stall.insert(entity: world.Entity, value: Stall)
 extern fn Till.insert(entity: world.Entity, value: Till)
 extern fn Till.get(entity: world.Entity) -> Till
 extern fn Customer.insert(entity: world.Entity, value: Customer)
+extern fn Amble.insert(entity: world.Entity, value: Amble)
+extern fn Animator.insert(entity: world.Entity, value: animation.Animator)
+extern fn RootMotion.insert(entity: world.Entity, value: animation.RootMotion)
 extern fn Stall.get(entity: world.Entity) -> Stall
 extern fn Stall.has(entity: world.Entity) -> bool
 extern fn Stall.count() -> i32
@@ -420,6 +439,12 @@ fn arrive(fromX: f64, x: f64, z: f64) {
     // Steered round the other customers (D411), a little faster than it walks
     // so it can step aside without falling behind.
     Agent.insert(customer, navigation.Agent(f32(0.35), f32(STEP * f64(SECOND) * 1.25), f32(1.0), f32(0.0), f32(0.0)))
+    // Its figure, posed where it is drawn by its pace, the clips' walk
+    // taken out of its pose (D512).
+    Amble.insert(customer, Amble(0.0))
+    Animator.insert(customer, animation.Animator(AMBLE, animation.PRESENTATION, u32(0), u64(0)))
+    RootMotion.insert(customer, animation.RootMotion(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                                     1.0))
 }
 
 // Customers walk for their stall the way the navmesh gives round the
@@ -428,7 +453,7 @@ fn arrive(fromX: f64, x: f64, z: f64) {
 // where it is put); with no way known (before the first bake), straight for
 // it. One that has walked PATIENCE ticks unserved leaves.
 fn walk(count: i32, customers: [Customer], poses: [physics3d.Pose3D], velocities: [physics3d.Velocity3D],
-        entities: [world.Entity]) {
+        ambles: [Amble], entities: [world.Entity]) {
     let i = 0
     while i < count {
         let c = customers[i]
@@ -442,10 +467,33 @@ fn walk(count: i32, customers: [Customer], poses: [physics3d.Pose3D], velocities
         let far = math.sqrt(dx * dx + dz * dz)
         velocities[i].x = 0.0
         velocities[i].z = 0.0
+        velocities[i].angularY = 0.0
+        let pace = f64(0.0)
         // Past a corner within a step when the way goes on beyond it.
         if far > STEP || (far > 0.000001 && f64(way.remaining) > far + STEP) {
             velocities[i].x = f32(dx / far * STEP * f64(SECOND))
             velocities[i].z = f32(dz / far * STEP * f64(SECOND))
+            pace = math.min(STEP * f64(SECOND) / f64(FIGURE_SCALE), 4.0)
+            // Turned toward where it walks, the figure facing its +z: by
+            // how far across its way it faces, a half turn when it faces
+            // away.
+            let qx = f64(poses[i].qx)
+            let qy = f64(poses[i].qy)
+            let qz = f64(poses[i].qz)
+            let qw = f64(poses[i].qw)
+            let facingX = 2.0 * (qx * qz + qw * qy)
+            let facingZ = 1.0 - 2.0 * (qx * qx + qy * qy)
+            let across = facingZ * dx / far - facingX * dz / far
+            if facingX * dx + facingZ * dz < 0.0 {
+                across = 1.0
+                if facingZ * dx - facingX * dz < 0.0 {
+                    across = -1.0
+                }
+            }
+            velocities[i].angularY = f32(across * 8.0)
+        }
+        if ambles[i].pace != pace {
+            ambles[i].pace = pace
         }
         customers[i].ticks = c.ticks + u32(1)
         if customers[i].ticks >= PATIENCE {
@@ -536,10 +584,9 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
         if b.collisionClass == STALLS {
             look.color = 0xC8553DFF
         }
-        // A customer (D392): a blue ball, drawn larger than its body so it
-        // is seen from the camera high above.
+        // A customer (D392): a blue figure walking (D512).
         if b.collisionClass == CUSTOMERS {
-            look = model.Model(model.SPHERE, 0.7, 0.7, 0.7, 0x3A7BD5FF, u64(0))
+            look = model.Model(FIGURE, FIGURE_SCALE, FIGURE_SCALE, FIGURE_SCALE, 0x3A7BD5FF, u64(0))
         }
         looks[i] = look
         i = i + 1
