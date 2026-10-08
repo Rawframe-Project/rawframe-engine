@@ -40,4 +40,16 @@ std::filesystem::path ownExecutable() {
 #endif
 }
 
+std::filesystem::path besideSelf(std::string_view name) {
+#if defined(_WIN32)
+    const std::string kName = std::string{name} + ".exe";
+#else
+    const std::string kName{name};
+#endif
+    std::error_code error;
+    const std::filesystem::path kHere = std::filesystem::canonical(ownExecutable(), error);
+    const std::filesystem::path kBeside = kHere.parent_path() / kName;
+    return !error && std::filesystem::is_regular_file(kBeside, error) ? kBeside : std::filesystem::path{};
+}
+
 } // namespace rawframe::process

@@ -456,19 +456,6 @@ int session(const std::filesystem::path& game, const std::filesystem::path& root
     std::_Exit(kStatus);
 }
 
-/// The cook tool beside this program, where an export puts them both.
-std::filesystem::path cookBeside() {
-#if defined(_WIN32)
-    constexpr const char* kName = "rawframe-cook.exe";
-#else
-    constexpr const char* kName = "rawframe-cook";
-#endif
-    std::error_code error;
-    const std::filesystem::path kHere = std::filesystem::canonical(rawframe::process::ownExecutable(), error);
-    const std::filesystem::path kBeside = kHere.parent_path() / kName;
-    return !error && std::filesystem::is_regular_file(kBeside, error) ? kBeside : std::filesystem::path{};
-}
-
 } // namespace
 
 int main(int argc, char** argv) {
@@ -497,7 +484,8 @@ int main(int argc, char** argv) {
         const std::filesystem::path kGame = argv[2];
         return session(kGame,
                        kSessionArguments == 4 ? std::filesystem::path{argv[3]} : kGame.parent_path(),
-                       kCookNamed ? std::filesystem::path{argv[argc - 1]} : cookBeside());
+                       kCookNamed ? std::filesystem::path{argv[argc - 1]}
+                                  : rawframe::process::besideSelf("rawframe-cook"));
     }
     if (kVerb == "migrate" && argc >= 4) {
         const bool kDry = std::string_view{argv[argc - 1]} == "--dry-run";
