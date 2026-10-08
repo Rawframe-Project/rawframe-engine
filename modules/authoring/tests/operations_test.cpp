@@ -7,6 +7,7 @@
 #include "rawframe/authoring/operations.h"
 #include "rawframe/test/test.h"
 
+#include <array>
 #include <limits>
 #include <memory>
 #include <string>
@@ -212,6 +213,40 @@ RAWFRAME_TEST(BatchesAreAtomicOrIndependentAsDeclared) {
         executeIndependent(*kScene, kScene->generation(), kHalting, kCatalog, OnFailure::HaltRemaining);
     RAWFRAME_EXPECT(kHalted.outcomes.size() == 1 && kHalted.skipped == 2 &&
                     kScene->scene().entities[0].name == "spawn");
+}
+
+RAWFRAME_TEST(AnAtomicBatchOverDocumentsIsOneTransaction) {
+    // Two scenes, one transaction (D497): the level in one, a door in the
+    // other; then a failure in the second part keeps nothing in the first.
+    const auto kLevel = empty();
+    const auto kHall = empty();
+    const ComponentCatalog kCatalog = catalog();
+    const std::vector<Operation> kSpawnOnly = {CreateEntity{.entity = kSpawn, .name = "spawn"}};
+    const std::vector<Operation> kDoorOnly = {CreateEntity{.entity = kDoor, .name = "door"}};
+    const std::array kParts = {DocumentPart{.scene = kLevel.get(), .generation = 0, .operations = kSpawnOnly},
+                               DocumentPart{.scene = kHall.get(), .generation = 0, .operations = kDoorOnly}};
+    const auto kDone = executeTogether(kParts, kCatalog);
+    RAWFRAME_EXPECT(kDone.has_value() && kDone->size() == 2 && kLevel->scene().entities.size() == 1 &&
+                    kHall->scene().entities[0].name == "door" && kLevel->undoable() == 1 && kHall->undoable() == 1);
+    const std::vector<Operation> kRename = {RenameEntity{.entity = kSpawn, .name = "start"}};
+    const std::vector<Operation> kTwice = {CreateEntity{.entity = kDoor}};
+    const std::array kFailing = {DocumentPart{.scene = kLevel.get(), .generation = 1, .operations = kRename},
+                                 DocumentPart{.scene = kHall.get(), .generation = 1, .operations = kTwice}};
+    const auto kRefused = executeTogether(kFailing, kCatalog);
+    RAWFRAME_EXPECT(refusedWith(kRefused, AuthoringError::Conflict));
+    std::string part;
+    for (const auto& kEach : kRefused.error().context()) {
+        part = kEach.key == "part" ? std::string{kEach.value} : part;
+    }
+    RAWFRAME_EXPECT(part == "1" && kLevel->scene().entities[0].name == "spawn" && kLevel->generation() == 1 &&
+                    !kLevel->inTransaction() && !kHall->inTransaction());
+    // A part against a stale generation, and a document named twice.
+    const std::array kStale = {DocumentPart{.scene = kLevel.get(), .generation = 0, .operations = kRename}};
+    RAWFRAME_EXPECT(refusedWith(executeTogether(kStale, kCatalog), AuthoringError::TargetStale));
+    const std::array kSame = {DocumentPart{.scene = kLevel.get(), .generation = 1, .operations = kRename},
+                              DocumentPart{.scene = kLevel.get(), .generation = 1, .operations = kRename}};
+    RAWFRAME_EXPECT(refusedWith(executeTogether(kSame, kCatalog), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(kLevel->scene().entities[0].name == "spawn" && !kLevel->inTransaction());
 }
 
 RAWFRAME_TEST(DiscoveryDeclaresEveryOperationWhole) {

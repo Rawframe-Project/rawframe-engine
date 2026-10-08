@@ -117,6 +117,7 @@ public:
 
 private:
     friend class AuthoredScene;
+    friend result::Result<std::vector<Committed>> commitTogether(std::span<Transaction> transactions);
     Transaction(AuthoredScene* scene, std::uint64_t serial, bool outermost) noexcept;
     [[nodiscard]] bool live() const noexcept;
 
@@ -124,6 +125,15 @@ private:
     std::uint64_t serial_ = 0;
     bool outermost_ = false;
 };
+
+/// Commits the outermost transactions of several documents as one (SPEC-0040's
+/// multi-document transaction, D497): every staged scene in form, or none
+/// is kept and every one is cancelled; then each document's journal is one
+/// entry in its own history (ADR-0065's per-document histories), so undo in
+/// one takes back only its part. Refuses (`ValidationFailed`, nothing kept)
+/// a document named twice, an inner or closed token, and a scene out of
+/// form, naming its document. Answers each document's commit in order.
+[[nodiscard]] result::Result<std::vector<Committed>> commitTogether(std::span<Transaction> transactions);
 
 class AuthoredScene {
 public:
@@ -214,6 +224,7 @@ public:
 
 private:
     friend class Transaction;
+    friend result::Result<std::vector<Committed>> commitTogether(std::span<Transaction> transactions);
 
     struct Entry {
         Journal journal;

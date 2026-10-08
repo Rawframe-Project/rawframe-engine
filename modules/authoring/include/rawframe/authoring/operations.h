@@ -310,6 +310,23 @@ enum class Mode : std::uint8_t {
                                                       const ComponentCatalog& catalog,
                                                       const scene::SceneSource* sources = nullptr);
 
+/// One document's part of a multi-document transaction: its scene, the
+/// generation it was computed against, and its operations in order.
+struct DocumentPart {
+    AuthoredScene* scene = nullptr;
+    std::uint64_t generation = 0;
+    std::span<const Operation> operations;
+};
+
+/// SPEC-0040's AtomicBatch over several documents, one transaction (D497):
+/// each part's operations staged in order in its document's transaction,
+/// then all committed together (`commitTogether`). Any failure keeps
+/// nothing in any document and names the part (`part`) and, below it, the
+/// operation (`index`).
+[[nodiscard]] result::Result<std::vector<Committed>> executeTogether(std::span<const DocumentPart> parts,
+                                                                     const ComponentCatalog& catalog,
+                                                                     const scene::SceneSource* sources = nullptr);
+
 enum class OnFailure : std::uint8_t {
     ContinuePerItem,
     HaltRemaining,

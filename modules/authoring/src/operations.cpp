@@ -593,6 +593,44 @@ result::Result<Committed> executeAtomic(AuthoredScene& scene,
     return transaction.commit();
 }
 
+result::Result<std::vector<Committed>> executeTogether(std::span<const DocumentPart> parts,
+                                                       const ComponentCatalog& catalog,
+                                                       const scene::SceneSource* sources) {
+    std::size_t operations = 0;
+    for (const DocumentPart& kPart : parts) {
+        operations += kPart.operations.size();
+    }
+    if (operations > kMaximumBatchOperations) {
+        return result::fail(result::ErrorClass::ResourceExhausted,
+                            kAuthoringDomain,
+                            code(AuthoringError::LimitExceeded),
+                            "a batch has more operations than its limit");
+    }
+    // Every transaction open before any stages, so a document named twice
+    // joins its own and is refused when they are committed. Dropped open on
+    // a failure, each is cancelled.
+    std::vector<Transaction> transactions;
+    for (std::size_t part = 0; part < parts.size(); ++part) {
+        auto begun = parts[part].scene->begin(parts[part].generation);
+        if (!begun.has_value()) {
+            return std::unexpected<result::Error>{std::move(begun).error().withContext("part", std::to_string(part))};
+        }
+        transactions.push_back(std::move(*begun));
+    }
+    for (std::size_t part = 0; part < parts.size(); ++part) {
+        for (std::size_t at = 0; at < parts[part].operations.size(); ++at) {
+            auto staged = stage(transactions[part], parts[part].operations[at], catalog, sources);
+            if (!staged.has_value()) {
+                return std::unexpected<result::Error>{std::move(staged)
+                                                          .error()
+                                                          .withContext("part", std::to_string(part))
+                                                          .withContext("index", std::to_string(at))};
+            }
+        }
+    }
+    return commitTogether(transactions);
+}
+
 IndependentOutcome executeIndependent(AuthoredScene& scene,
                                       std::uint64_t generation,
                                       std::span<const Operation> operations,

@@ -215,6 +215,58 @@ result::Result<Committed> AuthoredScene::commit() {
     return Committed{.generation = generation_, .deltas = kDeltas};
 }
 
+result::Result<std::vector<Committed>> commitTogether(std::span<Transaction> transactions) {
+    const auto kCancelAll = [&] {
+        for (Transaction& each : transactions) {
+            each.cancel();
+        }
+    };
+    for (std::size_t at = 0; at < transactions.size(); ++at) {
+        const Transaction& kEach = transactions[at];
+        if (!kEach.live() || !kEach.outermost_) {
+            kCancelAll();
+            return refuse(result::ErrorClass::InvalidArgument,
+                          AuthoringError::ValidationFailed,
+                          "a multi-document transaction commits outermost transactions still open");
+        }
+        for (std::size_t before = 0; before < at; ++before) {
+            if (transactions[before].scene_ == kEach.scene_) {
+                kCancelAll();
+                return refuse(result::ErrorClass::InvalidArgument,
+                              AuthoringError::ValidationFailed,
+                              "a multi-document transaction names each document once");
+            }
+        }
+    }
+    // Every staged scene in form before any is published: a commit checks
+    // the same, so none fails after the first is kept.
+    for (const Transaction& kEach : transactions) {
+        const AuthoredScene::Open& kOpen = *kEach.scene_->open_;
+        if (kOpen.journal.empty()) {
+            continue;
+        }
+        if (auto written = scene::writeScene(kOpen.staged); !written.has_value()) {
+            std::array<char, base::kBits128HexDigits> document{};
+            base::formatBits128Hex(kEach.scene_->identity_, document);
+            kCancelAll();
+            return std::unexpected<result::Error>{
+                std::move(written)
+                    .error()
+                    .mappedTo(result::ErrorClass::InvalidArgument,
+                              kAuthoringDomain,
+                              code(AuthoringError::ValidationFailed),
+                              "a multi-document transaction leaves every scene in form")
+                    .withContext("document", std::string_view{document.data(), document.size()})};
+        }
+    }
+    std::vector<Committed> committed;
+    for (Transaction& each : transactions) {
+        RAWFRAME_TRY_ASSIGN(Committed one, each.commit());
+        committed.push_back(one);
+    }
+    return committed;
+}
+
 void AuthoredScene::discard() noexcept {
     open_.reset();
 }

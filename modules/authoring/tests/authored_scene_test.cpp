@@ -280,3 +280,59 @@ RAWFRAME_TEST(ASelectionPastItsLimitIsRefused) {
     RAWFRAME_EXPECT(refusedWith(scene->select(kSpawns), AuthoringError::LimitExceeded) && scene->selection().empty());
     RAWFRAME_EXPECT(scene->select({}).has_value());
 }
+
+RAWFRAME_TEST(DocumentsCommittedTogetherAreAllOrNothingWithTheirOwnHistories) {
+    // SPEC-0040's multi-document transaction (D497): both kept, each one
+    // entry in its own history, undo in one taking back only its part.
+    const auto kLevel = opened();
+    auto other = AuthoredScene::open(base::Bits128{8, 8}, levelText());
+    RAWFRAME_EXPECT(other.has_value());
+    const auto kOther = std::move(*other);
+    {
+        std::vector<Transaction> together;
+        together.push_back(*kLevel->begin(0));
+        together.push_back(*kOther->begin(0));
+        RAWFRAME_EXPECT(together[0].stage(moveX("1", "2")).has_value() &&
+                        together[1].stage(moveX("1", "7")).has_value());
+        const auto kCommitted = commitTogether(together);
+        RAWFRAME_EXPECT(kCommitted.has_value() && kCommitted->size() == 2 && (*kCommitted)[0].generation == 1 &&
+                        (*kCommitted)[1].generation == 1 && (*kCommitted)[1].deltas == 1);
+    }
+    RAWFRAME_EXPECT(xOf(*kLevel) == "2" && xOf(*kOther) == "7" && kLevel->undoable() == 1 && kOther->undoable() == 1);
+    RAWFRAME_EXPECT(kLevel->undo(1).has_value());
+    RAWFRAME_EXPECT(xOf(*kLevel) == "1" && xOf(*kOther) == "7" && kOther->canUndo() && !kOther->canRedo());
+
+    // One scene left out of form: neither is kept, both are closed, and
+    // the refusal names the document.
+    const std::string kLevelBefore = kLevel->text();
+    const std::string kOtherBefore = kOther->text();
+    {
+        std::vector<Transaction> together;
+        together.push_back(*kLevel->begin(2));
+        together.push_back(*kOther->begin(1));
+        Delta zero = moveX("7", "2");
+        zero.after.field = number("0");
+        RAWFRAME_EXPECT(together[0].stage(moveX("1", "4")).has_value() && together[1].stage(zero).has_value());
+        const auto kRefused = commitTogether(together);
+        RAWFRAME_EXPECT(refusedWith(kRefused, AuthoringError::ValidationFailed));
+        bool named = false;
+        for (const auto& kEach : kRefused.error().context()) {
+            named = named || (kEach.key == "document" && kEach.value == "00000000000000080000000000000008");
+        }
+        RAWFRAME_EXPECT(named);
+    }
+    RAWFRAME_EXPECT(kLevel->text() == kLevelBefore && kOther->text() == kOtherBefore && !kLevel->inTransaction() &&
+                    !kOther->inTransaction() && kLevel->generation() == 2 && kOther->generation() == 1);
+    // A redo kept where nothing was committed.
+    RAWFRAME_EXPECT(kLevel->canRedo());
+
+    // A document named twice, or an inner token: refused, nothing kept.
+    {
+        std::vector<Transaction> twice;
+        twice.push_back(*kLevel->begin(2));
+        twice.push_back(*kLevel->begin(2));
+        RAWFRAME_EXPECT(twice[0].stage(moveX("1", "9")).has_value());
+        RAWFRAME_EXPECT(refusedWith(commitTogether(twice), AuthoringError::ValidationFailed));
+    }
+    RAWFRAME_EXPECT(xOf(*kLevel) == "1" && !kLevel->inTransaction() && kLevel->canRedo());
+}
