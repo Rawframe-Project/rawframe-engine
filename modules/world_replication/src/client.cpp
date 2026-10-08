@@ -715,6 +715,11 @@ result::Status ReplicationClient::sendCommand(const PostedCommand& command) {
 }
 
 result::Status ReplicationClient::submitInput(std::span<const std::byte> value) {
+    RAWFRAME_TRY(sampleInput(value));
+    return sendInputWindow();
+}
+
+result::Status ReplicationClient::sampleInput(std::span<const std::byte> value) {
     State& state = *state_;
     if (!state.accept || !state.settings.input || value.size() != state.settings.input->size) {
         return refuse(result::ErrorClass::FailedPrecondition,
@@ -725,17 +730,13 @@ result::Status ReplicationClient::submitInput(std::span<const std::byte> value) 
     state.unconsumed.erase(state.unconsumed.begin(), state.unconsumed.upper_bound(state.consumedInputTick));
     // Far early: this sample is left unlabelled and unpredicted, so the
     // input's lead shrinks by a tick; the window goes out as ever (D317).
-    const bool kHeldBack = state.holdBack > 0 && state.sinceHeld + 1 >= kDilationSamples;
-    if (kHeldBack) {
+    if (state.holdBack > 0 && state.sinceHeld + 1 >= kDilationSamples) {
         --state.holdBack;
         state.sinceHeld = 0;
         ++state.statistics.samplesHeldBack;
-        if (state.unconsumed.empty()) {
-            return {};
-        }
-    } else {
-        ++state.sinceHeld;
+        return {};
     }
+    ++state.sinceHeld;
     std::vector<std::byte> wire(state.settings.input->wireSize() +
                                 (state.settings.perception ? kMaximumPerceptionBytes : 0));
     network::Writer commandWriter{wire};
@@ -751,16 +752,22 @@ result::Status ReplicationClient::submitInput(std::span<const std::byte> value) 
         RAWFRAME_TRY(encodePerception(commandWriter, seen));
     }
     wire.resize(commandWriter.written().size());
-    if (!kHeldBack) {
-        const std::uint64_t kTick = state.nextInputTick++;
-        state.unconsumed[kTick] = std::move(wire);
-        if (state.prediction) {
-            state.prediction->command(kTick, value);
-            state.present();
-        }
+    const std::uint64_t kTick = state.nextInputTick++;
+    state.unconsumed[kTick] = std::move(wire);
+    if (state.prediction) {
+        state.prediction->command(kTick, value);
+        state.present();
     }
     while (state.unconsumed.size() > kMaximumInputWindow) {
         state.unconsumed.erase(state.unconsumed.begin());
+    }
+    return {};
+}
+
+result::Status ReplicationClient::sendInputWindow() {
+    State& state = *state_;
+    if (!state.accept || !state.connection || state.unconsumed.empty()) {
+        return {};
     }
     InputWindow window{.newestInputTick = state.unconsumed.rbegin()->first,
                        .ackedStateSequence = state.stateSequence,

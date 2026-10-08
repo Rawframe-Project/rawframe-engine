@@ -99,8 +99,16 @@ public:
     [[nodiscard]] std::uint64_t serverTick() const noexcept;
 
     /// The input for the next input tick, as a value of the input component
-    /// (its in-memory bytes), sent with every command not yet consumed.
+    /// (its in-memory bytes), sent with every command not yet consumed:
+    /// `sampleInput`, then `sendInputWindow`.
     [[nodiscard]] result::Status submitInput(std::span<const std::byte> value);
+    /// The input for the next input tick, labelled and predicted, not sent:
+    /// a frame covering many ticks samples each and sends one window for
+    /// them (D522).
+    [[nodiscard]] result::Status sampleInput(std::span<const std::byte> value);
+    /// Every command not yet consumed, at most `kMaximumInputWindow`, in
+    /// one input window; nothing when none waits.
+    [[nodiscard]] result::Status sendInputWindow();
     /// One of the player's commands, on the game's command lane, which the
     /// sessions must declare; in the order sent, after the input it was
     /// sampled with (D425).
