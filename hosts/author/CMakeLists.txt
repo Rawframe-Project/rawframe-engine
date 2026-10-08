@@ -57,6 +57,14 @@ if(RAWFRAME_BUILD_TESTS)
     add_test(NAME author_cooks
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_cooks.sh $<TARGET_FILE:rawframe_host_author>
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_cooks)
+    # Files from outside made the game's assets through a session (D503):
+    # a texture and a glTF with its image imported into a copy of the
+    # plaza, declared, listed, and cooked; paths out of place refused.
+    add_test(NAME author_imports
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_imports.sh $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_imports)
+    set_tests_properties(author_imports PROPERTIES
+                         PASS_REGULAR_EXPRESSION "imported a texture and a mesh into the plaza and cooked them")
     set_tests_properties(author_cooks PROPERTIES
                          PASS_REGULAR_EXPRESSION "cooked the plaza through a session, [1-9][0-9]* sources")
     # A running dedicated server's World read through its tooling endpoint

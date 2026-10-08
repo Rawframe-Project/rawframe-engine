@@ -2,6 +2,7 @@
 
 #include "cooking.h"
 #include "handles.h"
+#include "importing.h"
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/delta.h"
 #include "rawframe/authoring/operations.h"
@@ -68,7 +69,8 @@ struct Pressed {
 class Held {
 public:
     Held(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook)
-        : game_(std::move(game)), root_(std::filesystem::weakly_canonical(root)), cooking_(std::move(cook)) {
+        : game_(std::move(game)), root_(std::filesystem::weakly_canonical(root)), cook_(cook),
+          cooking_(std::move(cook)) {
     }
     Held(const Held&) = delete;
     Held& operator=(const Held&) = delete;
@@ -175,6 +177,14 @@ private:
                                         record.cache.has_value() ? std::optional<std::filesystem::path>{*record.cache}
                                                                  : std::nullopt));
             return Value{};
+        }
+        case authoring::SessionVerb::Import: {
+            // The game read again, so what it declares now names the new
+            // asset (D503).
+            RAWFRAME_TRY_ASSIGN(const Imported kMade, importAsset(game_, record.source, record.as, cook_));
+            catalog_.reset();
+            RAWFRAME_TRY(load());
+            return importedOf(kMade);
         }
         case authoring::SessionVerb::Cancel: {
             Value made = Value::object();
@@ -932,7 +942,9 @@ private:
     /// slot of its answer, and whether every record so far succeeded.
     bool failed_ = false;
     bool clean_ = true;
-    /// The session's long-running operation, if one runs (D502).
+    /// The cook tool, and the session's long-running operation, if one
+    /// runs (D502).
+    std::filesystem::path cook_;
     Cooking cooking_;
 };
 
