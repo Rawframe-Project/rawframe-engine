@@ -41,6 +41,20 @@ mkdir -p bench
 [ -f "$results" ] || printf 'date\tcommit\tmachine\tgame\tbots\tticks\tp50_ms\tp95_ms\tp99_ms\tkest_p95_ms\n' >"$results"
 
 failures=0
+# Before a measurement past its bounds is taken again: the load average
+# said, then up to two minutes waited for the last minute's to fall below
+# the processors, as the trees' tests leave the machine loaded for a while
+# after they end, and CI's run beside other work (D509).
+quieter() {
+    printf 'bench %s: %s; measured again, the load average %s\n' "$1" "$2" \
+        "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || echo unknown)"
+    local processors
+    processors="$(nproc 2>/dev/null || echo 1)"
+    for _ in $(seq 24); do
+        awk -v most="$processors" '{ exit !($1 >= most) }' /proc/loadavg 2>/dev/null || break
+        sleep 5
+    done
+}
 for game in arena runners plaza crowd; do
     {
         echo "host.maximum_iterations = 720"
@@ -90,8 +104,7 @@ if mine and p95 > 2 * statistics.median(mine) + 0.5:
                 break
             fi
             if [ "$attempt" = 1 ]; then
-                printf 'bench %s: %s; measured again, the load average %s\n' "$game" "$verdict" \
-                    "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || echo unknown)"
+                quieter "$game" "$verdict"
                 continue
             fi
             printf 'bench %s: %s\n' "$game" "$verdict"; failures=$((failures + 1))
@@ -104,13 +117,12 @@ if mine and p95 > 2 * statistics.median(mine) + 0.5:
 done
 
 # Runs a measurement, which sets `verdict`, and says it. In check mode one
-# past its bounds is measured once more, the load average said, and fails
-# only if past them again, as each game's is above (D504).
+# past its bounds is measured once more, once the machine is quieter, and
+# fails only if past them again, as each game's is above (D504, D509).
 held() {
     "$2"
     if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]]; then
-        printf 'bench %s: %s; measured again, the load average %s\n' "$1" "$verdict" \
-            "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || echo unknown)"
+        quieter "$1" "$verdict"
         "$2"
     fi
     printf 'bench %s: %s\n' "$1" "$verdict"
