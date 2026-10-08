@@ -6,7 +6,9 @@
 # log, the played client's and server's logs, and where a debugger attaches
 # (D462). A machine with no adapter the configuration allows skips, unless
 # RAWFRAME_REQUIRE_GPU is set. Run under an X server whose root window is
-# black (Xvfb -br), from the repository root.
+# black (Xvfb -br), from the repository root. With STUDIO_COOK naming the
+# cook tool, Studio is given it and the client's settings name no content,
+# so the game plays from what Studio cooks (D502).
 #
 # usage: plays.sh <rawframe-studio> <rawframe-server> <rawframe-client> <game>
 #                 <server settings> <client settings>
@@ -19,7 +21,11 @@ trap 'rm -rf "$work"' EXIT
 cp -R "$(dirname "$4")" "$work/game"
 # The played client's window beside Studio's, clear of where Studio is
 # clicked: with no window manager, a later window lies over an earlier.
-cat "$6" >"$work/client.conf"
+if [ -n "${STUDIO_COOK:-}" ]; then
+    grep -v '^content.root' "$6" >"$work/client.conf"
+else
+    cat "$6" >"$work/client.conf"
+fi
 printf 'window.width = 560\nwindow.height = 360\nwindow.x = 700\nwindow.y = 340\n' >>"$work/client.conf"
 cat >"$work/studio.conf" <<CONF
 host.maximum_iterations = 36000
@@ -32,6 +38,9 @@ studio.play.server_settings = $5
 studio.play.client_settings = $work/client.conf
 studio.play.directory = $work/play
 CONF
+if [ -n "${STUDIO_COOK:-}" ]; then
+    echo "studio.cook = $STUDIO_COOK" >>"$work/studio.conf"
+fi
 "$1" --config "$work/studio.conf" >"$work/studio.log" 2>&1 &
 studio=$!
 echo "$studio" >"$work/studio.pid"

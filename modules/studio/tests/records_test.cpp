@@ -427,3 +427,28 @@ RAWFRAME_TEST(APlayedGamesFilesAreItsOwnersAlone) {
                          .has_value());
     std::filesystem::remove_all(kRoot, error);
 }
+
+RAWFRAME_TEST(ACookIsAskedForAndHeardUntilItEnds) {
+    // D502: what Studio asks of a session's cook, and what it hears.
+    const std::string kCook = document::writeCompact(cookRecord(4, "/p/content", "/p/cook-cache"));
+    RAWFRAME_EXPECT(kCook == R"({"kind":"authoring.cook","id":4,"output":"/p/content","cache":"/p/cook-cache"})");
+    RAWFRAME_EXPECT(document::writeCompact(cancelRecord(5, 4)) ==
+                    R"({"kind":"authoring.cancel","id":5,"operation":4})");
+    const Heard kStep = heardOf(R"({"kind":"authoring.progress","id":4,"step":3,"steps":21,"source":"mound.gltf"})");
+    RAWFRAME_EXPECT(kStep.kind == Heard::Kind::Progress && kStep.id == 4 && kStep.step == 3 && kStep.steps == 21 &&
+                    kStep.text == "mound.gltf");
+    const Heard kDone =
+        heardOf(R"({"kind":"authoring.reply","id":4,"answer":{"kind":"authoring.cooked","cooked":2,"reused":19}})");
+    RAWFRAME_EXPECT(kDone.kind == Heard::Kind::Cooked && kDone.cooked == 2 && kDone.reused == 19);
+    RAWFRAME_EXPECT(heardOf(R"({"kind":"authoring.reply","id":4,"cancelled":{"reason":"requested"}})").kind ==
+                    Heard::Kind::Cancelled);
+    const Heard kFailed = heardOf(
+        R"({"kind":"authoring.reply","id":4,"error":{"code":"validation_failed","message":"the game's sources did not cook",)"
+        R"("details":{"first":"a.png: not an image"}}})");
+    RAWFRAME_EXPECT(kFailed.kind == Heard::Kind::Failed &&
+                    kFailed.text == "the game's sources did not cook: a.png: not an image");
+    // Another reply, and a line that is no record.
+    RAWFRAME_EXPECT(heardOf(R"({"kind":"authoring.reply","id":4,"answer":{"kind":"authoring.ended"}})").kind ==
+                    Heard::Kind::None);
+    RAWFRAME_EXPECT(heardOf("not json").kind == Heard::Kind::None);
+}

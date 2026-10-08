@@ -44,6 +44,57 @@ void ShellParticipant::stopPlaying() {
     say("game stopped");
 }
 
+void ShellParticipant::cookOrStop() {
+    if (cooking_.has_value()) {
+        static_cast<void>(ask(cancelRecord(next(), *cooking_)));
+        say("stopping the cook");
+        return;
+    }
+    // Into the game's play directory, its owner's alone (D462).
+    if (const result::Status kMade = privateDirectory(cookAt_); !kMade.has_value()) {
+        say(std::string{kMade.error().description()});
+        return;
+    }
+    const std::int64_t kId = next();
+    const std::string kRefused = ask(cookRecord(kId, cookAt_ / "content", cookAt_ / "cook-cache"));
+    // A cook started answers when it ends; one refused, at once.
+    if (!kRefused.empty()) {
+        say(answeredOf(kRefused).message);
+        return;
+    }
+    cooking_ = kId;
+    static_cast<void>(words(cookNode_, "Stop", kText, 14));
+    say("cooking");
+}
+
+void ShellParticipant::hearCook() {
+    for (const std::string& kLine : session_->poll()) {
+        const Heard kHeard = heardOf(kLine);
+        if (!cooking_.has_value() || kHeard.id != *cooking_ || kHeard.kind == Heard::Kind::None) {
+            continue;
+        }
+        switch (kHeard.kind) {
+        case Heard::Kind::None:
+            break;
+        case Heard::Kind::Progress:
+            say("cooking " + std::to_string(kHeard.step) + "/" + std::to_string(kHeard.steps) + " " + kHeard.text);
+            continue;
+        case Heard::Kind::Cooked:
+            say("cooked " + std::to_string(kHeard.cooked + kHeard.reused) + " sources, " +
+                std::to_string(kHeard.reused) + " reused");
+            break;
+        case Heard::Kind::Failed:
+            say(kHeard.text);
+            break;
+        case Heard::Kind::Cancelled:
+            say("cook stopped");
+            break;
+        }
+        cooking_.reset();
+        static_cast<void>(words(cookNode_, "Cook", kText, 14));
+    }
+}
+
 void ShellParticipant::attachPlayed(double seconds) {
     if (stopping_.has_value() && stopping_->ended()) {
         stopping_.reset();

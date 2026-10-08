@@ -307,6 +307,23 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "clicked at 1096,23.*saw studio_previewing.*typed 0,30,0.5 at 300,193.*clicked at 1096,23.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,[^\n]*\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,.*\"code\":\"scene_followed\"[^\n]*\"scene\":\"gate.scene\",\"created\":1.*{\"endpoint\":\"127.0.0.1:[0-9]+\",\"pinFile\":\"[^\"]*/server.fingerprint\",\"tokenFile\":\"[^\"]*/token\"}")
+        # The game cooked by Studio and played from that content alone
+        # (D502): Cook, its progress, then Play, the server's settings and
+        # the client's naming no content; previewed, its client drawing
+        # the cooked meshes and textures.
+        add_test(NAME studio_cooks_plaza
+                 COMMAND ${CMAKE_COMMAND} -E env STUDIO_COOK=$<TARGET_FILE:rawframe_host_cook_tool>
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game /dev/null ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf
+                         1026,23 "until=studio_said,status=\"cooked " 200,97 1096,23 until=studio_previewing wait=3
+                         1096,23 "until=studio_said,status=\"game stopped\""
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_cooks_plaza PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "saw studio_said,status=\"cooked .*saw studio_previewing.*\"code\":\"studio_said\"[^\n]*\"status\":\"cooked [1-9][0-9]* sources, 0 reused\".*\"code\":\"scene_summary\"[^\n]*\"gameMeshes\":[1-9][0-9]*,[^\n]*\"texturesReady\":[1-9][0-9]*,")
         # What the author clicks in the played game, selected in Studio
         # (D456): the gate's view aimed at its post, a click in the middle
         # of the played client's window (placed at 700,340, 560 by 360) is
@@ -484,7 +501,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # check starts fewer at once and none starves the others (D467;
         # three until Studio and its client drew less, D496).
         set_tests_properties(studio_plays_plaza studio_picks_plaza studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza studio_snaps_plaza studio_looks_plaza
-                             studio_rings_plaza studio_raises_plaza studio_turns_plaza studio_previews_plaza PROPERTIES PROCESSORS 2)
+                             studio_rings_plaza studio_raises_plaza studio_turns_plaza studio_previews_plaza studio_cooks_plaza
+                             PROPERTIES PROCESSORS 2)
     endif()
     # Every test here draws a window: labeled so the check can leave them
     # out of a tree they find nothing in (D493).

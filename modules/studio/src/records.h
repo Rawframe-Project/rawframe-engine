@@ -104,6 +104,35 @@ struct Asset {
 /// click, or one that met nothing `scene` brings.
 [[nodiscard]] Value pickRecord(std::int64_t id, std::string_view scene);
 
+/// `authoring.cook` (D502): the game cooked into `output`, reusing what
+/// `cache` holds; and `authoring.cancel` for the cook given `operation`.
+[[nodiscard]] Value
+cookRecord(std::int64_t id, const std::filesystem::path& output, const std::filesystem::path& cache);
+[[nodiscard]] Value cancelRecord(std::int64_t id, std::int64_t operation);
+
+/// What the session said unasked of a cook (D502): how far it is, or how
+/// it ended; `None` for any other line.
+struct Heard {
+    enum class Kind : std::uint8_t {
+        None,
+        Progress,
+        Cooked,
+        Failed,
+        Cancelled
+    };
+    Kind kind = Kind::None;
+    /// The cook's id, as Studio gave it.
+    std::int64_t id = 0;
+    std::int64_t step = 0;
+    std::int64_t steps = 0;
+    /// Progress's source; a failure's message.
+    std::string text;
+    std::int64_t cooked = 0;
+    std::int64_t reused = 0;
+};
+
+[[nodiscard]] Heard heardOf(std::string_view line);
+
 /// `authoring.mark` for `scene` (D464): the point its preview marks, or
 /// none.
 [[nodiscard]] Value markRecord(std::int64_t id, std::string_view scene, const std::optional<std::array<double, 3>>& at);

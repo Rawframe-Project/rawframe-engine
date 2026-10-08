@@ -42,35 +42,6 @@ result::Status written(const std::filesystem::path& path, const std::string& tex
     return kWhole && kClosed ? result::Status{} : failed("a play file could not be written");
 }
 
-/// The play directory, made if it is not there, a directory and no link,
-/// entered by its owner alone before anything is put in it: the token and
-/// the settings naming it are no one else's to read.
-result::Status privateDirectory(const std::filesystem::path& path) {
-    std::error_code error;
-    if (!std::filesystem::exists(std::filesystem::symlink_status(path, error))) {
-        std::filesystem::create_directories(path, error);
-        if (error) {
-            return failed("the play directory could not be made");
-        }
-    }
-    if (!std::filesystem::is_directory(std::filesystem::symlink_status(path, error))) {
-        return failed("the play directory is not a directory of its own");
-    }
-#if !defined(_WIN32)
-    // Made by another user first, it is theirs: never written into (D462).
-    struct stat held{};
-    if (::lstat(path.c_str(), &held) != 0 || held.st_uid != ::getuid()) {
-        return failed("the play directory is another user's");
-    }
-#endif
-    std::filesystem::permissions(
-        path, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace, error);
-    if (error) {
-        return failed("the play directory could not be kept to its owner");
-    }
-    return {};
-}
-
 /// Whether the settings `text` give `key` a value.
 bool sets(std::string_view text, std::string_view key) {
     std::size_t at = 0;
@@ -108,6 +79,35 @@ std::string contents(const std::filesystem::path& path) {
 }
 
 } // namespace
+
+// The play directory, made if it is not there, a directory and no link,
+// entered by its owner alone before anything is put in it: the token and
+// the settings naming it are no one else's to read.
+result::Status privateDirectory(const std::filesystem::path& path) {
+    std::error_code error;
+    if (!std::filesystem::exists(std::filesystem::symlink_status(path, error))) {
+        std::filesystem::create_directories(path, error);
+        if (error) {
+            return failed("the play directory could not be made");
+        }
+    }
+    if (!std::filesystem::is_directory(std::filesystem::symlink_status(path, error))) {
+        return failed("the play directory is not a directory of its own");
+    }
+#if !defined(_WIN32)
+    // Made by another user first, it is theirs: never written into (D462).
+    struct stat held{};
+    if (::lstat(path.c_str(), &held) != 0 || held.st_uid != ::getuid()) {
+        return failed("the play directory is another user's");
+    }
+#endif
+    std::filesystem::permissions(
+        path, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace, error);
+    if (error) {
+        return failed("the play directory could not be kept to its owner");
+    }
+    return {};
+}
 
 std::string settingsOf(const std::string& given,
                        std::initializer_list<std::pair<std::string_view, std::string>> defaults,
@@ -168,8 +168,19 @@ result::Status Play::launch() {
     }
     const std::string kGame = settings_.game.string();
     const std::string kPort = std::to_string(kServerPort);
+    // The content Studio cooked, for a program whose settings name none
+    // (D502).
+    const auto kWithContent = [this](std::string given) {
+        std::error_code error;
+        if (!settings_.content.empty() && !sets(given, "content.root") &&
+            std::filesystem::is_regular_file(settings_.content / "content.manifest", error)) {
+            given += (given.empty() || given.ends_with('\n') ? "" : "\n") + std::string{"content.root = "} +
+                     settings_.content.string() + "\n";
+        }
+        return given;
+    };
     RAWFRAME_TRY(written(kAt / "server.conf",
-                         settingsOf(contents(settings_.serverSettings),
+                         settingsOf(kWithContent(contents(settings_.serverSettings)),
                                     {{"host.iteration_rate", "120"},
                                      {"world.tick_rate", "60"},
                                      // Its scenes followed once a second: an edit Studio
@@ -185,7 +196,7 @@ result::Status Play::launch() {
                                      // Picked from (D456) and debugged (D460).
                                      {"tooling.grants", "inspect debug"}})));
     RAWFRAME_TRY(written(kAt / "client.conf",
-                         settingsOf(contents(settings_.clientSettings),
+                         settingsOf(kWithContent(contents(settings_.clientSettings)),
                                     {{"host.iteration_rate", "120"},
                                      {"kest.plan_only", "true"},
                                      {"bots.count", "1"},

@@ -69,6 +69,11 @@ result::Status ShellParticipant::build() {
     // The status, then undo and redo, at the header's end.
     RAWFRAME_TRY_ASSIGN(const ui::Node kEnd, box(kHeader, ui::Layout{.alignItems = ui::Align::Center, .gap = 6}, 0));
     RAWFRAME_TRY_ASSIGN(statusNode_, box(kEnd, ui::Layout{.padding = {0, 2, 8, 2}}, 0));
+    // Cook before Play, so Play, Undo, and Redo keep their places (D502).
+    if (!cookTool_.empty()) {
+        RAWFRAME_TRY_ASSIGN(cookNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
+        RAWFRAME_TRY(words(cookNode_, cooking_.has_value() ? "Stop" : "Cook", kText, 14));
+    }
     if (play_.has_value()) {
         RAWFRAME_TRY_ASSIGN(playNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {12, 2, 10, 2}}, kRow));
         RAWFRAME_TRY(words(playNode_, "Play", kText, 14));

@@ -33,7 +33,15 @@ struct PlaySettings {
     std::filesystem::path clientSettings;
     /// Where their settings, logs, token, and identities go, made afresh.
     std::filesystem::path directory;
+    /// The game's content as Studio cooked it (D502): each program's
+    /// `content.root` where its settings name none, once it holds a
+    /// manifest.
+    std::filesystem::path content;
 };
+
+/// Makes `path` a directory of this user's alone, or refuses one that is
+/// another's or a link (D462): where Studio plays a game and cooks it.
+[[nodiscard]] result::Status privateDirectory(const std::filesystem::path& path);
 
 /// Settings: `given` as they are, then each of `defaults` the given do not
 /// set, then each of `owned`, which are Studio's to say: a given setting

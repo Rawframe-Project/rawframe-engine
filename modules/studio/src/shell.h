@@ -310,6 +310,13 @@ private:
     /// The game let go and asked to stop.
     void stopPlaying();
 
+    /// The game cooked into its play directory, its content then what
+    /// Play reads (D502); or, while it cooks, asked to stop.
+    void cookOrStop();
+
+    /// What the session says of a running cook, shown as it says it.
+    void hearCook();
+
     /// While the game plays and no preview is live, its client attached as
     /// the chosen scene's preview, tried twice a second: it says who it is,
     /// then admits a session once its player is in.
@@ -407,6 +414,12 @@ private:
     std::optional<Play> stopping_;
     ui::Node playNode_{};
     std::uint64_t played_ = 0;
+    /// The cook tool, where the game's content and the cook's cache go,
+    /// and the running cook's id, if any (D502).
+    std::filesystem::path cookTool_;
+    std::filesystem::path cookAt_;
+    ui::Node cookNode_{};
+    std::optional<std::int64_t> cooking_;
     double nextAttach_ = 0;
     double nextPick_ = 0;
     std::uint64_t picked_ = 0;

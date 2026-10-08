@@ -1,5 +1,6 @@
 #include "generated/studio_font.h"
 #include "rawframe/authoring_session/attach.h"
+#include "rawframe/process/self.h"
 #include "shell.h"
 
 namespace rawframe::studio {
@@ -57,7 +58,14 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
             .directory = std::string{configuration.path("studio.play.directory")
                                          .value_or(authoring_session::playDirectoryOf(kDescription).string())}};
     }
-    session_ = std::make_unique<authoring_session::Session>(kDescription, kRoot);
+    // The cook tool: named, or beside Studio, where an export puts it; the
+    // content goes where the game plays (D502).
+    cookTool_ = std::string{configuration.path("studio.cook").value_or(process::besideSelf("rawframe-cook").string())};
+    cookAt_ = play_.has_value() ? play_->directory : authoring_session::playDirectoryOf(kDescription);
+    if (play_.has_value()) {
+        play_->content = cookAt_ / "content";
+    }
+    session_ = std::make_unique<authoring_session::Session>(kDescription, kRoot, cookTool_);
     description_ = kDescription;
     sceneRoot_ = kRoot;
     // VS Code by default; any editor that opens a file at a line by its
@@ -147,6 +155,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     typed_.clear();
     // Scroll steps ease over the layouts that follow, by this clock.
     const double kSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began_).count() + 1;
+    hearCook();
     attachPlayed(kSeconds);
     pollPicks(kSeconds);
     // A press is acted on as the window's records come and may have

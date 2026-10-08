@@ -47,7 +47,10 @@ void ShellParticipant::pressAt(float x, float y) {
     }
     // The row is the node hit or the one its words are on.
     const ui::Node kNode = *kHit->node;
-    if (play_.has_value() && kNode == playNode_) {
+    if (!cookTool_.empty() && kNode == cookNode_) {
+        endEdit();
+        cookOrStop();
+    } else if (play_.has_value() && kNode == playNode_) {
         endEdit();
         if (playing_.has_value()) {
             stopPlaying();
