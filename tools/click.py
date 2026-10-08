@@ -336,7 +336,10 @@ def main():
         # up to ten, since a loaded machine may still be drawing its first
         # frames there, and the cursor is waited for up to fifteen seconds (a
         # sanitized client at load 130 drew 25 frames in a run). Otherwise a
-        # click waits up to three seconds, as it always has.
+        # click waits half a second: no other test asks for the light, and
+        # input read in one frame is taken in its order (D486, D489), so the
+        # three seconds it waited cost a full check's every tree six minutes
+        # of clicks lighting nothing (D493).
         cursor = bool(os.environ.get("CLICK_CURSOR"))
         before = brightness(x, display, root, at, y)
         steady = 0
@@ -350,7 +353,7 @@ def main():
         xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
         x.XFlush(display)
         after = before
-        for _ in range(60 if cursor else 12):
+        for _ in range(60 if cursor else 2):
             time.sleep(0.25)
             after = brightness(x, display, root, at, y)
             if after >= before + 8:
