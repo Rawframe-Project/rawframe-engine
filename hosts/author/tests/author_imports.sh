@@ -37,7 +37,10 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.import","id":7,"source":"'"$plaza"'/paving.png","as":"art/bark.txt"}'
     echo '{"kind":"authoring.import","id":8,"source":"'"$plaza"'/crate.gltf","as":"art/crate.png"}'
     echo '{"kind":"authoring.cook","id":9,"output":"'"$work/content"'","cache":null}'
-    for _ in $(seq 300); do
+    # Each wait ends as the reply comes; four minutes only bounds a cook
+    # on a sanitized tree under load, which took more than thirty seconds
+    # (D507).
+    for _ in $(seq 2400); do
         grep -q '"id":9,"answer"\|"id":9,"error"' "$work/replies" 2>/dev/null && break
         sleep 0.1
     done

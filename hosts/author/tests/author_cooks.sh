@@ -32,7 +32,10 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.cook","id":2,"output":"'"$work/content"'","cache":"'"$work/cache"'"}'
     echo '{"kind":"authoring.cook","id":3,"output":"'"$work/other"'","cache":null}'
     echo '{"kind":"authoring.cancel","id":4,"operation":"none"}'
-    for _ in $(seq 300); do
+    # Each wait ends as the reply comes; four minutes only bounds a cook
+    # on a sanitized tree under load, which took more than thirty seconds
+    # (D507).
+    for _ in $(seq 2400); do
         grep -q '"id":2,"answer"\|"id":2,"error"' "$work/replies" 2>/dev/null && break
         sleep 0.1
     done
@@ -51,18 +54,18 @@ reply 5 | grep -q '"authoring.ended"'
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.cook","id":6,"output":"'"$work/again"'","cache":"'"$work/cache"'"}'
-    for _ in $(seq 300); do
+    for _ in $(seq 2400); do
         grep -q '"id":6,"answer"' "$work/replies" 2>/dev/null && break
         sleep 0.1
     done
     echo '{"kind":"authoring.cook","id":"stopped","output":"'"$work/stopped"'","cache":null}'
     echo '{"kind":"authoring.cancel","id":7,"operation":"stopped"}'
-    for _ in $(seq 300); do
+    for _ in $(seq 2400); do
         grep -q '"id":"stopped","cancelled"' "$work/replies" 2>/dev/null && break
         sleep 0.1
     done
     echo '{"kind":"authoring.cook","id":8,"output":"'"$(native "$repository")/games/plaza/content"'","cache":null}'
-    for _ in $(seq 300); do
+    for _ in $(seq 2400); do
         grep -q '"id":8,"error"' "$work/replies" 2>/dev/null && break
         sleep 0.1
     done
