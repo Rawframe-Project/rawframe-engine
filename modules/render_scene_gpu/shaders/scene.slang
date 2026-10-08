@@ -676,7 +676,7 @@ struct Lit
     float2 motion : SV_Target1;
 }
 
-Lit shade(Corner corner, bool decaled)
+Lit shaded(Corner corner, bool decaled)
 {
     const float2 pixel = corner.position.xy;
     const float3 toEye = normalize(-corner.placed);
@@ -804,6 +804,18 @@ Lit shade(Corner corner, bool decaled)
         frame.occlusion.x > 0.5 && opacity >= 0.999 ? occlusionTexture.Load(int3(texel / 2, 0)).r : 1.0;
     const float3 sky = occlusion * reaches * ((1.0 - sheen) * surface.diffuse * around + alongReflection);
     lit.color = float4((direct + sky + glowing) * exposure[0].value.y, opacity);
+    return lit;
+}
+
+// Every input read whatever the material reads: an input it leaves unread
+// is dropped from the entry otherwise, and D3D12 refuses a pixel shader
+// whose inputs are not its vertex shader's outputs (D418, D501). Chosen
+// after the shading, so nothing it samples is behind a branch, and with no
+// discard, which would cost an opaque model its early depth test.
+Lit shade(Corner corner, bool decaled)
+{
+    Lit lit = shaded(corner, decaled);
+    lit.color = unreadable(corner) ? float4(0.0) : lit.color;
     return lit;
 }
 

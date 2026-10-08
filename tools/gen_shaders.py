@@ -50,6 +50,10 @@ INVARIANT = ("scene",)
 # the module that exports it, the blob's for the containers the engine
 # ships, beside the module of what a material is.
 LINKED = {"scene": ("blob_material", "material"), "shadow": ("blob_material", "material")}
+# Each linked container's vertex entry and the fragment entries drawn with
+# it, whose inputs D3D12 asks be exactly its outputs: a material may leave
+# an input unread, which Slang drops from the entry (D418, D501).
+DRAWN_WITH = {"scene": ("vs", ("fs", "fsDecaled", "cut", "normal", "cutNormal")), "shadow": ("vsCut", ("cut",))}
 # Materials written for a module's tests (D485): its module and its name,
 # built from tests/materials/NAME.slang with each linked container, as
 # `--material` builds a game's, into tests/generated/NAME.CONTAINER.
@@ -85,6 +89,38 @@ def run(*command, cwd=None):
     result = subprocess.run(command, capture_output=True, text=True, cwd=cwd)
     if result.returncode != 0:
         sys.exit(f"{command[0]} failed:\n{result.stdout}{result.stderr}")
+
+
+def signature(dxil, which):
+    # A DXIL entry's input or output signature as dxc lists it: each
+    # element's name, index, and register.
+    listed = subprocess.run(["dxc", "-dumpbin", dxil], capture_output=True, text=True)
+    if listed.returncode != 0:
+        sys.exit(f"dxc cannot list {dxil}:\n{listed.stderr}")
+    heading = f"; {which} signature:"
+    if heading not in listed.stdout:
+        return []
+    rows = []
+    for line in listed.stdout.split(heading, 1)[1].splitlines():
+        parts = line[1:].split()
+        if len(parts) >= 4 and parts[1].isdigit() and parts[3].isdigit():
+            rows.append((parts[0], parts[1], parts[3]))
+        elif rows and not parts:
+            break
+    return rows
+
+
+def checkDrawnWith(dxil, name):
+    # D3D12 refuses a pipeline whose pixel shader's inputs are not the
+    # first of its vertex shader's outputs, element for element, where
+    # Vulkan, Metal, and WebGPU draw it; those it leaves off the end it
+    # need not read.
+    vertex, fragments = DRAWN_WITH[name]
+    outputs = signature(os.path.join(dxil, f"{vertex}.dxil"), "Output")
+    for fragment in fragments:
+        inputs = signature(os.path.join(dxil, f"{fragment}.dxil"), "Input")
+        if inputs != outputs[: len(inputs)]:
+            sys.exit(f"{name}: {fragment} reads {inputs}, where {vertex} gives {outputs}: D3D12 refuses the pair")
 
 
 def invariantPosition(spirv, wgsl):
@@ -162,6 +198,8 @@ def build(work, shaders, name, material=None):
     run(sys.executable, METAL, linked, reflection, metal)
     dxil = os.path.join(work, f"{name}_dxil")
     run(sys.executable, DXIL, linked, reflection, dxil)
+    if name in DRAWN_WITH:
+        checkDrawnWith(dxil, name)
     made = {}
     # Every container carries WGSL, which Maul RHI's writer asks of one
     # using no heap, beside what its own driver reads.
