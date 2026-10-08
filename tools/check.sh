@@ -92,16 +92,21 @@ build_and_test() {
     # So does clang-development in the full check: the fast check before
     # every push plays them there, alone, and gcc's debug tree plays them
     # under the full check's load (D500).
+    # A test labeled `alone` needs a player's frame rate, which the full
+    # check's load takes away: a predicted game's input then never reaches
+    # its server (D521). The fast check plays it, alone.
     local leave=()
     if [ "$preset" = gcc-shipping ] || { [ "$preset" = clang-development ] && [ "$tier" = full ]; }; then
         leave=(-LE window)
+    elif [ "$tier" = full ]; then
+        leave=(-LE alone)
     fi
     # The trees that play the window tests run twice the jobs (D507): those
     # tests mostly wait on frames, not processors, and the thread tree alone
     # took 169 s at twelve jobs where it took 319 s at six, the same 1,150 s
     # of tests.
     local run=$jobs
-    if [ "$tier" = full ] && [ ${#leave[@]} -eq 0 ] && [[ "$preset" != wasm-* ]]; then
+    if [ "$tier" = full ] && [ "${leave[1]:-}" != window ] && [[ "$preset" != wasm-* ]]; then
         run=$((jobs * 2))
     fi
     if ! ctest --test-dir "out/$preset" "${leave[@]}" --output-on-failure -j "$run" >"out/$preset.test.log" 2>&1; then
