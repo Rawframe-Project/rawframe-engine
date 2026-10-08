@@ -15,6 +15,7 @@
 #include "rawframe/scene/scene.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world_kest/game_files.h"
+#include "replies.h"
 #include "viewing.h"
 
 #include <algorithm>
@@ -265,49 +266,6 @@ private:
         };
     }
 
-    /// The assets a game declares by line (D455): each by its kind, its
-    /// identity as 16 hex digits (what a component's field holds, as an
-    /// unsigned number), and its name, a file beside the description or a
-    /// label's table and key, in line order within each kind.
-    static Value assetsOf(const rawframe::world_kest::GameDescription& game) {
-        Value made = Value::array();
-        const auto kAdd = [&made](std::string_view kind, std::uint64_t id, std::string name) {
-            std::array<char, 16> digits{};
-            for (std::size_t at = 0; at < digits.size(); ++at) {
-                digits[at] = "0123456789abcdef"[(id >> (60 - 4 * at)) & 0xFU];
-            }
-            Value each = Value::object();
-            each.add("kind", Value::string(std::string{kind}));
-            each.add("id", Value::string(std::string{digits.data(), digits.size()}));
-            each.add("name", Value::string(std::move(name)));
-            made.push(std::move(each));
-        };
-        for (const auto& each : game.textures) {
-            kAdd("texture", each.id, each.path);
-        }
-        for (const auto& each : game.meshes) {
-            kAdd("mesh", each.id, each.path);
-        }
-        for (const auto& each : game.materials) {
-            kAdd("material", each.id, each.path);
-        }
-        if (game.audio.has_value()) {
-            for (const auto& each : game.audio->sounds) {
-                kAdd("sound", each.id, each.path);
-            }
-        }
-        for (const auto& each : game.fonts) {
-            kAdd("font", each.id, each.path);
-        }
-        for (const auto& each : game.prefabs) {
-            kAdd("prefab", each.id, each.path);
-        }
-        for (const auto& each : game.labels) {
-            kAdd("label", each.id, each.table + "/" + each.key);
-        }
-        return made;
-    }
-
     /// A scene's history (D454): each entry, oldest first, summed up, with
     /// how many deltas it holds and whether it is applied (undoable) or
     /// undone (redoable). A read: nothing staged, nothing written.
@@ -394,22 +352,6 @@ private:
         return made;
     }
 
-    /// The outcome document `apply` writes, from a session's scene.
-    static Value outcome(const OpenScene& open, bool written, bool reopened, Value results, std::size_t skipped) {
-        Value made = Value::object();
-        made.add("kind", Value::string("authoring.outcome"));
-        made.add("document", Value::string(digestOf(open.document->text())));
-        made.add("written", Value::boolean(written));
-        made.add("reopened", Value::boolean(reopened));
-        made.add("undoable", Value::integer(static_cast<std::int64_t>(open.document->undoable())));
-        made.add("redoable", Value::integer(static_cast<std::int64_t>(open.document->redoable())));
-        made.add("selection", selectionOf(open));
-        made.add("view", viewOf(open));
-        made.add("results", std::move(results));
-        made.add("skipped", Value::integer(static_cast<std::int64_t>(skipped)));
-        return made;
-    }
-
     result::Result<Value> applied(const authoring::SessionRecord& record) {
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -446,37 +388,7 @@ private:
             skipped = kOutcomes.skipped;
         }
         RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.scene, *open));
-        return outcome(*open, kWritten, reopened, std::move(results), skipped);
-    }
-
-    /// The entities an open scene has selected, by their ids.
-    static Value selectionOf(const OpenScene& open) {
-        Value made = Value::array();
-        for (const rawframe::base::Bits128& each : open.document->selection()) {
-            const auto kText = rawframe::schema::formatStableIdText(each);
-            made.push(Value::string(std::string{kText.data(), kText.size()}));
-        }
-        return made;
-    }
-
-    /// Where an open scene is looked at from, null until told (D432).
-    static Value viewOf(const OpenScene& open) {
-        const std::optional<authoring::SceneView>& kView = open.document->view();
-        if (!kView.has_value()) {
-            return Value{};
-        }
-        const auto kPoint = [](const std::array<double, 3>& at) {
-            Value made = Value::array();
-            for (const double kEach : at) {
-                made.push(Value::real(kEach));
-            }
-            return made;
-        };
-        Value made = Value::object();
-        made.add("eye", kPoint(kView->eye));
-        made.add("target", kPoint(kView->target));
-        made.add("fieldOfView", Value::real(kView->fieldOfView));
-        return made;
+        return outcomeOf(*open->document, kWritten, reopened, std::move(results), skipped);
     }
 
     /// `view`: where the scene is looked at from, in place of what was.
@@ -488,7 +400,7 @@ private:
         made.add("kind", Value::string("authoring.view"));
         made.add("document", Value::string(digestOf(open->document->text())));
         made.add("reopened", Value::boolean(reopened));
-        made.add("view", viewOf(*open));
+        made.add("view", viewOf(*open->document));
         made.add("previewing", Value::boolean(forward(record.scene, *open)));
         return made;
     }
@@ -736,7 +648,7 @@ private:
             return Value{};
         }
         forward(previewScene_, kOpen->second);
-        return viewOf(kOpen->second);
+        return viewOf(*kOpen->second.document);
     }
 
     /// Has the preview draw lit the handle of its mark the pointer is over,
@@ -836,7 +748,7 @@ private:
         Value look = Value::object();
         look.add("kind", Value::string("tooling.look"));
         look.add("id", Value::integer(static_cast<std::int64_t>(++looks_)));
-        look.add("view", viewOf(open));
+        look.add("view", viewOf(*open.document));
         const auto kReply = preview_->ask(rawframe::document::writeCompact(look));
         const bool kAnswered = kReply.has_value() && [&kReply] {
             const auto kParsed = rawframe::document::parse(*kReply);
@@ -861,7 +773,7 @@ private:
         made.add("kind", Value::string("authoring.selection"));
         made.add("document", Value::string(digestOf(open->document->text())));
         made.add("reopened", Value::boolean(reopened));
-        made.add("selection", selectionOf(*open));
+        made.add("selection", selectionOf(*open->document));
         return made;
     }
 
@@ -905,7 +817,7 @@ private:
         results.push(slotValue(kStep));
         RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.scene, *open));
         (void)forward(record.scene, *open);
-        return outcome(*open, kWritten, reopened, std::move(results), 0);
+        return outcomeOf(*open->document, kWritten, reopened, std::move(results), 0);
     }
 
     std::filesystem::path game_;

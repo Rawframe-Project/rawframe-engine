@@ -3,6 +3,6 @@
 # and a preview's tooling link. Toolchain only: rawframe-author and Studio
 # hold one; no client or server closure contains it.
 rawframe_module(NAME authoring_session
-    SOURCES src/attach.cpp src/game.cpp src/handles.cpp src/link.cpp src/session.cpp src/viewing.cpp
+    SOURCES src/attach.cpp src/game.cpp src/handles.cpp src/link.cpp src/replies.cpp src/session.cpp src/viewing.cpp
     DEPS authoring world_tooling view network_quic network world_kest kest content scene schema document execution result base
 )

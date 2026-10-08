@@ -33,6 +33,12 @@ result::Result<authoring::ComponentCatalog> catalogOf(const world_kest::GameFile
 /// A slot of an outcome: its deltas, or the one error record.
 document::Value slotValue(const result::Result<authoring::Committed>& outcome);
 
+/// The assets a game declares by line (D455): each by its kind, its
+/// identity as 16 hex digits (what a component's field holds, as an
+/// unsigned number), and its name, a file beside the description or a
+/// label's table and key, in line order within each kind.
+document::Value assetsOf(const world_kest::GameDescription& game);
+
 /// The identity a scene's sidecar gives it, if it has one that reads.
 std::optional<base::Bits128> sidecarIdentity(const std::filesystem::path& source);
 
