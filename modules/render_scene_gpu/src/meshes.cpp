@@ -168,6 +168,20 @@ result::Status DeviceMeshes::bind(mrhiPassId pass, const HeldMesh& mesh, std::op
     return {};
 }
 
+result::Status DeviceMeshes::bindBefore(mrhiPassId pass, const HeldMesh& mesh, std::optional<VerticesAt> before) const {
+    const FrameMesh& kMade = imported_.at(&mesh);
+    const std::uint64_t kSize = std::uint64_t{mesh.source->positions.size()} * kVertexBytes;
+    if (mrhiSetVertexBuffer(native_,
+                            pass,
+                            2,
+                            before.has_value() ? before->buffer : kMade.vertices,
+                            before.has_value() ? before->offset : 0,
+                            before.has_value() ? kSize : MRHI_WHOLE_SIZE) != mrhi_success) {
+        return failed("a mesh could not be set to draw from", mrhi_errorState);
+    }
+    return {};
+}
+
 void DeviceMeshes::ended(bool submitted, RendererStatistics& statistics) noexcept {
     if (submitted) {
         for (HeldMesh* mesh : uploads_) {

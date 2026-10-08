@@ -51,7 +51,8 @@ void append(std::span<const render_scene::SceneDraw> draws,
         const std::uint32_t kCount = draw.indexCount != 0 ? draw.indexCount : kIndices - draw.firstIndex;
         if (runs.empty() || runs.back().mesh != kMesh->second || runs.back().firstIndex != draw.firstIndex ||
             runs.back().indexCount != kCount || runs.back().texture != kTexture || runs.back().program != kProgram ||
-            runs.back().palette != draw.palette || runs.back().joints != draw.joints) {
+            runs.back().palette != draw.palette || runs.back().joints != draw.joints ||
+            runs.back().previousPalette != draw.previousPalette) {
             runs.push_back({.mesh = kMesh->second,
                             .firstIndex = draw.firstIndex,
                             .indexCount = kCount,
@@ -60,7 +61,8 @@ void append(std::span<const render_scene::SceneDraw> draws,
                             .texture = kTexture,
                             .program = kProgram,
                             .palette = draw.palette,
-                            .joints = draw.joints});
+                            .joints = draw.joints,
+                            .previousPalette = draw.previousPalette});
         }
         ++runs.back().count;
         ++count;

@@ -2,8 +2,9 @@
 // skinned to one joint, its palette moving that joint a box's width to the
 // right, is drawn there and not where its mesh lies; the same draw without
 // its palette is drawn where its mesh lies; and the skinned model is
-// counted. Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU is
-// set.
+// counted. A posed box whose palette moved it since the frame before is
+// smeared by the motion blur, one posed alike both frames is not (D510).
+// Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU is set.
 
 #include "fixture.h"
 #include "rawframe/render/device.h"
@@ -15,6 +16,7 @@
 #include <cstdio>
 #include <memory>
 #include <optional>
+#include <vector>
 
 using namespace rawframe;
 using render_scene::SceneDraw;
@@ -46,6 +48,35 @@ std::optional<float> redMiddle(const std::vector<std::byte>& pixels) {
         }
     }
     return count == 0 ? std::nullopt : std::optional{sum / static_cast<float>(count)};
+}
+
+/// The pixels along the middle row neither the sky's red nor the box's.
+int between(const std::vector<std::byte>& pixels) {
+    const int kSky = at(pixels, 0, kSide / 2)[0];
+    const int kBox = at(pixels, kSide / 2, kSide / 2)[0];
+    int count = 0;
+    for (std::uint32_t x = 0; x < kSide; ++x) {
+        const int kRed = at(pixels, x, kSide / 2)[0];
+        count += kRed > kSky + 8 && kRed < kBox - 8 ? 1 : 0;
+    }
+    return count;
+}
+
+/// The skinned box four meters ahead, posed where it is bound, blurred; its
+/// joint `moved` meters to the left the frame before, its model unmoved.
+SceneFrame posedMoving(float moved) {
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    frame.dither = false;
+    frame.motionBlur = {.enabled = true, .shutter = 1};
+    frame.draws = {box(4, 1, {1, 0, 0, 1}, kSkinnedBox)};
+    frame.draws[0].previous = frame.draws[0].model;
+    frame.palette = {render_scene::Matrix{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1},
+                     render_scene::Matrix{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -moved, 0, 0, 1}};
+    frame.draws[0].palette = 0;
+    frame.draws[0].joints = 1;
+    frame.draws[0].previousPalette = 1;
+    return frame;
 }
 
 } // namespace
@@ -99,4 +130,33 @@ RAWFRAME_TEST(APosedModelIsDrawnWhereItsJointsPutIt) {
     RAWFRAME_EXPECT(std::abs(*kBoundMiddle - (kSide / 2.0F)) < 1.5F);
     RAWFRAME_EXPECT(*kPosedMiddle > *kBoundMiddle + 4 && *kPosedMiddle < *kBoundMiddle + 9);
     RAWFRAME_EXPECT(renderer.statistics().modelsSkinned >= 1);
+}
+
+RAWFRAME_TEST(APosedModelsMotionIsItsJointsSinceTheFrameBefore) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const std::shared_ptr<const mesh::Mesh> kMesh = skinnedBox();
+    const render_scene_gpu::MeshSource kMeshes = [&](std::uint64_t id) {
+        return id == kSkinnedBox ? kMesh : render_scene::engineMesh(id);
+    };
+    // The skinning pipeline is made on the first frame that asks for it.
+    const auto kStill =
+        drawnWith(**framer, **made, posedMoving(0), kMeshes, &render_scene_gpu::RendererStatistics::modelsSkinned);
+    const auto kStillAgain = drawn(**framer, **made, posedMoving(0), kMeshes);
+    const auto kMoved = drawn(**framer, **made, posedMoving(2), kMeshes);
+    RAWFRAME_EXPECT(kStillAgain.has_value() && kMoved.has_value());
+    if (!kStill.has_value() || !kStillAgain.has_value() || !kMoved.has_value()) {
+        return;
+    }
+    std::printf(
+        "between the sky and the posed box: still %d, its joint moved %d\n", between(*kStillAgain), between(*kMoved));
+    RAWFRAME_EXPECT(between(*kStillAgain) <= 2 && between(*kMoved) >= 6);
 }

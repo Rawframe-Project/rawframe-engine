@@ -7,7 +7,9 @@
 // land every vertex on the same depth; its position is marked invariant
 // after Slang compiles it, which Slang cannot say (D475). Where the vertex
 // is seen without the jitter, and where it was seen the frame before, go
-// on for its motion (D291).
+// on for its motion (D291): where it was in its model's space then, which
+// is where it is but for a skinned model's posed the frame before (D510),
+// placed by the model's rows then.
 //
 // Fragment entries "fs" and "fsDecaled", the latter for frames that draw
 // decals, which it lays over the base color first (D339): the surface its
@@ -196,6 +198,8 @@ struct Vertex
     [[vk::location(13)]] float2 uv;
     // The vertex's tangent and the bitangent's sign (D313).
     [[vk::location(14)]] float4 tangent;
+    // Where the vertex was in its model's space the frame before (D510).
+    [[vk::location(15)]] float3 before;
 }
 
 [shader("vertex")]
@@ -210,7 +214,8 @@ Corner vs(Vertex vertex)
     corner.normal = mul(vertex.normal, float3x3(vertex.normal0, vertex.normal1, vertex.normal2));
     corner.color = vertex.color;
     corner.placed = placed;
-    const float3 was = float3(dot(vertex.previous0, at), dot(vertex.previous1, at), dot(vertex.previous2, at));
+    const float4 then = float4(vertex.before, 1.0);
+    const float3 was = float3(dot(vertex.previous0, then), dot(vertex.previous1, then), dot(vertex.previous2, then));
     corner.now = mul(frame.unjittered, float4(placed, 1.0)).xyw;
     corner.before = mul(frame.previous, float4(was, 1.0)).xyw;
     corner.material = uint(vertex.material);

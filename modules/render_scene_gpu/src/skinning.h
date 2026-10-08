@@ -26,7 +26,8 @@ public:
     explicit DeviceSkinning(mrhiDevice* native) noexcept;
 
     /// The frame's posed models whose meshes are chosen and skinned, each
-    /// mesh and palette once; none where `ready` is false, as the skinning
+    /// mesh and palette once, and the drawn ones as posed the frame before
+    /// (D510); none where `ready` is false, as the skinning
     /// pipeline is not made yet, and those models are drawn as bound.
     /// Declares the frame's palette, each model's block, and the skinned
     /// vertices, adding what the upload pass writes to `writes`.
@@ -43,7 +44,8 @@ public:
     /// The vertices a draw of `mesh` posed with the palette from `palette`
     /// reads; none for one this frame draws as bound.
     [[nodiscard]] std::optional<VerticesAt> posedOf(const HeldMesh* mesh, std::uint32_t palette) const noexcept;
-    /// The models skinned this frame.
+    /// The skinnings this frame: a model and a palette each, its palette
+    /// the frame before's too where it moved (D510).
     [[nodiscard]] std::size_t skinned() const noexcept {
         return jobs_.size();
     }
@@ -73,6 +75,12 @@ private:
 /// where it is posed and they were skinned; none otherwise.
 [[nodiscard]] inline std::optional<VerticesAt> posedOf(const DeviceSkinning* skinning, const Run& run) noexcept {
     return skinning != nullptr && run.joints != 0 ? skinning->posedOf(run.mesh, run.palette) : std::nullopt;
+}
+
+/// Its vertices as its model was posed the frame before (D510); none where
+/// the model is drawn as bound.
+[[nodiscard]] inline std::optional<VerticesAt> posedBeforeOf(const DeviceSkinning* skinning, const Run& run) noexcept {
+    return skinning != nullptr && run.joints != 0 ? skinning->posedOf(run.mesh, run.previousPalette) : std::nullopt;
 }
 
 } // namespace rawframe::render_scene_gpu

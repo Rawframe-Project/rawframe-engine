@@ -72,6 +72,10 @@ public:
     /// Sets a chosen mesh's vertices and indices to draw from in `pass`;
     /// `posed`'s vertices in place of its own, where it is skinned (D508).
     result::Status bind(mrhiPassId pass, const HeldMesh& mesh, std::optional<VerticesAt> posed = std::nullopt) const;
+    /// Sets where a pass's draws of `mesh` read their vertices as they were
+    /// the frame before, which the scene's models are drawn with (D510):
+    /// `before` where its model was posed then, its own otherwise.
+    result::Status bindBefore(mrhiPassId pass, const HeldMesh& mesh, std::optional<VerticesAt> before) const;
 
     /// The frame ended: what it uploaded is held uploaded only if it was
     /// submitted.

@@ -32,6 +32,8 @@ struct Run {
     /// none for one drawn as bound (D508). Each posed model is a run.
     std::uint32_t palette = 0;
     std::uint32_t joints = 0;
+    /// Its first joint matrix the frame before (D510).
+    std::uint32_t previousPalette = 0;
 };
 using Runs = std::vector<Run>;
 

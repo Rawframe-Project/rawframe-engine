@@ -40,20 +40,26 @@ result::Status DeviceSkinning::declare(const render_scene::SceneFrame& frame,
     if (!ready || frame.palette.empty()) {
         return {};
     }
-    for (const std::vector<render_scene::SceneDraw>* kList :
-         {&frame.draws, &frame.shadows.casters, &frame.lightShadows.casters}) {
+    // Each palette a draw is posed with, and for the models drawn, not the
+    // casters, the one it was posed with the frame before.
+    const auto kSkin = [&](const render_scene::SceneDraw& draw, std::uint32_t palette) {
+        const auto kMesh = usable.find(draw.mesh);
+        if (draw.joints == 0 || kMesh == usable.end() || kMesh->second->influences.index1 == 0 ||
+            palette + std::uint64_t{draw.joints} > frame.palette.size() ||
+            draw.joints != kMesh->second->source->skin.joints.size() || found_.contains({kMesh->second, palette})) {
+            return;
+        }
+        found_.emplace(std::pair{kMesh->second, palette}, jobs_.size());
+        jobs_.push_back({.mesh = kMesh->second, .palette = palette, .first = static_cast<std::uint32_t>(vertices_)});
+        vertices_ += kMesh->second->source->positions.size();
+    };
+    for (const render_scene::SceneDraw& draw : frame.draws) {
+        kSkin(draw, draw.palette);
+        kSkin(draw, draw.previousPalette);
+    }
+    for (const std::vector<render_scene::SceneDraw>* kList : {&frame.shadows.casters, &frame.lightShadows.casters}) {
         for (const render_scene::SceneDraw& draw : *kList) {
-            const auto kMesh = usable.find(draw.mesh);
-            if (draw.joints == 0 || kMesh == usable.end() || kMesh->second->influences.index1 == 0 ||
-                draw.palette + std::uint64_t{draw.joints} > frame.palette.size() ||
-                draw.joints != kMesh->second->source->skin.joints.size() ||
-                found_.contains({kMesh->second, draw.palette})) {
-                continue;
-            }
-            found_.emplace(std::pair{kMesh->second, draw.palette}, jobs_.size());
-            jobs_.push_back(
-                {.mesh = kMesh->second, .palette = draw.palette, .first = static_cast<std::uint32_t>(vertices_)});
-            vertices_ += kMesh->second->source->positions.size();
+            kSkin(draw, draw.palette);
         }
     }
     if (jobs_.empty()) {
