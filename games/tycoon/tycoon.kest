@@ -625,14 +625,16 @@ fn mark(count: i32, owners: [Owner], marks: [model.Model]) {
 
 // The client's view: from a fixed point forty-two meters up and thirty-six
 // south of the lot's middle, looking down at it, the whole lot in sight, wherever the
-// owner's cursor is (the eye is placed from the player's pose, which is
-// the cursor's plot, so it is placed back).
+// owner's cursor is. The eye is fixed in the World (D520): placed back from
+// the player's pose, the cursor's plot, it lurched for a frame whenever the
+// cursor crossed into another plot between two ticks.
 fn frame(count: i32, poses: [physics3d.Pose3D], views: [model.Camera]) {
     let i = 0
     while i < count {
-        views[i].offsetX = f32(0.0 - poses[i].x)
-        views[i].offsetY = f32(42.0 - poses[i].y)
-        views[i].offsetZ = f32(36.0 - poses[i].z)
+        views[i].anchor = model.FIXED
+        views[i].offsetX = 0.0
+        views[i].offsetY = 42.0
+        views[i].offsetZ = 36.0
         views[i].pitch = -0.92
         views[i].fovY = 1.0
         views[i].near = 0.5
