@@ -287,7 +287,8 @@ public:
                       diagnostics::field("particlesSpawned", statistics.particlesSpawned),
                       diagnostics::field("ribbonsDrawn", statistics.ribbonsDrawn),
                       diagnostics::field("viewFrames", viewFrames),
-                      diagnostics::field("regionFrames", regionFrames)});
+                      diagnostics::field("regionFrames", regionFrames),
+                      diagnostics::field("modelsSkinned", statistics.modelsSkinned)});
     }
 
 private:
