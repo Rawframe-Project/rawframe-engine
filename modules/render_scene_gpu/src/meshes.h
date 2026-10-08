@@ -9,18 +9,35 @@
 #include <maul-rhi/frame.h>
 #include <maul-rhi/resources.h>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
 namespace rawframe::render_scene_gpu {
 
 /// A mesh held on the device: the mesh it was made from, and whether its
-/// vertices and indices are there yet.
+/// vertices and indices are there yet; a skinned one's influences too,
+/// and its vertices read by skinning as well as by drawing (D508).
 struct HeldMesh {
     std::shared_ptr<const mesh::Mesh> source;
     mrhiBufferId vertices{};
     mrhiBufferId indices{};
+    mrhiBufferId influences{};
     bool uploaded = false;
+};
+
+/// A chosen mesh's buffers in the open frame; no influences unskinned.
+struct FrameMesh {
+    mrhiResourceId vertices{};
+    mrhiResourceId indices{};
+    mrhiResourceId influences{};
+};
+
+/// Vertices a draw reads in its mesh's place: a buffer of the frame's, from
+/// a byte on (D508).
+struct VerticesAt {
+    mrhiResourceId buffer{};
+    std::uint64_t offset = 0;
 };
 
 /// The meshes held on the device (D284): each made once from the mesh the
@@ -50,8 +67,11 @@ public:
 
     /// Writes those uploading, in the upload pass.
     result::Status write(mrhiPassId upload) const;
-    /// Sets a chosen mesh's vertices and indices to draw from in `pass`.
-    result::Status bind(mrhiPassId pass, const HeldMesh& mesh) const;
+    /// A chosen mesh's buffers in the open frame, once imported.
+    [[nodiscard]] const FrameMesh& frameMeshOf(const HeldMesh& mesh) const;
+    /// Sets a chosen mesh's vertices and indices to draw from in `pass`;
+    /// `posed`'s vertices in place of its own, where it is skinned (D508).
+    result::Status bind(mrhiPassId pass, const HeldMesh& mesh, std::optional<VerticesAt> posed = std::nullopt) const;
 
     /// The frame ended: what it uploaded is held uploaded only if it was
     /// submitted.
@@ -63,7 +83,7 @@ private:
     std::map<std::uint64_t, HeldMesh> held_;
     std::map<std::uint64_t, HeldMesh*> chosen_;
     std::vector<HeldMesh*> uploads_;
-    std::map<const HeldMesh*, std::pair<mrhiResourceId, mrhiResourceId>> imported_;
+    std::map<const HeldMesh*, FrameMesh> imported_;
     std::uint64_t budget_ = 0;
 };
 

@@ -24,6 +24,7 @@
 #include "reflection.h"
 #include "runs.h"
 #include "sampled.h"
+#include "skinning.h"
 #include "tables.h"
 #include "temporal.h"
 
@@ -72,6 +73,7 @@ struct SceneRenderer::State {
     std::optional<TemporalPass> temporal;
     /// The exposure the device holds, and its metering (D293).
     std::optional<Metering> metering;
+    std::optional<DeviceSkinning> skinning;
     /// Its light read back for a tool (D326).
     std::optional<LightCapturing> capturing;
     /// Its ambient occlusion, when a view asks (D327).
@@ -213,6 +215,7 @@ struct SceneRenderer::State {
         return Casting{.native = native,
                        .pipelines = pipelines.get(),
                        .held = &*held,
+                       .skinning = &*skinning,
                        .textures = textures.get(),
                        .instances = now.instances,
                        .materials = now.materialsResource,
@@ -371,6 +374,10 @@ struct SceneRenderer::State {
         if (now.draws || now.casters) {
             writes.push_back(wholeOf(now.instances, mrhi_accessCopyDestination));
         }
+        // Posed models' vertices, skinned before anything draws them (D508).
+        RAWFRAME_TRY_ASSIGN(const bool kSkinning, made(!frame->palette.empty(), Effect::Skinning));
+        RAWFRAME_TRY(skinning->declare(*frame, kUsable, kSkinning, writes));
+        statistics.modelsSkinned += skinning->skinned();
         RAWFRAME_TRY(shadows->declare(*frame, now.block, writes));
         // Antialiased over time, the temporal pass blends the frame with the
         // picture before into the other kept picture (D291).
@@ -484,6 +491,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(decalAtlas->addPasses());
         // New probes' pictures into the atlas (D340).
         RAWFRAME_TRY(probeAtlas->addPasses());
+        RAWFRAME_TRY(skinning->addPass(*held, meshReads));
         // The shadow map first: its casters from each cascade's view.
         if (now.draws || now.casters) {
             meshReads.push_back(wholeOf(now.instances, mrhi_accessVertex));
@@ -697,12 +705,14 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(post->write(now.upload));
         RAWFRAME_TRY(shadows->write(now.upload));
         RAWFRAME_TRY(held->write(now.upload));
+        RAWFRAME_TRY(skinning->write(now.upload));
         RAWFRAME_TRY(textures->write(render::requestKey(now.upload.index1, now.upload.generation)));
         if (mrhiEndPass(native, now.upload) != mrhi_success) {
             return failed("the upload pass could not end", mrhi_errorState);
         }
         RAWFRAME_TRY(decalAtlas->record(*pipelines));
         RAWFRAME_TRY(probeAtlas->record(*pipelines));
+        RAWFRAME_TRY(skinning->record(*pipelines, *held));
         RAWFRAME_TRY(shadows->record(castingOf(now), now.placed));
         // The scene's table: slots 10 to 17 are each run's textures; 18 and
         // 19 the sky's picture (D322); 20 the reflection probes (D325); 21
@@ -757,6 +767,7 @@ struct SceneRenderer::State {
         // shadows are found between the two (D327, D331, D338).
         const Drawing kDrawing{.pipelines = pipelines.get(),
                                .held = &*held,
+                               .skinning = &*skinning,
                                .textures = textures.get(),
                                .instances = now.instances,
                                .placed = &now.placed,
@@ -874,6 +885,7 @@ SceneRenderer::made(render::Device& device, RendererLimits limits, const SceneRe
         RAWFRAME_TRY(state->pipelines->make());
     }
     state->metering.emplace(device.native());
+    state->skinning.emplace(device.native());
     state->temporal.emplace(device.native());
     state->capturing.emplace(device);
     state->occlusion.emplace(device.native());

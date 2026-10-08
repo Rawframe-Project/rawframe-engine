@@ -28,6 +28,10 @@ struct Run {
     /// it as a masked caster (D488); none for the engine's own, and for
     /// the solid casters.
     const material::ProgramMaterial* program = nullptr;
+    /// A posed model's first joint matrix among the frame's, and how many;
+    /// none for one drawn as bound (D508). Each posed model is a run.
+    std::uint32_t palette = 0;
+    std::uint32_t joints = 0;
 };
 using Runs = std::vector<Run>;
 

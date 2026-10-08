@@ -75,6 +75,7 @@ CONTAINERS = (
     ("render_scene_gpu", "fxaa"),
     ("render_scene_gpu", "bloom"),
     ("render_scene_gpu", "meter"),
+    ("render_scene_gpu", "skin"),
     ("render_scene_gpu", "shadow"),
     ("render_scene_gpu", "sky"),
     ("render_scene_gpu", "temporal"),

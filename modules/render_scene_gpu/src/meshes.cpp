@@ -26,6 +26,9 @@ DeviceMeshes::~DeviceMeshes() {
     for (auto& [id, made] : held_) {
         static_cast<void>(mrhiDestroyBuffer(native_, made.vertices));
         static_cast<void>(mrhiDestroyBuffer(native_, made.indices));
+        if (made.influences.index1 != 0) {
+            static_cast<void>(mrhiDestroyBuffer(native_, made.influences));
+        }
     }
 }
 
@@ -46,9 +49,14 @@ const HeldMesh* DeviceMeshes::choose(std::uint64_t id, const MeshSource& given, 
         if (source == nullptr || source->positions.empty() || source->indices.empty() || held_.size() >= maximum_) {
             return nullptr;
         }
+        // A skinned mesh's vertices are read by skinning too (D508).
+        const bool kSkinned = !source->skin.joints.empty();
         mrhiBufferDef vertexDef = mrhiDefaultBufferDef();
         vertexDef.size = std::uint64_t{source->positions.size()} * kVertexBytes;
         vertexDef.usage = mrhi_bufferVertex | mrhi_bufferCopyDestination;
+        if (kSkinned) {
+            vertexDef.usage |= mrhi_bufferStorage;
+        }
         mrhiBufferDef indexDef = mrhiDefaultBufferDef();
         indexDef.size = std::uint64_t{source->indices.size()} * 4;
         indexDef.usage = mrhi_bufferIndex | mrhi_bufferCopyDestination;
@@ -59,6 +67,16 @@ const HeldMesh* DeviceMeshes::choose(std::uint64_t id, const MeshSource& given, 
         if (mrhiCreateBuffer(native_, &indexDef, &made.indices) != mrhi_success) {
             static_cast<void>(mrhiDestroyBuffer(native_, made.vertices));
             return nullptr;
+        }
+        if (kSkinned) {
+            mrhiBufferDef influenceDef = mrhiDefaultBufferDef();
+            influenceDef.size = std::uint64_t{made.source->positions.size()} * kInfluenceWords * 4;
+            influenceDef.usage = mrhi_bufferStorage | mrhi_bufferCopyDestination;
+            if (mrhiCreateBuffer(native_, &influenceDef, &made.influences) != mrhi_success) {
+                static_cast<void>(mrhiDestroyBuffer(native_, made.vertices));
+                static_cast<void>(mrhiDestroyBuffer(native_, made.indices));
+                return nullptr;
+            }
         }
         found = held_.emplace(id, std::move(made)).first;
     }
@@ -78,23 +96,32 @@ const HeldMesh* DeviceMeshes::choose(std::uint64_t id, const MeshSource& given, 
 
 result::Status DeviceMeshes::import(std::vector<mrhiAccess>& writes, std::vector<mrhiAccess>& reads) {
     for (const auto& [id, mesh] : chosen_) {
-        mrhiResourceId vertices{};
-        mrhiResourceId indices{};
-        if (const mrhiResult kImported = mrhiImportBuffer(native_, mesh->vertices, &vertices);
+        FrameMesh made;
+        if (const mrhiResult kImported = mrhiImportBuffer(native_, mesh->vertices, &made.vertices);
             kImported != mrhi_success) {
             return failed("a mesh could not join the frame", kImported);
         }
-        if (const mrhiResult kImported = mrhiImportBuffer(native_, mesh->indices, &indices);
+        if (const mrhiResult kImported = mrhiImportBuffer(native_, mesh->indices, &made.indices);
             kImported != mrhi_success) {
             return failed("a mesh could not join the frame", kImported);
         }
-        imported_.emplace(mesh, std::pair{vertices, indices});
-        reads.push_back(wholeOf(vertices, mrhi_accessVertex));
-        reads.push_back(wholeOf(indices, mrhi_accessIndex));
+        if (mesh->influences.index1 != 0) {
+            if (const mrhiResult kImported = mrhiImportBuffer(native_, mesh->influences, &made.influences);
+                kImported != mrhi_success) {
+                return failed("a mesh could not join the frame", kImported);
+            }
+        }
+        imported_.emplace(mesh, made);
+        reads.push_back(wholeOf(made.vertices, mrhi_accessVertex));
+        reads.push_back(wholeOf(made.indices, mrhi_accessIndex));
     }
     for (const HeldMesh* mesh : uploads_) {
-        writes.push_back(wholeOf(imported_.at(mesh).first, mrhi_accessCopyDestination));
-        writes.push_back(wholeOf(imported_.at(mesh).second, mrhi_accessCopyDestination));
+        const FrameMesh& kMade = imported_.at(mesh);
+        writes.push_back(wholeOf(kMade.vertices, mrhi_accessCopyDestination));
+        writes.push_back(wholeOf(kMade.indices, mrhi_accessCopyDestination));
+        if (kMade.influences.index1 != 0) {
+            writes.push_back(wholeOf(kMade.influences, mrhi_accessCopyDestination));
+        }
     }
     return {};
 }
@@ -102,22 +129,40 @@ result::Status DeviceMeshes::import(std::vector<mrhiAccess>& writes, std::vector
 result::Status DeviceMeshes::write(mrhiPassId upload) const {
     for (const HeldMesh* mesh : uploads_) {
         const std::vector<float> kVertices = verticesOf(*mesh->source);
-        const auto& [kVertexResource, kIndexResource] = imported_.at(mesh);
-        if (mrhiWriteBuffer(native_, upload, kVertexResource, 0, kVertices.data(), kVertices.size() * sizeof(float)) !=
+        const FrameMesh& kMade = imported_.at(mesh);
+        if (mrhiWriteBuffer(native_, upload, kMade.vertices, 0, kVertices.data(), kVertices.size() * sizeof(float)) !=
                 mrhi_success ||
             mrhiWriteBuffer(
-                native_, upload, kIndexResource, 0, mesh->source->indices.data(), mesh->source->indices.size() * 4) !=
+                native_, upload, kMade.indices, 0, mesh->source->indices.data(), mesh->source->indices.size() * 4) !=
                 mrhi_success) {
             return failed("a mesh could not be written", mrhi_errorCapacity);
+        }
+        if (kMade.influences.index1 != 0) {
+            const std::vector<std::uint32_t> kInfluences = influencesOf(*mesh->source);
+            if (mrhiWriteBuffer(native_, upload, kMade.influences, 0, kInfluences.data(), kInfluences.size() * 4) !=
+                mrhi_success) {
+                return failed("a mesh's influences could not be written", mrhi_errorCapacity);
+            }
         }
     }
     return {};
 }
 
-result::Status DeviceMeshes::bind(mrhiPassId pass, const HeldMesh& mesh) const {
-    const auto& [kVertexResource, kIndexResource] = imported_.at(&mesh);
-    if (mrhiSetVertexBuffer(native_, pass, 0, kVertexResource, 0, MRHI_WHOLE_SIZE) != mrhi_success ||
-        mrhiSetIndexBuffer(native_, pass, kIndexResource, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
+const FrameMesh& DeviceMeshes::frameMeshOf(const HeldMesh& mesh) const {
+    return imported_.at(&mesh);
+}
+
+result::Status DeviceMeshes::bind(mrhiPassId pass, const HeldMesh& mesh, std::optional<VerticesAt> posed) const {
+    const FrameMesh& kMade = imported_.at(&mesh);
+    const mrhiResourceId kVertices = posed.has_value() ? posed->buffer : kMade.vertices;
+    const std::uint64_t kSize = std::uint64_t{mesh.source->positions.size()} * kVertexBytes;
+    if (mrhiSetVertexBuffer(native_,
+                            pass,
+                            0,
+                            kVertices,
+                            posed.has_value() ? posed->offset : 0,
+                            posed.has_value() ? kSize : MRHI_WHOLE_SIZE) != mrhi_success ||
+        mrhiSetIndexBuffer(native_, pass, kMade.indices, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
         return failed("a mesh could not be set to draw from", mrhi_errorState);
     }
     return {};

@@ -5,6 +5,7 @@
 #include "rawframe/render/textures.h"
 #include "rawframe/result/result.h"
 #include "runs.h"
+#include "skinning.h"
 
 #include <array>
 #include <cstddef>
@@ -26,6 +27,8 @@ inline constexpr std::size_t kTableSlots = 28;
 struct Drawing {
     const Pipelines* pipelines = nullptr;
     const DeviceMeshes* held = nullptr;
+    /// The posed models' vertices, which their runs read (D508).
+    const DeviceSkinning* skinning = nullptr;
     const render::DeviceTextures* textures = nullptr;
     mrhiResourceId instances{};
     const Placed* placed = nullptr;

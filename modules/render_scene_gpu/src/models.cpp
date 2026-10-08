@@ -171,7 +171,7 @@ result::Status ModelPasses::drawRuns(const Drawing& with,
             }
             bound = run.texture;
         }
-        RAWFRAME_TRY(with.held->bind(pass, *run.mesh));
+        RAWFRAME_TRY(with.held->bind(pass, *run.mesh, posedOf(with.skinning, run)));
         if (mrhiDrawIndexed(native_, pass, run.indexCount, run.count, run.firstIndex, 0, run.first) != mrhi_success) {
             return failed("a model could not be drawn", mrhi_errorState);
         }

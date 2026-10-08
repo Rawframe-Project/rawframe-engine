@@ -16,6 +16,9 @@ using Matrix4 = std::array<float, 16>;
 /// texture coordinates, nought for a mesh without them (D309), then its
 /// tangent and the bitangent's sign (D313).
 constexpr std::uint32_t kVertexBytes = 48;
+/// A skinned vertex's influences as skinning reads them (D508): its four
+/// joints two to a word, low half first, then its four weights' bits.
+constexpr std::uint32_t kInfluenceWords = 6;
 
 /// The frame's view and light as the scene's shaders read them (std140).
 struct FrameBlock {
@@ -174,7 +177,11 @@ std::vector<float> verticesOf(const mesh::Mesh& made);
 /// normal, and a sign of one, where the mesh has no coordinates.
 std::vector<std::array<float, 4>> tangentsOf(const mesh::Mesh& made, std::span<const mesh::Vector3> normals);
 
-/// The bytes a mesh takes on the device: its vertices and indices.
+/// A skinned mesh's influences, kInfluenceWords a vertex; none unskinned.
+std::vector<std::uint32_t> influencesOf(const mesh::Mesh& made);
+
+/// The bytes a mesh takes on the device: its vertices and indices, and a
+/// skinned one's influences.
 std::uint64_t bytesOf(const mesh::Mesh& made) noexcept;
 
 } // namespace rawframe::render_scene_gpu

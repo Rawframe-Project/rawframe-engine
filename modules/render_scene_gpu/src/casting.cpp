@@ -16,7 +16,7 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
         return failed("a shadow pass could not begin", mrhi_errorState);
     }
     const auto kDraw = [&with, native, pass](const Run& run) -> result::Status {
-        RAWFRAME_TRY(with.held->bind(pass, *run.mesh));
+        RAWFRAME_TRY(with.held->bind(pass, *run.mesh, posedOf(with.skinning, run)));
         if (mrhiDrawIndexed(native, pass, run.indexCount, run.count, run.firstIndex, 0, run.first) != mrhi_success) {
             return failed("a caster could not be drawn", mrhi_errorState);
         }

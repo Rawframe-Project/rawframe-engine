@@ -6,6 +6,7 @@
 #include "rawframe/render/textures.h"
 #include "rawframe/result/result.h"
 #include "runs.h"
+#include "skinning.h"
 
 #include <array>
 #include <cstdint>
@@ -29,6 +30,7 @@ struct Casting {
     mrhiDevice* native = nullptr;
     const Pipelines* pipelines = nullptr;
     const DeviceMeshes* held = nullptr;
+    const DeviceSkinning* skinning = nullptr;
     const render::DeviceTextures* textures = nullptr;
     mrhiResourceId instances{};
     mrhiResourceId materials{};

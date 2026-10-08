@@ -129,9 +129,10 @@ enum class Effect : std::uint8_t {
     Decals,
     Probes,
     Multisampled,
-    PostProcess
+    PostProcess,
+    Skinning
 };
-inline constexpr std::size_t kEffects = 12;
+inline constexpr std::size_t kEffects = 13;
 
 /// The scene's shaders, samplers, and pipelines (D284 to D292): what every
 /// frame draws with asked of the device at once, each effect's when a view
@@ -146,6 +147,7 @@ struct Pipelines {
     mrhiShaderId temporalShader{};
     mrhiShaderId skyShader{};
     mrhiShaderId meterShader{};
+    mrhiShaderId skinShader{};
     mrhiShaderId fxaaShader{};
     mrhiShaderId occlusionShader{};
     mrhiShaderId bloomShader{};
@@ -214,6 +216,8 @@ struct Pipelines {
     Asked sky;
     Asked histogram;
     Asked adapt;
+    /// Posed models' vertices skinned (D508).
+    Asked skin;
     Asked temporal;
     Asked tonemap;
     Asked fxaa;

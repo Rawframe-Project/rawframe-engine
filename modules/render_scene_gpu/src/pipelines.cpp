@@ -15,6 +15,7 @@
 #include "generated/resolve_container.h"
 #include "generated/scene_container.h"
 #include "generated/shadow_container.h"
+#include "generated/skin_container.h"
 #include "generated/sky_container.h"
 #include "generated/temporal_container.h"
 #include "generated/tonemap_container.h"
@@ -89,7 +90,7 @@ Pipelines::~Pipelines() {
                          &multisampled.resolveDepth}) {
         static_cast<void>(mrhiDestroyGraphicsPipeline(native, asked->pipeline));
     }
-    for (Asked* asked : {&histogram, &adapt}) {
+    for (Asked* asked : {&histogram, &adapt, &skin}) {
         static_cast<void>(mrhiDestroyComputePipeline(native, asked->compute));
     }
     static_cast<void>(mrhiDestroySampler(native, shadowSampler));
@@ -103,6 +104,7 @@ Pipelines::~Pipelines() {
                                        temporalShader,
                                        skyShader,
                                        meterShader,
+                                       skinShader,
                                        fxaaShader,
                                        occlusionShader,
                                        bloomShader,
@@ -595,6 +597,16 @@ result::Status Pipelines::askFor(Effect effect) {
         }
         return {};
     }
+    case Effect::Skinning: {
+        // Posed models' vertices, skinned into the frame's (D508).
+        RAWFRAME_TRY(makeShader(kSkinContainer, skinShader));
+        mrhiComputePipelineDef def = mrhiDefaultComputePipelineDef();
+        constexpr std::string_view kEntry = "skin";
+        def.shader = skinShader;
+        def.entry = kEntry.data();
+        def.entryLength = kEntry.size();
+        return ask(def, skin);
+    }
     case Effect::ContactShadows: {
         // The contact shadows from the prepass's depth (D338), a triangle
         // over the target.
@@ -750,6 +762,8 @@ result::Result<bool> Pipelines::wanted(Effect effect) {
         return answered({&postLinear, &postDisplay, &grade});
     case Effect::ContactShadows:
         return answered({&contactShade});
+    case Effect::Skinning:
+        return answered({&skin});
     case Effect::Decals:
         return answered({&decalFill, &decalNormalFill, &litDecaled, &maskedLitDecaled, &glassDecaled});
     case Effect::Probes:

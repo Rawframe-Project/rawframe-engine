@@ -1,0 +1,14 @@
+{
+  "root_block_bytes": 0,
+  "entries": [
+    {"name": "skin", "stage": "compute", "workgroup": [64, 1, 1]}
+  ],
+  "bindings": [
+    {"table": 0, "slot": 0, "kind": "read_only_storage_buffer", "stages": ["compute"], "min_size": 48},
+    {"table": 0, "slot": 1, "kind": "read_only_storage_buffer", "stages": ["compute"], "min_size": 24},
+    {"table": 0, "slot": 2, "kind": "read_only_storage_buffer", "stages": ["compute"], "min_size": 64},
+    {"table": 0, "slot": 3, "kind": "storage_buffer", "stages": ["compute"], "min_size": 48},
+    {"table": 0, "slot": 4, "kind": "uniform_buffer", "stages": ["compute"], "min_size": 16}
+  ],
+  "constants": []
+}

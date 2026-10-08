@@ -1,6 +1,7 @@
 #include "blocks.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <utility>
@@ -257,8 +258,28 @@ std::vector<float> verticesOf(const mesh::Mesh& made) {
     return vertices;
 }
 
+std::vector<std::uint32_t> influencesOf(const mesh::Mesh& made) {
+    std::vector<std::uint32_t> words;
+    if (made.skin.joints.empty()) {
+        return words;
+    }
+    words.reserve(made.skin.influences.size() * kInfluenceWords);
+    for (std::size_t at = 0; at < made.skin.influences.size(); ++at) {
+        const std::array<std::uint16_t, 4>& kJoints = made.skin.influences[at];
+        words.push_back(std::uint32_t{kJoints[0]} | (std::uint32_t{kJoints[1]} << 16U));
+        words.push_back(std::uint32_t{kJoints[2]} | (std::uint32_t{kJoints[3]} << 16U));
+        for (const float kWeight : made.skin.weights[at]) {
+            words.push_back(std::bit_cast<std::uint32_t>(kWeight));
+        }
+    }
+    return words;
+}
+
 std::uint64_t bytesOf(const mesh::Mesh& made) noexcept {
-    return (std::uint64_t{made.positions.size()} * kVertexBytes) + (std::uint64_t{made.indices.size()} * 4);
+    const std::uint64_t kInfluences =
+        made.skin.joints.empty() ? 0 : std::uint64_t{made.positions.size()} * kInfluenceWords * 4;
+    return (std::uint64_t{made.positions.size()} * kVertexBytes) + (std::uint64_t{made.indices.size()} * 4) +
+           kInfluences;
 }
 
 } // namespace rawframe::render_scene_gpu

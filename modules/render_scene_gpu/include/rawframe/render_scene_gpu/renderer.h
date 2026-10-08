@@ -70,6 +70,8 @@ struct RendererStatistics {
     /// Models left out: their mesh not given, deferred, or past the meshes
     /// held.
     std::uint64_t modelsLeftOut = 0;
+    /// Posed models whose vertices were skinned, summed over frames (D508).
+    std::uint64_t modelsSkinned = 0;
     std::uint64_t meshesUploaded = 0;
     /// The materials' textures uploaded (D309), and their bytes, apart
     /// from the meshes'.
