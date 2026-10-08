@@ -19,7 +19,10 @@ jobs:
   check:
     if: github.repository == 'Rawframe-Project/rawframe-engine'
     runs-on: [self-hosted, linux, x64, rawframe]
-    timeout-minutes: 20
+    # A backstop against a hang, not the check's budget: a change to a header
+    # every tree includes rebuilds all eight, 20 minutes on this machine
+    # (D493), and was cancelled at the 20 it had.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
