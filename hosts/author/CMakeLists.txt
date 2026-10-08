@@ -2,7 +2,7 @@
 # command line. Tooling only; no client or server closure contains it.
 rawframe_host(NAME author OUTPUT rawframe-author
     SOURCES src/main.cpp src/connect.cpp
-    DEPS authoring_session authoring world_kest kest content scene schema document execution result base
+    DEPS authoring_session authoring process world_kest kest content scene schema document execution result base
 )
 
 if(RAWFRAME_BUILD_TESTS)
@@ -50,6 +50,15 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_session.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_session)
     set_tests_properties(author_session PROPERTIES PASS_REGULAR_EXPRESSION "authored runners in a session")
+    # A session cooking its game as a long-running operation (D502): the
+    # plaza cooked source by source while records are answered, then from
+    # the cache; a second cook refused, one stopped as asked, one into the
+    # game refused, and one stopped by the session's end.
+    add_test(NAME author_cooks
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_cooks.sh $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_cooks)
+    set_tests_properties(author_cooks PROPERTIES
+                         PASS_REGULAR_EXPRESSION "cooked the plaza through a session, [1-9][0-9]* sources")
     # A running dedicated server's World read through its tooling endpoint
     # (D408): admitted by its token, status twice as it ticks, an unknown
     # verb answered with an error, and another token refused.

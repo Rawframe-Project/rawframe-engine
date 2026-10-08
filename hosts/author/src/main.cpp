@@ -44,7 +44,10 @@
 // running client's tooling endpoint granted `view` (D433), which then shows
 // one scene's game from that scene's view, handed it each time it changes;
 // the endpoint is a loopback address, so the token the record's file holds
-// goes to no other machine.
+// goes to no other machine. `cook` cooks the game's directory with the cook
+// tool `--cook` names, or the rawframe-cook beside this program, as a
+// long-running operation (D502): records are read and answered while it
+// runs, its progress and its reply said as they come.
 //
 // `connect` is a client of a running Runtime's tooling endpoint (D408,
 // connect.h): records a line on standard input, the replies on standard
@@ -64,6 +67,7 @@
 #include "rawframe/base/sha256.h"
 #include "rawframe/content/sidecar.h"
 #include "rawframe/document/json.h"
+#include "rawframe/process/self.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world_kest/game_files.h"
@@ -71,16 +75,22 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -375,20 +385,88 @@ bool readLine(std::FILE* in, std::string& line) {
     return any;
 }
 
+/// The records read from standard input, by a thread of their own, so a
+/// running operation is heard while the client is quiet: as the debug
+/// adapter reads its editor (D461, D502).
+struct Inbox {
+    std::mutex mutex;
+    std::condition_variable arrived;
+    std::deque<std::string> lines;
+    bool closed = false;
+};
+
 /// `session`: records from standard input answered on standard output
-/// until `end` or the input ends; 0 when every record succeeded.
-int session(const std::filesystem::path& game, const std::filesystem::path& root) {
-    rawframe::authoring_session::Session held{game, root};
-    std::string line;
-    while (readLine(stdin, line)) {
-        bool ended = false;
-        std::fputs(held.answer(line, ended).c_str(), stdout);
+/// until `end` or the input ends, and what the session says unasked as it
+/// says it; 0 when every record succeeded.
+int session(const std::filesystem::path& game, const std::filesystem::path& root, const std::filesystem::path& cook) {
+    rawframe::authoring_session::Session held{game, root, cook};
+    Inbox inbox;
+    std::thread reader([&inbox] {
+        std::string line;
+        for (;;) {
+            const bool kRead = readLine(stdin, line);
+            const std::scoped_lock kLock{inbox.mutex};
+            if (!kRead) {
+                inbox.closed = true;
+                inbox.arrived.notify_one();
+                return;
+            }
+            inbox.lines.push_back(std::move(line));
+            inbox.arrived.notify_one();
+        }
+    });
+    reader.detach();
+    const auto kSay = [](const std::string& said) {
+        std::fputs(said.c_str(), stdout);
         std::fflush(stdout);
-        if (ended) {
+    };
+    // A running operation is heard from ten times a second.
+    constexpr auto kHearEvery = std::chrono::milliseconds{100};
+    bool ended = false;
+    while (!ended) {
+        std::optional<std::string> line;
+        bool closed = false;
+        {
+            std::unique_lock lock{inbox.mutex};
+            inbox.arrived.wait_for(lock, kHearEvery, [&inbox] {
+                return !inbox.lines.empty() || inbox.closed;
+            });
+            if (!inbox.lines.empty()) {
+                line = std::move(inbox.lines.front());
+                inbox.lines.pop_front();
+            }
+            closed = inbox.closed && inbox.lines.empty();
+        }
+        for (const std::string& kSaid : held.poll()) {
+            kSay(kSaid);
+        }
+        if (line.has_value()) {
+            kSay(held.answer(*line, ended));
+        } else if (closed) {
+            // The input ended without `end`: as if it had said it, so a
+            // running operation is stopped and answers.
+            kSay(held.answer(R"({"kind":"authoring.end","id":null})", ended));
             break;
         }
     }
-    return held.clean() ? 0 : 1;
+    const int kStatus = held.clean() ? 0 : 1;
+    // Ended without the C library's cleanup, which would wait for standard
+    // input, held by the reader in a read that may never return.
+    std::fflush(stdout);
+    std::_Exit(kStatus);
+}
+
+/// The cook tool beside this program, where an export puts them both.
+std::filesystem::path cookBeside() {
+#if defined(_WIN32)
+    constexpr const char* kName = "rawframe-cook.exe";
+#else
+    constexpr const char* kName = "rawframe-cook";
+#endif
+    std::error_code error;
+    const std::filesystem::path kHere = std::filesystem::canonical(rawframe::process::ownExecutable(), error);
+    const std::filesystem::path kBeside = kHere.parent_path() / kName;
+    return !error && std::filesystem::is_regular_file(kBeside, error) ? kBeside : std::filesystem::path{};
 }
 
 } // namespace
@@ -412,9 +490,14 @@ int main(int argc, char** argv) {
     if (kVerb == "connect" && argc == 5) {
         return rawframe::author::connect(argv[2], argv[3], argv[4]);
     }
-    if (kVerb == "session" && (argc == 3 || argc == 4)) {
+    // `session <game> [<scene root>] [--cook <program>]`
+    const bool kCookNamed = argc >= 5 && std::string_view{argv[argc - 2]} == "--cook";
+    const int kSessionArguments = kCookNamed ? argc - 2 : argc;
+    if (kVerb == "session" && (kSessionArguments == 3 || kSessionArguments == 4)) {
         const std::filesystem::path kGame = argv[2];
-        return session(kGame, argc == 4 ? std::filesystem::path{argv[3]} : kGame.parent_path());
+        return session(kGame,
+                       kSessionArguments == 4 ? std::filesystem::path{argv[3]} : kGame.parent_path(),
+                       kCookNamed ? std::filesystem::path{argv[argc - 1]} : cookBeside());
     }
     if (kVerb == "migrate" && argc >= 4) {
         const bool kDry = std::string_view{argv[argc - 1]} == "--dry-run";
@@ -427,7 +510,7 @@ int main(int argc, char** argv) {
                "       rawframe-author apply <game description> <scene> <request> [--dry-run]\n"
                "       rawframe-author read <game description> <scene> <queries>\n"
                "       rawframe-author migrate <game description> <scene>... [--dry-run]\n"
-               "       rawframe-author session <game description> [<scene root>]\n"
+               "       rawframe-author session <game description> [<scene root>] [--cook <rawframe-cook>]\n"
                "       rawframe-author connect <endpoint> <pin file> <token file>\n",
                stderr);
     return 2;

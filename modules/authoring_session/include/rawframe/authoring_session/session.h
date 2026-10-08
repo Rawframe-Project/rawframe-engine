@@ -13,22 +13,31 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace rawframe::authoring_session {
 
 class Session {
 public:
     /// The game described at `game`, its scenes under `root`; read at
-    /// `hello`.
-    Session(std::filesystem::path game, std::filesystem::path root);
+    /// `hello`. `cook` is the cook tool `authoring.cook` runs (D502); none
+    /// refuses it.
+    Session(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook = {});
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
     /// Gives a preview's player its camera back.
     ~Session();
 
     /// One record, a line without its line feed, answered: the reply line,
-    /// its line feed included. `ended` is set by `end`.
+    /// its line feed included, or nothing for an operation that answers
+    /// when it ends (`cook`, D502). `ended` is set by `end`, whose reply
+    /// follows the last records of an operation it stopped.
     [[nodiscard]] std::string answer(std::string_view line, bool& ended);
+
+    /// What the session says unasked, each a line with its line feed: a
+    /// running operation's progress, and its reply once it ends. Asked as
+    /// often as a client wants to hear it.
+    [[nodiscard]] std::vector<std::string> poll();
     /// Whether every record so far succeeded, each slot of its answer too.
     [[nodiscard]] bool clean() const noexcept;
 

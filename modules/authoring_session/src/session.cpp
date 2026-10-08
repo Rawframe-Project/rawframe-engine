@@ -1,5 +1,6 @@
 #include "rawframe/authoring_session/session.h"
 
+#include "cooking.h"
 #include "handles.h"
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/delta.h"
@@ -66,8 +67,8 @@ struct Pressed {
 /// written to its file as it commits.
 class Held {
 public:
-    Held(std::filesystem::path game, std::filesystem::path root)
-        : game_(std::move(game)), root_(std::filesystem::weakly_canonical(root)) {
+    Held(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook)
+        : game_(std::move(game)), root_(std::filesystem::weakly_canonical(root)), cooking_(std::move(cook)) {
     }
     Held(const Held&) = delete;
     Held& operator=(const Held&) = delete;
@@ -89,14 +90,32 @@ public:
             return authoring::writeRefusal(id, record.error());
         }
         ended = record->verb == authoring::SessionVerb::End;
+        // An operation stopped by the end answers before the end does.
+        std::string last;
+        if (ended) {
+            for (const std::string& kSaid : cooking_.end()) {
+                last += kSaid;
+            }
+        }
         auto answered = handle(*record);
         clean_ = clean_ && answered.has_value() && !failed_;
-        return answered.has_value() ? authoring::writeReply(id, std::move(*answered))
-                                    : authoring::writeRefusal(id, answered.error());
+        // A cook started answers when it ends (D502).
+        if (answered.has_value() && answered->isNull()) {
+            return last;
+        }
+        return last + (answered.has_value() ? authoring::writeReply(id, std::move(*answered))
+                                            : authoring::writeRefusal(id, answered.error()));
     }
 
     bool clean() const noexcept {
         return clean_;
+    }
+
+    std::vector<std::string> poll() {
+        bool failed = false;
+        std::vector<std::string> said = cooking_.poll(failed);
+        clean_ = clean_ && !failed;
+        return said;
     }
 
 private:
@@ -148,6 +167,21 @@ private:
             return applied(record);
         case authoring::SessionVerb::ApplyTogether:
             return appliedTogether(record);
+        case authoring::SessionVerb::Cook: {
+            // The game's directory, as the cook tool reads its sources.
+            RAWFRAME_TRY(cooking_.start(record.id,
+                                        game_.parent_path(),
+                                        record.output,
+                                        record.cache.has_value() ? std::optional<std::filesystem::path>{*record.cache}
+                                                                 : std::nullopt));
+            return Value{};
+        }
+        case authoring::SessionVerb::Cancel: {
+            Value made = Value::object();
+            made.add("kind", Value::string("authoring.cancelling"));
+            made.add("found", Value::boolean(cooking_.cancel(record.operation)));
+            return made;
+        }
         case authoring::SessionVerb::Read:
             return answered(record);
         case authoring::SessionVerb::Undo:
@@ -898,18 +932,21 @@ private:
     /// slot of its answer, and whether every record so far succeeded.
     bool failed_ = false;
     bool clean_ = true;
+    /// The session's long-running operation, if one runs (D502).
+    Cooking cooking_;
 };
 
 } // namespace
 
 struct Session::State {
-    State(std::filesystem::path game, std::filesystem::path root) : held(std::move(game), std::move(root)) {
+    State(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook)
+        : held(std::move(game), std::move(root), std::move(cook)) {
     }
     Held held;
 };
 
-Session::Session(std::filesystem::path game, std::filesystem::path root)
-    : state_(std::make_unique<State>(std::move(game), std::move(root))) {
+Session::Session(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook)
+    : state_(std::make_unique<State>(std::move(game), std::move(root), std::move(cook))) {
 }
 
 Session::~Session() = default;
@@ -920,6 +957,10 @@ std::string Session::answer(std::string_view line, bool& ended) {
 
 bool Session::clean() const noexcept {
     return state_->held.clean();
+}
+
+std::vector<std::string> Session::poll() {
+    return state_->held.poll();
 }
 
 } // namespace rawframe::authoring_session
