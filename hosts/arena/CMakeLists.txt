@@ -267,7 +267,8 @@ if(RAWFRAME_BUILD_TESTS)
                          PASS_REGULAR_EXPRESSION "\"bodiesMade\":33,\"bodiesRemoved\":0,\"bodiesRefused\":0,\"teleports\":0,.*\"targets\":[1-9][0-9]*,\"characterMoves\":[1-9][0-9]*,\"jointsMade\":1,\"jointsRemoved\":0,\"jointsRefused\":0.*\"instancesMade\":9,\"instancesRemoved\":0,\"animatorsRefused\":0,.*\"rootMotions\":[1-9][0-9]*,\"stagesRun\":[1-9][0-9]*")
     # Two bots play the sample 3D game while the first one's mirrored World
     # is seen in 3D (D283): its client dresses every body it mirrors by its
-    # shape, the mound as the game's own mesh, and sees them through its
+    # shape, the mound as the game's own mesh (the strollers' figure the
+    # third, D508), and sees them through its
     # walker's camera; every model is drawn or culled, none malformed or of
     # a mesh unknown; the strollers' lanterns light the frames (D290);
     # the monitor's lens is seen into its render texture on demand, its
@@ -280,7 +281,7 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(plaza_seen PROPERTIES
                          FIXTURES_REQUIRED plaza_content
                          FAIL_REGULAR_EXPRESSION "\"truncated\""
-                         PASS_REGULAR_EXPRESSION "\"frames\":[1-9][0-9]+,\"framesViewed\":[1-9][0-9]+,\"viewWidth\":1280,\"viewHeight\":720,\"modelsDrawn\":[1-9][0-9]+,\"culled\":[1-9][0-9]*,\"hidden\":[0-9]+,\"malformed\":0,\"unknownMeshes\":0,\"overLimit\":0,\"mostDraws\":[1-9][0-9]*,\"gameMeshes\":2,\"gameMaterials\":7,\"unknownMaterials\":0,\"materialTextures\":2,\"texturesReady\":2,\"pictures\":2,\"picturesReady\":2,\"lightsLit\":[1-9][0-9]*,\"lightsCulled\":[0-9]+,\"lightsOverLimit\":0,\"clusterOverflow\":0.*\"code\":\"scene_views_summary\"[^\n]*\"drawn\":[1-9][0-9]*,\"kept\":[1-9][0-9]+,\"missed\":[0-9]+,\"leftOut\":0,\"refused\":0")
+                         PASS_REGULAR_EXPRESSION "\"frames\":[1-9][0-9]+,\"framesViewed\":[1-9][0-9]+,\"viewWidth\":1280,\"viewHeight\":720,\"modelsDrawn\":[1-9][0-9]+,\"culled\":[1-9][0-9]*,\"hidden\":[0-9]+,\"malformed\":0,\"unknownMeshes\":0,\"overLimit\":0,\"mostDraws\":[1-9][0-9]*,\"gameMeshes\":3,\"gameMaterials\":7,\"unknownMaterials\":0,\"materialTextures\":2,\"texturesReady\":2,\"pictures\":2,\"picturesReady\":2,\"lightsLit\":[1-9][0-9]*,\"lightsCulled\":[0-9]+,\"lightsOverLimit\":0,\"clusterOverflow\":0.*\"code\":\"scene_views_summary\"[^\n]*\"drawn\":[1-9][0-9]*,\"kept\":[1-9][0-9]+,\"missed\":[0-9]+,\"leftOut\":0,\"refused\":0")
     # At the low quality (D318), the paving samples no texture: the planks
     # are the one texture read.
     configure_file(tests/plaza_seen_low.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_seen_low.conf @ONLY)
@@ -296,7 +297,8 @@ if(RAWFRAME_BUILD_TESTS)
         # ambient occlusion found (D327), the monitor's lens drawn into its
         # render texture (D361), and a picture read back lit in many shades;
         # the bots wander, so the last may be a camera against the ramp
-        # (D433a).
+        # (D433a); and the strollers' figures skinned as their animators
+        # pose them (D508).
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.tga)
         configure_file(tests/plaza_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf @ONLY)
         add_test(NAME plaza_drawn
@@ -307,7 +309,7 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":[3-9],[^\n]*\"framesOccluded\":[1-9][0-9]+,[^\n]*\"postProcessesRun\":[1-9][0-9]+,\"postProcessesLeftOut\":0,\"emittersDrawn\":[1-9][0-9]+,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]+,\"ribbonsDrawn\":[1-9][0-9]+,\"viewFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"mostColors\":[1-9][0-9][0-9]+,[^\n]*\"captured\":true")
+                             "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":([3-9]|1[0-9]),[^\n]*\"framesOccluded\":[1-9][0-9]+,[^\n]*\"postProcessesRun\":[1-9][0-9]+,\"postProcessesLeftOut\":0,\"emittersDrawn\":[1-9][0-9]+,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]+,\"ribbonsDrawn\":[1-9][0-9]+,\"viewFrames\":[1-9][0-9]*,[^\n]*\"modelsSkinned\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"mostColors\":[1-9][0-9][0-9]+,[^\n]*\"captured\":true")
         # Two bots play Stalls while the first one's view is drawn (D389): the
         # lot, the stalls, and its cursor as models seen from above, its
         # coins' words given in the game's font and drawn (D398), and a picture

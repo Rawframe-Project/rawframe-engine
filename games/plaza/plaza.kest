@@ -12,6 +12,8 @@ import rawframe.world
 
 // The walkers' collision class (plaza.game).
 const WALKER: u64 = 0x5f23859a6c00ebba
+// The strollers' skinned figure (D508).
+const FIGURE: u64 = 0x6b27dc9178d0e4dd
 
 // The materials plaza.game's `material` lines name.
 const BRASS: u64 = 0x6d2c9bd611d50fdf
@@ -169,13 +171,15 @@ fn stroll(count: i32, strollers: [Stroller], motions: [animation.RootMotion], po
         poses[i].qw = f32(m.facingW)
         strollers[i].clock = strollers[i].clock + u32(1)
         strollers[i] = stride(strollers[i])
-        // The middle at head height, turned into its frame by its facing now.
+        // The middle at head height, turned into its frame by its facing now:
+        // the frame's origin is the body's middle, where the stroller's pose
+        // is, and its head half a meter above it (D508).
         let fc = m.facingW * m.facingW - m.facingY * m.facingY
         let fs = 2.0 * m.facingY * m.facingW
         let wx = 0.0 - poses[i].x
         let wz = 0.0 - poses[i].z
         strollers[i].look_x = fc * wx - fs * wz
-        strollers[i].look_y = 1.9
+        strollers[i].look_y = 0.5
         strollers[i].look_z = fs * wx + fc * wz
         // The head as the step posed it, turned toward last step's look.
         let head = animation.bone(entities[i], u32(2))
@@ -305,12 +309,13 @@ fn sky(count: i32, sticks: [controls.Stick], skies: [model.Sky]) {
     }
 }
 
-// What a client draws of a stroller (D288): a brass capsule (D303) of the
-// walkers' girth, 1.8 meters tall, where its pose stands.
+// What a client draws of a stroller (D288): a brass (D303) figure, 2.05
+// meters from its feet to the top of its head, skinned to its rig, so it
+// walks as the stroller's replicated animator poses it there (D258, D508).
 fn figure(count: i32, strollers: [Stroller], figures: [model.Model]) {
     let i = 0
     while i < count {
-        figures[i] = model.Model(model.CAPSULE, 0.3, 0.45, 0.3, 0xFFFFFFFF, BRASS)
+        figures[i] = model.Model(FIGURE, 1.0, 1.0, 1.0, 0xFFFFFFFF, BRASS)
         i = i + 1
     }
 }

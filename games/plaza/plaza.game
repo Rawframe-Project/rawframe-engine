@@ -14,6 +14,9 @@ collision class walker 5f23859a6c00ebba
 # crate's planks a texture kept exact (D314).
 mesh 6d3cbd2231e069f1 mound.gltf
 mesh 7f3a9c21e84d06b5 crate.gltf
+# The strollers' figure (D508): legs, a torso, and a head skinned to the
+# stroll rig's hips, spine, and head, posed as the strollers walk.
+mesh 6b27dc9178d0e4dd figure.gltf
 
 # What the models are made of (D303): the strollers are brass, the pillars
 # polished marble, and the floor paved, its slabs a texture (D309), kept
@@ -140,7 +143,10 @@ spawn 1 plaza.stroller left=90 rawframe.physics3d.pose x=18 y=1.4 z=-8 qw=1 rawf
 spawn 1 plaza.stroller left=60 rawframe.physics3d.pose x=0 y=1.4 z=18 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 spawn 1 plaza.stroller left=30 rawframe.physics3d.pose x=-2 y=1.4 z=-20 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 
-replicate plaza.stroller plaza.hall plaza.spring plaza.monitor rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick
+# The animators replicate, so a client plays them where it draws (D258)
+# and poses the strollers' figures (D508); their root motion too, which
+# takes the walk out of a client's pose as it does out of the server's.
+replicate plaza.stroller plaza.hall plaza.spring plaza.monitor rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick rawframe.animation.animator rawframe.animation.root_motion
 player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character
 input plaza.stick
 # A client makes its stick from its player's actions (plaza.actions) with
