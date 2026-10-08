@@ -218,6 +218,11 @@ struct SceneDraw {
     /// vertex is skinned in the model's space, then the model places it.
     std::uint32_t palette = 0;
     std::uint32_t joints = 0;
+    /// The palette it was posed with the frame before, as many matrices
+    /// among the frame's: what its vertices' motion is measured from, as
+    /// `previous` is its model's (D510); `palette` where it was not posed
+    /// then.
+    std::uint32_t previousPalette = 0;
 };
 
 /// The light a frame is drawn in, linear Rec. 709 (ADR-0047) in physical

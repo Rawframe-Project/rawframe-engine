@@ -136,6 +136,8 @@ struct Scene::State {
     struct Placement {
         std::array<float, 9> turned{};
         std::array<double, 3> position{};
+        /// The palette it was posed with, if posed (D510).
+        std::vector<Matrix> palette;
     };
     std::map<std::pair<world::EntityHandle, std::uint32_t>, Placement> placed;
     std::map<std::pair<world::EntityHandle, std::uint32_t>, Placement> placing;
@@ -431,7 +433,8 @@ struct Scene::State {
             // this frame's eye.
             const std::pair kKey{instance->entity, instance->component};
             draw.previous = draw.model;
-            if (const auto kBefore = placed.find(kKey); kBefore != placed.end()) {
+            const auto kBefore = placed.find(kKey);
+            if (kBefore != placed.end()) {
                 for (std::size_t column = 0; column < 3; ++column) {
                     for (std::size_t row = 0; row < 3; ++row) {
                         draw.previous[(column * 4) + row] = kBefore->second.turned[(column * 3) + row];
@@ -457,16 +460,16 @@ struct Scene::State {
                 return kMaterial->second;
             };
             // Its palette, the frame's from here, for its draws and its
-            // shadows' alike; past the frame's room, drawn as bound (D508).
-            if (instance->joints != 0) {
-                if (frame.palette.size() + instance->joints <= settings.limits.maximumPalette) {
-                    draw.palette = static_cast<std::uint32_t>(frame.palette.size());
-                    draw.joints = instance->joints;
-                    const auto kFirst = posed.begin() + instance->palette;
-                    frame.palette.insert(frame.palette.end(), kFirst, kFirst + instance->joints);
-                } else {
-                    ++frame.paletteOverLimit;
-                }
+            // shadows' alike, and the frame before's (D510); past the
+            // frame's room, drawn as bound (D508).
+            if (instance->joints != 0 &&
+                !paletteInto(std::span{posed}.subspan(instance->palette, instance->joints),
+                             kBefore != placed.end() ? std::span<const Matrix>{kBefore->second.palette}
+                                                     : std::span<const Matrix>{},
+                             settings.limits.maximumPalette,
+                             frame.palette,
+                             draw)) {
+                ++frame.paletteOverLimit;
             }
             std::vector<SceneDraw> runs;
             const std::uint32_t kOwn = kPlaceOf(kModel.material);
@@ -517,6 +520,8 @@ struct Scene::State {
                 }
             }
             now.position = instance->position;
+            now.palette.assign(frame.palette.begin() + draw.palette,
+                               frame.palette.begin() + draw.palette + draw.joints);
             frame.skinned += draw.joints != 0 ? 1 : 0;
             frame.draws.insert(frame.draws.end(), runs.begin(), runs.end());
             ++frame.drawn;

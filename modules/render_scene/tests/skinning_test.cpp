@@ -2,6 +2,7 @@
 // with a palette, each joint its bone as posed after its inverse bind, the
 // bone found by its target whatever the skeleton's order; one not played,
 // or whose skeleton lacks a joint's bone, is drawn as its mesh was bound;
+// a posed model carries the frame before's palette for its motion (D510);
 // and the frame's palette has a limit.
 
 #include "rawframe/render_scene/scene.h"
@@ -143,4 +144,35 @@ RAWFRAME_TEST(AFramesPaletteHasALimit) {
     const SceneFrame& kFrame = scene->queue({.fovY = 1, .near = 0.1F, .aspect = 1});
     RAWFRAME_EXPECT(kFrame.drawn == 1 && kFrame.skinned == 0 && kFrame.paletteOverLimit == 1 &&
                     kFrame.palette.empty() && kFrame.draws[0].joints == 0);
+}
+
+RAWFRAME_TEST(APosedModelCarriesThePaletteItWasPosedWithBefore) {
+    Rig rig;
+    const world::EntityHandle kLegged = rig.spawn(Model{.mesh = kLeg}, physics3d::Pose3D{.z = -10, .qw = 1});
+    auto scene = sceneOf(rig);
+    Poses poses;
+    pose(poses, kLegged);
+    // The first frame: posed for the first time, its motion measured from
+    // its own palette.
+    scene->extract(rig.world, &poses);
+    const SceneFrame& kFirst = scene->queue({.fovY = 1, .near = 0.1F, .aspect = 1});
+    RAWFRAME_EXPECT(kFirst.palette.size() == 2 && !kFirst.draws.empty() && kFirst.draws[0].previousPalette == 0);
+    const Matrix kHipBefore = kFirst.palette[0];
+    // The hip steps a meter on: this frame's palette, then the last's.
+    poses.poses[kLegged].bones[1].translation = {6, 0, 0};
+    scene->extract(rig.world, &poses);
+    const SceneFrame& kSecond = scene->queue({.fovY = 1, .near = 0.1F, .aspect = 1});
+    RAWFRAME_EXPECT(kSecond.palette.size() == 4 && !kSecond.draws.empty());
+    if (kSecond.palette.size() != 4 || kSecond.draws.empty()) {
+        return;
+    }
+    RAWFRAME_EXPECT(kSecond.draws[0].palette == 0 && kSecond.draws[0].previousPalette == 2);
+    RAWFRAME_EXPECT(near(kSecond.palette[0][12], 6) && kSecond.palette[2] == kHipBefore);
+    // Without the room for both, it is drawn as bound.
+    auto tight = sceneOf(rig, {.maximumPalette = 3});
+    tight->extract(rig.world, &poses);
+    static_cast<void>(tight->queue({.fovY = 1, .near = 0.1F, .aspect = 1}));
+    tight->extract(rig.world, &poses);
+    const SceneFrame& kTight = tight->queue({.fovY = 1, .near = 0.1F, .aspect = 1});
+    RAWFRAME_EXPECT(kTight.paletteOverLimit == 1 && kTight.palette.empty());
 }

@@ -33,6 +33,26 @@ Matrix matrixOf(const animation::Transform& transform) noexcept {
     return out;
 }
 
+bool paletteInto(std::span<const Matrix> now,
+                 std::span<const Matrix> before,
+                 std::size_t room,
+                 std::vector<Matrix>& palette,
+                 SceneDraw& draw) {
+    const bool kPosedBefore = before.size() == now.size();
+    if (palette.size() + (now.size() * (kPosedBefore ? 2 : 1)) > room) {
+        return false;
+    }
+    draw.palette = static_cast<std::uint32_t>(palette.size());
+    draw.joints = static_cast<std::uint32_t>(now.size());
+    draw.previousPalette = draw.palette;
+    palette.insert(palette.end(), now.begin(), now.end());
+    if (kPosedBefore) {
+        draw.previousPalette = static_cast<std::uint32_t>(palette.size());
+        palette.insert(palette.end(), before.begin(), before.end());
+    }
+    return true;
+}
+
 bool Skinning::pose(std::uint64_t mesh,
                     const mesh::Skin& skin,
                     std::span<const base::Bits128> bones,

@@ -21,6 +21,16 @@ namespace rawframe::render_scene {
 /// A transform as a column-major matrix: scaled, then turned, then moved.
 [[nodiscard]] Matrix matrixOf(const animation::Transform& transform) noexcept;
 
+/// Puts a posed model's palette `now` among the frame's `palette`, and
+/// after it `before`, the frame before's, where it holds as many joints,
+/// naming both on `draw` (D508, D510); false, putting nothing, past `room`
+/// matrices.
+bool paletteInto(std::span<const Matrix> now,
+                 std::span<const Matrix> before,
+                 std::size_t room,
+                 std::vector<Matrix>& palette,
+                 SceneDraw& draw);
+
 class Skinning {
 public:
     /// Appends `skin`'s palette posed by `pose`, whose bones are `bones` in
