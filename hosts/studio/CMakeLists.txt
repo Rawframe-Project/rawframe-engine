@@ -14,7 +14,8 @@ find_program(RAWFRAME_XVFB Xvfb)
 if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # Studio on runners: its session welcomed, its three scenes listed by
     # name, and its panels and words drawn in a real window, a frame as they
-    # change and a few a second while they do not (D494).
+    # change and a few a second while they do not (D494); Move to among
+    # its buttons (D498).
     add_test(NAME studio_shown
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/shown.sh $<TARGET_FILE:rawframe_host_studio_tool>
@@ -23,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":3,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":20,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":3,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":21,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio clicked: runners' level chosen shows its entities, read from
     # the session, and its ground chosen shows its four components and is
     # chosen in the session; its body's width typed as 12 and given with
@@ -123,6 +124,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "clicked at 800,65.*level.scene written: yes.*\"texture\": 11839623990059228360.*\"name\": \"ground copy\",[ \n]*\"components\": {[ \n]*\"rawframe.physics2d.body\": {[ \n]*\"height\": 0.5,[ \n]*\"shape\": 1,[ \n]*\"width\": 40[ \n]*},[ \n]*\"rawframe.physics2d.pose\": {},[ \n]*\"rawframe.physics2d.velocity\": {},[ \n]*\"runners.tile\": {[ \n]*\"color\": 4294967295,[^}]*\"texture\": 11839623990059228360,.*\"code\":\"studio_summary\"[^\n]*\"components\":4,[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"undoable\":1,[^\n]*\"status\":\"ground copy made\"")
+    # An entity moved to another scene (D498): ground, chosen in the level,
+    # Move to pressed and the hall's row clicked, is made in the hall with
+    # its id and components and deleted from the level, both written, in
+    # one transaction over both scenes (D497), the level left one entry to
+    # undo and eight entities.
+    add_test(NAME studio_moves_to_scene
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game hall.scene 200,126 640,129 628,65 200,97
+                     "until=studio_said,status=\"ground moved to hall.scene\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_moves_to_scene PROPERTIES
+                         ENVIRONMENT "STUDIO_SHOW_WRITTEN=1;STUDIO_ALSO_WRITTEN=level.scene"
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "saw studio_said,status=.ground moved to hall.scene.*hall.scene written: yes.*\"id\": \"c5400cf8-4b07-4d16-84c2-951852c66b40\",[ \n]*\"name\": \"ground\".*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":8,[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"undoable\":1,")
     # A component authored against another layout updated (D452): the
     # copy of runners' level records an older mark for the physics body,
     # so ground's body heading offers Update, which carries it over and

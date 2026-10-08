@@ -47,6 +47,15 @@ else
         cat "$work/game/$3"
     fi
 fi
+# And another scene the clicks write too, in STUDIO_ALSO_WRITTEN, as a move
+# from one scene to another (D498).
+if [ -n "${STUDIO_ALSO_WRITTEN:-}" ]; then
+    if cmp -s "$(dirname "$2")/$STUDIO_ALSO_WRITTEN" "$work/game/$STUDIO_ALSO_WRITTEN"; then
+        echo "$STUDIO_ALSO_WRITTEN written: no"
+    else
+        echo "$STUDIO_ALSO_WRITTEN written: yes"
+    fi
+fi
 if grep -q '"device_unavailable"' "$work/log" && [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then
     echo "skip: no device"
     exit 0

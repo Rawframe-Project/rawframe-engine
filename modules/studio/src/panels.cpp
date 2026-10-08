@@ -89,6 +89,12 @@ result::Status ShellParticipant::build() {
     // The chosen entity copied whole (D458), its operations the catalog's.
     if (catalog_.offers("scene.create_entity") && catalog_.offers("scene.add_component") &&
         catalog_.offers("scene.set_field")) {
+        // Moved to another scene, made there and deleted here (D498);
+        // before Duplicate, which keeps its place at the heading's end.
+        if (catalog_.offers("scene.destroy_entity")) {
+            RAWFRAME_TRY_ASSIGN(moveNode_, box(lastHeading_, ui::Layout{.padding = {8, 2, 8, 2}}, kRow));
+            RAWFRAME_TRY(words(moveNode_, "Move to", kText, 13));
+        }
         RAWFRAME_TRY_ASSIGN(duplicateNode_, box(lastHeading_, ui::Layout{.padding = {8, 2, 8, 2}}, kRow));
         RAWFRAME_TRY(words(duplicateNode_, "Duplicate", kText, 13));
     }

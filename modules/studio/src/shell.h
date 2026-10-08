@@ -222,6 +222,14 @@ private:
     /// its components and the values the scene gives them, in one
     /// transaction (D458).
     void duplicate();
+    /// The operations that make `entity`, named `called`, with each of the
+    /// components `components` reads and the values the scene gives them.
+    [[nodiscard]] static std::vector<Value>
+    copyOf(const Value& components, const std::string& entity, const std::string& called);
+    /// Moves the chosen entity, its id and components, to the scene listed
+    /// at `sceneAt`: made there and deleted here in one transaction over
+    /// both scenes (D498).
+    void moveTo(std::size_t sceneAt);
 
     /// Moves the chosen entity one place earlier (`by` -1) or later (+1)
     /// among the scene's own entities.
@@ -364,6 +372,10 @@ private:
     ui::Node uninstanceNode_{};
     ui::Node upNode_{};
     ui::Node duplicateNode_{};
+    ui::Node moveNode_{};
+    /// Move to was pressed: the next press on a scene's row moves the
+    /// chosen entity there, and any other lets it go (D498).
+    bool moving_ = false;
     /// The heading `column` made last.
     ui::Node lastHeading_{};
     ui::Node downNode_{};

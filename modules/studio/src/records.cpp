@@ -83,6 +83,10 @@ Outcome outcomeOf(std::string_view reply) {
         return outcome;
     }
     const Value* answer = kParsed->find("answer");
+    if (const Value* documents = answer != nullptr ? answer->find("documents") : nullptr;
+        documents != nullptr && documents->kind() == Value::Kind::Array && !documents->items().empty()) {
+        answer = &documents->items()[0];
+    }
     const Value* results = answer != nullptr ? answer->find("results") : nullptr;
     const bool kSlot = results != nullptr && results->kind() == Value::Kind::Array && !results->items().empty();
     const Value* slot = kSlot ? &results->items()[0] : nullptr;
@@ -131,6 +135,20 @@ std::string_view lastPart(std::string_view name) {
     return kDot == std::string_view::npos ? name : name.substr(kDot + 1);
 }
 
+/// An atomic request of `given`, in order.
+Value requestOf(std::vector<Value> given) {
+    Value operations = Value::array();
+    for (Value& operation : given) {
+        operations.push(std::move(operation));
+    }
+    Value request = Value::object();
+    request.add("formatVersion", Value::integer(1));
+    request.add("kind", Value::string("authoring.request"));
+    request.add("batch", Value::string("atomic"));
+    request.add("operations", std::move(operations));
+    return request;
+}
+
 Value recordOf(std::string_view kind, std::int64_t id, std::string_view scene) {
     Value record = Value::object();
     record.add("kind", Value::string(std::string{kind}));
@@ -165,17 +183,23 @@ Value applyRecord(std::int64_t id, std::string_view scene, Value operation) {
 }
 
 Value applyRecord(std::int64_t id, std::string_view scene, std::vector<Value> given) {
-    Value operations = Value::array();
-    for (Value& operation : given) {
-        operations.push(std::move(operation));
-    }
-    Value request = Value::object();
-    request.add("formatVersion", Value::integer(1));
-    request.add("kind", Value::string("authoring.request"));
-    request.add("batch", Value::string("atomic"));
-    request.add("operations", std::move(operations));
     Value record = recordOf("authoring.apply", id, scene);
-    record.add("request", std::move(request));
+    record.add("request", requestOf(std::move(given)));
+    return record;
+}
+
+Value togetherRecord(std::int64_t id, std::vector<std::pair<std::string, std::vector<Value>>> parts) {
+    Value documents = Value::array();
+    for (auto& [scene, operations] : parts) {
+        Value part = Value::object();
+        part.add("scene", Value::string(scene));
+        part.add("request", requestOf(std::move(operations)));
+        documents.push(std::move(part));
+    }
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.apply_together"));
+    record.add("id", Value::integer(id));
+    record.add("documents", std::move(documents));
     return record;
 }
 

@@ -14,6 +14,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace rawframe::studio {
@@ -44,6 +45,7 @@ struct Outcome {
     std::optional<Value> view;
 };
 
+/// Of an apply's reply, or of the first scene's in an apply together's.
 [[nodiscard]] Outcome outcomeOf(std::string_view reply);
 
 /// What `authoring.view` or `authoring.preview` answers: whether it was
@@ -207,6 +209,9 @@ readRecord(std::int64_t id, std::string_view scene, std::string_view operation, 
 [[nodiscard]] Value applyRecord(std::int64_t id, std::string_view scene, Value operation);
 /// The same with several operations, applied together or not at all.
 [[nodiscard]] Value applyRecord(std::int64_t id, std::string_view scene, std::vector<Value> operations);
+/// `authoring.apply_together` (D497): each scene's operations, atomic, all
+/// kept or none.
+[[nodiscard]] Value togetherRecord(std::int64_t id, std::vector<std::pair<std::string, std::vector<Value>>> parts);
 /// `authoring.select` of `entity` in `scene`.
 [[nodiscard]] Value selectRecord(std::int64_t id, std::string_view scene, std::string_view entity);
 /// `authoring.undo` or `authoring.redo` (`kind`) of `scene`.

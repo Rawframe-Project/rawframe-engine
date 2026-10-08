@@ -39,6 +39,8 @@ void ShellParticipant::pressAt(float x, float y) {
         static_cast<void>(tree_->layOut(root_, static_cast<float>(width_), static_cast<float>(height_), kSeconds));
     }
     pressedSinceLayout_ = true;
+    // Move to waits for this press alone (D498).
+    const bool kMoving = std::exchange(moving_, false);
     const auto kHit = tree_->hit(root_, x, y);
     if (!kHit.has_value() || !kHit->node.has_value()) {
         return;
@@ -81,6 +83,10 @@ void ShellParticipant::pressAt(float x, float y) {
     } else if (kNode == duplicateNode_ && !entity_.empty()) {
         endEdit();
         duplicate();
+    } else if (kNode == moveNode_ && !entity_.empty()) {
+        endEdit();
+        moving_ = true;
+        say("choose the scene to move it to");
     } else if ((kNode == upNode_ || kNode == downNode_) && !entity_.empty()) {
         endEdit();
         move(kNode == upNode_ ? -1 : 1);
@@ -115,7 +121,11 @@ void ShellParticipant::pressAt(float x, float y) {
         endEdit();
         stepTo(static_cast<std::size_t>(kEntry - entryRows_.begin()));
     } else if (const auto kScene = std::ranges::find(sceneRows_, kNode); kScene != sceneRows_.end()) {
-        showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
+        if (kMoving) {
+            moveTo(static_cast<std::size_t>(kScene - sceneRows_.begin()));
+        } else {
+            showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
+        }
     } else if (const auto kEntity = std::ranges::find(entityRows_, kNode); kEntity != entityRows_.end()) {
         showEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
     } else if (const auto kFieldAt = std::ranges::find(fields_, kNode, &FieldRow::value); kFieldAt != fields_.end()) {
@@ -355,20 +365,25 @@ void ShellParticipant::duplicate() {
     }
     const std::string kCopy = mintedIdentity();
     const std::string kName = (entityAt_ < names_.size() ? names_[entityAt_] : std::string{}) + " copy";
+    commitAll(copyOf(*components, kCopy, kName), kName + " made", kCopy);
+}
+
+std::vector<Value>
+ShellParticipant::copyOf(const Value& components, const std::string& entity, const std::string& called) {
     std::vector<Value> operations;
     Value made = Value::object();
     made.add("operation", Value::string("scene.create_entity"));
-    made.add("entity", Value::string(kCopy));
-    made.add("name", Value::string(kName));
+    made.add("entity", Value::string(entity));
+    made.add("name", Value::string(called));
     operations.push_back(std::move(made));
-    for (const Value& each : components->items()) {
+    for (const Value& each : components.items()) {
         const Value* component = each.find("component");
         if (component == nullptr || component->text() == nullptr) {
             continue;
         }
         Value added = Value::object();
         added.add("operation", Value::string("scene.add_component"));
-        added.add("entity", Value::string(kCopy));
+        added.add("entity", Value::string(entity));
         added.add("component", *component);
         operations.push_back(std::move(added));
         // Each value the scene gives, as it reads: a reference names its
@@ -389,7 +404,7 @@ void ShellParticipant::duplicate() {
                 continue;
             }
             Value set = Value::object();
-            set.add("entity", Value::string(kCopy));
+            set.add("entity", Value::string(entity));
             set.add("component", *component);
             set.add("field", *name);
             if (kKind == "entity") {
@@ -402,7 +417,40 @@ void ShellParticipant::duplicate() {
             operations.push_back(std::move(set));
         }
     }
-    commitAll(std::move(operations), kName + " made", kCopy);
+    return operations;
+}
+
+void ShellParticipant::moveTo(std::size_t sceneAt) {
+    const std::string kTarget = sceneAt < scenes_.size() ? scenes_[sceneAt] : std::string{};
+    const bool kBrought = entityAt_ < brought_.size() && brought_[entityAt_];
+    const std::optional<Value> kRead = read(scene_, "scene.read_entity", entity_);
+    const Value* components = kRead.has_value() ? kRead->find("components") : nullptr;
+    if (kTarget == scene_ || kBrought || components == nullptr || components->kind() != Value::Kind::Array) {
+        ++refused_;
+        say(kTarget == scene_ ? "already in that scene"
+            : kBrought        ? "an instance's entity is its source's to move"
+                              : "nothing to move");
+        return;
+    }
+    // Its own id kept: made in the other scene and deleted from this one,
+    // both or neither (D497). A reference it holds to an entity left here
+    // names nothing there, and refuses the whole.
+    const std::string kName = entityAt_ < names_.size() ? names_[entityAt_] : std::string{};
+    std::vector<Value> gone;
+    gone.push_back(operationOn("scene.destroy_entity"));
+    std::vector<std::pair<std::string, std::vector<Value>>> parts;
+    parts.emplace_back(scene_, std::move(gone));
+    parts.emplace_back(kTarget, copyOf(*components, entity_, kName));
+    const Outcome kOutcome = outcomeOf(ask(togetherRecord(next(), std::move(parts))));
+    told(kOutcome);
+    if (kOutcome.done) {
+        ++applied_;
+        say(kName + " moved to " + kTarget);
+    } else {
+        ++refused_;
+        say(kOutcome.message);
+    }
+    refresh(std::nullopt);
 }
 
 void ShellParticipant::move(int by) {
