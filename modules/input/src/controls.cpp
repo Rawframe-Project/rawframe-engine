@@ -133,7 +133,10 @@ constexpr std::array<std::uint16_t, kKeys.size()> kKeyUsages = {
     41,  58,  59, 60, 61,  62,  63,  64, 65,  66,  67,  68,  69, 70, 71, 72,     // function
 };
 
-constexpr std::array<std::string_view, 9> kMouse = {
+// `delta` is the device's own motion, given while the pointer is captured;
+// `motion` the cursor's over the window, in logical pixels (D521): two
+// streams SPEC-0025 keeps apart.
+constexpr std::array<std::string_view, 10> kMouse = {
     "left",
     "right",
     "middle",
@@ -143,6 +146,7 @@ constexpr std::array<std::string_view, 9> kMouse = {
     "wheel_y",
     "delta",
     "pointer",
+    "motion",
 };
 
 constexpr std::array<std::string_view, 19> kGamepad = {
@@ -205,7 +209,8 @@ ControlShape shapeOf(Control control) noexcept {
     if (kName == "wheel_x" || kName == "wheel_y" || kName == "trigger_left" || kName == "trigger_right") {
         return ControlShape::Axis1;
     }
-    if (kName == "delta" || kName == "stick_left" || kName == "stick_right" || kName == "pointer") {
+    if (kName == "delta" || kName == "motion" || kName == "stick_left" || kName == "stick_right" ||
+        kName == "pointer") {
         return ControlShape::Axis2;
     }
     return ControlShape::Digital;

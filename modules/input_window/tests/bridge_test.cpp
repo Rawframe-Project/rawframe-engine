@@ -32,6 +32,7 @@ constexpr std::size_t kMove = 4;
 constexpr std::size_t kAim = 5;
 constexpr std::size_t kDash = 6;
 constexpr std::size_t kSteer = 7;
+constexpr std::size_t kGlide = 8;
 
 Binding single(DeviceClass device, std::string_view name) {
     Binding binding;
@@ -59,9 +60,11 @@ ActionSet actions() {
     dash.bindings = {single(DeviceClass::Touch, "right")};
     Action steer{.id = 8, .name = "steer", .type = ValueType::Axis2D};
     steer.bindings = {single(DeviceClass::Touch, "stick_left")};
-    set.actions = {jump, fire, zoom, look, move, aim, dash, steer};
+    Action glide{.id = 9, .name = "glide", .type = ValueType::Axis2D};
+    glide.bindings = {single(DeviceClass::Mouse, "motion")};
+    set.actions = {jump, fire, zoom, look, move, aim, dash, steer, glide};
     set.contexts.push_back(
-        Context{.id = 10, .name = "play", .actions = {kJump, kFire, kZoom, kLook, kMove, kAim, kDash, kSteer}});
+        Context{.id = 10, .name = "play", .actions = {kJump, kFire, kZoom, kLook, kMove, kAim, kDash, kSteer, kGlide}});
     return set;
 }
 
@@ -171,6 +174,40 @@ RAWFRAME_TEST(TheCursorsPlaceIsThePointerAndStaysWhereItWasLastTold) {
     rig.take(moved);
     rig.commit();
     RAWFRAME_EXPECT(near(rig.state(kAim).x, 0) && near(rig.state(kAim).y, 0));
+}
+
+RAWFRAME_TEST(TheCursorsMotionIsAStreamApartFromTheDevices) {
+    // The window system gives a pointer's own motion only while it is
+    // captured; the cursor's motion over the window is `motion` (D521), up
+    // positive, summed over a tick, and the two never mix (SPEC-0025).
+    Rig rig;
+    window::Event moved = record(window::EventKind::CursorMoved);
+    moved.pointer.position = {.x = 600, .y = 300};
+    rig.take(moved);
+    rig.commit();
+    // Where it first is, it has not moved.
+    RAWFRAME_EXPECT(near(rig.state(kGlide).x, 0) && near(rig.state(kGlide).y, 0));
+    moved.pointer.position = {.x = 610, .y = 290};
+    rig.take(moved);
+    moved.pointer.position = {.x = 640, .y = 280};
+    rig.take(moved);
+    window::Event raw = record(window::EventKind::RawPointerDelta);
+    raw.motion = {.x = 5, .y = 0};
+    rig.take(raw);
+    rig.commit();
+    RAWFRAME_EXPECT(near(rig.state(kGlide).x, 40) && near(rig.state(kGlide).y, 20));
+    RAWFRAME_EXPECT(near(rig.state(kLook).x, 5) && near(rig.state(kLook).y, 0));
+    // Leaving and coming back elsewhere is no motion, nor is focus going.
+    rig.take(record(window::EventKind::CursorLeft));
+    moved.pointer.position = {.x = 100, .y = 100};
+    rig.take(moved);
+    rig.commit();
+    RAWFRAME_EXPECT(near(rig.state(kGlide).x, 0) && near(rig.state(kGlide).y, 0));
+    rig.take(record(window::EventKind::FocusLost));
+    moved.pointer.position = {.x = 300, .y = 100};
+    rig.take(moved);
+    rig.commit();
+    RAWFRAME_EXPECT(near(rig.state(kGlide).x, 0) && near(rig.state(kGlide).y, 0));
 }
 
 RAWFRAME_TEST(AGamepadsSticksCombineAndItsDepartureLetsGo) {

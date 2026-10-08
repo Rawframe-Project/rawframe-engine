@@ -2,8 +2,9 @@
 
 // A window system's raw input as a player's devices (SPEC-0025 into
 // SPEC-0029): keys by their HID usage, mouse buttons, the wheel, a
-// captured pointer's motion, and mapped gamepads become control events of
-// their devices in the feed; losing focus or input lets go of everything.
+// captured pointer's motion, the cursor's place and its motion over the
+// window (D521), and mapped gamepads become control events of their
+// devices in the feed; losing focus or input lets go of everything.
 // The window reports sticks one axis at a time, down positive; the feed
 // gets both axes of a stick together, up positive, as the mapper reads
 // them. Touches become a touch screen's virtual controls (D387). The other way, what the feed asks a gamepad to feel
@@ -16,6 +17,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -55,8 +57,11 @@ private:
 
     void button(input::DeviceId device, input::DeviceClass deviceClass, std::string_view name, bool down);
     void gamepadAxis(const window::Event& event);
+    void cursorMoved(const window::Event& event);
 
     input::Feed* feed_;
+    /// Where the cursor was last told over the window, while it stays there.
+    std::optional<window::Position> cursor_;
     input::TouchControls touch_;
     std::vector<Pad> pads_;
     std::uint32_t nextDevice_;

@@ -92,12 +92,12 @@ void Bridge::take(const window::Event& event) {
         }
         break;
     case EventKind::CursorMoved:
-        // Where the cursor is over the window, logical pixels from its top
-        // left, y down (D367).
-        feed_->submit({.device = kMouse,
-                       .control = *input::controlNamed(input::DeviceClass::Mouse, "pointer"),
-                       .x = event.pointer.position.x,
-                       .y = event.pointer.position.y});
+        cursorMoved(event);
+        break;
+    case EventKind::CursorEntered:
+    case EventKind::CursorLeft:
+        // Where the cursor comes back in is no motion from where it left.
+        cursor_.reset();
         break;
     case EventKind::RawPointerDelta:
         // Up positive, as a stick is, so one look action reads both.
@@ -125,6 +125,7 @@ void Bridge::take(const window::Event& event) {
         // the one release the mapper has, and never leaves one held.
         feed_->releaseAll();
         touch_.forget();
+        cursor_.reset();
         break;
     case EventKind::GamepadAdded:
         if (kPad == pads_.end()) {
@@ -156,6 +157,25 @@ void Bridge::take(const window::Event& event) {
     default:
         break;
     }
+}
+
+void Bridge::cursorMoved(const window::Event& event) {
+    const window::Position kAt = event.pointer.position;
+    // Where the cursor is over the window, logical pixels from its top
+    // left, y down (D367).
+    feed_->submit({.device = kMouse,
+                   .control = *input::controlNamed(input::DeviceClass::Mouse, "pointer"),
+                   .x = kAt.x,
+                   .y = kAt.y});
+    // Its motion since, up positive (D521): the window system gives the
+    // device's own only while the pointer is captured, a stream apart.
+    if (cursor_.has_value() && (kAt.x != cursor_->x || kAt.y != cursor_->y)) {
+        feed_->submit({.device = kMouse,
+                       .control = *input::controlNamed(input::DeviceClass::Mouse, "motion"),
+                       .x = kAt.x - cursor_->x,
+                       .y = cursor_->y - kAt.y});
+    }
+    cursor_ = kAt;
 }
 
 void Bridge::resize(float width) noexcept {
