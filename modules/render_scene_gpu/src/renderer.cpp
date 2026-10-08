@@ -23,6 +23,7 @@
 #include "rawframe/render_scene_gpu/errors.h"
 #include "reflection.h"
 #include "runs.h"
+#include "sampled.h"
 #include "tables.h"
 #include "temporal.h"
 
@@ -198,54 +199,10 @@ struct SceneRenderer::State {
                 probePictures.insert(kProbe.environment);
             }
         }
-        // Each emitter's and ribbon's material's base and emission
-        // textures (D353, D354).
-        std::vector<std::uint32_t> shown;
-        for (const rawframe::particles::EmitterDraw& kEmitter : scene.particles.emitters) {
-            shown.push_back(kEmitter.material);
-        }
-        for (const rawframe::particles::Ribbon& kRibbon : scene.particles.ribbons) {
-            shown.push_back(kRibbon.material);
-        }
-        for (const std::uint32_t kMaterial : shown) {
-            if (kMaterial >= scene.textures.size()) {
-                continue;
-            }
-            const render_scene::SceneTextures& kTextures = scene.textures[kMaterial];
-            for (const std::uint64_t kId : {kTextures.base.id, kTextures.emission.id}) {
-                if (kId != 0) {
-                    static_cast<void>(textures->choose(kId, sampled ? sampled(kId) : nullptr));
-                }
-            }
-        }
-        // Each post process's texture (D350).
-        for (const render_scene::ScenePostProcess& kProcess : scene.postProcesses) {
-            if (kProcess.texture.id != 0) {
-                static_cast<void>(
-                    textures->choose(kProcess.texture.id, sampled ? sampled(kProcess.texture.id) : nullptr));
-            }
-        }
-        // Each decal's texture (D339), and its normals' (D342).
-        for (const render_scene::SceneDecal& kDecal : scene.decals) {
-            static_cast<void>(textures->choose(kDecal.texture, sampled ? sampled(kDecal.texture) : nullptr));
-            if (kDecal.normal != 0) {
-                static_cast<void>(textures->choose(kDecal.normal, sampled ? sampled(kDecal.normal) : nullptr));
-            }
-        }
-        for (const std::vector<render_scene::SceneDraw>* kList :
-             {&scene.draws, &scene.shadows.casters, &scene.lightShadows.casters}) {
-            for (const render_scene::SceneDraw& draw : *kList) {
-                if (draw.material >= scene.textures.size()) {
-                    continue;
-                }
-                const render_scene::SceneTextures& kTextures = scene.textures[draw.material];
-                for (const std::uint64_t kId :
-                     {kTextures.base.id, kTextures.packed.id, kTextures.emission.id, kTextures.normal.id}) {
-                    if (kId != 0) {
-                        static_cast<void>(textures->choose(kId, sampled ? sampled(kId) : nullptr));
-                    }
-                }
-            }
+        // What the frame's emitters, ribbons, post processes, decals, and
+        // draws sample.
+        for (const std::uint64_t kId : sampledTexturesOf(scene)) {
+            static_cast<void>(textures->choose(kId, sampled ? sampled(kId) : nullptr));
         }
     }
 

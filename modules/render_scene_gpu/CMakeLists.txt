@@ -6,7 +6,7 @@ if(NOT TARGET rawframe_render)
     return()
 endif()
 
-rawframe_module(NAME render_scene_gpu SOURCES src/blocks.cpp src/bloom.cpp src/capture.cpp src/casting.cpp src/contact.cpp src/decals.cpp src/probes.cpp src/environment.cpp src/focus.cpp src/meshes.cpp src/metering.cpp src/models.cpp src/motion.cpp src/occlusion.cpp src/participant.cpp src/particles.cpp src/picture.cpp src/post.cpp src/pipelines.cpp src/programs.cpp src/reflection.cpp src/renderer.cpp src/runs.cpp src/tables.cpp src/temporal.cpp src/views.cpp DEPS render render_scene particles_gpu particles material texture mesh composition diagnostics result base)
+rawframe_module(NAME render_scene_gpu SOURCES src/blocks.cpp src/bloom.cpp src/capture.cpp src/casting.cpp src/contact.cpp src/decals.cpp src/probes.cpp src/environment.cpp src/focus.cpp src/meshes.cpp src/metering.cpp src/models.cpp src/motion.cpp src/occlusion.cpp src/participant.cpp src/particles.cpp src/picture.cpp src/post.cpp src/pipelines.cpp src/programs.cpp src/reflection.cpp src/renderer.cpp src/runs.cpp src/sampled.cpp src/tables.cpp src/temporal.cpp src/views.cpp DEPS render render_scene particles_gpu particles material texture mesh composition diagnostics result base)
 rawframe_shader_containers(TARGET rawframe_render_scene_gpu NAMES scene occlusion reflect motion focus contact decal probe resolve fxaa bloom meter shadow sky temporal tonemap post)
 # Which of a program material's containers the build's driver reads
 # (D485), as the engine's own are chosen.
