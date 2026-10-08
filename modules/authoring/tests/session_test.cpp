@@ -207,6 +207,20 @@ RAWFRAME_TEST(ACookNamesWhereItCooksToAndACancelItsOperation) {
                     "{\"kind\":\"authoring.reply\",\"id\":9,\"cancelled\":{\"reason\":\"requested\"}}\n");
 }
 
+RAWFRAME_TEST(AnImportNamesItsSourceAndWhereItGoes) {
+    // D503: a file from outside made one of the game's assets.
+    document::Value id;
+    const auto kImport =
+        readSessionRecord(R"({"kind":"authoring.import","id":7,"source":"/art/bark.png","as":"art/bark.png"})", id);
+    RAWFRAME_EXPECT(kImport.has_value() && kImport->verb == SessionVerb::Import && kImport->source == "/art/bark.png" &&
+                    kImport->as == "art/bark.png");
+    for (const char* kRefused : {R"({"kind":"authoring.import","source":"art/bark.png","as":"bark.png"})",
+                                 R"({"kind":"authoring.import","source":"/art/bark.png","as":""})",
+                                 R"({"kind":"authoring.import","source":"/art/bark.png"})"}) {
+        RAWFRAME_EXPECT(refusedWith(readSessionRecord(kRefused, id), AuthoringError::ValidationFailed));
+    }
+}
+
 RAWFRAME_TEST(RepliesAreOneCompactLine) {
     document::Value answer = document::Value::object();
     answer.add("kind", document::Value::string("authoring.ended"));

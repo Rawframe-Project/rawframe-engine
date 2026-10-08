@@ -29,7 +29,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 18> kVerbs = {
+constexpr std::array<VerbName, 19> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -47,6 +47,7 @@ constexpr std::array<VerbName, 18> kVerbs = {
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
+    VerbName{.kind = "authoring.import", .verb = SessionVerb::Import},
     VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
 
 /// The members a verb's record may hold beside `kind` and `id`, and those
@@ -71,6 +72,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Preview:
     case SessionVerb::Mark:
     case SessionVerb::Cook:
+    case SessionVerb::Import:
         return Members{.required = 2, .optional = 0};
     case SessionVerb::Undo:
     case SessionVerb::Redo:
@@ -148,7 +150,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     }
     if (named == nullptr) {
         return malformed("a session record's kind is hello, describe, apply, read, undo, redo, select, view, preview, "
-                         "create_scene, history, assets, pick, mark, apply_together, cook, cancel, or end");
+                         "create_scene, history, assets, pick, mark, apply_together, cook, cancel, import, or end");
     }
     SessionRecord record{.verb = named->verb, .id = idRead};
     const Members kMembers = membersOf(record.verb);
@@ -191,6 +193,18 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         if (!kCache->isNull()) {
             record.cache = *kCache->text();
         }
+        return record;
+    }
+    case SessionVerb::Import: {
+        // The source absolute, where it is; where it goes, the session's to
+        // check under the game's directory.
+        const std::string* source = textOf(parsed->find("source"));
+        const std::string* as = textOf(parsed->find("as"));
+        if (source == nullptr || !absolute(*source) || as == nullptr || as->empty()) {
+            return malformed("import names an absolute source and the path it goes to");
+        }
+        record.source = *source;
+        record.as = *as;
         return record;
     }
     case SessionVerb::Cancel: {

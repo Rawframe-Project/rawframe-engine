@@ -19,6 +19,7 @@
 //     {"scene":"level.scene","request":{...}},{"scene":"hall.scene","request":{...}}]}
 //   {"kind":"authoring.cook","id":9,"output":"/games/plaza-content","cache":null}
 //   {"kind":"authoring.cancel","id":10,"operation":9}
+//   {"kind":"authoring.import","id":12,"source":"/home/me/art/bark.png","as":"art/bark.png"}
 //   {"kind":"authoring.end","id":11}
 //
 // `hello` comes first and names the surface generation the client speaks;
@@ -39,7 +40,10 @@
 //   {"kind":"authoring.progress","id":9,"step":3,"steps":21,"source":"gate.scene"}
 //
 // `cancel` asks the operation the client gave `operation` as its id to
-// stop; that operation still answers, cancelled. Every reply is
+// stop; that operation still answers, cancelled. `import` copies a file
+// from outside (an absolute `source`) into the game's directory at `as`,
+// gives it a sidecar, and declares it in the game's description (D503).
+// Every reply is
 //
 //   {"kind":"authoring.reply","id":...,"answer":{...}}
 //
@@ -101,6 +105,8 @@ enum class SessionVerb : std::uint8_t {
     Cook,
     /// A running operation asked to stop (D502).
     Cancel,
+    /// A file from outside made one of the game's assets (D503).
+    Import,
     End,
 };
 
@@ -154,6 +160,9 @@ struct SessionRecord {
     std::optional<std::string> cache;
     /// Cancel's: the id the operation to stop was given.
     document::Value operation;
+    /// Import's: the file, and where under the game's directory it goes.
+    std::string source;
+    std::string as;
 };
 
 /// Reads one record; refuses (`ValidationFailed`) anything out of the form
