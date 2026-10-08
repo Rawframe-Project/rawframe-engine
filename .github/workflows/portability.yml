@@ -200,6 +200,23 @@ jobs:
             done
             ls "played/$game"
           done
+      # A copy of the exported Plaza played for five seconds, as a player would
+      # start it: whether its client is admitted and shows frames on this
+      # machine, which has no GPU but Direct3D 12's software one. Reported,
+      # not yet required (D517).
+      - name: Play the exported Plaza
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          cp -r played/plaza "$RUNNER_TEMP/plaza"
+          printf 'host.maximum_iterations = 600\n' >>"$RUNNER_TEMP/plaza/client.conf"
+          (cd "$RUNNER_TEMP/plaza" && timeout 180 ./rawframe-play.exe; echo "rawframe-play: exit $?")
+          for log in server client; do
+            grep -o '"code":"\(bots_admitted\|frame_summary\|device_ready\|device_unavailable\|start_failed\)"[^}]*}[^}]*}' \
+              "$RUNNER_TEMP/plaza/$log.log" || echo "$log: nothing of note"
+          done
+          grep -q '"framesShown":[1-9]' "$RUNNER_TEMP/plaza/client.log"
       - name: Keep the sample games
         uses: actions/upload-artifact@v7
         with:
