@@ -33,6 +33,8 @@ result::Status DeviceSkinning::declare(const render_scene::SceneFrame& frame,
                                        bool ready,
                                        std::vector<mrhiAccess>& writes) {
     jobs_.clear();
+    meshed_.clear();
+    table_.clear();
     found_.clear();
     palette_.clear();
     blocks_.clear();
@@ -41,7 +43,9 @@ result::Status DeviceSkinning::declare(const render_scene::SceneFrame& frame,
         return {};
     }
     // Each palette a draw is posed with, and for the models drawn, not the
-    // casters, the one it was posed with the frame before.
+    // casters, the one it was posed with the frame before; by mesh.
+    std::map<const HeldMesh*, std::vector<std::uint32_t>> byMesh;
+    std::vector<const HeldMesh*> order;
     const auto kSkin = [&](const render_scene::SceneDraw& draw, std::uint32_t palette) {
         const auto kMesh = usable.find(draw.mesh);
         if (draw.joints == 0 || kMesh == usable.end() || kMesh->second->influences.index1 == 0 ||
@@ -49,9 +53,12 @@ result::Status DeviceSkinning::declare(const render_scene::SceneFrame& frame,
             draw.joints != kMesh->second->source->skin.joints.size() || found_.contains({kMesh->second, palette})) {
             return;
         }
-        found_.emplace(std::pair{kMesh->second, palette}, jobs_.size());
-        jobs_.push_back({.mesh = kMesh->second, .palette = palette, .first = static_cast<std::uint32_t>(vertices_)});
-        vertices_ += kMesh->second->source->positions.size();
+        found_.emplace(std::pair{kMesh->second, palette}, 0);
+        auto [at, made] = byMesh.try_emplace(kMesh->second);
+        if (made) {
+            order.push_back(kMesh->second);
+        }
+        at->second.push_back(palette);
     };
     for (const render_scene::SceneDraw& draw : frame.draws) {
         kSkin(draw, draw.palette);
@@ -62,6 +69,18 @@ result::Status DeviceSkinning::declare(const render_scene::SceneFrame& frame,
             kSkin(draw, draw.palette);
         }
     }
+    // Each mesh's jobs one after another, so one dispatch skins them all.
+    for (const HeldMesh* kMesh : order) {
+        meshed_.push_back({.mesh = kMesh,
+                           .firstJob = static_cast<std::uint32_t>(jobs_.size()),
+                           .jobs = static_cast<std::uint32_t>(byMesh.at(kMesh).size())});
+        for (const std::uint32_t kPalette : byMesh.at(kMesh)) {
+            found_[{kMesh, kPalette}] = jobs_.size();
+            jobs_.push_back({.mesh = kMesh, .palette = kPalette, .first = static_cast<std::uint32_t>(vertices_)});
+            table_.insert(table_.end(), {kPalette, static_cast<std::uint32_t>(vertices_), 0, 0});
+            vertices_ += kMesh->source->positions.size();
+        }
+    }
     if (jobs_.empty()) {
         return {};
     }
@@ -69,14 +88,14 @@ result::Status DeviceSkinning::declare(const render_scene::SceneFrame& frame,
     for (const render_scene::Matrix& kMatrix : frame.palette) {
         palette_.insert(palette_.end(), kMatrix.begin(), kMatrix.end());
     }
-    blocks_.assign(jobs_.size() * kBlockWords, 0);
-    for (std::size_t job = 0; job < jobs_.size(); ++job) {
-        blocks_[job * kBlockWords] = static_cast<std::uint32_t>(jobs_[job].mesh->source->positions.size());
-        blocks_[(job * kBlockWords) + 1] = jobs_[job].palette;
-        blocks_[(job * kBlockWords) + 2] = jobs_[job].first;
+    blocks_.assign(meshed_.size() * kBlockWords, 0);
+    for (std::size_t at = 0; at < meshed_.size(); ++at) {
+        blocks_[at * kBlockWords] = static_cast<std::uint32_t>(meshed_[at].mesh->source->positions.size());
+        blocks_[(at * kBlockWords) + 1] = meshed_[at].firstJob;
     }
     for (const auto& [kBytes, kMade] : {std::pair{std::uint64_t{palette_.size()} * 4, &paletteResource_},
                                         std::pair{std::uint64_t{blocks_.size()} * 4, &blocksResource_},
+                                        std::pair{std::uint64_t{table_.size()} * 4, &tableResource_},
                                         std::pair{vertices_ * kVertexBytes, &posedResource_}}) {
         mrhiBufferDef def = mrhiDefaultBufferDef();
         def.size = kBytes;
@@ -86,6 +105,7 @@ result::Status DeviceSkinning::declare(const render_scene::SceneFrame& frame,
     }
     writes.push_back(wholeOf(paletteResource_, mrhi_accessCopyDestination));
     writes.push_back(wholeOf(blocksResource_, mrhi_accessCopyDestination));
+    writes.push_back(wholeOf(tableResource_, mrhi_accessCopyDestination));
     return {};
 }
 
@@ -95,14 +115,12 @@ result::Status DeviceSkinning::addPass(const DeviceMeshes& meshes, std::vector<m
     }
     std::vector<mrhiAccess> accesses = {wholeOf(paletteResource_, mrhi_accessStorageRead),
                                         wholeOf(blocksResource_, mrhi_accessUniform),
+                                        wholeOf(tableResource_, mrhi_accessStorageRead),
                                         wholeOf(posedResource_, mrhi_accessStorageWrite)};
-    std::map<const HeldMesh*, bool> named;
-    for (const Job& kJob : jobs_) {
-        if (named.emplace(kJob.mesh, true).second) {
-            const FrameMesh& kMade = meshes.frameMeshOf(*kJob.mesh);
-            accesses.push_back(wholeOf(kMade.vertices, mrhi_accessStorageRead));
-            accesses.push_back(wholeOf(kMade.influences, mrhi_accessStorageRead));
-        }
+    for (const Meshed& kMeshed : meshed_) {
+        const FrameMesh& kMade = meshes.frameMeshOf(*kMeshed.mesh);
+        accesses.push_back(wholeOf(kMade.vertices, mrhi_accessStorageRead));
+        accesses.push_back(wholeOf(kMade.influences, mrhi_accessStorageRead));
     }
     mrhiPassDef def = mrhiDefaultPassDef();
     def.accesses = accesses.data();
@@ -119,7 +137,8 @@ result::Status DeviceSkinning::write(mrhiPassId upload) const {
         return {};
     }
     if (mrhiWriteBuffer(native_, upload, paletteResource_, 0, palette_.data(), palette_.size() * 4) != mrhi_success ||
-        mrhiWriteBuffer(native_, upload, blocksResource_, 0, blocks_.data(), blocks_.size() * 4) != mrhi_success) {
+        mrhiWriteBuffer(native_, upload, blocksResource_, 0, blocks_.data(), blocks_.size() * 4) != mrhi_success ||
+        mrhiWriteBuffer(native_, upload, tableResource_, 0, table_.data(), table_.size() * 4) != mrhi_success) {
         return failed("the skinned models could not be written", mrhi_errorCapacity);
     }
     return {};
@@ -133,19 +152,22 @@ result::Status DeviceSkinning::record(const Pipelines& pipelines, const DeviceMe
         mrhiSetComputePipeline(native_, pass_, pipelines.skin.compute) != mrhi_success) {
         return failed("the skinning pass could not be recorded", mrhi_errorState);
     }
-    for (std::size_t job = 0; job < jobs_.size(); ++job) {
-        const Job& kJob = jobs_[job];
-        const FrameMesh& kMade = meshes.frameMeshOf(*kJob.mesh);
-        const std::uint64_t kVertices = kJob.mesh->source->positions.size();
+    // A mesh bound once and dispatched once, a row of workgroups a palette.
+    for (std::size_t at = 0; at < meshed_.size(); ++at) {
+        const Meshed& kMeshed = meshed_[at];
+        const FrameMesh& kMade = meshes.frameMeshOf(*kMeshed.mesh);
+        const std::uint64_t kVertices = kMeshed.mesh->source->positions.size();
         mrhiBinding block = bufferAt(4, blocksResource_, kBlockBytes);
-        block.offset = std::uint64_t{job} * kBlockBytes;
-        const std::array<mrhiBinding, 5> kBindings = {bufferAt(0, kMade.vertices, kVertices * kVertexBytes),
+        block.offset = std::uint64_t{at} * kBlockBytes;
+        const std::array<mrhiBinding, 6> kBindings = {bufferAt(0, kMade.vertices, kVertices * kVertexBytes),
                                                       bufferAt(1, kMade.influences, kVertices * kInfluenceWords * 4),
                                                       bufferAt(2, paletteResource_, palette_.size() * 4),
                                                       bufferAt(3, posedResource_, vertices_ * kVertexBytes),
-                                                      block};
+                                                      block,
+                                                      bufferAt(5, tableResource_, table_.size() * 4)};
         if (mrhiSetBindings(native_, pass_, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-            mrhiDispatch(native_, pass_, static_cast<std::uint32_t>((kVertices + kGroup - 1) / kGroup), 1, 1) !=
+            mrhiDispatch(
+                native_, pass_, static_cast<std::uint32_t>((kVertices + kGroup - 1) / kGroup), kMeshed.jobs, 1) !=
                 mrhi_success) {
             return failed("the skinning pass could not be recorded", mrhi_errorState);
         }

@@ -1,11 +1,12 @@
 // Skinned models' vertices (D508), in Slang (ADR-0026, D475): each vertex
 // of a posed model's mesh, as the scene's pipelines read it, moved by the
 // joints it follows into a buffer of the same layout, which the frame's
-// draws of that model read in its mesh's place.
+// draws of that model read in its mesh's place. One dispatch skins one
+// mesh with every palette it is posed with this frame, a palette a row of
+// workgroups (D510).
 
-// What one model's skinning reads and writes: its mesh's vertex count, its
-// first joint matrix among the frame's, and its first vertex among the
-// frame's skinned ones.
+// One mesh's skinning: its vertex count and its first job among the
+// frame's.
 struct Skinned
 {
     uint4 counts;
@@ -21,11 +22,14 @@ struct Skinned
 [[vk::binding(2, 0)]] StructuredBuffer<float4> palette;
 [[vk::binding(3, 0)]] RWStructuredBuffer<float> posed;
 [[vk::binding(4, 0)]] ConstantBuffer<Skinned> skinned;
+// Each job's first joint matrix among the frame's and first vertex among
+// the frame's skinned ones.
+[[vk::binding(5, 0)]] StructuredBuffer<uint4> jobs;
 
 // A joint's columns, weighed, added to `columns`.
-void weigh(uint joint, float weight, inout float4 columns[4])
+void weigh(uint firstJoint, uint joint, float weight, inout float4 columns[4])
 {
-    const uint first = (skinned.counts.y + joint) * 4u;
+    const uint first = (firstJoint + joint) * 4u;
     for (uint column = 0u; column < 4u; ++column)
     {
         columns[column] += palette[first + column] * weight;
@@ -44,6 +48,7 @@ void skin(uint3 invocation : SV_DispatchThreadID)
     {
         return;
     }
+    const uint4 job = jobs[skinned.counts.y + invocation.y];
     const uint words = influences[which * 6u];
     const uint more = influences[which * 6u + 1u];
     const uint4 joints = uint4(words & 0xFFFFu, words >> 16u, more & 0xFFFFu, more >> 16u);
@@ -52,10 +57,10 @@ void skin(uint3 invocation : SV_DispatchThreadID)
                                   asfloat(influences[which * 6u + 4u]),
                                   asfloat(influences[which * 6u + 5u]));
     float4 columns[4] = { float4(0.0), float4(0.0), float4(0.0), float4(0.0) };
-    weigh(joints.x, weights.x, columns);
-    weigh(joints.y, weights.y, columns);
-    weigh(joints.z, weights.z, columns);
-    weigh(joints.w, weights.w, columns);
+    weigh(job.x, joints.x, weights.x, columns);
+    weigh(job.x, joints.y, weights.y, columns);
+    weigh(job.x, joints.z, weights.z, columns);
+    weigh(job.x, joints.w, weights.w, columns);
     // Columns given; Slang's constructor takes rows.
     const float4x4 moved = transpose(float4x4(columns[0], columns[1], columns[2], columns[3]));
     const uint from = which * 12u;
@@ -64,7 +69,7 @@ void skin(uint3 invocation : SV_DispatchThreadID)
     const float3 normal = normalize(mul(turn, float3(rest[from + 3u], rest[from + 4u], rest[from + 5u])));
     const float3 along = mul(turn, float3(rest[from + 8u], rest[from + 9u], rest[from + 10u]));
     const float3 tangent = dot(along, along) > 0.0 ? normalize(along) : along;
-    const uint to = (skinned.counts.z + which) * 12u;
+    const uint to = (job.y + which) * 12u;
     posed[to] = place.x;
     posed[to + 1u] = place.y;
     posed[to + 2u] = place.z;

@@ -4,7 +4,9 @@
 // and the palette it is posed with skinned once a frame, by a compute pass
 // before any drawing, into one buffer of the frame's in the layout the
 // scene's pipelines read; every draw of that model, its shadows' too,
-// reads them in its mesh's place, so no drawing pipeline changes.
+// reads them in its mesh's place, so no drawing pipeline changes. Each
+// mesh is bound once and skinned with all its palettes by one dispatch
+// (D510).
 
 #include "meshes.h"
 #include "pipelines.h"
@@ -58,15 +60,24 @@ private:
         std::uint32_t palette = 0;
         std::uint32_t first = 0;
     };
+    /// A mesh's jobs, one after another among the frame's.
+    struct Meshed {
+        const HeldMesh* mesh = nullptr;
+        std::uint32_t firstJob = 0;
+        std::uint32_t jobs = 0;
+    };
 
     mrhiDevice* native_ = nullptr;
     std::vector<Job> jobs_;
+    std::vector<Meshed> meshed_;
+    std::vector<std::uint32_t> table_;
     std::map<std::pair<const HeldMesh*, std::uint32_t>, std::size_t> found_;
     std::vector<float> palette_;
     std::vector<std::uint32_t> blocks_;
     std::uint64_t vertices_ = 0;
     mrhiResourceId paletteResource_{};
     mrhiResourceId blocksResource_{};
+    mrhiResourceId tableResource_{};
     mrhiResourceId posedResource_{};
     mrhiPassId pass_{};
 };
