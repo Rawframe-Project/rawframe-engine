@@ -182,6 +182,31 @@ RAWFRAME_TEST(ApplyTogetherReadsTwoOrMoreScenesEachOnce) {
         AuthoringError::ValidationFailed));
 }
 
+RAWFRAME_TEST(ACookNamesWhereItCooksToAndACancelItsOperation) {
+    // SPEC-0040's long-running operation on the wire (D502).
+    document::Value id;
+    const auto kCook =
+        readSessionRecord(R"({"kind":"authoring.cook","id":"c","output":"/g/content","cache":"C:\\cache"})", id);
+    RAWFRAME_EXPECT(kCook.has_value() && kCook->verb == SessionVerb::Cook && kCook->output == "/g/content" &&
+                    kCook->cache == "C:\\cache" && id.text() != nullptr && *id.text() == "c");
+    const auto kNoCache = readSessionRecord(R"({"kind":"authoring.cook","id":1,"output":"//h/s","cache":null})", id);
+    RAWFRAME_EXPECT(kNoCache.has_value() && !kNoCache->cache.has_value());
+    // A relative path, a cache left out, and a drive with no separator.
+    for (const char* kRefused : {R"({"kind":"authoring.cook","output":"content","cache":null})",
+                                 R"({"kind":"authoring.cook","output":"/content"})",
+                                 R"({"kind":"authoring.cook","output":"/content","cache":"C:cache"})"}) {
+        RAWFRAME_EXPECT(refusedWith(readSessionRecord(kRefused, id), AuthoringError::ValidationFailed));
+    }
+    const auto kCancel = readSessionRecord(R"({"kind":"authoring.cancel","id":2,"operation":"c"})", id);
+    RAWFRAME_EXPECT(kCancel.has_value() && kCancel->verb == SessionVerb::Cancel &&
+                    kCancel->operation.text() != nullptr && *kCancel->operation.text() == "c");
+    RAWFRAME_EXPECT(refusedWith(readSessionRecord(R"({"kind":"authoring.cancel","operation":null})", id),
+                                AuthoringError::ValidationFailed));
+    // Stopped as asked is no error.
+    RAWFRAME_EXPECT(writeCancelled(document::Value::integer(9), "requested") ==
+                    "{\"kind\":\"authoring.reply\",\"id\":9,\"cancelled\":{\"reason\":\"requested\"}}\n");
+}
+
 RAWFRAME_TEST(RepliesAreOneCompactLine) {
     document::Value answer = document::Value::object();
     answer.add("kind", document::Value::string("authoring.ended"));

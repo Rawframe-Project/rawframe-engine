@@ -17,7 +17,9 @@
 //   {"kind":"authoring.describe","id":7}
 //   {"kind":"authoring.apply_together","id":8,"documents":[
 //     {"scene":"level.scene","request":{...}},{"scene":"hall.scene","request":{...}}]}
-//   {"kind":"authoring.end","id":9}
+//   {"kind":"authoring.cook","id":9,"output":"/games/plaza-content","cache":null}
+//   {"kind":"authoring.cancel","id":10,"operation":9}
+//   {"kind":"authoring.end","id":11}
 //
 // `hello` comes first and names the surface generation the client speaks;
 // before any public stability promise only the tool's own is accepted
@@ -29,13 +31,26 @@
 // document, but what undo and redo put back with it (D417). `apply_together`
 // is SPEC-0040's multi-document transaction (D497): each part an atomic
 // request to its scene, all kept or none, each scene's part one entry in
-// its own history. Every reply is
+// its own history. `cook` is SPEC-0040's long-running operation (D502): it
+// cooks the game's directory into `output` (an absolute path, outside it),
+// reusing what `cache` holds if it names one, and answers when it ends,
+// other records answered meanwhile, telling how far it is as it goes:
+//
+//   {"kind":"authoring.progress","id":9,"step":3,"steps":21,"source":"gate.scene"}
+//
+// `cancel` asks the operation the client gave `operation` as its id to
+// stop; that operation still answers, cancelled. Every reply is
 //
 //   {"kind":"authoring.reply","id":...,"answer":{...}}
 //
 // or, for a record that could not be run at all,
 //
 //   {"kind":"authoring.reply","id":...,"error":{<the one error record>}}
+//
+// or, for an operation stopped as asked, which is no error (SPEC-0040, after
+// ADR-0010's outcomes),
+//
+//   {"kind":"authoring.reply","id":...,"cancelled":{"reason":"requested"}}
 
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/queries.h"
@@ -82,6 +97,10 @@ enum class SessionVerb : std::uint8_t {
     Mark,
     /// One atomic request over several scenes, one transaction (D497).
     ApplyTogether,
+    /// The game's directory cooked, as a long-running operation (D502).
+    Cook,
+    /// A running operation asked to stop (D502).
+    Cancel,
     End,
 };
 
@@ -130,6 +149,11 @@ struct SessionRecord {
     std::optional<std::array<double, 3>> mark;
     /// Apply together's, two or more, each scene named once (D497).
     std::vector<SessionPart> parts;
+    /// Cook's: where it cooks to, and the cache it reuses, if any (D502).
+    std::string output;
+    std::optional<std::string> cache;
+    /// Cancel's: the id the operation to stop was given.
+    document::Value operation;
 };
 
 /// Reads one record; refuses (`ValidationFailed`) anything out of the form
@@ -143,5 +167,9 @@ struct SessionRecord {
 
 /// A refusal's reply line, its line feed included.
 [[nodiscard]] std::string writeRefusal(const document::Value& id, const result::Error& error);
+
+/// A cancelled operation's reply line, its line feed included: stopped as
+/// its client asked (`requested`), or as its session ended (`ended`).
+[[nodiscard]] std::string writeCancelled(const document::Value& id, std::string_view reason);
 
 } // namespace rawframe::authoring

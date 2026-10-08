@@ -4,6 +4,7 @@
 #include "rawframe/schema/stable_id.h"
 
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <utility>
@@ -28,7 +29,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 16> kVerbs = {
+constexpr std::array<VerbName, 18> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -44,6 +45,8 @@ constexpr std::array<VerbName, 16> kVerbs = {
     VerbName{.kind = "authoring.pick", .verb = SessionVerb::Pick},
     VerbName{.kind = "authoring.mark", .verb = SessionVerb::Mark},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
+    VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
+    VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
     VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
 
 /// The members a verb's record may hold beside `kind` and `id`, and those
@@ -67,6 +70,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::View:
     case SessionVerb::Preview:
     case SessionVerb::Mark:
+    case SessionVerb::Cook:
         return Members{.required = 2, .optional = 0};
     case SessionVerb::Undo:
     case SessionVerb::Redo:
@@ -75,9 +79,18 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::History:
     case SessionVerb::Pick:
     case SessionVerb::ApplyTogether:
+    case SessionVerb::Cancel:
         return Members{.required = 1, .optional = 0};
     }
     return {};
+}
+
+/// Whether `path` is absolute in POSIX's form (`/a`) or Windows' (`C:/a`,
+/// `C:\a`, `\\server\share`).
+bool absolute(std::string_view path) {
+    const bool kDrive = path.size() >= 3 && std::isalpha(static_cast<unsigned char>(path[0])) != 0 && path[1] == ':' &&
+                        (path[2] == '/' || path[2] == '\\');
+    return path.starts_with('/') || path.starts_with("\\\\") || kDrive;
 }
 
 /// Apply together's parts: two or more, each a scene's path and an atomic
@@ -135,7 +148,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     }
     if (named == nullptr) {
         return malformed("a session record's kind is hello, describe, apply, read, undo, redo, select, view, preview, "
-                         "create_scene, history, assets, pick, mark, apply_together, or end");
+                         "create_scene, history, assets, pick, mark, apply_together, cook, cancel, or end");
     }
     SessionRecord record{.verb = named->verb, .id = idRead};
     const Members kMembers = membersOf(record.verb);
@@ -165,6 +178,29 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         return record;
     case SessionVerb::ApplyTogether:
         return together(*parsed, std::move(record));
+    case SessionVerb::Cook: {
+        // Absolute paths in either system's form; whether they are fit to
+        // cook to is the session's to say, on its own system.
+        const std::string* output = textOf(parsed->find("output"));
+        const Value* kCache = parsed->find("cache");
+        if (output == nullptr || !absolute(*output) || kCache == nullptr ||
+            (!kCache->isNull() && (textOf(kCache) == nullptr || !absolute(*kCache->text())))) {
+            return malformed("cook names an absolute output and an absolute cache, or null for none");
+        }
+        record.output = *output;
+        if (!kCache->isNull()) {
+            record.cache = *kCache->text();
+        }
+        return record;
+    }
+    case SessionVerb::Cancel: {
+        const Value* kOperation = parsed->find("operation");
+        if (kOperation == nullptr || kOperation->isNull()) {
+            return malformed("cancel names the operation by the id its client gave it");
+        }
+        record.operation = *kOperation;
+        return record;
+    }
     case SessionVerb::Apply:
     case SessionVerb::Read:
     case SessionVerb::Undo:
@@ -296,6 +332,16 @@ std::string writeRefusal(const document::Value& id, const result::Error& error) 
     made.add("kind", Value::string("authoring.reply"));
     made.add("id", id);
     made.add("error", errorRecord(error));
+    return document::writeCompact(made) + "\n";
+}
+
+std::string writeCancelled(const document::Value& id, std::string_view reason) {
+    Value why = Value::object();
+    why.add("reason", Value::string(std::string{reason}));
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.reply"));
+    made.add("id", id);
+    made.add("cancelled", std::move(why));
     return document::writeCompact(made) + "\n";
 }
 
