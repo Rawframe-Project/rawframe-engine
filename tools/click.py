@@ -14,7 +14,8 @@
 # before and up to fifteen seconds after (D453b). A point followed by `:`
 # and lower-case text has the text typed after its click, a key at a time,
 # then Return (D426); a dot, a comma, a minus, and a space are typed as
-# their keys, and a colon with Shift (D473). An argument `keys=` and X key names apart by commas presses
+# their keys, a colon with Shift (D473), and a slash, an underscore, and
+# capitals as their keys too, so a path is typed whole (D505). An argument `keys=` and X key names apart by commas presses
 # those keys alone, a third of a second apart, and waits a second and a half
 # after them (D430). An argument `wheel=`, a point, and a count turns the
 # wheel there that many detents toward the user, or away for a count below
@@ -65,9 +66,11 @@ class XImage(ctypes.Structure):
 
 
 # Characters typed whose X key names are words.
-KEYS = {".": "period", ",": "comma", "-": "minus", " ": "space"}
+KEYS = {".": "period", ",": "comma", "-": "minus", " ": "space", "/": "slash"}
 # Characters typed with Shift held, by the key that types them (D473).
-SHIFTED = {":": "semicolon"}
+SHIFTED = {":": "semicolon", "_": "underscore"}
+# Capitals typed with Shift held, as a path may hold them (D505).
+SHIFTED.update({letter: letter.lower() for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"})
 
 
 def alive(pid):
