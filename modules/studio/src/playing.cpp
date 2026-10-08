@@ -96,8 +96,11 @@ void ShellParticipant::hearCook() {
 }
 
 void ShellParticipant::attachPlayed(double seconds) {
+    // Said, so what closes Studio after a game waits for the game's own
+    // stop, its records written, rather than ending it mid-stop (D504).
     if (stopping_.has_value() && stopping_->ended()) {
         stopping_.reset();
+        emitter_.log(diagnostics::Severity::Info, kGameEnded, "the stopped game has ended");
     }
     if (previewing_ || seconds < nextAttach_) {
         return;

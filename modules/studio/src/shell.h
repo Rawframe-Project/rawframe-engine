@@ -47,6 +47,8 @@ inline constexpr diagnostics::EventIdentity kPreviewing{"studio", "studio_previe
 inline constexpr diagnostics::EventIdentity kMarked{"studio", "studio_marked"};
 /// A part of the mark lit under the pointer, as the session says (D504).
 inline constexpr diagnostics::EventIdentity kLit{"studio", "studio_lit"};
+/// A game asked to stop has ended, its server and its client both (D504).
+inline constexpr diagnostics::EventIdentity kGameEnded{"studio", "studio_game_ended"};
 /// A drag in the played game committed to the chosen scene (D457, D463,
 /// D466, D467): how, and what it moved.
 inline constexpr diagnostics::EventIdentity kDragged{"studio", "studio_dragged"};
