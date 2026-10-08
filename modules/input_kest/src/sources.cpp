@@ -358,7 +358,10 @@ public:
             navigate();
         }
         mapper_->endFrame();
-        std::ranges::fill(input, std::byte{0});
+        // The sample starts from the input it made the tick before, nought
+        // at first: a value it keeps there, as a view's heading, is whole in
+        // every command, so a command the server holds over for a late one
+        // repeats it rather than losing a turn (D525).
         RAWFRAME_TRY_ASSIGN(const kest::Value kLent, machine_->lend(input.data(), 1, element_, input.size()));
         std::ranges::fill(frame_, kest::Value{});
         frame_[0] = kLent;

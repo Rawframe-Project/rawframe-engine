@@ -25,7 +25,8 @@ public:
     virtual ~InputSource() = default;
 
     /// Fills `input` (the input component's bytes) for the client's tick
-    /// `tick`.
+    /// `tick`. It holds the input made for the tick before, nought before
+    /// the first, which a source may build on (D525).
     [[nodiscard]] virtual result::Status next(std::uint64_t tick, std::span<std::byte> input) = 0;
     /// Appends the commands the last `next` sent (D425), in order; none by
     /// default.
