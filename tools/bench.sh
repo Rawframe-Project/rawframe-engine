@@ -11,7 +11,11 @@
 #                           12.5 ms), on Kest time per tick past its p95 of
 #                           4 ms, or on a p95 past twice this machine's
 #                           recorded one (the median of its last three rows)
-#                           and half a millisecond
+#                           and half a millisecond. A game past them is
+#                           measured once more and fails only if it is past
+#                           them again: the owner's machine is shared, and
+#                           a tick slowed by another's build is told from a
+#                           slower engine only by measuring again (D504).
 #
 # Needs out/clang-shipping built; the full check builds it first. Last, the
 # crowd is served over QUIC to bots in processes of their own, and the
@@ -49,25 +53,26 @@ for game in arena runners plaza crowd; do
         echo "bots.endpoint = arena"
         if [ "$game" = plaza ]; then echo "content.root = $work/plaza"; fi
     } >"$work/$game.conf"
-    "$build/hosts/arena/rawframe-arena" --config "$work/$game.conf" >"$work/$game.log" 2>&1 || true
-    summary="$(grep '"code":"tick_summary"' "$work/$game.log" | tail -1 || true)"
-    kest="$(grep '"code":"kest_summary"' "$work/$game.log" | tail -1 || true)"
-    if [ -z "$summary" ]; then
-        printf 'bench %s: no tick summary\n' "$game"; failures=$((failures + 1)); continue
-    fi
-    # ticks, then p50, p95, and p99 in milliseconds.
-    read -r ticks p50 p95 p99 < <(python3 -c '
+    for attempt in 1 2; do
+        "$build/hosts/arena/rawframe-arena" --config "$work/$game.conf" >"$work/$game.log" 2>&1 || true
+        summary="$(grep '"code":"tick_summary"' "$work/$game.log" | tail -1 || true)"
+        kest="$(grep '"code":"kest_summary"' "$work/$game.log" | tail -1 || true)"
+        if [ -z "$summary" ]; then
+            printf 'bench %s: no tick summary\n' "$game"; failures=$((failures + 1)); break
+        fi
+        # ticks, then p50, p95, and p99 in milliseconds.
+        read -r ticks p50 p95 p99 < <(python3 -c '
 import json, sys
 f = json.loads(sys.argv[1])["fields"]
 print(f["ticks"], *("%.3f" % (f[k] / 1000) for k in ("p50", "p95", "p99")))' "$summary")
-    # Kest time per tick, SPEC-0013's aggregate script time (D210).
-    kest95="$(python3 -c '
+        # Kest time per tick, SPEC-0013's aggregate script time (D210).
+        kest95="$(python3 -c '
 import json, sys
 print("%.3f" % (json.loads(sys.argv[1])["fields"]["p95"] / 1000) if sys.argv[1] else "none")' "$kest")"
-    printf 'bench %s: %s ticks, p50 %s ms, p95 %s ms, p99 %s ms; Kest p95 %s ms\n' "$game" "$ticks" "$p50" "$p95" "$p99" \
-        "$kest95"
-    if [ "$mode" = check ]; then
-        verdict="$(python3 -c '
+        printf 'bench %s: %s ticks, p50 %s ms, p95 %s ms, p99 %s ms; Kest p95 %s ms\n' "$game" "$ticks" "$p50" "$p95" "$p99" \
+            "$kest95"
+        if [ "$mode" = check ]; then
+            verdict="$(python3 -c '
 import statistics, sys
 path, machine, game, p50, p95, p99, kest95 = sys.argv[1:8]
 p50, p95, p99 = float(p50), float(p95), float(p99)
@@ -81,13 +86,21 @@ rows = [line.rstrip("\n").split("\t") for line in open(path)][1:]
 mine = [float(r[7]) for r in rows if r[2] == machine and r[3] == game][-3:]
 if mine and p95 > 2 * statistics.median(mine) + 0.5:
     print("p95 past twice the recorded %.3f ms" % statistics.median(mine))' "$results" "$machine" "$game" "$p50" "$p95" "$p99" "$kest95")"
-        if [ -n "$verdict" ]; then
+            if [ -z "$verdict" ]; then
+                break
+            fi
+            if [ "$attempt" = 1 ]; then
+                printf 'bench %s: %s; measured again, the load average %s\n' "$game" "$verdict" \
+                    "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || echo unknown)"
+                continue
+            fi
             printf 'bench %s: %s\n' "$game" "$verdict"; failures=$((failures + 1))
+        else
+            printf '%s\t%s\t%s\t%s\t64\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$commit" "$machine" \
+                "$game" "$ticks" "$p50" "$p95" "$p99" "$kest95" >>"$results"
         fi
-    else
-        printf '%s\t%s\t%s\t%s\t64\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$commit" "$machine" \
-            "$game" "$ticks" "$p50" "$p95" "$p99" "$kest95" >>"$results"
-    fi
+        break
+    done
 done
 
 # The crowd as SPEC-0013 deploys it: the dedicated server over QUIC, and 64
