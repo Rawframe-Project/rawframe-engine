@@ -17,13 +17,6 @@ server=$2
 repository=$3
 content=$4
 work=$5
-# Not on Windows yet: Git's bash sets no mode bits for the directory an
-# open one is told from, and names the game by a path whose digest is not
-# the adapter's. The adapter's own checks hold there (D501).
-if command -v cygpath >/dev/null 2>&1; then
-    echo "skip: Windows, the play directory set up by Git's bash"
-    exit 0
-fi
 
 rm -rf "$work"
 mkdir -p "$work"
@@ -53,10 +46,27 @@ done
 # directory (D462): under the user's runtime directory, by the digest of
 # the game's absolute path, its owner's alone.
 game="$repository/games/plaza/plaza.game"
-export XDG_RUNTIME_DIR="$work/runtime"
-mkdir -p -m 700 "$XDG_RUNTIME_DIR"
-played="$XDG_RUNTIME_DIR/rawframe-play-$(python3 -c 'import hashlib, os, sys; print(hashlib.sha256(os.path.normpath(os.path.abspath(sys.argv[1])).encode()).hexdigest()[:32])' "$game")"
-mkdir -p -m 755 "$played"
+# Windows has it in the user's temporary directory, which TMP names there,
+# kept to the user by its ACL: Git's bash sets no mode bits, and a POSIX
+# path in XDG_RUNTIME_DIR would mean another place to the adapter (D505).
+runtime="$work/runtime"
+if command -v cygpath >/dev/null 2>&1; then
+    mkdir -p "$runtime"
+    TMP="$runtime"
+    TEMP="$runtime"
+    export TMP TEMP
+else
+    export XDG_RUNTIME_DIR="$runtime"
+    mkdir -p -m 700 "$runtime"
+fi
+# The digest of the game's absolute path with forward slashes, as the
+# adapter takes it on every system.
+played="$runtime/rawframe-play-$(python3 -c 'import hashlib, os, sys; print(hashlib.sha256(os.path.normpath(os.path.abspath(sys.argv[1])).replace(os.sep, "/").encode()).hexdigest()[:32])' "$game")"
+if command -v cygpath >/dev/null 2>&1; then
+    mkdir -p "$played"
+else
+    mkdir -p -m 755 "$played"
+fi
 printf '{"endpoint":"127.0.0.1:%s","pinFile":"%s","tokenFile":"%s"}\n' "$port" "$work/fingerprint" "$work/token" >"$played/debug.attach"
 
 python3 - "$adapter" "127.0.0.1:$port" "$work/fingerprint" "$work/token" "$game" "$played" "$work/server.log" <<'PY'
@@ -198,13 +208,15 @@ assert not refused["success"] and "loopback" in refused["message"], refused
 remote.leave()
 print("a remote endpoint refused", flush=True)
 
-# A play directory others may enter is not trusted.
-open_to_others = Editor()
-refused = open_to_others.attach({"game": game})
-assert not refused["success"] and "open to others" in refused["message"], refused
-open_to_others.leave()
-print("a play directory open to others refused", flush=True)
-os.chmod(played, 0o700)
+# A play directory others may enter is not trusted, where mode bits say
+# so; Windows keeps it to its owner by its ACL (D501).
+if os.name != "nt":
+    open_to_others = Editor()
+    refused = open_to_others.attach({"game": game})
+    assert not refused["success"] and "open to others" in refused["message"], refused
+    open_to_others.leave()
+    print("a play directory open to others refused", flush=True)
+    os.chmod(played, 0o700)
 
 editor = Editor()
 attached = editor.attach({"endpoint": endpoint, "pinFile": pin, "tokenFile": token})
