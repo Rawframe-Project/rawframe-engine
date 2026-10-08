@@ -94,7 +94,7 @@ build_and_test() {
     # under the full check's load (D500).
     # A test labeled `alone` needs a player's frame rate, which the full
     # check's load takes away: a predicted game's input then never reaches
-    # its server (D521). The fast check plays it, alone.
+    # its server (D521). The fast check plays it with nothing beside it.
     local leave=()
     if [ "$preset" = gcc-shipping ] || { [ "$preset" = clang-development ] && [ "$tier" = full ]; }; then
         leave=(-LE window)

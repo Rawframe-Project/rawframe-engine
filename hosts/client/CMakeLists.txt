@@ -170,12 +170,15 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # The plaza's view turned as its player drags with the right mouse
         # button held (D521): the scene's last view looks more than a radian
         # away from where it started. The turn is the server's, so it needs
-        # its input to arrive: played alone, by the fast check.
+        # its input to arrive, which a client drawing under ten frames a
+        # second does not manage (D521): played by the fast check with no
+        # other test beside it, four seconds after admission, once its input
+        # is paced.
         add_test(NAME client_turns_plaza
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf
-                         games/plaza/plaza.game orbit=900,360,300,360
+                         games/plaza/plaza.game wait=4 orbit=900,360,300,360
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_turns_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
@@ -212,6 +215,6 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     list(FILTER window_tests INCLUDE REGEX "^client_")
     set_tests_properties(${window_tests} PROPERTIES LABELS window)
     if(TEST client_turns_plaza)
-        set_tests_properties(client_turns_plaza PROPERTIES LABELS "window;alone")
+        set_tests_properties(client_turns_plaza PROPERTIES LABELS "window;alone" RUN_SERIAL TRUE)
     endif()
 endif()
