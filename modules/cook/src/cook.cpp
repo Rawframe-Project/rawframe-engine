@@ -507,6 +507,11 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
     Value inputs = Value::array();
     Value artifacts = Value::array();
     for (const Planned& planned : plan) {
+        const std::size_t kIndex = static_cast<std::size_t>(&planned - plan.data());
+        if (request.step && !request.step(CookStep{.index = kIndex, .count = plan.size(), .source = planned.source})) {
+            report.stopped = true;
+            return report;
+        }
         const std::string kKey = hexOf(keyOf(request, planned));
         std::optional<Cached> cached = request.cache ? fromCache(kSources, *request.cache, kKey) : std::nullopt;
         const bool kReused = cached.has_value();

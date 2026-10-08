@@ -91,6 +91,37 @@ RAWFRAME_TEST(SourcesCookIntoVerifiedArtifacts) {
     RAWFRAME_EXPECT(kProject.cook(2).cooked == 2);
 }
 
+RAWFRAME_TEST(ACookToldEachSourceStopsWhereItIsToldToPublishingNothing) {
+    const Project kProject;
+    std::vector<std::string> told;
+    std::size_t counted = 0;
+    const auto kTell = [&](const CookStep& step) {
+        told.emplace_back(step.source);
+        counted = step.count;
+        return true;
+    };
+    const CookReport kWhole = kProject.cook(1, std::nullopt, kTell);
+    RAWFRAME_EXPECT(!kWhole.stopped && kWhole.cooked == 2 && told.size() == 2 && counted == 2);
+    const std::string kManifest = readText(kProject.output / "content.manifest");
+    const std::string kReceipt = readText(kProject.output / "cook.receipt");
+    // Stopped before its second source by another tool, whose artifacts
+    // would differ: the manifest and receipt are the last cook's.
+    const CookReport kStopped = kProject.cook(2, std::nullopt, [](const CookStep& step) {
+        return step.index == 0;
+    });
+    RAWFRAME_EXPECT(kStopped.stopped && kStopped.cooked == 1 && kStopped.failures.empty());
+    RAWFRAME_EXPECT(readText(kProject.output / "content.manifest") == kManifest &&
+                    readText(kProject.output / "cook.receipt") == kReceipt);
+    // Stopped before any: nothing cooked.
+    RAWFRAME_EXPECT(kProject
+                        .cook(3,
+                              std::nullopt,
+                              [](const CookStep&) {
+                                  return false;
+                              })
+                        .cooked == 0);
+}
+
 RAWFRAME_TEST(TheCacheIsKeyedOnEveryInputAndVerified) {
     const Project kProject;
     static_cast<void>(kProject.cook());

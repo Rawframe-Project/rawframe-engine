@@ -136,6 +136,15 @@ struct Importer {
     base::Sha256Digest tools{};
 };
 
+/// One source a cook is about to cook or reuse: its place among the
+/// sources the sidecars name, how many they name, and its path under the
+/// sources.
+struct CookStep {
+    std::size_t index = 0;
+    std::size_t count = 0;
+    std::string_view source;
+};
+
 struct CookRequest {
     /// The authored sources, and the sidecars beside them.
     std::filesystem::path sources;
@@ -153,6 +162,10 @@ struct CookRequest {
     /// SPEC-0026's `variants_per_package`: the most material variants the
     /// artifacts' reports may count together (D319).
     std::int64_t maximumVariants = 4096;
+    /// Told each source before it is cooked, and asked whether to go on:
+    /// false stops the cook there, publishing nothing, as a failure would
+    /// (SPEC-0040's long-running operations, D502). None cooks every source.
+    std::function<bool(const CookStep&)> step;
 };
 
 struct CookReport {
@@ -162,6 +175,9 @@ struct CookReport {
     std::int64_t variants = 0;
     /// Every failure, in source order; any at all publishes nothing.
     std::vector<result::Error> failures;
+    /// Stopped by its request's `step` before every source was cooked:
+    /// nothing published, the last manifest and receipt left as they were.
+    bool stopped = false;
 };
 
 /// Scans `sources` for sidecars (`<source file>.rfmeta`) in path order,

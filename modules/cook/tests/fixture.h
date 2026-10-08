@@ -13,6 +13,7 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <optional>
 #include <string>
@@ -67,7 +68,9 @@ struct Project {
     Project(const Project&) = delete;
     Project& operator=(const Project&) = delete;
 
-    rawframe::cook::CookReport cook(std::uint8_t tool = 1, std::optional<fs::path> into = std::nullopt) const {
+    rawframe::cook::CookReport cook(std::uint8_t tool = 1,
+                                    std::optional<fs::path> into = std::nullopt,
+                                    std::function<bool(const rawframe::cook::CookStep&)> step = {}) const {
         static const std::array<rawframe::cook::Importer, 1> kImporters = {rawframe::cook::audioImporter()};
         base::Sha256Digest toolchain{};
         toolchain[0] = std::byte{tool};
@@ -76,7 +79,8 @@ struct Project {
                                                                               .cache = cache,
                                                                               .importers = kImporters,
                                                                               .toolchain = toolchain,
-                                                                              .target = "any"});
+                                                                              .target = "any",
+                                                                              .step = std::move(step)});
         RAWFRAME_EXPECT(report.has_value());
         return report.has_value() ? std::move(*report) : rawframe::cook::CookReport{};
     }
