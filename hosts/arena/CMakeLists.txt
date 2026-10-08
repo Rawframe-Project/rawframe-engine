@@ -322,7 +322,7 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED tycoon_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"ui_drawing_summary\"[^\n]*\"glyphRuns\":[1-9][0-9]+,\"glyphs\":[1-9][0-9]+,\"glyphRunsWaiting\":0.*\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,[^\n]*\"fontsRead\":1,\"texts\":[1-9][0-9]*,\"textsUnknown\":0,\"glyphRuns\":[1-9][0-9]*,\"glyphsLeftOut\":0,.*\"code\":\"scene_drawing_summary\"[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9]+,\"captured\":true")
+                             "\"code\":\"scene_drawing_summary\"[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,.*\"code\":\"ui_drawing_summary\"[^\n]*\"glyphRuns\":[1-9][0-9]+,\"glyphs\":[1-9][0-9]+,\"glyphRunsWaiting\":0.*\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,[^\n]*\"fontsRead\":1,\"texts\":[1-9][0-9]*,\"textsUnknown\":0,\"glyphRuns\":[1-9][0-9]*,\"glyphsLeftOut\":0,.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9]+,\"captured\":true")
         # Both bots' scenes drawn split-screen (D362): each local player's
         # view drawn into its half, and the picture read back in many
         # shades. The second's frames are not required: under a loaded full

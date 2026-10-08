@@ -39,7 +39,8 @@ constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        game_content::kGameContent.name,
                                        view::kPlayerViews.name,
-                                       view::kPreviewCamera.name};
+                                       view::kPreviewCamera.name,
+                                       world_animation::kPresentedPoses.name};
 
 /// A client's view without a camera of its own: behind its player and
 /// above, looking a little down, in a sunny day's exposure.
@@ -101,6 +102,10 @@ public:
         // A preview's camera, where an authoring client sets one (D432).
         if (!client.has_value() && context.has(view::kPreviewCamera.name)) {
             RAWFRAME_TRY_ASSIGN(preview_, context.capability(view::kPreviewCamera));
+        }
+        // The poses its skinned models are drawn in (D508).
+        if (context.has(world_animation::kPresentedPoses.name)) {
+            RAWFRAME_TRY_ASSIGN(poses_, context.capability(world_animation::kPresentedPoses));
         }
         // Split-screen (D362): the process's local players, each in its
         // region by the game's layout for their count, the first in the
@@ -387,7 +392,7 @@ private:
             scene_ = std::move(*made);
             scene_->show(lines_);
         }
-        scene_->extract(*kView.world);
+        scene_->extract(*kView.world, posesOf(*kView.world));
         extracted_ = true;
         if (kView.owned.isNull() || !kView.world->alive(kView.owned)) {
             return;
@@ -479,7 +484,7 @@ private:
                 }
                 each.scene = std::move(*made);
             }
-            each.scene->extract(*kView.world);
+            each.scene->extract(*kView.world, posesOf(*kView.world));
             if (!kView.owned.isNull() && kView.world->alive(kView.owned)) {
                 static_cast<void>(readCamera(*kView.world, kView.owned, each.camera));
             }
@@ -688,7 +693,7 @@ private:
                 }
                 each.scene = std::move(*made);
             }
-            each.scene->extract(world);
+            each.scene->extract(world, posesOf(world));
             static_cast<void>(readCamera(world, *each.entity, each.camera));
         }
     }
@@ -814,6 +819,12 @@ private:
     /// The local players' views, told each frame (D367).
     view::PlayerViews* views_ = nullptr;
     view::PreviewCamera* preview_ = nullptr;
+    const world_animation::PresentedPoses* poses_ = nullptr;
+
+    /// The animation `world` was presented with, if any.
+    const world_animation::AnimationQueries* posesOf(const world::World& world) const noexcept {
+        return poses_ != nullptr ? poses_->posesOf(world) : nullptr;
+    }
     std::uint64_t marksShown_ = 0;
     /// The preview's marks drawn, a point each (D464).
     std::uint64_t marksDrawn_ = 0;

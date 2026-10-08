@@ -21,6 +21,7 @@
 #include "rawframe/schema/registry.h"
 #include "rawframe/view/view.h"
 #include "rawframe/world/world.h"
+#include "rawframe/world_animation/animation.h"
 #include "rawframe/world_kest/game_files.h"
 
 #include <array>
@@ -127,6 +128,11 @@ struct ModelInstance {
     std::array<double, 3> position{};
     /// The pose's turn as a unit quaternion, x, y, z, w.
     std::array<float, 4> rotation{0, 0, 0, 1};
+    /// A skinned mesh's palette as its entity's animation posed it (D508):
+    /// its first matrix among the scene's extracted ones, and how many; none
+    /// for a model drawn as its mesh was bound.
+    std::uint32_t palette = 0;
+    std::uint32_t joints = 0;
 };
 
 /// The view as the queue stage takes it: the eye's place, its direction
@@ -207,6 +213,11 @@ struct SceneDraw {
     /// what its motion is measured from (D291); the model itself where it
     /// was not drawn then.
     Matrix previous{};
+    /// A posed skinned mesh's palette (D508): its first matrix among the
+    /// frame's, and how many; none for one drawn as its mesh was bound. A
+    /// vertex is skinned in the model's space, then the model places it.
+    std::uint32_t palette = 0;
+    std::uint32_t joints = 0;
 };
 
 /// The light a frame is drawn in, linear Rec. 709 (ADR-0047) in physical
@@ -621,6 +632,12 @@ struct SceneFrame {
     /// one the blob says, and for every place past the list's end.
     std::vector<std::shared_ptr<const material::ProgramMaterial>> programs;
     std::size_t overLimit = 0;
+    /// The posed skinned meshes' joint matrices, from their meshes' bind
+    /// space to their models' (D508), the draws naming theirs; skinned
+    /// models drawn posed; and those drawn as bound for want of room.
+    std::vector<Matrix> palette;
+    std::size_t skinned = 0;
+    std::size_t paletteOverLimit = 0;
 };
 
 /// `frame` without its reflection probes, in its list or its clusters: as
@@ -649,6 +666,8 @@ struct SceneLimits {
     std::size_t maximumPostProcesses = 8;
     /// ADR-0053's particle, trail, and beam limit points (D352, D354).
     rawframe::particles::Limits particles;
+    /// The joint matrices one frame's skinned models are drawn with (D508).
+    std::size_t maximumPalette = 16384;
 };
 
 /// ADR-0051's one typed atlas for the punctual lights' shadows (D292), a
@@ -759,8 +778,10 @@ public:
     /// The extract stage, in `presentation_extract`: every model of the
     /// World, copied with its pose, and the sun and sky, if one is set; read
     /// only (the World is not const because its queries cache what they
-    /// matched). Nothing of it is kept.
-    void extract(world::World& world);
+    /// matched). Nothing of it is kept. A skinned model whose entity
+    /// `poses` played is posed as it left it (D508), its palette among
+    /// `extractedPalette`; one it did not is drawn as its mesh was bound.
+    void extract(world::World& world, const world_animation::AnimationQueries* poses = nullptr);
 
     /// The view and queue stages, in `present`: the extracted models seen
     /// through `camera` and culled to its view, those in view in the order
@@ -772,6 +793,7 @@ public:
     void show(std::span<const SceneLine> lines);
 
     [[nodiscard]] std::span<const ModelInstance> extracted() const noexcept;
+    [[nodiscard]] std::span<const Matrix> extractedPalette() const noexcept;
     [[nodiscard]] std::span<const LightInstance> extractedLights() const noexcept;
     [[nodiscard]] std::span<const ProbeInstance> extractedProbes() const noexcept;
     [[nodiscard]] std::span<const DecalInstance> extractedDecals() const noexcept;

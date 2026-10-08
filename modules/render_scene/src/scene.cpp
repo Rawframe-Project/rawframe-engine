@@ -1,5 +1,6 @@
 #include "rawframe/render_scene/scene.h"
 
+#include "bounded.h"
 #include "camera.h"
 #include "decals.h"
 #include "lights.h"
@@ -11,6 +12,7 @@
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/layouts.h"
+#include "skinning.h"
 
 #include <algorithm>
 #include <cmath>
@@ -50,50 +52,6 @@ constexpr std::uint32_t kGround = 0x7C7C7CFF;
 /// default sun's (D347); and the most a sun's may, twenty degrees.
 constexpr float kSunAngle = 0.0093F;
 constexpr float kMostSunAngle = 0.35F;
-
-/// A mesh with the sphere around it, in its own space.
-/// A run of a mesh's parts that draw with one material: its indices and
-/// the material's identity, nought for the Model's.
-struct Run {
-    std::uint32_t firstIndex = 0;
-    std::uint32_t indexCount = 0;
-    std::uint64_t material = 0;
-};
-
-struct Bounded {
-    std::shared_ptr<const mesh::Mesh> mesh;
-    Vector center{};
-    float radius = 0;
-    /// Its parts, the next joined to one of the same material.
-    std::vector<Run> runs;
-};
-
-Bounded bounded(std::shared_ptr<const mesh::Mesh> made) {
-    Vector low = made->positions.front();
-    Vector high = low;
-    for (const mesh::Vector3& kPosition : made->positions) {
-        for (std::size_t axis = 0; axis < 3; ++axis) {
-            low[axis] = std::min(low[axis], kPosition[axis]);
-            high[axis] = std::max(high[axis], kPosition[axis]);
-        }
-    }
-    const Vector kCenter = {(low[0] + high[0]) / 2, (low[1] + high[1]) / 2, (low[2] + high[2]) / 2};
-    float radius = 0;
-    for (const mesh::Vector3& kPosition : made->positions) {
-        const Vector kAway = {kPosition[0] - kCenter[0], kPosition[1] - kCenter[1], kPosition[2] - kCenter[2]};
-        radius = std::max(radius, std::sqrt((kAway[0] * kAway[0]) + (kAway[1] * kAway[1]) + (kAway[2] * kAway[2])));
-    }
-    std::vector<Run> runs;
-    for (const mesh::Part& kPart : made->parts) {
-        if (!runs.empty() && runs.back().material == kPart.material) {
-            runs.back().indexCount += kPart.indexCount;
-        } else {
-            runs.push_back(
-                {.firstIndex = kPart.firstIndex, .indexCount = kPart.indexCount, .material = kPart.material});
-        }
-    }
-    return Bounded{.mesh = std::move(made), .center = kCenter, .radius = radius, .runs = std::move(runs)};
-}
 
 /// Whether an instance's values are all ones it can be drawn with.
 bool wellFormed(const ModelInstance& instance) noexcept {
@@ -143,6 +101,31 @@ struct Scene::State {
     std::map<std::uint64_t, std::uint32_t> materials;
     std::vector<bool> translucent;
     std::vector<ModelInstance> extracted;
+    /// The extracted skinned models' palettes, and the joints each mesh's
+    /// skin names found among its skeleton's bones (D508).
+    std::vector<Matrix> posed;
+    Skinning skinning;
+
+    /// A skinned model's palette, if its entity was played (D508).
+    void posePalette(const world_animation::AnimationQueries* poses, ModelInstance& instance) {
+        if (poses == nullptr) {
+            return;
+        }
+        const auto kMesh = meshes.find(instance.model.mesh);
+        if (kMesh == meshes.end() || kMesh->second.mesh->skin.joints.empty()) {
+            return;
+        }
+        const animation::Pose* kPose = poses->pose(instance.entity);
+        if (kPose == nullptr) {
+            return;
+        }
+        const std::size_t kFirst = posed.size();
+        if (skinning.pose(
+                instance.model.mesh, kMesh->second.mesh->skin, poses->bones(instance.entity), *kPose, posed)) {
+            instance.palette = static_cast<std::uint32_t>(kFirst);
+            instance.joints = static_cast<std::uint32_t>(posed.size() - kFirst);
+        }
+    }
     std::optional<Sun> sunNow;
     std::optional<Sky> skyNow;
     std::vector<const ModelInstance*> order;
@@ -316,6 +299,9 @@ struct Scene::State {
 
     const SceneFrame& queue(const SceneCamera& camera) {
         frame.draws.clear();
+        frame.palette.clear();
+        frame.skinned = 0;
+        frame.paletteOverLimit = 0;
         frame.drawn = 0;
         frame.culled = 0;
         frame.hidden = 0;
@@ -426,8 +412,10 @@ struct Scene::State {
                     center[row] += kTurn[column][row] * kScale[column] * kBounds.center[column];
                 }
             }
-            const float kRadius =
-                kBounds.radius * std::max({std::abs(kScale[0]), std::abs(kScale[1]), std::abs(kScale[2])});
+            // A posed mesh may reach past its bind's bounds: twice as far
+            // holds a limb swung about its middle (D508).
+            const float kRadius = kBounds.radius * (instance->joints != 0 ? 2.0F : 1.0F) *
+                                  std::max({std::abs(kScale[0]), std::abs(kScale[1]), std::abs(kScale[2])});
             SceneDraw draw{.mesh = kModel.mesh, .entity = instance->entity};
             for (std::size_t column = 0; column < 3; ++column) {
                 for (std::size_t row = 0; row < 3; ++row) {
@@ -468,6 +456,18 @@ struct Scene::State {
                 }
                 return kMaterial->second;
             };
+            // Its palette, the frame's from here, for its draws and its
+            // shadows' alike; past the frame's room, drawn as bound (D508).
+            if (instance->joints != 0) {
+                if (frame.palette.size() + instance->joints <= settings.limits.maximumPalette) {
+                    draw.palette = static_cast<std::uint32_t>(frame.palette.size());
+                    draw.joints = instance->joints;
+                    const auto kFirst = posed.begin() + instance->palette;
+                    frame.palette.insert(frame.palette.end(), kFirst, kFirst + instance->joints);
+                } else {
+                    ++frame.paletteOverLimit;
+                }
+            }
             std::vector<SceneDraw> runs;
             const std::uint32_t kOwn = kPlaceOf(kModel.material);
             for (const Run& kRun : kBounds.runs) {
@@ -517,6 +517,7 @@ struct Scene::State {
                 }
             }
             now.position = instance->position;
+            frame.skinned += draw.joints != 0 ? 1 : 0;
             frame.draws.insert(frame.draws.end(), runs.begin(), runs.end());
             ++frame.drawn;
         }
@@ -801,9 +802,10 @@ void extractRibbons(world::World& world,
 
 } // namespace
 
-void Scene::extract(world::World& world) {
+void Scene::extract(world::World& world, const world_animation::AnimationQueries* poses) {
     State& state = *state_;
     state.extracted.clear();
+    state.posed.clear();
     for (std::size_t component = 0; component < state.models.size(); ++component) {
         state.models[component].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
             for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
@@ -817,6 +819,7 @@ void Scene::extract(world::World& world) {
                         instance.rotation = {pose->qx, pose->qy, pose->qz, pose->qw};
                     }
                 }
+                state.posePalette(poses, instance);
                 state.extracted.push_back(instance);
             }
         });
@@ -940,6 +943,10 @@ std::array<float, 2> temporalJitter(std::uint64_t frame) noexcept {
     };
     const std::uint64_t kIndex = (frame % 8) + 1;
     return {kRadical(kIndex, 2) - 0.5F, kRadical(kIndex, 3) - 0.5F};
+}
+
+std::span<const Matrix> Scene::extractedPalette() const noexcept {
+    return state_->posed;
 }
 
 std::span<const ModelInstance> Scene::extracted() const noexcept {
