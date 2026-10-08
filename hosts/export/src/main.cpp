@@ -60,6 +60,7 @@
 #include "rawframe/content/composition_record.h"
 #include "rawframe/content/library.h"
 #include "rawframe/document/json.h"
+#include "rawframe/input/actions.h"
 #include "rawframe/process/child.h"
 #include "rawframe/process/self.h"
 #include "rawframe/release/release.h"
@@ -152,6 +153,58 @@ std::optional<std::string> wordAfter(const std::string& printed, std::string_vie
         at = kEnd == std::string::npos ? printed.size() : kEnd + 1;
     }
     return std::nullopt;
+}
+
+/// A binding as a player reads it: its device, then its control, or each
+/// of a pair's or a quad's by what it does.
+std::string bindingText(const rawframe::input::Binding& binding) {
+    using rawframe::input::Composite;
+    std::string text{rawframe::input::nameOf(binding.device)};
+    const auto kControl = [&binding](std::size_t at) {
+        return std::string{rawframe::input::nameOf(binding.controls.at(at))};
+    };
+    if (binding.composite == Composite::None) {
+        return text + " " + kControl(0);
+    }
+    if (binding.composite == Composite::Pair) {
+        return text + " " + kControl(0) + " and " + kControl(1);
+    }
+    return text + " " + kControl(0) + ", " + kControl(1) + ", " + kControl(2) + ", " + kControl(3) +
+           " (up, down, left, right)";
+}
+
+/// What a player of the exported game reads first: how to start it, and
+/// each action of the game's `actions` file with its default bindings.
+std::string howToPlay(const std::filesystem::path& game, const std::string& gameFile, const std::string& suffix) {
+    std::string text = "To play, run rawframe-play" + suffix +
+                       " in this folder: it starts the game's server, then the game in a window.\n"
+                       "Closing the window ends both. The server's and the game's records are\n"
+                       "written beside them, in server.log and client.log.\n";
+    std::ifstream description{game / gameFile};
+    std::string line;
+    while (std::getline(description, line)) {
+        if (!line.starts_with("actions ")) {
+            continue;
+        }
+        std::ifstream file{game / line.substr(8), std::ios::binary};
+        const std::string kBytes{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+        const auto kSet = rawframe::input::readActionSet(kBytes);
+        if (!kSet.has_value()) {
+            break;
+        }
+        text += "\nControls:\n";
+        for (const rawframe::input::Action& kAction : kSet->actions) {
+            text += "  " + (kAction.displayName.empty() ? kAction.name : kAction.displayName) + ":";
+            const char* separator = " ";
+            for (const rawframe::input::Binding& kBinding : kAction.bindings) {
+                text += separator + bindingText(kBinding);
+                separator = "; ";
+            }
+            text += "\n";
+        }
+        break;
+    }
+    return text;
 }
 
 constexpr std::string_view kPlatform =
@@ -604,6 +657,14 @@ int main(int argc, char** argv) {
             : writeNative(kExported, {kTool("server"), kTool("client"), kTool("play"), kTool("install")}, written);
     if (!kWritten) {
         return 1;
+    }
+    // How to play it, for a native folder's player.
+    if (!web) {
+        if (!writeText(kOutput / "README.txt", howToPlay(kGame, gameFile, kSuffix))) {
+            std::fputs("rawframe-export: README.txt cannot be written\n", stderr);
+            return 1;
+        }
+        written.emplace_back("README.txt");
     }
     fs::remove_all(kWork, error);
 
