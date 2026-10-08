@@ -452,3 +452,13 @@ RAWFRAME_TEST(ACookIsAskedForAndHeardUntilItEnds) {
                     Heard::Kind::None);
     RAWFRAME_EXPECT(heardOf("not json").kind == Heard::Kind::None);
 }
+
+RAWFRAME_TEST(AnImportIsAskedForAndWhatItMadeSaid) {
+    // D505: a file Studio imports, and how it says what it made.
+    RAWFRAME_EXPECT(document::writeCompact(importRecord(3, "/art/bark.png", "bark.png")) ==
+                    R"({"kind":"authoring.import","id":3,"source":"/art/bark.png","as":"bark.png"})");
+    RAWFRAME_EXPECT(importedIn(R"({"kind":"authoring.reply","id":3,"answer":{"kind":"authoring.imported",)"
+                               R"("asset":"texture","id":"0123456789abcdef","path":"bark.png"}})") ==
+                    "texture bark.png");
+    RAWFRAME_EXPECT(importedIn(R"({"kind":"authoring.reply","id":3,"error":{"message":"taken"}})").empty());
+}

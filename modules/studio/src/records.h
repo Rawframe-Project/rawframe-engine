@@ -104,6 +104,12 @@ struct Asset {
 /// click, or one that met nothing `scene` brings.
 [[nodiscard]] Value pickRecord(std::int64_t id, std::string_view scene);
 
+/// `authoring.import` (D503): the file at `source` made one of the game's
+/// assets at `as` under its directory; and what the answer says it made,
+/// as Studio says it: its kind and its path, or empty for a refusal.
+[[nodiscard]] Value importRecord(std::int64_t id, std::string_view source, std::string_view as);
+[[nodiscard]] std::string importedIn(std::string_view reply);
+
 /// `authoring.cook` (D502): the game cooked into `output`, reusing what
 /// `cache` holds; and `authoring.cancel` for the cook given `operation`.
 [[nodiscard]] Value

@@ -488,6 +488,23 @@ void ShellParticipant::place(const std::string& text) {
 }
 
 void ShellParticipant::makeScene(std::string text) {
+    // A file named by its absolute path is imported, beside the game's own
+    // files under its own name (D505).
+    if (std::filesystem::path{text}.is_absolute()) {
+        const std::string kReply =
+            ask(importRecord(next(), text, std::filesystem::path{text}.filename().generic_string()));
+        const std::string kImported = importedIn(kReply);
+        if (kImported.empty()) {
+            ++refused_;
+            say(answeredOf(kReply).message);
+        } else {
+            ++applied_;
+            assets_ = assetsOf(ask(assetsRecord(next())));
+            say("imported " + kImported);
+        }
+        static_cast<void>(showScenes());
+        return;
+    }
     if (!text.empty() && !text.ends_with(".scene")) {
         text += ".scene";
     }

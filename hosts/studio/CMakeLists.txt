@@ -99,6 +99,19 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "typed crate at 248,193.*clicked at 463,97.*\"code\":\"studio_summary\"[^\n]*\"scenes\":4,\"scene\":\"crate.scene\",\"entities\":1,[^\n]*\"applied\":2,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+    # A file imported from Studio (D503, D505): the plaza's paving typed by
+    # its absolute path into the field under runners' scenes, made one of
+    # runners' textures under its own name.
+    add_test(NAME studio_imports
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene 248,193:${PROJECT_SOURCE_DIR}/games/plaza/paving.png
+                     "until=studio_said,status=\"imported "
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_imports PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "typed [^\n]*/games/plaza/paving.png at 248,193.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"imported texture paving.png\".*\"exit\":\"clean_stop\"")
     # An entity moved among the scene's own (D451): ground, first in
     # runners' level, is refused Up and moved Down twice, staying chosen.
     add_test(NAME studio_moves

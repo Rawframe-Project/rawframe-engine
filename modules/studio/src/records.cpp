@@ -250,6 +250,26 @@ std::string litIn(std::string_view reply) {
     return kLit != nullptr && kLit->text() != nullptr ? *kLit->text() : std::string{};
 }
 
+Value importRecord(std::int64_t id, std::string_view source, std::string_view as) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.import"));
+    record.add("id", Value::integer(id));
+    record.add("source", Value::string(std::string{source}));
+    record.add("as", Value::string(std::string{as}));
+    return record;
+}
+
+std::string importedIn(std::string_view reply) {
+    const auto kRead = document::parse(reply);
+    const Value* kAnswer = kRead.has_value() ? kRead->find("answer") : nullptr;
+    const Value* kKind = kAnswer != nullptr ? kAnswer->find("asset") : nullptr;
+    const Value* kPath = kAnswer != nullptr ? kAnswer->find("path") : nullptr;
+    if (kKind == nullptr || kKind->text() == nullptr || kPath == nullptr || kPath->text() == nullptr) {
+        return {};
+    }
+    return *kKind->text() + " " + *kPath->text();
+}
+
 Value cookRecord(std::int64_t id, const std::filesystem::path& output, const std::filesystem::path& cache) {
     Value record = Value::object();
     record.add("kind", Value::string("authoring.cook"));

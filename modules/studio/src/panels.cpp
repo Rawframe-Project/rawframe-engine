@@ -174,7 +174,8 @@ result::Status ShellParticipant::showScenes() {
     }
     // A new scene is the session's own verb, not an operation the catalog
     // lists, so it is always offered.
-    RAWFRAME_TRY_ASSIGN(const auto kLine, fieldRow("new scene", "", scenesColumn_));
+    // A file's absolute path typed there imports it instead (D505).
+    RAWFRAME_TRY_ASSIGN(const auto kLine, fieldRow("new scene or import", "", scenesColumn_));
     newSceneRow_ = kLine.first;
     newScene_ = FieldRow{.value = kLine.second, .role = FieldRow::Role::NewScene, .field = "new scene"};
     if (!viewRows_.empty()) {

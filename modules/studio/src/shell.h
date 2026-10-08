@@ -243,7 +243,8 @@ private:
     void place(const std::string& text);
 
     /// Makes a new scene at the path `text` gives, `.scene` added if it
-    /// has none, and chooses it.
+    /// has none, and chooses it; or, for a file's absolute path, imports
+    /// the file as one of the game's assets (D505).
     void makeScene(std::string text);
 
     /// Greets the session and reads what it offers and the game's scenes;
