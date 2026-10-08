@@ -169,17 +169,8 @@ void ReplicationServer::State::onInput(Peer& peer, const network::SessionEvent& 
     // pacing a client ahead for it would leave it that far early once it
     // made up what it owed, its commands waiting past their age and
     // dropped (D323).
-    // After a silence, and for the first window, the lead is what this
-    // window finds as it arrives (D522): a client sending windows further
-    // apart than a command's age, drawn at a few frames a second, is paced
-    // too, where it never was and every command it sent landed on a tick
-    // already played.
     if (peer.pendingLead.has_value() && pumpTick <= peer.heardAt + maximumAgeTicks(peer)) {
         peer.leastLead = std::min(peer.leastLead.value_or(*peer.pendingLead), *peer.pendingLead);
-    } else {
-        const std::int64_t kArrived =
-            static_cast<std::int64_t>(kWindow->newestInputTick) - static_cast<std::int64_t>(peer.nextInputTick);
-        peer.leastLead = std::min(peer.leastLead.value_or(kArrived), kArrived);
     }
     peer.pendingLead.reset();
     peer.heardInput = true;
