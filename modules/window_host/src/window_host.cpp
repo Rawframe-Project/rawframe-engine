@@ -155,6 +155,10 @@ result::Status WindowHost::start(window::Windows& windows) {
         // pads another program made (D467).
         RAWFRAME_TRY_ASSIGN(gamepads_, kConfiguration->truth("input.gamepads", true));
         made.size = {.width = static_cast<float>(kWidth), .height = static_cast<float>(kHeight)};
+        // A game's own name over its window, as an export gives it (D519).
+        if (const auto kTitle = kConfiguration->text("window.title")) {
+            made.title = std::string{*kTitle};
+        }
         if (kConfiguration->text("window.x").has_value() || kConfiguration->text("window.y").has_value()) {
             place = window::Position{.x = static_cast<float>(kX), .y = static_cast<float>(kY)};
         }
