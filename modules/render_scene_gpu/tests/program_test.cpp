@@ -116,7 +116,8 @@ RAWFRAME_TEST(AMaterialsOwnProgramLightsItsModel) {
     const std::array<int, 2> kChecked = kCounted(*kOwn);
     const render_scene_gpu::RendererStatistics kStatistics = (*made)->statistics();
     std::printf(
-        "plain red %d green %d, program red %d green %d, center %d %d %d; program models drawn %llu, waiting %llu\n",
+        "plain red %d green %d, program red %d green %d, center %d %d %d; program models drawn %llu, waiting %llu; "
+        "programs refused %llu%s%s\n",
         kWhite[0],
         kWhite[1],
         kChecked[0],
@@ -125,9 +126,12 @@ RAWFRAME_TEST(AMaterialsOwnProgramLightsItsModel) {
         at(*kOwn, 32, 32)[1],
         at(*kOwn, 32, 32)[2],
         static_cast<unsigned long long>(kStatistics.programModelsDrawn),
-        static_cast<unsigned long long>(kStatistics.programModelsWaiting));
-    RAWFRAME_EXPECT(kWhite[0] == 0 && kWhite[1] == 0 && kChecked[0] > 100 && kChecked[1] > 100 &&
-                    kStatistics.programModelsDrawn > 0);
+        static_cast<unsigned long long>(kStatistics.programModelsWaiting),
+        static_cast<unsigned long long>(kStatistics.programsRefused),
+        kStatistics.programRefusal.empty() ? "" : ", the first by ",
+        kStatistics.programRefusal.c_str());
+    RAWFRAME_EXPECT(kStatistics.programsRefused == 0 && kWhite[0] == 0 && kWhite[1] == 0 && kChecked[0] > 100 &&
+                    kChecked[1] > 100 && kStatistics.programModelsDrawn > 0);
 }
 
 RAWFRAME_TEST(AMaskedProgramMaterialIsCutWhereItsProgramSays) {

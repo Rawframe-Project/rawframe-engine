@@ -2,6 +2,7 @@
 
 #include "rawframe/material/material.h"
 #include "rawframe/render/device.h"
+#include "rawframe/render_scene_gpu/renderer.h"
 #include "rawframe/result/result.h"
 
 #include <array>
@@ -13,6 +14,7 @@
 #include <maul-rhi/shader.h>
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace rawframe::render_scene_gpu {
@@ -94,6 +96,8 @@ struct ProgramShading {
     std::array<Asked, 19> variants{};
     std::array<bool, 19> asked{};
     bool refused = false;
+    /// What refused it, as the device said (D501).
+    std::string refusal;
 };
 
 /// Where a program's pipeline for `shade` lies among its variants: the lit
@@ -261,6 +265,10 @@ struct Pipelines {
     /// for a program refused.
     [[nodiscard]] const Asked*
     programPipeline(const material::ProgramMaterial* program, Shade shade, bool decaled, bool sampled) const;
+
+    /// The programs refused into `statistics`: how many, and why the first
+    /// was, if none was told before (D501).
+    void tellRefused(RendererStatistics& statistics) const;
 
 private:
     result::Status askFor(Effect effect);

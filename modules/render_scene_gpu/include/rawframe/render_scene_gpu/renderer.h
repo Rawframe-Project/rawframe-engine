@@ -27,6 +27,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace rawframe::render_scene_gpu {
@@ -117,6 +118,10 @@ struct RendererStatistics {
     /// they were refused (D485, D487).
     std::uint64_t programModelsDrawn = 0;
     std::uint64_t programModelsWaiting = 0;
+    /// Material programs the device refused, and why the first was: its
+    /// shader or a pipeline of it, as the device said (D501).
+    std::uint64_t programsRefused = 0;
+    std::string programRefusal;
 };
 
 /// The bytes of one draw's placement as the scene pipeline reads it: the

@@ -11,7 +11,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <string_view>
+#include <utility>
 
 namespace rawframe::render_scene_gpu {
 
@@ -43,6 +45,16 @@ constexpr std::array<std::string_view, 19> kLabels = {"rawframe.scene.program.li
                                                       "rawframe.scene.program.depth.surfaces.masked.multisampled",
                                                       "rawframe.scene.program.shadows.masked"};
 
+/// What the device said refusing a program's `part`: the error and what it
+/// names, one line.
+std::string refusalOf(const result::Error& error, std::string_view part) {
+    std::string made = std::string{part} + ": " + std::string{error.description()};
+    for (const auto& each : error.context()) {
+        made += ", " + std::string{each.key} + " " + std::string{each.value};
+    }
+    return made;
+}
+
 } // namespace
 
 void Pipelines::wantPrograms(std::span<const std::shared_ptr<const material::ProgramMaterial>> named,
@@ -59,8 +71,14 @@ void Pipelines::wantPrograms(std::span<const std::shared_ptr<const material::Pro
             const auto kBytesOf = [](const std::vector<std::byte>& bytes) {
                 return std::span<const std::uint8_t>{reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()};
             };
-            shading.refused = !makeShader(kBytesOf(kProgram->containers.at(kContainer)), shading.shader).has_value() ||
-                              !makeShader(kBytesOf(kProgram->shadows.at(kContainer)), shading.shadowShader).has_value();
+            for (const auto& [kBytes, kInto] : {std::pair{&kProgram->containers, &shading.shader},
+                                                std::pair{&kProgram->shadows, &shading.shadowShader}}) {
+                if (const result::Status kMade = makeShader(kBytesOf(kBytes->at(kContainer)), *kInto);
+                    !shading.refused && !kMade.has_value()) {
+                    shading.refused = true;
+                    shading.refusal = refusalOf(kMade.error(), kBytes == &kProgram->containers ? "scene" : "shadow");
+                }
+            }
         }
         // The prepass's surfaces are wanted once a view wants them (D337).
         const bool kSurfaced = asked_.at(static_cast<std::size_t>(Effect::Surfaces));
@@ -91,12 +109,30 @@ void Pipelines::wantPrograms(std::span<const std::shared_ptr<const material::Pro
                 def.sampleCount = samples;
             }
             shading.asked.at(variant) = true;
-            shading.refused = !ask(def, shading.variants.at(variant)).has_value();
+            if (const result::Status kAsked = ask(def, shading.variants.at(variant)); !kAsked.has_value()) {
+                shading.refused = true;
+                shading.refusal = refusalOf(kAsked.error(), kLabels.at(variant));
+            }
         }
         for (std::size_t variant = 0; variant < shading.variants.size() && !shading.refused; ++variant) {
             if (shading.asked.at(variant) && !shading.variants.at(variant).ready) {
                 const auto kAnswered = answered({&shading.variants.at(variant)});
-                shading.refused = !kAnswered.has_value();
+                if (!kAnswered.has_value()) {
+                    shading.refused = true;
+                    shading.refusal = refusalOf(kAnswered.error(), kLabels.at(variant));
+                }
+            }
+        }
+    }
+}
+
+void Pipelines::tellRefused(RendererStatistics& statistics) const {
+    statistics.programsRefused = 0;
+    for (const auto& [kProgram, kShading] : programs) {
+        if (kShading.refused) {
+            ++statistics.programsRefused;
+            if (statistics.programRefusal.empty()) {
+                statistics.programRefusal = kShading.refusal;
             }
         }
     }
