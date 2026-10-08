@@ -178,11 +178,11 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              PASS_REGULAR_EXPRESSION
                              "\"id\":2,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":true}.*\"id\":3,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":4,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":5,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":false}.*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,")
         # Each draws a window on lavapipe beside a server, and bots or a
-        # second client in some: three of a preset's processors each, so a
-        # full check, eight trees at once, starts fewer at once and none is
-        # starved past its input (D491), as Studio's played tests (D467).
+        # second client in some: two of a preset's processors each, so a full
+        # check, eight trees at once, starts fewer at once and none is starved
+        # past its input (D491), as Studio's played tests (D467, D496).
         set_tests_properties(client_plays_runners client_drawn client_clicks_stalls client_types_stalls client_types_stalls_frozen client_navigates_stalls client_navigates_stalls_frozen client_plaza_drawn client_previews_plaza
-                             PROPERTIES PROCESSORS 3)
+                             PROPERTIES PROCESSORS 2)
     endif()
     # Every client test here draws a window, the content it plays cooked
     # first: labeled so the check can leave them out of a tree they find

@@ -461,10 +461,11 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              PASS_REGULAR_EXPRESSION
                              "dragged from 980,520 to 1080,520 holding Control_L.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"applied\":1,[^\n]*\"undoable\":1,[^\n]*\"picked\":1,\"dragged\":1,\"raised\":0,\"turned\":1,")
         # A played game is three programs, Studio, its server, and a client
-        # drawing on the device: each counts as three of the tree's jobs, so
-        # a check starts fewer at once and none starves the others (D467).
+        # drawing on the device: each counts as two of the tree's jobs, so a
+        # check starts fewer at once and none starves the others (D467;
+        # three until Studio and its client drew less, D496).
         set_tests_properties(studio_plays_plaza studio_picks_plaza studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza studio_snaps_plaza studio_looks_plaza
-                             studio_rings_plaza studio_raises_plaza studio_turns_plaza studio_previews_plaza PROPERTIES PROCESSORS 3)
+                             studio_rings_plaza studio_raises_plaza studio_turns_plaza studio_previews_plaza PROPERTIES PROCESSORS 2)
     endif()
     # Every test here draws a window: labeled so the check can leave them
     # out of a tree they find nothing in (D493).
