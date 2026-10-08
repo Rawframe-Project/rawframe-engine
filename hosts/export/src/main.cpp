@@ -138,7 +138,13 @@ std::optional<std::string> wordAfter(const std::string& printed, std::string_vie
     std::size_t at = 0;
     while (at < printed.size()) {
         const std::size_t kEnd = printed.find('\n', at);
-        const std::string_view kLine{printed.data() + at, (kEnd == std::string::npos ? printed.size() : kEnd) - at};
+        std::string_view line{printed.data() + at, (kEnd == std::string::npos ? printed.size() : kEnd) - at};
+        // A Windows tool's text output ends its lines with a carriage
+        // return too, which is no part of the line's last word.
+        if (line.ends_with('\r')) {
+            line.remove_suffix(1);
+        }
+        const std::string_view kLine = line;
         if (kLine.starts_with(kPrefix)) {
             const std::string_view kRest = kLine.substr(kPrefix.size());
             return std::string{kRest.substr(0, kRest.find(' '))};
