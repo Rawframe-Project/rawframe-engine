@@ -3,7 +3,7 @@
 # the parser it holds is trusted only with an author's own files.
 rawframe_module(NAME mesh_import
     SOURCES src/import.cpp src/materials.cpp
-    DEPS mesh material result base
+    DEPS mesh material animation_import result base
 )
 target_link_libraries(rawframe_mesh_import PRIVATE rawframe_cgltf)
 

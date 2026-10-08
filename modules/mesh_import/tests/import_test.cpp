@@ -1,13 +1,16 @@
 // glTF import: every container form gives the same mesh, nodes place their
 // meshes and a mirror keeps triangles facing out, strips and fans become
-// lists, materials and their images become subassets the parts name, what
-// is not supported is refused by name, and damaged sources are refused
-// without a crash.
+// lists, materials and their images become subassets the parts name, a
+// skinned mesh keeps its space and names its joints' bones, what is not
+// supported is refused by name, and damaged sources are refused without a
+// crash.
 
+#include "rawframe/animation/skeleton.h"
 #include "rawframe/mesh/errors.h"
 #include "rawframe/mesh_import/import.h"
 #include "rawframe/test/test.h"
 
+#include <array>
 #include <bit>
 #include <cstdint>
 #include <cstring>
@@ -384,5 +387,110 @@ RAWFRAME_TEST(DamagedSourcesAreRefusedWithoutACrash) {
         damaged[at] ^= std::byte{0xFF};
         const auto kImported = importGltf(damaged, none.reader(), &identify);
         RAWFRAME_EXPECT(!kImported.has_value() || mesh::validate(kImported->mesh).has_value());
+    }
+}
+
+namespace {
+
+/// A leg (D508): a mesh node placed five meters along x, skinned to a hip
+/// and a knee under an armature, the skin listing the knee first. The
+/// buffer: three positions, three vertices' joints as bytes, their weights
+/// (the first split two to two, the third naming a joint past the skin with
+/// no weight), two inverse binds (the knee's raised a meter), and three
+/// indices.
+struct Leg {
+    std::array<std::uint8_t, 12> joints = {0, 1, 0, 0, 1, 0, 0, 0, 0, 9, 0, 0};
+    std::array<float, 12> weights = {2.0F, 2.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F};
+    std::string attributes = R"("POSITION": 0, "JOINTS_0": 1, "WEIGHTS_0": 2)";
+    std::string extraNode;
+};
+
+std::string leg(const Leg& shape) {
+    std::vector<std::byte> buffer;
+    for (const float kValue : {0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F}) {
+        putU32(buffer, std::bit_cast<std::uint32_t>(kValue));
+    }
+    for (const std::uint8_t kJoint : shape.joints) {
+        buffer.push_back(std::byte{kJoint});
+    }
+    for (const float kValue : shape.weights) {
+        putU32(buffer, std::bit_cast<std::uint32_t>(kValue));
+    }
+    for (std::size_t joint = 0; joint < 2; ++joint) {
+        for (std::size_t at = 0; at < 16; ++at) {
+            const float kValue = at % 5 == 0 ? 1.0F : (joint == 0 && at == 13 ? 1.0F : 0.0F);
+            putU32(buffer, std::bit_cast<std::uint32_t>(kValue));
+        }
+    }
+    for (const std::uint8_t kByte : {0, 0, 1, 0, 2, 0, 0, 0}) {
+        buffer.push_back(std::byte{kByte});
+    }
+    return R"({"asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [)"
+           R"({"name": "Armature", "children": [1, 3)" +
+           std::string{shape.extraNode.empty() ? "" : ", 4"} +
+           R"(]}, {"name": "hip", "children": [2]}, {"name": "knee", "translation": [0, -1, 0]}, )"
+           R"({"mesh": 0, "skin": 0, "translation": [5, 0, 0]})" +
+           shape.extraNode + R"(], "skins": [{"joints": [2, 1], "inverseBindMatrices": 3}], )" +
+           R"("meshes": [{"primitives": [{"attributes": {)" + shape.attributes + R"(}, "indices": 4}]}], )" +
+           R"("buffers": [{"byteLength": 232, "uri": "data:application/octet-stream;base64,)" + base64(buffer) +
+           R"("}], "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36}, )"
+           R"({"buffer": 0, "byteOffset": 36, "byteLength": 12}, {"buffer": 0, "byteOffset": 48, "byteLength": 48}, )"
+           R"({"buffer": 0, "byteOffset": 96, "byteLength": 128}, {"buffer": 0, "byteOffset": 224, "byteLength": 6}], )"
+           R"("accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", )"
+           R"("min": [0, 0, 0], "max": [1, 1, 0]}, {"bufferView": 1, "componentType": 5121, "count": 3, "type": "VEC4"}, )"
+           R"({"bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4"}, )"
+           R"({"bufferView": 3, "componentType": 5126, "count": 2, "type": "MAT4"}, )"
+           R"({"bufferView": 4, "componentType": 5123, "count": 3, "type": "SCALAR"}]})";
+}
+
+result::Result<Imported> importedLeg(const Leg& shape) {
+    const std::string kText = leg(shape);
+    const std::vector<std::byte> kBytes = bytesOf(kText);
+    const ReadFile kNothing = [](std::string_view) -> result::Result<std::span<const std::byte>> {
+        return result::fail(result::ErrorClass::NotFound, mesh::kMeshDomain, {}, "no file");
+    };
+    const Identify kIdentity = [](std::string_view) {
+        return std::uint64_t{1};
+    };
+    return importGltf(kBytes, kNothing, kIdentity, {});
+}
+
+} // namespace
+
+RAWFRAME_TEST(ASkinnedMeshKeepsItsSpaceAndNamesItsJointsBones) {
+    const auto kImported = importedLeg({});
+    RAWFRAME_EXPECT(kImported.has_value());
+    if (!kImported.has_value()) {
+        return;
+    }
+    const mesh::Mesh& kMesh = kImported->mesh;
+    // The mesh's node places nothing; its joints will.
+    RAWFRAME_EXPECT(kMesh.positions[1] == (mesh::Vector3{1.0F, 0.0F, 0.0F}));
+    // In the skin's order, each joint names the bone the skeleton has for it.
+    const std::array<std::string_view, 2> kKnee = {"hip", "knee"};
+    const std::array<std::string_view, 1> kHip = {"hip"};
+    RAWFRAME_EXPECT(kMesh.skin.joints.size() == 2 && kMesh.skin.joints[0].bone == animation::targetIdOf(kKnee) &&
+                    kMesh.skin.joints[1].bone == animation::targetIdOf(kHip));
+    RAWFRAME_EXPECT(kMesh.skin.joints[0].inverseBind[13] == 1.0F && kMesh.skin.joints[1].inverseBind[13] == 0.0F);
+    // Weights made to sum to one; a joint with none named as the first.
+    RAWFRAME_EXPECT(kMesh.skin.weights[0] == (std::array<float, 4>{0.5F, 0.5F, 0.0F, 0.0F}));
+    RAWFRAME_EXPECT(kMesh.skin.influences[0] == (std::array<std::uint16_t, 4>{0, 1, 0, 0}) &&
+                    kMesh.skin.influences[2] == (std::array<std::uint16_t, 4>{0, 0, 0, 0}));
+    RAWFRAME_EXPECT(mesh::encode(kMesh).has_value());
+}
+
+RAWFRAME_TEST(SkinsAMeshCannotFollowAreRefused) {
+    Leg mixed;
+    mixed.extraNode = R"(, {"mesh": 0})";
+    Leg past;
+    past.joints[4] = 2;
+    Leg unweighted;
+    unweighted.weights[4] = 0.0F;
+    Leg noWeights;
+    noWeights.attributes = R"("POSITION": 0, "JOINTS_0": 1)";
+    Leg negative;
+    negative.weights[1] = -1.0F;
+    for (const Leg& kLeg : {mixed, past, unweighted, noWeights, negative}) {
+        RAWFRAME_EXPECT(refusedWith(importedLeg(kLeg), MeshError::BadSource));
     }
 }

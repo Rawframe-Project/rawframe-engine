@@ -1,13 +1,16 @@
 #include "rawframe/mesh_import/import.h"
 
 #include "materials.h"
+#include "rawframe/animation_import/import.h"
 #include "rawframe/mesh/errors.h"
 
 #include <array>
 #include <cgltf.h>
 #include <cmath>
 #include <cstdint>
+#include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -214,6 +217,91 @@ struct Gathered {
     bool uvs = true;
 };
 
+/// A skin's joints as the mesh's (D508): each names the bone the skeleton
+/// imported from the same skin has, with the skin's inverse bind, or none.
+result::Result<std::vector<mesh::Joint>> jointsOf(const cgltf_skin& skin, const ImportLimits& limits) {
+    if (skin.joints_count == 0) {
+        return badSource("a skin with no joints");
+    }
+    if (skin.joints_count > limits.mesh.maximumJoints) {
+        return overLimit("a skin holds more joints than its limits allow");
+    }
+    std::map<const cgltf_node*, std::size_t> indices;
+    for (cgltf_size i = 0; i < skin.joints_count; ++i) {
+        indices.emplace(skin.joints[i], i);
+    }
+    std::vector<animation_import::SkinJoint> described;
+    for (cgltf_size i = 0; i < skin.joints_count; ++i) {
+        const cgltf_node* kJoint = skin.joints[i];
+        const auto kParent = kJoint->parent != nullptr ? indices.find(kJoint->parent) : indices.end();
+        described.push_back({.name = kJoint->name != nullptr ? std::string_view{kJoint->name} : std::string_view{},
+                             .parent = kParent != indices.end() ? std::optional{kParent->second} : std::nullopt});
+    }
+    const auto kTargets = animation_import::jointTargets(described);
+    if (!kTargets.has_value()) {
+        return badSource(kTargets.error().description());
+    }
+    const cgltf_accessor* kBinds = skin.inverse_bind_matrices;
+    if (kBinds != nullptr && (kBinds->type != cgltf_type_mat4 || kBinds->count != skin.joints_count)) {
+        return badSource("a skin whose inverse binds are not one matrix per joint");
+    }
+    std::vector<mesh::Joint> joints(skin.joints_count);
+    for (cgltf_size i = 0; i < skin.joints_count; ++i) {
+        joints[i].bone = (*kTargets)[i];
+        joints[i].inverseBind = {
+            1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F};
+        if (kBinds != nullptr && !cgltf_accessor_read_float(kBinds, i, joints[i].inverseBind.data(), 16)) {
+            return badSource("a skin's inverse bind that cannot be read");
+        }
+    }
+    return joints;
+}
+
+/// A skinned primitive's influences and weights, its weights made to sum
+/// to one.
+result::Status
+influencesOf(const cgltf_primitive& primitive, std::size_t vertices, std::size_t joints, mesh::Skin& skin) {
+    const cgltf_accessor* kJoints = attribute(primitive, cgltf_attribute_type_joints);
+    const cgltf_accessor* kWeights = attribute(primitive, cgltf_attribute_type_weights);
+    if (kJoints == nullptr || kWeights == nullptr || kJoints->count != vertices || kWeights->count != vertices ||
+        kJoints->type != cgltf_type_vec4) {
+        return badSource("a skinned primitive without JOINTS_0 and WEIGHTS_0 for every vertex");
+    }
+    RAWFRAME_TRY_ASSIGN(auto weights, unpack<4>(*kWeights, cgltf_type_vec4));
+    for (std::size_t vertex = 0; vertex < vertices; ++vertex) {
+        std::array<cgltf_uint, 4> read{};
+        if (!cgltf_accessor_read_uint(kJoints, vertex, read.data(), 4)) {
+            return badSource("a skinned primitive's joints that cannot be read");
+        }
+        std::array<float, 4>& weight = weights[vertex];
+        float sum = 0.0F;
+        for (std::size_t each = 0; each < 4; ++each) {
+            if (!std::isfinite(weight[each]) || weight[each] < 0.0F) {
+                return badSource("a skinned primitive's weight that is negative or not finite");
+            }
+            // A joint with no weight may name anything; it is kept as the first.
+            if (weight[each] == 0.0F) {
+                read[each] = 0;
+            } else if (read[each] >= joints) {
+                return badSource("a skinned primitive's joint past the skin's");
+            }
+            sum += weight[each];
+        }
+        if (sum <= 0.0F) {
+            return badSource("a skinned primitive's vertex weighted to no joint");
+        }
+        for (float& value : weight) {
+            value /= sum;
+        }
+        skin.influences.push_back({static_cast<std::uint16_t>(read[0]),
+                                   static_cast<std::uint16_t>(read[1]),
+                                   static_cast<std::uint16_t>(read[2]),
+                                   static_cast<std::uint16_t>(read[3])});
+        skin.weights.push_back(weight);
+    }
+    return {};
+}
+
 result::Status gather(const cgltf_primitive& primitive,
                       const Placement& placement,
                       const ImportLimits& limits,
@@ -242,6 +330,9 @@ result::Status gather(const cgltf_primitive& primitive,
     RAWFRAME_TRY_ASSIGN(const std::vector<mesh::Vector3> kPoints, unpack<3>(*kPositions, cgltf_type_vec3));
     for (const mesh::Vector3& kPoint : kPoints) {
         gathered.mesh.positions.push_back(place(placement, kPoint));
+    }
+    if (!gathered.mesh.skin.joints.empty()) {
+        RAWFRAME_TRY(influencesOf(primitive, kVertices, gathered.mesh.skin.joints.size(), gathered.mesh.skin));
     }
     const cgltf_accessor* kNormals = attribute(primitive, cgltf_attribute_type_normal);
     gathered.normals = gathered.normals && kNormals != nullptr && kNormals->count == kVertices;
@@ -342,6 +433,9 @@ result::Result<Imported> importGltf(std::span<const std::byte> source,
         pending.push_back(kScene->nodes[i - 1]);
     }
     std::size_t visits = 0;
+    // The skin the first node with a mesh follows, which every other
+    // follows too, or none (D508).
+    std::optional<const cgltf_skin*> skin;
     while (!pending.empty()) {
         const cgltf_node* kNode = pending.back();
         pending.pop_back();
@@ -349,7 +443,22 @@ result::Result<Imported> importGltf(std::span<const std::byte> source,
             return badSource("a glTF scene that reaches a node twice");
         }
         if (kNode->mesh != nullptr) {
-            const Placement kPlacement = placement(*kNode);
+            if (!skin.has_value()) {
+                skin = kNode->skin;
+                if (kNode->skin != nullptr) {
+                    RAWFRAME_TRY_ASSIGN(gathered.mesh.skin.joints, jointsOf(*kNode->skin, limits));
+                }
+            } else if (*skin != kNode->skin) {
+                return badSource("a glTF whose meshes follow different skins, or some none; a mesh follows one");
+            }
+            // A skinned mesh's node places nothing: its joints do, as glTF
+            // has it.
+            const Placement kPlacement =
+                kNode->skin != nullptr
+                    ? Placement{.matrix =
+                                    {1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0},
+                                .normal = {{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}}}}
+                    : placement(*kNode);
             for (cgltf_size i = 0; i < kNode->mesh->primitives_count; ++i) {
                 RAWFRAME_TRY(gather(kNode->mesh->primitives[i], kPlacement, limits, materials, gathered));
             }
