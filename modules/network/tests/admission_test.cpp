@@ -141,6 +141,16 @@ RAWFRAME_TEST(AcceptsAndRejectsRoundTrip) {
     Accept zeroEpoch = accept;
     zeroEpoch.inputEpoch = 0;
     RAWFRAME_EXPECT(failedWith(decodeAccept(encoded(zeroEpoch, &encodeAccept)), NetworkError::Malformed));
+    // A tick rate no World has: a part past 32 bits, which a client's
+    // arithmetic could wrap to a division by nought.
+    Accept hugeRate = accept;
+    hugeRate.tickRateSeconds = 1ULL << 61U;
+    RAWFRAME_EXPECT(failedWith(decodeAccept(encoded(hugeRate, &encodeAccept)), NetworkError::Malformed));
+    hugeRate = accept;
+    hugeRate.tickRateTicks = 1ULL << 32U;
+    RAWFRAME_EXPECT(failedWith(decodeAccept(encoded(hugeRate, &encodeAccept)), NetworkError::Malformed));
+    hugeRate.tickRateTicks = (1ULL << 32U) - 1;
+    RAWFRAME_EXPECT(decodeAccept(encoded(hugeRate, &encodeAccept)).has_value());
 
     const Reject kReject{.reason = RejectReason::SchemaMismatch, .message = "schema differs"};
     const auto kRejectBytes = encoded(kReject, &encodeReject);

@@ -2,6 +2,9 @@
 
 #include "rawframe/network/errors.h"
 
+#include <cstdint>
+#include <limits>
+
 namespace rawframe::network {
 
 namespace {
@@ -154,6 +157,13 @@ result::Result<Accept> decodeAccept(std::span<const std::byte> payload) {
     if (accept.inputEpoch == 0 || accept.replicationEpoch == 0 || accept.connectionEpoch == 0 ||
         accept.tickRateTicks == 0 || accept.tickRateSeconds == 0) {
         return malformed("an accept's epochs and tick rate are nonzero");
+    }
+    // A World's tick rate is two 32-bit parts (world::TickRate): a server
+    // telling a larger one is hostile, and a client's arithmetic on it
+    // could wrap to a division by nought.
+    if (accept.tickRateTicks > std::numeric_limits<std::uint32_t>::max() ||
+        accept.tickRateSeconds > std::numeric_limits<std::uint32_t>::max()) {
+        return malformed("an accept's tick rate is a World's, two 32-bit parts");
     }
     return accept;
 }
