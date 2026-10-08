@@ -63,10 +63,9 @@ command collect controls.Collect
 # What the player writes in its sign field and gives by Enter (D426).
 command sign controls.Sign
 
-# A customer's figure (D512): Plaza's strollers' figure and its walk and
-# run, copied under amble/ with their origin lifted 0.82 so that drawn at
-# 0.6 the figure's feet stand on the ground below a customer's body, and
-# blended by pace alone.
+# A customer's figure (D512): Plaza's strollers' figure and its idle, walk,
+# and run, copied under amble/ with ids of their own, blended by pace
+# alone.
 mesh f08f5a874875ee6c amble/figure.gltf
 animator 4d2c8e71a9f03b56 amble.rfanim parameters tycoon.amble
 

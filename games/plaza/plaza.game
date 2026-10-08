@@ -17,9 +17,6 @@ mesh 7f3a9c21e84d06b5 crate.gltf
 # The strollers' figure (D508): legs, a torso, and a head skinned to the
 # stroll rig's hips, spine, and head, posed as the strollers walk.
 mesh 6b27dc9178d0e4dd figure.gltf
-# The walkers' figure (D513): the strollers', its origin lifted 0.37 so that
-# drawn at 0.78 its feet stand where a walker's capsule's foot is.
-mesh 12222a54b28bd94d walker/figure.gltf
 
 # What the models are made of (D303): the strollers are brass, the pillars
 # polished marble, and the floor paved, its slabs a texture (D309), kept
@@ -85,8 +82,8 @@ animator 3a7d1f0c2b9e4d61 blade.rfanim
 # space by pace, synced by phase, moving them by root motion, their heads
 # turned by a look-at the server runs too.
 animator 5c7e2a91f04b3d68 stroll.rfanim parameters plaza.stroller
-# A walker's figure plays the strollers' idle, walk, and run in place, by
-# its pace alone, copied under walker/: its body moves and turns it (D513).
+# A walker's figure plays the strollers' idle, walk, and run by its pace
+# alone, their root motion taken out: its body moves and turns it (D513).
 animator 2b9f6c04e7d1a835 walker.rfanim parameters plaza.gait
 
 system plaza.join simulation join write rawframe.physics3d.body write rawframe.physics3d.pose write rawframe.physics3d.character write rawframe.animation.animator with plaza.stick random spawn before rawframe.physics3d.step
@@ -155,7 +152,7 @@ spawn 1 plaza.stroller left=30 rawframe.physics3d.pose x=-2 y=1.4 z=-20 qw=1 raw
 # and poses the strollers' figures (D508); their root motion too, which
 # takes the walk out of a client's pose as it does out of the server's.
 replicate plaza.stroller plaza.hall plaza.spring plaza.monitor rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick rawframe.animation.animator rawframe.animation.root_motion plaza.gait
-player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.gait rawframe.animation.animator
+player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.gait rawframe.animation.animator rawframe.animation.root_motion
 input plaza.stick
 # A client makes its stick from its player's actions (plaza.actions) with
 # sample.kest, from keys, a gamepad, or a touch screen (the left half's

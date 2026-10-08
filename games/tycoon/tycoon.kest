@@ -29,10 +29,12 @@ const CUSTOMERS: u64 = 0x1a6375d11861b18d
 // A customer's figure and its animator (tycoon.game, D512).
 const FIGURE: u64 = 0xf08f5a874875ee6c
 const AMBLE: u64 = 0x4d2c8e71a9f03b56
-// The figure's scale, 1.23 meters tall: its rig's origin is lifted so that
-// its feet stand on the ground at this scale where a customer's body, a
-// ball 0.35 high at its middle, is (tycoon.game).
+// The figure's scale, 1.23 meters tall, and how far it is lowered so that
+// its feet stand on the ground below a customer's body, a ball 0.35 high
+// at its middle: the figure's middle is 1.4 times its scale above its
+// feet (D514).
 const FIGURE_SCALE: f32 = 0.6
+const FIGURE_LIFT: f32 = -0.49
 
 // The lot: PLOTS plots a side, PLOT meters each, HALF meters from the
 // origin to each edge.
@@ -581,13 +583,13 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
     let i = 0
     while i < count {
         let b = bodies[i]
-        let look = model.Model(model.BOX, b.width, b.height, b.depth, 0x5E8C3AFF, u64(0))
+        let look = model.Model(model.BOX, b.width, b.height, b.depth, 0x5E8C3AFF, u64(0), 0.0)
         if b.collisionClass == STALLS {
             look.color = 0xC8553DFF
         }
         // A customer (D392): a blue figure walking (D512).
         if b.collisionClass == CUSTOMERS {
-            look = model.Model(FIGURE, FIGURE_SCALE, FIGURE_SCALE, FIGURE_SCALE, 0x3A7BD5FF, u64(0))
+            look = model.Model(FIGURE, FIGURE_SCALE, FIGURE_SCALE, FIGURE_SCALE, 0x3A7BD5FF, u64(0), FIGURE_LIFT)
         }
         looks[i] = look
         i = i + 1
@@ -616,7 +618,7 @@ fn tint(count: i32, stalls: [Stall], looks: [model.Model]) {
 fn mark(count: i32, owners: [Owner], marks: [model.Model]) {
     let i = 0
     while i < count {
-        marks[i] = model.Model(model.BOX, 1.9, 0.05, 1.9, 0xF2E8C8FF, u64(0))
+        marks[i] = model.Model(model.BOX, 1.9, 0.05, 1.9, 0xF2E8C8FF, u64(0), 0.0)
         i = i + 1
     }
 }

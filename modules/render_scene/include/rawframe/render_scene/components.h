@@ -18,6 +18,8 @@ struct Model {
     float scaleZ = 1;
     std::uint32_t color = 0xFFFFFFFF;
     std::uint64_t material = 0;
+    /// Meters along the pose's own up the mesh is drawn from it (D514).
+    float lift = 0;
 };
 
 /// `rawframe.model.Camera` as C++ reads it.

@@ -101,7 +101,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"scaleY", offsetof(Model, scaleY)},
                            {"scaleZ", offsetof(Model, scaleZ)},
                            {"color", offsetof(Model, color)},
-                           {"material", offsetof(Model, material)}}));
+                           {"material", offsetof(Model, material)},
+                           {"lift", offsetof(Model, lift)}}));
     RAWFRAME_TRY(kLaidOut(!loaded.cameras.empty(),
                           "rawframe.model.Camera",
                           sizeof(Camera),

@@ -824,6 +824,12 @@ void Scene::extract(world::World& world, const world_animation::AnimationQueries
                         instance.rotation = {pose->qx, pose->qy, pose->qz, pose->qw};
                     }
                 }
+                // Drawn `lift` along the pose's own up (D514).
+                const auto [kX, kY, kZ, kW] = instance.rotation;
+                const double kLift = instance.model.lift;
+                instance.position[0] += kLift * 2.0 * ((kX * kY) - (kW * kZ));
+                instance.position[1] += kLift * (1.0 - (2.0 * ((kX * kX) + (kZ * kZ))));
+                instance.position[2] += kLift * 2.0 * ((kY * kZ) + (kW * kX));
                 state.posePalette(poses, instance);
                 state.extracted.push_back(instance);
             }

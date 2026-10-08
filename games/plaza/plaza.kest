@@ -15,9 +15,12 @@ import std.math
 const WALKER: u64 = 0x5f23859a6c00ebba
 // The strollers' skinned figure (D508).
 const FIGURE: u64 = 0x6b27dc9178d0e4dd
-// The walkers' figure, lifted, its scale, and its animator (D513).
-const WALKER_FIGURE: u64 = 0x12222a54b28bd94d
+// A walker's figure, the strollers' at 0.78 as tall as its 1.6 meter
+// capsule, its feet lowered to the capsule's foot: 0.8 below the body's
+// middle, where the figure's middle is 1.4 times its scale above its feet
+// (D514); and the walkers' animator (D513).
 const WALKER_SCALE: f32 = 0.78
+const WALKER_LIFT: f32 = -0.292
 const WALKER_GAIT: u64 = 0x2b9f6c04e7d1a835
 
 // The materials plaza.game's `material` lines name.
@@ -251,18 +254,19 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
     let i = 0
     while i < count {
         let b = bodies[i]
-        let look = model.Model(model.BOX, b.width, b.height, b.depth, 0xC8B48CFF, u64(0))
+        let look = model.Model(model.BOX, b.width, b.height, b.depth, 0xC8B48CFF, u64(0), 0.0)
         if b.shape == physics3d.SPHERE {
-            look = model.Model(model.SPHERE, b.width, b.width, b.width, 0xC8B48CFF, u64(0))
+            look = model.Model(model.SPHERE, b.width, b.width, b.width, 0xC8B48CFF, u64(0), 0.0)
         }
         if b.shape == physics3d.CAPSULE {
-            look = model.Model(model.CAPSULE, b.width, (b.height + b.width) * 0.5, b.width, 0xC8B48CFF, u64(0))
+            look = model.Model(model.CAPSULE, b.width, (b.height + b.width) * 0.5, b.width, 0xC8B48CFF, u64(0),
+                               0.0)
         }
         if b.shape == physics3d.CYLINDER {
-            look = model.Model(model.CYLINDER, b.width, b.height, b.width, 0xE6E0D2FF, MARBLE)
+            look = model.Model(model.CYLINDER, b.width, b.height, b.width, 0xE6E0D2FF, MARBLE, 0.0)
         }
         if b.shape == physics3d.MESH {
-            look = model.Model(u64(0), 1.0, 1.0, 1.0, 0xFFFFFFFF, u64(0))
+            look = model.Model(u64(0), 1.0, 1.0, 1.0, 0xFFFFFFFF, u64(0), 0.0)
         }
         if b.shape == physics3d.BOX && b.width > 20.0 && b.height < 1.0 {
             look.color = 0x8C8C84FF
@@ -276,7 +280,7 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
         }
         // A walker (D513): a blue figure, as tall as its capsule.
         if b.collisionClass == WALKER {
-            look = model.Model(WALKER_FIGURE, WALKER_SCALE, WALKER_SCALE, WALKER_SCALE, 0x3A7BD5FF, u64(0))
+            look = model.Model(FIGURE, WALKER_SCALE, WALKER_SCALE, WALKER_SCALE, 0x3A7BD5FF, u64(0), WALKER_LIFT)
         }
         looks[i] = look
         i = i + 1
@@ -359,7 +363,7 @@ fn sky(count: i32, sticks: [controls.Stick], skies: [model.Sky]) {
 fn figure(count: i32, strollers: [Stroller], figures: [model.Model]) {
     let i = 0
     while i < count {
-        figures[i] = model.Model(FIGURE, 1.0, 1.0, 1.0, 0xFFFFFFFF, BRASS)
+        figures[i] = model.Model(FIGURE, 1.0, 1.0, 1.0, 0xFFFFFFFF, BRASS, 0.0)
         i = i + 1
     }
 }
@@ -436,7 +440,8 @@ struct Monitor {
 fn screen(count: i32, monitors: [Monitor], screens: [model.Model]) {
     let i = 0
     while i < count {
-        screens[i] = model.Model(model.BOX, monitors[i].width, monitors[i].height, 0.05, 0xFFFFFFFF, MONITOR)
+        screens[i] = model.Model(model.BOX, monitors[i].width, monitors[i].height, 0.05, 0xFFFFFFFF, MONITOR,
+                                 0.0)
         i = i + 1
     }
 }

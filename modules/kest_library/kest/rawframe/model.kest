@@ -14,7 +14,9 @@ module rawframe.model
 // plain surface, OpenPBR's but for a white base color. `color`, 0xRRGGBBAA
 // in sRGB, tints the material's base color, so without one it is the base
 // color; an alpha of nought, a scale of nought, or mesh nought draws
-// nothing.
+// nothing. `lift` raises the mesh that many meters along the pose's own
+// up, or lowers it below nought: where a mesh's origin is not the body's
+// middle, as a figure's feet below a body's middle (D514).
 struct Model {
     mesh: u64
     scaleX: f32
@@ -22,6 +24,7 @@ struct Model {
     scaleZ: f32
     color: u32
     material: u64
+    lift: f32
 }
 
 // The engine's own meshes, each one meter from its center to its sides,
