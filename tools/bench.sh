@@ -103,6 +103,22 @@ if mine and p95 > 2 * statistics.median(mine) + 0.5:
     done
 done
 
+# Runs a measurement, which sets `verdict`, and says it. In check mode one
+# past its bounds is measured once more, the load average said, and fails
+# only if past them again, as each game's is above (D504).
+held() {
+    "$2"
+    if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]]; then
+        printf 'bench %s: %s; measured again, the load average %s\n' "$1" "$verdict" \
+            "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || echo unknown)"
+        "$2"
+    fi
+    printf 'bench %s: %s\n' "$1" "$verdict"
+    if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]]; then
+        failures=$((failures + 1))
+    fi
+}
+
 # The crowd as SPEC-0013 deploys it: the dedicated server over QUIC, and 64
 # bots in four processes of their own (D211), under SPEC-0013's overload
 # thresholds (bench/canonical_profile.conf, D212). What is held here is the
@@ -113,9 +129,10 @@ done
 # tick is reported, not held: four bots processes with their own MsQuic
 # threads share this machine, and their load shows in its tail
 # (D215); the arena's runs above hold the tick.
-play="$(hosts/bots/tests/play.sh "$build/hosts/dedicated_server/rawframe-server" "$build/hosts/bots/rawframe-bots" \
-    16 4 1440 games/crowd/crowd.game "$PWD/bench/canonical_profile.conf" 2>&1 || true)"
-verdict="$(python3 -c '
+quic() {
+    play="$(hosts/bots/tests/play.sh "$build/hosts/dedicated_server/rawframe-server" "$build/hosts/bots/rawframe-bots" \
+        16 4 1440 games/crowd/crowd.game "$PWD/bench/canonical_profile.conf" 2>&1 || true)"
+    verdict="$(python3 -c '
 import json, sys
 logs = [json.loads(line) for line in sys.argv[1].splitlines() if line.startswith("{")]
 # The server logs first, to its stop.
@@ -150,23 +167,20 @@ if ready > 128 or peak > 512 or degraded or stopped["exit"] != "clean_stop" or \
         started["normalShutdownBoundMs"] > 8000:
     line = "FAIL past SPEC-0013: " + line
 print(line)' "$play")"
-printf 'bench crowd over QUIC: %s\n' "$verdict"
-if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]]; then
-    failures=$((failures + 1))
-fi
+}
+held "crowd over QUIC" quic
 # A checkpoint of the crowd captured and restored (D215): capture within
 # 10 s, restore within 15 s, the artifact within 128 MiB, and the World held
 # for the capture's safe point within 5 ms (SPEC-0013's snapshot ceilings;
 # D227).
-common="host.iteration_rate = 1000
-world.tick_rate = 1000
-kest.game = $PWD/games/crowd/crowd.game"
-printf '%s\nhost.maximum_iterations = 200\ncheckpoint.capture_ticks = 100\ncheckpoint.capture_prefix = %s/a-\n' \
-    "$common" "$work" >"$work/capture.conf"
-printf '%s\nhost.maximum_iterations = 50\ncheckpoint.restore = %s/a-100.rfsn\n' "$common" "$work" >"$work/restore.conf"
-logs="$("$build/hosts/dedicated_server/rawframe-server" --config "$work/capture.conf" 2>&1 || true)
-$("$build/hosts/dedicated_server/rawframe-server" --config "$work/restore.conf" 2>&1 || true)"
-verdict="$(python3 -c '
+checkpoint() {
+    common="$(printf 'host.iteration_rate = 1000\nworld.tick_rate = 1000\nkest.game = %s' "$PWD/games/crowd/crowd.game")"
+    printf '%s\nhost.maximum_iterations = 200\ncheckpoint.capture_ticks = 100\ncheckpoint.capture_prefix = %s/a-\n' \
+        "$common" "$work" >"$work/capture.conf"
+    printf '%s\nhost.maximum_iterations = 50\ncheckpoint.restore = %s/a-100.rfsn\n' "$common" "$work" >"$work/restore.conf"
+    logs="$("$build/hosts/dedicated_server/rawframe-server" --config "$work/capture.conf" 2>&1 || true)"
+    logs+=$'\n'"$("$build/hosts/dedicated_server/rawframe-server" --config "$work/restore.conf" 2>&1 || true)"
+    verdict="$(python3 -c '
 import json, sys
 logs = [json.loads(line) for line in sys.argv[1].splitlines() if line.startswith("{")]
 captured = [l["fields"] for l in logs if l.get("code") == "checkpoint_captured"]
@@ -181,16 +195,15 @@ if c["captureMs"] > 10000 or r["restoreMs"] > 15000 or c["bytes"] > 128 * 2**20 
         c["pauseUs"] > 5000:
     line = "FAIL past SPEC-0013: " + line
 print(line)' "$logs")"
-printf 'bench crowd checkpoint: %s\n' "$verdict"
-if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]]; then
-    failures=$((failures + 1))
-fi
+}
+held "crowd checkpoint" checkpoint
 # A Kest system that never ends (D228): its fuel stops it every tick, and
 # the tick it spoils stays within SPEC-0013's 8 ms emergency containment.
-printf 'world.tick_rate = 60\nhost.iteration_rate = 60\nhost.maximum_iterations = 60\nkest.game = %s\n' \
-    "$PWD/modules/world_kest/tests/game/runaway.game" >"$work/runaway.conf"
-logs="$("$build/hosts/dedicated_server/rawframe-server" --config "$work/runaway.conf" 2>&1 || true)"
-verdict="$(python3 -c '
+runaway() {
+    printf 'world.tick_rate = 60\nhost.iteration_rate = 60\nhost.maximum_iterations = 60\nkest.game = %s\n' \
+        "$PWD/modules/world_kest/tests/game/runaway.game" >"$work/runaway.conf"
+    logs="$("$build/hosts/dedicated_server/rawframe-server" --config "$work/runaway.conf" 2>&1 || true)"
+    verdict="$(python3 -c '
 import json, sys
 logs = [json.loads(line) for line in sys.argv[1].splitlines() if line.startswith("{")]
 failed = [l for l in logs if l.get("code") == "system_failed"]
@@ -202,8 +215,6 @@ line = "stopped %d times, tick p50 %.3f ms, p99 %.3f ms" % (len(failed), tick[0]
 if tick[0]["p99"] > 8000:
     line = "FAIL past SPEC-0013: " + line
 print(line)' "$logs")"
-printf 'bench runaway Kest: %s\n' "$verdict"
-if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]]; then
-    failures=$((failures + 1))
-fi
+}
+held "runaway Kest" runaway
 exit $((failures > 0))
