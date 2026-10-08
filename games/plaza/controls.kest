@@ -4,11 +4,11 @@ module controls
 // the game and a client's sample program (sample.kest) share the one type.
 
 // What a player asks for, each -1 to 1: to run along x and z, and to jump
-// (above a half); and how far its view turns this tick, in radians about +Y
-// (D521).
+// (above a half); and where it has turned its view, radians about +Y as a
+// camera's yaw, within half a turn either way (D521, D525).
 struct Stick {
     runX: f32
     runZ: f32
     jump: f32
-    turn: f32
+    heading: f32
 }

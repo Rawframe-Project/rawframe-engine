@@ -55,8 +55,6 @@ component 9b8e1f52-3c47-4d0a-a6e2-5f1d7c93b204 plaza.blade Blade
 component 2d6e0b91-7c35-4f48-9a1e-3b5c8d0f6a27 plaza.stroller Stroller
 # How fast a walker goes, which its figure's animator plays (D513).
 component c2c0913c-ceaf-42d9-9ff2-2368f8cfa1dd plaza.gait Gait
-# Where a walker's player has turned its view (D521).
-component bf2f7ff1-429b-4941-bf3f-60d1bc25f084 plaza.heading Heading
 component 6a1f0c3e-94b2-4d57-8e16-2b7d9c4f0a35 plaza.figure rawframe.model.Model
 component 8e4b2c17-6a39-4d05-b1f8-7c2e9d4a3f61 plaza.look rawframe.model.Model
 component 1f7d3a58-9c24-4e6b-8a03-5d9e1b7c2f84 plaza.view rawframe.model.Camera
@@ -91,7 +89,7 @@ animator 2b9f6c04e7d1a835 walker.rfanim parameters plaza.gait
 system plaza.join simulation join write rawframe.physics3d.body write rawframe.physics3d.pose write rawframe.physics3d.character write rawframe.animation.animator with plaza.stick random spawn before rawframe.physics3d.step
 system plaza.swing simulation swing read plaza.blade write rawframe.physics3d.target entities after rawframe.animation.step before rawframe.physics3d.step
 system plaza.stroll simulation stroll write plaza.stroller read rawframe.animation.root_motion write rawframe.physics3d.pose entities after rawframe.animation.step
-system plaza.walk simulation walk read plaza.stick read rawframe.physics3d.character read rawframe.physics3d.pose write rawframe.physics3d.velocity write plaza.gait write plaza.heading before rawframe.physics3d.step predicted
+system plaza.walk simulation walk read plaza.stick read rawframe.physics3d.character read rawframe.physics3d.pose write rawframe.physics3d.velocity write plaza.gait before rawframe.physics3d.step predicted
 
 # The plaza, eighty meters square, and walls around it.
 spawn 1 rawframe.physics3d.body motion=0 shape=1 width=40 height=0.5 depth=40 rawframe.physics3d.pose rawframe.physics3d.velocity
@@ -153,8 +151,8 @@ spawn 1 plaza.stroller left=30 rawframe.physics3d.pose x=-2 y=1.4 z=-20 qw=1 raw
 # The animators replicate, so a client plays them where it draws (D258)
 # and poses the strollers' figures (D508); their root motion too, which
 # takes the walk out of a client's pose as it does out of the server's.
-replicate plaza.stroller plaza.hall plaza.spring plaza.monitor rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick rawframe.animation.animator rawframe.animation.root_motion plaza.gait plaza.heading
-player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.gait plaza.heading rawframe.animation.animator rawframe.animation.root_motion
+replicate plaza.stroller plaza.hall plaza.spring plaza.monitor rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick rawframe.animation.animator rawframe.animation.root_motion plaza.gait
+player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.gait rawframe.animation.animator rawframe.animation.root_motion
 input plaza.stick
 # A client makes its stick from its player's actions (plaza.actions) with
 # sample.kest, from keys, a gamepad, or a touch screen (the left half's
@@ -164,7 +162,7 @@ actions plaza.actions
 sample sample.kest sample
 interest rawframe.physics3d.pose x z within 30
 interpolate rawframe.physics3d.pose
-predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.stick plaza.gait plaza.heading
+predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.stick plaza.gait
 
 # What a client draws (D283): every body it mirrors, by its shape and in
 # a color for what it is, the mound and the crates as their own meshes in
@@ -187,7 +185,7 @@ present plaza.lantern lantern read plaza.stroller write plaza.lantern
 presentation plaza.trace on plaza.stroller
 present plaza.trace trace read plaza.stroller write plaza.trace
 presentation plaza.view on player
-present plaza.frame frame read plaza.heading write plaza.view
+present plaza.frame frame read plaza.stick write plaza.view
 presentation plaza.meter on player
 present plaza.meter meter read plaza.stick write plaza.meter
 presentation plaza.hidden on player

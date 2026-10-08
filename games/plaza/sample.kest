@@ -1,14 +1,14 @@
 module sample
 
 // A client's input for a walker (plaza.game's `sample` line): the stick,
-// made each tick from its player's actions (plaza.actions). Its run is
-// along the view: up runs the way the view looks along the ground. The
-// view turns with the mouse while its right button is held, and with the
-// arrow keys or the right stick (D521).
+// made each tick from its player's actions (plaza.actions). The view turns
+// with the mouse while its right button is held, and with the arrow keys
+// or the right stick (D521). Its heading is kept in the stick, which the
+// sample builds on tick to tick (D525), and the walker runs along it: up
+// runs the way the view looks along the ground.
 
 import controls
 import rawframe.input
-import rawframe.view
 import std.math
 
 const MOVE: u64 = 0x2b8c866778ceb662
@@ -24,21 +24,25 @@ const MOUSE_TURN: f32 = 0.005
 const STICK_TURN: f32 = 0.04
 
 fn sample(into: [controls.Stick]) {
-    // The way the view looks along the ground, from the ray through its
-    // middle: along -Z until it is drawn.
-    let forwardX = 0.0
-    let forwardZ = -1.0
-    let place = view.scenePlace()
-    if place.failure == u32(0) {
-        let ray = view.pointToRay(place.width * 0.5, place.height * 0.5)
-        let length = math.sqrt(ray.directionX * ray.directionX + ray.directionZ * ray.directionZ)
-        if ray.failure == u32(0) && length > 0.001 {
-            forwardX = ray.directionX / length
-            forwardZ = ray.directionZ / length
-        }
+    // Turning right turns the view clockwise: its yaw falls. The mouse
+    // turns it in a tick its right button was down in at all: a slow frame
+    // reads a whole drag, press to release, as one tick.
+    let turn = 0.0 - input.x(TURN) * STICK_TURN
+    if input.on(ORBIT) || input.pressed(ORBIT) || input.released(ORBIT) {
+        turn = turn - input.x(LOOK) * MOUSE_TURN
     }
-    // Right of the view is its forward a quarter turn clockwise, seen
-    // from above.
+    let heading = into[0].heading + turn
+    if heading > 3.14159265 {
+        heading = heading - 6.2831853
+    }
+    if heading < -3.14159265 {
+        heading = heading + 6.2831853
+    }
+    into[0].heading = heading
+    // A yaw of nought looks along -Z, a quarter turn along -X; right of the
+    // view is its forward a quarter turn clockwise, seen from above.
+    let forwardX = 0.0 - math.sin(heading)
+    let forwardZ = 0.0 - math.cos(heading)
     let ahead = input.y(MOVE)
     let aside = input.x(MOVE)
     into[0].runX = aside * (0.0 - forwardZ) + ahead * forwardX
@@ -46,12 +50,5 @@ fn sample(into: [controls.Stick]) {
     into[0].jump = 0.0
     if input.on(JUMP) {
         into[0].jump = 1.0
-    }
-    // Turning right turns the view clockwise: its yaw falls. The mouse
-    // turns it in a tick its right button was down in at all: a slow frame
-    // reads a whole drag, press to release, as one tick.
-    into[0].turn = 0.0 - input.x(TURN) * STICK_TURN
-    if input.on(ORBIT) || input.pressed(ORBIT) || input.released(ORBIT) {
-        into[0].turn = into[0].turn - input.x(LOOK) * MOUSE_TURN
     }
 }
