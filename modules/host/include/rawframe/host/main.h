@@ -16,6 +16,7 @@
 #include "rawframe/composition/registrar.h"
 #include "rawframe/host/host.h"
 
+#include <atomic>
 #include <span>
 #include <string_view>
 
@@ -38,6 +39,15 @@ struct ProcessEntry {
 };
 
 [[nodiscard]] int hostMain(int argc, char** argv, const ProcessEntry& entry);
+
+/// Bridges this process's stop requests to `stopRequested`: what `hostMain`
+/// does, and a tool that stops in order without a Host does too (the cook,
+/// D502). Installing it again changes nothing.
+void installStopBridge();
+
+/// Whether a stop has been requested of this process since its bridge was
+/// installed: the one process-wide value in the engine, only ever set.
+[[nodiscard]] const std::atomic<bool>& stopRequested() noexcept;
 
 } // namespace rawframe::host
 #endif

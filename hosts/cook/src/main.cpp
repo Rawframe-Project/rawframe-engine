@@ -8,11 +8,19 @@
 //   rawframe-cook <sources> <output> [<cache>]
 //   rawframe-cook --map <sources>
 //
+// Each source is told on standard output as it is begun
+// (`cooking <n>/<count> <source>`), so a caller shows how far it is; a stop
+// request (SIGTERM, or Ctrl+Break on Windows) stops the cook before the next
+// source, publishing nothing, and it ends with 3 (SPEC-0040's long-running
+// operations, D502).
+//
 // A material whose graph the blob cannot fold is built with the shader
 // toolchain (D484): the engine's tools/gen_shaders.py run by the python3 on
 // the path, with the pinned Slang compiler RAWFRAME_SLANGC names or the
 // slangc on the path, and dxc and spirv-cross on the path. Without them
 // such a material is refused, and every other source cooks as before.
+
+#include "rawframe/host/main.h"
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/cook/animation.h"
@@ -31,6 +39,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -190,6 +199,19 @@ int main(int argc, char** argv) {
     if (argc == 4) {
         request.cache = argv[3];
     }
+    rawframe::host::installStopBridge();
+    request.step = [](const rawframe::cook::CookStep& step) {
+        if (rawframe::host::stopRequested().load(std::memory_order_acquire)) {
+            return false;
+        }
+        std::printf("cooking %zu/%zu %.*s\n",
+                    step.index + 1,
+                    step.count,
+                    static_cast<int>(step.source.size()),
+                    step.source.data());
+        std::fflush(stdout);
+        return true;
+    };
     const auto kReport = rawframe::cook::cookSources(request);
     if (!kReport.has_value()) {
         print(kReport.error());
@@ -197,6 +219,10 @@ int main(int argc, char** argv) {
     }
     for (const auto& failure : kReport->failures) {
         print(failure);
+    }
+    if (kReport->stopped) {
+        std::printf("stopped, cooked %zu, reused %zu, published nothing\n", kReport->cooked, kReport->reused);
+        return 3;
     }
     std::printf("cooked %zu, reused %zu, failed %zu\n", kReport->cooked, kReport->reused, kReport->failures.size());
     return kReport->failures.empty() ? 0 : 1;

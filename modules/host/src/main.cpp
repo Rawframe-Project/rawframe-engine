@@ -21,11 +21,11 @@ namespace rawframe::host {
 namespace {
 
 // The one process-wide value in the engine: a signal handler can reach nothing
-// else. It is only ever set, and only read by the Host loop.
-std::atomic<bool> stopRequested{false};
+// else. It is only ever set, and only read by the Host loop or a tool's.
+std::atomic<bool> stopped{false};
 
 extern "C" void requestStop(int) {
-    stopRequested.store(true, std::memory_order_release);
+    stopped.store(true, std::memory_order_release);
 }
 
 #if defined(_WIN32)
@@ -46,21 +46,6 @@ BOOL WINAPI requestStopOnEvent(DWORD event) {
     }
 }
 #endif
-
-void installStopBridge() {
-#if defined(_WIN32)
-    ::SetConsoleCtrlHandler(&requestStopOnEvent, TRUE);
-#elif defined(__unix__) || defined(__APPLE__)
-    struct sigaction action{};
-    action.sa_handler = &requestStop;
-    sigemptyset(&action.sa_mask);
-    sigaction(SIGINT, &action, nullptr);
-    sigaction(SIGTERM, &action, nullptr);
-#else
-    std::signal(SIGINT, &requestStop);
-    std::signal(SIGTERM, &requestStop);
-#endif
-}
 
 bool writeStandardOutput(void*, std::span<const char> bytes) noexcept {
     const bool kWritten = std::fwrite(bytes.data(), 1, bytes.size(), stdout) == bytes.size();
@@ -83,6 +68,25 @@ bool readFile(const char* path, std::string& text) {
 }
 
 } // namespace
+
+void installStopBridge() {
+#if defined(_WIN32)
+    ::SetConsoleCtrlHandler(&requestStopOnEvent, TRUE);
+#elif defined(__unix__) || defined(__APPLE__)
+    struct sigaction action{};
+    action.sa_handler = &requestStop;
+    sigemptyset(&action.sa_mask);
+    sigaction(SIGINT, &action, nullptr);
+    sigaction(SIGTERM, &action, nullptr);
+#else
+    std::signal(SIGINT, &requestStop);
+    std::signal(SIGTERM, &requestStop);
+#endif
+}
+
+const std::atomic<bool>& stopRequested() noexcept {
+    return stopped;
+}
 
 int hostMain(int argc, char** argv, const ProcessEntry& entry) {
     const auto kName = static_cast<int>(entry.name.size());
@@ -120,7 +124,7 @@ int hostMain(int argc, char** argv, const ProcessEntry& entry) {
         .registrars = entry.registrars,
         .configuration = &*kConfiguration,
         .log = {.write = &writeStandardOutput, .context = nullptr},
-        .stopRequested = &stopRequested,
+        .stopRequested = &stopped,
         .defaultShutdownBudgetMs = entry.defaultShutdownBudgetMs,
     };
     const HostExit kExit = entry.drive != nullptr ? entry.drive(kRequest) : runHost(kRequest);
