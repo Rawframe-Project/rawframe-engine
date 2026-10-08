@@ -10,3 +10,11 @@ rawframe_embedded_file(TARGET rawframe_studio FILE "${CMAKE_CURRENT_SOURCE_DIR}/
                        HEADER studio_font.h SYMBOL kStudioFont)
 
 rawframe_module_tests(NAME studio SOURCES tests/records_test.cpp)
+if(TARGET rawframe_studio_tests AND TARGET rawframe_process_child)
+    # A program that ends at once on every system, for a played game whose
+    # server ends as it starts (D501): the process tests' child, given an
+    # argument it does not know.
+    target_compile_definitions(rawframe_studio_tests PRIVATE
+        RAWFRAME_PROCESS_CHILD="$<TARGET_FILE:rawframe_process_child>")
+    add_dependencies(rawframe_studio_tests rawframe_process_child)
+endif()

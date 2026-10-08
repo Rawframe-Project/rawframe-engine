@@ -227,8 +227,14 @@ RAWFRAME_TEST(AnEditorIsFoundOnThePathAsAShellFindsIt) {
     std::filesystem::create_directories(kRoot / "one");
     std::filesystem::create_directories(kRoot / "two");
     std::ofstream{kRoot / "two" / "edit"} << "#!/bin/sh\n";
-    const std::string kPath =
-        (kRoot / "none").string() + ":" + (kRoot / "one").string() + "::" + (kRoot / "two").string();
+    // The system's separator: on Windows a drive's colon is in every path.
+#if defined(_WIN32)
+    const std::string kSeparator = ";";
+#else
+    const std::string kSeparator = ":";
+#endif
+    const std::string kPath = (kRoot / "none").string() + kSeparator + (kRoot / "one").string() + kSeparator +
+                              kSeparator + (kRoot / "two").string();
     RAWFRAME_EXPECT(programOnPath("edit", kPath) == kRoot / "two" / "edit");
     RAWFRAME_EXPECT(!programOnPath("missing", kPath).has_value());
     // A program naming a directory is itself.
@@ -374,9 +380,12 @@ RAWFRAME_TEST(APlayedProgramsSettingsKeepWhatTheyAreGivenAndAddWhatTheyLack) {
 RAWFRAME_TEST(AGameEndingAsItStartsIsLaunchedAgainAFewTimes) {
     std::error_code error;
     const std::filesystem::path kRoot = std::filesystem::temp_directory_path() / ("studio-play-" + mintedIdentity());
-    // A server that ends at once, as one whose port another process took.
-    auto play = Play::start(
-        PlaySettings{.server = "/bin/false", .client = "/bin/false", .game = "g.game", .directory = kRoot / "play"});
+    // A server that ends at once, as one whose port another process took:
+    // the process tests' child, which ends with 2 on `--config`.
+    auto play = Play::start(PlaySettings{.server = RAWFRAME_PROCESS_CHILD,
+                                         .client = RAWFRAME_PROCESS_CHILD,
+                                         .game = "g.game",
+                                         .directory = kRoot / "play"});
     RAWFRAME_EXPECT(play.has_value());
     for (int tries = 0; play.has_value() && tries < 2000 && !(play->launches() == 5 && play->ended()); ++tries) {
         RAWFRAME_EXPECT(play->advance().has_value());
