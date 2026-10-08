@@ -112,7 +112,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
-                         games/tycoon/tycoon.game until=ui_reachable,reachable=2 keys=Tab keys=Return keys=Tab keys=Return keys=b,o,Return
+                         games/tycoon/tycoon.game until=ui_reachable,reachable=2 keys=Tab keys=Return keys=Tab keys=Return keys=b,o,Return until=ui_submitted
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_navigates_stalls PROPERTIES
                              FIXTURES_REQUIRED tycoon_content
