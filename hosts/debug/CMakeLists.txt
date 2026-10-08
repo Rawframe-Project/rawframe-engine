@@ -15,7 +15,7 @@ if(RAWFRAME_BUILD_TESTS)
     add_test(NAME debug_attaches
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/debug_attaches.sh $<TARGET_FILE:rawframe_host_debug>
                      $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}
-                     ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf ${CMAKE_CURRENT_BINARY_DIR}/debug_attaches)
+                     ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf ${CMAKE_CURRENT_BINARY_DIR}/debug_attaches)
     # Bounded, so an adapter that hangs fails the check rather than holding
     # it (D474).
     set_tests_properties(debug_attaches PROPERTIES FIXTURES_REQUIRED plaza_content TIMEOUT 300

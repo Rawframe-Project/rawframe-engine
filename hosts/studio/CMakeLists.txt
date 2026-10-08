@@ -278,7 +278,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/previewing.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> $<TARGET_FILE:rawframe_host_studio_tool>
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf games/plaza/plaza.game
-                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf 200,97 until=studio_previewing
+                         ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf 200,97 until=studio_previewing
                          300,193:0,30,0.5 "until=studio_said,status=\"view set and previewed\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_previews_plaza PROPERTIES
@@ -298,7 +298,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing 300,193:0,30,0.5
                          wait=3 463,97 wait=5 1096,23 "until=studio_said,status=\"game stopped\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -317,7 +317,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
                          300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 980,520 wait=3 1096,23 "until=studio_said,status=\"game stopped\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -335,7 +335,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
                          300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 drag=980,520,1080,520 wait=3 1096,23 "until=studio_said,status=\"game stopped\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -352,7 +352,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
                          300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 980,520 until=studio_marked wait=1 drag=999,520,1079,540 until=studio_dragged 1096,23 "until=studio_said,status=\"game stopped\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -368,7 +368,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
                          300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 980,520 until=studio_marked move=999,520 wait=3
                          1096,23 "until=studio_said,status=\"game stopped\""
@@ -386,7 +386,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
                          300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 wheel=980,520,-3 orbit=980,520,1080,520 wait=3
                          1096,23 "until=studio_said,status=\"game stopped\""
@@ -403,7 +403,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
                          300,193:-30,3,-20 300,225:-30,2.5,-30 300,289:1\ 15 wait=3 drag=980,520,1080,520
                          until=studio_dragged 1096,23 "until=studio_said,status=\"game stopped\""
@@ -422,7 +422,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
                          300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 orbit=980,520,1080,520,Shift_L
                          until=studio_view_moved wait=2 wheel=980,520,-3,Shift_L wait=2 1096,23 "until=studio_said,status=\"game stopped\""
@@ -439,7 +439,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
                          300,193:-30,8,-25 300,225:-30,2.5,-30 wait=3 980,520 until=studio_marked wait=1 drag=928,520,980,564 until=studio_dragged 1096,23 "until=studio_said,status=\"game stopped\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -455,7 +455,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
                          300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 drag=980,520,980,470,Shift_L wait=3 1096,23 "until=studio_said,status=\"game stopped\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -468,7 +468,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
                          300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 drag=980,520,1080,520,Control_L wait=3 1096,23 "until=studio_said,status=\"game stopped\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})

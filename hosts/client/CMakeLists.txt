@@ -149,12 +149,11 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set(PLAZA_CONTENT ${PROJECT_BINARY_DIR}/hosts/arena/plaza_content)
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/client_plaza.tga)
         configure_file(tests/plaza_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf @ONLY)
-        configure_file(tests/plaza_server.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_server.conf @ONLY)
         add_test(NAME client_plaza_drawn
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf
-                         games/plaza/plaza.game ${CMAKE_CURRENT_BINARY_DIR}/plaza_server.conf
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_plaza_drawn PROPERTIES
                              FIXTURES_REQUIRED plaza_content
@@ -170,7 +169,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/previewed.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> $<TARGET_FILE:rawframe_host_author>
                          ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf games/plaza/plaza.game gate.scene
-                         ${CMAKE_CURRENT_BINARY_DIR}/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_previews_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content

@@ -65,7 +65,7 @@ if(RAWFRAME_BUILD_TESTS)
         add_test(NAME author_picks
                  COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_picks.sh $<TARGET_FILE:rawframe_host_author>
                          $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}
-                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf ${CMAKE_CURRENT_BINARY_DIR}/author_picks)
+                         ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf ${CMAKE_CURRENT_BINARY_DIR}/author_picks)
         set_tests_properties(author_picks PROPERTIES FIXTURES_REQUIRED plaza_content
                              PASS_REGULAR_EXPRESSION "picked the plaza's gate post through the tooling endpoint")
         # A game's scripts debugged through the tooling endpoint (D460): a
@@ -74,7 +74,7 @@ if(RAWFRAME_BUILD_TESTS)
         add_test(NAME author_debugs
                  COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_debugs.sh $<TARGET_FILE:rawframe_host_author>
                          $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}
-                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_server.conf ${CMAKE_CURRENT_BINARY_DIR}/author_debugs)
+                         ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf ${CMAKE_CURRENT_BINARY_DIR}/author_debugs)
         set_tests_properties(author_debugs PROPERTIES FIXTURES_REQUIRED plaza_content
                              PASS_REGULAR_EXPRESSION "stopped the plaza at its stroll system and carried on")
     endif()

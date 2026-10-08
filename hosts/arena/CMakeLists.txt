@@ -247,6 +247,10 @@ if(RAWFRAME_BUILD_TESTS)
                          FIXTURES_SETUP plaza_content
                          PASS_REGULAR_EXPRESSION "failed 0")
     configure_file(tests/plaza.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza.conf @ONLY)
+    # A dedicated server of the plaza reading this content, for every test
+    # that runs one: the client's, Studio's, the author tool's, and the
+    # debug adapter's, on every machine, Xvfb or not (D501).
+    configure_file(tests/plaza_server.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_server.conf @ONLY)
     configure_file(tests/plaza_prediction.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_prediction.conf @ONLY)
     # Sixteen bots play the sample 3D game: fourteen bodies of the plaza, its
     # mound a cooked mesh among them, its gate's hinge, and one walker for
