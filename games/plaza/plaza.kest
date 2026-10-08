@@ -63,9 +63,19 @@ fn join(count: i32, bodies: [physics3d.Body3D], poses: [physics3d.Pose3D], chara
 // Five meters a second across the ground; on ground, a jump when asked, and
 // in the air, a fall that quickens to twenty meters a second.
 fn walk(count: i32, sticks: [controls.Stick], characters: [physics3d.Character3D], poses: [physics3d.Pose3D],
-        velocities: [physics3d.Velocity3D], gaits: [Gait]) {
+        velocities: [physics3d.Velocity3D], gaits: [Gait], headings: [Heading]) {
     let i = 0
     while i < count {
+        if sticks[i].turn != 0.0 {
+            let yaw = headings[i].yaw + f64(sticks[i].turn)
+            if yaw > 3.141592653589793 {
+                yaw = yaw - 6.283185307179586
+            }
+            if yaw < -3.141592653589793 {
+                yaw = yaw + 6.283185307179586
+            }
+            headings[i].yaw = yaw
+        }
         velocities[i].x = sticks[i].runX * 5.0
         velocities[i].z = sticks[i].runZ * 5.0
         // Its figure's pace, in the figure's own meters a second, and its
@@ -151,6 +161,14 @@ enum Stride {
 // the run's four (D513).
 struct Gait {
     pace: f64
+}
+
+// Where a walker's player has turned its view, radians about +Y as a
+// camera's yaw, within half a turn either way (D521). The predicted walk
+// turns it by each tick's input, so a client drawing a frame for many
+// ticks loses none of a turn.
+struct Heading {
+    yaw: f64
 }
 
 struct Stroller {
@@ -297,14 +315,15 @@ fn dressMesh(count: i32, meshes: [physics3d.Mesh3D], looks: [model.Model]) {
 }
 
 // What a client sees of its own walker (D283): from eight meters behind
-// and four above, looking a little down, easing a meter and a half toward
-// the way it runs.
-fn frame(count: i32, sticks: [controls.Stick], views: [model.Camera]) {
+// and four above, looking a little down, along its heading (D521).
+fn frame(count: i32, headings: [Heading], views: [model.Camera]) {
     let i = 0
     while i < count {
-        views[i].offsetX = views[i].offsetX + (sticks[i].runX * 1.5 - views[i].offsetX) * 0.05
+        let yaw = headings[i].yaw
+        views[i].yaw = f32(yaw)
+        views[i].offsetX = f32(8.0 * math.sin(yaw))
         views[i].offsetY = 4.0
-        views[i].offsetZ = 8.0
+        views[i].offsetZ = f32(8.0 * math.cos(yaw))
         views[i].pitch = -0.4
         views[i].fovY = 1.0
         views[i].near = 0.1

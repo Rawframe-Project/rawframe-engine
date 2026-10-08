@@ -167,6 +167,20 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"output_record\"[^\n]*\"revision\":1,\"offered\":\"sdr_srgb[^\"]*\",\"active\":\"sdr_srgb\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,[^\n]*\"historyReused\":[1-9][0-9]+,\"framesMetered\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]+,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
+        # The plaza's view turned as its player drags with the right mouse
+        # button held (D521): the scene's last view looks more than a radian
+        # away from where it started. The turn is the server's, so it needs
+        # its input to arrive: played alone, by the fast check.
+        add_test(NAME client_turns_plaza
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf
+                         games/plaza/plaza.game orbit=900,360,300,360
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_turns_plaza PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION "\"code\":\"scene_summary\"[^\n]*\"yaw\":-?[1-3]\\.[0-9]+}")
         # The plaza previewed for an authoring session (D432, D433): the
         # client's own tooling endpoint, with the view grant, attached as a
         # scene's preview, shown the scene's views, and let go, which gives
@@ -188,6 +202,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # check, eight trees at once, starts fewer at once and none is starved
         # past its input (D491), as Studio's played tests (D467, D496).
         set_tests_properties(client_plays_runners client_drawn client_clicks_stalls client_types_stalls client_types_stalls_frozen client_navigates_stalls client_navigates_stalls_frozen client_plaza_drawn client_previews_plaza
+                             client_turns_plaza
                              PROPERTIES PROCESSORS 2)
     endif()
     # Every client test here draws a window, the content it plays cooked
@@ -196,4 +211,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     get_property(window_tests DIRECTORY PROPERTY TESTS)
     list(FILTER window_tests INCLUDE REGEX "^client_")
     set_tests_properties(${window_tests} PROPERTIES LABELS window)
+    if(TEST client_turns_plaza)
+        set_tests_properties(client_turns_plaza PROPERTIES LABELS "window;alone")
+    endif()
 endif()

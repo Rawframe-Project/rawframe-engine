@@ -1,20 +1,57 @@
 module sample
 
 // A client's input for a walker (plaza.game's `sample` line): the stick,
-// made each tick from its player's actions (plaza.actions). The camera
-// looks along -Z, so up is -Z.
+// made each tick from its player's actions (plaza.actions). Its run is
+// along the view: up runs the way the view looks along the ground. The
+// view turns with the mouse while its right button is held, and with the
+// arrow keys or the right stick (D521).
 
 import controls
 import rawframe.input
+import rawframe.view
+import std.math
 
 const MOVE: u64 = 0x2b8c866778ceb662
 const JUMP: u64 = 0x2afb6c927e7f3e6f
+const LOOK: u64 = 0xe43978625b6e00b9
+const ORBIT: u64 = 0xdd9f99b9f2884926
+const TURN: u64 = 0x991a5a8c8fdb1a14
+
+// Radians the view turns for each unit of the mouse's motion, and in a
+// tick at a full tilt of the arrow keys or the stick (about four tenths of
+// a turn a second).
+const MOUSE_TURN: f32 = 0.005
+const STICK_TURN: f32 = 0.04
 
 fn sample(into: [controls.Stick]) {
-    into[0].runX = input.x(MOVE)
-    into[0].runZ = 0.0 - input.y(MOVE)
+    // The way the view looks along the ground, from the ray through its
+    // middle: along -Z until it is drawn.
+    let forwardX = 0.0
+    let forwardZ = -1.0
+    let place = view.scenePlace()
+    if place.failure == u32(0) {
+        let ray = view.pointToRay(place.width * 0.5, place.height * 0.5)
+        let length = math.sqrt(ray.directionX * ray.directionX + ray.directionZ * ray.directionZ)
+        if ray.failure == u32(0) && length > 0.001 {
+            forwardX = ray.directionX / length
+            forwardZ = ray.directionZ / length
+        }
+    }
+    // Right of the view is its forward a quarter turn clockwise, seen
+    // from above.
+    let ahead = input.y(MOVE)
+    let aside = input.x(MOVE)
+    into[0].runX = aside * (0.0 - forwardZ) + ahead * forwardX
+    into[0].runZ = aside * forwardX + ahead * forwardZ
     into[0].jump = 0.0
     if input.on(JUMP) {
         into[0].jump = 1.0
+    }
+    // Turning right turns the view clockwise: its yaw falls. The mouse
+    // turns it in a tick its right button was down in at all: a slow frame
+    // reads a whole drag, press to release, as one tick.
+    into[0].turn = 0.0 - input.x(TURN) * STICK_TURN
+    if input.on(ORBIT) || input.pressed(ORBIT) || input.released(ORBIT) {
+        into[0].turn = into[0].turn - input.x(LOOK) * MOUSE_TURN
     }
 }

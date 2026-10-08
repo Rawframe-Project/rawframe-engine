@@ -46,6 +46,51 @@
           "control": "right"
         }
       ]
+    },
+    {
+      "actionId": "e43978625b6e00b9",
+      "name": "look",
+      "valueType": "axis2d",
+      "displayName": "Look",
+      "bindings": [
+        {
+          "device": "mouse",
+          "control": "motion"
+        }
+      ]
+    },
+    {
+      "actionId": "dd9f99b9f2884926",
+      "name": "orbit",
+      "valueType": "bool",
+      "displayName": "Turn the view with the mouse",
+      "bindings": [
+        {
+          "device": "mouse",
+          "control": "right"
+        }
+      ]
+    },
+    {
+      "actionId": "991a5a8c8fdb1a14",
+      "name": "turn",
+      "valueType": "axis2d",
+      "displayName": "Turn the view",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "quad": {
+            "up": "arrow_up",
+            "down": "arrow_down",
+            "left": "arrow_left",
+            "right": "arrow_right"
+          }
+        },
+        {
+          "device": "gamepad",
+          "control": "stick_right"
+        }
+      ]
     }
   ],
   "contexts": [
@@ -54,7 +99,10 @@
       "name": "walking",
       "actions": [
         "move",
-        "jump"
+        "jump",
+        "look",
+        "orbit",
+        "turn"
       ]
     }
   ]
