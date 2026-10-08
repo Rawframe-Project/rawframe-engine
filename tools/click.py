@@ -37,7 +37,8 @@
 # one whose field has a value where `,name=value` follows (D476).
 # Five seconds after, it stops the program whose pid its pid file holds
 # (D430), whose iterations only bound it, and waits for the process it
-# watches to end.
+# watches to end; half a second, where the last argument waited for a
+# record that came, since what the test asked for has been seen (D493).
 #
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
@@ -208,7 +209,9 @@ def main():
         xtest.XTestFakeKeyEvent(display, code, 0, 0)
         x.XFlush(display)
 
+    seen = False
     for at, y, text in points:
+        seen = False
         if not alive(pid):
             break
         if isinstance(text, tuple) and text[0] == "wheel":
@@ -282,6 +285,7 @@ def main():
                     break
                 time.sleep(0.25)
             print(f"{'saw' if found else 'never saw'} {text[1]}")
+            seen = found
             continue
         if isinstance(text, float):
             time.sleep(text)
@@ -390,7 +394,7 @@ def main():
             time.sleep(0.5)
             os.kill(stopped, signal.SIGCONT)
             time.sleep(1.5)
-    time.sleep(5)
+    time.sleep(0.5 if seen else 5)
     stop(pid_file)
     while alive(pid):
         time.sleep(0.25)
