@@ -24,6 +24,9 @@ constexpr int kMostIterationsPerFrame = 4;
 // a window that draws nothing: input waits no longer than this to be seen.
 // A page's frames are paced by the browser and never wait.
 [[maybe_unused]] constexpr auto kLongestWait = std::chrono::milliseconds{4};
+// The most iterations the events after a key wait for the players' input
+// to read it (D506): a few world ticks at any rate a game runs.
+constexpr int kMostIterationsAwaited = 16;
 
 // USB HID keyboard usages of the keys a text field takes.
 constexpr std::uint16_t kUsageA = 0x04;
@@ -173,7 +176,15 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     if (const auto kState = windows.state(window_); kState.has_value()) {
         bridge_->resize(kState->size.width);
     }
-    while (std::optional<window::Event> event = windows.next()) {
+    // Not until the players' input has read the key that ended the last
+    // reading: a frame may come before the host is due, and an iteration
+    // may run no world tick, and the keys after it would then be read in
+    // the same tick after all (D506).
+    while (!awaitingRead_) {
+        const std::optional<window::Event> event = windows.next();
+        if (!event.has_value()) {
+            break;
+        }
         closing = closing || event->kind == window::EventKind::CloseRequested;
         // Whether a field takes text, told among the keys (D430): a key
         // typed into a field is never a gated action's, even when the
@@ -260,6 +271,8 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         // (D476).
         if (event->kind == window::EventKind::KeyDown && !typing_.editing() &&
             (navigation_.focused() || navigation_.reachable())) {
+            awaitingRead_ = true;
+            iterationsAwaited_ = 0;
             break;
         }
     }
@@ -273,6 +286,9 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     for (int ran = 0; ran < kMostIterationsPerFrame && clock_.now() >= host_->due(); ++ran) {
         if (!host_->iterate()) {
             return end();
+        }
+        if (awaitingRead_ && (feed_.waiting() == 0 || ++iterationsAwaited_ >= kMostIterationsAwaited)) {
+            awaitingRead_ = false;
         }
     }
     // What the iterations asked the player's gamepads to feel.

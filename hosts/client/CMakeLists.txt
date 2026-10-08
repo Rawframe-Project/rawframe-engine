@@ -107,12 +107,15 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # field, Return gives it the keyboard, and the sign typed and given
         # by Return goes to the server and back to the board. Each step that
         # moves focus is its own group of keys, so a loaded machine's input
-        # never reads the next with it, before the step took effect.
+        # never reads the next with it, before the step took effect; but the
+        # first Tab and Return come a few milliseconds apart, as a quick
+        # player's, within one world tick, and Return still finds the purse
+        # (D506).
         add_test(NAME client_navigates_stalls
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
-                         games/tycoon/tycoon.game until=ui_reachable,reachable=2 keys=Tab keys=Return keys=Tab keys=Return keys=b,o,Return until=ui_submitted
+                         games/tycoon/tycoon.game until=ui_reachable,reachable=2 quick=Tab,Return keys=Tab keys=Return keys=b,o,Return until=ui_submitted
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_navigates_stalls PROPERTIES
                              FIXTURES_REQUIRED tycoon_content

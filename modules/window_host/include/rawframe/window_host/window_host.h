@@ -83,6 +83,12 @@ private:
     view::UiNavigation navigation_;
     /// Whether the feed was last told a field takes text.
     bool toldEditing_ = false;
+    /// Whether a key ended a frame's reading and the players' input has
+    /// not read it yet: the events after it wait until it has (D506).
+    bool awaitingRead_ = false;
+    /// Iterations run while it waited, so a game whose input reads nothing
+    /// does not hold its events for ever.
+    int iterationsAwaited_ = 0;
     /// Whether the players' gamepads play: `input.gamepads`, true unless
     /// told false (D467).
     bool gamepads_ = true;

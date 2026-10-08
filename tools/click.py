@@ -28,7 +28,9 @@
 # the program stopped, once the mouse is over the point (D477). The
 # arguments `freeze` and `thaw` stop the program and let it go on, so what
 # comes between, clicks and the wheel among it, is read in one frame
-# (D479). An argument
+# (D479). An argument `quick=` and X key names presses them a few
+# milliseconds apart with the program running, as a quick player does,
+# so they reach it within one world tick (D506). An argument
 # `move=` and a point moves the pointer there with no press, a second
 # before going on (D468), and `orbit=` and two points drags as `drag=`
 # does with the right button (D469), a key a fifth part names held through
@@ -44,7 +46,8 @@
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
 #                 | wheel=<x>,<y>,<turns>[,<key>] | drag=<x>,<y>,<x>,<y>[,<key>]
-#                 | frozen=<key>[,<key>...] | frozenclick=<x>,<y>:<text>
+#                 | frozen=<key>[,<key>...] | quick=<key>[,<key>...]
+#                 | frozenclick=<x>,<y>:<text>
 #                 | move=<x>,<y> | freeze | thaw
 #                 | orbit=<x>,<y>,<x>,<y>[,<key>] | wait=<seconds>
 #                 | until=<code>[,<field>=<value>]
@@ -142,6 +145,9 @@ def main():
             continue
         if argument.startswith("frozen="):
             points.append((None, "frozen", argument[len("frozen="):].split(",")))
+            continue
+        if argument.startswith("quick="):
+            points.append((None, "quick", argument[len("quick="):].split(",")))
             continue
         if argument in ("freeze", "thaw"):
             points.append((None, None, (argument,)))
@@ -329,12 +335,12 @@ def main():
                     frozen = int(told.read().strip())
                 os.kill(frozen, signal.SIGSTOP)
             for name in text:
-                press(name, 0.1)
-                time.sleep(0.33)
+                press(name, 0.001 if y == "quick" else 0.1)
+                time.sleep(0.002 if y == "quick" else 0.33)
             if y == "frozen":
                 time.sleep(0.5)
                 os.kill(frozen, signal.SIGCONT)
-            print(f"{'pressed frozen' if y == 'frozen' else 'pressed'} {','.join(text)}")
+            print(f"pressed {y + ' ' if y else ''}{','.join(text)}")
             time.sleep(1.5)
             continue
         # Moved there first, so the press is where the pointer already is.
