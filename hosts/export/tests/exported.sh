@@ -8,7 +8,8 @@
 # admit the player; the client ends on its own after a minute regardless.
 # Prints the keys the folder holds (the studio's key set, never its
 # secret), the fonts the client read from the folder's library, the
-# players admitted, the frames shown, how each side stopped, and whether
+# players admitted, the frames shown, whether the window carried the title
+# the export was given (D519), how each side stopped, and whether
 # the launcher ended with the client's code. A machine with no adapter the
 # client allows skips, unless RAWFRAME_REQUIRE_GPU is set. Run under an X
 # server, from the repository root.
@@ -24,7 +25,7 @@ kid="$("$3" key studio "$out.keys" | cut -d' ' -f2)"
 # A port nothing holds right now.
 port="$(python3 "$(dirname "$0")/../../../tools/free_port.py")"
 "$1" "$7" "$out" --port "$port" --key "$out.keys/$kid.key" --publisher studio --cook "$2" --build "$3" \
-    --server "$4" --client "$5" --play "$6" || exit 1
+    --server "$4" --client "$5" --play "$6" --title "Stalls, a market" || exit 1
 printf 'host.maximum_iterations = 7200\n' >>"$out/client.conf"
 "$out/rawframe-play" &
 play=$!
@@ -34,6 +35,8 @@ for _ in $(seq 600); do
     sleep 0.1
 done
 sleep 3
+titled=no
+xwininfo -root -tree 2>/dev/null | grep -q '"Stalls, a market"' && titled=yes
 kill -TERM "$play" 2>/dev/null
 status=0
 wait "$play" || status=$?
@@ -60,5 +63,6 @@ if [ ! -f "$out/client.log" ]; then
 fi
 echo "export: keys $(ls "$out/library/keys" | tr '\n' ' ')fonts read $(field client.log fontsRead)," \
     "admitted $(field client.log admitted), frames shown $(field client.log framesShown)," \
+    "titled: $titled," \
     "client stopped $(stopped client.log exit), server stopped $(stopped server.log exit)," \
     "the launcher's code the client's: $same"

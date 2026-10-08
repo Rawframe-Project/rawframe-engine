@@ -14,13 +14,16 @@
 //   rawframe-export <game directory> <output directory> [--game <file>]
 //                   [--port <port>] [--version <version>] [--tools <directory>]
 //                   [--key <secret key> --publisher <name>] [--target web]
-//                   [--follow <origin> [--channel <channel>]]
+//                   [--follow <origin> [--channel <channel>]] [--title <title>]
 //
 // With `--key`, the Build is signed by that secret (`rawframe-build key`
 // writes it beside `<publisher>.keys`, which the folder's library pins);
 // the secret is read, never copied. Without it, a key is made for this
 // export under the publisher `local`, and its secret deleted once the Build
 // is signed.
+//
+// The client's window carries `--title`, the game's directory name unless
+// given (D519).
 //
 // The game is `<directory name>.game` unless named. The tools (rawframe-cook,
 // rawframe-build, rawframe-server, rawframe-client, rawframe-play) are found
@@ -57,6 +60,7 @@
 // `--maul-window`, `--maul-rhi`, `--page`).
 
 #include "rawframe/base/sha256.h"
+#include "rawframe/composition/configuration.h"
 #include "rawframe/content/composition_record.h"
 #include "rawframe/content/library.h"
 #include "rawframe/document/json.h"
@@ -293,6 +297,8 @@ struct Exported {
     std::string channel;
     std::string gameResource;
     std::string port;
+    /// The client window's title.
+    std::string title;
     /// The programs' suffix on this system (`.exe` on Windows).
     std::string suffix;
 };
@@ -383,8 +389,8 @@ bool writeNative(const Exported& exported, const std::array<fs::path, 4>& progra
                                 "# this machine's graphics device (a software one where it has none) and\n"
                                 "# heard on its sound device.\n"
                                 "host.iteration_rate = 120\nbots.player = true\nrender.device = any\n"
-                                "audio.play = device\n" +
-                                kContent +
+                                "audio.play = device\nwindow.title = " +
+                                exported.title + "\n" + kContent +
                                 "kest.plan_only = true\nnetwork.quic.pin_file = fingerprint\n"
                                 "bots.endpoint = 127.0.0.1:" +
                                 exported.port + "\n";
@@ -471,11 +477,19 @@ bool writeWeb(const Exported& exported, const WebFiles& from, std::vector<std::s
     return true;
 }
 
+/// Whether `title` fits one configuration value: a line, not blank, of
+/// at most the value bound, with no space at either end to be trimmed off.
+bool titleLike(std::string_view title) {
+    return !title.empty() && title.size() <= rawframe::composition::kMaximumConfigurationValueBytes &&
+           title.find_first_of("\r\n") == std::string_view::npos && title.front() != ' ' && title.back() != ' ' &&
+           title.front() != '\t' && title.back() != '\t';
+}
+
 int usage() {
     std::fputs("usage: rawframe-export <game directory> <output directory> [--game <file>] [--port <port>]\n"
                "                       [--version <version>] [--tools <directory>] [--<tool> <path>]...\n"
                "                       [--key <secret key> --publisher <name>] [--target web]\n"
-               "                       [--follow <origin> [--channel <channel>]]\n",
+               "                       [--follow <origin> [--channel <channel>]] [--title <title>]\n",
                stderr);
     return 2;
 }
@@ -499,6 +513,7 @@ int main(int argc, char** argv) {
     bool web = false;
     std::optional<std::string> follow;
     std::string channel = "stable";
+    std::string title = kGame.filename().string();
     fs::path toolDirectory = kSelf.parent_path();
     std::map<std::string, fs::path, std::less<>> tools;
     for (int at = 3; at + 1 < argc; at += 2) {
@@ -522,6 +537,8 @@ int main(int argc, char** argv) {
             follow = kValue;
         } else if (kOption == "--channel") {
             channel = kValue;
+        } else if (kOption == "--title") {
+            title = kValue;
         } else if (kOption == "--cook" || kOption == "--build" || kOption == "--server" || kOption == "--client" ||
                    kOption == "--play" || kOption == "--install" || kOption == "--web-client" ||
                    kOption == "--maul-window" || kOption == "--maul-rhi" || kOption == "--page") {
@@ -532,7 +549,7 @@ int main(int argc, char** argv) {
     }
     // A web export's page updates as its site does; following is native.
     if (argc % 2 == 0 || (port.has_value() && !portLike(*port)) || (web && follow.has_value()) ||
-        !rawframe::release::channelNamed(channel).has_value()) {
+        !rawframe::release::channelNamed(channel).has_value() || !titleLike(title)) {
         return usage();
     }
     const auto kTool = [&](const char* name) {
@@ -644,6 +661,7 @@ int main(int argc, char** argv) {
                              .channel = channel,
                              .gameResource = kGameResource,
                              .port = *port,
+                             .title = title,
                              .suffix = kSuffix};
     std::vector<std::string> written = std::move(installed);
     const bool kWritten =
