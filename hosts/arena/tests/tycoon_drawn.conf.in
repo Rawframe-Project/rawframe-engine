@@ -19,3 +19,8 @@ render.height = 360
 render.capture = @CAPTURE@
 scene.shadow_side = 256
 render.read_every = 8
+# What is checked is what is drawn, not how fast a loaded machine ticks:
+# the World may fall behind without the server refusing the bots, as a
+# World a second behind refuses players (D212, D516).
+world.degraded_ms = 600000
+world.overload_ms = 0
