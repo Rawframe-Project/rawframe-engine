@@ -33,7 +33,12 @@ struct Camera {
     float near = 0;
     float exposure = 0;
     std::uint32_t tonemapper = 0;
+    /// Whether the offsets are from the World's origin, not the pose (D520).
+    std::uint32_t anchor = 0;
 };
+
+/// `rawframe.model.FIXED`: a camera placed in the World (D520).
+inline constexpr std::uint32_t kCameraFixed = 1;
 
 /// `rawframe.model.View` as C++ reads it (ADR-0052, D361): the render
 /// texture its entity's camera draws into, its order among the views

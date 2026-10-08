@@ -222,3 +222,15 @@ RAWFRAME_TEST(ACamerasPostProcessesRunInItsOrder) {
         RAWFRAME_EXPECT(kFrame.postProcesses[2].blob == material::blobOf(kFade));
     }
 }
+
+RAWFRAME_TEST(AFixedCameraStaysPutWhereverItsPlayerIs) {
+    // A following camera is placed from its entity's pose; a fixed one
+    // (D520) is its offsets in the World, whatever the pose, or none.
+    const physics3d::Pose3D kPose{.x = 7, .y = 1, .z = -3};
+    Camera camera{.offsetX = 0, .offsetY = 42, .offsetZ = 36};
+    RAWFRAME_EXPECT((eyeOf(camera, &kPose) == std::array<double, 3>{7, 43, 33}));
+    RAWFRAME_EXPECT(!eyeOf(camera, nullptr).has_value());
+    camera.anchor = kCameraFixed;
+    RAWFRAME_EXPECT((eyeOf(camera, &kPose) == std::array<double, 3>{0, 42, 36}));
+    RAWFRAME_EXPECT((eyeOf(camera, nullptr) == std::array<double, 3>{0, 42, 36}));
+}

@@ -94,6 +94,16 @@ CameraMatrices matricesOf(const SceneCamera& camera) noexcept {
                                                0}};
 }
 
+std::optional<std::array<double, 3>> eyeOf(const Camera& camera, const physics3d::Pose3D* pose) noexcept {
+    if (camera.anchor == kCameraFixed) {
+        return std::array<double, 3>{camera.offsetX, camera.offsetY, camera.offsetZ};
+    }
+    if (pose == nullptr) {
+        return std::nullopt;
+    }
+    return std::array<double, 3>{pose->x + camera.offsetX, pose->y + camera.offsetY, pose->z + camera.offsetZ};
+}
+
 view::Perspective perspectiveOf(const SceneCamera& camera) noexcept {
     return view::Perspective{
         .eye = camera.eye, .yaw = camera.yaw, .pitch = camera.pitch, .fovY = camera.fovY, .near = camera.near};

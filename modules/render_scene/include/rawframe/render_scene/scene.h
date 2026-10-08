@@ -16,6 +16,7 @@
 #include "rawframe/material/post_process.h"
 #include "rawframe/mesh/mesh.h"
 #include "rawframe/particles/particles.h"
+#include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/components.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
@@ -189,6 +190,11 @@ struct CameraMatrices {
 /// A camera's view geometry for picking (ADR-0052, D366): its eye, aim,
 /// and lens; the view's size is the caller's.
 [[nodiscard]] view::Perspective perspectiveOf(const SceneCamera& camera) noexcept;
+
+/// Where a camera puts the eye in the World: its offsets from `pose`, or
+/// from the origin when it is fixed (D520); none when it follows and its
+/// entity has no pose.
+[[nodiscard]] std::optional<std::array<double, 3>> eyeOf(const Camera& camera, const physics3d::Pose3D* pose) noexcept;
 
 /// One model to draw, or a run of its mesh's parts that draw with one
 /// material (D314): its mesh and the run's indices, where it is relative to

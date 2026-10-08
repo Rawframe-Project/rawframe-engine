@@ -114,7 +114,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"fovY", offsetof(Camera, fovY)},
                            {"near", offsetof(Camera, near)},
                            {"exposure", offsetof(Camera, exposure)},
-                           {"tonemapper", offsetof(Camera, tonemapper)}}));
+                           {"tonemapper", offsetof(Camera, tonemapper)},
+                           {"anchor", offsetof(Camera, anchor)}}));
     RAWFRAME_TRY(kLaidOut(
         loaded.view.has_value(),
         "rawframe.model.View",

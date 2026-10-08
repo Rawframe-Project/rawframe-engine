@@ -41,7 +41,10 @@ const CAPSULE: u64 = 0x63ed148327123836
 // A client's view of the 3D World (ADR-0052's camera), on the client's
 // own player: a presentation component (`presentation <camera> on
 // player`) its present systems place. The eye is `offsetX`, `offsetY`,
-// and `offsetZ` meters from the player's pose, in the World's axes, and
+// and `offsetZ` meters from the player's pose, in the World's axes, or
+// from the World's origin where `anchor` is FIXED (a view that stays put
+// wherever the player is: placed back from the pose, it would lurch for a
+// frame as the pose moves between ticks, D520), and
 // looks along `yaw` radians about +Y (nought looks along -Z, a quarter
 // turn along -X) and `pitch` radians above the ground's plane. `fovY` is
 // the vertical field of view in radians (a wider window sees more,
@@ -63,6 +66,7 @@ struct Camera {
     near: f32
     exposure: f32
     tonemapper: u32
+    anchor: u32
 }
 
 // A view (ADR-0052, D361), on an entity with a camera: what the camera
@@ -85,6 +89,11 @@ struct View {
 const AGX: u32 = 0
 const PBR_NEUTRAL: u32 = 1
 const LINEAR: u32 = 2
+
+// Where a camera's offsets are from (D520): its entity's pose (FOLLOW,
+// nought, the default) or the World's origin (FIXED).
+const FOLLOW: u32 = 0
+const FIXED: u32 = 1
 
 // A camera's grading (ADR-0051, ADR-0047), on the same entity as its
 // camera: the scene's light, before it is mapped for display, balanced to

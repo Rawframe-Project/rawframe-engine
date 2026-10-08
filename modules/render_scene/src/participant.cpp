@@ -554,7 +554,8 @@ private:
     }
 
     /// The camera on `entity` and its effects read into `camera`, the eye
-    /// placed by the entity's pose; whether it has a camera (else it looks
+    /// placed by the entity's pose, or in the World where it is fixed
+    /// (D520); whether it has a camera (else it looks
     /// as the default does).
     bool readCamera(world::World& world, world::EntityHandle entity, SceneCamera& camera) const {
         Camera view = kDefaultCamera;
@@ -604,10 +605,9 @@ private:
                 }
             }
         }
-        if (const auto kPose = world.registry().key<physics3d::Pose3D>()) {
-            if (const auto* pose = world.get(entity, *kPose)) {
-                camera.eye = {pose->x + view.offsetX, pose->y + view.offsetY, pose->z + view.offsetZ};
-            }
+        const auto kPose = world.registry().key<physics3d::Pose3D>();
+        if (const auto kEye = eyeOf(view, kPose ? world.get(entity, *kPose) : nullptr)) {
+            camera.eye = *kEye;
         }
         return found;
     }
