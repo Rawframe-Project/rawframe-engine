@@ -1,0 +1,152 @@
+{
+  "formatVersion": 1,
+  "kind": "animation.skeleton",
+  "bones": [
+    {
+      "target": "1e895f353806509c756004284b9483ea",
+      "name": "hips",
+      "translation": [
+        0,
+        -0.025641,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "target": "15b072183f608bc60e7fdd9386794243",
+      "name": "spine",
+      "parent": 0,
+      "translation": [
+        0,
+        0.5,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "target": "893c7d1f63779f19797447d898a7cfa7",
+      "name": "head",
+      "parent": 1,
+      "translation": [
+        0,
+        0.4,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "target": "e269d823ae8f577e76279baf1f989733",
+      "name": "thigh_l",
+      "parent": 0,
+      "translation": [
+        -0.1,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "target": "77ca571ff7f3d811e3c40e9defb243d0",
+      "name": "thigh_r",
+      "parent": 0,
+      "translation": [
+        0.1,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "target": "e5d393c53d5372a876a9a13be9012a52",
+      "name": "arm_l",
+      "parent": 1,
+      "translation": [
+        -0.265,
+        0.2,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "target": "ab38d8673ff627fcbc9d616d92259486",
+      "name": "arm_r",
+      "parent": 1,
+      "translation": [
+        0.265,
+        0.2,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    }
+  ]
+}

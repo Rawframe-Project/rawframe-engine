@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "kind": "animation.clip",
+  "skeleton": "77ebdc8e1bf3eb8ec377e230a8d580cb",
+  "duration": 2,
+  "loop": "loop",
+  "tracks": [
+    {
+      "bone": "1e895f353806509c756004284b9483ea",
+      "channel": "translation",
+      "keys": [
+        {
+          "time": 0,
+          "value": [
+            0,
+            -0.025641,
+            0
+          ]
+        },
+        {
+          "time": 1,
+          "value": [
+            0,
+            -0.045641,
+            0
+          ]
+        }
+      ]
+    }
+  ],
+  "events": [],
+  "syncMarkers": []
+}
