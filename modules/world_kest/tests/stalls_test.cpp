@@ -358,22 +358,39 @@ RAWFRAME_TEST(CustomersFindTheirWayRoundTheStallsInIt) {
         middles.push_back({((kOne.plotX + 0.5) * 4) - 24, ((kOne.plotZ + 0.5) * 4) - 24});
     }
     // For forty seconds no customer steps inside a stall, and the corner
-    // stall, behind the wall, serves some.
+    // stall, behind the wall, serves some; a customer walking faces where
+    // it walks, but for the turns it is making (D512).
     const auto kPoseKey = *world.registry().find(physics3d::Pose3D::kComponentTypeId);
+    const auto kVelocityKey = *world.registry().find(physics3d::Velocity3D::kComponentTypeId);
     std::uint64_t inside = 0;
     std::uint64_t seen = 0;
+    std::uint64_t walking = 0;
+    std::uint64_t facing = 0;
     for (int tick = 0; tick < 40 * 60; ++tick) {
         played.run(1);
         for (const world::EntityHandle kCustomer : holding(world, kCustomerId)) {
             const auto& kPose = *static_cast<const physics3d::Pose3D*>(world.getErased(kCustomer, kPoseKey));
             ++seen;
+            const auto& kVelocity =
+                *static_cast<const physics3d::Velocity3D*>(world.getErased(kCustomer, kVelocityKey));
+            const double kSpeed = std::hypot(kVelocity.x, kVelocity.z);
+            if (kSpeed > 1) {
+                ++walking;
+                const double kFacingX = 2.0 * ((kPose.qx * kPose.qz) + (kPose.qw * kPose.qy));
+                const double kFacingZ = 1.0 - (2.0 * ((kPose.qx * kPose.qx) + (kPose.qy * kPose.qy)));
+                facing += ((kFacingX * kVelocity.x) + (kFacingZ * kVelocity.z)) / kSpeed > 0.9 ? 1 : 0;
+            }
             for (const auto& kMiddle : middles) {
                 inside += std::abs(kPose.x - kMiddle[0]) < 1.5 && std::abs(kPose.z - kMiddle[1]) < 1.5 ? 1 : 0;
             }
         }
     }
     const Till* const kCorner = valueOf<Till>(world, kStalls[0], kTillId);
+    std::printf("customers: %llu walking, %llu facing their way\n",
+                static_cast<unsigned long long>(walking),
+                static_cast<unsigned long long>(facing));
     RAWFRAME_EXPECT(seen > 10'000 && inside == 0);
+    RAWFRAME_EXPECT(walking > 1'000 && facing * 10 > walking * 8);
     RAWFRAME_EXPECT(kCorner != nullptr && kCorner->takings > 0);
 }
 

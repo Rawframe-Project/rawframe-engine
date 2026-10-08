@@ -428,11 +428,12 @@ fn open(count: i32, gates: [Gate]) {
 }
 
 // A customer at `fromX` on the south edge heading for (x, z): a small
-// kinematic sensor of the customers' class, pushing nothing.
+// kinematic sensor of the customers' class, pushing nothing, free to turn
+// toward where it walks (D512).
 fn arrive(fromX: f64, x: f64, z: f64) {
     let customer = world.create()
     Customer.insert(customer, Customer(x, z, u32(0)))
-    Body3D.insert(customer, physics3d.Body3D(physics3d.KINEMATIC, physics3d.SPHERE, true, false, true, CUSTOMERS,
+    Body3D.insert(customer, physics3d.Body3D(physics3d.KINEMATIC, physics3d.SPHERE, false, false, true, CUSTOMERS,
                                              0.35, 0.35, 0.35, 0.0, 0.0, 0.0, 0.0, 0.0))
     Pose3D.insert(customer, physics3d.Pose3D(fromX, 0.35, HALF, 0.0, 0.0, 0.0, 1.0))
     Velocity3D.insert(customer, physics3d.Velocity3D(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
