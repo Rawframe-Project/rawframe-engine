@@ -211,12 +211,21 @@ jobs:
           for game in plaza tycoon runners; do
             cp -r "played/$game" "$RUNNER_TEMP/$game"
             printf 'host.maximum_iterations = 600\n' >>"$RUNNER_TEMP/$game/client.conf"
+            # The plaza starts on the whole screen (D523).
+            [ "$game" = plaza ] && printf 'window.fullscreen = true\n' >>"$RUNNER_TEMP/$game/client.conf"
             (cd "$RUNNER_TEMP/$game" && timeout 180 ./rawframe-play.exe; echo "$game: rawframe-play exit $?")
             for log in server client; do
               grep -o '"code":"\(bots_admitted\|frame_summary\|device_ready\|device_unavailable\|start_failed\)"[^}]*}[^}]*}' \
                 "$RUNNER_TEMP/$game/$log.log" || echo "$game $log: nothing of note"
             done
             grep -q '"framesShown":[1-9]' "$RUNNER_TEMP/$game/client.log" || { echo "$game showed no frame"; failed=1; }
+            if [ "$game" = plaza ]; then
+              # On the whole screen its view is the screen's, not the
+              # window's 720 logical pixels high.
+              grep -o '"viewWidth":[0-9]*,"viewHeight":[0-9]*' "$RUNNER_TEMP/$game/client.log" | tail -1
+              grep '"code":"scene_summary"' "$RUNNER_TEMP/$game/client.log" | grep -q '"viewHeight":720,' &&
+                { echo "plaza was not on the whole screen"; failed=1; }
+            fi
           done
           exit "$failed"
       - name: Keep the sample games
