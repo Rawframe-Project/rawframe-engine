@@ -35,6 +35,7 @@ constexpr diagnostics::EventIdentity kFailed{"ui", "ui_failed"};
 // test or a tool waits for the UI it will press rather than for time.
 constexpr diagnostics::EventIdentity kReachable{"ui", "ui_reachable"};
 constexpr diagnostics::EventIdentity kSubmitted{"ui", "ui_submitted"};
+constexpr diagnostics::EventIdentity kActivated{"ui", "ui_activated"};
 constexpr diagnostics::EventIdentity kImageUnknown{"ui", "image_unknown"};
 constexpr diagnostics::EventIdentity kImageUnread{"ui", "image_unavailable"};
 constexpr diagnostics::EventIdentity kFontUnread{"ui", "font_unavailable"};
@@ -352,39 +353,48 @@ public:
         // dismisses has the keyboard or gives it back at once, so the keys
         // after find it there.
         if (navigation_ != nullptr && ui_ != nullptr) {
-            navigation_->answer(view::UiNavigation::Answers{.enter =
-                                                                [this] {
-                                                                    return !failed_ && ui_->enterNavigation();
-                                                                },
-                                                            .move =
-                                                                [this](view::NavigationMove move) {
-                                                                    return !failed_ && ui_->navigate(move);
-                                                                },
-                                                            .activate =
-                                                                [this] {
-                                                                    if (failed_) {
-                                                                        return std::optional<std::int64_t>{};
-                                                                    }
-                                                                    const std::optional<std::int64_t> kPressed =
-                                                                        ui_->activate();
-                                                                    followCaret();
-                                                                    return kPressed;
-                                                                },
-                                                            .dismiss =
-                                                                [this] {
-                                                                    if (!failed_) {
-                                                                        ui_->dismiss();
-                                                                        followCaret();
-                                                                    }
-                                                                },
-                                                            .focused =
-                                                                [this] {
-                                                                    return !failed_ && ui_->navigating();
-                                                                },
-                                                            .reachable =
-                                                                [this] {
-                                                                    return !failed_ && ui_->reachable() > 0;
-                                                                }});
+            navigation_->answer(view::UiNavigation::Answers{
+                .enter =
+                    [this] {
+                        return !failed_ && ui_->enterNavigation();
+                    },
+                .move =
+                    [this](view::NavigationMove move) {
+                        return !failed_ && ui_->navigate(move);
+                    },
+                .activate =
+                    [this] {
+                        if (failed_) {
+                            return std::optional<std::int64_t>{};
+                        }
+                        const std::optional<std::int64_t> kPressed = ui_->activate();
+                        followCaret();
+                        // What it activated, told as rarely as
+                        // a player does it: a press, or a field
+                        // taking the keyboard (D505).
+                        emitter_.log(diagnostics::Severity::Info,
+                                     kActivated,
+                                     "navigation activated what it had focused",
+                                     {diagnostics::field("press", kPressed.value_or(0)),
+                                      diagnostics::field("pressed", kPressed.has_value()),
+                                      diagnostics::field("typing", ui_->caret().has_value())});
+                        return kPressed;
+                    },
+                .dismiss =
+                    [this] {
+                        if (!failed_) {
+                            ui_->dismiss();
+                            followCaret();
+                        }
+                    },
+                .focused =
+                    [this] {
+                        return !failed_ && ui_->navigating();
+                    },
+                .reachable =
+                    [this] {
+                        return !failed_ && ui_->reachable() > 0;
+                    }});
         }
         return {};
     }
