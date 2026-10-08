@@ -96,7 +96,15 @@ build_and_test() {
     if [ "$preset" = gcc-shipping ] || { [ "$preset" = clang-development ] && [ "$tier" = full ]; }; then
         leave=(-LE window)
     fi
-    if ! ctest --test-dir "out/$preset" "${leave[@]}" --output-on-failure -j "$jobs" >"out/$preset.test.log" 2>&1; then
+    # The trees that play the window tests run twice the jobs (D507): those
+    # tests mostly wait on frames, not processors, and the thread tree alone
+    # took 169 s at twelve jobs where it took 319 s at six, the same 1,150 s
+    # of tests.
+    local run=$jobs
+    if [ "$tier" = full ] && [ ${#leave[@]} -eq 0 ] && [[ "$preset" != wasm-* ]]; then
+        run=$((jobs * 2))
+    fi
+    if ! ctest --test-dir "out/$preset" "${leave[@]}" --output-on-failure -j "$run" >"out/$preset.test.log" 2>&1; then
         # Each failed test's status and its output's last lines, cut short
         # (its records are long), so a failure seen only under CI's load can
         # be read there.
