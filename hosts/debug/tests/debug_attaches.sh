@@ -17,6 +17,13 @@ server=$2
 repository=$3
 content=$4
 work=$5
+# Not on Windows yet: Git's bash sets no mode bits for the directory an
+# open one is told from, and names the game by a path whose digest is not
+# the adapter's. The adapter's own checks hold there (D501).
+if command -v cygpath >/dev/null 2>&1; then
+    echo "skip: Windows, the play directory set up by Git's bash"
+    exit 0
+fi
 
 rm -rf "$work"
 mkdir -p "$work"
@@ -55,9 +62,10 @@ printf '{"endpoint":"127.0.0.1:%s","pinFile":"%s","tokenFile":"%s"}\n' "$port" "
 python3 - "$adapter" "127.0.0.1:$port" "$work/fingerprint" "$work/token" "$game" "$played" "$work/server.log" <<'PY'
 import json
 import os
-import select
+import queue
 import subprocess
 import sys
+import threading
 import time
 
 adapter, endpoint, pin, token, game, played, server_log = sys.argv[1:8]
@@ -85,11 +93,37 @@ class Editor:
     """An editor's side of the protocol, over one adapter."""
 
     def __init__(self):
-        # Unbuffered, so what select says waits is all there is to read.
         self.child = subprocess.Popen([adapter], stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
         self.seq = 0
         self.seen = []
         self.kept = []
+        # Its messages read whole by a thread of their own, so a wait can
+        # end on time on every system: select takes no pipe on Windows
+        # (D501). None says it ended.
+        self.messages = queue.Queue()
+        threading.Thread(target=self.read, daemon=True).start()
+
+    def read(self):
+        while True:
+            length = 0
+            while True:
+                line = self.child.stdout.readline()
+                if not line:
+                    self.messages.put(None)
+                    return
+                line = line.strip()
+                if not line:
+                    break
+                if line.startswith(b"Content-Length:"):
+                    length = int(line.split(b":")[1])
+            body = b""
+            while len(body) < length:
+                more = self.child.stdout.read(length - len(body))
+                if not more:
+                    self.messages.put(None)
+                    return
+                body += more
+            self.messages.put(json.loads(body))
 
     def send(self, command, arguments=None):
         self.seq += 1
@@ -101,7 +135,9 @@ class Editor:
 
     def receive(self, end, what):
         # A silent adapter fails the step it was in, never hangs the test.
-        if not select.select([self.child.stdout], [], [], max(0.0, end - time.time()))[0]:
+        try:
+            message = self.messages.get(timeout=max(0.0, end - time.time()))
+        except queue.Empty:
             # Where each of its threads waits, for a hang seen only in a
             # loaded check (D474).
             tasks = "/proc/%d/task" % self.child.pid
@@ -110,23 +146,9 @@ class Editor:
                     print("adapter thread", task, wchan.read(), flush=True)
             explain(self.seen)
             raise SystemExit("the adapter said nothing in time, waiting to be " + what)
-        length = 0
-        while True:
-            line = self.child.stdout.readline()
-            if not line:
-                raise SystemExit("the adapter ended")
-            line = line.strip()
-            if not line:
-                break
-            if line.startswith(b"Content-Length:"):
-                length = int(line.split(b":")[1])
-        body = b""
-        while len(body) < length:
-            more = self.child.stdout.read(length - len(body))
-            if not more:
-                raise SystemExit("the adapter ended")
-            body += more
-        return json.loads(body)
+        if message is None:
+            raise SystemExit("the adapter ended")
+        return message
 
     # What the adapter tells waits on the game, which on a loaded machine
     # may take a while to run a tick; a minute still fails a silent one

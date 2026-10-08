@@ -8,12 +8,18 @@
 set -uo pipefail
 
 server="$1"
+# Paths as the server reads them: Git's bash on Windows names D:/a as /d/a,
+# which only its own tools understand (D237, D501).
+native() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
+}
+here="$(native "$PWD")"
 work="$(mktemp -d)"
 trap 'kill "$first" 2>/dev/null; wait "$first" 2>/dev/null; rm -rf "$work"' EXIT
 port="$(python3 "$(dirname "$0")/../../../tools/free_port.py")"
 config() {
     printf 'host.maximum_iterations = %s\nhost.iteration_rate = 100\nworld.tick_rate = 60\n' "$1"
-    printf 'kest.game = %s/games/arena/arena.game\nnetwork.quic.self_signed = true\n' "$PWD"
+    printf 'kest.game = %s/games/arena/arena.game\nnetwork.quic.self_signed = true\n' "$here"
     printf 'replication.endpoint = 127.0.0.1:%s\n' "$port"
 }
 config 6000 >"$work/a.conf"

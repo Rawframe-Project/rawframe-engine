@@ -19,5 +19,6 @@ if(RAWFRAME_BUILD_TESTS)
     # Bounded, so an adapter that hangs fails the check rather than holding
     # it (D474).
     set_tests_properties(debug_attaches PROPERTIES FIXTURES_REQUIRED plaza_content TIMEOUT 300
+                         SKIP_REGULAR_EXPRESSION "skip: Windows"
                          PASS_REGULAR_EXPRESSION "debugged the plaza through the debug adapter")
 endif()

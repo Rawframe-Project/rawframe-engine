@@ -97,5 +97,9 @@ if kill -0 $running 2>/dev/null; then
 fi
 wait $holding || true
 grep -q '"id":10,"answer":{"kind":"debug.broken","found":1}' "$work/held"
-grep -q '"exit":"clean_stop"' "$work/server.log"
+# Asked to stop, it stopped cleanly: where kill sends a signal. Git's bash
+# on Windows ends a native program outright, so there it only ended (D501).
+if ! command -v cygpath >/dev/null 2>&1; then
+    grep -q '"exit":"clean_stop"' "$work/server.log"
+fi
 echo "stopped the plaza at its stroll system and carried on through the tooling endpoint"
