@@ -78,6 +78,13 @@ public:
         width_ = static_cast<std::uint32_t>(kWidth);
         height_ = static_cast<std::uint32_t>(kHeight);
         RAWFRAME_TRY_ASSIGN(readEvery_, configuration.unsignedInteger("render.read_every", 60));
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kFrameRate, configuration.unsignedInteger("render.frame_rate", 0));
+        if (kFrameRate > 1000) {
+            return badConfiguration("render.frame_rate is 0 for no limit, or 1 to 1000 frames a second");
+        }
+        if (kFrameRate != 0) {
+            framePeriod_ = execution::MonotonicDuration{static_cast<std::int64_t>(1'000'000'000 / kFrameRate)};
+        }
         capture_ = configuration.path("render.capture");
 #if !RAWFRAME_FILE_SYSTEM
         if (capture_.has_value()) {
@@ -117,6 +124,11 @@ public:
         unchanged_.clear();
         now_ = frame.now;
         if (devices_ == nullptr || failed_ || joined_.empty()) {
+            return;
+        }
+        // Not sooner than the frame limit allows after the last (D495).
+        if (framePeriod_.has_value() && madeAt_.has_value() && now_ - *madeAt_ < *framePeriod_) {
+            ++framesLimited_;
             return;
         }
         Device* device = devices_->ready();
@@ -198,6 +210,7 @@ public:
                       diagnostics::field("framesWithoutDevice", framesWithoutDevice_),
                       diagnostics::field("framesIncomplete", framesIncomplete_),
                       diagnostics::field("framesUnchanged", framesUnchanged_),
+                      diagnostics::field("framesLimited", framesLimited_),
                       diagnostics::field("readBacks", readBacks_),
                       diagnostics::field("coveredPixels", lastCovered_),
                       diagnostics::field("mostCovered", mostCovered_),
@@ -344,6 +357,8 @@ private:
     /// When the last frame was submitted; none before one, or once a
     /// recorder left.
     std::optional<execution::MonotonicInstant> madeAt_;
+    /// `render.frame_rate`'s period; none for no limit.
+    std::optional<execution::MonotonicDuration> framePeriod_;
     std::optional<std::pair<std::uint32_t, std::uint32_t>> planned_;
     FrameTarget target_;
     bool made_ = false;
@@ -366,6 +381,7 @@ private:
     std::uint64_t framesWithoutDevice_ = 0;
     std::uint64_t framesIncomplete_ = 0;
     std::uint64_t framesUnchanged_ = 0;
+    std::uint64_t framesLimited_ = 0;
     std::uint64_t readBacks_ = 0;
     std::uint64_t lastCovered_ = 0;
     std::uint64_t mostCovered_ = 0;

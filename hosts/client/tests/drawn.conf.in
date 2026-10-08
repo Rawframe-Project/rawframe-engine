@@ -9,3 +9,6 @@ render.capture = @CAPTURE@
 # The machine's gamepads left out: another program's virtual pads would
 # play this client's player (D467).
 input.gamepads = false
+# Thirty frames a second: drawn by software, as many as the Host iterates
+# held most of a full check's processors (D495).
+render.frame_rate = 30

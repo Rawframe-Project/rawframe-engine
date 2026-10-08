@@ -42,6 +42,8 @@ namespace rawframe::render {
 ///                      none)
 ///   render.capture     a TGA file the last picture read back is written to
 ///                      when the World stops
+///   render.frame_rate  the most frames made a second, as a game's frame
+///                      limit (0, as many as the Host's iterations; D495)
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::Runtime) |
