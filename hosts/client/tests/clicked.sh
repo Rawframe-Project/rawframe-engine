@@ -15,8 +15,11 @@ here="$(dirname "$0")"
 log="$(mktemp)"
 work="$(mktemp -d)"
 trap 'rm -rf "$log" "$work"' EXIT
+# The server plays the cooked content the client's settings name, as a
+# game with meshes is played from its content (D512).
+grep '^content\.root' "$3" >"$work/content.conf" || true
 # The client's iterations only bound it: a loaded machine admits it late.
-RAWFRAME_PLAY_WORK="$work" bash "$here/../../bots/tests/play.sh" "$1" "$2" 0 1 36000 "$4" /dev/null "$3" \
+RAWFRAME_PLAY_WORK="$work" bash "$here/../../bots/tests/play.sh" "$1" "$2" 0 1 36000 "$4" "$work/content.conf" "$3" \
     >"$log" 2>&1 &
 play=$!
 python3 "$here/../../../tools/click.py" "$play" "$work/bots-1.log" bots_admitted "$work/bots-1.pid" "${@:5}"

@@ -52,19 +52,22 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(crates_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bodiesMade\":27,\"bodiesRemoved\":0,\"bodiesRefused\":0")
+    # Stalls' sources cooked into the build tree: its customers' figure,
+    # which every run plays from them (D512), and its font and text, read
+    # by the drawn run (D389).
+    set(TYCOON_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/tycoon_content)
     # Eight bots play Stalls (D388): each joins as an owner and builds stalls,
     # each a static body of the lot beside its ground; customers come and
     # are served (D392), their bodies moved by velocity, never put, along the
     # ways the server's navmesh gives, baked again as stalls go up (D400),
     # steered round each other (D411).
+    configure_file(tests/tycoon.conf.in ${CMAKE_CURRENT_BINARY_DIR}/tycoon.conf @ONLY)
     add_test(NAME tycoon_bots
-             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/tycoon.conf
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/tycoon.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(tycoon_bots PROPERTIES
+                         FIXTURES_REQUIRED tycoon_content
                          PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8.*\"bodiesMade\":([3-9]|[1-9][0-9]+),\"bodiesRemoved\":[0-9]+,\"bodiesRefused\":0,\"teleports\":0.*\"code\":\"navigation_summary\"[^\n]*\"bakes\":[1-9][0-9]*,\"bakesRefused\":0,[^\n]*\"searches\":[1-9][0-9]*,\"avoided\":[1-9]")
-    # Stalls' sources cooked into the build tree: its font and text, read by
-    # the drawn run (D389).
-    set(TYCOON_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/tycoon_content)
     add_test(NAME tycoon_cooked
              COMMAND rawframe_host_cook_tool ${PROJECT_SOURCE_DIR}/games/tycoon ${TYCOON_CONTENT}
                      ${CMAKE_CURRENT_BINARY_DIR}/tycoon_cook_cache)
