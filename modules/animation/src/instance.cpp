@@ -172,6 +172,7 @@ result::Result<std::shared_ptr<const CompiledGraph>> CompiledGraph::compile(cons
     made->unchanged_.bones.assign(skeleton.bones.size(), Transform{});
     for (const Bone& bone : skeleton.bones) {
         made->parents_.push_back(bone.parent);
+        made->bones_.push_back(bone.target);
     }
     made->rootMotion_ = skeleton.rootMotion;
     made->limits_ = limits;

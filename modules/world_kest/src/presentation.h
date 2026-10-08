@@ -73,6 +73,9 @@ public:
     void hover(std::int64_t code) noexcept;
     [[nodiscard]] PresentationStatistics statistics() const noexcept;
     [[nodiscard]] world_animation::AnimationStatistics animationStatistics() const noexcept;
+    /// The animation that played `world`, if it is the World last
+    /// presented and the game has animators; null otherwise (D508).
+    [[nodiscard]] const world_animation::AnimationQueries* poses(const world::World& world) const noexcept;
 
     struct State;
 

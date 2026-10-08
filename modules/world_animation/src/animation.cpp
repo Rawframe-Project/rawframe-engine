@@ -488,6 +488,11 @@ const animation::Pose* WorldAnimation::pose(world::EntityHandle entity) const no
     return kFound == state_->playing.end() ? nullptr : &kFound->second.pose;
 }
 
+std::span<const base::Bits128> WorldAnimation::bones(world::EntityHandle entity) const noexcept {
+    const auto kFound = state_->playing.find(entity);
+    return kFound == state_->playing.end() ? std::span<const base::Bits128>{} : kFound->second.instance.graph().bones();
+}
+
 std::span<const animation::GraphEvent> WorldAnimation::events(world::EntityHandle entity) const noexcept {
     const auto kFound = state_->playing.find(entity);
     return kFound == state_->playing.end() ? std::span<const animation::GraphEvent>{} : kFound->second.events;

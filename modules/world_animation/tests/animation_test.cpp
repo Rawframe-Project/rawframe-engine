@@ -159,6 +159,11 @@ RAWFRAME_TEST(APoseFollowsTheGamesParameters) {
     if (pose == nullptr) {
         return;
     }
+    // Each bone by its target, in the pose's order, for a skinned mesh's
+    // joints (D508).
+    const std::span<const base::Bits128> kBones = stage.animation->bones(kWalker);
+    RAWFRAME_EXPECT(kBones.size() == 2 && kBones[0] == kRoot && kBones[1] == kArm);
+    RAWFRAME_EXPECT(stage.animation->bones(world::EntityHandle{}).empty());
     // Half idle, half walk: a meter along, an eighth turn; the arm a meter
     // out from the root along that turn.
     RAWFRAME_EXPECT(near(pose->bones[0].translation[0], 1.0));

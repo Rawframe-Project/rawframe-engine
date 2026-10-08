@@ -265,6 +265,10 @@ PresentationStatistics ClientPresentation::statistics() const noexcept {
     return state_->statistics;
 }
 
+const world_animation::AnimationQueries* ClientPresentation::poses(const world::World& world) const noexcept {
+    return state_->bound == &world ? state_->animation.get() : nullptr;
+}
+
 world_animation::AnimationStatistics ClientPresentation::animationStatistics() const noexcept {
     return state_->animation != nullptr ? state_->animation->statistics() : world_animation::AnimationStatistics{};
 }
@@ -277,9 +281,11 @@ constexpr std::string_view kPresentedMaybe[] = {
     kPresentationPlan.name, world_replication::kClientWorlds.name, kUiHover.name};
 constexpr std::uint64_t kMostTicksPerFrame = 4;
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
+constexpr std::string_view kPresentedProvided[] = {world_animation::kPresentedPoses.name};
 
-/// Presents the Worlds of the process's local players (D362), each a frame.
-class PresentedParticipant final : public composition::Participant {
+/// Presents the Worlds of the process's local players (D362), each a frame,
+/// and tells what draws them the poses it played them with (D508).
+class PresentedParticipant final : public composition::Participant, public world_animation::PresentedPoses {
 public:
     result::Status load(composition::ParticipantContext& context) {
         if (!context.has(kPresentationPlan.name) || !context.has(world_replication::kClientWorlds.name)) {
@@ -309,6 +315,22 @@ public:
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
         return {};
+    }
+
+    composition::CapabilityObject provide(std::string_view capability) noexcept override {
+        if (capability == world_animation::kPresentedPoses.name) {
+            return composition::provideAs<world_animation::PresentedPoses>(*this);
+        }
+        return {};
+    }
+
+    const world_animation::AnimationQueries* posesOf(const world::World& world) const noexcept override {
+        for (const Presented& each : presented_) {
+            if (const world_animation::AnimationQueries* kPoses = each.presentation->poses(world)) {
+                return kPoses;
+            }
+        }
+        return nullptr;
     }
 
     void runHostPhase(composition::HostPhase phase, const composition::HostFrame& frame) noexcept override {
@@ -413,6 +435,7 @@ void registerPresented(composition::ParticipantRegistrar& registrar) noexcept {
         .identity = "rawframe.world_kest.presented",
         .factory = &makePresented,
         .scope = composition::LifetimeScope::World,
+        .providedCapabilities = kPresentedProvided,
         .optionalCapabilities = kPresentedMaybe,
         .eligibility = {.roles = ~kServer},
         // Stopping only reports: nothing it holds is waited for.

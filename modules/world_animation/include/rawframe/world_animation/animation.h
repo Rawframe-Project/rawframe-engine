@@ -127,6 +127,10 @@ public:
     /// The entity's pose in model space (each bone relative to the entity),
     /// in its skeleton's order, or null for an entity not played here.
     [[nodiscard]] virtual const animation::Pose* pose(world::EntityHandle entity) const noexcept = 0;
+    /// Each bone of the entity's pose by its target identity, in the same
+    /// order, which a skinned mesh's joints name (D508); none for an entity
+    /// not played here.
+    [[nodiscard]] virtual std::span<const base::Bits128> bones(world::EntityHandle entity) const noexcept = 0;
     /// The events the entity's graph fired in the last step, in order.
     [[nodiscard]] virtual std::span<const animation::GraphEvent> events(world::EntityHandle entity) const noexcept = 0;
     /// The state machine that is the graph node of id `node`; none for an
@@ -163,6 +167,7 @@ public:
     [[nodiscard]] std::uint64_t digest() const noexcept;
 
     [[nodiscard]] const animation::Pose* pose(world::EntityHandle entity) const noexcept override;
+    [[nodiscard]] std::span<const base::Bits128> bones(world::EntityHandle entity) const noexcept override;
     [[nodiscard]] std::span<const animation::GraphEvent> events(world::EntityHandle entity) const noexcept override;
     [[nodiscard]] std::optional<MachineView> machine(world::EntityHandle entity,
                                                      std::uint64_t node) const noexcept override;
@@ -197,5 +202,22 @@ public:
 };
 
 inline constexpr composition::Capability<AnimationPlan> kAnimationPlan{"rawframe.animation.plan"};
+
+/// The animation a process plays its local players' Worlds with (D258),
+/// for what draws them (D508). Only from the thread that runs the host's
+/// phases.
+class PresentedPoses {
+public:
+    PresentedPoses() = default;
+    PresentedPoses(const PresentedPoses&) = delete;
+    PresentedPoses& operator=(const PresentedPoses&) = delete;
+    virtual ~PresentedPoses() = default;
+
+    /// What played `world` last; null for a World not presented here, or
+    /// a game without animators.
+    [[nodiscard]] virtual const AnimationQueries* posesOf(const world::World& world) const noexcept = 0;
+};
+
+inline constexpr composition::Capability<PresentedPoses> kPresentedPoses{"rawframe.animation.presented_poses"};
 
 } // namespace rawframe::world_animation

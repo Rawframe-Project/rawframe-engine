@@ -109,6 +109,11 @@ public:
     [[nodiscard]] std::span<const std::optional<BoneIndex>> parents() const noexcept {
         return parents_;
     }
+    /// Each bone's target identity, in the skeleton's order: what a skinned
+    /// mesh's joints name (D508).
+    [[nodiscard]] std::span<const base::Bits128> bones() const noexcept {
+        return bones_;
+    }
     /// The skeleton's root motion source; none keeps the motion in the pose.
     [[nodiscard]] const std::optional<RootMotionSource>& rootMotion() const noexcept {
         return rootMotion_;
@@ -247,6 +252,7 @@ private:
     Pose bind_;
     Pose unchanged_;
     std::vector<std::optional<BoneIndex>> parents_;
+    std::vector<base::Bits128> bones_;
     std::optional<RootMotionSource> rootMotion_;
     EvaluationLimits limits_;
 };
