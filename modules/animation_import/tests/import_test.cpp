@@ -8,6 +8,7 @@
 #include "rawframe/animation_import/import.h"
 #include "rawframe/test/test.h"
 
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -211,4 +212,36 @@ RAWFRAME_TEST(RigsASkeletonCannotHoldAreRefused) {
             "", R"("extensionsRequired": ["KHR_animation_pointer"], "extensionsUsed": ["KHR_animation_pointer"],)")),
         AnimationError::UnsupportedExtension));
     RAWFRAME_EXPECT(refusedWith(imported("{\"asset\": 1"), AnimationError::BadSource));
+}
+
+RAWFRAME_TEST(AJointsTargetIsItsBonesInTheSkinsOrder) {
+    // The arm's skin lists the elbow first; each joint names the bone the
+    // skeleton imported from it has, so a mesh skinned to it finds it.
+    const auto kImported = imported(arm());
+    RAWFRAME_EXPECT(kImported.has_value());
+    if (!kImported.has_value()) {
+        return;
+    }
+    const std::array<SkinJoint, 2> kArm = {SkinJoint{.name = "elbow", .parent = 1},
+                                           SkinJoint{.name = "shoulder", .parent = std::nullopt}};
+    const auto kTargets = jointTargets(kArm);
+    RAWFRAME_EXPECT(kTargets.has_value() && kTargets->size() == 2 &&
+                    (*kTargets)[0] == kImported->skeleton.bones[1].target &&
+                    (*kTargets)[1] == kImported->skeleton.bones[0].target);
+    // An unnamed joint is named by its index in the skin.
+    const std::array<SkinJoint, 2> kUnnamed = {SkinJoint{.name = "", .parent = std::nullopt},
+                                               SkinJoint{.name = "", .parent = 0}};
+    const std::array<std::string_view, 2> kPath = {"joint0", "joint1"};
+    const auto kNamed = jointTargets(kUnnamed);
+    RAWFRAME_EXPECT(kNamed.has_value() && (*kNamed)[1] == animation::targetIdOf(kPath));
+    // No root, two, a parent past the joints, and a joint its own ancestor.
+    const std::array<SkinJoint, 2> kCycle = {SkinJoint{.name = "a", .parent = 1}, SkinJoint{.name = "b", .parent = 0}};
+    const std::array<SkinJoint, 2> kTwo = {SkinJoint{.name = "a"}, SkinJoint{.name = "b"}};
+    const std::array<SkinJoint, 2> kPast = {SkinJoint{.name = "a"}, SkinJoint{.name = "b", .parent = 2}};
+    const std::array<SkinJoint, 3> kLoop = {
+        SkinJoint{.name = "a"}, SkinJoint{.name = "b", .parent = 2}, SkinJoint{.name = "c", .parent = 1}};
+    RAWFRAME_EXPECT(refusedWith(jointTargets(kCycle), AnimationError::BadSource));
+    RAWFRAME_EXPECT(refusedWith(jointTargets(kTwo), AnimationError::BadSource));
+    RAWFRAME_EXPECT(refusedWith(jointTargets(kPast), AnimationError::BadSource));
+    RAWFRAME_EXPECT(refusedWith(jointTargets(kLoop), AnimationError::BadSource));
 }

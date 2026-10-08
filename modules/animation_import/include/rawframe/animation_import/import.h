@@ -80,6 +80,20 @@ struct ImportedAnimation {
     std::size_t rotationsFlattened = 0;
 };
 
+/// A skin's joint as a glTF has it, in the skin's order: its node's name,
+/// empty if it has none, and its parent among the skin's joints, if any.
+struct SkinJoint {
+    std::string_view name;
+    std::optional<std::size_t> parent;
+};
+
+/// Each joint's target identity, in the skin's order, derived from its
+/// name path from the root as the skeleton's bones' are, so a mesh skinned
+/// to the skin names the bones of the skeleton imported from it (D508).
+/// Refuses (`BadSource`) joints with no root or more than one, a parent
+/// past the joints, or a joint its own ancestor.
+[[nodiscard]] result::Result<std::vector<base::Bits128>> jointTargets(std::span<const SkinJoint> joints);
+
 /// Refuses (`BadSource`) what is not valid glTF 2.0, a buffer `read`
 /// refuses or that is shorter than declared, a glTF with no skin, and a
 /// rig the documents cannot hold; (`UnsupportedExtension`) a required

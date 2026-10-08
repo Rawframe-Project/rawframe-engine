@@ -252,11 +252,24 @@ struct Rig {
     Transform placement;
 };
 
+/// A joint's bone's name: its node's, or `joint<index>` in the skin.
+std::string jointName(std::string_view name, std::size_t index) {
+    return name.empty() ? "joint" + std::to_string(index) : std::string{name};
+}
+
 result::Result<Rig> rigOf(const cgltf_skin& skin) {
     std::map<const cgltf_node*, std::size_t> joints;
     for (cgltf_size i = 0; i < skin.joints_count; ++i) {
         joints.emplace(skin.joints[i], i);
     }
+    std::vector<SkinJoint> described;
+    for (cgltf_size i = 0; i < skin.joints_count; ++i) {
+        const cgltf_node* kJoint = skin.joints[i];
+        const auto kParent = kJoint->parent != nullptr ? joints.find(kJoint->parent) : joints.end();
+        described.push_back({.name = kJoint->name != nullptr ? std::string_view{kJoint->name} : std::string_view{},
+                             .parent = kParent != joints.end() ? std::optional{kParent->second} : std::nullopt});
+    }
+    RAWFRAME_TRY_ASSIGN(const std::vector<base::Bits128> kTargets, jointTargets(described));
     const cgltf_node* root = nullptr;
     for (cgltf_size i = 0; i < skin.joints_count; ++i) {
         const cgltf_node* kJoint = skin.joints[i];
@@ -272,20 +285,13 @@ result::Result<Rig> rigOf(const cgltf_skin& skin) {
     }
     Rig rig;
     RAWFRAME_TRY_ASSIGN(rig.placement, placementOf(*root));
-    // Depth first from the root, children in order, each bone's name path
-    // beside it.
+    // Depth first from the root, children in order.
     std::vector<std::pair<const cgltf_node*, std::optional<std::size_t>>> pending{{root, std::nullopt}};
-    std::vector<std::vector<std::string>> paths;
     while (!pending.empty()) {
         const auto [kNode, kParent] = pending.back();
         pending.pop_back();
         const std::size_t kBone = rig.skeleton.bones.size();
-        std::string name = kNode->name != nullptr && kNode->name[0] != '\0'
-                               ? std::string{kNode->name}
-                               : "joint" + std::to_string(joints.at(kNode));
-        std::vector<std::string> path = kParent.has_value() ? paths[*kParent] : std::vector<std::string>{};
-        path.push_back(name);
-        std::vector<std::string_view> views(path.begin(), path.end());
+        std::string name = jointName(described[joints.at(kNode)].name, joints.at(kNode));
         RAWFRAME_TRY_ASSIGN(Transform bind, localOf(*kNode));
         if (!kParent.has_value()) {
             const auto kT = folded(rig.placement,
@@ -299,12 +305,11 @@ result::Result<Rig> rigOf(const cgltf_skin& skin) {
             bind.scale = {kS[0], kS[1], kS[2]};
         }
         rig.skeleton.bones.push_back(animation::Bone{
-            .target = animation::targetIdOf(views),
+            .target = kTargets[joints.at(kNode)],
             .name = std::move(name),
             .parent = kParent.has_value() ? std::optional{animation::BoneIndex{static_cast<std::uint32_t>(*kParent)}}
                                           : std::nullopt,
             .bind = bind});
-        paths.push_back(std::move(path));
         rig.bones.emplace(kNode, kBone);
         for (cgltf_size i = kNode->children_count; i > 0; --i) {
             if (joints.contains(kNode->children[i - 1])) {
@@ -504,6 +509,39 @@ clipOf(const cgltf_animation& source, const Rig& rig, const ImportSettings& sett
 }
 
 } // namespace
+
+result::Result<std::vector<base::Bits128>> jointTargets(std::span<const SkinJoint> joints) {
+    std::size_t roots = 0;
+    for (const SkinJoint& kJoint : joints) {
+        if (kJoint.parent.has_value() && *kJoint.parent >= joints.size()) {
+            return badSource("a joint whose parent is not among the skin's joints");
+        }
+        roots += kJoint.parent.has_value() ? 0 : 1;
+    }
+    if (roots != 1) {
+        return badSource(roots == 0 ? "a skin with no root joint"
+                                    : "a skin with more than one root joint; a skeleton has one root");
+    }
+    std::vector<base::Bits128> targets;
+    targets.reserve(joints.size());
+    std::vector<std::string> path;
+    for (std::size_t each = 0; each < joints.size(); ++each) {
+        // From the joint up to the root, then turned to read from the root.
+        path.clear();
+        std::optional<std::size_t> at = each;
+        while (at.has_value()) {
+            if (path.size() == joints.size()) {
+                return badSource("a skin whose joint is its own ancestor");
+            }
+            path.push_back(jointName(joints[*at].name, *at));
+            at = joints[*at].parent;
+        }
+        std::ranges::reverse(path);
+        const std::vector<std::string_view> kViews(path.begin(), path.end());
+        targets.push_back(animation::targetIdOf(kViews));
+    }
+    return targets;
+}
 
 result::Result<ImportedAnimation>
 importGltf(std::span<const std::byte> source, const ReadFile& read, const ImportSettings& settings) {
