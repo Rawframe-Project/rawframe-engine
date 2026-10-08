@@ -183,7 +183,9 @@ std::string howToPlay(const std::filesystem::path& game, const std::string& game
     std::string text = "To play, run rawframe-play" + suffix +
                        " in this folder: it starts the game's server, then the game in a window.\n"
                        "Closing the window ends both. The server's and the game's records are\n"
-                       "written beside them, in server.log and client.log.\n";
+                       "written beside them, in server.log and client.log. F11, or Alt and Enter,\n"
+                       "puts the window on the whole screen and back; window.fullscreen = true in\n"
+                       "client.conf starts it there.\n";
     std::ifstream description{game / gameFile};
     std::string line;
     while (std::getline(description, line)) {
