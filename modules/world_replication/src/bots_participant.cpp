@@ -120,10 +120,11 @@ struct Bot {
     std::optional<execution::MonotonicInstant> retryAt;
     /// The last refusal heard, kept while it asks again; none once admitted.
     std::optional<network::RejectReason> refusal;
-    /// A client ticks at the server's rate: input is sampled once at
-    /// admission and then once per server tick it has heard of since the
-    /// first, not once per Host iteration nor by its own clock, which runs
-    /// ahead of a server slowed with it in one process (D522).
+    /// A client ticks at the server's rate: input goes out once per tick due
+    /// since admission, not once per Host iteration, and never more than one
+    /// input window past the newest server tick it has heard of, so it does
+    /// not run ahead of a server slowed with it in one process (D522).
+    std::optional<execution::MonotonicInstant> admittedAt;
     std::optional<std::uint64_t> firstHeard;
     std::uint64_t submitted = 0;
     /// Rollback alarms already reported.
@@ -377,11 +378,18 @@ public:
                 }
                 admitted += bot.client->admitted() ? 1 : 0;
             } else if (phase == composition::HostPhase::Egress && bot.client->admitted() && !bot.input.empty()) {
+                const network::Accept& accept = *bot.client->accept();
+                if (!bot.admittedAt) {
+                    bot.admittedAt = frame.now;
+                }
+                const auto kElapsed = static_cast<std::uint64_t>((frame.now - *bot.admittedAt).nanoseconds);
                 const std::uint64_t kHeard = bot.client->serverTick();
                 if (!bot.firstHeard && kHeard != 0) {
                     bot.firstHeard = kHeard;
                 }
-                const std::uint64_t kDue = 1 + (bot.firstHeard ? kHeard - *bot.firstHeard : 0);
+                const std::uint64_t kDue =
+                    std::min(1 + (kElapsed / 1'000'000U * accept.tickRateTicks / (1'000U * accept.tickRateSeconds)),
+                             1 + kMaximumInputWindow + (bot.firstHeard ? kHeard - *bot.firstHeard : 0));
                 // A frame covering many ticks samples each, as many as one
                 // input window carries, and sends them in one window: a
                 // player drawn at a few frames a second keeps its input at
