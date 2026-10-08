@@ -173,3 +173,36 @@ jobs:
       - name: Test
         shell: pwsh
         run: ctest --test-dir out/windows-development --output-on-failure -j3
+      # The sample games to play on Windows (D515): each exported as the
+      # export tool makes a folder, whose rawframe-play starts its server and
+      # then its client in a window, with the DLLs its programs import from
+      # the build beside them (MsQuic's and OpenSSL's, say) and the C++
+      # runtime's, kept two weeks.
+      - name: Export the sample games
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree=out/windows-development
+          for game in plaza tycoon runners; do
+            "$tree/hosts/export/rawframe-export.exe" "games/$game" "played/$game" \
+              --cook "$tree/hosts/cook/rawframe-cook.exe" --build "$tree/hosts/build/rawframe-build.exe" \
+              --server "$tree/hosts/dedicated_server/rawframe-server.exe" \
+              --client "$tree/hosts/client/rawframe-client.exe" --play "$tree/launcher/play/rawframe-play.exe"
+            for program in "played/$game"/*.exe; do
+              for dll in $(llvm-objdump -p "$program" | sed -n 's/^ *DLL Name: //p' | tr -d '\r'); do
+                [ -e "played/$game/$dll" ] && continue
+                found="$(find "$tree" -name "$dll" -print -quit)"
+                [ -z "$found" ] && [ -e "/c/Windows/System32/$dll" ] && case "${dll,,}" in
+                  vcruntime*|msvcp*|concrt*) found="/c/Windows/System32/$dll" ;;
+                esac
+                [ -n "$found" ] && cp "$found" "played/$game/"
+              done
+            done
+            ls "played/$game"
+          done
+      - name: Keep the sample games
+        uses: actions/upload-artifact@v7
+        with:
+          name: rawframe-games-windows
+          path: played/
+          retention-days: 14
