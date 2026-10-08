@@ -14,6 +14,7 @@
 #include "rawframe/world_replication/errors.h"
 #include "rawframe/world_replication/input_source.h"
 #include "rawframe/world_replication/plan.h"
+#include "rawframe/world_replication/records.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_replication/server.h"
 #include "rawframe/world_runtime/players.h"
@@ -119,9 +120,11 @@ struct Bot {
     std::optional<execution::MonotonicInstant> retryAt;
     /// The last refusal heard, kept while it asks again; none once admitted.
     std::optional<network::RejectReason> refusal;
-    /// A client ticks at the server's rate: input goes out once per tick due
-    /// since admission, not once per Host iteration.
-    std::optional<execution::MonotonicInstant> admittedAt;
+    /// A client ticks at the server's rate: input is sampled once at
+    /// admission and then once per server tick it has heard of since the
+    /// first, not once per Host iteration nor by its own clock, which runs
+    /// ahead of a server slowed with it in one process (D522).
+    std::optional<std::uint64_t> firstHeard;
     std::uint64_t submitted = 0;
     /// Rollback alarms already reported.
     std::uint64_t alarms = 0;
@@ -374,25 +377,38 @@ public:
                 }
                 admitted += bot.client->admitted() ? 1 : 0;
             } else if (phase == composition::HostPhase::Egress && bot.client->admitted() && !bot.input.empty()) {
-                const network::Accept& accept = *bot.client->accept();
-                if (!bot.admittedAt) {
-                    bot.admittedAt = frame.now;
+                const std::uint64_t kHeard = bot.client->serverTick();
+                if (!bot.firstHeard && kHeard != 0) {
+                    bot.firstHeard = kHeard;
                 }
-                const auto kElapsed = static_cast<std::uint64_t>((frame.now - *bot.admittedAt).nanoseconds);
-                const std::uint64_t kDue =
-                    1 + (kElapsed / 1'000'000U * accept.tickRateTicks / (1'000U * accept.tickRateSeconds));
-                // A bot that fell far behind catches up a few ticks at a time.
-                for (int burst = 0; burst < 4 && bot.submitted < kDue; ++burst, ++bot.submitted) {
+                const std::uint64_t kDue = 1 + (bot.firstHeard ? kHeard - *bot.firstHeard : 0);
+                // A frame covering many ticks samples each, as many as one
+                // input window carries, and sends them in one window: a
+                // player drawn at a few frames a second keeps its input at
+                // the server's pace (D522). A bot further behind catches up
+                // over the frames after.
+                bool sampled = false;
+                for (std::size_t burst = 0; burst < kMaximumInputWindow && bot.submitted < kDue;
+                     ++burst, ++bot.submitted) {
                     steer(bot, bot.submitted);
-                    static_cast<void>(bot.client->submitInput(bot.input));
-                    // What the sample asked for with that input (D425).
+                    static_cast<void>(bot.client->sampleInput(bot.input));
+                    sampled = true;
+                    // What the sample asked for with that input, after it
+                    // (D425).
                     if (bot.source != nullptr) {
                         commands_.clear();
                         bot.source->takeCommands(commands_);
+                        if (!commands_.empty()) {
+                            static_cast<void>(bot.client->sendInputWindow());
+                            sampled = false;
+                        }
                         for (const PostedCommand& command : commands_) {
                             static_cast<void>(bot.client->sendCommand(command));
                         }
                     }
+                }
+                if (sampled) {
+                    static_cast<void>(bot.client->sendInputWindow());
                 }
             }
         }
@@ -420,6 +436,8 @@ public:
         std::uint64_t stateDatagrams = 0;
         std::uint64_t messagesReceived = 0;
         std::uint64_t commandsSent = 0;
+        std::uint64_t windowsSent = 0;
+        std::uint64_t heldBack = 0;
         std::uint64_t terminated = 0;
         PredictionStatistics predicted;
         InterpolationStatistics interpolated;
@@ -460,6 +478,8 @@ public:
             stateDatagrams += bot.client->statistics().stateDatagrams;
             messagesReceived += bot.client->statistics().messagesReceived;
             commandsSent += bot.client->statistics().commandsSent;
+            windowsSent += bot.client->statistics().inputWindowsSent;
+            heldBack += bot.client->statistics().samplesHeldBack;
             terminated += bot.client->termination().has_value() ? 1 : 0;
             const PredictionStatistics kBot = bot.client->predictionStatistics();
             predicted.predictedTicks += kBot.predictedTicks;
@@ -506,7 +526,12 @@ public:
                       diagnostics::field("terminated", terminated),
                       diagnostics::field("blended", interpolated.blended),
                       diagnostics::field("shownNewest", interpolated.newest),
-                      diagnostics::field("retried", retried_)});
+                      diagnostics::field("retried", retried_),
+                      // Input windows sent, one a frame however many ticks it
+                      // samples, and samples left unlabelled to bring an early
+                      // client back (D317, D522).
+                      diagnostics::field("inputWindowsSent", windowsSent),
+                      diagnostics::field("samplesHeldBack", heldBack)});
     }
 
 private:
