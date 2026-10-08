@@ -140,6 +140,17 @@ void ShellParticipant::pollPicks(double seconds) {
     }
     nextPick_ = seconds + 0.25;
     const std::string kReply = ask(pickRecord(next(), scene_));
+    // Said once each time another part is lit, so what waits on a hover
+    // waits for it (D504).
+    if (std::string lit = litIn(kReply); lit != lit_) {
+        lit_ = std::move(lit);
+        if (!lit_.empty()) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kLit,
+                         "a part of the mark is lit under the pointer",
+                         {diagnostics::field("part", std::string_view{lit_})});
+        }
+    }
     const std::optional<std::string> kSource = pickedIn(kReply, scene_);
     const std::optional<Moved> kMoved = movedIn(kReply, scene_);
     if (kSource.has_value()) {

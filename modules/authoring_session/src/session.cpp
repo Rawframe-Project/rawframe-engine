@@ -655,6 +655,8 @@ private:
         made.add("clicks", Value::integer(kClicks));
         made.add("scene", std::move(scene));
         made.add("source", std::move(source));
+        // The mark's part the pointer has lit, if any (D468, D504).
+        made.add("lit", partName(lit_).empty() ? Value{} : Value::string(std::string{partName(lit_)}));
         // The press that met an authored entity, let go elsewhere: how far
         // its point moved across the level plane through it (D457); with
         // Shift, up or down the upright plane through it facing the eye,

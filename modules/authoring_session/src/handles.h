@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace rawframe::authoring_session {
 
@@ -64,6 +65,10 @@ struct Handle {
 /// The handle of the mark at `mark` a press's ray grabs, if any.
 [[nodiscard]] std::optional<Handle>
 grabbedHandle(const Point& mark, const Point& origin, const Point& toward, double fieldOfView) noexcept;
+
+/// The name of a mark's part as `partUnder` numbers it: x, y, z, or ring;
+/// empty for none.
+[[nodiscard]] std::string_view partName(std::uint8_t part) noexcept;
 
 /// `tooling.mark` for a point, or none, its part `lit` (as `partUnder`
 /// names it) drawn lit.

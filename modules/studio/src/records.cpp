@@ -243,6 +243,13 @@ std::vector<HistoryEntry> historyOf(std::string_view reply) {
     return made;
 }
 
+std::string litIn(std::string_view reply) {
+    const auto kRead = document::parse(reply);
+    const Value* kAnswer = kRead.has_value() ? kRead->find("answer") : nullptr;
+    const Value* kLit = kAnswer != nullptr ? kAnswer->find("lit") : nullptr;
+    return kLit != nullptr && kLit->text() != nullptr ? *kLit->text() : std::string{};
+}
+
 Value cookRecord(std::int64_t id, const std::filesystem::path& output, const std::filesystem::path& cache) {
     Value record = Value::object();
     record.add("kind", Value::string("authoring.cook"));

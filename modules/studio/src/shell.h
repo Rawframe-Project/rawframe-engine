@@ -45,6 +45,8 @@ inline constexpr diagnostics::EventIdentity kPreviewing{"studio", "studio_previe
 /// The preview shows where the chosen entity stands (D464), so its handles
 /// can be grabbed (D466).
 inline constexpr diagnostics::EventIdentity kMarked{"studio", "studio_marked"};
+/// A part of the mark lit under the pointer, as the session says (D504).
+inline constexpr diagnostics::EventIdentity kLit{"studio", "studio_lit"};
 /// A drag in the played game committed to the chosen scene (D457, D463,
 /// D466, D467): how, and what it moved.
 inline constexpr diagnostics::EventIdentity kDragged{"studio", "studio_dragged"};
@@ -414,6 +416,8 @@ private:
     std::optional<Play> stopping_;
     ui::Node playNode_{};
     std::uint64_t played_ = 0;
+    /// The mark's part last said lit (D504).
+    std::string lit_;
     /// The cook tool, where the game's content and the cook's cache go,
     /// and the running cook's id, if any (D502).
     std::filesystem::path cookTool_;

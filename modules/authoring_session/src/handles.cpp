@@ -140,14 +140,18 @@ document::Value pointValue(const Point& point) {
 
 } // namespace
 
-document::Value markRecord(const std::optional<Point>& at, std::uint8_t lit) {
+std::string_view partName(std::uint8_t part) noexcept {
     constexpr std::array<std::string_view, 5> kParts = {"", "x", "y", "z", "ring"};
+    return part < kParts.size() ? kParts[part] : "";
+}
+
+document::Value markRecord(const std::optional<Point>& at, std::uint8_t lit) {
     document::Value mark = document::Value::object();
     mark.add("kind", document::Value::string("tooling.mark"));
     mark.add("id", document::Value::integer(0));
     mark.add("at", at.has_value() ? pointValue(*at) : document::Value{});
-    if (lit != 0 && lit < kParts.size()) {
-        mark.add("lit", document::Value::string(std::string{kParts[lit]}));
+    if (!partName(lit).empty()) {
+        mark.add("lit", document::Value::string(std::string{partName(lit)}));
     }
     return mark;
 }

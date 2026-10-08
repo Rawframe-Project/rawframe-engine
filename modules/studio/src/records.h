@@ -138,6 +138,10 @@ struct Heard {
 [[nodiscard]] Value markRecord(std::int64_t id, std::string_view scene, const std::optional<std::array<double, 3>>& at);
 [[nodiscard]] std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene);
 
+/// The part of the preview's mark a pick's answer says the pointer has
+/// lit (D468): x, y, z, or ring; empty for none.
+[[nodiscard]] std::string litIn(std::string_view reply);
+
 /// An entity the author dragged in the preview (D457): its id in the scene,
 /// and how: carried across the level plane, in metres along x and z;
 /// raised or lowered, along y, with Shift; or turned about its own place
