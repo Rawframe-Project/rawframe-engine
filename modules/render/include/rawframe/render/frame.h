@@ -131,6 +131,9 @@ private:
 /// The frames as the bridges reach them (`rawframe.render.frames`): the
 /// frame participant plans one at the start of each `present` and makes it
 /// once every recorder that joined is ready.
+/// The longest a window that nothing changes in goes undrawn (D494).
+inline constexpr execution::MonotonicDuration kLongestUnchanged = execution::MonotonicDuration::fromMilliseconds(250);
+
 class Frames {
 public:
     Frames() = default;
@@ -153,6 +156,12 @@ public:
     /// The recorder has prepared what it records in the planned frame, or
     /// has nothing: once every one that joined is ready, the frame is made.
     virtual void ready(FrameRecorder& recorder) noexcept = 0;
+    /// Ready, and what it prepared draws what it drew in the last frame
+    /// made (D494). A frame every recorder says so of, as large as the
+    /// last, read back by no one, is not made, so a window nothing changes
+    /// in is not drawn again; one is all the same at least every
+    /// `kLongestUnchanged`, so what a window lost while covered is drawn.
+    virtual void unchanged(FrameRecorder& recorder) noexcept = 0;
 };
 
 inline constexpr composition::Capability<Frames> kFrames{"rawframe.render.frames"};

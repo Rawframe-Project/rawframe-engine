@@ -7,9 +7,12 @@
 #include "rawframe/ui/frames.h"
 
 #include <array>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace rawframe::render_canvas_gpu {
@@ -214,7 +217,11 @@ public:
                            [ui = ui_](std::uint64_t id) {
                                return ui->image(id);
                            });
-        frames_->ready(*renderer_);
+        if (same(drawn)) {
+            frames_->unchanged(*renderer_);
+        } else {
+            frames_->ready(*renderer_);
+        }
     }
 
     void stop() noexcept override {
@@ -241,9 +248,35 @@ public:
     }
 
 private:
+    /// Whether `drawn` draws what the last list prepared did (D494): the
+    /// same commands, glyphs from the same atlas revision, and the same
+    /// images held for its keys. Kept as the last, whichever.
+    bool same(const ui::DrawList* drawn) {
+        std::vector<std::shared_ptr<const texture::Texture>> images;
+        if (drawn != nullptr) {
+            for (const ui::Image& each : drawn->images) {
+                images.push_back(ui_->image(each.image));
+            }
+        }
+        const std::uint64_t kRevision = drawn != nullptr && drawn->atlas != nullptr ? drawn->atlas->revision : 0;
+        const bool kSame = drawn != nullptr && last_.has_value() && *drawn == *last_ && kRevision == lastRevision_ &&
+                           images == lastImages_;
+        if (drawn == nullptr) {
+            last_.reset();
+        } else if (!kSame) {
+            last_ = *drawn;
+        }
+        lastRevision_ = kRevision;
+        lastImages_ = std::move(images);
+        return kSame;
+    }
+
     render::Frames* frames_ = nullptr;
     ui::UiFrames* ui_ = nullptr;
     std::unique_ptr<UiRenderer> renderer_;
+    std::optional<ui::DrawList> last_;
+    std::uint64_t lastRevision_ = 0;
+    std::vector<std::shared_ptr<const texture::Texture>> lastImages_;
     bool failed_ = false;
     diagnostics::Emitter emitter_;
 };

@@ -106,7 +106,7 @@ public:
         return {};
     }
 
-    void runHostPhase(composition::HostPhase /*phase*/, const composition::HostFrame& /*frame*/) noexcept override {
+    void runHostPhase(composition::HostPhase /*phase*/, const composition::HostFrame& frame) noexcept override {
         // The last iteration's plan, if a recorder never said it was ready.
         if (planned_.has_value() && !made_) {
             ++framesIncomplete_;
@@ -114,6 +114,8 @@ public:
         planned_.reset();
         made_ = false;
         ready_.clear();
+        unchanged_.clear();
+        now_ = frame.now;
         if (devices_ == nullptr || failed_ || joined_.empty()) {
             return;
         }
@@ -195,6 +197,7 @@ public:
                       diagnostics::field("framesBusy", framesBusy_ + statistics.framesBusy),
                       diagnostics::field("framesWithoutDevice", framesWithoutDevice_),
                       diagnostics::field("framesIncomplete", framesIncomplete_),
+                      diagnostics::field("framesUnchanged", framesUnchanged_),
                       diagnostics::field("readBacks", readBacks_),
                       diagnostics::field("coveredPixels", lastCovered_),
                       diagnostics::field("mostCovered", mostCovered_),
@@ -229,6 +232,17 @@ public:
             return joined.recorder == &recorder;
         });
         ready_.erase(&recorder);
+        unchanged_.erase(&recorder);
+        // What it drew is gone from the next frame.
+        madeAt_.reset();
+    }
+
+    void unchanged(FrameRecorder& recorder) noexcept override {
+        if (!planned_.has_value() || made_ || failed_) {
+            return;
+        }
+        unchanged_.insert(&recorder);
+        ready(recorder);
     }
 
     void ready(FrameRecorder& recorder) noexcept override {
@@ -242,6 +256,17 @@ public:
             return;
         }
         made_ = true;
+        // What the last frame made shows still, and it is not old (D494).
+        if (madeAt_.has_value() && now_ - *madeAt_ < kLongestUnchanged && !target_.readBack &&
+            target_.width == lastWidth_ && target_.height == lastHeight_ &&
+            std::ranges::all_of(
+                joined_,
+                [&](const Joined& joined) {
+                    return unchanged_.contains(joined.recorder);
+                })) {
+            ++framesUnchanged_;
+            return;
+        }
         std::vector<FrameRecorder*> recorders;
         for (const Joined& joined : joined_) {
             recorders.push_back(joined.recorder);
@@ -253,6 +278,7 @@ public:
         }
         if (*kMade) {
             ++submitted_;
+            madeAt_ = now_;
             lastWidth_ = target_.width;
             lastHeight_ = target_.height;
             if (target_.readBack) {
@@ -312,6 +338,12 @@ private:
     /// In order.
     std::vector<Joined> joined_;
     std::unordered_set<FrameRecorder*> ready_;
+    /// Those of `ready_` that draw what they drew in the last frame made.
+    std::unordered_set<FrameRecorder*> unchanged_;
+    execution::MonotonicInstant now_;
+    /// When the last frame was submitted; none before one, or once a
+    /// recorder left.
+    std::optional<execution::MonotonicInstant> madeAt_;
     std::optional<std::pair<std::uint32_t, std::uint32_t>> planned_;
     FrameTarget target_;
     bool made_ = false;
@@ -333,6 +365,7 @@ private:
     std::uint64_t framesBusy_ = 0;
     std::uint64_t framesWithoutDevice_ = 0;
     std::uint64_t framesIncomplete_ = 0;
+    std::uint64_t framesUnchanged_ = 0;
     std::uint64_t readBacks_ = 0;
     std::uint64_t lastCovered_ = 0;
     std::uint64_t mostCovered_ = 0;

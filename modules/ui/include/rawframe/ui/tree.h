@@ -281,6 +281,7 @@ struct Rect {
     float y = 0;
     float width = 0;
     float height = 0;
+    friend constexpr bool operator==(Rect, Rect) noexcept = default;
 };
 
 /// A rounded box to draw (SPEC-0032), in pixels from the root's top left,
@@ -298,6 +299,7 @@ struct Box {
     std::array<std::array<float, 4>, 4> borderColors{};
     std::uint32_t clip = 0;
     std::uint32_t gradient = 0;
+    friend constexpr bool operator==(Box, Box) noexcept = default;
 };
 
 /// A gradient of a list (D382): its kind, linear or radial; for a linear
@@ -310,6 +312,7 @@ struct Gradient {
     std::uint32_t stops = 0;
     std::array<std::array<float, 4>, 4> colors{};
     std::array<float, 4> positions{};
+    friend constexpr bool operator==(Gradient, Gradient) noexcept = default;
 };
 
 /// An image to draw (SPEC-0032, D378): its owner's key, the part of it
@@ -324,6 +327,7 @@ struct Image {
     std::array<float, 4> slice{};
     std::array<float, 4> tint{};
     std::uint32_t clip = 0;
+    friend constexpr bool operator==(Image, Image) noexcept = default;
 };
 
 /// A shadow to draw (SPEC-0032, D381): of the rounded box `rect` and
@@ -340,6 +344,7 @@ struct Shadow {
     float spread = 0;
     bool inset = false;
     std::uint32_t clip = 0;
+    friend constexpr bool operator==(Shadow, Shadow) noexcept = default;
 };
 
 /// A glyph of a run (D384): its id in the run's font and its place from the
@@ -354,6 +359,7 @@ struct Glyph {
     float y = 0;
     Rect image;
     Rect atlas;
+    friend constexpr bool operator==(Glyph, Glyph) noexcept = default;
 };
 
 /// The coverage of the glyphs a tree draws (D398): `side` by `side` bytes,
@@ -382,6 +388,7 @@ struct GlyphRun {
     std::uint32_t first = 0;
     std::uint32_t count = 0;
     std::uint32_t clip = 0;
+    friend constexpr bool operator==(GlyphRun, GlyphRun) noexcept = default;
 };
 
 /// A command of a list in paint order: a box, an image, a shadow, or a run
@@ -395,6 +402,7 @@ struct DrawCommand {
     };
     Kind kind = Kind::Box;
     std::uint32_t index = 0;
+    friend constexpr bool operator==(DrawCommand, DrawCommand) noexcept = default;
 };
 
 /// A clip: drawing kept inside the rounded rectangle (outside it, when
@@ -404,6 +412,7 @@ struct Clip {
     std::array<float, 4> radii{};
     std::uint32_t parent = 0;
     bool invert = false;
+    friend constexpr bool operator==(Clip, Clip) noexcept = default;
 };
 
 /// What a tree draws: its boxes, images, shadows, and glyph runs,
@@ -429,6 +438,9 @@ struct DrawList {
     /// Glyphs with an outline left out: past what the atlas holds at once,
     /// or of a size or font that cannot be rendered.
     std::uint32_t glyphsLeftOut = 0;
+    /// The same commands of the same things, the atlas by address: whether
+    /// its glyphs changed is its `revision`'s to say.
+    friend bool operator==(const DrawList&, const DrawList&) = default;
 };
 
 /// A node of a tree, by its slot and generation; a node removed leaves its
