@@ -152,6 +152,36 @@ RAWFRAME_TEST(ARecordOutOfItsFormIsRefusedNamingItsId) {
         AuthoringError::UnsupportedOperation));
 }
 
+RAWFRAME_TEST(ApplyTogetherReadsTwoOrMoreScenesEachOnce) {
+    // SPEC-0040's multi-document transaction on the wire (D497).
+    document::Value id;
+    const std::string kPart = R"({"scene":"level.scene","request":)" + std::string{kRequest} + "}";
+    const std::string kOther = R"({"scene":"hall.scene","request":)" + std::string{kRequest} + "}";
+    const auto kTogether = readSessionRecord(
+        R"({"kind":"authoring.apply_together","id":3,"documents":[)" + kPart + "," + kOther + "]}", id);
+    RAWFRAME_EXPECT(kTogether.has_value() && kTogether->verb == SessionVerb::ApplyTogether &&
+                    kTogether->parts.size() == 2 && kTogether->parts[1].scene == "hall.scene" &&
+                    kTogether->parts[0].request.operations.size() == 1 && id.integer() == 3);
+    // One document, a scene twice, a request not atomic, and a part with
+    // more than its scene and request.
+    RAWFRAME_EXPECT(
+        refusedWith(readSessionRecord(R"({"kind":"authoring.apply_together","documents":[)" + kPart + "]}", id),
+                    AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(
+        readSessionRecord(R"({"kind":"authoring.apply_together","documents":[)" + kPart + "," + kPart + "]}", id),
+        AuthoringError::ValidationFailed));
+    std::string independent = kOther;
+    independent.replace(independent.find("\"atomic\""), 8, "\"halt_remaining\"");
+    RAWFRAME_EXPECT(refusedWith(
+        readSessionRecord(R"({"kind":"authoring.apply_together","documents":[)" + kPart + "," + independent + "]}", id),
+        AuthoringError::ValidationFailed));
+    std::string extra = kOther;
+    extra.insert(1, R"("expects":"x",)");
+    RAWFRAME_EXPECT(refusedWith(
+        readSessionRecord(R"({"kind":"authoring.apply_together","documents":[)" + kPart + "," + extra + "]}", id),
+        AuthoringError::ValidationFailed));
+}
+
 RAWFRAME_TEST(RepliesAreOneCompactLine) {
     document::Value answer = document::Value::object();
     answer.add("kind", document::Value::string("authoring.ended"));

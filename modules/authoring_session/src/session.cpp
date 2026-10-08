@@ -146,6 +146,8 @@ private:
         }
         case authoring::SessionVerb::Apply:
             return applied(record);
+        case authoring::SessionVerb::ApplyTogether:
+            return appliedTogether(record);
         case authoring::SessionVerb::Read:
             return answered(record);
         case authoring::SessionVerb::Undo:
@@ -389,6 +391,51 @@ private:
         }
         RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.scene, *open));
         return outcomeOf(*open->document, kWritten, reopened, std::move(results), skipped);
+    }
+
+    /// SPEC-0040's multi-document transaction (D497): every part's scene
+    /// open and as its request expects, its operations staged in its own
+    /// transaction, all kept or none; then each scene changed is written,
+    /// and each answers its outcome, in the parts' order.
+    result::Result<Value> appliedTogether(const authoring::SessionRecord& record) {
+        std::vector<OpenScene*> opened;
+        std::vector<bool> reopened;
+        std::vector<authoring::DocumentPart> parts;
+        for (const authoring::SessionPart& kPart : record.parts) {
+            bool again = false;
+            RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(kPart.scene, again));
+            const std::string kBefore = digestOf(open->document->text());
+            if (kPart.request.expects.has_value() && *kPart.request.expects != kBefore) {
+                return std::unexpected{failure(authoring::AuthoringError::TargetStale,
+                                               result::ErrorClass::FailedPrecondition,
+                                               "the request was computed against another generation of the scene")
+                                           .withContext("scene", kPart.scene)
+                                           .withContext("document", kBefore)};
+            }
+            opened.push_back(open);
+            reopened.push_back(again);
+            parts.push_back(authoring::DocumentPart{.scene = open->document.get(),
+                                                    .generation = open->document->generation(),
+                                                    .operations = kPart.request.operations});
+        }
+        const rawframe::scene::SceneSource kSources = sources();
+        const auto kCommitted = authoring::executeTogether(parts, *catalog_, &kSources);
+        failed_ = failed_ || !kCommitted.has_value();
+        Value documents = Value::array();
+        for (std::size_t at = 0; at < opened.size(); ++at) {
+            RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.parts[at].scene, *opened[at]));
+            Value results = Value::array();
+            results.push(kCommitted.has_value()
+                             ? slotValue((*kCommitted)[at])
+                             : slotValue(std::unexpected<result::Error>{kCommitted.error().clone()}));
+            Value each = outcomeOf(*opened[at]->document, kWritten, reopened[at], std::move(results), 0);
+            each.add("scene", Value::string(record.parts[at].scene));
+            documents.push(std::move(each));
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.outcomes"));
+        made.add("documents", std::move(documents));
+        return made;
     }
 
     /// `view`: where the scene is looked at from, in place of what was.

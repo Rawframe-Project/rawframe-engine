@@ -6,7 +6,8 @@
 # records out of form, out of order, or naming a scene outside the root
 # refused, each answered by its own id; and a selection kept beside the
 # level, put back by undo (D417), as is where the level is looked at from
-# (D432).
+# (D432); and two scenes changed in one transaction, all or nothing, each
+# its own history (D497).
 #
 # usage: author_session.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -212,4 +213,33 @@ reply 6 | grep -q '"entries":\[{"summary":"rename to floor","deltas":1,"applied"
 reply 2 | grep -q '"answer":{"kind":"authoring.assets","assets":\[{"kind":"texture","id":"[0-9a-f]\{16\}","name":"runner.png"}'
 reply 2 | grep -q '{"kind":"texture","id":"c067c4be8ce86d12","name":"hud.png"}'
 reply 2 | grep -q '{"kind":"sound","id":"[0-9a-f]\{16\}","name":"jump.sound"}'
+# Two scenes in one transaction (D497): a crate made in the level and in
+# the hall together, each its own history, so undoing the level's leaves
+# the hall's; then a request whose second part fails keeps nothing in
+# either, and neither file is written.
+mkdir -p "$work/together"
+cp "$repository/games/runners/level.scene" "$work/together/level.scene"
+cp "$repository/games/runners/hall.scene" "$work/together/hall.scene"
+cp "$work/together/hall.scene" "$work/hall.original"
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.apply_together","id":2,"documents":[{"scene":"level.scene","request":'"$create"'},{"scene":"hall.scene","request":'"$create"'}]}'
+    echo '{"kind":"authoring.undo","id":3,"scene":"level.scene"}'
+} | "$author" session "$game" "$work/together" >"$work/replies" || true
+reply 2 | grep -q '"answer":{"kind":"authoring.outcomes","documents":\[{"kind":"authoring.outcome",'
+reply 2 | grep -q '"written":true,"reopened":false,"undoable":1,"redoable":0,"selection":\[\],"view":null,"results":\[{"deltas":2}\],"skipped":0,"scene":"level.scene"},{'
+reply 2 | grep -q '"written":true,"reopened":false,"undoable":1,"redoable":0,"selection":\[\],"view":null,"results":\[{"deltas":2}\],"skipped":0,"scene":"hall.scene"}\]}}$'
+reply 3 | grep -q '"undoable":0,"redoable":1'
+cmp "$work/together/level.scene" "$work/original.scene"
+grep -q "$crate" "$work/together/hall.scene"
+cp "$work/together/hall.scene" "$work/hall.made"
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.apply_together","id":2,"documents":[{"scene":"level.scene","request":'"$create"'},{"scene":"hall.scene","request":'"$create"'}]}'
+} | "$author" session "$game" "$work/together" >"$work/replies" || true
+reply 2 | grep -q '"results":\[{"error":{"code":"conflict".*"scene":"level.scene"},{.*"results":\[{"error":{"code":"conflict".*"scene":"hall.scene"}\]}}$'
+reply 2 | grep -q '"details":{"operation":"scene.create_entity","part":"1","index":"0"}'
+! reply 2 | grep -q '"written":true'
+cmp "$work/together/level.scene" "$work/original.scene"
+cmp "$work/together/hall.scene" "$work/hall.made"
 echo "authored runners in a session"

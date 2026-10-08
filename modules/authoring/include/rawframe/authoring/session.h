@@ -15,7 +15,9 @@
 //   {"kind":"authoring.redo","id":5,"scene":"level.scene"}
 //   {"kind":"authoring.select","id":6,"scene":"level.scene","entities":["...", ...]}
 //   {"kind":"authoring.describe","id":7}
-//   {"kind":"authoring.end","id":8}
+//   {"kind":"authoring.apply_together","id":8,"documents":[
+//     {"scene":"level.scene","request":{...}},{"scene":"hall.scene","request":{...}}]}
+//   {"kind":"authoring.end","id":9}
 //
 // `hello` comes first and names the surface generation the client speaks;
 // before any public stability promise only the tool's own is accepted
@@ -24,7 +26,10 @@
 // game's directory; `expects`, on undo and redo, is the generation the
 // client last saw, as a request's is. `select` chooses the scene's entities
 // by their SourceEntityIds, in place of what was chosen: no change to the
-// document, but what undo and redo put back with it (D417). Every reply is
+// document, but what undo and redo put back with it (D417). `apply_together`
+// is SPEC-0040's multi-document transaction (D497): each part an atomic
+// request to its scene, all kept or none, each scene's part one entry in
+// its own history. Every reply is
 //
 //   {"kind":"authoring.reply","id":...,"answer":{...}}
 //
@@ -75,7 +80,15 @@ enum class SessionVerb : std::uint8_t {
     /// A point the scene's preview marks, where the author chose
     /// something, or none (D464).
     Mark,
+    /// One atomic request over several scenes, one transaction (D497).
+    ApplyTogether,
     End,
+};
+
+/// A scene's part of `apply_together`: its path and its atomic request.
+struct SessionPart {
+    std::string scene;
+    Request request;
 };
 
 /// Where a preview's tooling endpoint is (D433): its address, and the files
@@ -115,6 +128,8 @@ struct SessionRecord {
     std::optional<PreviewTarget> preview;
     /// Mark's: the point, or none (D464).
     std::optional<std::array<double, 3>> mark;
+    /// Apply together's, two or more, each scene named once (D497).
+    std::vector<SessionPart> parts;
 };
 
 /// Reads one record; refuses (`ValidationFailed`) anything out of the form

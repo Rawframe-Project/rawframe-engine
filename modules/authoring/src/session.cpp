@@ -28,7 +28,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 15> kVerbs = {
+constexpr std::array<VerbName, 16> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -43,6 +43,7 @@ constexpr std::array<VerbName, 15> kVerbs = {
     VerbName{.kind = "authoring.assets", .verb = SessionVerb::Assets},
     VerbName{.kind = "authoring.pick", .verb = SessionVerb::Pick},
     VerbName{.kind = "authoring.mark", .verb = SessionVerb::Mark},
+    VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
 
 /// The members a verb's record may hold beside `kind` and `id`, and those
@@ -73,9 +74,45 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::CreateScene:
     case SessionVerb::History:
     case SessionVerb::Pick:
+    case SessionVerb::ApplyTogether:
         return Members{.required = 1, .optional = 0};
     }
     return {};
+}
+
+/// Apply together's parts: two or more, each a scene's path and an atomic
+/// request, no scene named twice.
+result::Result<SessionRecord> together(const Value& parsed, SessionRecord record) {
+    const Value* kDocuments = parsed.find("documents");
+    if (kDocuments == nullptr || kDocuments->kind() != Value::Kind::Array || kDocuments->items().size() < 2) {
+        return malformed("apply_together holds two or more documents");
+    }
+    for (std::size_t at = 0; at < kDocuments->items().size(); ++at) {
+        const Value& kEach = kDocuments->items()[at];
+        const std::string* scene = kEach.kind() == Value::Kind::Object ? textOf(kEach.find("scene")) : nullptr;
+        const Value* kRequest = scene != nullptr ? kEach.find("request") : nullptr;
+        if (kRequest == nullptr || scene->empty() || kEach.names().size() != 2) {
+            return std::unexpected<result::Error>{malformed("each document names its scene and holds its request")
+                                                      .error()
+                                                      .withContext("part", std::to_string(at))};
+        }
+        for (const SessionPart& kBefore : record.parts) {
+            if (kBefore.scene == *scene) {
+                return std::unexpected<result::Error>{
+                    malformed("apply_together names each scene once").error().withContext("part", std::to_string(at))};
+            }
+        }
+        auto request = readRequest(document::writeCompact(*kRequest));
+        if (!request.has_value()) {
+            return std::unexpected<result::Error>{std::move(request).error().withContext("part", std::to_string(at))};
+        }
+        if (request->batch != Batch::Atomic) {
+            return std::unexpected<result::Error>{
+                malformed("apply_together's requests are atomic").error().withContext("part", std::to_string(at))};
+        }
+        record.parts.push_back(SessionPart{.scene = *scene, .request = std::move(*request)});
+    }
+    return record;
 }
 
 } // namespace
@@ -98,7 +135,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     }
     if (named == nullptr) {
         return malformed("a session record's kind is hello, describe, apply, read, undo, redo, select, view, preview, "
-                         "create_scene, history, assets, pick, mark, or end");
+                         "create_scene, history, assets, pick, mark, apply_together, or end");
     }
     SessionRecord record{.verb = named->verb, .id = idRead};
     const Members kMembers = membersOf(record.verb);
@@ -126,6 +163,8 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Assets:
     case SessionVerb::End:
         return record;
+    case SessionVerb::ApplyTogether:
+        return together(*parsed, std::move(record));
     case SessionVerb::Apply:
     case SessionVerb::Read:
     case SessionVerb::Undo:
