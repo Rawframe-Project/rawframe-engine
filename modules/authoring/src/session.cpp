@@ -88,11 +88,14 @@ Members membersOf(SessionVerb verb) {
 }
 
 /// Whether `path` is absolute in POSIX's form (`/a`) or Windows' (`C:/a`,
-/// `C:\a`, `\\server\share`).
+/// `C:\a`). Never a network share (`\\server\share`, `//server/share`):
+/// Windows answers one by authenticating to the server, which would hand
+/// the user's credentials to whoever a record names (D503).
 bool absolute(std::string_view path) {
     const bool kDrive = path.size() >= 3 && std::isalpha(static_cast<unsigned char>(path[0])) != 0 && path[1] == ':' &&
                         (path[2] == '/' || path[2] == '\\');
-    return path.starts_with('/') || path.starts_with("\\\\") || kDrive;
+    const bool kShare = path.size() >= 2 && (path[0] == '/' || path[0] == '\\') && (path[1] == '/' || path[1] == '\\');
+    return !kShare && (path.starts_with('/') || kDrive);
 }
 
 /// Apply together's parts: two or more, each a scene's path and an atomic
