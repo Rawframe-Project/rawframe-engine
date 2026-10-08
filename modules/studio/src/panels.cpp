@@ -528,9 +528,12 @@ result::Status ShellParticipant::showHistory() {
 }
 
 void ShellParticipant::say(std::string text) {
+    // Logged as it changes: a game that ended is said again every half
+    // second, and was logged as often (D495).
+    const bool kChanged = text != status_;
     status_ = std::move(text);
     static_cast<void>(words(statusNode_, status_, kQuiet, 14));
-    if (!status_.empty()) {
+    if (kChanged && !status_.empty()) {
         emitter_.log(diagnostics::Severity::Info,
                      kSaid,
                      "Studio's status line says",
