@@ -336,7 +336,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 980,520 wait=3 1096,23 "until=studio_said,status=\"game stopped\""
+                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 980,520 "until=studio_said,status=\"picked "
+                         1096,23 "until=studio_said,status=\"game stopped\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_picks_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
@@ -354,7 +355,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 drag=980,520,1080,520 wait=3 1096,23 "until=studio_said,status=\"game stopped\""
+                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 drag=980,520,1080,520 until=studio_dragged 1096,23 "until=studio_said,status=\"game stopped\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_drags_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
@@ -474,7 +475,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 drag=980,520,980,470,Shift_L wait=3 1096,23 "until=studio_said,status=\"game stopped\""
+                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 drag=980,520,980,470,Shift_L until=studio_dragged 1096,23 "until=studio_said,status=\"game stopped\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_raises_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
@@ -487,7 +488,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 drag=980,520,1080,520,Control_L wait=3 1096,23 "until=studio_said,status=\"game stopped\""
+                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 drag=980,520,1080,520,Control_L until=studio_dragged 1096,23 "until=studio_said,status=\"game stopped\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_turns_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
