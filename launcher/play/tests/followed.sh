@@ -28,7 +28,7 @@ port="$(python3 "$(dirname "$0")/../../../tools/free_port.py")"
 out="$work/runners"
 "$1" games/runners "$out" --port "$port" --key "$work/keys/$kid.key" --publisher rawframe --follow "$work/mirror" \
     --cook "$2" --build "$3" --server "$4" --client "$5" --play "$6" --install "$7" >"$work/export.txt" || exit 1
-printf 'host.maximum_iterations = 240\nrender.device = any\n' >>"$out/client.conf"
+printf 'host.maximum_iterations = 240\n' >>"$out/client.conf"
 printf 'host.maximum_iterations = 600\n' >>"$out/server.conf"
 
 # The studio's 0.2.0, on the mirror and on stable.

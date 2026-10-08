@@ -25,7 +25,7 @@ kid="$("$3" key studio "$out.keys" | cut -d' ' -f2)"
 port="$(python3 "$(dirname "$0")/../../../tools/free_port.py")"
 "$1" "$7" "$out" --port "$port" --key "$out.keys/$kid.key" --publisher studio --cook "$2" --build "$3" \
     --server "$4" --client "$5" --play "$6" || exit 1
-printf 'host.maximum_iterations = 7200\nrender.device = any\n' >>"$out/client.conf"
+printf 'host.maximum_iterations = 7200\n' >>"$out/client.conf"
 "$out/rawframe-play" &
 play=$!
 for _ in $(seq 600); do
