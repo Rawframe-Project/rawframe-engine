@@ -42,6 +42,7 @@ constexpr std::uint16_t kUsageLeft = 0x50;
 constexpr std::uint16_t kUsageDown = 0x51;
 constexpr std::uint16_t kUsageUp = 0x52;
 constexpr std::uint16_t kUsageKeypadEnter = 0x58;
+constexpr std::uint16_t kUsageF11 = 0x44;
 
 bool held(const window::Key& key, window::Modifier modifier) noexcept {
     return (key.modifiers & static_cast<std::uint16_t>(modifier)) != 0;
@@ -154,6 +155,11 @@ result::Status WindowHost::start(window::Windows& windows) {
         // none keeps one lying there from moving them, or a test keeps the
         // pads another program made (D467).
         RAWFRAME_TRY_ASSIGN(gamepads_, kConfiguration->truth("input.gamepads", true));
+        // A player who plays on the whole screen (D523).
+        RAWFRAME_TRY_ASSIGN(const bool kFullscreen, kConfiguration->truth("window.fullscreen", false));
+        if (kFullscreen) {
+            made.mode = window::Mode::BorderlessFullscreen;
+        }
         made.size = {.width = static_cast<float>(kWidth), .height = static_cast<float>(kHeight)};
         // A game's own name over its window, as an export gives it (D519).
         if (const auto kTitle = kConfiguration->text("window.title")) {
@@ -201,6 +207,18 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             (event->kind == window::EventKind::GamepadAdded || event->kind == window::EventKind::GamepadRemoved ||
              event->kind == window::EventKind::GamepadButtonDown || event->kind == window::EventKind::GamepadButtonUp ||
              event->kind == window::EventKind::GamepadAxisMoved)) {
+            continue;
+        }
+        // F11, or Alt and Enter, puts the window on the whole screen and back
+        // (D523): the window's, never a game's action.
+        if (event->kind == window::EventKind::KeyDown && !event->key.repeat &&
+            (event->key.usage == kUsageF11 ||
+             (event->key.usage == kUsageEnter &&
+              (event->key.modifiers & static_cast<std::uint16_t>(window::Modifier::Alt)) != 0))) {
+            const auto kState = windows.state(window_);
+            const bool kWhole = kState.has_value() && kState->mode == window::Mode::BorderlessFullscreen;
+            static_cast<void>(
+                windows.requestMode(window_, kWhole ? window::Mode::Windowed : window::Mode::BorderlessFullscreen));
             continue;
         }
         bridge_->take(*event);
