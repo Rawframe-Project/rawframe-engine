@@ -128,6 +128,10 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # purse is there (D476); the frozen one waits until the sign is
         # given before it stops the client, which on the slowest tree at
         # load drew a frame a second (D489).
+        # Whether a frame shows the words before they are submitted is not
+        # held here: read in one frame, the field takes the keyboard, the
+        # words, and Return together, and a frame between them is the
+        # machine's to give (D505). That none is lost is what this holds.
         add_test(NAME client_navigates_stalls_frozen
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
@@ -139,7 +143,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED tycoon_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "pressed frozen Return,b,o,Return.*\"commandsTaken\":2,\"commandsLimited\":0.*\"code\":\"ui_summary\"[^\n]*\"presses\":0,\"focused\":1,\"typed\":3,\"submitted\":1,\"typedShown\":[1-9][0-9]*,\"navigated\":[2-9][0-9]*,\"activated\":1,")
+                             "pressed frozen Return,b,o,Return.*\"commandsTaken\":2,\"commandsLimited\":0.*\"code\":\"ui_summary\"[^\n]*\"presses\":0,\"focused\":1,\"typed\":3,\"submitted\":1,\"typedShown\":[0-9]+,\"navigated\":[2-9][0-9]*,\"activated\":1,")
         # The plaza, its walker's scene drawn in 3D and shown in the window
         # (D286): the scene's models drawn in frames the window showed,
         # antialiased over time, each reusing the picture before (D291), its
