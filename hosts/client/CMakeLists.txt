@@ -184,4 +184,10 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set_tests_properties(client_plays_runners client_drawn client_clicks_stalls client_types_stalls client_types_stalls_frozen client_navigates_stalls client_navigates_stalls_frozen client_plaza_drawn client_previews_plaza
                              PROPERTIES PROCESSORS 3)
     endif()
+    # Every client test here draws a window, the content it plays cooked
+    # first: labeled so the check can leave them out of a tree they find
+    # nothing in (D493).
+    get_property(window_tests DIRECTORY PROPERTY TESTS)
+    list(FILTER window_tests INCLUDE REGEX "^client_")
+    set_tests_properties(${window_tests} PROPERTIES LABELS window)
 endif()

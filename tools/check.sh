@@ -86,7 +86,12 @@ build_and_test() {
         grep -E 'error|FAILED' "out/$preset.build.log" | head -20; fail "$preset build"; return
     fi
     built=$(date +%s)
-    if ! ctest --test-dir "out/$preset" --output-on-failure -j "$jobs" >"out/$preset.test.log" 2>&1; then
+    # Window tests play in real time against a software rasterizer, and gcc's
+    # optimized tree finds nothing in them that clang's optimized tree, the
+    # sanitizers, and gcc's slow debug tree do not; it leaves them out (D493).
+    local leave=()
+    [ "$preset" = gcc-shipping ] && leave=(-LE window)
+    if ! ctest --test-dir "out/$preset" "${leave[@]}" --output-on-failure -j "$jobs" >"out/$preset.test.log" 2>&1; then
         # Each failed test's status and its output's last lines, cut short
         # (its records are long), so a failure seen only under CI's load can
         # be read there.

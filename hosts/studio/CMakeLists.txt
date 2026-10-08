@@ -465,4 +465,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set_tests_properties(studio_plays_plaza studio_picks_plaza studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza studio_snaps_plaza studio_looks_plaza
                              studio_rings_plaza studio_raises_plaza studio_turns_plaza studio_previews_plaza PROPERTIES PROCESSORS 3)
     endif()
+    # Every test here draws a window: labeled so the check can leave them
+    # out of a tree they find nothing in (D493).
+    get_property(window_tests DIRECTORY PROPERTY TESTS)
+    set_tests_properties(${window_tests} PROPERTIES LABELS window)
 endif()

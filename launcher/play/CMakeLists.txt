@@ -32,6 +32,7 @@ if(RAWFRAME_BUILD_TESTS)
                          ${PROJECT_BINARY_DIR}/hosts/arena/runners_content ${CMAKE_CURRENT_BINARY_DIR}/followed
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(play_follows PROPERTIES
+                             LABELS window
                              FIXTURES_REQUIRED runners_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION

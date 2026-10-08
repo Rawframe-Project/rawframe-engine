@@ -24,6 +24,7 @@ if(RAWFRAME_BUILD_TESTS)
                          $<TARGET_FILE:rawframe_host_play_tool> games/tycoon ${CMAKE_CURRENT_BINARY_DIR}/stalls
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(stalls_exported PROPERTIES
+                             LABELS window
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "export: keys studio.keys fonts read 1, admitted 1, frames shown [1-9][0-9]*, client stopped (clean_stop|controlled_overload), server stopped clean_stop, the launcher's code the client's: yes")
