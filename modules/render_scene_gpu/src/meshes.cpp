@@ -153,15 +153,13 @@ const FrameMesh& DeviceMeshes::frameMeshOf(const HeldMesh& mesh) const {
 }
 
 result::Status DeviceMeshes::bind(mrhiPassId pass, const HeldMesh& mesh, std::optional<VerticesAt> posed) const {
+    // Posed vertices are bound from their offset to the buffer's end: the
+    // draw reads only its own, and lavapipe leaks a vertex buffer bound at
+    // an offset with a size (D510).
     const FrameMesh& kMade = imported_.at(&mesh);
     const mrhiResourceId kVertices = posed.has_value() ? posed->buffer : kMade.vertices;
-    const std::uint64_t kSize = std::uint64_t{mesh.source->positions.size()} * kVertexBytes;
-    if (mrhiSetVertexBuffer(native_,
-                            pass,
-                            0,
-                            kVertices,
-                            posed.has_value() ? posed->offset : 0,
-                            posed.has_value() ? kSize : MRHI_WHOLE_SIZE) != mrhi_success ||
+    if (mrhiSetVertexBuffer(native_, pass, 0, kVertices, posed.has_value() ? posed->offset : 0, MRHI_WHOLE_SIZE) !=
+            mrhi_success ||
         mrhiSetIndexBuffer(native_, pass, kMade.indices, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
         return failed("a mesh could not be set to draw from", mrhi_errorState);
     }
@@ -170,13 +168,12 @@ result::Status DeviceMeshes::bind(mrhiPassId pass, const HeldMesh& mesh, std::op
 
 result::Status DeviceMeshes::bindBefore(mrhiPassId pass, const HeldMesh& mesh, std::optional<VerticesAt> before) const {
     const FrameMesh& kMade = imported_.at(&mesh);
-    const std::uint64_t kSize = std::uint64_t{mesh.source->positions.size()} * kVertexBytes;
     if (mrhiSetVertexBuffer(native_,
                             pass,
                             2,
                             before.has_value() ? before->buffer : kMade.vertices,
                             before.has_value() ? before->offset : 0,
-                            before.has_value() ? kSize : MRHI_WHOLE_SIZE) != mrhi_success) {
+                            MRHI_WHOLE_SIZE) != mrhi_success) {
         return failed("a mesh could not be set to draw from", mrhi_errorState);
     }
     return {};
