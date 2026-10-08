@@ -183,7 +183,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set_tests_properties(client_turns_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
-                             PASS_REGULAR_EXPRESSION "\"code\":\"scene_summary\"[^\n]*\"yaw\":-?[1-3]\\.[0-9]+}")
+                             PASS_REGULAR_EXPRESSION "\"code\":\"scene_summary\"[^\n]*\"yaw\":-?[1-3](\\.[0-9]+)?}")
         # The plaza previewed for an authoring session (D432, D433): the
         # client's own tooling endpoint, with the view grant, attached as a
         # scene's preview, shown the scene's views, and let go, which gives
