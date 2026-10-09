@@ -17,6 +17,9 @@
 
 #if RAWFRAME_FILE_SYSTEM
 
+#include <chrono>
+#include <thread>
+
 namespace rawframe::world_save {
 
 namespace {
@@ -125,7 +128,17 @@ result::Status DirectorySaveStore::keep(std::string_view slot, std::span<const s
         std::remove(kPartial.c_str());
         return failed(result::ErrorClass::Unavailable, SaveError::StorageFailed, "a save cannot be written");
     }
-    std::filesystem::rename(kPartial, kPath, error);
+    // A save another handle holds open, a reader or a scanner, cannot be
+    // replaced on Windows for that moment: the move is tried again for up
+    // to half a second before the save is given up as not put in place.
+    for (int attempt = 0; attempt < 50; ++attempt) {
+        error.clear();
+        std::filesystem::rename(kPartial, kPath, error);
+        if (!error) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    }
     if (error) {
         std::remove(kPartial.c_str());
         return failed(
