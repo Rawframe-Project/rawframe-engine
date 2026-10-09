@@ -194,4 +194,20 @@ struct RunSettings {
 /// Never from inside a running program.
 [[nodiscard]] result::Status run(Program& program, const RunSettings& settings);
 
+#if defined(__ANDROID__)
+/// What an Android program runs. There the platform starts a program, not a
+/// `main` that calls run: Maul Window's activity asks for it when the first
+/// activity is created (mwin-0026, D551), and runs it as run would. The
+/// program outlives every activity and the call that gave it.
+struct AndroidStart {
+    /// None for a program that cannot run: its activity finishes.
+    Program* program = nullptr;
+    RunSettings settings;
+};
+
+/// Defined by the program's own library, once in a process: what the
+/// window module hands Maul Window's activity.
+[[nodiscard]] AndroidStart androidStart() noexcept;
+#endif
+
 } // namespace rawframe::window

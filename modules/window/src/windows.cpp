@@ -77,16 +77,21 @@ mwinCursorMode toMaul(CursorMode mode) noexcept {
 
 } // namespace
 
-result::Status Platform::run(Program& program, const RunSettings& settings, mwinBackendKind backend) {
-    auto platform = std::make_unique<Platform>(program);
+mwinAppDef Platform::define(Platform& platform, const RunSettings& settings, mwinBackendKind backend) {
     mwinAppDef app = mwinDefaultAppDef();
     app.context.limits = toMaul(settings.limits, app.context.limits);
     app.context.backend = backend;
     app.init = startProgram;
     app.frame = frameProgram;
     app.quit = stopProgram;
-    app.user = platform.get();
-    const mwinResult status = mwinRun(&app);
+    app.user = &platform;
+    return app;
+}
+
+result::Status Platform::run(Program& program, const RunSettings& settings, mwinBackendKind backend) {
+    auto platform = std::make_unique<Platform>(program);
+    const mwinAppDef kApp = define(*platform, settings, backend);
+    const mwinResult status = mwinRun(&kApp);
     if (platform->context != nullptr) {
         // The page's frames run the program on; its stop frees this.
         platform->outlivesRun = true;
@@ -105,6 +110,26 @@ result::Status Platform::run(Program& program, const RunSettings& settings, mwin
 result::Status run(Program& program, const RunSettings& settings) {
     return Platform::run(program, settings, mwin_backendNative);
 }
+
+} // namespace rawframe::window
+
+#if defined(__ANDROID__)
+// Maul Window's entry on Android (its context.h): the program its library
+// gives, run on a Platform that its stop frees, as the web's is.
+mwinAppDef mwinAndroidMain(void) {
+    using rawframe::window::Platform;
+    const rawframe::window::AndroidStart kStart = rawframe::window::androidStart();
+    if (kStart.program == nullptr) {
+        // No init: the activity cannot run it and finishes.
+        return mwinDefaultAppDef();
+    }
+    auto platform = std::make_unique<Platform>(*kStart.program);
+    platform->outlivesRun = true;
+    return Platform::define(*platform.release(), kStart.settings, mwin_backendNative);
+}
+#endif
+
+namespace rawframe::window {
 
 result::Result<WindowId> Windows::create(const WindowSettings& settings) {
     mwinWindowDef def = mwinDefaultWindowDef();

@@ -32,7 +32,8 @@ enum class Platform : std::uint8_t {
     Linux,
     Windows,
     MacOs,
-    Web
+    Web,
+    Android
 };
 
 struct EligibilityMask {

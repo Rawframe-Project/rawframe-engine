@@ -36,6 +36,10 @@ struct Platform {
     /// Runs `program` on the backend: Maul Window's loop, its three calls
     /// forwarded to the program.
     [[nodiscard]] static result::Status run(Program& program, const RunSettings& settings, mwinBackendKind backend);
+
+    /// The application Maul Window runs for `platform`'s program: its three
+    /// calls, and the context's limits and backend.
+    [[nodiscard]] static mwinAppDef define(Platform& platform, const RunSettings& settings, mwinBackendKind backend);
 };
 
 /// The Error for a Maul Window failure; `what` names the call.
