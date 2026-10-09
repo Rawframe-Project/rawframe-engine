@@ -296,7 +296,7 @@ public:
         }
         typing_ = seed.has_value() ? nullptr : shared.typing;
         RAWFRAME_TRY(addUiDoors(table, &ui_));
-        text_ = TextDoorContext{.text = seed.has_value() ? nullptr : shared.text};
+        text_ = TextDoorContext{.text = seed.has_value() ? nullptr : shared.text, .player = player};
         RAWFRAME_TRY(addTextDoors(table, &text_));
         for (const world_kest::CommandKind& command : shared.commands) {
             auto kind = std::make_unique<CommandDoorContext::Kind>();

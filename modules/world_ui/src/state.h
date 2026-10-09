@@ -35,6 +35,8 @@ struct Entry {
     bool placeholder = false;
     /// The states its node was last given (D431).
     ui::States states;
+    /// The local player whose view it is in, whose locale its words are in.
+    std::size_t player = 0;
 };
 
 /// The node holding focus (D430): a text field given the keyboard, its
@@ -162,7 +164,10 @@ struct WorldUi::State {
 
     /// `value`'s words given to `node`, or none, the typed `shown` in place
     /// of its label (D427); whether the tree took them.
-    bool giveWords(ui::Node node, const Node& value, std::optional<std::string_view> shown = std::nullopt);
+    bool giveWords(ui::Node node,
+                   const Node& value,
+                   std::size_t player,
+                   std::optional<std::string_view> shown = std::nullopt);
     /// Every node of an entry `which` picks given its words again, a field
     /// its look, keeping what was typed into it; one the tree refuses is
     /// dropped.

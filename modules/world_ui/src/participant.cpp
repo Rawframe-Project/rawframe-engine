@@ -230,8 +230,9 @@ public:
                                 context.capability(world_localization::kGameText));
             text_ = text;
             reworded_ = text->revision();
-            settings->words = [this, text, labels = files->description().labels](
-                                  std::uint64_t label, std::int64_t value) -> std::optional<std::string> {
+            settings->words =
+                [this, text, labels = files->description().labels](
+                    std::size_t player, std::uint64_t label, std::int64_t value) -> std::optional<std::string> {
                 const auto kLabel = std::ranges::find(labels, label, &world_kest::GameLabel::id);
                 if (kLabel == labels.end()) {
                     return std::nullopt;
@@ -239,7 +240,7 @@ public:
                 const std::array<localization::Argument, 1> kArguments{
                     localization::Argument{.name = kLabel->argument, .value = value}};
                 auto words = text->format(
-                    kLabel->table, kLabel->key, std::span{kArguments}.first(kLabel->argument.empty() ? 0 : 1));
+                    player, kLabel->table, kLabel->key, std::span{kArguments}.first(kLabel->argument.empty() ? 0 : 1));
                 if (words.has_value()) {
                     return std::move(*words);
                 }

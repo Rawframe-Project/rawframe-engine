@@ -11,24 +11,25 @@ constexpr std::array<kest::Parameter, 1> kCountGives = {kest::Parameter{kest::Sl
 constexpr std::array<kest::Parameter, 1> kChooseTakes = {kest::Parameter{kest::Slot::U32}};
 constexpr std::array<kest::Parameter, 1> kChooseGives = {kest::Parameter{kest::Slot::Bool}};
 
-world_localization::GameText* textOf(void* context) noexcept {
-    return static_cast<TextDoorContext*>(context)->text;
+const TextDoorContext& textOf(void* context) noexcept {
+    return *static_cast<const TextDoorContext*>(context);
 }
 
 void offeredDoor(kest::DoorCall& call, void* context) noexcept {
-    const world_localization::GameText* text = textOf(context);
+    const world_localization::GameText* text = textOf(context).text;
     call.answerInteger(text != nullptr ? static_cast<std::int64_t>(text->offered().size()) : 0);
 }
 
 void chosenDoor(kest::DoorCall& call, void* context) noexcept {
-    const world_localization::GameText* text = textOf(context);
-    call.answerInteger(text != nullptr ? static_cast<std::int64_t>(text->chosen()) : 0);
+    const TextDoorContext& lent = textOf(context);
+    call.answerInteger(lent.text != nullptr ? static_cast<std::int64_t>(lent.text->chosen(lent.player)) : 0);
 }
 
 void chooseDoor(kest::DoorCall& call, void* context) noexcept {
-    world_localization::GameText* text = textOf(context);
+    const TextDoorContext& lent = textOf(context);
     const std::int64_t kIndex = call.integer(0);
-    call.answerBoolean(text != nullptr && kIndex >= 0 && text->choose(static_cast<std::size_t>(kIndex)));
+    call.answerBoolean(lent.text != nullptr && kIndex >= 0 &&
+                       lent.text->choose(lent.player, static_cast<std::size_t>(kIndex)));
 }
 
 } // namespace

@@ -95,10 +95,10 @@ struct Typed {
     std::array<std::byte, kMostTypedBytes> bytes{};
 };
 
-/// The words of label `label` with `value` as its argument, in the player's
-/// locale; none for a label the game does not have, or whose words cannot be
-/// made (D386).
-using Words = std::function<std::optional<std::string>(std::uint64_t label, std::int64_t value)>;
+/// The words of label `label` with `value` as its argument, in the locale
+/// of local player `player`, whose view shows them; none for a label the
+/// game does not have, or whose words cannot be made (D386).
+using Words = std::function<std::optional<std::string>(std::size_t player, std::uint64_t label, std::int64_t value)>;
 
 /// The game's node components, in declaration order, and the one each is
 /// inside by its `ui` line, an index of them; none for a root of its view.

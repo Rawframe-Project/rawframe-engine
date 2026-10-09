@@ -3,7 +3,8 @@
 // seed; games without controls, or whose sample does not fit, refused; the
 // player's effects felt on its gamepads (D251); the player's view read by
 // its sample through `rawframe.view` (D367); and a press the UI takes read
-// by the sample as its node's press code, never by an action (D421).
+// by the sample as its node's press code, never by an action (D421); and
+// each local player's own locale chosen by their sample (D548).
 
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/input_kest/sources.h"
@@ -450,4 +451,63 @@ RAWFRAME_TEST(AFieldsTextReachesTheSampleAndItsKeysNoAction) {
     play(**source, 1);
     feed.submit({.device = kKeyboard, .control = kD, .x = 1});
     RAWFRAME_EXPECT(play(**source, 1)[0][0] == 1.0F);
+}
+
+namespace {
+
+/// A sample that gives the player's locale as `run`, then asks for the next
+/// one, round to the first.
+constexpr std::string_view kSpoken = R"(module spoken
+
+import controls
+import rawframe.input
+
+fn sample(into: [controls.Stick]) {
+    into[0].run = f32(input.locale())
+    input.chooseLocale((input.locale() + u32(1)) % input.locales())
+}
+)";
+
+} // namespace
+
+RAWFRAME_TEST(EachLocalPlayerChoosesTheirOwnLocale) {
+    // ADR-0050's locale as per-player presentation state (D548): the first
+    // player's choice leaves the second's as configured, and theirs the
+    // first's.
+    localization::StringTable table{.sourceLocale = *localization::parseLocale("en"), .entries = {}};
+    table.entries["menu.play"] = localization::SourceEntry{.message = "Play", .description = {}};
+    const base::Bits128 kHud{0, 0xa1};
+    localization::Translations turkish{.table = kHud, .locale = *localization::parseLocale("tr"), .entries = {}};
+    turkish.entries["menu.play"] =
+        localization::TranslatedEntry{.message = "Oyna", .sourceHash = localization::sourceHashOf("Play")};
+    const std::vector<localization::TableDocument> kTables{{.id = kHud, .table = table}};
+    const std::vector<localization::Translations> kTranslations{turkish};
+    world_localization::GameText text{*localization::Catalog::build(kTables, kTranslations),
+                                      {{"hud.strings", kHud}},
+                                      *localization::parseLocale("en"),
+                                      *localization::parseLocale("en"),
+                                      {*localization::parseLocale("en"), *localization::parseLocale("tr")}};
+    input::Feed feed;
+    SourceSettings settings{.game = &gameAt("runners/runners.game",
+                                            "sample sample.kest sample",
+                                            "sample spoken.kest sample",
+                                            {{"spoken.kest", std::string{kSpoken}}}),
+                            .inputSize = sizeof(Stick),
+                            .feed = &feed,
+                            .text = &text};
+    auto sources = makeInputSources(settings);
+    RAWFRAME_EXPECT(sources.has_value());
+    if (!sources.has_value()) {
+        return;
+    }
+    auto first = (*sources)->playerSource(0);
+    auto second = (*sources)->playerSource(1);
+    RAWFRAME_EXPECT(first.has_value() && second.has_value());
+    if (!first.has_value() || !second.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(play(**first, 1)[0][0] == 0.0F && text.chosen(0) == 1 && text.chosen(1) == 0);
+    RAWFRAME_EXPECT(play(**second, 1)[0][0] == 0.0F && text.chosen(1) == 1 && text.chosen(0) == 1);
+    RAWFRAME_EXPECT(play(**first, 1)[0][0] == 1.0F && text.chosen(0) == 0 && text.chosen(1) == 1);
+    RAWFRAME_EXPECT(text.revision() == 3);
 }

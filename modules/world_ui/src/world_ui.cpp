@@ -239,7 +239,7 @@ bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const Node& 
         !tree->setInteraction(*entry.node, *kInteraction).has_value() ||
         !tree->setClasses(*entry.node, kClasses != 0 ? std::span{&kClass->second, 1} : std::span<const ui::Style>{})
              .has_value() ||
-        !giveFocusLook(entry) || (!kEditable && !giveWords(*entry.node, value, wordsOf(entry.words)))) {
+        !giveFocusLook(entry) || (!kEditable && !giveWords(*entry.node, value, entry.player, wordsOf(entry.words)))) {
         drop(entry);
         return false;
     }
@@ -262,7 +262,7 @@ bool WorldUi::State::giveFieldLook(Entry& entry) {
     const bool kHeld = focus.has_value() && focus->entry == &entry && focus->keyboard;
     std::optional<std::string> label;
     if (!kHeld && text.empty() && kValue.text != 0 && settings.words) {
-        label = settings.words(kValue.text, kValue.textValue);
+        label = settings.words(entry.player, kValue.text, kValue.textValue);
     }
     entry.placeholder = label.has_value();
     if (label.has_value()) {
@@ -279,8 +279,9 @@ void WorldUi::State::giveWordsAgain(const std::function<bool(const Entry&)>& whi
             if (!entry.node.has_value() || !which(entry)) {
                 continue;
             }
-            const bool kGiven =
-                entry.editable ? giveFieldLook(entry) : giveWords(*entry.node, entry.value, wordsOf(entry.words));
+            const bool kGiven = entry.editable
+                                    ? giveFieldLook(entry)
+                                    : giveWords(*entry.node, entry.value, entry.player, wordsOf(entry.words));
             if (!kGiven) {
                 drop(entry);
             }
@@ -288,7 +289,10 @@ void WorldUi::State::giveWordsAgain(const std::function<bool(const Entry&)>& whi
     }
 }
 
-bool WorldUi::State::giveWords(ui::Node node, const Node& value, std::optional<std::string_view> shown) {
+bool WorldUi::State::giveWords(ui::Node node,
+                               const Node& value,
+                               std::size_t player,
+                               std::optional<std::string_view> shown) {
     if (value.textAlign > 2 || value.textWrap > 1) {
         return false;
     }
@@ -297,7 +301,7 @@ bool WorldUi::State::giveWords(ui::Node node, const Node& value, std::optional<s
         words = std::string{*shown};
         ++statistics.typedShown;
     } else if (value.text != 0) {
-        words = settings.words ? settings.words(value.text, value.textValue) : std::nullopt;
+        words = settings.words ? settings.words(player, value.text, value.textValue) : std::nullopt;
         ++(words.has_value() ? statistics.texts : statistics.textsUnknown);
     }
     if (!words.has_value()) {
@@ -364,6 +368,7 @@ void WorldUi::State::mirror(ViewState& view) {
                 auto [at, made] = view.entries.try_emplace(EntryKey{chunk.entities[row], component});
                 Entry& entry = at->second;
                 entry.seen = true;
+                entry.player = static_cast<std::size_t>(&view - views.data());
                 // Its words, read where it shows any (D427).
                 Typed words;
                 if (view.shows[component].has_value()) {

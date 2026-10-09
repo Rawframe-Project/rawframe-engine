@@ -31,16 +31,16 @@ world_localization::GameText game(std::string_view requested) {
 
 RAWFRAME_TEST(AKeyIsFormattedInTheAskedLocaleOrItsFallback) {
     const world_localization::GameText kTurkish = game("tr_TR");
-    RAWFRAME_EXPECT(kTurkish.requested().text() == "tr-TR" && kTurkish.table("hud.strings") == kHud);
-    RAWFRAME_EXPECT(kTurkish.format("hud.strings", "menu.play", {}) == "Oyna");
+    RAWFRAME_EXPECT(kTurkish.requested(0).text() == "tr-TR" && kTurkish.table("hud.strings") == kHud);
+    RAWFRAME_EXPECT(kTurkish.format(0, "hud.strings", "menu.play", {}) == "Oyna");
     // Turkish lacks the score: English serves it, in English numbers.
     const std::vector<Argument> kPoints{{"points", std::int64_t{1500}}};
-    RAWFRAME_EXPECT(kTurkish.format("hud.strings", "hud.score", kPoints) == "1,500 points");
-    RAWFRAME_EXPECT(game("de").format("hud.strings", "menu.play", {}) == "Play");
+    RAWFRAME_EXPECT(kTurkish.format(0, "hud.strings", "hud.score", kPoints) == "1,500 points");
+    RAWFRAME_EXPECT(game("de").format(0, "hud.strings", "menu.play", {}) == "Play");
     // A table no text line names, and a key the table lacks.
-    const auto kNoTable = kTurkish.format("other.strings", "menu.play", {});
+    const auto kNoTable = kTurkish.format(0, "other.strings", "menu.play", {});
     RAWFRAME_EXPECT(!kNoTable.has_value() && kNoTable.error().code() == code(LocalizationError::KeyUnknown));
-    const auto kNoKey = kTurkish.format("hud.strings", "menu.quit", {});
+    const auto kNoKey = kTurkish.format(0, "hud.strings", "menu.quit", {});
     RAWFRAME_EXPECT(!kNoKey.has_value() && kNoKey.error().code() == code(LocalizationError::KeyUnknown));
 }
 
@@ -59,22 +59,29 @@ RAWFRAME_TEST(APlayerChoosesAmongTheOfferedLocalesWhilePlaying) {
                                       *parseLocale("en"),
                                       {*parseLocale("en"), *parseLocale("tr")}};
     // A configured locale none of them is chosen past the last.
-    RAWFRAME_EXPECT(text.offered().size() == 2 && text.chosen() == 2 && text.revision() == 0);
-    RAWFRAME_EXPECT(text.choose(1) && text.chosen() == 1 && text.revision() == 1);
-    RAWFRAME_EXPECT(text.format("hud.strings", "menu.play", {}) == "Oyna");
+    RAWFRAME_EXPECT(text.offered().size() == 2 && text.chosen(0) == 2 && text.revision() == 0);
+    RAWFRAME_EXPECT(text.choose(0, 1) && text.chosen(0) == 1 && text.revision() == 1);
+    RAWFRAME_EXPECT(text.format(0, "hud.strings", "menu.play", {}) == "Oyna");
     // The one asked for again changes nothing; one past them is refused.
-    RAWFRAME_EXPECT(text.choose(1) && text.revision() == 1);
-    RAWFRAME_EXPECT(!text.choose(2) && text.chosen() == 1);
-    RAWFRAME_EXPECT(text.choose(0) && text.revision() == 2);
-    RAWFRAME_EXPECT(text.format("hud.strings", "menu.play", {}) == "Play");
+    RAWFRAME_EXPECT(text.choose(0, 1) && text.revision() == 1);
+    RAWFRAME_EXPECT(!text.choose(0, 2) && text.chosen(0) == 1);
+    RAWFRAME_EXPECT(text.choose(0, 0) && text.revision() == 2);
+    RAWFRAME_EXPECT(text.format(0, "hud.strings", "menu.play", {}) == "Play");
+    // Each local player has their own (ADR-0050): the second choosing
+    // Turkish leaves the first in English, and a third keeps the one
+    // configured.
+    RAWFRAME_EXPECT(text.choose(1, 1) && text.revision() == 3 && text.chosen(1) == 1 && text.chosen(0) == 0);
+    RAWFRAME_EXPECT(text.format(1, "hud.strings", "menu.play", {}) == "Oyna");
+    RAWFRAME_EXPECT(text.format(0, "hud.strings", "menu.play", {}) == "Play");
+    RAWFRAME_EXPECT(text.chosen(2) == 2 && text.requested(2).text() == "de");
 }
 
 RAWFRAME_TEST(DisplayKeysModeShowsEveryKeyAsItsToken) {
     // SPEC-0033's development-only display-keys mode (D540): the key itself,
     // whatever the locale, the table, or the key's presence.
     world_localization::GameText text = game("tr");
-    RAWFRAME_EXPECT(text.format("hud.strings", "menu.play", {}) == "Oyna");
+    RAWFRAME_EXPECT(text.format(0, "hud.strings", "menu.play", {}) == "Oyna");
     text.showKeys();
-    RAWFRAME_EXPECT(text.format("hud.strings", "menu.play", {}) == "menu.play");
-    RAWFRAME_EXPECT(text.format("other.strings", "menu.quit", {}) == "menu.quit");
+    RAWFRAME_EXPECT(text.format(0, "hud.strings", "menu.play", {}) == "menu.play");
+    RAWFRAME_EXPECT(text.format(0, "other.strings", "menu.quit", {}) == "menu.quit");
 }

@@ -27,16 +27,19 @@ GameText::GameText(localization::Catalog catalog,
       projectDefault_(std::move(projectDefault)), offered_(std::move(offered)) {
 }
 
-std::size_t GameText::chosen() const noexcept {
-    return static_cast<std::size_t>(std::ranges::find(offered_, requested_) - offered_.begin());
+std::size_t GameText::chosen(std::size_t player) const noexcept {
+    return static_cast<std::size_t>(std::ranges::find(offered_, requested(player)) - offered_.begin());
 }
 
-bool GameText::choose(std::size_t index) noexcept {
+bool GameText::choose(std::size_t player, std::size_t index) {
     if (index >= offered_.size()) {
         return false;
     }
-    if (offered_[index] != requested_) {
-        requested_ = offered_[index];
+    if (offered_[index] != requested(player)) {
+        if (asked_.size() <= player) {
+            asked_.resize(player + 1, requested_);
+        }
+        asked_[player] = offered_[index];
         ++revision_;
     }
     return true;
@@ -47,8 +50,10 @@ std::optional<base::Bits128> GameText::table(std::string_view path) const noexce
     return kFound != tables_.end() ? std::optional{kFound->second} : std::nullopt;
 }
 
-result::Result<std::string>
-GameText::format(std::string_view path, std::string_view key, std::span<const localization::Argument> arguments) const {
+result::Result<std::string> GameText::format(std::size_t player,
+                                             std::string_view path,
+                                             std::string_view key,
+                                             std::span<const localization::Argument> arguments) const {
     if (showingKeys_) {
         return std::string{key};
     }
@@ -61,7 +66,7 @@ GameText::format(std::string_view path, std::string_view key, std::span<const lo
                                                   .error()
                                                   .withContext("path", path)};
     }
-    return catalog_.format(*kTable, key, requested_, projectDefault_, arguments);
+    return catalog_.format(*kTable, key, requested(player), projectDefault_, arguments);
 }
 
 namespace {
@@ -285,7 +290,7 @@ public:
                      diagnostics::field("translations", static_cast<std::uint64_t>(summary_.translations)),
                      diagnostics::field("keys", static_cast<std::uint64_t>(summary_.keys)),
                      diagnostics::field("stale", static_cast<std::uint64_t>(text_->catalog().stale().size())),
-                     diagnostics::field("locale", text_->requested().text()),
+                     diagnostics::field("locale", text_->requested(0).text()),
                      diagnostics::field("default", text_->projectDefault().text())});
         emitter_ = emitter;
         return {};
@@ -295,12 +300,12 @@ public:
         if (text_ == nullptr) {
             return;
         }
-        // The locale the words were last given in, and how often a player
-        // chose another (D539).
+        // The first local player's locale as it ended, and how often a
+        // player chose another (D539).
         emitter_.log(diagnostics::Severity::Info,
                      kTextSummary,
                      "the game's text as it ended",
-                     {diagnostics::field("locale", text_->requested().text()),
+                     {diagnostics::field("locale", text_->requested(0).text()),
                       diagnostics::field("offered", static_cast<std::uint64_t>(text_->offered().size())),
                       diagnostics::field("changes", text_->revision())});
     }

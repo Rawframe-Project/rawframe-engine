@@ -101,15 +101,16 @@ struct UiDoorContext {
 [[nodiscard]] result::Status addUiDoors(kest::DoorTable& doors, const UiDoorContext* context);
 
 /// What the `Text.*` doors reach: the game's text, none for a bot or where
-/// the host lends none (D539).
+/// the host lends none (D539), and whose locale they read and choose.
 struct TextDoorContext {
     world_localization::GameText* text = nullptr;
+    std::size_t player = 0;
 };
 
 /// Adds `Text.offered`, `Text.chosen`, and `Text.choose`: how many locales
-/// a player may choose among while playing, which is asked for, and
-/// asking for another by its place (ADR-0050's locale as presentation
-/// state). They reach only the client's own words, so they are safe for
+/// a player may choose among while playing, which the player asks for, and
+/// asking for another by its place (ADR-0050's locale as per-player
+/// presentation state). They reach only the client's own words, so they are safe for
 /// untrusted code. `context` outlives every machine started with the
 /// table.
 [[nodiscard]] result::Status addTextDoors(kest::DoorTable& doors, const TextDoorContext* context);

@@ -38,26 +38,31 @@ public:
     [[nodiscard]] const localization::Catalog& catalog() const noexcept {
         return catalog_;
     }
-    /// The locale the player asked for, and the project's default, which
-    /// every key falls back through (locale.h).
-    [[nodiscard]] const localization::Locale& requested() const noexcept {
-        return requested_;
+    /// The locale local player `player` asks for (ADR-0050: per-player
+    /// presentation state): the one the client was configured with until
+    /// that player chooses another. `player` is a local player's place,
+    /// which the client bounds.
+    [[nodiscard]] const localization::Locale& requested(std::size_t player) const noexcept {
+        return player < asked_.size() ? asked_[player] : requested_;
     }
+    /// The project's default, which every key falls back through
+    /// (locale.h).
     [[nodiscard]] const localization::Locale& projectDefault() const noexcept {
         return projectDefault_;
     }
-    /// The locales a player may choose among, and which of them is asked
-    /// for: past the last for one configured that none of them is.
+    /// The locales a player may choose among, and which of them `player`
+    /// asks for: past the last for one configured that none of them is.
     [[nodiscard]] std::span<const localization::Locale> offered() const noexcept {
         return offered_;
     }
-    [[nodiscard]] std::size_t chosen() const noexcept;
-    /// Asks for the offered locale at `index` from now on (ADR-0050: a
-    /// change is a revision every formatted word follows); false for none
-    /// such. Choosing the one asked for changes nothing.
-    bool choose(std::size_t index) noexcept;
-    /// Counts the changes of the locale asked for, so what formatted words
-    /// formats them again when it moves.
+    [[nodiscard]] std::size_t chosen(std::size_t player) const noexcept;
+    /// `player` asks for the offered locale at `index` from now on, the
+    /// other local players keeping theirs (ADR-0050: a change is a revision
+    /// every formatted word follows); false for none such. Choosing the one
+    /// asked for changes nothing.
+    bool choose(std::size_t player, std::size_t index);
+    /// Counts the changes of any local player's locale, so what formatted
+    /// words formats them again when one moves.
     [[nodiscard]] std::uint64_t revision() const noexcept {
         return revision_;
     }
@@ -70,16 +75,20 @@ public:
     /// The identity of the table a `text` line names `path`, if it names a
     /// table.
     [[nodiscard]] std::optional<base::Bits128> table(std::string_view path) const noexcept;
-    /// A key of the table at `path`, formatted in the requested locale or
-    /// the first it falls back to. Refuses as `Catalog::format` does, and
-    /// (`KeyUnknown`) a path that names no table.
-    [[nodiscard]] result::Result<std::string>
-    format(std::string_view path, std::string_view key, std::span<const localization::Argument> arguments) const;
+    /// A key of the table at `path`, formatted in the locale `player` asks
+    /// for or the first it falls back to. Refuses as `Catalog::format`
+    /// does, and (`KeyUnknown`) a path that names no table.
+    [[nodiscard]] result::Result<std::string> format(std::size_t player,
+                                                     std::string_view path,
+                                                     std::string_view key,
+                                                     std::span<const localization::Argument> arguments) const;
 
 private:
     localization::Catalog catalog_;
     std::vector<std::pair<std::string, base::Bits128>> tables_;
     localization::Locale requested_;
+    /// Each local player's locale, up to the last who chose one.
+    std::vector<localization::Locale> asked_;
     localization::Locale projectDefault_;
     std::vector<localization::Locale> offered_;
     std::uint64_t revision_ = 0;

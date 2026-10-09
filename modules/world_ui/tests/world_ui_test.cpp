@@ -217,17 +217,17 @@ RAWFRAME_TEST(WhatTheTreeCannotTakeIsLeftOut) {
 RAWFRAME_TEST(ANodeShowsItsLabelsWordsInTheGamesFont) {
     Rig rig;
     std::uint64_t asked = 0;
-    rig.ui =
-        *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId},
-                          .parents = {std::nullopt, 0, 0},
-                          .fonts = {0xF2, 0xF1},
-                          .words = [&asked](std::uint64_t label, std::int64_t value) -> std::optional<std::string> {
-                              ++asked;
-                              if (label != 0xA1) {
-                                  return std::nullopt;
-                              }
-                              return std::string(static_cast<std::size_t>(value), 'X');
-                          }});
+    rig.ui = *WorldUi::create(
+        {.nodes = {kHudId, kMeterId, kRowId},
+         .parents = {std::nullopt, 0, 0},
+         .fonts = {0xF2, 0xF1},
+         .words = [&asked](std::size_t, std::uint64_t label, std::int64_t value) -> std::optional<std::string> {
+             ++asked;
+             if (label != 0xA1) {
+                 return std::nullopt;
+             }
+             return std::string(static_cast<std::size_t>(value), 'X');
+         }});
     // Words in Ahem, whose glyphs are em boxes: three of them, 10 pixels.
     rig.put(
         rig.player, kHudId, Node{.text = 0xA1, .textValue = 3, .font = 0xF1, .textSize = 10, .textColor = 0xFFFFFFFF});
@@ -262,6 +262,40 @@ RAWFRAME_TEST(ANodeShowsItsLabelsWordsInTheGamesFont) {
     // Font nought is the first declared font read so far: here the one.
     rig.put(rig.player, kHudId, Node{.text = 0xA1, .textValue = 2, .textSize = 10, .textColor = 0xFFFFFFFF});
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 2);
+}
+
+RAWFRAME_TEST(EachLocalPlayersWordsAreInTheirOwnLocale) {
+    // Two local players, each in their own view of their own World, the
+    // second asking for words twice as long (ADR-0050's per-player locale).
+    Rig rig;
+    std::vector<std::size_t> askedBy;
+    rig.ui = *WorldUi::create(
+        {.nodes = {kHudId, kMeterId, kRowId},
+         .parents = {std::nullopt, 0, 0},
+         .fonts = {0xF1},
+         .words = [&askedBy](std::size_t player, std::uint64_t, std::int64_t value) -> std::optional<std::string> {
+             askedBy.push_back(player);
+             return std::string(static_cast<std::size_t>(value) * (player + 1), 'X');
+         }});
+    const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
+    RAWFRAME_EXPECT(rig.ui->addFont(0xF1, std::as_bytes(std::span{kAhem.data(), kAhem.size()})).has_value());
+    Node label{.text = 0xA1, .textValue = 3, .font = 0xF1, .textSize = 10, .textColor = 0xFFFFFFFF};
+    rig.put(rig.player, kHudId, label);
+    world::World second{rig.schema};
+    const world::EntityHandle kSecond = *second.create();
+    RAWFRAME_EXPECT(second.insertErased(kSecond, *rig.schema->find(kHudId), &label).has_value());
+    const std::array<UiView, 2> kViews = {
+        UiView{.world = &rig.world, .player = rig.player, .width = 320, .height = 360},
+        UiView{.world = &second, .player = kSecond, .x = 320, .width = 320, .height = 360}};
+    RAWFRAME_EXPECT(rig.ui->update(kViews, 640, 360, 1).has_value());
+    RAWFRAME_EXPECT((askedBy == std::vector<std::size_t>{0, 1}));
+    const ui::DrawList& kDrawn = rig.ui->drawn();
+    RAWFRAME_EXPECT(kDrawn.glyphRuns.size() == 2 && kDrawn.glyphs.size() == 9);
+    // A change of locale words both views again, each in its player's.
+    askedBy.clear();
+    rig.ui->reword();
+    RAWFRAME_EXPECT(rig.ui->update(kViews, 640, 360, 1).has_value());
+    RAWFRAME_EXPECT((askedBy == std::vector<std::size_t>{0, 1}) && rig.ui->drawn().glyphs.size() == 9);
 }
 
 RAWFRAME_TEST(APressLandsOnANodeThatTakesIt) {
@@ -399,7 +433,7 @@ RAWFRAME_TEST(ANodeShowsTypedWordsInPlaceOfItsLabel) {
                                .parents = {std::nullopt, 0, 0},
                                .shows = {kWordsId, std::nullopt, std::nullopt},
                                .fonts = {0xF1},
-                               .words = [](std::uint64_t, std::int64_t) -> std::optional<std::string> {
+                               .words = [](std::size_t, std::uint64_t, std::int64_t) -> std::optional<std::string> {
                                    return std::string{"LABEL"};
                                }});
     const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
@@ -435,7 +469,7 @@ RAWFRAME_TEST(AnEmptyFieldShowsItsLabelUntilItHasTheKeyboard) {
     rig.ui = *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId},
                                .parents = {std::nullopt, 0, 0},
                                .fonts = {0xF1},
-                               .words = [](std::uint64_t, std::int64_t) -> std::optional<std::string> {
+                               .words = [](std::size_t, std::uint64_t, std::int64_t) -> std::optional<std::string> {
                                    return std::string{"NAME"};
                                }});
     const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
