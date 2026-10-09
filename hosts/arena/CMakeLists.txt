@@ -336,11 +336,13 @@ if(RAWFRAME_BUILD_TESTS)
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":([3-9]|1[0-9]),[^\n]*\"framesOccluded\":[1-9][0-9]+,[^\n]*\"postProcessesRun\":[1-9][0-9]+,\"postProcessesLeftOut\":0,\"emittersDrawn\":[1-9][0-9]+,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]+,\"ribbonsDrawn\":[1-9][0-9]+,\"viewFrames\":[1-9][0-9]*,[^\n]*\"modelsSkinned\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"mostColors\":[1-9][0-9][0-9]+,[^\n]*\"captured\":true")
         # A view too large for its device drawn at a falling render scale
-        # (D533): the scale changes to one lower than the whole.
+        # (D533): the scale changes to one lower than the whole, and the run
+        # stops once it has (D564).
         configure_file(tests/plaza_scaled.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_scaled.conf @ONLY)
         add_test(NAME plaza_scaled
                  COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
                          $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/plaza_scaled.conf
+                         "\"code\":\"render_scale_changed\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(plaza_scaled PROPERTIES
                              FIXTURES_REQUIRED plaza_content
