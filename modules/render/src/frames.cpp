@@ -33,6 +33,8 @@ bool readable(std::uint32_t width, std::uint32_t height) noexcept {
     return (kPitch * height + 511) / 512 * 512 <= kReadbackBytes;
 }
 
+/// Why a Host stops whose frames failed (D538).
+constexpr std::string_view kPresentationFailed = "presentation_failed";
 /// A frame's budget where `render.frame_rate` sets none (D533).
 constexpr execution::MonotonicDuration kSixtieth{1'000'000'000 / 60};
 constexpr std::string_view kMaybe[] = {kDevice.name, window::kSurfaces.name};
@@ -120,6 +122,7 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
+        context_ = &context;
         return {};
     }
 
@@ -393,6 +396,12 @@ private:
             kFailed,
             "a frame could not be made: no more are",
             {diagnostics::field("reason", std::string{error.description()}), diagnostics::field("detail", detail)});
+        // A window that no longer changes while its game goes on is a freeze
+        // to its player: the Host stops instead, as SPEC-0024 has a lost
+        // device's client do, and says why (D538).
+        if (context_ != nullptr) {
+            context_->reportHealth(composition::Health::Unhealthy, kPresentationFailed);
+        }
     }
 
     DeviceHolder* devices_ = nullptr;
@@ -447,6 +456,7 @@ private:
     /// a camera against a wall still says what it drew (D433a).
     std::uint64_t mostColors_ = 0;
     diagnostics::Emitter emitter_;
+    composition::ParticipantContext* context_ = nullptr;
 };
 
 result::Result<composition::ParticipantOwner> make(composition::ParticipantContext& context) noexcept {

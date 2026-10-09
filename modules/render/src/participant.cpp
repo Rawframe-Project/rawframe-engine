@@ -105,6 +105,7 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
+        context_ = &context;
         poll();
         return {};
     }
@@ -270,6 +271,11 @@ private:
         if (!lostSeen_ && device_->lost()) {
             lostSeen_ = true;
             emitter_.log(diagnostics::Severity::Error, kLost, "the device was lost: nothing more is drawn", {});
+            // SPEC-0024: a lost device is the presentation's end, and the
+            // Host's policy a client's exit (D538).
+            if (context_ != nullptr) {
+                context_->reportHealth(composition::Health::Unhealthy, "device_lost");
+            }
         }
         if (windows_ != nullptr) {
             follow();
@@ -344,6 +350,7 @@ private:
     bool opened_ = false;
     bool lostSeen_ = false;
     diagnostics::Emitter emitter_;
+    composition::ParticipantContext* context_ = nullptr;
 };
 
 result::Result<composition::ParticipantOwner> make(composition::ParticipantContext& context) noexcept {
