@@ -235,16 +235,18 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(runners_recooked PROPERTIES
                          PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "\"peak\":(0\\.[1-9]|[1-9])[^,]*,\"cues\":[1-9]")
-    # Four bots predict their runners: a thousand ticks confirmed, the
-    # rollbacks only those of admission, their own jumps heard as
-    # predicted effects (D219), and no checksum diverged (D274).
+    # Four bots predict their runners: a thousand ticks confirmed, fewer
+    # rollbacks than that, their own jumps heard as predicted effects
+    # (D219), and no checksum diverged (D274). Alone it rolls back only on
+    # admission; a loaded machine, whose inputs reach the server late, more
+    # than a hundred times, as plaza's does (D511, D574).
     add_test(NAME runners_prediction
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(runners_prediction PROPERTIES
                          PROCESSORS 6
                          PASS_REGULAR_EXPRESSION
-                         "\"confirmed\":[1-9][0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9],.*\"effectsDelivered\":[1-9]"
+                         "\"confirmed\":[1-9][0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9]?[0-9],.*\"effectsDelivered\":[1-9]"
                          FAIL_REGULAR_EXPRESSION "\"checksumsDiverged\":[1-9]")
     add_test(NAME runners_rollback_alarm
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_rollback_alarm.conf
