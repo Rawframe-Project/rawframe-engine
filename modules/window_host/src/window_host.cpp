@@ -14,6 +14,9 @@
 #if RAWFRAME_THREADS
 #include <thread>
 #endif
+#if defined(__ANDROID__)
+#include <android/native_activity.h>
+#endif
 
 namespace rawframe::window_host {
 
@@ -182,11 +185,10 @@ result::Status WindowHost::start(window::Windows& windows) {
     // The UI read by a screen reader where the platform has a bus for it,
     // AT-SPI's (D571), unless `ui.accessibility` says not; the participant
     // whose tree is the window's seats it, and says whether it is read.
-    bool accessible = true;
     if (const composition::Configuration* kConfiguration = request_.configuration) {
-        RAWFRAME_TRY_ASSIGN(accessible, kConfiguration->truth("ui.accessibility", true));
+        RAWFRAME_TRY_ASSIGN(accessible_, kConfiguration->truth("ui.accessibility", true));
     }
-    if (accessible && ui::accessBuilt(ui::AccessPlatform::Atspi)) {
+    if (accessible_ && ui::accessBuilt(ui::AccessPlatform::Atspi)) {
         RAWFRAME_TRY(access_.open({.platform = ui::AccessPlatform::Atspi,
                                    .application = made.title.empty() ? std::string{"Rawframe"} : made.title}));
     }
@@ -215,6 +217,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         if (event->kind == window::EventKind::Suspending || event->kind == window::EventKind::Resumed) {
             suspended_.store(event->kind == window::EventKind::Suspending, std::memory_order_release);
         }
+        accessAsked_ = accessAsked_ || event->kind == window::EventKind::AccessibilityRequested;
         // Whether a field takes text, told among the keys (D430): a key
         // typed into a field is never a gated action's, even when the
         // field lets go before the input next reads.
@@ -351,7 +354,33 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     return window::FrameOutcome::Continue;
 }
 
-void WindowHost::followAccess(const window::Windows& windows) {
+void WindowHost::followAccess(window::Windows& windows) {
+#if defined(__ANDROID__)
+    // Android reads the UI through a provider for the activity's view,
+    // made once a client first asks for the window's tree, so nothing is
+    // built where no screen reader runs, and made again for the view of
+    // each activity that shows the window (D576).
+    if (accessible_ && accessAsked_ && ui::accessBuilt(ui::AccessPlatform::Android)) {
+        const auto kHandles = windows.handles(window_);
+        const auto kState = windows.state(window_);
+        const auto* kAndroid = kHandles.has_value() ? std::get_if<window::AndroidHandles>(&kHandles->handles) : nullptr;
+        if (kAndroid != nullptr && kAndroid->view != nullptr && kAndroid->view != accessView_ && kState.has_value() &&
+            kState->scale > 0) {
+            accessView_ = kAndroid->view;
+            accessScale_ = kState->scale;
+            static_cast<void>(access_.open({.platform = ui::AccessPlatform::Android,
+                                            .scale = kState->scale,
+                                            .env = static_cast<ANativeActivity*>(kAndroid->activity)->env,
+                                            .view = kAndroid->view}));
+        }
+    }
+#endif
+    // The root the window hands its clients follows the access, made or
+    // gone; only a platform that takes one has one.
+    void* const kRoot = access_.access() != nullptr ? access_.access()->root() : nullptr;
+    if (kRoot != accessRoot_ && windows.requestAccessibilityRoot(window_, kRoot).has_value()) {
+        accessRoot_ = kRoot;
+    }
     if (access_.access() == nullptr) {
         return;
     }
