@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # A scene edited while its game runs (D410): a dedicated server plays a copy
 # of runners, watching its sources; an authoring session adds a crate to the
-# level and the running World holds it within a second, as the tooling
+# level and the running World holds it within its reload period (a loaded
+# machine's sanitized tree given half a minute, D579), as the tooling
 # endpoint reads it; moved, the World's crate is written rather than made
 # again; undone in the session, the World lets it go.
 #
@@ -58,6 +59,20 @@ held = {c["name"]: c["entities"] for c in json.load(sys.stdin)["answer"]["compon
 print(held.get("rawframe.physics2d.pose", 0))'
 }
 before=$(poses)
+# Until the World holds `count` poses, or half a minute has gone.
+await() {
+    for _ in $(seq 60); do
+        [[ "$(poses)" == "$1" ]] && return
+        sleep 0.5
+    done
+}
+# Until the server has followed the scene `count` times.
+followed() {
+    for _ in $(seq 60); do
+        (($(grep -c '"code":"scene_followed"' "$work/server.log") >= $1)) && return
+        sleep 0.5
+    done
+}
 
 create='{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[
 {"operation":"scene.create_entity","entity":"'$crate'","name":"crate","place":0},
@@ -71,14 +86,14 @@ move='{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.apply","id":2,"scene":"level.scene","request":'"$create"'}'
     # The running World follows the scene within its reload period.
-    sleep 1
+    await $((before + 1))
     poses >"$work/with_crate"
     # Moved: the World's crate is written, not made again.
     echo '{"kind":"authoring.apply","id":3,"scene":"level.scene","request":'"$move"'}'
-    sleep 1
+    followed 2
     echo '{"kind":"authoring.undo","id":4,"scene":"level.scene"}'
     echo '{"kind":"authoring.undo","id":5,"scene":"level.scene"}'
-    sleep 1
+    await "$before"
     poses >"$work/without_crate"
     echo '{"kind":"authoring.end","id":6}'
 } | "$author" session "$work/runners/runners.game" >"$work/replies"
