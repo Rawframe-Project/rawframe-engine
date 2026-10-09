@@ -14,7 +14,8 @@
 //   rawframe-export <game directory> <output directory> [--game <file>]
 //                   [--port <port>] [--version <version>] [--tools <directory>]
 //                   [--key <secret key> --publisher <name>] [--target web]
-//                   [--target android --address <host>]
+//                   [--target android --address <host>
+//                    [--android-client <library> --packager <script> [--package <name>]]]
 //                   [--follow <origin> [--channel <channel>]] [--title <title>]
 //
 // With `--key`, the Build is signed by that secret (`rawframe-build key`
@@ -72,7 +73,11 @@
 // `server/identity.key`): a package is made once and cannot read a
 // fingerprint a server writes as it starts, as a page or a native folder
 // does. The identity is the game server's secret; the package holds only its
-// fingerprint.
+// fingerprint. With `--android-client` (the Android build's
+// `librawframe_client.so`) and `--packager` (`tools/android_apk.sh`, which
+// finds the SDK by ANDROID_HOME), the export makes the package itself,
+// `android/<name>.apk`, named `<publisher>.<name>` unless `--package` names
+// it (D556).
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/configuration.h"
@@ -636,6 +641,30 @@ bool addressLike(std::string_view address) {
     });
 }
 
+/// Whether `name` is an Android package name: two or more dot-separated
+/// parts, each a lower-case letter then lower-case letters, digits, or
+/// underscores.
+bool packageLike(std::string_view name) {
+    if (name.empty() || name.size() > 255 || name.find('.') == std::string_view::npos) {
+        return false;
+    }
+    bool partStart = true;
+    for (const char kEach : name) {
+        if (kEach == '.') {
+            if (partStart) {
+                return false;
+            }
+            partStart = true;
+        } else if (partStart ? (kEach >= 'a' && kEach <= 'z')
+                             : ((kEach >= 'a' && kEach <= 'z') || (kEach >= '0' && kEach <= '9') || kEach == '_')) {
+            partStart = false;
+        } else {
+            return false;
+        }
+    }
+    return !partStart;
+}
+
 /// Whether `title` fits one configuration value: a line, not blank, of
 /// at most the value bound, with no space at either end to be trimmed off.
 bool titleLike(std::string_view title) {
@@ -677,6 +706,9 @@ int main(int argc, char** argv) {
     };
     Target target = Target::Native;
     std::optional<std::string> address;
+    std::optional<fs::path> androidClient;
+    std::optional<fs::path> packager;
+    std::optional<std::string> package;
     std::optional<std::string> follow;
     std::string channel = "stable";
     std::string title = kGame.filename().string();
@@ -701,6 +733,12 @@ int main(int argc, char** argv) {
             target = kValue == "web" ? Target::Web : kValue == "android" ? Target::Android : Target::Native;
         } else if (kOption == "--address") {
             address = kValue;
+        } else if (kOption == "--android-client") {
+            androidClient = fs::absolute(kValue);
+        } else if (kOption == "--packager") {
+            packager = fs::absolute(kValue);
+        } else if (kOption == "--package") {
+            package = kValue;
         } else if (kOption == "--follow") {
             follow = kValue;
         } else if (kOption == "--channel") {
@@ -720,8 +758,12 @@ int main(int argc, char** argv) {
     // it is given one.
     const bool kWeb = target == Target::Web;
     const bool kAndroid = target == Target::Android;
+    // The package is made with both its library and its packager, and named
+    // only where it is made.
+    const bool kPackaged = androidClient.has_value() || packager.has_value() || package.has_value();
     if (argc % 2 == 0 || (port.has_value() && !portLike(*port)) || (target != Target::Native && follow.has_value()) ||
         kAndroid != address.has_value() || (address.has_value() && !addressLike(*address)) ||
+        (kPackaged && (!kAndroid || !androidClient.has_value() || !packager.has_value())) ||
         !rawframe::release::channelNamed(channel).has_value() || !titleLike(title)) {
         return usage();
     }
@@ -855,6 +897,28 @@ int main(int argc, char** argv) {
                  : writeNative(kExported, {kTool("server"), kTool("client"), kTool("play"), kTool("install")}, written);
     if (!kWritten) {
         return 1;
+    }
+    // The package itself, carrying `android/game` (D556).
+    if (androidClient.has_value()) {
+        const std::string kPackage = package.value_or(publisher + "." + kName);
+        const std::string kApk = "android/" + kName + ".apk";
+        if (!packageLike(kPackage)) {
+            std::fprintf(stderr, "rawframe-export: %s is not an Android package name\n", kPackage.c_str());
+            return 1;
+        }
+        // Made under the work directory, where the packager keeps its debug
+        // key beside it, and moved into the folder alone.
+        if (!runTool(*packager,
+                     {(kWork / "package.apk").string(), androidClient->string(), kPackage, title, kSite.string()},
+                     kWork / "package.log")) {
+            return 1;
+        }
+        fs::rename(kWork / "package.apk", kOutput / kApk, error);
+        if (error) {
+            std::fprintf(stderr, "rawframe-export: %s cannot be written\n", kApk.c_str());
+            return 1;
+        }
+        written.push_back(kApk);
     }
     // How to play it, for a native folder's player.
     if (target == Target::Native) {

@@ -49,4 +49,5 @@ if [ ! -f "$key" ]; then
     keytool -genkeypair -keystore "$key" -storepass android -keypass android -alias debug -keyalg RSA \
         -validity 10000 -dname "CN=Rawframe development" >/dev/null 2>&1
 fi
-"$tools/apksigner" sign --ks "$key" --ks-pass pass:android --out "$out" "$work/aligned.apk"
+# No v4 signature file beside it: nothing here installs incrementally.
+"$tools/apksigner" sign --ks "$key" --ks-pass pass:android --v4-signing-enabled false --out "$out" "$work/aligned.apk"
