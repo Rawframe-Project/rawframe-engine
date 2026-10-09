@@ -32,10 +32,14 @@ namespace rawframe::world_replication {
 
 namespace {
 
-/// Samples taken past the newest server tick a bot has heard of, at most:
-/// a server slowed in the bot's own process plays its ticks late, and
-/// commands sampled further ahead wait past their age (D522, D532).
-constexpr std::uint64_t kLeadOverHeard = 4;
+/// How far past the newest server tick a bot has heard of its newest
+/// sample's tick may be: a server slowed in the bot's own process plays its
+/// ticks late, and commands sampled further ahead wait past their age
+/// (D522, D532). Three ticks: D532's cap counted from the first tick heard,
+/// two past the admission's origin wherever measured, so its four samples
+/// were three ticks; counted from the origin, a first state heard late no
+/// longer holds a bot back by as much (D546).
+constexpr std::uint64_t kLeadOverHeard = 3;
 
 } // namespace
 
@@ -137,7 +141,6 @@ struct Bot {
     /// Admitted at any time: a session that ends after it is not asked
     /// again.
     bool everAdmitted = false;
-    std::optional<std::uint64_t> firstHeard;
     std::uint64_t submitted = 0;
     /// Rollback alarms already reported.
     std::uint64_t alarms = 0;
@@ -403,12 +406,15 @@ public:
                 }
                 const auto kElapsed = static_cast<std::uint64_t>((frame.now - *bot.admittedAt).nanoseconds);
                 const std::uint64_t kHeard = bot.client->serverTick();
-                if (!bot.firstHeard && kHeard != 0) {
-                    bot.firstHeard = kHeard;
-                }
+                // Sample `n` is for tick origin + 1 + n: as many as reach
+                // the heard tick and the lead past it; before a state is
+                // heard, as many as the first, two past the origin, would
+                // allow.
+                const std::uint64_t kAllowed =
+                    kHeard + kLeadOverHeard > accept.tickOrigin ? kHeard + kLeadOverHeard - accept.tickOrigin : 0;
                 const std::uint64_t kDue =
                     std::min(1 + (kElapsed / 1'000'000U * accept.tickRateTicks / (1'000U * accept.tickRateSeconds)),
-                             1 + kLeadOverHeard + (bot.firstHeard ? kHeard - *bot.firstHeard : 0));
+                             kHeard != 0 ? kAllowed : 2 + kLeadOverHeard);
                 // A frame covering many ticks samples each, as many as one
                 // input window carries, and sends them in one window: a
                 // player drawn at a few frames a second keeps its input at
