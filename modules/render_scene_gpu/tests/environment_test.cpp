@@ -122,7 +122,9 @@ RAWFRAME_TEST(TheSkysPictureIsSeenTheWayEachPointLooks) {
     if (kPlain.has_value()) {
         const std::array<int, 3> kGrey = at(*kPlain, kSide / 2, kSide / 2);
         print("not a cube", kGrey);
-        RAWFRAME_EXPECT(kGrey[0] > 150 && kGrey[0] == kGrey[1] && kGrey[1] == kGrey[2]);
+        // Grey within a step: AgX's way through Rec.2020 and back keeps it
+        // grey to a rounding a device may tip (D580).
+        RAWFRAME_EXPECT(kGrey[0] > 150 && std::abs(kGrey[0] - kGrey[1]) <= 1 && std::abs(kGrey[1] - kGrey[2]) <= 1);
     }
 }
 
