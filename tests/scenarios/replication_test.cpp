@@ -677,3 +677,24 @@ RAWFRAME_TEST(RemoteEntitiesAreShownBetweenStates) {
     RAWFRAME_EXPECT(kBehind > 4 && kBehind < 9);
     RAWFRAME_EXPECT(scenario.client->interpolationStatistics().blended > 500);
 }
+
+RAWFRAME_TEST(AnAttemptEndedUnansweredIsAskedAgainFromNothing) {
+    // D541: a client whose hello the server did not hear in its admission
+    // time ends unanswered, no refusal; asked again, it is not ended, and
+    // is admitted.
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
+    scenario.clock.advance(MonotonicDuration::fromSeconds(3));
+    scenario.client->pump();
+    RAWFRAME_EXPECT(scenario.client->ended() && !scenario.client->admitted() &&
+                    !scenario.client->rejection().has_value() && !scenario.client->termination().has_value());
+    RAWFRAME_EXPECT(
+        scenario.client
+            ->connect({"server"},
+                      network::Hello{.compatibility = compatibility(), .maximumDatagram = 1100, .maximumFrame = 4096})
+            .has_value());
+    RAWFRAME_EXPECT(!scenario.client->ended());
+    for (int step = 0; step < 30; ++step) {
+        scenario.step(Steer{1, 0});
+    }
+    RAWFRAME_EXPECT(scenario.client->admitted() && scenario.mirrored() == 1);
+}

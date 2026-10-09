@@ -134,6 +134,9 @@ struct Bot {
     /// input window past the newest server tick it has heard of, so it does
     /// not run ahead of a server slowed with it in one process (D522).
     std::optional<execution::MonotonicInstant> admittedAt;
+    /// Admitted at any time: a session that ends after it is not asked
+    /// again.
+    bool everAdmitted = false;
     std::optional<std::uint64_t> firstHeard;
     std::uint64_t submitted = 0;
     /// Rollback alarms already reported.
@@ -344,11 +347,18 @@ public:
                 // A server refuses as unavailable while it is not active or
                 // not healthy (D212) and admits again once it is: a bot
                 // refused so asks again a while later, a bounded number of
-                // times (D379).
+                // times (D379). So does one whose attempt ended unanswered,
+                // past the admission's time: a Host held up longer than
+                // that, compiling its first frame's pipelines say, never
+                // asked again and was never admitted (D541).
                 if (const auto kRefusal = bot.client->rejection()) {
                     bot.refusal = kRefusal;
                 }
-                if (bot.connecting && bot.client->rejection() == network::RejectReason::Unavailable &&
+                bot.everAdmitted = bot.everAdmitted || bot.client->admitted();
+                const bool kUnanswered = !bot.everAdmitted && bot.client->ended() &&
+                                         !bot.client->rejection().has_value() &&
+                                         !bot.client->termination().has_value() && !bot.client->serverStopping();
+                if (bot.connecting && (bot.client->rejection() == network::RejectReason::Unavailable || kUnanswered) &&
                     bot.retries < retries_) {
                     if (!bot.retryAt) {
                         bot.retryAt = frame.now + retryAfter_;
