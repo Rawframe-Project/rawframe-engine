@@ -25,6 +25,14 @@ namespace {
 constexpr diagnostics::EventIdentity kFrameSummary{"render", "frame_summary"};
 constexpr diagnostics::EventIdentity kFailed{"render", "frame_failed"};
 constexpr std::string_view kProvided[] = {kFrames.name};
+/// Whether a picture of `width` by `height` fits what the device keeps for
+/// readbacks: 8-bit RGBA rows at a 256-byte pitch, the whole at a 512-byte
+/// boundary (Maul RHI's `readbackBytes`).
+bool readable(std::uint32_t width, std::uint32_t height) noexcept {
+    const std::uint64_t kPitch = (std::uint64_t{width} * 4 + 255) / 256 * 256;
+    return (kPitch * height + 511) / 512 * 512 <= kReadbackBytes;
+}
+
 /// A frame's budget where `render.frame_rate` sets none (D533).
 constexpr execution::MonotonicDuration kSixtieth{1'000'000'000 / 60};
 constexpr std::string_view kMaybe[] = {kDevice.name, window::kSurfaces.name};
@@ -176,6 +184,13 @@ public:
             target_.height = kPrepared->second.size.height;
             target_.surface = kPrepared->first;
         }
+        // A picture past what the device keeps for readbacks is not read
+        // back: asked anyway, it failed the frame, and no frame was made
+        // again, so a window put on a 4K screen froze (D534).
+        if (target_.readBack && !readable(target_.width, target_.height)) {
+            target_.readBack = false;
+            ++readBacksTooLarge_;
+        }
         planned_ = std::pair{target_.width, target_.height};
     }
 
@@ -221,7 +236,8 @@ public:
                       diagnostics::field("mostCovered", mostCovered_),
                       diagnostics::field("mostColors", mostColors_),
                       diagnostics::field("colors", lastColors_),
-                      diagnostics::field("captured", captured)});
+                      diagnostics::field("captured", captured),
+                      diagnostics::field("readBacksTooLarge", readBacksTooLarge_)});
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -423,6 +439,7 @@ private:
     std::uint64_t framesUnchanged_ = 0;
     std::uint64_t framesLimited_ = 0;
     std::uint64_t readBacks_ = 0;
+    std::uint64_t readBacksTooLarge_ = 0;
     std::uint64_t lastCovered_ = 0;
     std::uint64_t mostCovered_ = 0;
     std::uint64_t lastColors_ = 0;

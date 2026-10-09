@@ -177,6 +177,21 @@ if(RAWFRAME_BUILD_TESTS)
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"boxes\":[1-9][0-9]+,\"images\":[1-9][0-9]+,[^\n]*\"shadows\":[1-9][0-9]+,\"glyphRuns\":[1-9][0-9]+,\"glyphs\":[1-9][0-9]+,\"glyphRunsWaiting\":0.*\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,\"mostNodes\":12,[^\n]*\"fontsRead\":1,\"texts\":[1-9][0-9]*,\"textsUnknown\":0,\"glyphRuns\":[1-9][0-9]*,\"glyphsLeftOut\":0,.*\"code\":\"drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"draws\":[1-9][0-9]+,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]*,\"ribbonsDrawn\":[1-9][0-9]*,\"playerFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,[^\n]*\"captured\":true")
     endif()
+    # A picture too large to read back is drawn without (D534): frames are
+    # made past the first asked to be read back.
+    if(RAWFRAME_ARENA_DRAWS)
+        configure_file(tests/runners_large.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_large.conf @ONLY)
+        add_test(NAME runners_drawn_large
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
+                         $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/runners_large.conf
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(runners_drawn_large PROPERTIES
+                             FIXTURES_REQUIRED runners_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"frame_summary\"[^\n]*\"width\":3840,\"height\":2160,\"frames\":([4-9]|[1-9][0-9]+),[^\n]*\"readBacks\":0,[^\n]*\"readBacksTooLarge\":([2-9]|[1-9][0-9]+)"
+                             FAIL_REGULAR_EXPRESSION "\"code\":\"frame_failed\"")
+    endif()
     # Runners' 16:9 view drawn into a 4:3 picture is letterboxed (D369): the
     # captured picture's bars are the game's slate and its view is not.
     if(RAWFRAME_ARENA_DRAWS)

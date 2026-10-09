@@ -1,0 +1,24 @@
+# Two bots play the sample platformer while the first one's canvas is drawn
+# offscreen into a picture as large as a 4K screen, one frame in two asked
+# to be read back (D534): a picture past what the device keeps for
+# readbacks is not read back, and frames go on being made. Asked anyway,
+# the first failed its frame and no frame was made again, so an exported
+# game's window put on a 4K screen froze. A software rasterizer may serve.
+host.maximum_iterations = 240
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = @PROJECT_SOURCE_DIR@/games/runners/runners.game
+content.root = @CONTENT@
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 2
+bots.endpoint = arena
+render.device = any
+render.offscreen = true
+render.width = 3840
+render.height = 2160
+render.read_every = 2
+# What is checked is what is drawn, not how fast a loaded machine ticks
+# (D212, D516).
+world.degraded_ms = 600000
+world.overload_ms = 0
