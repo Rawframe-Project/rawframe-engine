@@ -32,6 +32,15 @@ namespace rawframe::world_replication {
 
 namespace {
 
+/// Samples taken past the newest server tick a bot has heard of, at most:
+/// a server slowed in the bot's own process plays its ticks late, and
+/// commands sampled further ahead wait past their age (D522, D532).
+constexpr std::uint64_t kLeadOverHeard = 4;
+
+} // namespace
+
+namespace {
+
 using diagnostics::EventIdentity;
 
 constexpr EventIdentity kRollbackAlarm{"replication", "rollback_rate_alarm"};
@@ -389,7 +398,7 @@ public:
                 }
                 const std::uint64_t kDue =
                     std::min(1 + (kElapsed / 1'000'000U * accept.tickRateTicks / (1'000U * accept.tickRateSeconds)),
-                             1 + kMaximumInputWindow + (bot.firstHeard ? kHeard - *bot.firstHeard : 0));
+                             1 + kLeadOverHeard + (bot.firstHeard ? kHeard - *bot.firstHeard : 0));
                 // A frame covering many ticks samples each, as many as one
                 // input window carries, and sends them in one window: a
                 // player drawn at a few frames a second keeps its input at
