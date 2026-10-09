@@ -43,6 +43,8 @@ jobs:
           cmake --build out/ios-simulator -- -k 0 >"$RUNNER_TEMP/build.log" 2>&1
           status=$?
           grep -E "error:|FAILED:" "$RUNNER_TEMP/build.log" | sort | uniq -c | sort -rn | head -80
+          # What a failed link lacked.
+          grep -E -A12 "^FAILED: .*\.app/" "$RUNNER_TEMP/build.log" | grep -v "^ld: warning" | head -120
           tail -20 "$RUNNER_TEMP/build.log"
           exit $status
   probe:

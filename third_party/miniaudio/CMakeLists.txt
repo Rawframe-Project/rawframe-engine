@@ -18,6 +18,15 @@ target_compile_definitions(rawframe_miniaudio_vendor PUBLIC
 target_compile_options(rawframe_miniaudio_vendor PRIVATE -w)
 set_target_properties(rawframe_miniaudio_vendor PROPERTIES C_STANDARD 99 POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(rawframe_miniaudio_vendor PRIVATE ${CMAKE_DL_LIBS} Threads::Threads ${RAWFRAME_MATH_LIBRARY})
+# On iOS its Core Audio backend asks AVFoundation's audio session, so it is
+# compiled as Objective-C and links Apple's audio frameworks, which iOS does
+# not let it load at run time (D584).
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    enable_language(OBJC)
+    set_source_files_properties(miniaudio.c PROPERTIES LANGUAGE OBJC)
+    target_link_libraries(rawframe_miniaudio_vendor PRIVATE "-framework AVFoundation" "-framework AudioToolbox"
+                          "-framework CoreAudio" "-framework Foundation" "-framework CoreFoundation")
+endif()
 
 # The sources themselves, for the one translation unit that builds
 # miniaudio's decoders with stb_vorbis for import tooling (ADR-0058); no
