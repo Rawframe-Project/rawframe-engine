@@ -1,10 +1,11 @@
 # A running client's UI as UI Automation clients read it (Windows, D579):
 # the main window of the process named is found, and its tree is read
-# through UI Automation until a button is in it, a minute at most (the
-# first asking makes the client's access, and the tree comes after it).
-# Prints one line a node, "uia: <control type> <name>". Given a pattern,
-# the first button whose name matches it is pressed through its Invoke
-# pattern, as a screen reader presses it: "uia: pressed <name>".
+# through UI Automation until a button the pattern names is in it, or any
+# button where none is given, a minute at most (the first asking makes the
+# client's access, and the tree comes after it; the title bar's buttons are
+# there before it). Prints one line a node, "uia: <control type> <name>".
+# Given a pattern, the first button whose name matches it is pressed through
+# its Invoke pattern, as a screen reader presses it: "uia: pressed <name>".
 #
 #   powershell -File tools/uia_read.ps1 <process name> [<name pattern>]
 param([Parameter(Mandatory = $true)][string]$Process, [string]$Press = "")
@@ -26,7 +27,9 @@ while ((Get-Date) -lt $deadline) {
         } catch {
             $nodes = @()
         }
-        if ($nodes | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button }) {
+        if ($nodes | Where-Object {
+                $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and
+                ($Press -eq "" -or $_.Current.Name -match $Press) }) {
             break
         }
     }

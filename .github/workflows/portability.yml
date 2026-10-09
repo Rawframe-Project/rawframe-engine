@@ -49,7 +49,9 @@ jobs:
       # command that gives sent by the client and taken by the server.
       - name: Read Stalls through the AX API
         run: |
-          set -uo pipefail
+          # Not -e, which a shell step has: a reader that fails still shows
+          # what the client and the server said.
+          set +e -uo pipefail
           tree=out/clang-development
           "$tree/hosts/export/rawframe-export" games/tycoon "$RUNNER_TEMP/read" \
             --cook "$tree/hosts/cook/rawframe-cook" --build "$tree/hosts/build/rawframe-build" \
@@ -290,7 +292,9 @@ jobs:
       - name: Read Stalls through UI Automation
         shell: bash
         run: |
-          set -uo pipefail
+          # Not -e, which a shell step has: a reader that fails still shows
+          # what the client and the server said.
+          set +e -uo pipefail
           cp -r played/tycoon "$RUNNER_TEMP/read"
           printf 'host.maximum_iterations = 7200\n' >>"$RUNNER_TEMP/read/client.conf"
           (cd "$RUNNER_TEMP/read" && timeout 180 ./rawframe-play.exe) &

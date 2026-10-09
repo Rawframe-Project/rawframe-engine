@@ -1,12 +1,13 @@
 // A running client's UI as macOS accessibility clients read it (D579):
 // the application of the process named is found, and its tree is read
-// through the AX API until a button is in it, a minute at most (the first
-// asking makes the client's access, and the tree comes after it). Prints
-// whether this process may read others ("ax: trusted"), then one line a
-// node, "ax: <depth> <role> <title or description>". Given a pattern, the
-// first button whose name matches it is pressed as a screen reader presses
-// it: "ax: pressed <name>". Reading another application needs this process
-// trusted for accessibility.
+// through the AX API until a button the pattern names is in it, or any
+// button where none is given, a minute at most (the first asking makes the
+// client's access, and the tree comes after it; the window's own buttons
+// are there before it). Prints whether this process may read others
+// ("ax: trusted"), then one line a node, "ax: <depth> <role> <title or
+// description>". Given a pattern, the first button whose name matches it is
+// pressed as a screen reader presses it: "ax: pressed <name>". Reading
+// another application needs this process trusted for accessibility.
 //
 //   swift tools/ax_read.swift <process name> [<name pattern>]
 import AppKit
@@ -56,7 +57,10 @@ while Date() < deadline {
     if let running {
         nodes = []
         walk(AXUIElementCreateApplication(running.processIdentifier), 0, &nodes)
-        if nodes.contains(where: { $0.1 == kAXButtonRole as String }) {
+        if nodes.contains(where: {
+            $0.1 == kAXButtonRole as String
+                && (pattern.isEmpty || $0.2.range(of: pattern, options: .regularExpression) != nil)
+        }) {
             break
         }
     }
