@@ -1,7 +1,8 @@
 # Maul RHI, vendored at the exact revision recorded in third_party/README.md
 # and built by its own CMake, unchanged: the one device layer (ADR-0029).
-# On Linux its Vulkan driver is loaded at run time from the system's Vulkan
-# loader, so nothing links a GPU library. On Windows its Direct3D 12
+# On Linux and Android its Vulkan driver is loaded at run time from the
+# system's Vulkan loader, so nothing links a GPU library; on Android it draws
+# to the activity's native window (D550). On Windows its Direct3D 12
 # driver, the engine's shader containers carrying each entry's DXIL (D415).
 # On macOS its Metal driver, the engine's shader containers carrying each
 # entry in Metal's language (D406). On the web its WebGPU driver's JavaScript is imports the page gives
@@ -10,7 +11,7 @@
 # driver, which renders nothing and answers as a test describes, is built
 # only where the engine's tests are.
 set(RAWFRAME_MAUL_RHI OFF)
-if(CMAKE_SYSTEM_NAME MATCHES "^(Linux|Darwin|WASI)$" OR WIN32)
+if(CMAKE_SYSTEM_NAME MATCHES "^(Linux|Darwin|WASI|Android)$" OR WIN32)
     set(RAWFRAME_MAUL_RHI ON)
 endif()
 if(NOT RAWFRAME_MAUL_RHI)
