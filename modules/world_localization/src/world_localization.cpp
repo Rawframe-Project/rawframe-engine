@@ -21,9 +21,25 @@ namespace rawframe::world_localization {
 GameText::GameText(localization::Catalog catalog,
                    std::vector<std::pair<std::string, base::Bits128>> tables,
                    localization::Locale requested,
-                   localization::Locale projectDefault) noexcept
+                   localization::Locale projectDefault,
+                   std::vector<localization::Locale> offered) noexcept
     : catalog_(std::move(catalog)), tables_(std::move(tables)), requested_(std::move(requested)),
-      projectDefault_(std::move(projectDefault)) {
+      projectDefault_(std::move(projectDefault)), offered_(std::move(offered)) {
+}
+
+std::size_t GameText::chosen() const noexcept {
+    return static_cast<std::size_t>(std::ranges::find(offered_, requested_) - offered_.begin());
+}
+
+bool GameText::choose(std::size_t index) noexcept {
+    if (index >= offered_.size()) {
+        return false;
+    }
+    if (offered_[index] != requested_) {
+        requested_ = offered_[index];
+        ++revision_;
+    }
+    return true;
 }
 
 std::optional<base::Bits128> GameText::table(std::string_view path) const noexcept {
@@ -53,6 +69,7 @@ constexpr EventIdentity kCatalogEvent{"localization", "text_catalog"};
 constexpr EventIdentity kStaleEvent{"localization", "text_stale"};
 constexpr EventIdentity kUnavailableEvent{"localization", "text_unavailable"};
 constexpr EventIdentity kLocaleRefusedEvent{"localization", "locale_refused"};
+constexpr EventIdentity kTextSummary{"localization", "text_summary"};
 constexpr std::string_view kProvides[] = {kGameText.name};
 constexpr std::string_view kMaybe[] = {world_kest::kGameFiles.name, game_content::kGameContent.name};
 
@@ -191,7 +208,21 @@ public:
         for (const localization::TableDocument& table : tables) {
             summary_.keys += table.table.entries.size();
         }
-        text_ = std::make_unique<GameText>(std::move(catalog), std::move(named), std::move(requested), projectDefault);
+        // What a player may choose among while playing (D539): the
+        // default, then each translation's locale by its tag.
+        std::vector<localization::Locale> offered;
+        for (const localization::Translations& each : translations) {
+            offered.push_back(each.locale);
+        }
+        for (const localization::Translations& each : pseudo) {
+            offered.push_back(each.locale);
+        }
+        std::ranges::sort(offered, {}, &localization::Locale::text);
+        offered.erase(std::ranges::unique(offered).begin(), offered.end());
+        std::erase(offered, projectDefault);
+        offered.insert(offered.begin(), projectDefault);
+        text_ = std::make_unique<GameText>(
+            std::move(catalog), std::move(named), std::move(requested), projectDefault, std::move(offered));
         return {};
     }
 
@@ -229,7 +260,22 @@ public:
                      diagnostics::field("stale", static_cast<std::uint64_t>(text_->catalog().stale().size())),
                      diagnostics::field("locale", text_->requested().text()),
                      diagnostics::field("default", text_->projectDefault().text())});
+        emitter_ = emitter;
         return {};
+    }
+
+    void stop() noexcept override {
+        if (text_ == nullptr) {
+            return;
+        }
+        // The locale the words were last given in, and how often a player
+        // chose another (D539).
+        emitter_.log(diagnostics::Severity::Info,
+                     kTextSummary,
+                     "the game's text as it ended",
+                     {diagnostics::field("locale", text_->requested().text()),
+                      diagnostics::field("offered", static_cast<std::uint64_t>(text_->offered().size())),
+                      diagnostics::field("changes", text_->revision())});
     }
 
 private:
@@ -241,6 +287,7 @@ private:
 
     std::unique_ptr<GameText> text_;
     std::unique_ptr<GameText> none_;
+    diagnostics::Emitter emitter_;
     Summary summary_;
     bool unavailable_ = false;
     std::optional<std::string> refusedLocale_;

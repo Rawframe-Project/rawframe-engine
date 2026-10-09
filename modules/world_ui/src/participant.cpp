@@ -227,6 +227,8 @@ public:
         if (context.has(world_localization::kGameText.name)) {
             RAWFRAME_TRY_ASSIGN(const world_localization::GameText* text,
                                 context.capability(world_localization::kGameText));
+            text_ = text;
+            reworded_ = text->revision();
             settings->words = [text, labels = files->description().labels](
                                   std::uint64_t label, std::int64_t value) -> std::optional<std::string> {
                 const auto kLabel = std::ranges::find(labels, label, &world_kest::GameLabel::id);
@@ -427,6 +429,11 @@ public:
                                       .width = static_cast<float>(kPixels.width) / scale,
                                       .height = static_cast<float>(kPixels.height) / scale});
         }
+        // Words follow the locale a player chose (D539).
+        if (text_ != nullptr && text_->revision() != reworded_) {
+            reworded_ = text_->revision();
+            ui_->reword();
+        }
         // The node under the mouse is hovered (D431).
         if (pointing_ != nullptr) {
             ui_->hoverAt(pointing_->pointer());
@@ -625,6 +632,10 @@ private:
     world_replication::ClientWorlds* clients_ = nullptr;
     view::PlayerViews* views_ = nullptr;
     view::UiPointing* pointing_ = nullptr;
+    /// The game's text, and its locale's revision the words were last
+    /// given in (D539).
+    const world_localization::GameText* text_ = nullptr;
+    std::uint64_t reworded_ = 0;
     view::UiTyping* typing_ = nullptr;
     view::UiNavigation* navigation_ = nullptr;
     std::unique_ptr<WorldUi> ui_;

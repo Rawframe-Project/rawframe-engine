@@ -273,6 +273,21 @@ bool WorldUi::State::giveFieldLook(Entry& entry) {
     return tree->setText(*entry.node, text, look).has_value();
 }
 
+void WorldUi::State::giveWordsAgain(const std::function<bool(const Entry&)>& which) {
+    for (ViewState& view : views) {
+        for (auto& [kKey, entry] : view.entries) {
+            if (!entry.node.has_value() || !which(entry)) {
+                continue;
+            }
+            const bool kGiven =
+                entry.editable ? giveFieldLook(entry) : giveWords(*entry.node, entry.value, wordsOf(entry.words));
+            if (!kGiven) {
+                drop(entry);
+            }
+        }
+    }
+}
+
 bool WorldUi::State::giveWords(ui::Node node, const Node& value, std::optional<std::string_view> shown) {
     if (value.textAlign > 2 || value.textWrap > 1) {
         return false;
@@ -565,21 +580,18 @@ result::Status WorldUi::addFont(std::uint64_t id, std::span<const std::byte> byt
             break;
         }
     }
-    for (ViewState& view : state.views) {
-        for (auto& [kKey, entry] : view.entries) {
-            const bool kShows = entry.editable || entry.value.text != 0 || wordsOf(entry.words).has_value();
-            if (entry.node.has_value() && kShows &&
-                (entry.value.font == id || !state.fonts.contains(entry.value.font))) {
-                // A field keeps what was typed into it.
-                const bool kGiven = entry.editable ? state.giveFieldLook(entry)
-                                                   : state.giveWords(*entry.node, entry.value, wordsOf(entry.words));
-                if (!kGiven) {
-                    state.drop(entry);
-                }
-            }
-        }
-    }
+    state.giveWordsAgain([&state, id](const Entry& entry) {
+        const bool kShows = entry.editable || entry.value.text != 0 || wordsOf(entry.words).has_value();
+        return kShows && (entry.value.font == id || !state.fonts.contains(entry.value.font));
+    });
     return {};
+}
+
+void WorldUi::reword() {
+    // A field's label is a placeholder in the locale too.
+    state_->giveWordsAgain([](const Entry& entry) {
+        return entry.value.text != 0;
+    });
 }
 
 const ui::DrawList& WorldUi::drawn() const noexcept {

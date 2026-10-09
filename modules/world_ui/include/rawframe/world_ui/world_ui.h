@@ -190,6 +190,10 @@ public:
     /// take.
     [[nodiscard]] result::Status addFont(std::uint64_t id, std::span<const std::byte> bytes);
 
+    /// The nodes that show the game's words are given them again (D539):
+    /// the locale they are formatted in changed.
+    void reword();
+
     /// What a press at `x`, `y`, logical pixels of the window, lands on as
     /// the last update laid the UI out (D421): none when it passes through to
     /// the game, else the press code of the node it lands on.

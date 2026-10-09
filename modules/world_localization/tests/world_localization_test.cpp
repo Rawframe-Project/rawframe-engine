@@ -43,3 +43,28 @@ RAWFRAME_TEST(AKeyIsFormattedInTheAskedLocaleOrItsFallback) {
     const auto kNoKey = kTurkish.format("hud.strings", "menu.quit", {});
     RAWFRAME_EXPECT(!kNoKey.has_value() && kNoKey.error().code() == code(LocalizationError::KeyUnknown));
 }
+
+RAWFRAME_TEST(APlayerChoosesAmongTheOfferedLocalesWhilePlaying) {
+    // D539: the default first, then the translations' locales; choosing one
+    // moves the revision once, and what is formatted follows.
+    StringTable table{.sourceLocale = *parseLocale("en"), .entries = {}};
+    table.entries["menu.play"] = SourceEntry{.message = "Play", .description = {}};
+    Translations turkish{.table = kHud, .locale = *parseLocale("tr"), .entries = {}};
+    turkish.entries["menu.play"] = TranslatedEntry{.message = "Oyna", .sourceHash = sourceHashOf("Play")};
+    const std::vector<TableDocument> kTables{{.id = kHud, .table = table}};
+    const std::vector<Translations> kTranslations{turkish};
+    world_localization::GameText text{*Catalog::build(kTables, kTranslations),
+                                      {{"hud.strings", kHud}},
+                                      *parseLocale("de"),
+                                      *parseLocale("en"),
+                                      {*parseLocale("en"), *parseLocale("tr")}};
+    // A configured locale none of them is chosen past the last.
+    RAWFRAME_EXPECT(text.offered().size() == 2 && text.chosen() == 2 && text.revision() == 0);
+    RAWFRAME_EXPECT(text.choose(1) && text.chosen() == 1 && text.revision() == 1);
+    RAWFRAME_EXPECT(text.format("hud.strings", "menu.play", {}) == "Oyna");
+    // The one asked for again changes nothing; one past them is refused.
+    RAWFRAME_EXPECT(text.choose(1) && text.revision() == 1);
+    RAWFRAME_EXPECT(!text.choose(2) && text.chosen() == 1);
+    RAWFRAME_EXPECT(text.choose(0) && text.revision() == 2);
+    RAWFRAME_EXPECT(text.format("hud.strings", "menu.play", {}) == "Play");
+}

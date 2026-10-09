@@ -10,6 +10,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -162,6 +163,10 @@ struct WorldUi::State {
     /// `value`'s words given to `node`, or none, the typed `shown` in place
     /// of its label (D427); whether the tree took them.
     bool giveWords(ui::Node node, const Node& value, std::optional<std::string_view> shown = std::nullopt);
+    /// Every node of an entry `which` picks given its words again, a field
+    /// its look, keeping what was typed into it; one the tree refuses is
+    /// dropped.
+    void giveWordsAgain(const std::function<bool(const Entry&)>& which);
 
     /// `view` bound to `world`: every node of the World before gone.
     result::Status bind(ViewState& view, world::World* world);
