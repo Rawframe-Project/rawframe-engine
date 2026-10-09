@@ -5,6 +5,8 @@
 #include "rawframe/execution/operation.h"
 
 #include <algorithm>
+#include <span>
+#include <utility>
 
 namespace rawframe::assets {
 
@@ -72,6 +74,21 @@ struct AssetSet::State {
     AssetSettings settings;
     std::vector<Entry> entries;
     std::vector<Requester> requesters;
+    /// One past the highest slot of each ever taken: a set has room for
+    /// thousands and holds a few, and its passes walked every free slot
+    /// each update, a client's largest cost a frame after its scene's.
+    std::size_t entriesEnd = 0;
+    std::size_t requestersEnd = 0;
+
+    [[nodiscard]] std::span<Entry> taken() noexcept {
+        return std::span{entries}.first(entriesEnd);
+    }
+    [[nodiscard]] std::span<const Entry> taken() const noexcept {
+        return std::span{entries}.first(entriesEnd);
+    }
+    [[nodiscard]] std::span<Requester> takenRequesters() noexcept {
+        return std::span{requesters}.first(requestersEnd);
+    }
     AssetStatistics statistics;
     bool closed = false;
     result::Result<execution::OperationScope> operations;
@@ -132,7 +149,7 @@ struct AssetSet::State {
     /// class so far), then least recently used, then lowest slot.
     [[nodiscard]] Entry* nextEviction() noexcept {
         Entry* chosen = nullptr;
-        for (Entry& entry : entries) {
+        for (Entry& entry : taken()) {
             if (entry.used && entry.residency == Residency::Evictable &&
                 (chosen == nullptr || entry.lastUse < chosen->lastUse)) {
                 chosen = &entry;
@@ -150,10 +167,13 @@ struct AssetSet::State {
             return refuse(AssetError::LimitExceeded, result::ErrorClass::ResourceExhausted, "every requester in use");
         }
         // The same resource at the same revision shares its load.
-        auto found = std::ranges::find_if(entries, [&descriptor](const Entry& entry) {
-            return entry.used && entry.id == descriptor.id && content::sameDigest(entry.revision, descriptor.digest);
-        });
-        if (found != entries.end()) {
+        auto found = std::ranges::find_if(entries.begin(),
+                                          entries.begin() + static_cast<std::ptrdiff_t>(entriesEnd),
+                                          [&descriptor](const Entry& entry) {
+                                              return entry.used && entry.id == descriptor.id &&
+                                                     content::sameDigest(entry.revision, descriptor.digest);
+                                          });
+        if (found != entries.begin() + static_cast<std::ptrdiff_t>(entriesEnd)) {
             ++statistics.coalesced;
         } else {
             RAWFRAME_TRY_ASSIGN(Entry * started, startLoad(descriptor));
@@ -166,6 +186,7 @@ struct AssetSet::State {
         }
         Requester& requester = *kFreeRequester;
         requester.used = true;
+        requestersEnd = std::max(requestersEnd, static_cast<std::size_t>(kFreeRequester - requesters.begin()) + 1);
         ++requester.generation;
         requester.entry = static_cast<std::uint32_t>(found - entries.begin());
         requester.entryGeneration = entry.generation;
@@ -187,6 +208,7 @@ struct AssetSet::State {
             store->read(content::PinnedResourceRef{.resource = {.id = descriptor.id, .type = descriptor.type},
                                                    .digest = descriptor.digest}));
         kFree->used = true;
+        entriesEnd = std::max(entriesEnd, static_cast<std::size_t>(kFree - entries.begin()) + 1);
         kFree->id = descriptor.id;
         kFree->revision = descriptor.digest;
         kFree->residency = Residency::Loading;
@@ -209,7 +231,7 @@ struct AssetSet::State {
     /// retires at once. Candidates of an earlier reload are abandoned.
     void beginReload(const content::ContentCatalog& catalog) {
         reconciled = catalog.generation();
-        for (Entry& entry : entries) {
+        for (Entry& entry : taken()) {
             if (entry.used && entry.candidate) {
                 entry.candidate = false;
                 if (entry.interest == 0 && entry.residency != Residency::Loading) {
@@ -217,7 +239,7 @@ struct AssetSet::State {
                 }
             }
         }
-        for (std::size_t slot = 0; slot < entries.size(); ++slot) {
+        for (std::size_t slot = 0; slot < entriesEnd; ++slot) {
             Entry& live = entries[slot];
             if (!live.used || live.candidate || live.residency == Residency::Retiring) {
                 continue;
@@ -242,7 +264,7 @@ struct AssetSet::State {
             // A load of the new revision someone already asked for is the
             // candidate; otherwise one starts.
             Entry* made = nullptr;
-            for (Entry& other : entries) {
+            for (Entry& other : taken()) {
                 if (other.used && !other.candidate && other.residency != Residency::Retiring && other.id == live.id &&
                     content::sameDigest(other.revision, descriptor.digest)) {
                     made = &other;
@@ -267,13 +289,13 @@ struct AssetSet::State {
     /// succeeded takes over its live entry's requesters, and the live
     /// entry's form retires.
     void publishReload() {
-        const bool kSettled = std::ranges::none_of(entries, [](const Entry& entry) {
+        const bool kSettled = std::ranges::none_of(taken(), [](const Entry& entry) {
             return entry.used && entry.candidate && entry.residency == Residency::Loading;
         });
         if (!kSettled) {
             return;
         }
-        for (std::size_t slot = 0; slot < entries.size(); ++slot) {
+        for (std::size_t slot = 0; slot < entriesEnd; ++slot) {
             Entry& made = entries[slot];
             if (!made.used || !made.candidate) {
                 continue;
@@ -291,7 +313,7 @@ struct AssetSet::State {
                 continue;
             }
             if (kLive) {
-                for (Requester& requester : requesters) {
+                for (Requester& requester : takenRequesters()) {
                     if (requester.used && requester.entry == made.replaces &&
                         requester.entryGeneration == live.generation) {
                         requester.entry = static_cast<std::uint32_t>(slot);
@@ -475,7 +497,7 @@ void AssetSet::update(std::uint64_t tick) {
         kCatalog != nullptr && kCatalog->generation() != state.reconciled) {
         state.beginReload(*kCatalog);
     }
-    for (Entry& entry : state.entries) {
+    for (Entry& entry : state.taken()) {
         // An old revision retires once no consumer holds its form.
         if (entry.used && entry.residency == Residency::Retiring && entry.form.value.use_count() <= 1) {
             state.retire(entry, AssetError::RevisionRetired);
@@ -540,7 +562,7 @@ void AssetSet::update(std::uint64_t tick) {
     // Requests past their deadlines fail on their own; the load goes on for
     // anyone else.
     const execution::MonotonicInstant kNow = state.clock->now();
-    for (Requester& requester : state.requesters) {
+    for (Requester& requester : state.takenRequesters()) {
         if (requester.used && !requester.failure.has_value() && requester.deadline.has_value() &&
             kNow >= *requester.deadline && state.entries[requester.entry].residency == Residency::Loading) {
             requester.failure = failureOf(
@@ -563,7 +585,7 @@ Residency AssetSet::residency(AssetHandle handle) const noexcept {
 
 AssetStatistics AssetSet::statistics() const noexcept {
     AssetStatistics statistics = state_->statistics;
-    for (const Entry& entry : state_->entries) {
+    for (const Entry& entry : std::as_const(*state_).taken()) {
         statistics.loading += entry.used && entry.residency == Residency::Loading ? 1 : 0;
         statistics.resident += entry.used && entry.residency == Residency::Resident ? 1 : 0;
         statistics.evictable += entry.used && entry.residency == Residency::Evictable ? 1 : 0;
@@ -582,14 +604,14 @@ std::vector<Survivor> AssetSet::close() {
         return {};
     }
     std::vector<Survivor> survivors;
-    for (const Entry& entry : state.entries) {
+    for (const Entry& entry : std::as_const(state).taken()) {
         if (entry.used && entry.interest > 0) {
             survivors.push_back(Survivor{.id = entry.id, .revision = entry.revision, .interest = entry.interest});
         }
     }
     state.operations->cancel(execution::CancelReason::OwnerStopping);
     state.operations->join();
-    for (Entry& entry : state.entries) {
+    for (Entry& entry : state.taken()) {
         if (entry.used) {
             state.retire(entry, AssetError::ScopeClosed);
         }
