@@ -186,6 +186,7 @@ struct Shared {
     /// engine's navigation actions added, where they are (D430).
     const view::UiNavigation* navigation = nullptr;
     std::optional<input::ActionSet> navigable;
+    world_localization::GameText* text = nullptr;
     input::Navigation navigationActions;
     diagnostics::Emitter emitter;
     /// The game's commands the sample program lays out (D425).
@@ -295,6 +296,8 @@ public:
         }
         typing_ = seed.has_value() ? nullptr : shared.typing;
         RAWFRAME_TRY(addUiDoors(table, &ui_));
+        text_ = TextDoorContext{.text = seed.has_value() ? nullptr : shared.text};
+        RAWFRAME_TRY(addTextDoors(table, &text_));
         for (const world_kest::CommandKind& command : shared.commands) {
             auto kind = std::make_unique<CommandDoorContext::Kind>();
             kind->command = command;
@@ -423,6 +426,7 @@ private:
     InputDoorContext doors_;
     ViewDoorContext view_;
     UiDoorContext ui_;
+    TextDoorContext text_;
     bool local_ = false;
     std::size_t player_ = 0;
     diagnostics::Emitter emitter_;
@@ -608,6 +612,7 @@ result::Result<std::unique_ptr<InputSources>> makeInputSources(const SourceSetti
     shared.views = settings.views;
     shared.pointing = settings.pointing;
     shared.typing = settings.typing;
+    shared.text = settings.text;
     if (settings.navigation != nullptr) {
         shared.navigation = settings.navigation;
         shared.navigable = shared.actions;

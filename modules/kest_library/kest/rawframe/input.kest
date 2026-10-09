@@ -80,3 +80,27 @@ fn uiNavigate() -> bool {
 fn uiNavigating() -> bool {
     return UI.navigating()
 }
+
+extern fn Text.offered() -> u32
+extern fn Text.chosen() -> u32
+extern fn Text.choose(index: u32) -> bool
+
+// How many locales the player may choose among while playing (D539): the
+// game's default first, then each its translations are in, by tag. Nought
+// for a bot, or a game without text.
+fn locales() -> u32 {
+    return Text.offered()
+}
+
+// Which of them the client's words are given in; `locales()` for one
+// configured that none of them is.
+fn locale() -> u32 {
+    return Text.chosen()
+}
+
+// The client's words given in the locale at `index` of them from now on,
+// every label formatted again; false for none such. One locale for the
+// client's every local player.
+fn chooseLocale(index: u32) -> bool {
+    return Text.choose(index)
+}

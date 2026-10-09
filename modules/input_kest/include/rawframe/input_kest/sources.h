@@ -17,6 +17,7 @@
 #include "rawframe/view/typing.h"
 #include "rawframe/world_kest/commands.h"
 #include "rawframe/world_kest/game_files.h"
+#include "rawframe/world_localization/text.h"
 #include "rawframe/world_replication/input_source.h"
 #include "rawframe/world_replication/messages.h"
 
@@ -99,6 +100,20 @@ struct UiDoorContext {
 /// `context` outlives every machine started with the table.
 [[nodiscard]] result::Status addUiDoors(kest::DoorTable& doors, const UiDoorContext* context);
 
+/// What the `Text.*` doors reach: the game's text, none for a bot or where
+/// the host lends none (D539).
+struct TextDoorContext {
+    world_localization::GameText* text = nullptr;
+};
+
+/// Adds `Text.offered`, `Text.chosen`, and `Text.choose`: how many locales
+/// a player may choose among while playing, which is asked for, and
+/// asking for another by its place (ADR-0050's locale as presentation
+/// state). They reach only the client's own words, so they are safe for
+/// untrusted code. `context` outlives every machine started with the
+/// table.
+[[nodiscard]] result::Status addTextDoors(kest::DoorTable& doors, const TextDoorContext* context);
+
 /// `text` as `ui.Typed` lays it out: its length, then at most 252 of its
 /// bytes, whole code points.
 void typedOf(std::string_view text, std::array<std::byte, 256>& into) noexcept;
@@ -156,6 +171,9 @@ struct SourceSettings {
     /// first local player's mapper has the engine's navigation actions,
     /// theirs while the UI holds focus; outlives the sources.
     const view::UiNavigation* navigation = nullptr;
+    /// The game's text (D539), or null where the host lends none: the
+    /// local players choose its locale; outlives the sources.
+    world_localization::GameText* text = nullptr;
     /// Where a local player's source says, as it ends, what its devices
     /// gave and its mapper did with them.
     diagnostics::Emitter emitter;

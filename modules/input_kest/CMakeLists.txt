@@ -3,8 +3,8 @@
 # program reads, and input sources for bots with a hand on the controls. Client only: the
 # dedicated server links none of it.
 rawframe_module(NAME input_kest
-    SOURCES src/participant.cpp src/sources.cpp src/view_doors.cpp src/ui_doors.cpp src/command_doors.cpp
-    DEPS view input document world_kest world_replication kest world composition execution diagnostics result base
+    SOURCES src/participant.cpp src/sources.cpp src/view_doors.cpp src/ui_doors.cpp src/command_doors.cpp src/text_doors.cpp
+    DEPS view input document world_localization localization world_kest world_replication kest world composition execution diagnostics result base
 )
 
 rawframe_module_tests(NAME input_kest SOURCES tests/sources_test.cpp)
