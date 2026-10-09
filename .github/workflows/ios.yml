@@ -1,5 +1,7 @@
 # iOS, the second mobile target after Android (ADR-0084, D583): on request
-# only, while its build is begun. This first step asks what a macOS runner
+# only, while its build is begun. The build job compiles the engine for the
+# iOS simulator (D584) against LLVM 20's libc++ built for it, kept between
+# runs. The probe job asks what a macOS runner
 # offers for it: the Xcode and SDKs there, and whether Xcode's own libc++
 # compiles for the iOS simulator what the engine asks of the C++23 library
 # (std::expected, and std::from_chars of a double, which NDK r28's libc++
@@ -13,6 +15,36 @@ permissions:
   contents: read
 
 jobs:
+  build:
+    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      RAWFRAME_IOS_LIBCXX: ${{ github.workspace }}/../ios/libcxx
+      RAWFRAME_DEPENDENCY_CACHE: ${{ github.workspace }}/../ios/dependencies
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tools
+        run: brew install llvm@20 ninja ccache >/dev/null
+      - name: Kept libc++ and dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ${{ github.workspace }}/../ios
+          key: ios-${{ hashFiles('tools/build_libcxx_ios.sh', 'tools/build_quic.sh', 'third_party/quic.cmake') }}
+      - name: LLVM 20's libc++ for the simulator
+        run: |
+          [ -f "$RAWFRAME_IOS_LIBCXX/complete" ] || tools/build_libcxx_ios.sh "$RAWFRAME_IOS_LIBCXX"
+      - name: Configure
+        run: cmake --preset ios-simulator
+      - name: Build
+        run: |
+          set +e
+          cmake --build out/ios-simulator -- -k 0 >"$RUNNER_TEMP/build.log" 2>&1
+          status=$?
+          grep -E "error:|FAILED:" "$RUNNER_TEMP/build.log" | sort | uniq -c | sort -rn | head -80
+          tail -20 "$RUNNER_TEMP/build.log"
+          exit $status
   probe:
     if: github.repository == 'Rawframe-Project/rawframe-engine'
     runs-on: macos-15

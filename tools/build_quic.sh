@@ -5,10 +5,12 @@
 # OpenSSL for each of six presets would cost more than the engine does.
 #
 #   tools/build_quic.sh <prefix> <c compiler> <c++ compiler> [<android ndk> <api level>]
+#   tools/build_quic.sh <prefix> <c compiler> <c++ compiler> ios-simulator <deployment target>
 #
 # Given an NDK and an API level, it builds both for 64-bit ARM Android
 # (D549): OpenSSL by its android-arm64 target, MsQuic through the NDK's CMake
-# toolchain.
+# toolchain. Given ios-simulator, both for the iOS simulator on 64-bit ARM
+# (D584), with Xcode's clang, as C needs no C++ library.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -17,11 +19,18 @@ compiler="$2"
 cxx_compiler="$3"
 android_ndk="${4:-}"
 android_api="${5:-}"
+ios=""
+if [ "$android_ndk" = ios-simulator ]; then
+    ios="$android_api"
+    android_ndk=""
+    android_api=""
+fi
 root="$PWD/third_party"
 jobs="$(getconf _NPROCESSORS_ONLN)"
 # OpenSSL's name for this machine (D236), or Android's.
-case "$(if [ -n "$android_ndk" ]; then echo Android; else echo "$(uname -s)-$(uname -m)"; fi)" in
+case "$(if [ -n "$android_ndk" ]; then echo Android; elif [ -n "$ios" ]; then echo iOS; else echo "$(uname -s)-$(uname -m)"; fi)" in
     Android) openssl_target=android-arm64 ;;
+    iOS) openssl_target=iossimulator-arm64-xcrun ;;
     Linux-x86_64) openssl_target=linux-x86_64 ;;
     Linux-aarch64) openssl_target=linux-aarch64 ;;
     Darwin-arm64) openssl_target=darwin64-arm64-cc ;;
@@ -69,6 +78,15 @@ elif [ -n "$android_ndk" ]; then
         make -j"$jobs" build_libs >>"$work/openssl.log" 2>&1
         make install_dev >>"$work/openssl.log" 2>&1
     ) || { tail -30 "$work/openssl.log"; exit 1; }
+elif [ -n "$ios" ]; then
+    # OpenSSL's xcrun targets find the SDK's clang and sysroot themselves.
+    (
+        cd "$work/openssl"
+        perl "$root/openssl/Configure" "$openssl_target" no-shared no-tests no-docs no-apps \
+            -mios-simulator-version-min="$ios" --prefix="$prefix" --libdir=lib >"$work/openssl.log" 2>&1
+        make -j"$jobs" build_libs >>"$work/openssl.log" 2>&1
+        make install_dev >>"$work/openssl.log" 2>&1
+    ) || { tail -30 "$work/openssl.log"; exit 1; }
 else
     (
         cd "$work/openssl"
@@ -98,6 +116,11 @@ fi
         compilers=(-DCMAKE_TOOLCHAIN_FILE="$android_ndk/build/cmake/android.toolchain.cmake"
                    -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-"$android_api"
                    -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH)
+    elif [ -n "$ios" ]; then
+        compilers=(-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphonesimulator -DCMAKE_OSX_ARCHITECTURES=arm64
+                   -DCMAKE_OSX_DEPLOYMENT_TARGET="$ios" -DCMAKE_C_COMPILER="$(xcrun -f clang)"
+                   -DCMAKE_CXX_COMPILER="$(xcrun -f clang++)" -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH
+                   -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH)
     fi
     cmake -S "$root/msquic" -B "$work/msquic" -G Ninja -DCMAKE_BUILD_TYPE=Release \
         "${compilers[@]}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \

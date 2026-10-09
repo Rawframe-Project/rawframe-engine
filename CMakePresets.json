@@ -50,6 +50,11 @@
       }
     },
     {
+      "name": "ios-simulator",
+      "inherits": ["base", "development"],
+      "toolchainFile": "${sourceDir}/cmake/ios-simulator.cmake"
+    },
+    {
       "name": "android-development",
       "inherits": ["base", "development"],
       "toolchainFile": "$env{RAWFRAME_ANDROID_NDK}/build/cmake/android.toolchain.cmake",

@@ -48,6 +48,10 @@ set(rawframe_quic_android "")
 if(ANDROID)
     set(rawframe_quic_android "${ANDROID_NDK}" "${ANDROID_PLATFORM_LEVEL}")
 endif()
+# The iOS simulator, at the toolchain's deployment target (D584).
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(rawframe_quic_android ios-simulator "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+endif()
 file(SHA256 "${PROJECT_SOURCE_DIR}/tools/build_quic.sh" rawframe_quic_script_hash)
 string(SHA256 rawframe_quic_key
     "${RAWFRAME_MSQUIC_REVISION} ${RAWFRAME_OPENSSL_REVISION} ${rawframe_quic_script_hash} ${RAWFRAME_QUIC_C_COMPILER} ${rawframe_quic_android}")
