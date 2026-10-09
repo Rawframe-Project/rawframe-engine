@@ -101,9 +101,12 @@ RAWFRAME_TEST(ABotPlaysThroughTheGamesActionsAndSample) {
         RAWFRAME_EXPECT(kAim <= 1.0001F);
         aimed += kAim > 0 ? 1 : 0;
     }
-    // Keys and pads make whole steps: run is left, still, or right; jump and
-    // fire are on or off; and every one of them happened.
-    RAWFRAME_EXPECT((runs == std::set<float>{-1, 0, 1}));
+    // Keys and pads make whole steps, and the touch screen's left stick
+    // (D558) the steps between: run is within full left and full right, and
+    // left, still, and right all happened; jump and fire are on or off, and
+    // both happened.
+    RAWFRAME_EXPECT(!runs.empty() && *runs.begin() >= -1 && *runs.rbegin() <= 1 && runs.contains(-1) &&
+                    runs.contains(0) && runs.contains(1) && runs.size() > 3);
     RAWFRAME_EXPECT((jumps == std::set<float>{0, 1}) && (fires == std::set<float>{0, 1}));
     RAWFRAME_EXPECT(aimed > 100);
 

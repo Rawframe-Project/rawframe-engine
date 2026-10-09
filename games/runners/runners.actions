@@ -41,6 +41,18 @@
       ]
     },
     {
+      "actionId": "7efabd3a35c647a3",
+      "name": "move",
+      "valueType": "axis2d",
+      "displayName": "Move",
+      "bindings": [
+        {
+          "device": "touch",
+          "control": "stick_left"
+        }
+      ]
+    },
+    {
       "actionId": "302f813f89c1849d",
       "name": "aim",
       "valueType": "axis2d",
@@ -57,6 +69,10 @@
         },
         {
           "device": "gamepad",
+          "control": "stick_right"
+        },
+        {
+          "device": "touch",
           "control": "stick_right"
         }
       ]
@@ -78,6 +94,10 @@
         {
           "device": "gamepad",
           "control": "trigger_right"
+        },
+        {
+          "device": "touch",
+          "control": "right"
         }
       ]
     },
@@ -113,6 +133,7 @@
       "actions": [
         "run",
         "jump",
+        "move",
         "aim",
         "fire",
         "point",
