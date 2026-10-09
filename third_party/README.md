@@ -8,8 +8,8 @@ apply to vendored files; the code is upstream's, not ours.
 | Name | Upstream | Revision | License | What is vendored |
 | --- | --- | --- | --- | --- |
 | Kest | `Rawframe-Project/kest` | `e2930df874619950d347d19a75aa6a7ffb342083` | MIT | `include/`, `src/` except `main.c`, `lib/`, `LICENSE` |
-| Maul2D 0.0.1 | `Rawframe-Project/maul2d` | `42676bf8798be03b8436a040ca3c60bad4d13b8c` | MIT | `include/`, `src/`, `LICENSE` |
-| Maul3D 0.0.1 | `Rawframe-Project/maul3d` | `a8f590b6d38afcf75133dd3d63777d09ba984c7a` | MIT | `include/`, `src/`, `LICENSE` |
+| Maul2D 0.0.1 | `Rawframe-Project/maul2d` | `1589de32bed38a8e1d8f388789bf3151e084542d` | MIT | `include/`, `src/`, `LICENSE` |
+| Maul3D 0.0.1 | `Rawframe-Project/maul3d` | `a6cd5b2534c3cab2fd9347a32ab422710a209e69` | MIT | `include/`, `src/`, `LICENSE` |
 | Maul Unicode 0.2.1 | `Rawframe-Project/maul-unicode` | `d995c6a6b40a49f59372701d71b0c9d0baa8a18e` | MIT (its UCD tables: Unicode-3.0) | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE` |
 | Maul Window 0.10.0 (the web without Emscripten, mwin-0022, D250; Xbox pads through Windows.Gaming.Input, mwin-0023, D251; macOS's AppKit backend, mwin-0024, the client's windows there since D405) | `Rawframe-Project/maul-window` | `b564ca63fafa5efb5e4c0494f4f1512fef43363c` | MIT (its gamepad tables: SDL_GameControllerDB, zlib) | `include/`, `src/`, `cmake/`, `protocols/`, `tools/gen_web_glue.py`, `CMakeLists.txt`, `LICENSE` |
 | Maul RHI 0.5.0 and after (its Vulkan driver on Linux; its Direct3D 12 driver on Windows, D415; its Metal driver on macOS, D406; its WebGPU driver on the web, built with wasm32-wasi, D282) | `Rawframe-Project/maul-rhi` | `fe20e6af8aefa4ec13478800236ff7a92458a4c5` | MIT (its Khronos headers: Apache-2.0 or MIT; Microsoft's DirectX headers: MIT) | `include/`, `src/`, `khronos/`, `directx/` (D415), `cmake/`, `tools/mrhi_container.py` and the `docs/contract/mrhi.json` it reads, `tools/mrhi_msl.py` (D406), `tools/mrhi_dxil.py` (D415), `tools/gen_web_glue.py`, `CMakeLists.txt`, `LICENSE` |
