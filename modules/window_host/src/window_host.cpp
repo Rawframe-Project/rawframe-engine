@@ -5,9 +5,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <utility>
+#include <variant>
 
 #if RAWFRAME_THREADS
 #include <thread>
@@ -137,6 +139,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     lent_.push_back(composition::LentCapability{view::kUiPointing.name, composition::provideAs(pointing_)});
     lent_.push_back(composition::LentCapability{view::kUiTyping.name, composition::provideAs(typing_)});
     lent_.push_back(composition::LentCapability{view::kUiNavigation.name, composition::provideAs(navigation_)});
+    lent_.push_back(composition::LentCapability{ui::kAccessSeat.name, composition::provideAs(access_)});
     lent_.insert(lent_.end(), settings_.lent.begin(), settings_.lent.end());
     request_.lent = lent_;
     request_.suspended = &suspended_;
@@ -176,6 +179,17 @@ result::Status WindowHost::start(window::Windows& windows) {
     }
     surfaces_.watch(kWindow);
     window_ = kWindow;
+    // The UI read by a screen reader where the platform has a bus for it,
+    // AT-SPI's (D571), unless `ui.accessibility` says not; the participant
+    // whose tree is the window's seats it, and says whether it is read.
+    bool accessible = true;
+    if (const composition::Configuration* kConfiguration = request_.configuration) {
+        RAWFRAME_TRY_ASSIGN(accessible, kConfiguration->truth("ui.accessibility", true));
+    }
+    if (accessible && ui::accessBuilt(ui::AccessPlatform::Atspi)) {
+        RAWFRAME_TRY(access_.open({.platform = ui::AccessPlatform::Atspi,
+                                   .application = made.title.empty() ? std::string{"Rawframe"} : made.title}));
+    }
     bridge_.emplace(feed_);
     host_ = std::make_unique<host::Host>(request_);
     return {};
@@ -322,6 +336,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             awaitingRead_ = false;
         }
     }
+    followAccess(windows);
     // What the iterations asked the player's gamepads to feel.
     bridge_->feel(windows);
     followTextInput(windows);
@@ -334,6 +349,32 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     }
 #endif
     return window::FrameOutcome::Continue;
+}
+
+void WindowHost::followAccess(const window::Windows& windows) {
+    if (access_.access() == nullptr) {
+        return;
+    }
+    if (const auto kState = windows.state(window_); kState.has_value() && kState->scale > 0) {
+        if (kState->scale != accessScale_ && access_.setScale(kState->scale).has_value()) {
+            accessScale_ = kState->scale;
+        }
+        // X11 says where a window is, in its pixels, and AT-SPI's screen is
+        // the X screen; Wayland says not, and the window is its own screen.
+        const auto kHandles = windows.handles(window_);
+        if (kHandles.has_value() && std::holds_alternative<window::XcbHandles>(kHandles->handles)) {
+            const std::array<std::int32_t, 2> kPlace = {
+                static_cast<std::int32_t>(std::lround(kState->position.x * kState->scale)),
+                static_cast<std::int32_t>(std::lround(kState->position.y * kState->scale))};
+            if (kPlace != accessPlace_) {
+                access_.setPlace(kPlace);
+                accessPlace_ = kPlace;
+            }
+        }
+    }
+    // A platform that refuses an update leaves the UI as it was last read;
+    // the game plays on.
+    static_cast<void>(access_.update());
 }
 
 void WindowHost::moveView(const window::Event& event) {

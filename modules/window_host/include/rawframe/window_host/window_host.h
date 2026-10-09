@@ -23,6 +23,7 @@
 #include "rawframe/input/feed.h"
 #include "rawframe/input_window/bridge.h"
 #include "rawframe/result/result.h"
+#include "rawframe/ui/access.h"
 #include "rawframe/view/navigation.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
@@ -73,6 +74,9 @@ private:
     void followTextInput(window::Windows& windows);
     /// Tells a preview the wheel and the right button's drags (D469).
     void moveView(const window::Event& event);
+    /// The UI's readers told what changed, the window's scale and, on X11,
+    /// its place first (D571).
+    void followAccess(const window::Windows& windows);
 
     host::HostRequest request_;
     WindowHostSettings settings_;
@@ -82,6 +86,11 @@ private:
     view::UiPointing pointing_;
     view::UiTyping typing_;
     view::UiNavigation navigation_;
+    /// Where the window's UI is read for assistive technology (D571), and
+    /// the scale and place it was last told.
+    ui::AccessSeat access_;
+    float accessScale_ = 1;
+    std::optional<std::array<std::int32_t, 2>> accessPlace_;
     /// Whether the feed was last told a field takes text.
     bool toldEditing_ = false;
     /// Whether a key ended a frame's reading and the players' input has

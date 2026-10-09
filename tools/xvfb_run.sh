@@ -34,6 +34,10 @@ if [ -z "$number" ]; then
     kill "$server" 2>/dev/null
     exit 1
 fi
+# Nor the machine's session bus: a client on it would join the desktop's
+# accessibility bus (D571); a test that reads a UI aloud starts a bus of
+# its own.
+unset DBUS_SESSION_BUS_ADDRESS AT_SPI_BUS_ADDRESS
 DISPLAY=":$number" "$@"
 status=$?
 kill "$server" 2>/dev/null
