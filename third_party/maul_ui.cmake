@@ -17,12 +17,21 @@ set(FETCHCONTENT_SOURCE_DIR_MAUL-UNICODE "${CMAKE_CURRENT_LIST_DIR}/maul-unicode
 set(MAUL_UNICODE_INSTALL OFF CACHE BOOL "" FORCE)
 set(MAUL_UI_TEXT ON CACHE BOOL "" FORCE)
 set(MAUL_UI_TEXT_SYSTEM_LIBRARIES OFF CACHE BOOL "" FORCE)
-# Its accessibility tree and platform adapters (record mui-0008) wait for
-# the engine to integrate accessibility; until then no client carries them
-# (D441).
-set(MAUL_UI_ACCESS_TREE OFF CACHE BOOL "" FORCE)
-set(MAUL_UI_ATSPI OFF CACHE BOOL "" FORCE)
+# Its accessibility tree (record mui-0008), which the engine's UI hands its
+# updates to (D571), and the adapters the engine drives so far: AT-SPI's on
+# Linux, which opens libdbus at run time. The other platforms' adapters
+# follow, each when its platform's run shows it.
+set(MAUL_UI_ACCESS_TREE ON CACHE BOOL "" FORCE)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(MAUL_UI_ATSPI ON CACHE BOOL "" FORCE)
+else()
+    set(MAUL_UI_ATSPI OFF CACHE BOOL "" FORCE)
+endif()
 set(MAUL_UI_UIA OFF CACHE BOOL "" FORCE)
+set(MAUL_UI_NSACCESSIBILITY OFF CACHE BOOL "" FORCE)
+set(MAUL_UI_UIACCESSIBILITY OFF CACHE BOOL "" FORCE)
+set(MAUL_UI_ANDROID_ACCESSIBILITY OFF CACHE BOOL "" FORCE)
+set(MAUL_UI_ARIA OFF CACHE BOOL "" FORCE)
 set(MAUL_UI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(MAUL_UI_BUILD_BENCH OFF CACHE BOOL "" FORCE)
 set(MAUL_UI_INSTALL OFF CACHE BOOL "" FORCE)

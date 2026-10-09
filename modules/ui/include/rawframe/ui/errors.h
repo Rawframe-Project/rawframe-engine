@@ -21,6 +21,9 @@ enum class UiError : std::uint32_t {
     Stale = 3,
     /// Bytes that are not a font the tree reads (D384).
     Format = 4,
+    /// An accessibility platform that cannot be reached, or is not built
+    /// (D571).
+    Unavailable = 5,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(UiError error) noexcept {

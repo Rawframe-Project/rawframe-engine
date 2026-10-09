@@ -121,6 +121,8 @@ Tree::create(std::uint32_t maximumNodes, std::uint32_t maximumFonts, std::uint32
     }
     muiContextDef def = muiDefaultContextDef();
     def.limits.nodes = maximumNodes;
+    // Every node may carry a role or a name (D571).
+    def.limits.accessNodes = maximumNodes;
     auto state = std::make_unique<State>();
     RAWFRAME_TRY(checked(muiCreateContext(&def, &state->context), "a UI tree could not be made"));
     muiTextServiceDef text = muiDefaultTextServiceDef();

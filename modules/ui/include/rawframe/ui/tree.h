@@ -476,6 +476,26 @@ struct Interaction {
     Layer layer = Layer::None;
 };
 
+/// What a node is to assistive technology (SPEC-0030's role vocabulary,
+/// D571): its owner says, from what the node does. A node told nothing
+/// only lays out others, and a screen reader shows its children in its
+/// place.
+enum class Role : std::uint8_t {
+    Generic,
+    /// Text that names or tells.
+    Label,
+    Image,
+    Button,
+    /// A field of one line, and of many.
+    TextInput,
+    MultilineTextInput,
+    ScrollView,
+    /// A layer that holds the input while it is up, as a modal one does.
+    Dialog,
+    /// Nodes that belong together, named as one.
+    Group
+};
+
 /// What a point hits: the topmost node there, none for nothing, the point
 /// in that node's box, and whether input passes through to what lies
 /// behind the UI (always when nothing is hit, never when a modal layer
@@ -607,6 +627,10 @@ public:
     /// How `node` takes part in what points hit; a node is hit in full and
     /// blocks until told otherwise.
     [[nodiscard]] result::Status setInteraction(Node node, const Interaction& interaction);
+    /// What `node` is to assistive technology and the name it is read by,
+    /// none for a node its own text or children name (D571).
+    [[nodiscard]] result::Status setRole(Node node, Role role);
+    [[nodiscard]] result::Status setName(Node node, std::string_view name);
     /// What the point at `x`, `y` hits in `root`'s subtree as its last
     /// layout left it, the root at its own rectangle: layers from the top
     /// down, then the content they are not in, cut by every clip on the
@@ -697,6 +721,8 @@ public:
     struct State;
 
 private:
+    /// A tree's accessibility reads the context it holds (access.h).
+    friend class Access;
     explicit Tree(std::unique_ptr<State> state) noexcept;
     std::unique_ptr<State> state_;
 };

@@ -22,9 +22,10 @@
 namespace rawframe::ui {
 
 inline std::unexpected<result::Error> refuse(UiError error, std::string_view why) {
-    const result::ErrorClass kClass = error == UiError::Capacity ? result::ErrorClass::ResourceExhausted
-                                      : error == UiError::Stale  ? result::ErrorClass::NotFound
-                                                                 : result::ErrorClass::InvalidArgument;
+    const result::ErrorClass kClass = error == UiError::Capacity      ? result::ErrorClass::ResourceExhausted
+                                      : error == UiError::Stale       ? result::ErrorClass::NotFound
+                                      : error == UiError::Unavailable ? result::ErrorClass::Unavailable
+                                                                      : result::ErrorClass::InvalidArgument;
     return std::unexpected<result::Error>{result::fail(kClass, kUiDomain, code(error), why).error()};
 }
 
