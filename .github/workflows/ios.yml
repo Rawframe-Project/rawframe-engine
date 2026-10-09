@@ -1,0 +1,73 @@
+# iOS, the second mobile target after Android (ADR-0084, D583): on request
+# only, while its build is begun. This first step asks what a macOS runner
+# offers for it: the Xcode and SDKs there, and whether Xcode's own libc++
+# compiles for the iOS simulator what the engine asks of the C++23 library
+# (std::expected, and std::from_chars of a double, which NDK r28's libc++
+# lacked, D549), and whether LLVM 20's clang does with its own libc++.
+name: ios
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: What the runner offers
+        run: |
+          xcodebuild -version
+          ls /Applications | grep -i xcode
+          xcrun --sdk iphonesimulator --show-sdk-path
+          xcrun --sdk iphoneos --show-sdk-path
+          xcrun clang++ --version
+          xcrun simctl list runtimes | head -20
+      - name: Xcode's libc++ for the iOS simulator
+        run: |
+          cat >"$RUNNER_TEMP/probe.cpp" <<'CPP'
+          #include <algorithm>
+          #include <charconv>
+          #include <cstdio>
+          #include <expected>
+          #include <ranges>
+          #include <string_view>
+          #include <vector>
+
+          std::expected<double, int> parsed(std::string_view text) {
+              double value = 0;
+              const auto [kEnd, kError] = std::from_chars(text.data(), text.data() + text.size(), value);
+              if (kError != std::errc{}) {
+                  return std::unexpected(1);
+              }
+              return value;
+          }
+
+          int main() {
+              std::vector<int> numbers{3, 1, 2};
+              std::ranges::sort(numbers);
+              char written[32]{};
+              const auto kWritten = std::to_chars(written, written + sizeof(written), 0.25);
+              std::printf("%g %d %.*s\n", parsed("1.5").value_or(0), numbers.front(),
+                          static_cast<int>(kWritten.ptr - written), written);
+          }
+          CPP
+          for sdk in iphonesimulator iphoneos; do
+            target=arm64-apple-ios16.0
+            [ "$sdk" = iphonesimulator ] && target=arm64-apple-ios16.0-simulator
+            echo "== $sdk"
+            xcrun --sdk "$sdk" clang++ -std=c++23 -target "$target" -fno-exceptions -fno-rtti \
+              "$RUNNER_TEMP/probe.cpp" -o "$RUNNER_TEMP/probe-$sdk" && echo "built for $sdk" || echo "not built for $sdk"
+          done
+      - name: LLVM 20's clang for the iOS simulator
+        run: |
+          brew install llvm@20 >/dev/null
+          clang="$(brew --prefix llvm@20)/bin/clang++"
+          "$clang" --version
+          "$clang" -std=c++23 -target arm64-apple-ios16.0-simulator \
+            -isysroot "$(xcrun --sdk iphonesimulator --show-sdk-path)" -fno-exceptions -fno-rtti \
+            "$RUNNER_TEMP/probe.cpp" -o "$RUNNER_TEMP/probe-llvm" && echo "built with LLVM 20 and the SDK's libc++" ||
+            echo "not built with LLVM 20 and the SDK's libc++"
