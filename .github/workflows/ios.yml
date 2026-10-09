@@ -55,12 +55,16 @@ jobs:
                           static_cast<int>(kWritten.ptr - written), written);
           }
           CPP
+          for xcode in /Applications/Xcode_16.4.app /Applications/Xcode_26.3.app; do
+          export DEVELOPER_DIR="$xcode/Contents/Developer"
+          xcrun clang++ --version | head -1
           for sdk in iphonesimulator iphoneos; do
             target=arm64-apple-ios16.0
             [ "$sdk" = iphonesimulator ] && target=arm64-apple-ios16.0-simulator
             echo "== $sdk"
             xcrun --sdk "$sdk" clang++ -std=c++23 -target "$target" -fno-exceptions -fno-rtti \
               "$RUNNER_TEMP/probe.cpp" -o "$RUNNER_TEMP/probe-$sdk" && echo "built for $sdk" || echo "not built for $sdk"
+          done
           done
       - name: LLVM 20's clang for the iOS simulator
         run: |
@@ -71,3 +75,31 @@ jobs:
             -isysroot "$(xcrun --sdk iphonesimulator --show-sdk-path)" -fno-exceptions -fno-rtti \
             "$RUNNER_TEMP/probe.cpp" -o "$RUNNER_TEMP/probe-llvm" && echo "built with LLVM 20 and the SDK's libc++" ||
             echo "not built with LLVM 20 and the SDK's libc++"
+      - name: LLVM 20's libc++ built for the iOS simulator
+        run: |
+          llvm="$(brew --prefix llvm@20)"
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          curl -sSfL -o "$RUNNER_TEMP/llvm.tar.xz" \
+            https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/llvm-project-20.1.8.src.tar.xz
+          shasum -a 256 "$RUNNER_TEMP/llvm.tar.xz"
+          tar -xf "$RUNNER_TEMP/llvm.tar.xz" -C "$RUNNER_TEMP"
+          start=$(date +%s)
+          cmake -S "$RUNNER_TEMP/llvm-project-20.1.8.src/runtimes" -B "$RUNNER_TEMP/libcxx" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$llvm/bin/clang" -DCMAKE_CXX_COMPILER="$llvm/bin/clang++" \
+            -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT="$sdk" -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.3 -DCMAKE_C_COMPILER_TARGET=arm64-apple-ios16.3-simulator \
+            -DCMAKE_CXX_COMPILER_TARGET=arm64-apple-ios16.3-simulator \
+            -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi" -DLIBCXX_ENABLE_SHARED=OFF -DLIBCXXABI_ENABLE_SHARED=OFF \
+            -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=ON -DLIBCXX_INCLUDE_BENCHMARKS=OFF -DLIBCXX_INCLUDE_TESTS=OFF \
+            -DLIBCXXABI_INCLUDE_TESTS=OFF -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/libcxx-ios" >"$RUNNER_TEMP/libcxx.log" 2>&1 &&
+            cmake --build "$RUNNER_TEMP/libcxx" >>"$RUNNER_TEMP/libcxx.log" 2>&1 &&
+            cmake --install "$RUNNER_TEMP/libcxx" >>"$RUNNER_TEMP/libcxx.log" 2>&1 || { tail -40 "$RUNNER_TEMP/libcxx.log"; exit 1; }
+          echo "libc++ built in $(( $(date +%s) - start )) s"
+          ls "$RUNNER_TEMP/libcxx-ios/lib"
+          "$llvm/bin/clang++" -std=c++23 -target arm64-apple-ios16.3-simulator -isysroot "$sdk" -fno-exceptions -fno-rtti \
+            -nostdinc++ -isystem "$RUNNER_TEMP/libcxx-ios/include/c++/v1" -nostdlib++ \
+            "$RUNNER_TEMP/probe.cpp" "$RUNNER_TEMP/libcxx-ios/lib/libc++.a" -o "$RUNNER_TEMP/probe-own" &&
+            echo "built with LLVM 20 and its own libc++" || echo "not built with LLVM 20 and its own libc++"
+          xcrun simctl list devices available | grep -m1 iPhone
+          device=$(xcrun simctl list devices available | grep -m1 -o 'iPhone [^(]*([0-9A-F-]*)' | grep -o '[0-9A-F-]\{36\}')
+          xcrun simctl boot "$device" && xcrun simctl spawn "$device" "$RUNNER_TEMP/probe-own" || echo "not run in the simulator"
