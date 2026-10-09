@@ -16,6 +16,9 @@ work=$4
 
 rm -rf "$work"
 mkdir -p "$work/sources"
+# A step that fails says which, and how the arena ended: under a loaded
+# machine its World may fall behind and stop it (D302).
+trap 'echo "runners_recooked: failed at line $LINENO"; grep -o "\"code\":\"stopped\".*" "$work/log.ndjson" 2>/dev/null | cut -c1-600' ERR
 cp -r "$repository/games/runners/." "$work/sources/"
 "$cook" "$work/sources" "$work/content" "$work/cache" >/dev/null
 
