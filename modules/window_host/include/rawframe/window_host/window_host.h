@@ -75,8 +75,9 @@ private:
     /// Tells a preview the wheel and the right button's drags (D469).
     void moveView(const window::Event& event);
     /// The UI's readers told what changed, the window's scale and, on X11,
-    /// its place first (D571); on Android, read once a client asks, for
-    /// each activity's view, its root handed to the window (D576).
+    /// its place first (D571); on Android, Windows, and macOS, read once a
+    /// client asks, for each view, its root handed to the window (D576,
+    /// D579).
     void followAccess(window::Windows& windows);
 
     host::HostRequest request_;
@@ -93,11 +94,12 @@ private:
     float accessScale_ = 1;
     std::optional<std::array<std::int32_t, 2>> accessPlace_;
     /// Whether `ui.accessibility` lets the UI be read, whether a client
-    /// asked for the window's tree, the view the access was made for, and
-    /// the root last handed to the window (D576).
+    /// asked for the window's tree, the platform and the view the access
+    /// was made for, and the root last handed to the window (D576, D579).
     bool accessible_ = true;
     bool accessAsked_ = false;
-    [[maybe_unused]] void* accessView_ = nullptr;
+    ui::AccessPlatform accessPlatform_ = ui::AccessPlatform::Copy;
+    void* accessView_ = nullptr;
     void* accessRoot_ = nullptr;
     /// Whether the feed was last told a field takes text.
     bool toldEditing_ = false;

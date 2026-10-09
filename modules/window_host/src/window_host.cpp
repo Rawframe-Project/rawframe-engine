@@ -189,6 +189,7 @@ result::Status WindowHost::start(window::Windows& windows) {
         RAWFRAME_TRY_ASSIGN(accessible_, kConfiguration->truth("ui.accessibility", true));
     }
     if (accessible_ && ui::accessBuilt(ui::AccessPlatform::Atspi)) {
+        accessPlatform_ = ui::AccessPlatform::Atspi;
         RAWFRAME_TRY(access_.open({.platform = ui::AccessPlatform::Atspi,
                                    .application = made.title.empty() ? std::string{"Rawframe"} : made.title}));
     }
@@ -355,26 +356,39 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
 }
 
 void WindowHost::followAccess(window::Windows& windows) {
-#if defined(__ANDROID__)
-    // Android reads the UI through a provider for the activity's view,
-    // made once a client first asks for the window's tree, so nothing is
-    // built where no screen reader runs, and made again for the view of
-    // each activity that shows the window (D576).
-    if (accessible_ && accessAsked_ && ui::accessBuilt(ui::AccessPlatform::Android)) {
+    // A platform whose clients ask for the window's tree (Android, Windows,
+    // macOS) is read once one first asks, so nothing is built where no
+    // screen reader runs, and again for each view the window shows in,
+    // as Android's changes with the activity (D576, D579).
+    if (accessible_ && accessAsked_) {
         const auto kHandles = windows.handles(window_);
         const auto kState = windows.state(window_);
-        const auto* kAndroid = kHandles.has_value() ? std::get_if<window::AndroidHandles>(&kHandles->handles) : nullptr;
-        if (kAndroid != nullptr && kAndroid->view != nullptr && kAndroid->view != accessView_ && kState.has_value() &&
-            kState->scale > 0) {
-            accessView_ = kAndroid->view;
-            accessScale_ = kState->scale;
-            static_cast<void>(access_.open({.platform = ui::AccessPlatform::Android,
-                                            .scale = kState->scale,
-                                            .env = static_cast<ANativeActivity*>(kAndroid->activity)->env,
-                                            .view = kAndroid->view}));
+        std::optional<ui::AccessSettings> settings;
+        if (kHandles.has_value() && kState.has_value() && kState->scale > 0) {
+#if defined(__ANDROID__)
+            if (const auto* kAndroid = std::get_if<window::AndroidHandles>(&kHandles->handles)) {
+                settings = ui::AccessSettings{.platform = ui::AccessPlatform::Android,
+                                              .scale = kState->scale,
+                                              .env = static_cast<ANativeActivity*>(kAndroid->activity)->env,
+                                              .host = kAndroid->view};
+            }
+#endif
+            if (const auto* kWin32 = std::get_if<window::Win32Handles>(&kHandles->handles)) {
+                settings = ui::AccessSettings{
+                    .platform = ui::AccessPlatform::Uia, .scale = kState->scale, .host = kWin32->window};
+            } else if (const auto* kApple = std::get_if<window::AppleHandles>(&kHandles->handles)) {
+                // AppKit measures in points, which a UI pixel is.
+                settings = ui::AccessSettings{.platform = ui::AccessPlatform::AppKit, .scale = 1, .host = kApple->view};
+            }
+        }
+        if (settings.has_value() && settings->host != nullptr && settings->host != accessView_ &&
+            ui::accessBuilt(settings->platform)) {
+            accessView_ = settings->host;
+            accessScale_ = settings->scale;
+            accessPlatform_ = settings->platform;
+            static_cast<void>(access_.open(*settings));
         }
     }
-#endif
     // The root the window hands its clients follows the access, made or
     // gone; only a platform that takes one has one.
     void* const kRoot = access_.access() != nullptr ? access_.access()->root() : nullptr;
@@ -385,7 +399,8 @@ void WindowHost::followAccess(window::Windows& windows) {
         return;
     }
     if (const auto kState = windows.state(window_); kState.has_value() && kState->scale > 0) {
-        if (kState->scale != accessScale_ && access_.setScale(kState->scale).has_value()) {
+        if (accessPlatform_ != ui::AccessPlatform::AppKit && kState->scale != accessScale_ &&
+            access_.setScale(kState->scale).has_value()) {
             accessScale_ = kState->scale;
         }
         // X11 says where a window is, in its pixels, and AT-SPI's screen is
