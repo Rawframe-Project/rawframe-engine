@@ -29,26 +29,36 @@ enum class AccessPlatform : std::uint8_t {
     /// names, else the one the session bus gives.
     Atspi,
     /// Android's accessibility framework (D576): a node provider for the
-    /// view `AccessSettings` names, which the window gives as its root.
-    Android
+    /// view `AccessSettings::host` names, which the window gives as its
+    /// root.
+    Android,
+    /// UI Automation (Windows, D579): providers for the window
+    /// `AccessSettings::host` names, the root's answering the window's
+    /// WM_GETOBJECT.
+    Uia,
+    /// NSAccessibility (macOS, D579): elements under the view
+    /// `AccessSettings::host` names, the root its child.
+    AppKit
 };
 
 struct AccessSettings {
     AccessPlatform platform = AccessPlatform::Copy;
     /// The application's name, as AT-SPI lists it.
     std::string application = "Rawframe";
-    /// Device pixels a UI pixel.
+    /// Device pixels a UI pixel; AppKit's points, which a UI pixel is.
     float scale = 1;
     /// Where the window's client area is on the screen, in device pixels,
     /// where the platform says (X11); none where it does not (Wayland).
     std::optional<std::array<std::int32_t, 2>> place;
     /// The most nodes the platform's copy holds.
     std::uint32_t nodes = 4096;
-    /// Android's: the main thread's `JNIEnv*`, and the `android.view.View`
-    /// the tree lies in, its origin the tree's (a `jobject`, which the
-    /// access holds a reference of its own to).
+    /// Android's: the main thread's `JNIEnv*`.
     void* env = nullptr;
-    void* view = nullptr;
+    /// What the tree lies in, its origin the tree's: Android's
+    /// `android.view.View` (a `jobject`), the Win32 window (an `HWND`), or
+    /// AppKit's `NSView`; the access holds a reference of its own where the
+    /// platform counts them.
+    void* host = nullptr;
 };
 
 /// What a screen reader asked of a node (D572), for the UI's owner to do as
@@ -97,8 +107,9 @@ public:
     [[nodiscard]] std::optional<Node> focused() const;
 
     /// The root the window hands the platform's clients, where the
-    /// platform takes one: Android's node provider, a global reference the
-    /// access keeps while it lives (D576); none elsewhere.
+    /// platform takes one, which lives while the access does: Android's
+    /// node provider (D576), UI Automation's root provider, AppKit's root
+    /// element (D579); none for AT-SPI and a copy.
     [[nodiscard]] void* root() const noexcept;
 
     /// What screen readers asked since last taken, oldest first.
