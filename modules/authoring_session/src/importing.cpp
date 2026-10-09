@@ -264,9 +264,11 @@ result::Result<Imported> importAsset(const std::filesystem::path& game,
                                        "the game's description could not be added to")};
     }
     // A mesh's materials mapped to identities of their own by the cook
-    // tool, as an author's `rawframe-cook --map` would (D316).
+    // tool, as an author's `rawframe-cook --map` would (D316): the mesh
+    // alone, not every source of the game again, which took past the wait
+    // on a loaded sanitized tree (D536).
     if (made.kind == "mesh" && !cook.empty()) {
-        auto mapping = process::Child::start({.program = cook, .arguments = {"--map", kDirectory.string()}});
+        auto mapping = process::Child::start({.program = cook, .arguments = {"--map", kDirectory.string(), made.path}});
         if (mapping.has_value()) {
             const auto kUntil = std::chrono::steady_clock::now() + std::chrono::seconds{30};
             while (!mapping->exited().has_value() && std::chrono::steady_clock::now() < kUntil) {

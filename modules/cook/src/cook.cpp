@@ -660,7 +660,8 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
 
 result::Result<MapReport> mapSubassets(const std::filesystem::path& sources,
                                        std::span<const Importer> importers,
-                                       const std::function<content::ResourceId()>& fresh) {
+                                       const std::function<content::ResourceId()>& fresh,
+                                       const std::optional<std::string>& only) {
     std::error_code error;
     const std::filesystem::path kSources = std::filesystem::canonical(sources, error);
     if (error || !std::filesystem::is_directory(kSources)) {
@@ -670,6 +671,9 @@ result::Result<MapReport> mapSubassets(const std::filesystem::path& sources,
     RAWFRAME_TRY_ASSIGN(const std::vector<std::string> kSidecars, sidecarsUnder(kSources));
     MapReport report;
     for (const std::string& path : kSidecars) {
+        if (only.has_value() && path != *only + std::string{content::kSidecarSuffix}) {
+            continue;
+        }
         const auto kText = readFile(kSources / path);
         auto read =
             kText.has_value()

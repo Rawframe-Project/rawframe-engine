@@ -6,7 +6,7 @@
 // server.
 //
 //   rawframe-cook <sources> <output> [<cache>]
-//   rawframe-cook --map <sources>
+//   rawframe-cook --map <sources> [<source>]
 //
 // Each source is told on standard output as it is begun
 // (`cooking <n>/<count> <source>`), so a caller shows how far it is; a stop
@@ -149,9 +149,11 @@ std::optional<rawframe::cook::ShaderTools> shaderTools() {
 } // namespace
 
 int main(int argc, char** argv) {
-    const bool kMap = argc == 3 && std::string_view{argv[1]} == "--map";
+    const bool kMap = (argc == 3 || argc == 4) && std::string_view{argv[1]} == "--map";
     if (!kMap && argc != 3 && argc != 4) {
-        std::fputs("usage: rawframe-cook <sources> <output> [<cache>]\n       rawframe-cook --map <sources>\n", stderr);
+        std::fputs(
+            "usage: rawframe-cook <sources> <output> [<cache>]\n       rawframe-cook --map <sources> [<source>]\n",
+            stderr);
         return 2;
     }
     // The tool's own bytes are its identity in every cook key.
@@ -174,7 +176,9 @@ int main(int argc, char** argv) {
                                                                  rawframe::cook::textImporter(),
                                                                  rawframe::cook::textureImporter()};
     if (kMap) {
-        const auto kReport = rawframe::cook::mapSubassets(argv[2], kImporters, &freshIdentity);
+        // One source alone where named (D536), its path under the sources.
+        const auto kReport = rawframe::cook::mapSubassets(
+            argv[2], kImporters, &freshIdentity, argc == 4 ? std::optional<std::string>{argv[3]} : std::nullopt);
         if (!kReport.has_value()) {
             print(kReport.error());
             return 2;

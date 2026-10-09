@@ -203,11 +203,14 @@ struct MapReport {
 /// that gained one (ADR-0024: identity is given by authoring tooling, never
 /// by a cook). A key already mapped keeps its identity, and one the source
 /// no longer has stays. A source that does not cook for another reason is a
-/// failure, and its sidecar is left as it was. Errors are the request's
-/// own (an unreadable sources directory).
+/// failure, and its sidecar is left as it was. With `only`, a source's
+/// path under the sources, that source alone is mapped: an import maps
+/// what it brought, not every source again (D536). Errors are the
+/// request's own (an unreadable sources directory).
 [[nodiscard]] result::Result<MapReport> mapSubassets(const std::filesystem::path& sources,
                                                      std::span<const Importer> importers,
-                                                     const std::function<content::ResourceId()>& fresh);
+                                                     const std::function<content::ResourceId()>& fresh,
+                                                     const std::optional<std::string>& only = std::nullopt);
 
 /// The digest of a file, for a toolchain's identity.
 [[nodiscard]] result::Result<base::Sha256Digest> digestOfFile(const std::filesystem::path& path);

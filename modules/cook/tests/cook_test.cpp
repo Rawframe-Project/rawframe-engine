@@ -397,6 +397,34 @@ RAWFRAME_TEST(AuthoringToolingGivesUnmappedSubassetsTheirIdentities) {
     RAWFRAME_EXPECT(cookSplit(kProject).failures.empty());
 }
 
+RAWFRAME_TEST(OneSourceIsMappedAloneWhereNamed) {
+    // An import maps what it brought (D536): the source named is mapped,
+    // and another, broken here, is not even read.
+    const Project kProject;
+    writeText(kProject.sources / "props/parts.txt", "left=one\nright=two");
+    writeText(kProject.sources / "props/parts.txt.rfmeta",
+              splitSidecar("    \"part/left\": \"000000000000000000000000000000b1\""));
+    writeText(kProject.sources / "broken.txt", "x=y");
+    writeText(kProject.sources / "broken.txt.rfmeta", "{\n  \"schema\": 2\n}\n");
+    static const std::array<Importer, 1> kImporters = {
+        Importer{.identity = "test.split",
+                 .normalize = [](const document::Value*) -> result::Result<std::string> {
+                     return std::string{};
+                 },
+                 .cook = &split}};
+    std::uint64_t next = 0xd0;
+    const auto kFresh = [&next] {
+        return content::ResourceId{base::Bits128{.high = 0, .low = next++}};
+    };
+    const auto kMapped = mapSubassets(kProject.sources, kImporters, kFresh, std::string{"props/parts.txt"});
+    RAWFRAME_EXPECT(kMapped.has_value() && kMapped->failures.empty() && kMapped->written.size() == 1 &&
+                    kMapped->written[0].first == "props/parts.txt.rfmeta" &&
+                    kMapped->written[0].second == (std::vector<std::string>{"part/right"}));
+    // A source that is not there maps nothing.
+    const auto kNone = mapSubassets(kProject.sources, kImporters, kFresh, std::string{"props/gone.txt"});
+    RAWFRAME_EXPECT(kNone.has_value() && kNone->failures.empty() && kNone->written.empty());
+}
+
 RAWFRAME_TEST(AKestProjectCooksIntoItsFiles) {
     const Project kProject;
     const fs::path kGame = kProject.sources / "game";
