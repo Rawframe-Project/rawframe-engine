@@ -215,7 +215,9 @@ public:
     /// Admitted connections, each with its player.
     [[nodiscard]] std::size_t connections() const noexcept;
     /// Tells every admitted connection the server is stopping (SPEC-0012's
-    /// stopping notice): one `graceful_close` each. Play goes on.
+    /// stopping notice): one `graceful_close` each, once. Play goes on.
+    /// Asked again, it tells only those not told yet: a connection whose
+    /// admission a tick took in after the first asking (D585).
     void noticeStopping() noexcept;
     /// Whether a connection is playing as `identity` now.
     [[nodiscard]] bool playing(world_runtime::PlayerIdentity identity) const noexcept;

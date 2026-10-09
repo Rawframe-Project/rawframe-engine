@@ -699,9 +699,12 @@ void ReplicationServer::noticeStopping() noexcept {
     if (!network::encodeGracefulClose(writer, network::CloseNotice::ServerStopping).has_value()) {
         return;
     }
-    for (const auto& [id, peer] : state_->peers) {
-        static_cast<void>(
-            state_->sessions->sendFrame(peer.connection, network::ControlFrame::GracefulClose, writer.written()));
+    for (auto& [id, peer] : state_->peers) {
+        if (!peer.toldStopping) {
+            peer.toldStopping =
+                state_->sessions->sendFrame(peer.connection, network::ControlFrame::GracefulClose, writer.written())
+                    .has_value();
+        }
     }
 }
 

@@ -46,6 +46,24 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
     RAWFRAME_EXPECT(scenario.mirrored() == 3);
 }
 
+RAWFRAME_TEST(AConnectionAdmittedAfterTheStoppingNoticeIsToldToo) {
+    // SPEC-0012's stopping notice, asked for each iteration a server drains
+    // (D585): a connection a tick admits after the first asking hears it
+    // from the next, and play goes on.
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
+    scenario.server->noticeStopping();
+    for (int step = 0; step < 30; ++step) {
+        scenario.step(Steer{1, 0});
+    }
+    RAWFRAME_EXPECT(scenario.client->admitted() && !scenario.client->serverStopping());
+    scenario.server->noticeStopping();
+    for (int step = 0; step < 10; ++step) {
+        scenario.step(Steer{1, 0});
+    }
+    RAWFRAME_EXPECT(scenario.client->serverStopping() && scenario.client->admitted() &&
+                    scenario.server->connections() == 1);
+}
+
 RAWFRAME_TEST(ATerminatedPlayerIsToldWhyAndLeaves) {
     // ADR-0073 (D267): the reason arrives on the engine's lane, the player
     // leaves the server's World at once, and the client ends its session.

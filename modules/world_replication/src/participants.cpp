@@ -188,9 +188,9 @@ public:
         }
         admitting_.clear();
         // Host phases run once the Host is active, so admission closed here
-        // means it drains: the players hear so once.
-        if (!noticed_ && !context_->admitting()) {
-            noticed_ = true;
+        // means it drains: the players hear so, each once, those admitted
+        // by a tick since among them (D585).
+        if (!context_->admitting()) {
             server_->noticeStopping();
         }
         context_->reportConnections(server_->connections());
@@ -278,7 +278,6 @@ private:
     std::vector<ReceivedCommand> commands_;
     std::vector<PostedTermination> ended_;
     std::set<world_runtime::PlayerIdentity> admitting_;
-    bool noticed_ = false;
     std::string endpoint_;
     ReplicationPlan* plan_ = nullptr;
     world_runtime::Simulation* simulation_ = nullptr;
