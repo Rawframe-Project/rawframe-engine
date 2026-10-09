@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <set>
+#include <tuple>
 
 namespace rawframe::localization {
 
@@ -95,6 +96,11 @@ result::Result<Catalog> Catalog::assemble(std::span<const TableDocument> tables,
             failure(LocalizationError::OverLimit, "a catalog has more locales than its limit")};
     }
     std::ranges::sort(made.stale_);
+#if !RAWFRAME_SHIPPING
+    std::ranges::sort(made.coverage_, [](const Coverage& left, const Coverage& right) {
+        return std::tie(left.table, left.locale) < std::tie(right.table, right.locale);
+    });
+#endif
     return made;
 }
 
@@ -147,6 +153,22 @@ result::Status Catalog::add(std::span<const TableDocument> tables,
         }
         messages.emplace(key, std::move(message));
     }
+#if !RAWFRAME_SHIPPING
+    if (!pseudo) {
+        Coverage covered{.table = translation.table,
+                         .locale = translation.locale,
+                         .translated = messages.size(),
+                         .keys = source.size(),
+                         .firstMissing = {}};
+        const auto kMissing = std::ranges::find_if(source, [&messages](const auto& entry) {
+            return !messages.contains(entry.first);
+        });
+        if (kMissing != source.end()) {
+            covered.firstMissing = kMissing->first;
+        }
+        coverage_.push_back(std::move(covered));
+    }
+#endif
     table.messages.emplace(translation.locale, std::move(messages));
     locales.insert(translation.locale);
     return {};

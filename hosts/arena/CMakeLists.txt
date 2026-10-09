@@ -140,9 +140,15 @@ if(RAWFRAME_BUILD_TESTS)
     add_test(NAME runners_text
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/runners_text.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    # Development builds say first how much of the table Turkish covers.
+    set(rawframe_runners_coverage "")
+    if(NOT RAWFRAME_CONFIGURATION STREQUAL "shipping")
+        set(rawframe_runners_coverage
+            "\"text_coverage\".*\"locale\":\"tr\",\"translated\":3,\"keys\":3,\"firstMissing\":\"\".*")
+    endif()
     set_tests_properties(runners_text PROPERTIES
                          FIXTURES_REQUIRED runners_content
-                         PASS_REGULAR_EXPRESSION "\"text_catalog\".*\"tables\":1,\"translations\":1,\"keys\":3,\"stale\":0,\"locale\":\"tr-TR\",\"default\":\"en\"")
+                         PASS_REGULAR_EXPRESSION "${rawframe_runners_coverage}\"text_catalog\".*\"tables\":1,\"translations\":1,\"keys\":3,\"stale\":0,\"locale\":\"tr-TR\",\"default\":\"en\"")
     # Eight bots play runners and the first one's World is heard: its shots
     # and the others' within range sound, its own jumps sound as predicted
     # effects (D220), it winces when hit through its client's own emitter

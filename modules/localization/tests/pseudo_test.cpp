@@ -78,7 +78,8 @@ RAWFRAME_TEST(APseudoLocaleServesThroughTheCatalog) {
     // Only the development door takes a private-use locale.
     RAWFRAME_EXPECT(refusedWith(Catalog::build(kTables, kTranslations), LocalizationError::DocumentInvalid));
     const auto kCatalog = Catalog::buildWithPseudo(kTables, {}, kTranslations);
-    RAWFRAME_EXPECT(kCatalog.has_value() && kCatalog->stale().empty());
+    // Pseudo-localized translations are not counted as coverage.
+    RAWFRAME_EXPECT(kCatalog.has_value() && kCatalog->stale().empty() && kCatalog->coverage().empty());
     const Locale kXa = *parseLocale("en-XA");
     const std::vector<Argument> kCount{{"count", std::int64_t{1234}}};
     RAWFRAME_EXPECT(kCatalog->format(kHud, "menu.play", kXa, kXa, {}) == "[Ṗĺáý~~~~]");

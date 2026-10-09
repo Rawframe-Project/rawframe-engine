@@ -1,6 +1,6 @@
 // Catalogs (SPEC-0033): tables and translations checked together, stale
-// entries reported, and keys resolved along the fallback chain and
-// formatted in the locale that served them.
+// entries and (in development) coverage reported, and keys resolved along
+// the fallback chain and formatted in the locale that served them.
 
 #include "rawframe/localization/catalog.h"
 #include "rawframe/localization/errors.h"
@@ -104,6 +104,28 @@ RAWFRAME_TEST(AChangedSourceMakesItsTranslationsStale) {
                     kCatalog->stale()[1].locale == tag("tr") && kCatalog->stale()[1].key == "menu.play");
     RAWFRAME_EXPECT(kCatalog->format(kHud, "menu.play", tag("tr"), tag("en"), {}) == "Oyna");
 }
+
+#if !RAWFRAME_SHIPPING
+RAWFRAME_TEST(EachTranslationsCoverageIsReportedInDevelopment) {
+    const std::vector<TableDocument> kTables{hud()};
+    const auto kCatalog = Catalog::build(kTables, translated());
+    RAWFRAME_EXPECT(kCatalog.has_value() && kCatalog->coverage().size() == 2);
+    // German, then Turkish; each has two of the three keys, and names the
+    // first it lacks in key order.
+    const Coverage& kGerman = kCatalog->coverage()[0];
+    const Coverage& kTurkish = kCatalog->coverage()[1];
+    RAWFRAME_EXPECT(kGerman.locale == tag("de") && kGerman.translated == 2 && kGerman.keys == 3 &&
+                    kGerman.firstMissing == "hud.files");
+    RAWFRAME_EXPECT(kTurkish.locale == tag("tr") && kTurkish.translated == 2 && kTurkish.keys == 3 &&
+                    kTurkish.firstMissing == "hud.score" && kTurkish.table == kHud);
+    // A whole translation lacks nothing.
+    const std::vector<Translations> kWhole{
+        into("fr", {{"menu.play", "Jouer"}, {"hud.score", "{$points} points"}, {"hud.files", "fichiers"}})};
+    const auto kFrench = Catalog::build(kTables, kWhole);
+    RAWFRAME_EXPECT(kFrench.has_value() && kFrench->coverage().size() == 1 && kFrench->coverage()[0].translated == 3 &&
+                    kFrench->coverage()[0].firstMissing.empty());
+}
+#endif
 
 RAWFRAME_TEST(DocumentsThatDoNotFitTogetherAreRefused) {
     const std::vector<TableDocument> kTables{hud()};

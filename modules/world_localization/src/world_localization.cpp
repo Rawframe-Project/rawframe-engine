@@ -70,6 +70,9 @@ using diagnostics::EventIdentity;
 
 constexpr EventIdentity kCatalogEvent{"localization", "text_catalog"};
 constexpr EventIdentity kStaleEvent{"localization", "text_stale"};
+#if !RAWFRAME_SHIPPING
+constexpr EventIdentity kCoverageEvent{"localization", "text_coverage"};
+#endif
 constexpr EventIdentity kUnavailableEvent{"localization", "text_unavailable"};
 constexpr EventIdentity kLocaleRefusedEvent{"localization", "locale_refused"};
 constexpr EventIdentity kTextSummary{"localization", "text_summary"};
@@ -261,6 +264,20 @@ public:
                          diagnostics::field("locale", stale.locale.text()),
                          diagnostics::field("key", stale.key)});
         }
+#if !RAWFRAME_SHIPPING
+        // How much of each table its translations cover, for whoever
+        // translates (SPEC-0033's development view).
+        for (const localization::Coverage& covered : text_->catalog().coverage()) {
+            emitter.log(diagnostics::Severity::Info,
+                        kCoverageEvent,
+                        "how much of a table a translation covers",
+                        {diagnostics::field("table", hexOf(covered.table)),
+                         diagnostics::field("locale", covered.locale.text()),
+                         diagnostics::field("translated", static_cast<std::uint64_t>(covered.translated)),
+                         diagnostics::field("keys", static_cast<std::uint64_t>(covered.keys)),
+                         diagnostics::field("firstMissing", covered.firstMissing)});
+        }
+#endif
         emitter.log(diagnostics::Severity::Info,
                     kCatalogEvent,
                     "the game's text",

@@ -51,6 +51,23 @@ struct StaleEntry {
     friend auto operator<=>(const StaleEntry&, const StaleEntry&) = default;
 };
 
+#if !RAWFRAME_SHIPPING
+/// How much of a table one authored translation covers: a development
+/// view (SPEC-0033), absent from shipping builds. Pseudo-localized
+/// translations cover every key and are not counted.
+struct Coverage {
+    base::Bits128 table;
+    Locale locale;
+    std::size_t translated = 0;
+    std::size_t keys = 0;
+    /// The first key in key order the translation lacks; empty when it
+    /// lacks none.
+    std::string firstMissing;
+
+    friend bool operator==(const Coverage&, const Coverage&) = default;
+};
+#endif
+
 /// SPEC-0033's named limits for catalogs.
 struct CatalogLimits {
     std::size_t maximumTables = 256;
@@ -83,6 +100,13 @@ public:
     [[nodiscard]] std::span<const StaleEntry> stale() const noexcept {
         return stale_;
     }
+
+#if !RAWFRAME_SHIPPING
+    /// Each authored translation's coverage, in table and locale order.
+    [[nodiscard]] std::span<const Coverage> coverage() const noexcept {
+        return coverage_;
+    }
+#endif
 
     /// The locale that serves a key. Refuses (`KeyUnknown`) a key or table
     /// the catalog does not have, and (`OverLimit`) a chain past its limit.
@@ -117,6 +141,9 @@ private:
 
     std::map<base::Bits128, Table> tables_;
     std::vector<StaleEntry> stale_;
+#if !RAWFRAME_SHIPPING
+    std::vector<Coverage> coverage_;
+#endif
     CatalogLimits limits_;
 };
 
