@@ -1,5 +1,5 @@
 # Two bots play the sample 3D game while the first one's scene is drawn
-# offscreen into a picture as large as a 1440p screen, its render scale
+# offscreen into a picture as large as a 1080p screen, its render scale
 # allowed down to a quarter (D533): a software rasterizer cannot draw it in
 # a sixtieth of a second, the frames see each still running past it, and
 # the scale falls. Twenty seconds: under the full check's load the
@@ -16,8 +16,11 @@ bots.count = 2
 bots.endpoint = arena
 render.device = any
 render.offscreen = true
-render.width = 2560
-render.height = 1440
+# 1080p: frames of about 65 ms on the rasterizer, three times what shrinks
+# the scale, where 1440p's 220 ms made the address-sanitized tree's run
+# its longest test, 84 s under the full check's load (D545).
+render.width = 1920
+render.height = 1080
 render.read_every = 0
 scene.render_scale_least_percent = 25
 # What is checked is what is drawn, not how fast a loaded machine ticks
