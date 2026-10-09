@@ -187,11 +187,13 @@ function(rawframe_module)
 endfunction()
 
 # Declares a host: a process entry under hosts/<name>, checked against
-# tools/modules.txt like a module. Nothing may depend on a host.
+# tools/modules.txt like a module. Nothing may depend on a host. LIBRARY makes
+# it a shared library a platform loads and starts (Android's activity, D551)
+# in place of an executable.
 #
 #   rawframe_host(NAME dedicated_server OUTPUT rawframe-server SOURCES src/main.cpp DEPS host)
 function(rawframe_host)
-    cmake_parse_arguments(arg "" "NAME;OUTPUT" "SOURCES;DEPS" ${ARGN})
+    cmake_parse_arguments(arg "LIBRARY" "NAME;OUTPUT" "SOURCES;DEPS" ${ARGN})
     if(NOT RAWFRAME_KNOWN_MODULE_${arg_NAME})
         message(FATAL_ERROR "host '${arg_NAME}' is not listed in tools/modules.txt")
     endif()
@@ -201,7 +203,11 @@ function(rawframe_host)
         endif()
     endforeach()
     set(target rawframe_host_${arg_NAME})
-    add_executable(${target} ${arg_SOURCES})
+    if(arg_LIBRARY)
+        add_library(${target} SHARED ${arg_SOURCES})
+    else()
+        add_executable(${target} ${arg_SOURCES})
+    endif()
     set_target_properties(${target} PROPERTIES OUTPUT_NAME ${arg_OUTPUT})
     target_link_libraries(${target} PRIVATE rawframe_policy)
     foreach(dep IN LISTS arg_DEPS)

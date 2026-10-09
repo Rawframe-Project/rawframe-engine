@@ -40,3 +40,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
     target_compile_options(rawframe_wasi_setjmp PRIVATE -mllvm -wasm-enable-sjlj -mexception-handling)
     target_link_libraries(maul-ui PRIVATE rawframe_wasi_setjmp)
 endif()
+
+# On Android the client is a shared library (D551), which FreeType's and
+# HarfBuzz's objects go into: Maul UI builds them position-dependent unless
+# it is shared itself.
+if(ANDROID)
+    set_target_properties(maul_ui_freetype maul_ui_harfbuzz PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
