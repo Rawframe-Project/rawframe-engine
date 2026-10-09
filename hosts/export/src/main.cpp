@@ -396,7 +396,9 @@ bool writeNative(const Exported& exported, const std::array<fs::path, 4>& progra
                                 "audio.play = device\n"
                                 "# Its view drawn at fewer pixels, down to half each way, while the device\n"
                                 "# cannot keep up (D533).\n"
-                                "scene.render_scale_least_percent = 50\nwindow.title = " +
+                                "scene.render_scale_least_percent = 50\n"
+                                "# No picture read back: that is for tests (D534).\n"
+                                "render.read_every = 0\nwindow.title = " +
                                 exported.title + "\n" + kContent +
                                 "kest.plan_only = true\nnetwork.quic.pin_file = fingerprint\n"
                                 "bots.endpoint = 127.0.0.1:" +
