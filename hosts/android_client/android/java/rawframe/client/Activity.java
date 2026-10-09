@@ -2,6 +2,7 @@ package rawframe.client;
 
 import android.content.res.AssetManager;
 import android.os.Bundle;
+import android.view.WindowManager;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -27,6 +28,13 @@ public class Activity extends maul.window.Activity {
     protected void onCreate(Bundle savedInstanceState) {
         unpack();
         super.onCreate(savedInstanceState);
+        // NativeActivity sets the window's soft input mode itself, over the
+        // manifest's, to one that lets the system raise the on-screen
+        // keyboard for the focused input view at start (D560): hidden until
+        // the program asks for text input, which Maul Window shows it for,
+        // the window still resized around it.
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+                | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
 
     private void unpack() {
