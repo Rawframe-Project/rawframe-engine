@@ -138,6 +138,10 @@ mrhiResult mrhiPlace(mrhiDevice* device)
 static bool ReadLater(const mrhiDevice* device, uint32_t after, const mrhiFrameUse* part,
                       uint8_t planes)
 {
+    const mrhiFrameResource* resource = &device->frameResources[part->resource - 1];
+    uint32_t partBase = 0;
+    uint32_t partCount = 0;
+    mrhiTrackedLayers(resource, part, &partBase, &partCount);
     for (uint32_t p = after + 1; p < device->framePassCount; ++p)
     {
         const mrhiFramePass* pass = &device->framePasses[p];
@@ -145,11 +149,13 @@ static bool ReadLater(const mrhiDevice* device, uint32_t after, const mrhiFrameU
         for (uint32_t i = 0; i < pass->useCount && pass->kept; ++i)
         {
             const mrhiFrameUse* use = &uses[i];
+            uint32_t useBase = 0;
+            uint32_t useCount = 0;
+            mrhiTrackedLayers(resource, use, &useBase, &useCount);
             bool meets = use->resource == part->resource && (use->planes & planes) != 0 &&
                          use->baseMip < part->baseMip + part->mipCount &&
                          part->baseMip < use->baseMip + use->mipCount &&
-                         use->baseLayer < part->baseLayer + part->layerCount &&
-                         part->baseLayer < use->baseLayer + use->layerCount;
+                         useBase < partBase + partCount && partBase < useBase + useCount;
             if (meets && use->reads)
             {
                 return true;

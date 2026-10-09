@@ -131,13 +131,24 @@ static void Place(MTLRenderPassAttachmentDescriptor* attachment, id<MTLTexture> 
     }
 }
 
+// A target in its view format: the texture itself, or a view the
+// frame's pool releases.
+static id<MTLTexture> InFormat(id<MTLTexture> texture, mrhiFormat format)
+{
+    MTLPixelFormat viewed = mrhiMetalFormat(format);
+    return viewed == texture.pixelFormat
+               ? texture
+               : [[texture newTextureViewWithPixelFormat:viewed] autorelease];
+}
+
 static void DescribeColor(const mrhiMetalEncoder* encoder, MTLRenderPassDescriptor* descriptor,
                           uint32_t index)
 {
     const mrhiDriverPass* pass = encoder->pass;
     const mrhiColorTarget* target = &pass->colorTargets[index];
     MTLRenderPassColorAttachmentDescriptor* color = descriptor.colorAttachments[index];
-    Place(color, TargetOf(encoder, target->resource), target->mip, target->layer);
+    Place(color, InFormat(TargetOf(encoder, target->resource), target->viewFormat), target->mip,
+          target->layer);
     color.loadAction = LoadOf(target->load);
     color.clearColor = MTLClearColorMake((double)target->clear.red, (double)target->clear.green,
                                          (double)target->clear.blue, (double)target->clear.alpha);
@@ -147,7 +158,7 @@ static void DescribeColor(const mrhiMetalEncoder* encoder, MTLRenderPassDescript
         color.storeAction = keep ? MTLStoreActionStore : MTLStoreActionDontCare;
         return;
     }
-    id<MTLTexture> resolve = TargetOf(encoder, target->resolve);
+    id<MTLTexture> resolve = InFormat(TargetOf(encoder, target->resolve), target->viewFormat);
     color.resolveTexture = resolve;
     color.resolveLevel = target->resolveMip;
     if (resolve.textureType == MTLTextureType3D)

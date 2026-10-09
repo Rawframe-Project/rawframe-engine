@@ -38,6 +38,10 @@
 #define D3D12_HEAP_SIZE         65536
 #define D3D12_SAMPLER_HEAP_SIZE 256
 
+// Microsoft's Basic Render Driver (WARP) by its PCI identity.
+#define D3D12_WARP_VENDOR_ID 0x1414
+#define D3D12_WARP_DEVICE_ID 0x8C
+
 typedef struct D3d12Driver
 {
     mrhiAllocator allocator;
@@ -77,9 +81,12 @@ static ID3D12Device* OpenDevice(const D3d12Driver* driver, IDXGIAdapter1* adapte
     return device;
 }
 
+// An adapter's kind. WARP is software by its identity too: on GitHub's
+// hosted Windows runner it is listed without DXGI's software flag.
 static mrhiAdapterKind KindOf(const DXGI_ADAPTER_DESC1* desc, ID3D12Device* device)
 {
-    if ((desc->Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0)
+    if ((desc->Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0 ||
+        (desc->VendorId == D3D12_WARP_VENDOR_ID && desc->DeviceId == D3D12_WARP_DEVICE_ID))
     {
         return mrhi_adapterSoftware;
     }

@@ -106,4 +106,15 @@ bool mrhiVulkanPresent(mrhiVulkanSwapchains* swapchains);
 // Destroys every swapchain left, on an idle device.
 void mrhiVulkanSwapchainsDestroy(mrhiVulkanSwapchains* swapchains);
 
+// Whether the size is one the window takes now: its own where it fixes
+// the extent, else one within the surface's bounds. Android reports the
+// window's size yet takes any size within the bounds, which its
+// compositor scales to the window.
+bool mrhiVulkanTakesSize(const VkSurfaceCapabilitiesKHR* caps, VkExtent2D size);
+
+// The swapchain's shape: at least three images within the surface's
+// bounds, its present mode and its alpha.
+void mrhiVulkanSwapchainShape(const VkSurfaceCapabilitiesKHR* caps, const mrhiSurfaceConfig* config,
+                              VkSwapchainCreateInfoKHR* info);
+
 #endif // MAUL_RHI_SRC_VULKAN_SWAPCHAIN_H

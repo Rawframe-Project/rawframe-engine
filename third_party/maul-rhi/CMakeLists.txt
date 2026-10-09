@@ -25,8 +25,14 @@ option(MAUL_RHI_WERROR "Treat compiler warnings as errors" OFF)
 option(MAUL_RHI_SANITIZE "Instrument with AddressSanitizer and UBSan" OFF)
 option(MAUL_RHI_TSAN "Instrument with ThreadSanitizer" OFF)
 option(MAUL_RHI_VALIDATION "Build the validation layer around the driver SPI (mrhi-0025)" OFF)
+option(MAUL_RHI_LABELS "Hand debug labels to drivers and record label commands (mrhi-0029)" ON)
+if(NOT MAUL_RHI_LABELS)
+    # Labels are still checked, then dropped: every target here sees it.
+    add_compile_definitions(MAUL_RHI_LABELS=0)
+endif()
 option(MAUL_RHI_COVERAGE "Instrument for gcov coverage" OFF)
 option(MAUL_RHI_FUZZ "Build the libFuzzer targets (Clang)" OFF)
+option(MAUL_RHI_SEAM "Build the check against Maul Window, fetched for it (test only)" OFF)
 # The tests run on the test driver, and so does fuzz_cache.
 if(MAUL_RHI_BUILD_TESTS OR MAUL_RHI_FUZZ)
     set(maul_rhi_test_driver ON)
@@ -151,7 +157,7 @@ if(MAUL_RHI_TEST_DRIVER OR MAUL_RHI_VALIDATION)
 endif()
 if(MAUL_RHI_VULKAN_DRIVER)
     target_sources(maul-rhi PRIVATE src/driver_vulkan.c src/vulkan_adapter.c src/vulkan_api.c
-                                   src/vulkan_device.c src/vulkan_frame.c src/vulkan_graphics.c
+                                   src/vulkan_device.c src/vulkan_facts.c src/vulkan_frame.c src/vulkan_graphics.c
                                    src/vulkan_heap.c src/vulkan_label.c src/vulkan_memory.c
                                    src/vulkan_object.c src/vulkan_pass.c src/vulkan_pipeline.c
                                    src/vulkan_query.c src/vulkan_recipe.c src/vulkan_record.c
@@ -203,6 +209,7 @@ if(MAUL_RHI_BUILD_TESTS)
     maul_add_test(chain WHITEBOX)
     maul_add_test(layout WHITEBOX)
     maul_add_test(notify WHITEBOX)
+    maul_add_test(internals WHITEBOX)
     maul_add_test(pool WHITEBOX)
     maul_add_test(label WHITEBOX)
     maul_add_test(sha256 WHITEBOX)
@@ -211,9 +218,12 @@ if(MAUL_RHI_BUILD_TESTS)
     if(MAUL_RHI_VULKAN_DRIVER)
         maul_add_test(vulkan_label WHITEBOX)
         maul_add_test(vulkan_limits WHITEBOX)
+        maul_add_test(vulkan_facts WHITEBOX)
         maul_add_test(vulkan_surface WHITEBOX)
+        maul_add_test(vulkan_swapchain WHITEBOX)
         maul_add_test(vulkan_external WHITEBOX)
-        foreach(test vulkan_label vulkan_limits vulkan_surface vulkan_external)
+        foreach(test vulkan_label vulkan_limits vulkan_facts vulkan_surface vulkan_swapchain
+                     vulkan_external)
             if(TARGET test_${test})
                 target_include_directories(test_${test} SYSTEM PRIVATE
                                            ${PROJECT_SOURCE_DIR}/khronos)
@@ -465,6 +475,23 @@ endif()
 
 if(MAUL_RHI_BUILD_SAMPLES)
     add_subdirectory(samples)
+endif()
+
+# The guide's C snippets as written (family record 0019), run natively on
+# the samples' harness and triangle; the web's waits are a later frame's.
+if(MAUL_RHI_BUILD_TESTS AND NOT (EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI"))
+    add_executable(test_guide test/test_guide.c samples/harness.c)
+    target_link_libraries(test_guide PRIVATE maul-rhi)
+    target_include_directories(test_guide PRIVATE ${PROJECT_SOURCE_DIR}/samples)
+    maul_apply_flags(test_guide)
+    add_test(NAME guide COMMAND test_guide)
+    set_tests_properties(guide PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${maul_rhi_test_env}"
+                         FAIL_REGULAR_EXPRESSION "Validation Error")
+endif()
+
+# The seam with Maul Window, test only (mrhi-0028).
+if(MAUL_RHI_SEAM AND MAUL_RHI_BUILD_TESTS)
+    add_subdirectory(test/seam)
 endif()
 
 if(MAUL_RHI_INSTALL)

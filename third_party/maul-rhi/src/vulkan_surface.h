@@ -24,6 +24,25 @@ size_t mrhiVulkanSurfaceExtensions(const char* const** namesOut);
 mrhiResult mrhiVulkanCreateSurface(const mrhiVulkan* vulkan, VkInstance instance, uint32_t enabled,
                                    const mrhiChain* source, VkSurfaceKHR* surfaceOut);
 
+// What a surface lists on a physical device: its formats, its present
+// modes, its composite alpha and image usage flags, and whether the
+// device offers twin views.
+typedef struct mrhiVulkanSurfaceFacts
+{
+    const VkSurfaceFormatKHR* formats;
+    uint32_t formatCount;
+    const VkPresentModeKHR* modes;
+    uint32_t modeCount;
+    VkCompositeAlphaFlagsKHR alpha;
+    VkImageUsageFlags usages;
+    bool mutableFormat;
+} mrhiVulkanSurfaceFacts;
+
+// Fills what a surface can do from what it lists: nothing but
+// presentable, false, when a floor is missing (a color, FIFO, opaque
+// alpha, render targets, a way to sRGB).
+void mrhiVulkanCapsOf(const mrhiVulkanSurfaceFacts* facts, mrhiSurfaceCaps* capsOut);
+
 // Fills what a surface can do on a physical device, given whether it
 // offers VK_KHR_swapchain and VK_KHR_swapchain_mutable_format (twin
 // views); nothing but presentable, false, when it cannot present there.
@@ -43,5 +62,9 @@ bool mrhiVulkanTwinImages(const VkSurfaceFormatKHR* formats, uint32_t count,
 bool mrhiVulkanSurfaceFormat(const mrhiVulkan* vulkan, VkPhysicalDevice device,
                              VkSurfaceKHR surface, mrhiSurfaceColor color,
                              VkSurfaceFormatKHR* formatOut);
+
+// The same, from the formats a surface lists.
+bool mrhiVulkanPickFormat(const VkSurfaceFormatKHR* formats, uint32_t count, mrhiSurfaceColor color,
+                          VkSurfaceFormatKHR* formatOut);
 
 #endif // MAUL_RHI_SRC_VULKAN_SURFACE_H

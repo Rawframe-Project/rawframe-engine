@@ -196,6 +196,19 @@ extern "C"
     MRHI_NODISCARD MRHI_API mrhiResult mrhiGetDeviceLimits(mrhiDevice* device,
                                                            mrhiLimits* limitsOut);
 
+    /// Reads the limits of its own bookkeeping a device was made with, as
+    /// asked: object counts, frame command and upload bytes, readbacks,
+    /// diagnostics. A library given a device learns its budgets here.
+    ///
+    /// @param device     The device.
+    /// @param limitsOut  Receives the limits.
+    /// @return `mrhi_success`, in any device state; `mrhi_errorInvalid` for a
+    /// NULL argument.
+    /// @par Thread safety
+    /// Safe from any thread; the device is used by one thread at a time.
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetDeviceOwnLimits(mrhiDevice* device,
+                                                              mrhiDeviceLimits* limitsOut);
+
     /// Reads the nanoseconds one tick of the device's timestamps takes: 1 where
     /// the API reports nanoseconds already.
     ///

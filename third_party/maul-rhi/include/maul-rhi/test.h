@@ -63,6 +63,9 @@ extern "C"
         uint64_t uploadSum;
         // The bytes its transients take together.
         uint64_t memoryBytes;
+        // The device's objects made with a label, over its life: none in a
+        // build that compiles labels out (MAUL_RHI_LABELS).
+        uint32_t named;
     } mrhiTestFrameLog;
 
     // An adapter the test driver finds: its facts, features and limits, and how

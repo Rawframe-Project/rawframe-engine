@@ -9,6 +9,7 @@
 // unsupported unread.
 
 #include "capabilities_core.h"
+#include "label.h"
 #include "pipeline_core.h"
 
 #include <math.h>
@@ -556,12 +557,14 @@ mrhiResult mrhiCreateGraphicsPipeline(mrhiDevice* device, const mrhiGraphicsPipe
                            : (uint32_t)(stages.fragment - reflection->entries);
     slot->heapUses =
         stages.vertex->heapUses | (stages.fragment == nullptr ? 0 : stages.fragment->heapUses);
+    mrhiGraphicsPipelineDef driverDef = *def;
+    mrhiDropLabel(&driverDef.label, &driverDef.labelLength);
     mrhiDriverGraphicsPipeline pipeline = {
         .shader = shader->handle,
         .reflection = reflection,
         .vertexEntry = slot->entries[0],
         .fragmentEntry = slot->entries[1],
-        .def = def,
+        .def = &driverDef,
     };
     status = mrhiDriverStatus(device, device->driver.vtable->createGraphicsPipeline(
                                           device->driver.self, &pipeline,

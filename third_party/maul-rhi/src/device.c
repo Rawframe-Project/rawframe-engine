@@ -309,7 +309,8 @@ static FrameParts AddFrameParts(mrhiLayout* layout, const mrhiDeviceDef* def)
                       sizeof(uint64_t), alignof(uint64_t));
     parts.chunks = mrhiLayoutAdd(layout, parts.chunkCount, sizeof(mrhiCommandChunk),
                                  alignof(mrhiCommandChunk));
-    parts.labels = mrhiLayoutAdd(layout, (size_t)limits->framePasses * MRHI_LABEL_BYTES, 1, 1);
+    parts.labels = mrhiLayoutAdd(
+        layout, MAUL_RHI_LABELS ? (size_t)limits->framePasses * MRHI_LABEL_BYTES : 0, 1, 1);
     parts.driverPasses =
         mrhiLayoutAdd(layout, limits->framePasses, sizeof(mrhiDriverPass), alignof(mrhiDriverPass));
     parts.driverResources = mrhiLayoutAdd(layout, limits->frameResources,
@@ -438,8 +439,10 @@ mrhiResult mrhiCreateDevice(mrhiInstance* instance, const mrhiDeviceDef* def,
     }
     // An adapter was found, so the instance has a driver.
     MRHI_ASSERT(instance->driver.vtable != nullptr);
-    status = instance->driver.vtable->createDevice(instance->driver.self, adapter->handle, def,
-                                                   device->request, &device->driver);
+    mrhiDeviceDef driverDef = *def;
+    mrhiDropLabel(&driverDef.label, &driverDef.labelLength);
+    status = instance->driver.vtable->createDevice(instance->driver.self, adapter->handle,
+                                                   &driverDef, device->request, &device->driver);
     if (status == mrhi_success)
     {
         // The handshake (mrhi-0024); destroy comes first in every version.
@@ -543,6 +546,17 @@ mrhiResult mrhiGetDeviceLimits(mrhiDevice* device, mrhiLimits* limitsOut)
                                  : mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     *limitsOut = device->limits;
+    return mrhi_success;
+}
+
+mrhiResult mrhiGetDeviceOwnLimits(mrhiDevice* device, mrhiDeviceLimits* limitsOut)
+{
+    if (device == nullptr || limitsOut == nullptr)
+    {
+        return device == nullptr ? mrhi_errorInvalid
+                                 : mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
+    }
+    *limitsOut = device->deviceLimits;
     return mrhi_success;
 }
 

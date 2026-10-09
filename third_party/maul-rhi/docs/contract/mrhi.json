@@ -6,7 +6,7 @@
   "guard": "MAUL_RHI",
   "version": {
     "major": 0,
-    "minor": 2,
+    "minor": 5,
     "patch": 0
   },
   "headers": [
@@ -6677,6 +6677,34 @@
         },
         {
           "kind": "function",
+          "name": "get_device_own_limits",
+          "doc": "Reads the limits of its own bookkeeping a device was made with, as asked: object counts, frame command and upload bytes, readbacks, diagnostics. A library given a device learns its budgets here.",
+          "returns": {
+            "type": "result",
+            "doc": "`mrhi_success`, in any device state; `mrhi_errorInvalid` for a NULL argument."
+          },
+          "args": [
+            {
+              "name": "device",
+              "type": "opaque.device",
+              "pointer": "mutable",
+              "doc": "The device."
+            },
+            {
+              "name": "limits_out",
+              "type": "struct.device_limits",
+              "pointer": "mutable",
+              "doc": "Receives the limits."
+            }
+          ],
+          "thread_safety": {
+            "class": "any_exclusive",
+            "object": "the device"
+          },
+          "library": "reads what the device was made with"
+        },
+        {
+          "kind": "function",
           "name": "get_device_timestamp_period",
           "doc": "Reads the nanoseconds one tick of the device's timestamps takes: 1 where the API reports nanoseconds already.",
           "returns": {
@@ -12717,6 +12745,11 @@
               "name": "resolve_layer",
               "type": "uint32",
               "doc": "The resolve texture's layer."
+            },
+            {
+              "name": "view_format",
+              "type": "enum.format",
+              "doc": "The format it renders in: the texture's or one of its view formats, a surface image's from its configuration; mrhi_formatNone for the texture's. A resolve texture is viewed in it too, and must list it."
             }
           ],
           "mapping": {
@@ -13521,7 +13554,7 @@
             {
               "name": "transient",
               "type": "bool",
-              "doc": "Whether it is a declared texture living only inside its render passes, which tile GPUs keep on chip."
+              "doc": "Whether it is a declared texture living only inside its render passes, which tile GPUs keep on chip; never one listing view formats, which WebGPU keeps off chip."
             },
             {
               "name": "first_pass",
@@ -21859,6 +21892,11 @@
               "name": "memory_bytes",
               "type": "uint64",
               "doc": "The bytes its transients take together."
+            },
+            {
+              "name": "named",
+              "type": "uint32",
+              "doc": "The device's objects made with a label, over its life: none in a build that compiles labels out (MAUL_RHI_LABELS)."
             }
           ],
           "library": "what the library's test driver saw of a submitted frame"
@@ -21991,5 +22029,5 @@
       ]
     }
   ],
-  "contract_version": 2
+  "contract_version": 3
 }

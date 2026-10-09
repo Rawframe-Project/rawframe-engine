@@ -22,12 +22,12 @@ extern "C"
 
 // The library version. CMake reads it from here.
 #define MRHI_VERSION_MAJOR 0
-#define MRHI_VERSION_MINOR 2
+#define MRHI_VERSION_MINOR 5
 #define MRHI_VERSION_PATCH 0
 
 // The contract version a program is built against. An instance refuses any
 // other before 1.0.
-#define MRHI_CONTRACT_VERSION 2
+#define MRHI_CONTRACT_VERSION 3
 
 // MRHI_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_rhi_EXPORTS is defined while building

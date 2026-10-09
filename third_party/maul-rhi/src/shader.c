@@ -6,6 +6,7 @@
 // shader and its pipelines, and its code handed to the driver.
 
 #include "device_core.h"
+#include "label.h"
 
 #include <string.h>
 
@@ -196,8 +197,11 @@ mrhiResult mrhiCreateShader(mrhiDevice* device, const mrhiShaderDef* def, mrhiSh
         mrhiPoolRelease(&device->shaders, index1);
         return mrhi_errorCapacity;
     }
-    status = mrhiDriverStatus(device, device->driver.vtable->createShader(
-                                          device->driver.self, def, &container, &slot->handle));
+    mrhiShaderDef driverDef = *def;
+    mrhiDropLabel(&driverDef.label, &driverDef.labelLength);
+    status =
+        mrhiDriverStatus(device, device->driver.vtable->createShader(
+                                     device->driver.self, &driverDef, &container, &slot->handle));
     if (status != mrhi_success)
     {
         mrhiReleaseReflection(&device->allocator, slot->reflection);

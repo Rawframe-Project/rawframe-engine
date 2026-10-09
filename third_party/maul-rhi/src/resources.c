@@ -8,6 +8,7 @@
 #include "capabilities_core.h"
 #include "device_core.h"
 #include "heap_core.h"
+#include "label.h"
 
 #define SAMPLER_DEF_COOKIE 0x6D727361u
 #define BUFFER_DEF_COOKIE  0x6D726275u
@@ -79,8 +80,10 @@ mrhiResult mrhiCreateSampler(mrhiDevice* device, const mrhiSamplerDef* def,
         return mrhi_errorCapacity;
     }
     uint64_t handle = 0;
+    mrhiSamplerDef driverDef = *def;
+    mrhiDropLabel(&driverDef.label, &driverDef.labelLength);
     status = mrhiDriverStatus(
-        device, device->driver.vtable->createSampler(device->driver.self, def, &handle));
+        device, device->driver.vtable->createSampler(device->driver.self, &driverDef, &handle));
     if (status != mrhi_success)
     {
         mrhiPoolRelease(&device->samplers, index1);
@@ -168,8 +171,10 @@ mrhiResult mrhiCreateBuffer(mrhiDevice* device, const mrhiBufferDef* def, mrhiBu
         return mrhi_errorCapacity;
     }
     uint64_t handle = 0;
+    mrhiBufferDef driverDef = *def;
+    mrhiDropLabel(&driverDef.label, &driverDef.labelLength);
     status = mrhiDriverStatus(
-        device, device->driver.vtable->createBuffer(device->driver.self, def, &handle));
+        device, device->driver.vtable->createBuffer(device->driver.self, &driverDef, &handle));
     if (status != mrhi_success)
     {
         mrhiPoolRelease(&device->buffers, index1);

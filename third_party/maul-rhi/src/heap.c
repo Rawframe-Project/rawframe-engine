@@ -10,6 +10,7 @@
 
 #include "allocator.h"
 #include "heap_core.h"
+#include "label.h"
 
 #include "maul-rhi/encoder.h"
 
@@ -72,8 +73,10 @@ mrhiResult mrhiCreateHeap(mrhiDevice* device, const mrhiHeapDef* def, mrhiHeapId
         return mrhi_errorCapacity;
     }
     uint64_t handle = 0;
-    status = mrhiDriverStatus(device,
-                              device->driver.vtable->createHeap(device->driver.self, def, &handle));
+    mrhiHeapDef driverDef = *def;
+    mrhiDropLabel(&driverDef.label, &driverDef.labelLength);
+    status = mrhiDriverStatus(
+        device, device->driver.vtable->createHeap(device->driver.self, &driverDef, &handle));
     if (status != mrhi_success)
     {
         mrhiRelease(&device->allocator, table, bytes, alignof(mrhiHeapEntrySlot));

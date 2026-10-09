@@ -6,6 +6,7 @@
 // in the device's queue, whose room each creation reserves.
 
 #include "invariant.h"
+#include "label.h"
 #include "pipeline_core.h"
 
 #include <float.h>
@@ -203,8 +204,8 @@ mrhiResult mrhiCreateComputePipeline(mrhiDevice* device, const mrhiComputePipeli
     slot->entries[0] = entry;
     slot->heapUses = shader->reflection->entries[entry].heapUses;
     mrhiDriverComputePipeline pipeline = {
-        .label = def->label,
-        .labelLength = def->labelLength,
+        .label = MAUL_RHI_LABELS ? def->label : nullptr,
+        .labelLength = MAUL_RHI_LABELS ? def->labelLength : 0,
         .shader = shader->handle,
         .reflection = shader->reflection,
         .entry = entry,

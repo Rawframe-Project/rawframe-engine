@@ -11,11 +11,7 @@
 #include "allocator.h"
 #include "driver.h"
 #include "vulkan_api.h"
-
-// The vertex buffers and attributes a pipeline has at most on this
-// driver: the adapter's limits are reported no higher.
-#define MRHI_VULKAN_VERTEX_BUFFERS    64
-#define MRHI_VULKAN_VERTEX_ATTRIBUTES 64
+#include "vulkan_facts.h"
 
 // Describes a physical device as an adapter whose handle is the device:
 // false, with nothing written, for a device below the floor. The
@@ -30,13 +26,6 @@ VkFormat mrhiVulkanDepthStencil(const mrhiVulkan* vulkan, VkPhysicalDevice devic
 // The Vulkan format of a format, given the device's depth and stencil
 // format; VK_FORMAT_UNDEFINED for one the contract does not list.
 VkFormat mrhiVulkanFormat(mrhiFormat format, VkFormat depthStencil);
-
-// The limits of binding a device's Vulkan limits give, into limits whose
-// tables and vertex buffers are already set: the contract's slots per
-// table, the per-stage kinds fitted under maxPerStageResources less the
-// color attachments (stage_limits.h), and tables plus vertex buffers at
-// least the contract's value.
-void mrhiVulkanBindingLimits(const VkPhysicalDeviceLimits* limits, mrhiLimits* granted);
 
 // The queue family with graphics and compute a listed device has.
 uint32_t mrhiVulkanQueueFamily(const mrhiVulkan* vulkan, VkPhysicalDevice device);

@@ -36,7 +36,7 @@ endfunction()
 #
 # Compiles every public header on its own as C17, C23 and C++17, with
 # pedantic warnings as errors, so the headers stay in the common subset
-# the family requires (F5, F26). ROOT and NAME default to the project's
+# the family requires (family record 0008). ROOT and NAME default to the project's
 # source directory and name; cmake/HeaderCheck passes them to check a
 # library's headers alone. MSVC's cl has no C23 mode (its /std:clatest is
 # a draft mode), so the C23 check is skipped there. In C++17 the
@@ -96,6 +96,10 @@ macro(maul_add_header_tests)
     if(NOT CMAKE_C_COMPILER_ID STREQUAL "MSVC")
         add_library(header_test_c23 OBJECT ${maul_c23_sources})
         set_target_properties(header_test_c23 PROPERTIES C_STANDARD 23 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+        # clang-cl is asked for C23 directly, as maul_apply_flags does.
+        if(MSVC)
+            target_compile_options(header_test_c23 PRIVATE /clang:-std=c23)
+        endif()
         list(APPEND maul_header_targets header_test_c23)
     endif()
     if(CMAKE_CXX_COMPILER)

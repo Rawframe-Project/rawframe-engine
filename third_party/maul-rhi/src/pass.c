@@ -10,6 +10,7 @@
 #include "capabilities_core.h"
 #include "device_core.h"
 #include "heap_core.h"
+#include "label.h"
 
 #include <string.h>
 
@@ -43,6 +44,14 @@ static bool IsBuffer(const mrhiFrameResource* resource)
 const mrhiTextureDef* mrhiFrameTextureOf(const mrhiFrameResource* resource)
 {
     return &resource->texture;
+}
+
+void mrhiTrackedLayers(const mrhiFrameResource* resource, const mrhiFrameUse* use,
+                       uint32_t* baseOut, uint32_t* countOut)
+{
+    bool volume = !IsBuffer(resource) && resource->texture.kind == mrhi_texture3d;
+    *baseOut = volume ? 0 : use->baseLayer;
+    *countOut = volume ? 1 : use->layerCount;
 }
 
 uint32_t mrhiFindFrameResource(const mrhiDevice* device, mrhiResourceId id)
@@ -292,8 +301,10 @@ static uint32_t UsesOfColor(const mrhiDevice* device, const mrhiColorTarget* tar
     }
     const mrhiTextureDef* def = mrhiFrameTextureOf(&device->frameResources[slot - 1]);
     *statusOut = mrhi_errorInvalid;
+    mrhiFormat format = mrhiViewFormatOf(def, target->viewFormat);
     if (target->load > mrhi_loadDiscard || target->store > mrhi_storeDiscard ||
-        mrhiFormatHasDepth(def->format) || !Agrees(shape, def, target->mip))
+        mrhiFormatHasDepth(def->format) || format == mrhi_formatNone ||
+        !Agrees(shape, def, target->mip))
     {
         return 0;
     }
@@ -323,8 +334,11 @@ static uint32_t UsesOfColor(const mrhiDevice* device, const mrhiColorTarget* tar
     const mrhiTextureDef* into = mrhiFrameTextureOf(&device->frameResources[resolve - 1]);
     TargetShape resolveShape = {0};
     Agrees(&resolveShape, into, target->resolveMip);
+    // The resolve takes the target's own format, viewed in its view
+    // format too.
     if (def->sampleCount == 1 || into->sampleCount != 1 || into->format != def->format ||
-        resolveShape.width != shape->width || resolveShape.height != shape->height)
+        mrhiViewFormatOf(into, format) == mrhi_formatNone || resolveShape.width != shape->width ||
+        resolveShape.height != shape->height)
     {
         *statusOut = mrhi_errorInvalid;
         return 0;
@@ -560,7 +574,7 @@ static void MeasureTargets(const mrhiDevice* device, mrhiFramePass* pass)
         const mrhiColorTarget* target = &pass->colorTargets[i];
         const mrhiTextureDef* texture =
             mrhiFrameTextureOf(&device->frameResources[target->resource.index1 - 1]);
-        pass->layout.colors[i] = texture->format;
+        pass->layout.colors[i] = target->viewFormat;
         pass->layout.samples = texture->sampleCount;
         pass->width = texture->width >> target->mip > 0 ? texture->width >> target->mip : 1;
         pass->height = texture->height >> target->mip > 0 ? texture->height >> target->mip : 1;
@@ -626,13 +640,13 @@ mrhiResult mrhiAddPass(mrhiDevice* device, const mrhiPassDef* def, mrhiPassId* p
         .occlusionSet = def->occlusionQuerySet.index1,
         .occlusionGeneration = def->occlusionQuerySet.generation,
         .heap = heap,
-        .labelLength = (uint32_t)def->labelLength,
+        .labelLength = MAUL_RHI_LABELS ? (uint32_t)def->labelLength : 0,
     };
     if (def->occlusionQuerySet.index1 != 0)
     {
         pass->occlusionHandle = device->querySetSlots[def->occlusionQuerySet.index1 - 1].handle;
     }
-    if (def->labelLength > 0)
+    if (pass->labelLength > 0)
     {
         memcpy(&device->frameLabels[(size_t)(device->framePassCount - 1) * MRHI_LABEL_BYTES],
                def->label, def->labelLength);
@@ -641,6 +655,14 @@ mrhiResult mrhiAddPass(mrhiDevice* device, const mrhiPassDef* def, mrhiPassId* p
     for (uint32_t i = 0; i < def->colorTargetCount; ++i)
     {
         pass->colorTargets[i] = def->colorTargets[i];
+        // Drivers see the format a target renders in, never none.
+        if (def->colorTargets[i].resource.index1 != 0)
+        {
+            const mrhiTextureDef* texture = mrhiFrameTextureOf(
+                &device->frameResources[def->colorTargets[i].resource.index1 - 1]);
+            pass->colorTargets[i].viewFormat =
+                mrhiViewFormatOf(texture, def->colorTargets[i].viewFormat);
+        }
     }
     MeasureTargets(device, pass);
     device->frameUseCount += count;

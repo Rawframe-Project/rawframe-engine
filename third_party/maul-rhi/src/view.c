@@ -9,6 +9,7 @@
 #include "capabilities_core.h"
 #include "device_core.h"
 #include "heap_core.h"
+#include "label.h"
 
 #include <stdckdint.h>
 
@@ -98,6 +99,12 @@ bool mrhiFormatHasAspect(mrhiFormat format, mrhiTextureAspect aspect)
     }
 }
 
+mrhiFormat mrhiViewFormatOf(const mrhiTextureDef* texture, mrhiFormat format)
+{
+    mrhiFormat viewed = format == mrhi_formatNone ? texture->format : format;
+    return IsFormatGiven(texture, viewed) ? viewed : mrhi_formatNone;
+}
+
 bool mrhiResolveView(const mrhiTextureDef* texture, const mrhiViewDef* def,
                      mrhiViewDef* resolvedOut)
 {
@@ -173,6 +180,7 @@ mrhiResult mrhiCreateView(mrhiDevice* device, const mrhiViewDef* def, mrhiViewId
     }
     mrhiTextureSlot* texture = &device->textureSlots[def->texture.index1 - 1];
     uint64_t handle = 0;
+    mrhiDropLabel(&resolved.label, &resolved.labelLength);
     status =
         mrhiDriverStatus(device, device->driver.vtable->createView(
                                      device->driver.self, texture->handle, &resolved, &handle));

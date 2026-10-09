@@ -211,6 +211,8 @@ typedef struct TestDevice
     // or NULL for success; and the images acquired and not yet presented
     // or given back.
     mrhiTestFrameLog* frameLog;
+    // The objects made with a label.
+    uint32_t named;
     const mrhiResult* acquireOutcome;
     uint32_t imagesOut;
     // The flag that loses the device, why, and whether it is lost and the
@@ -246,6 +248,7 @@ typedef struct TestDevice
 static void Name(TestDevice* device, const char* label, size_t length)
 {
     MRHI_ASSERT(length <= MRHI_LABEL_BYTES && (label != nullptr || length == 0));
+    device->named += length > 0 ? 1 : 0;
     for (size_t i = 0; i < length; ++i)
     {
         MRHI_ASSERT(label[i] != '\0');
@@ -655,6 +658,7 @@ static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t
     if (device->frameLog != nullptr)
     {
         log.frames = device->frameLog->frames + 1;
+        log.named = device->named;
         *device->frameLog = log;
     }
     uint64_t handle = 0;

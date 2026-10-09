@@ -261,13 +261,18 @@ static bool PlanResource(mrhiDevice* device, uint32_t slot)
             resource->finalState = uses[i].state;
             bool target = uses[i].use == mrhiUseColorTarget || uses[i].use == mrhiUseDepthTarget;
             targetsOnly = targetsOnly && target && uses[i].writes && !uses[i].reads;
+            uint32_t baseLayer = 0;
+            uint32_t layerCount = 0;
+            mrhiTrackedLayers(resource, &uses[i], &baseLayer, &layerCount);
             Move(&map, p + 1,
-                 (mrhiBox){uses[i].baseMip, uses[i].mipCount, uses[i].baseLayer, uses[i].layerCount,
-                           uses[i].planes, uses[i].state});
+                 (mrhiBox){uses[i].baseMip, uses[i].mipCount, baseLayer, layerCount, uses[i].planes,
+                           uses[i].state});
         }
     }
-    resource->transient =
-        resource->kind == mrhiFrameTexture && resource->firstPass != 0 && targetsOnly;
+    // A texture with view formats may be rendered in one, which WebGPU's
+    // transient attachments refuse.
+    resource->transient = resource->kind == mrhiFrameTexture && resource->firstPass != 0 &&
+                          targetsOnly && resource->texture.viewFormats[0] == mrhi_formatNone;
     // A surface image ends ready to present, a sealed object sealed, and
     // an imported object otherwise in its last use's state.
     if (resource->kind == mrhiSurfaceImage)

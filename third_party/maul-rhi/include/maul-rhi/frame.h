@@ -414,6 +414,10 @@ extern "C"
         uint32_t resolveMip;
         // The resolve texture's layer.
         uint32_t resolveLayer;
+        // The format it renders in: the texture's or one of its view formats, a
+        // surface image's from its configuration; mrhi_formatNone for the
+        // texture's. A resolve texture is viewed in it too, and must list it.
+        mrhiFormat viewFormat;
     } mrhiColorTarget;
 
     // A texture a pass tests and writes depth and stencil in.
@@ -651,7 +655,8 @@ extern "C"
         // The texture or buffer usages its kept passes make of it.
         uint32_t usage;
         // Whether it is a declared texture living only inside its render
-        // passes, which tile GPUs keep on chip.
+        // passes, which tile GPUs keep on chip; never one listing view formats,
+        // which WebGPU keeps off chip.
         bool transient;
         // The first kept pass using it, or a null id when none does.
         mrhiPassId firstPass;

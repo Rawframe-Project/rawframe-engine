@@ -1,5 +1,5 @@
 # The public headers alone, compiled by whichever compiler configures
-# this project (F26): Windows CI configures it with Visual Studio's
+# this project (family record 0008): Windows CI configures it with Visual Studio's
 # default toolset, so MSVC's cl, which cannot build the C23 library,
 # still compiles every header as C17 and C++17 with /W4 /WX.
 #

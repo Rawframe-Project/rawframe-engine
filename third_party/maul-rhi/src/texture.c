@@ -10,6 +10,7 @@
 #include "capabilities_core.h"
 #include "chain.h"
 #include "device_core.h"
+#include "label.h"
 
 #include "maul-rhi/vulkan.h"
 
@@ -256,8 +257,10 @@ mrhiResult mrhiCreateTexture(mrhiDevice* device, const mrhiTextureDef* def,
         return mrhi_errorCapacity;
     }
     uint64_t handle = 0;
+    mrhiTextureDef driverDef = *def;
+    mrhiDropLabel(&driverDef.label, &driverDef.labelLength);
     status = mrhiDriverStatus(
-        device, device->driver.vtable->createTexture(device->driver.self, def, &handle));
+        device, device->driver.vtable->createTexture(device->driver.self, &driverDef, &handle));
     if (status != mrhi_success)
     {
         mrhiPoolRelease(&device->textures, index1);

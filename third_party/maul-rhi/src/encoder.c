@@ -496,7 +496,7 @@ static mrhiResult Label(mrhiDevice* device, mrhiPassId id, mrhiCommandType type,
     {
         ++pass->debugDepth;
     }
-    return Record(device, pass, command, label, length);
+    return MAUL_RHI_LABELS ? Record(device, pass, command, label, length) : mrhi_success;
 }
 
 mrhiResult mrhiPushDebugGroup(mrhiDevice* device, mrhiPassId pass, const char* label,
@@ -529,5 +529,5 @@ mrhiResult mrhiPopDebugGroup(mrhiDevice* device, mrhiPassId id)
     }
     --pass->debugDepth;
     mrhiCommand command = {.type = mrhiCommandPopDebugGroup};
-    return Record(device, pass, command, nullptr, 0);
+    return MAUL_RHI_LABELS ? Record(device, pass, command, nullptr, 0) : mrhi_success;
 }

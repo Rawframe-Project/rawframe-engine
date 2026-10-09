@@ -65,13 +65,20 @@ EM_JS(void, mrhiJsBeginFrame, (int state, double serial, const uint8_t* staging,
         frame.taken.push(entry);
         return entry.object;
     };
-    frame.view = (index, mip, layer, volume) => frame.objects[index].createView({
-        dimension: volume ? '3d' : '2d',
-        baseMipLevel: mip,
-        mipLevelCount: 1,
-        baseArrayLayer: volume ? 0 : layer,
-        arrayLayerCount: 1,
-    });
+    // A view of one mip and layer, in a format when one is named.
+    frame.view = (index, mip, layer, volume, format) => {
+        const descriptor = {
+            dimension: volume ? '3d' : '2d',
+            baseMipLevel: mip,
+            mipLevelCount: 1,
+            baseArrayLayer: volume ? 0 : layer,
+            arrayLayerCount: 1,
+        };
+        if (format) {
+            descriptor.format = format;
+        }
+        return frame.objects[index].createView(descriptor);
+    };
     // The pass draws and dispatches go to, a compute pass taking up what
     // its last one had bound.
     frame.inside = () => {
@@ -166,12 +173,13 @@ EM_JS(void, mrhiJsAddNoTarget, (int state), {
 });
 
 EM_JS(void, mrhiJsAddColorTarget, (int state, uint32_t resource, uint32_t mip, uint32_t layer,
-                            bool volume, bool keep, bool discard, float red, float green,
-                            float blue, float alpha, uint32_t resolve, uint32_t resolveMip,
-                            uint32_t resolveLayer), {
+                            bool volume, const char* viewFormat, bool keep, bool discard,
+                            float red, float green, float blue, float alpha, uint32_t resolve,
+                            uint32_t resolveMip, uint32_t resolveLayer), {
     const frame = Module.mrhiGpu.states[state].frame;
+    const format = UTF8ToString(viewFormat);
     const target = {
-        view: frame.view(resource, mip, layer, volume),
+        view: frame.view(resource, mip, layer, volume, format),
         loadOp: keep ? 'load' : 'clear',
         storeOp: discard ? 'discard' : 'store',
         clearValue: [red, green, blue, alpha],
@@ -180,7 +188,7 @@ EM_JS(void, mrhiJsAddColorTarget, (int state, uint32_t resource, uint32_t mip, u
         target.depthSlice = layer;
     }
     if (resolve) {
-        target.resolveTarget = frame.view(resolve, resolveMip, resolveLayer, false);
+        target.resolveTarget = frame.view(resolve, resolveMip, resolveLayer, false, format);
     }
     frame.targets.push(target);
 });
@@ -635,7 +643,7 @@ static void AddTargets(int state, const mrhiDriverFrame* frame, const mrhiDriver
         const mrhiClearColor* clear = &target->clear;
         mrhiJsAddColorTarget(state, target->resource.index1, target->mip, target->layer,
                              TextureOf(frame, target->resource.index1)->kind == mrhi_texture3d,
-                             target->load == mrhi_loadKeep,
+                             mrhiWebGpuFormat(target->viewFormat), target->load == mrhi_loadKeep,
                              pass->colorStores[i] == mrhi_storeDiscard, clear->red, clear->green,
                              clear->blue, clear->alpha, target->resolve.index1, target->resolveMip,
                              target->resolveLayer);

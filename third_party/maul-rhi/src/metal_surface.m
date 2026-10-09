@@ -36,18 +36,27 @@ uint32_t mrhiMetalSurfaceColors(mrhiSurfaceColor* colors)
         {mrhi_formatRgba16Float, mrhi_primariesBt709, mrhi_transferLinear, mrhi_rangeExtended},
         {mrhi_formatRgba16Float, mrhi_primariesDisplayP3, mrhi_transferLinear, mrhi_rangeStandard},
         {mrhi_formatRgba16Float, mrhi_primariesDisplayP3, mrhi_transferLinear, mrhi_rangeExtended},
+        // HDR10: the system tone maps it to what the display shows.
+        {mrhi_formatRgb10a2Unorm, mrhi_primariesBt2020, mrhi_transferPq, mrhi_rangeStandard},
     };
     static_assert(sizeof(kColors) / sizeof(kColors[0]) <= MRHI_SURFACE_COLORS, "colors fit");
-    // A layer takes extended range content on iOS from 16 only.
+    // A layer takes extended range content on iOS from 16 only, and the
+    // PQ color space comes with macOS 11.
     bool extended = false;
+    bool pq = false;
     if (@available(macOS 10.11, iOS 16.0, *))
     {
         extended = true;
     }
+    if (@available(macOS 11.0, iOS 16.0, *))
+    {
+        pq = true;
+    }
     uint32_t count = 0;
     for (uint32_t i = 0; i < sizeof(kColors) / sizeof(kColors[0]); ++i)
     {
-        if (extended || kColors[i].range != mrhi_rangeExtended)
+        bool hdr10 = kColors[i].transfer == mrhi_transferPq;
+        if ((extended || kColors[i].range != mrhi_rangeExtended) && (pq || !hdr10))
         {
             colors[count++] = kColors[i];
         }
@@ -60,7 +69,15 @@ static CGColorSpaceRef NewColorSpace(const mrhiSurfaceColor* color)
 {
     bool p3 = color->primaries == mrhi_primariesDisplayP3;
     CFStringRef name = kCGColorSpaceSRGB;
-    if (color->transfer == mrhi_transferSrgb)
+    if (color->transfer == mrhi_transferPq)
+    {
+        // Listed from macOS 11 and iOS 16 only.
+        if (@available(macOS 11.0, iOS 14.0, *))
+        {
+            name = kCGColorSpaceITUR_2100_PQ;
+        }
+    }
+    else if (color->transfer == mrhi_transferSrgb)
     {
         name = p3 ? kCGColorSpaceDisplayP3 : kCGColorSpaceSRGB;
     }
@@ -84,10 +101,14 @@ static void Set(CAMetalLayer* layer, id<MTLDevice> device, const mrhiSurfaceConf
     CGColorSpaceRelease(space);
     if (@available(macOS 10.11, iOS 16.0, *))
     {
-        layer.wantsExtendedDynamicRangeContent = config->color.range == mrhi_rangeExtended;
+        // PQ content goes past SDR white too.
+        layer.wantsExtendedDynamicRangeContent =
+            config->color.range == mrhi_rangeExtended || config->color.transfer == mrhi_transferPq;
     }
     layer.drawableSize = CGSizeMake(config->width, config->height);
-    layer.framebufferOnly = config->usage == mrhi_textureRenderTarget;
+    // A drawable viewed in another format is no framebuffer only.
+    layer.framebufferOnly = config->usage == mrhi_textureRenderTarget &&
+                            config->viewFormats[0] == mrhi_formatNone;
     layer.maximumDrawableCount = 3;
     layer.opaque = config->alphaMode == mrhi_alphaOpaque;
 #if TARGET_OS_OSX

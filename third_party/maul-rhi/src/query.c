@@ -9,6 +9,7 @@
 // work with.
 
 #include "encoder_core.h"
+#include "label.h"
 
 #include <stdatomic.h>
 
@@ -93,8 +94,10 @@ mrhiResult mrhiCreateQuerySet(mrhiDevice* device, const mrhiQuerySetDef* def,
         return mrhi_errorCapacity;
     }
     uint64_t handle = 0;
+    mrhiQuerySetDef driverDef = *def;
+    mrhiDropLabel(&driverDef.label, &driverDef.labelLength);
     status = mrhiDriverStatus(
-        device, device->driver.vtable->createQuerySet(device->driver.self, def, &handle));
+        device, device->driver.vtable->createQuerySet(device->driver.self, &driverDef, &handle));
     if (status != mrhi_success)
     {
         mrhiPoolRelease(&device->querySets, index1);

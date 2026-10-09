@@ -298,15 +298,21 @@ static void AddColors(const VkSurfaceFormatKHR* formats, uint32_t count, mrhiSur
     }
 }
 
-static mrhiPresentModes ModesOf(const mrhiVulkan* vulkan, VkPhysicalDevice device,
-                                VkSurfaceKHR surface)
+// The surface's present modes, up to capacity: how many were read, 0 on
+// a failure.
+static uint32_t ReadModes(const mrhiVulkan* vulkan, VkPhysicalDevice device, VkSurfaceKHR surface,
+                          VkPresentModeKHR* modes, uint32_t capacity)
 {
-    VkPresentModeKHR modes[16];
-    uint32_t count = sizeof(modes) / sizeof(modes[0]);
+    uint32_t count = capacity;
     VkResult result =
         vulkan->vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &count, modes);
+    return result == VK_SUCCESS || result == VK_INCOMPLETE ? count : 0;
+}
+
+static mrhiPresentModes ModesOf(const VkPresentModeKHR* modes, uint32_t count)
+{
     mrhiPresentModes found = 0;
-    for (uint32_t i = 0; i < count && (result == VK_SUCCESS || result == VK_INCOMPLETE); ++i)
+    for (uint32_t i = 0; i < count; ++i)
     {
         found |= modes[i] == VK_PRESENT_MODE_FIFO_KHR        ? mrhi_presentFifo
                  : modes[i] == VK_PRESENT_MODE_MAILBOX_KHR   ? mrhi_presentMailbox
@@ -361,6 +367,34 @@ bool mrhiVulkanTwinImages(const VkSurfaceFormatKHR* formats, uint32_t count,
     return eight > 0 && twinned == eight;
 }
 
+void mrhiVulkanCapsOf(const mrhiVulkanSurfaceFacts* facts, mrhiSurfaceCaps* capsOut)
+{
+    *capsOut = (mrhiSurfaceCaps){0};
+    mrhiSurfaceCaps caps = {0};
+    AddColors(facts->formats, facts->formatCount, &caps);
+    caps.twinViews = facts->mutableFormat;
+    caps.twinImages = mrhiVulkanTwinImages(facts->formats, facts->formatCount, &caps);
+    caps.presentModes = ModesOf(facts->modes, facts->modeCount);
+    VkCompositeAlphaFlagsKHR alpha = facts->alpha;
+    caps.alphaModes |=
+        (alpha & (VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR | VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)) != 0
+            ? mrhi_alphaOpaque
+            : 0u;
+    caps.alphaModes |=
+        (alpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) != 0 ? mrhi_alphaPremultiplied : 0u;
+    caps.usages = UsagesOf(facts->usages);
+    // The floors: a color, FIFO, opaque alpha, render targets and a way to
+    // sRGB.
+    caps.presentable = caps.colorCount > 0 && (caps.presentModes & mrhi_presentFifo) != 0 &&
+                       (caps.alphaModes & mrhi_alphaOpaque) != 0 &&
+                       (caps.usages & mrhi_textureRenderTarget) != 0 &&
+                       (caps.twinViews || caps.twinImages);
+    if (caps.presentable)
+    {
+        *capsOut = caps;
+    }
+}
+
 void mrhiVulkanSurfaceCaps(const mrhiVulkan* vulkan, VkPhysicalDevice device, bool swapchain,
                            bool mutableFormat, VkSurfaceKHR surface, mrhiSurfaceCaps* capsOut)
 {
@@ -376,39 +410,23 @@ void mrhiVulkanSurfaceCaps(const mrhiVulkan* vulkan, VkPhysicalDevice device, bo
     {
         return;
     }
-    mrhiSurfaceCaps caps = {0};
     VkSurfaceFormatKHR formats[64];
-    uint32_t formatCount = ReadFormats(vulkan, device, surface, formats, 64);
-    AddColors(formats, formatCount, &caps);
-    caps.twinViews = mutableFormat;
-    caps.twinImages = mrhiVulkanTwinImages(formats, formatCount, &caps);
-    caps.presentModes = ModesOf(vulkan, device, surface);
-    VkCompositeAlphaFlagsKHR alpha = surfaceCaps.supportedCompositeAlpha;
-    caps.alphaModes |=
-        (alpha & (VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR | VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)) != 0
-            ? mrhi_alphaOpaque
-            : 0u;
-    caps.alphaModes |=
-        (alpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) != 0 ? mrhi_alphaPremultiplied : 0u;
-    caps.usages = UsagesOf(surfaceCaps.supportedUsageFlags);
-    // The floors: a color, FIFO, opaque alpha, render targets and a way to
-    // sRGB.
-    caps.presentable = caps.colorCount > 0 && (caps.presentModes & mrhi_presentFifo) != 0 &&
-                       (caps.alphaModes & mrhi_alphaOpaque) != 0 &&
-                       (caps.usages & mrhi_textureRenderTarget) != 0 &&
-                       (caps.twinViews || caps.twinImages);
-    if (caps.presentable)
-    {
-        *capsOut = caps;
-    }
+    VkPresentModeKHR modes[16];
+    const mrhiVulkanSurfaceFacts facts = {
+        .formats = formats,
+        .formatCount = ReadFormats(vulkan, device, surface, formats, 64),
+        .modes = modes,
+        .modeCount = ReadModes(vulkan, device, surface, modes, 16),
+        .alpha = surfaceCaps.supportedCompositeAlpha,
+        .usages = surfaceCaps.supportedUsageFlags,
+        .mutableFormat = mutableFormat,
+    };
+    mrhiVulkanCapsOf(&facts, capsOut);
 }
 
-bool mrhiVulkanSurfaceFormat(const mrhiVulkan* vulkan, VkPhysicalDevice device,
-                             VkSurfaceKHR surface, mrhiSurfaceColor color,
-                             VkSurfaceFormatKHR* formatOut)
+bool mrhiVulkanPickFormat(const VkSurfaceFormatKHR* formats, uint32_t count, mrhiSurfaceColor color,
+                          VkSurfaceFormatKHR* formatOut)
 {
-    VkSurfaceFormatKHR formats[64];
-    uint32_t count = ReadFormats(vulkan, device, surface, formats, 64);
     // An sRGB color (twin images) is listed as its unorm twin.
     VkFormat exact = mrhiVulkanFormat(color.format, VK_FORMAT_UNDEFINED);
     mrhiSurfaceColor listedAs = color;
@@ -426,4 +444,13 @@ bool mrhiVulkanSurfaceFormat(const mrhiVulkan* vulkan, VkPhysicalDevice device,
         }
     }
     return found;
+}
+
+bool mrhiVulkanSurfaceFormat(const mrhiVulkan* vulkan, VkPhysicalDevice device,
+                             VkSurfaceKHR surface, mrhiSurfaceColor color,
+                             VkSurfaceFormatKHR* formatOut)
+{
+    VkSurfaceFormatKHR formats[64];
+    uint32_t count = ReadFormats(vulkan, device, surface, formats, 64);
+    return mrhiVulkanPickFormat(formats, count, color, formatOut);
 }

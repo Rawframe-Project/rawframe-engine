@@ -71,11 +71,7 @@ static mrhiResult StatusOf(VkResult result)
     }
 }
 
-// Whether the size is one the window takes now: its own where it fixes
-// the extent, else one within the surface's bounds. Android reports the
-// window's size yet takes any size within the bounds, which its
-// compositor scales to the window.
-static bool TakesSize(const VkSurfaceCapabilitiesKHR* caps, VkExtent2D size)
+bool mrhiVulkanTakesSize(const VkSurfaceCapabilitiesKHR* caps, VkExtent2D size)
 {
 #ifndef __ANDROID__
     if (caps->currentExtent.width != UINT32_MAX)
@@ -87,10 +83,8 @@ static bool TakesSize(const VkSurfaceCapabilitiesKHR* caps, VkExtent2D size)
            size.height >= caps->minImageExtent.height && size.height <= caps->maxImageExtent.height;
 }
 
-// The swapchain's shape: at least three images within the surface's
-// bounds, its present mode and its alpha.
-static void Shape(const VkSurfaceCapabilitiesKHR* caps, const mrhiSurfaceConfig* config,
-                  VkSwapchainCreateInfoKHR* info)
+void mrhiVulkanSwapchainShape(const VkSurfaceCapabilitiesKHR* caps, const mrhiSurfaceConfig* config,
+                              VkSwapchainCreateInfoKHR* info)
 {
     uint32_t count = caps->minImageCount > 3 ? caps->minImageCount : 3;
     count = caps->maxImageCount != 0 && count > caps->maxImageCount ? caps->maxImageCount : count;
@@ -150,7 +144,7 @@ static mrhiResult Make(mrhiVulkanSwapchains* swapchains, VkSurfaceKHR surface,
     }
     const VkExtent2D size = {config->width, config->height};
     VkSurfaceFormatKHR format;
-    if (!TakesSize(&caps, size))
+    if (!mrhiVulkanTakesSize(&caps, size))
     {
         return mrhi_errorOutOfDate;
     }
@@ -192,7 +186,7 @@ static mrhiResult Make(mrhiVulkanSwapchains* swapchains, VkSurfaceKHR surface,
         .clipped = VK_TRUE,
         .oldSwapchain = old,
     };
-    Shape(&caps, config, &info);
+    mrhiVulkanSwapchainShape(&caps, config, &info);
     *slot = (mrhiVulkanSwapchain){.surface = surface, .generation = slot->generation};
     result =
         swapchains->api->vkCreateSwapchainKHR(swapchains->device, &info, nullptr, &slot->swapchain);

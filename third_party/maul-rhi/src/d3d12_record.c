@@ -48,7 +48,8 @@ static D3D12_CPU_DESCRIPTOR_HANDLE ColorView(mrhiD3d12Recorder* recorder,
 {
     const mrhiD3d12Object* object = TargetOf(recorder, target->resource);
     const mrhiTextureDef* def = object->texture;
-    D3D12_RENDER_TARGET_VIEW_DESC desc = {.Format = mrhiD3d12Format(def->format)};
+    // The target's view format, which the core always names.
+    D3D12_RENDER_TARGET_VIEW_DESC desc = {.Format = mrhiD3d12Format(target->viewFormat)};
     if (def->kind == mrhi_texture3d)
     {
         desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE3D;
@@ -210,7 +211,7 @@ static void Resolve(mrhiD3d12Recorder* recorder)
             mrhiD3d12FlushBarriers(recorder);
             ID3D12GraphicsCommandList_ResolveSubresource(recorder->list, into->resource, to,
                                                          source->resource, from,
-                                                         mrhiD3d12Format(source->texture->format));
+                                                         mrhiD3d12Format(target->viewFormat));
             mrhiD3d12Transition(recorder, source->resource, from,
                                 D3D12_RESOURCE_STATE_RESOLVE_SOURCE,
                                 D3D12_RESOURCE_STATE_RENDER_TARGET);

@@ -111,15 +111,17 @@ static VkImageView MakeView(mrhiVulkanRecording* recording, VkImage image, const
 
 // A view of one mip and layer (a 3D texture's depth slice) of a target;
 // in a multiview pass, of a layer per view from it (mrhi-0020).
+// A view of a target in a format, mrhi_formatNone for the texture's.
 static VkImageView TargetView(mrhiVulkanRecording* recording, uint32_t index1, uint32_t mip,
-                              uint32_t layer, VkImageUsageFlags use)
+                              uint32_t layer, VkImageUsageFlags use, mrhiFormat format)
 {
     mrhiVulkanFrameTexture texture = mrhiVulkanFrameImage(recording, index1);
     uint32_t views = recording->pass->viewCount;
+    mrhiFormat viewed = format != mrhi_formatNone ? format : texture.def->format;
     const ViewShape shape = {
         .type = views > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D,
-        .format = texture.def->format,
-        .aspects = mrhiVulkanAspect(mrhi_aspectAll, texture.def->format),
+        .format = viewed,
+        .aspects = mrhiVulkanAspect(mrhi_aspectAll, viewed),
         .mip = mip,
         .mips = 1,
         .layer = layer,
@@ -167,7 +169,7 @@ static VkRenderingAttachmentInfo ColorOf(mrhiVulkanRecording* recording, uint32_
     }
     mrhiFormat format = mrhiVulkanFrameImage(recording, target->resource.index1).def->format;
     color.imageView = TargetView(recording, target->resource.index1, target->mip, target->layer,
-                                 VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+                                 VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, target->viewFormat);
     color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     color.loadOp = (VkAttachmentLoadOp)target->load;
     color.storeOp = (VkAttachmentStoreOp)pass->colorStores[i];
@@ -177,7 +179,7 @@ static VkRenderingAttachmentInfo ColorOf(mrhiVulkanRecording* recording, uint32_
         color.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
         color.resolveImageView =
             TargetView(recording, target->resolve.index1, target->resolveMip, target->resolveLayer,
-                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, target->viewFormat);
         color.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     }
     return color;
@@ -205,7 +207,7 @@ static void DepthOf(mrhiVulkanRecording* recording, VkRenderingAttachmentInfo* d
     const mrhiDepthTarget* target = &pass->depthTarget;
     mrhiFormat format = mrhiVulkanFrameImage(recording, target->resource.index1).def->format;
     VkImageView view = TargetView(recording, target->resource.index1, target->mip, target->layer,
-                                  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+                                  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, mrhi_formatNone);
     VkImageLayout layout = target->readOnly ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
                                             : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     *depthOut = (VkRenderingAttachmentInfo){

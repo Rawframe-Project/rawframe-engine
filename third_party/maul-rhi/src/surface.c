@@ -132,7 +132,10 @@ mrhiResult mrhiCreateSurface(mrhiInstance* instance, const mrhiSurfaceDef* def,
         return mrhi_errorCapacity;
     }
     uint64_t handle = 0;
-    status = instance->driver.vtable->createSurface(instance->driver.self, source, def, &handle);
+    mrhiSurfaceDef driverDef = *def;
+    mrhiDropLabel(&driverDef.label, &driverDef.labelLength);
+    status =
+        instance->driver.vtable->createSurface(instance->driver.self, source, &driverDef, &handle);
     if (status != mrhi_success)
     {
         mrhiPoolRelease(&instance->surfaces, index1);
