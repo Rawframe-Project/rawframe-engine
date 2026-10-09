@@ -42,9 +42,15 @@ elseif(WIN32)
 else()
     set(rawframe_quic_cache "$ENV{HOME}/.cache/rawframe")
 endif()
+# Android builds both with the build's own NDK, for its API level, as the
+# NDK's toolchain file names them (D549).
+set(rawframe_quic_android "")
+if(ANDROID)
+    set(rawframe_quic_android "${ANDROID_NDK}" "${ANDROID_PLATFORM_LEVEL}")
+endif()
 file(SHA256 "${PROJECT_SOURCE_DIR}/tools/build_quic.sh" rawframe_quic_script_hash)
 string(SHA256 rawframe_quic_key
-    "${RAWFRAME_MSQUIC_REVISION} ${RAWFRAME_OPENSSL_REVISION} ${rawframe_quic_script_hash} ${RAWFRAME_QUIC_C_COMPILER}")
+    "${RAWFRAME_MSQUIC_REVISION} ${RAWFRAME_OPENSSL_REVISION} ${rawframe_quic_script_hash} ${RAWFRAME_QUIC_C_COMPILER} ${rawframe_quic_android}")
 string(SUBSTRING "${rawframe_quic_key}" 0 16 rawframe_quic_key)
 set(RAWFRAME_QUIC_PREFIX "${rawframe_quic_cache}/quic-${rawframe_quic_key}")
 
@@ -54,7 +60,7 @@ if(NOT EXISTS "${RAWFRAME_QUIC_PREFIX}/complete")
     message(STATUS "Building MsQuic and OpenSSL into ${RAWFRAME_QUIC_PREFIX}")
     execute_process(
         COMMAND ${rawframe_quic_shell} "${PROJECT_SOURCE_DIR}/tools/build_quic.sh" "${RAWFRAME_QUIC_PREFIX}"
-                "${RAWFRAME_QUIC_C_COMPILER}" "${RAWFRAME_QUIC_CXX_COMPILER}"
+                "${RAWFRAME_QUIC_C_COMPILER}" "${RAWFRAME_QUIC_CXX_COMPILER}" ${rawframe_quic_android}
         RESULT_VARIABLE rawframe_quic_result)
     if(NOT rawframe_quic_result EQUAL 0)
         message(FATAL_ERROR "tools/build_quic.sh failed")

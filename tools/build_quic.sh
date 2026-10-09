@@ -4,17 +4,24 @@
 # quic.cmake): the result is the same for every build tree, and building
 # OpenSSL for each of six presets would cost more than the engine does.
 #
-#   tools/build_quic.sh <prefix> <c compiler> <c++ compiler>
+#   tools/build_quic.sh <prefix> <c compiler> <c++ compiler> [<android ndk> <api level>]
+#
+# Given an NDK and an API level, it builds both for 64-bit ARM Android
+# (D549): OpenSSL by its android-arm64 target, MsQuic through the NDK's CMake
+# toolchain.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 prefix="$1"
 compiler="$2"
 cxx_compiler="$3"
+android_ndk="${4:-}"
+android_api="${5:-}"
 root="$PWD/third_party"
 jobs="$(getconf _NPROCESSORS_ONLN)"
-# OpenSSL's name for this machine (D236).
-case "$(uname -s)-$(uname -m)" in
+# OpenSSL's name for this machine (D236), or Android's.
+case "$(if [ -n "$android_ndk" ]; then echo Android; else echo "$(uname -s)-$(uname -m)"; fi)" in
+    Android) openssl_target=android-arm64 ;;
     Linux-x86_64) openssl_target=linux-x86_64 ;;
     Linux-aarch64) openssl_target=linux-aarch64 ;;
     Darwin-arm64) openssl_target=darwin64-arm64-cc ;;
@@ -51,6 +58,17 @@ if [ "$windows" = 1 ]; then
         nmake -nologo build_libs >>"$work/openssl.log" 2>&1
         nmake -nologo install_dev >>"$work/openssl.log" 2>&1
     ) || { tail -30 "$work/openssl.log"; exit 1; }
+elif [ -n "$android_ndk" ]; then
+    # OpenSSL finds the NDK's clang on the path and names its target itself.
+    (
+        cd "$work/openssl"
+        export ANDROID_NDK_ROOT="$android_ndk"
+        PATH="$android_ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+        CC=clang perl "$root/openssl/Configure" "$openssl_target" no-shared no-tests no-docs no-apps \
+            -D__ANDROID_API__="$android_api" --prefix="$prefix" --libdir=lib -fPIC >"$work/openssl.log" 2>&1
+        make -j"$jobs" build_libs >>"$work/openssl.log" 2>&1
+        make install_dev >>"$work/openssl.log" 2>&1
+    ) || { tail -30 "$work/openssl.log"; exit 1; }
 else
     (
         cd "$work/openssl"
@@ -73,8 +91,16 @@ fi
     if [ "$windows" = 1 ]; then
         export _CL_="-WX- -GL-"
     fi
+    compilers=(-DCMAKE_C_COMPILER="$compiler" -DCMAKE_CXX_COMPILER="$cxx_compiler")
+    if [ -n "$android_ndk" ]; then
+        # The NDK's toolchain looks for libraries in its sysroot alone;
+        # OpenSSL's are in the prefix.
+        compilers=(-DCMAKE_TOOLCHAIN_FILE="$android_ndk/build/cmake/android.toolchain.cmake"
+                   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-"$android_api"
+                   -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH)
+    fi
     cmake -S "$root/msquic" -B "$work/msquic" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_C_COMPILER="$compiler" -DCMAKE_CXX_COMPILER="$cxx_compiler" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        "${compilers[@]}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DQUIC_TLS_LIB=openssl -DQUIC_OPENSSL_INCLUDE_DIR="$prefix/include" \
         -DQUIC_OPENSSL_LIB_DIR="$prefix/lib" -DQUIC_BUILD_SHARED=OFF -DQUIC_BUILD_TEST=OFF \
         -DQUIC_BUILD_TOOLS=OFF -DQUIC_BUILD_PERF=OFF -DQUIC_ENABLE_LOGGING=OFF \
