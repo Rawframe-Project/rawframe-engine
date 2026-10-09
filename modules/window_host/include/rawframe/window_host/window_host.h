@@ -32,6 +32,7 @@
 #include "rawframe/window/windows.h"
 
 #include <array>
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <string>
@@ -102,6 +103,9 @@ private:
     /// it was not asked.
     std::optional<view::UiTyping::Caret> textInput_;
     window::WindowId window_;
+    /// From the platform's `suspending` until its `resumed`, as the Host's
+    /// frames tell its participants (D565).
+    std::atomic<bool> suspended_{false};
     std::vector<composition::LentCapability> lent_;
     std::optional<input_window::Bridge> bridge_;
     std::unique_ptr<host::Host> host_;

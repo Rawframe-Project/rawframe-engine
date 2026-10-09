@@ -37,6 +37,8 @@ constexpr EventIdentity kRecording{"audio", "recording_summary"};
 constexpr EventIdentity kPlaying{"audio", "playing_summary"};
 constexpr EventIdentity kUnheard{"audio", "output_unavailable"};
 constexpr EventIdentity kSilent{"audio", "game_silent"};
+constexpr EventIdentity kSuspended{"audio", "output_suspended"};
+constexpr EventIdentity kResumed{"audio", "output_resumed"};
 constexpr EventIdentity kUnread{"audio", "sounds_unavailable"};
 constexpr EventIdentity kUnreadSound{"audio", "sound_unavailable"};
 constexpr EventIdentity kSoundsRead{"audio", "sounds_read"};
@@ -444,8 +446,24 @@ public:
         if (phase != composition::HostPhase::PresentationExtract || (output_ == nullptr && sink_ == nullptr)) {
             return;
         }
+        if (frame.suspended != suspended_) {
+            suspend(frame.suspended);
+        }
         const std::optional<double> kSeconds = hearing_.hear(frame);
         if (!kSeconds.has_value()) {
+            return;
+        }
+        if (suspended_) {
+            // The World runs on unheard (D565): its mix is rendered here
+            // and let go, so what it plays ends as it would have, and no
+            // command waits in the mixer's queue to sound all at once when
+            // the program comes back.
+            const std::uint32_t kRate = sink_ != nullptr ? sink_->rate() : output_->rate();
+            owed_ += *kSeconds * kRate;
+            const auto kFrames = static_cast<std::size_t>(owed_);
+            owed_ -= static_cast<double>(kFrames);
+            rendered_.resize(kFrames * 2);
+            hearing_.mixer->render(rendered_);
             return;
         }
         if (sink_ != nullptr) {
@@ -486,7 +504,8 @@ public:
                           diagnostics::field("cues", kHeard.cues),
                           diagnostics::field("emitterCues", emitterCuesOf(kHeard)),
                           diagnostics::field("effects", kHeard.once),
-                          diagnostics::field("refused", kHeard.refused)});
+                          diagnostics::field("refused", kHeard.refused),
+                          diagnostics::field("suspensions", suspensions_)});
             return;
         }
         if (output_ == nullptr) {
@@ -509,10 +528,39 @@ public:
                       diagnostics::field("cues", kHeard.cues),
                       diagnostics::field("emitterCues", emitterCuesOf(kHeard)),
                       diagnostics::field("effects", kHeard.once),
-                      diagnostics::field("refused", kHeard.refused)});
+                      diagnostics::field("refused", kHeard.refused),
+                      diagnostics::field("suspensions", suspensions_)});
     }
 
 private:
+    /// The platform suspended the program, or it runs again (D565): a
+    /// device's output stops, as SPEC-0025's `suspended` asks of all that
+    /// reaches a person, and starts again on `resumed`; a sink is no longer
+    /// written to until then.
+    void suspend(bool suspended) noexcept {
+        suspended_ = suspended;
+        if (suspended) {
+            ++suspensions_;
+        }
+        if (output_ != nullptr) {
+            if (suspended) {
+                output_->stop();
+            } else if (hearing_.mixer != nullptr) {
+                if (const result::Status kStarted = output_->start(*hearing_.mixer); !kStarted.has_value()) {
+                    emitter_.log(diagnostics::Severity::Warning,
+                                 kUnheard,
+                                 "the output did not start again: the World goes unheard",
+                                 {diagnostics::field("reason", kStarted.error().description())});
+                }
+            }
+        }
+        emitter_.log(diagnostics::Severity::Info,
+                     suspended ? kSuspended : kResumed,
+                     suspended ? "the program is suspended: its sound stops"
+                               : "the program runs again: its sound plays",
+                     {});
+    }
+
     // The output is declared after what it renders, so it stops first.
     Hearing hearing_;
     std::unique_ptr<audio::Output> output_;
@@ -525,6 +573,10 @@ private:
     bool silent_ = false;
     float peak_ = 0;
     bool lostReported_ = false;
+    /// Whether the last frame said the program is suspended, and how many
+    /// times it was.
+    bool suspended_ = false;
+    std::uint64_t suspensions_ = 0;
     diagnostics::Emitter emitter_;
 };
 

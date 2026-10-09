@@ -139,6 +139,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     lent_.push_back(composition::LentCapability{view::kUiNavigation.name, composition::provideAs(navigation_)});
     lent_.insert(lent_.end(), settings_.lent.begin(), settings_.lent.end());
     request_.lent = lent_;
+    request_.suspended = &suspended_;
 }
 
 result::Status WindowHost::start(window::Windows& windows) {
@@ -182,6 +183,7 @@ result::Status WindowHost::start(window::Windows& windows) {
 
 window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     bool closing = false;
+    const bool kWasSuspended = suspended_.load(std::memory_order_relaxed);
     // The touch screen's halves split the window as it is now (D387).
     if (const auto kState = windows.state(window_); kState.has_value()) {
         bridge_->resize(kState->size.width);
@@ -196,6 +198,9 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             break;
         }
         closing = closing || event->kind == window::EventKind::CloseRequested;
+        if (event->kind == window::EventKind::Suspending || event->kind == window::EventKind::Resumed) {
+            suspended_.store(event->kind == window::EventKind::Suspending, std::memory_order_release);
+        }
         // Whether a field takes text, told among the keys (D430): a key
         // typed into a field is never a gated action's, even when the
         // field lets go before the input next reads.
@@ -305,7 +310,11 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     if (const auto kState = windows.state(window_); kState.has_value()) {
         views_.window({.width = kState->size.width, .height = kState->size.height});
     }
-    for (int ran = 0; ran < kMostIterationsPerFrame && clock_.now() >= host_->due(); ++ran) {
+    // The platform's `suspending` comes in a frame of its own, after which
+    // frames pause (Maul Window's mobile backends): the Host runs in it,
+    // due or not, so its participants hear of it before then (D565).
+    const bool kTold = suspended_.load(std::memory_order_relaxed) != kWasSuspended;
+    for (int ran = 0; ran < kMostIterationsPerFrame && (clock_.now() >= host_->due() || (kTold && ran == 0)); ++ran) {
         if (!host_->iterate()) {
             return end();
         }
