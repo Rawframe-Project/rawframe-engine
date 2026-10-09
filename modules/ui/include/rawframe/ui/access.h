@@ -17,6 +17,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace rawframe::ui {
 
@@ -40,6 +41,19 @@ struct AccessSettings {
     std::optional<std::array<std::int32_t, 2>> place;
     /// The most nodes the platform's copy holds.
     std::uint32_t nodes = 4096;
+};
+
+/// What a screen reader asked of a node (D572), for the UI's owner to do as
+/// its own input would: a press, as a pointer's or navigation's, and focus,
+/// as navigation's. Scrolls the tree does itself.
+struct AccessRequest {
+    enum class Kind : std::uint8_t {
+        Press,
+        Focus
+    };
+    Kind kind = Kind::Press;
+    Node node;
+    friend constexpr bool operator==(const AccessRequest&, const AccessRequest&) noexcept = default;
 };
 
 /// Whether this build has `platform`'s adapter.
@@ -69,6 +83,14 @@ public:
     /// The tree as the platform was last given it, one node a line, as
     /// Maul UI writes it: what a screen reader reads.
     [[nodiscard]] std::string written() const;
+
+    /// What screen readers asked since last taken, oldest first.
+    [[nodiscard]] std::vector<AccessRequest> takeRequests();
+    /// A request as a platform gives it: one of a node the tree holds is
+    /// kept for its owner, a scroll is done, anything else is refused.
+    /// Whether it was taken. Platforms call it while they are updated;
+    /// tests, to play a screen reader.
+    bool ask(AccessRequest::Kind kind, Node node);
 
     struct State;
 
@@ -109,6 +131,11 @@ public:
     [[nodiscard]] const Access* access() const noexcept {
         return access_.get();
     }
+    [[nodiscard]] Access* access() noexcept {
+        return access_.get();
+    }
+    /// The UI's side: what screen readers asked since last taken.
+    [[nodiscard]] std::vector<AccessRequest> takeRequests();
 
 private:
     [[nodiscard]] result::Status make();

@@ -8,6 +8,7 @@
 #include <maul-ui/access_tree.h>
 #include <string>
 #include <utility>
+#include <vector>
 
 #if RAWFRAME_UI_ATSPI
 #include <maul-ui/access_atspi.h>
@@ -74,6 +75,8 @@ struct Access::State {
     /// The copy the platform reads: the AT-SPI adapter's own, or one held
     /// here where there is none.
     muiAccessTree* copy = nullptr;
+    /// What screen readers asked since last taken (D572).
+    std::vector<AccessRequest> requests;
 #if RAWFRAME_UI_ATSPI
     muiAtspiApp* app = nullptr;
     muiAtspiAdapter* adapter = nullptr;
@@ -104,18 +107,34 @@ struct Access::State {
     }
 };
 
-#if RAWFRAME_UI_ATSPI
 namespace {
 
-/// What a client asked for, done by the tree: a focus moved, a value set,
-/// a node scrolled; a press the game's own input decides is not done here.
-bool act(void* user, const muiAccessRequest* request) {
+/// What a client asked for (D572): a press or a focus kept for the UI's
+/// owner, whose input decides what they do; a scroll done by the tree.
+bool act(Access::State& state, const muiAccessRequest& request) {
+    const muiNodeId kId = muiNodeIdOfAccess(request.target);
+    const Node kNode{.index1 = kId.index1, .generation = kId.generation};
+    if (request.action == mui_actionClick || request.action == mui_actionFocus) {
+        if (!state.tree->contains(kNode)) {
+            return false;
+        }
+        state.requests.push_back(
+            {.kind = request.action == mui_actionClick ? AccessRequest::Kind::Press : AccessRequest::Kind::Focus,
+             .node = kNode});
+        return true;
+    }
+    const bool kScroll = request.action >= mui_actionScrollIntoView && request.action <= mui_actionSetScrollOffset;
     bool handled = false;
-    return muiPerformAccessAction(static_cast<muiContext*>(user), request, &handled) == mui_success && handled;
+    return kScroll && muiPerformAccessAction(state.context(), &request, &handled) == mui_success && handled;
 }
 
-} // namespace
+#if RAWFRAME_UI_ATSPI
+bool actFor(void* user, const muiAccessRequest* request) {
+    return act(*static_cast<Access::State*>(user), *request);
+}
 #endif
+
+} // namespace
 
 Access::Access(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
 }
@@ -151,8 +170,8 @@ result::Result<std::unique_ptr<Access>> Access::create(Tree& tree, Node root, co
         muiAtspiAdapterDef adapter = muiDefaultAtspiAdapterDef();
         adapter.nodes = settings.nodes;
         adapter.scale = settings.scale;
-        adapter.action = &act;
-        adapter.user = state->context();
+        adapter.action = &actFor;
+        adapter.user = state.get();
         RAWFRAME_TRY(checked(muiCreateAtspiAdapter(state->app, &adapter, &state->adapter),
                              "the window's accessibility could not be made"));
         if (settings.place.has_value()) {
@@ -255,6 +274,22 @@ void AccessSeat::setPlace(std::array<std::int32_t, 2> place) noexcept {
     if (access_ != nullptr) {
         access_->setPlace(place);
     }
+}
+
+std::vector<AccessRequest> Access::takeRequests() {
+    return std::exchange(state_->requests, {});
+}
+
+bool Access::ask(AccessRequest::Kind kind, Node node) {
+    const muiAccessRequest kRequest{
+        .action = static_cast<muiAccessAction>(kind == AccessRequest::Kind::Press ? mui_actionClick : mui_actionFocus),
+        .target = muiAccessIdOf(idOf(node)),
+    };
+    return act(*state_, kRequest);
+}
+
+std::vector<AccessRequest> AccessSeat::takeRequests() {
+    return access_ != nullptr ? access_->takeRequests() : std::vector<AccessRequest>{};
 }
 
 std::string Access::written() const {

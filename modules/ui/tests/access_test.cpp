@@ -10,6 +10,7 @@
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 using namespace rawframe;
 using namespace rawframe::ui;
@@ -111,4 +112,33 @@ RAWFRAME_TEST(ASeatReadsItsTreeOnceOpenAndForgetsItOnLeaving) {
     RAWFRAME_EXPECT(seat.access() == nullptr && seat.update().has_value());
     RAWFRAME_EXPECT(seat.seat(ui, kRoot).has_value() && seat.access() != nullptr);
     RAWFRAME_EXPECT(seat.update().has_value() && holds(seat.access()->written(), "button"));
+}
+
+RAWFRAME_TEST(AScreenReadersPressesAndFocusesAreKeptForTheOwner) {
+    auto made = Tree::create(8);
+    RAWFRAME_EXPECT(made.has_value());
+    if (!made.has_value()) {
+        return;
+    }
+    Tree& ui = **made;
+    const Node kRoot = *ui.add(1);
+    const Node kPlay = *ui.add(2);
+    const Node kQuit = *ui.add(3);
+    RAWFRAME_EXPECT(ui.attach(kRoot, kPlay).has_value() && ui.attach(kRoot, kQuit).has_value());
+    AccessSeat seat;
+    RAWFRAME_EXPECT(seat.seat(ui, kRoot).has_value() && seat.open({}).has_value() && seat.update().has_value());
+    Access* access = seat.access();
+    RAWFRAME_EXPECT(access != nullptr);
+    if (access == nullptr) {
+        return;
+    }
+    // Kept in their order, taken once.
+    RAWFRAME_EXPECT(access->ask(AccessRequest::Kind::Focus, kQuit) && access->ask(AccessRequest::Kind::Press, kPlay));
+    const std::vector<AccessRequest> kTaken = seat.takeRequests();
+    RAWFRAME_EXPECT((kTaken == std::vector<AccessRequest>{{.kind = AccessRequest::Kind::Focus, .node = kQuit},
+                                                          {.kind = AccessRequest::Kind::Press, .node = kPlay}}));
+    RAWFRAME_EXPECT(seat.takeRequests().empty());
+    // A node that is gone asks nothing.
+    RAWFRAME_EXPECT(ui.remove(kQuit).has_value());
+    RAWFRAME_EXPECT(!access->ask(AccessRequest::Kind::Press, kQuit) && seat.takeRequests().empty());
 }
