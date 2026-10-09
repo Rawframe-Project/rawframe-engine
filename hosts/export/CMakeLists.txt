@@ -28,7 +28,7 @@ if(RAWFRAME_BUILD_TESTS)
                              LABELS window
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "export: keys studio.keys fonts read 1, admitted 1, frames shown [1-9][0-9]*, titled: yes, client stopped (clean_stop|controlled_overload), server stopped clean_stop, the launcher's code the client's: yes")
+                             "export: keys studio.keys fonts read 1, admitted 1, frames shown [1-9][0-9]*, titled: yes, client stopped (clean_stop|controlled_overload), server stopped clean_stop, the launcher's code the client's: yes, controls readable: yes")
         if(RAWFRAME_SANITIZE MATCHES "address")
             # A client drawn long under load leaves a thread's allocations in
             # a library unloaded before LeakSanitizer reports, so no

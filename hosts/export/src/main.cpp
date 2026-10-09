@@ -71,6 +71,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -84,6 +85,7 @@
 #include <string_view>
 #include <system_error>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -159,13 +161,72 @@ std::optional<std::string> wordAfter(const std::string& printed, std::string_vie
     return std::nullopt;
 }
 
+/// A control as a player reads it (D542), not as the action set names it:
+/// `key_a` is A, `arrow_up` the up arrow, `face_south` the bottom face
+/// button, `trigger_left` the left trigger.
+std::string controlText(std::string_view name) {
+    static constexpr std::array<std::pair<std::string_view, std::string_view>, 19> kNamed = {{
+        {"space", "Space"},
+        {"arrow_up", "up arrow"},
+        {"arrow_down", "down arrow"},
+        {"enter", "Enter"},
+        {"escape", "Esc"},
+        {"tab", "Tab"},
+        {"backspace", "Backspace"},
+        {"face_south", "bottom face button (A, Cross)"},
+        {"face_east", "right face button (B, Circle)"},
+        {"face_west", "left face button (X, Square)"},
+        {"face_north", "top face button (Y, Triangle)"},
+        {"stick_left_click", "left stick press"},
+        {"stick_right_click", "right stick press"},
+        {"start", "Start"},
+        {"select", "Select"},
+        {"guide", "Guide"},
+        {"middle", "middle button"},
+        {"wheel_y", "wheel"},
+        {"motion", "movement"},
+    }};
+    if (const auto kFound = std::ranges::find(kNamed, name, &std::pair<std::string_view, std::string_view>::first);
+        kFound != kNamed.end()) {
+        return std::string{kFound->second};
+    }
+    std::string text;
+    if (name.starts_with("key_") || name.starts_with("digit_")) {
+        for (const char kLetter : name.substr(name.find('_') + 1)) {
+            text += static_cast<char>(std::toupper(static_cast<unsigned char>(kLetter)));
+        }
+        return text;
+    }
+    if (name.size() <= 3 && name.starts_with('f')) {
+        return "F" + std::string{name.substr(1)};
+    }
+    if (name.starts_with("dpad_")) {
+        return "D-pad " + std::string{name.substr(5)};
+    }
+    if (name == "left" || name == "right") {
+        return std::string{name} + " button";
+    }
+    // `<thing>_left` is the left thing, and the rest is read with spaces.
+    std::string_view rest = name;
+    for (const std::string_view kSide : {std::string_view{"left"}, std::string_view{"right"}}) {
+        if (rest.ends_with("_" + std::string{kSide})) {
+            text = std::string{kSide} + " ";
+            rest.remove_suffix(kSide.size() + 1);
+        }
+    }
+    for (const char kLetter : rest) {
+        text += kLetter == '_' ? ' ' : kLetter;
+    }
+    return text;
+}
+
 /// A binding as a player reads it: its device, then its control, or each
 /// of a pair's or a quad's by what it does.
 std::string bindingText(const rawframe::input::Binding& binding) {
     using rawframe::input::Composite;
     std::string text{rawframe::input::nameOf(binding.device)};
     const auto kControl = [&binding](std::size_t at) {
-        return std::string{rawframe::input::nameOf(binding.controls.at(at))};
+        return controlText(rawframe::input::nameOf(binding.controls.at(at)));
     };
     if (binding.composite == Composite::None) {
         return text + " " + kControl(0);

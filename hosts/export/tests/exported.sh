@@ -55,6 +55,10 @@ stopped() {
 }
 same=no
 [ "$(stopped client.log exitCode)" = "$status" ] && same=yes
+# The README names the controls as a player reads them (D542): Space, not
+# `space` or `key_` anything.
+readable=no
+grep -q 'keyboard Space' "$out/README.txt" && ! grep -qE 'key_|keyboard space' "$out/README.txt" && readable=yes
 # Where the client never started, the server's own record says why: how
 # it stopped and its last lines, a sanitizer's report among them.
 if [ ! -f "$out/client.log" ]; then
@@ -65,4 +69,4 @@ echo "export: keys $(ls "$out/library/keys" | tr '\n' ' ')fonts read $(field cli
     "admitted $(field client.log admitted), frames shown $(field client.log framesShown)," \
     "titled: $titled," \
     "client stopped $(stopped client.log exit), server stopped $(stopped server.log exit)," \
-    "the launcher's code the client's: $same"
+    "the launcher's code the client's: $same, controls readable: $readable"
