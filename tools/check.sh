@@ -91,12 +91,16 @@ build_and_test() {
     # sanitizers, and gcc's slow debug tree do not; it leaves them out (D493).
     # So does clang-development in the full check: the fast check before
     # every push plays them there, alone, and gcc's debug tree plays them
-    # under the full check's load (D500).
+    # under the full check's load (D500). So does clang-shipping: optimized
+    # clang code is played by that fast check and by the thread sanitizer's
+    # optimized tree, and no window failure was its alone but a port the
+    # machine held (D526).
     # A test labeled `alone` needs a player's frame rate, which the full
     # check's load takes away: a predicted game's input then never reaches
     # its server (D521). The fast check plays it with nothing beside it.
     local leave=()
-    if [ "$preset" = gcc-shipping ] || { [ "$preset" = clang-development ] && [ "$tier" = full ]; }; then
+    if [ "$preset" = gcc-shipping ] || [ "$preset" = clang-shipping ] ||
+        { [ "$preset" = clang-development ] && [ "$tier" = full ]; }; then
         leave=(-LE window)
     elif [ "$tier" = full ]; then
         leave=(-LE alone)
@@ -123,6 +127,66 @@ build_and_test() {
     printf '   %s: built in %ss, tested in %ss\n' "$preset" "$((built - began))" "$(($(date +%s) - built))"
 }
 
+# The browser's steps, after clang-development's and the web's development
+# trees are built and tested.
+web_steps() {
+    # Two trees at once: the browser's page modules drive the web client
+    # against the native dedicated server over WebTransport (D173).
+    step "web page"
+    if ! tools/node_page.sh hosts/web_client/tests/browser_page.mjs \
+        out/clang-development/hosts/dedicated_server/rawframe-server \
+        out/wasm-development/hosts/web_client/rawframe-web-client.wasm "$PWD" >out/web-page.log 2>&1; then
+        tail -30 out/web-page.log; fail "web page"
+    else
+        grep '^page:' out/web-page.log
+    fi
+    # A real browser plays from a canvas (D250), where Puppeteer and its
+    # browser are installed: RAWFRAME_NODE_MODULES and
+    # PUPPETEER_CACHE_DIR, or under /opt/webtest, which any user
+    # (the CI runner's too) can read.
+    # Runners, then the plaza, the sample 3D game (D287), each exported
+    # for the web and played from its site (D397).
+    for game in runners plaza; do
+        step "web play $game"
+        play_status=0
+        RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
+            PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
+            tools/node_page.sh hosts/web_client/tests/browser_play.mjs \
+            out/clang-development/hosts/export/rawframe-export \
+            out/clang-development/hosts/cook/rawframe-cook out/clang-development/hosts/build/rawframe-build \
+            out/clang-development/hosts/dedicated_server/rawframe-server \
+            out/clang-development/hosts/bots/rawframe-bots \
+            out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
+            out/wasm-development/third_party/maul-window/maul-window.mjs \
+            out/wasm-development/third_party/maul-rhi/maul-rhi.mjs "$PWD" \
+            "$game" >"out/web-play-$game.log" 2>&1 ||
+            play_status=$?
+        if [ "$play_status" -eq 77 ]; then
+            echo "web play skipped: no Puppeteer or no browser for it"
+        elif [ "$play_status" -ne 0 ]; then
+            # The page's own lines say which part failed; the tail is
+            # the client's summaries after them.
+            grep '^page:' "out/web-play-$game.log"
+            tail -30 "out/web-play-$game.log"; fail "web play $game"
+        else
+            grep '^page:' "out/web-play-$game.log"
+        fi
+    done
+    # Every engine shader's WGSL compiled by the browser's WebGPU (D286).
+    step "web shaders"
+    wgsl_status=0
+    RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
+        PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
+        tools/node_page.sh tools/check_wgsl.mjs "$PWD" >out/web-shaders.log 2>&1 || wgsl_status=$?
+    if [ "$wgsl_status" -eq 77 ]; then
+        echo "web shaders skipped: no Puppeteer or no browser for it"
+    elif [ "$wgsl_status" -ne 0 ]; then
+        tail -30 out/web-shaders.log; fail "web shaders"
+    else
+        grep '^page: [0-9]' out/web-shaders.log
+    fi
+}
+
 if [ "$tier" = "fast" ]; then
     build_and_test clang-development
 else
@@ -134,69 +198,26 @@ else
         ( build_and_test "$preset" ) >"out/$preset.check.log" 2>&1 &
         pids+=($!)
     done
+    # The browser's steps need only clang-development's and the web's
+    # development trees: they play once those two are done, beside the
+    # other trees' tests, not after them (D526).
+    web=""
+    wait "${pids[2]}" || true
+    wait "${pids[6]}" || true
+    if ! grep -q '^FAILED' out/clang-development.check.log out/wasm-development.check.log; then
+        ( web_steps ) >out/web.check.log 2>&1 &
+        web=$!
+    fi
     for i in "${!presets[@]}"; do
-        wait "${pids[$i]}" || true
+        # Those two were waited for already.
+        wait "${pids[$i]}" 2>/dev/null || true
         cat "out/${presets[$i]}.check.log"
         grep -q '^FAILED' "out/${presets[$i]}.check.log" && failures=$((failures + 1))
     done
-    # Two trees at once: the browser's page modules drive the web client
-    # against the native dedicated server over WebTransport (D173).
-    if [ "$failures" -eq 0 ]; then
-        step "web page"
-        if ! tools/node_page.sh hosts/web_client/tests/browser_page.mjs \
-            out/clang-development/hosts/dedicated_server/rawframe-server \
-            out/wasm-development/hosts/web_client/rawframe-web-client.wasm "$PWD" >out/web-page.log 2>&1; then
-            tail -30 out/web-page.log; fail "web page"
-        else
-            grep '^page:' out/web-page.log
-        fi
-        # A real browser plays from a canvas (D250), where Puppeteer and its
-        # browser are installed: RAWFRAME_NODE_MODULES and
-        # PUPPETEER_CACHE_DIR, or under /opt/webtest, which any user
-        # (the CI runner's too) can read.
-        # Runners, then the plaza, the sample 3D game (D287), each exported
-        # for the web and played from its site (D397).
-        for game in runners plaza; do
-            step "web play $game"
-            play_status=0
-            RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
-                PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
-                tools/node_page.sh hosts/web_client/tests/browser_play.mjs \
-                out/clang-development/hosts/export/rawframe-export \
-                out/clang-development/hosts/cook/rawframe-cook out/clang-development/hosts/build/rawframe-build \
-                out/clang-development/hosts/dedicated_server/rawframe-server \
-                out/clang-development/hosts/bots/rawframe-bots \
-                out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
-                out/wasm-development/third_party/maul-window/maul-window.mjs \
-                out/wasm-development/third_party/maul-rhi/maul-rhi.mjs "$PWD" \
-                "$game" >"out/web-play-$game.log" 2>&1 ||
-                play_status=$?
-            if [ "$play_status" -eq 77 ]; then
-                echo "web play skipped: no Puppeteer or no browser for it"
-            elif [ "$play_status" -ne 0 ]; then
-                # The page's own lines say which part failed; the tail is
-                # the client's summaries after them.
-                grep '^page:' "out/web-play-$game.log"
-                tail -30 "out/web-play-$game.log"; fail "web play $game"
-            else
-                grep '^page:' "out/web-play-$game.log"
-            fi
-        done
-    fi
-    # Every engine shader's WGSL compiled by the browser's WebGPU (D286).
-    if [ "$failures" -eq 0 ]; then
-        step "web shaders"
-        wgsl_status=0
-        RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
-            PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
-            tools/node_page.sh tools/check_wgsl.mjs "$PWD" >out/web-shaders.log 2>&1 || wgsl_status=$?
-        if [ "$wgsl_status" -eq 77 ]; then
-            echo "web shaders skipped: no Puppeteer or no browser for it"
-        elif [ "$wgsl_status" -ne 0 ]; then
-            tail -30 out/web-shaders.log; fail "web shaders"
-        else
-            grep '^page: [0-9]' out/web-shaders.log
-        fi
+    if [ -n "$web" ]; then
+        wait "$web" || true
+        cat out/web.check.log
+        grep -q '^FAILED' out/web.check.log && failures=$((failures + 1))
     fi
     # Measured last, alone, so the builds do not share the machine with it.
     if [ "$failures" -eq 0 ]; then
