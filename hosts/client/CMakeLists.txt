@@ -61,7 +61,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED runners_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"text_summary\"[^\n]*\"locale\":\"tr\",\"offered\":2,\"changes\":1}")
+                             "\"code\":\"input_seen\"[^\n]*\"device\":\"keyboard\".*\"code\":\"text_summary\"[^\n]*\"locale\":\"tr\",\"offered\":2,\"changes\":1}")
         # Stalls clicked on its HUD's purse, a panel that takes presses
         # (D421): lighter under the mouse once it is there (D422), the UI
         # takes the click, and the owner builds no stall under it, the World

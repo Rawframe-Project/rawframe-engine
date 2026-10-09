@@ -9,6 +9,7 @@
 #include "rawframe/input/controls.h"
 #include "rawframe/result/result.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -92,6 +93,9 @@ struct MapperStatistics {
     /// Presses the UI took (D421), and actions turned on.
     std::uint64_t uiTaken = 0;
     std::uint64_t actionPresses = 0;
+    /// Events from paired devices, by device class (its value an index):
+    /// which kinds of device a player has used (D559).
+    std::array<std::uint64_t, 4> events{};
 };
 
 class Mapper {

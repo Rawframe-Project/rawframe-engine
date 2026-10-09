@@ -600,6 +600,7 @@ void Mapper::submit(const ControlEvent& event) {
         ++state.statistics.unpairedEvents;
         return;
     }
+    ++state.statistics.events[static_cast<std::size_t>(device->deviceClass)];
     Player& player = state.players[device->player];
     player.queue.push_back(event);
     if (player.queue.size() > state.limits.maximumQueuedEventsPerPlayer) {

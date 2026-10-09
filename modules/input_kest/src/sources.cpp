@@ -22,6 +22,7 @@ namespace rawframe::input_kest {
 namespace {
 
 constexpr diagnostics::EventIdentity kInputSummary{"input", "input_summary"};
+constexpr diagnostics::EventIdentity kInputSeen{"input", "input_seen"};
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, InputKestError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(errorClass, kInputKestDomain, code(error), why).error()};
@@ -241,6 +242,10 @@ public:
                           diagnostics::field("releases", kMapped.releases),
                           diagnostics::field("droppedEvents", kMapped.droppedEvents),
                           diagnostics::field("unpairedEvents", kMapped.unpairedEvents),
+                          diagnostics::field("keyboardEvents", kMapped.events[0]),
+                          diagnostics::field("mouseEvents", kMapped.events[1]),
+                          diagnostics::field("gamepadEvents", kMapped.events[2]),
+                          diagnostics::field("touchEvents", kMapped.events[3]),
                           diagnostics::field("feedDropped", feed_ != nullptr ? feed_->dropped() : 0)});
         }
     }
@@ -355,6 +360,7 @@ public:
             if (typing_ != nullptr) {
                 mapper_->setTextEditing(typing_->editing());
             }
+            sayWhatIsSeen();
         }
         mapper_->commit(tick);
         if (kNavigating) {
@@ -419,6 +425,23 @@ public:
     }
 
 private:
+    /// Says the first time each kind of device gives this player an event:
+    /// what a device's log shows when its touches, say, never arrive (D559).
+    void sayWhatIsSeen() {
+        const input::MapperStatistics& kMapped = mapper_->statistics();
+        for (std::size_t kind = 0; kind < seen_.size(); ++kind) {
+            if (!seen_[kind] && kMapped.events[kind] != 0) {
+                seen_[kind] = true;
+                emitter_.log(
+                    diagnostics::Severity::Info,
+                    kInputSeen,
+                    "a kind of device gave a local player its first event",
+                    {diagnostics::field("player", player_),
+                     diagnostics::field("device", std::string{input::nameOf(static_cast<input::DeviceClass>(kind))})});
+            }
+        }
+    }
+
     std::shared_ptr<input::Mapper> mapper_;
     std::optional<Hand> hand_;
     std::shared_ptr<Routing> routing_;
@@ -429,6 +452,8 @@ private:
     TextDoorContext text_;
     bool local_ = false;
     std::size_t player_ = 0;
+    /// The device classes said to be seen, by index (D559).
+    std::array<bool, 4> seen_{};
     diagnostics::Emitter emitter_;
     view::UiTyping* typing_ = nullptr;
     view::UiTyping* submissions_ = nullptr;

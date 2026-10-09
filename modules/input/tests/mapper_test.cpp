@@ -332,6 +332,9 @@ RAWFRAME_TEST(PlayersNeverShareActionState) {
     RAWFRAME_EXPECT(!rig.now(kJump, kFirst).on);
     rig.press(kPad, pad("face_south"));
     RAWFRAME_EXPECT(!rig.now(kJump, kFirst).on && rig.mapper->statistics().unpairedEvents == 1);
+    // The paired pads' three events are counted as a gamepad's, and the
+    // unpaired one as no class's (D559).
+    RAWFRAME_EXPECT((rig.mapper->statistics().events == std::array<std::uint64_t, 4>{0, 0, 3, 0}));
     // A device is paired once.
     RAWFRAME_EXPECT(!rig.mapper->pair(kSecondPad, DeviceClass::Gamepad, kFirst).has_value());
 }
