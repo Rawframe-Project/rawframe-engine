@@ -26,10 +26,12 @@ fn level(on: bool) -> f32 {
 
 fn sample(into: [controls.Stick]) {
     into[0].run = input.x(RUN)
-    into[0].jump = level(input.on(JUMP))
+    // A button held now, or pressed in this tick at all: a slow frame reads
+    // a quick tap, press to release, as one tick (D527).
+    into[0].jump = level(input.on(JUMP) || input.pressed(JUMP))
     into[0].aimX = input.x(AIM)
     into[0].aimY = input.y(AIM)
-    into[0].fire = level(input.on(FIRE))
+    into[0].fire = level(input.on(FIRE) || input.pressed(FIRE))
     // The pointer is on once the mouse has been over the window; a bot,
     // and a player before its first frame, has no view to pick through.
     into[0].pointed = 0.0

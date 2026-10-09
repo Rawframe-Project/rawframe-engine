@@ -47,8 +47,10 @@ fn sample(into: [controls.Stick]) {
     let aside = input.x(MOVE)
     into[0].runX = aside * (0.0 - forwardZ) + ahead * forwardX
     into[0].runZ = aside * forwardX + ahead * forwardZ
+    // A jump held now, or pressed in this tick at all, as the mouse's
+    // button (D527).
     into[0].jump = 0.0
-    if input.on(JUMP) {
+    if input.on(JUMP) || input.pressed(JUMP) {
         into[0].jump = 1.0
     }
 }

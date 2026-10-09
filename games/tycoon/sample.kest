@@ -27,8 +27,10 @@ extern fn Commands.sign(value: controls.Sign)
 fn sample(into: [controls.Hand]) {
     into[0].moveX = input.x(MOVE)
     into[0].moveZ = 0.0 - input.y(MOVE)
+    // A build held now, or pressed in this tick at all: a slow frame reads
+    // a quick tap, press to release, as one tick (D527).
     into[0].build = 0.0
-    if input.on(BUILD) {
+    if input.on(BUILD) || input.pressed(BUILD) {
         into[0].build = 1.0
     }
     into[0].pointed = 0.0
