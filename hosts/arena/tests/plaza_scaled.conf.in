@@ -2,8 +2,10 @@
 # offscreen into a picture as large as a 1440p screen, its render scale
 # allowed down to a quarter (D533): a software rasterizer cannot draw it in
 # a sixtieth of a second, the frames see each still running past it, and
-# the scale falls. Ten seconds, as plaza_drawn's (D343, D373).
-host.maximum_iterations = 1200
+# the scale falls. Twenty seconds: under the full check's load the
+# rasterizer compiled its pipelines for most of ten, and drew eight frames,
+# fewer than a judgement takes (D535).
+host.maximum_iterations = 2400
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = @PROJECT_SOURCE_DIR@/games/plaza/plaza.game
