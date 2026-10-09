@@ -132,8 +132,8 @@ build_and_test() {
     printf '   %s: built in %ss, tested in %ss\n' "$preset" "$((built - began))" "$(($(date +%s) - built))"
 }
 
-# The browser's steps, after clang-development's and the web's development
-# trees are built and tested.
+# The browser's page and shader steps, after clang-development's and the
+# web's development trees are built and tested, beside the other trees.
 web_steps() {
     # Two trees at once: the browser's page modules drive the web client
     # against the native dedicated server over WebTransport (D173).
@@ -145,6 +145,25 @@ web_steps() {
     else
         grep '^page:' out/web-page.log
     fi
+    # Every engine shader's WGSL compiled by the browser's WebGPU (D286).
+    step "web shaders"
+    wgsl_status=0
+    RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
+        PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
+        tools/node_page.sh tools/check_wgsl.mjs "$PWD" >out/web-shaders.log 2>&1 || wgsl_status=$?
+    if [ "$wgsl_status" -eq 77 ]; then
+        echo "web shaders skipped: no Puppeteer or no browser for it"
+    elif [ "$wgsl_status" -ne 0 ]; then
+        tail -30 out/web-shaders.log; fail "web shaders"
+    else
+        grep '^page: [0-9]' out/web-shaders.log
+    fi
+}
+
+# Real browsers playing the sample games: after the trees, never beside
+# them, where a page drawing a few frames a second failed its own
+# expectations (D529).
+web_plays() {
     # A real browser plays from a canvas (D250), where Puppeteer and its
     # browser are installed: RAWFRAME_NODE_MODULES and
     # PUPPETEER_CACHE_DIR, or under /opt/webtest, which any user
@@ -177,19 +196,6 @@ web_steps() {
             grep '^page:' "out/web-play-$game.log"
         fi
     done
-    # Every engine shader's WGSL compiled by the browser's WebGPU (D286).
-    step "web shaders"
-    wgsl_status=0
-    RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
-        PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
-        tools/node_page.sh tools/check_wgsl.mjs "$PWD" >out/web-shaders.log 2>&1 || wgsl_status=$?
-    if [ "$wgsl_status" -eq 77 ]; then
-        echo "web shaders skipped: no Puppeteer or no browser for it"
-    elif [ "$wgsl_status" -ne 0 ]; then
-        tail -30 out/web-shaders.log; fail "web shaders"
-    else
-        grep '^page: [0-9]' out/web-shaders.log
-    fi
 }
 
 if [ "$tier" = "fast" ]; then
@@ -223,6 +229,9 @@ else
         wait "$web" || true
         cat out/web.check.log
         grep -q '^FAILED' out/web.check.log && failures=$((failures + 1))
+    fi
+    if [ "$failures" -eq 0 ]; then
+        web_plays
     fi
     # Measured last, alone, so the builds do not share the machine with it.
     if [ "$failures" -eq 0 ]; then
