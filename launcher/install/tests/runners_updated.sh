@@ -91,18 +91,50 @@ grep -q 'collected 0 blobs' "$work/collected.txt"
 play
 
 # Over HTTPS (D414): a test authority signs a certificate for localhost and
-# 127.0.0.1, and a web server serves the mirror with it.
+# 127.0.0.1, and a web server serves the mirror with it. Both are valid from
+# a fixed day long past, not from the second they are signed: a machine's
+# clock may be set back a few seconds while the test runs (one setting it
+# from an HTTPS Date header did, D554), and a certificate signed in the
+# second before is then not yet valid. `openssl ca` dates them, which every
+# OpenSSL and LibreSSL the tests run with can.
 keys=$work/authority
 mkdir -p "$keys"
 # Git Bash would read the subjects as paths.
 export MSYS2_ARG_CONV_EXCL='/CN='
-openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
-    -subj /CN=rawframe-test-authority -keyout "$keys/authority.key" -out "$keys/authority.pem" 2>/dev/null
-openssl req -newkey rsa:2048 -nodes -subj /CN=localhost \
-    -keyout "$keys/server.key" -out "$keys/server.csr" 2>/dev/null
-printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\n' >"$keys/names.ext"
-openssl x509 -req -in "$keys/server.csr" -CA "$keys/authority.pem" -CAkey "$keys/authority.key" \
-    -CAcreateserial -days 2 -extfile "$keys/names.ext" -out "$keys/server.pem" 2>/dev/null
+cat >"$keys/ca.cnf" <<'CNF'
+[ca]
+default_ca = test
+[test]
+database = index.txt
+new_certs_dir = .
+serial = serial
+default_md = sha256
+policy = anything
+copy_extensions = copy
+unique_subject = no
+[anything]
+commonName = supplied
+[authority]
+basicConstraints = critical, CA:true
+keyUsage = critical, keyCertSign, cRLSign
+subjectKeyIdentifier = hash
+[server]
+basicConstraints = CA:false
+subjectAltName = DNS:localhost, IP:127.0.0.1
+authorityKeyIdentifier = keyid
+CNF
+(
+    cd "$keys"
+    : >index.txt
+    echo 01 >serial
+    openssl req -new -newkey rsa:2048 -nodes -subj /CN=rawframe-test-authority \
+        -keyout authority.key -out authority.csr 2>/dev/null
+    openssl ca -batch -notext -config ca.cnf -selfsign -keyfile authority.key -in authority.csr -extensions authority \
+        -startdate 20200101000000Z -enddate 20991231235959Z -out authority.pem 2>/dev/null
+    openssl req -new -newkey rsa:2048 -nodes -subj /CN=localhost -keyout server.key -out server.csr 2>/dev/null
+    openssl ca -batch -notext -config ca.cnf -cert authority.pem -keyfile authority.key -in server.csr -extensions server \
+        -startdate 20200101000000Z -enddate 20991231235959Z -out server.pem 2>/dev/null
+)
 python=${PYTHON:-$(command -v python3 || command -v python)}
 "$python" "$(dirname "$0")/serve_mirror.py" "$mirror" "$keys" "$work/port" 2>"$work/serve.txt" &
 server=$!
