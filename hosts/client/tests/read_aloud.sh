@@ -3,10 +3,12 @@
 # plays the accessibility bus (AT_SPI_BUS_ADDRESS), the client plays a game
 # against its server, and once it is admitted and says assistive technology
 # reads its UI, its AT-SPI tree is walked from the application's root with
-# busctl, one line a node: "a11y: <depth> <role> <name>". Then the client
-# is asked to stop.
+# busctl, one line a node: "a11y: <depth> <role> <name>". Given `press`,
+# the first push button found is pressed as a screen reader presses it,
+# through AT-SPI's Action interface (D572), and the client plays on a
+# while. Then it is asked to stop.
 #
-# usage: read_aloud.sh <rawframe-server> <rawframe-client> <configuration> <game>
+# usage: read_aloud.sh <rawframe-server> <rawframe-client> <configuration> <game> [press]
 set -uo pipefail
 here="$(dirname "$0")"
 log="$(mktemp)"
@@ -35,7 +37,9 @@ done
 sleep 2
 name="$(busctl --address="$address" list --no-legend 2>/dev/null | awk '$3 == "rawframe-client" { print $1; exit }')"
 
-# One node's line, then its children's, at most eight deep.
+# One node's line, then its children's, at most eight deep; the first push
+# button kept.
+button=""
 walk() {
     local path="$1" depth="$2"
     local role label
@@ -44,6 +48,9 @@ walk() {
     label="$(busctl --address="$address" get-property "$name" "$path" org.a11y.atspi.Accessible Name 2>/dev/null |
         sed -n 's/^s "\(.*\)"$/\1/p')"
     echo "a11y: $depth ${role:-none} ${label}"
+    if [ "$role" = "push button" ] && [ -z "$button" ]; then
+        button="$path"
+    fi
     [ "$depth" -ge 8 ] && return
     local child
     for child in $(busctl --address="$address" call "$name" "$path" org.a11y.atspi.Accessible GetChildren 2>/dev/null |
@@ -55,6 +62,11 @@ if [ -n "$name" ]; then
     walk /org/a11y/atspi/accessible/root 0
 else
     echo "a11y: no client on the bus"
+fi
+if [ "${5:-}" = press ] && [ -n "$button" ]; then
+    done="$(busctl --address="$address" call "$name" "$button" org.a11y.atspi.Action DoAction i 0 2>&1)"
+    echo "a11y: pressed $button: $done"
+    sleep 3
 fi
 
 kill -INT "$(cat "$work/bots-1.pid" 2>/dev/null)" 2>/dev/null

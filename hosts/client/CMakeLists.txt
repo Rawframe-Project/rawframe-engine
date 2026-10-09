@@ -78,6 +78,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "a11y: 1 frame [^\n]*\na11y: 2 image *\na11y: 2 label 0 points\n.*\"code\":\"accessibility_ready\"")
+        # Stalls' HUD read aloud and its purse pressed by a screen reader
+        # (D572): a push button named by its coins and the sign's entry, and
+        # AT-SPI's DoAction on the button reaching the game as a press, the
+        # player's one collect command sent and taken by the server. Read
+        # without pressing, it sends none.
+        add_test(NAME client_presses_stalls_aloud
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_aloud.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
+                         games/tycoon/tycoon.game press
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_presses_stalls_aloud PROPERTIES
+                             FIXTURES_REQUIRED tycoon_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "a11y: 2 push button [0-9]+ coins\na11y: 2 entry *\na11y: pressed [^\n]*: b true.*\"commandsTaken\":1,.*\"commandsSent\":1,")
         # Stalls clicked on its HUD's purse, a panel that takes presses
         # (D421): lighter under the mouse once it is there (D422), the UI
         # takes the click, and the owner builds no stall under it, the World
