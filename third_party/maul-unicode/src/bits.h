@@ -2,8 +2,9 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // Bit counting on 64-bit words, through the compiler builtins GCC and
-// Clang (clang-cl included) provide (F5 rules out <stdbit.h>), and the
-// rank indexes built on it.
+// Clang (clang-cl included) provide (family 0008 uses only what the
+// compiler provides, which rules out <stdbit.h> from the C library), and
+// the rank indexes built on it.
 
 #ifndef MAUL_UNICODE_SRC_BITS_H
 #define MAUL_UNICODE_SRC_BITS_H

@@ -103,8 +103,9 @@ static void ResolveSeparators(const muniBidiSequence* sequence)
     }
 }
 
-// W5 to W7 in one pass. A run of ET becomes EN when an EN touches it
-// (W5) and ON otherwise (W6); W7 then turns EN after an L into L.
+// UAX #9's rules W5 to W7 in one pass. A run of ET becomes EN when an
+// EN touches it (rule W5) and ON otherwise (rule W6); rule W7 then turns
+// EN after an L into L.
 static void ResolveNumbers(const muniBidiSequence* sequence)
 {
     const muniBidiParagraph* paragraph = sequence->paragraph;
