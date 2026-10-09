@@ -9,7 +9,7 @@
 // finds the exposure the scene's light asks for; a camera's grade
 // brightens, warms, and greys the picture as asked; its tonemapper keeps
 // middle grey where AgX puts it, and AgX stays within its distance of
-// Blender's (D579); and,
+// Blender's (D580); and,
 // antialiased over time, an edge's texels blend what the jittered frames
 // saw of it, and a moving box leaves no ghost where it was. Skips where no
 // adapter answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
@@ -594,7 +594,7 @@ RAWFRAME_TEST(EveryTonemapperKeepsMiddleGrey) {
                 kLinear,
                 kBrightAgx,
                 kBrightLinear);
-    // 0.1865 linear is 120 in sRGB (D579).
+    // 0.1865 linear is 120 in sRGB (D580).
     RAWFRAME_EXPECT(std::abs(kAgx - 120) <= 2 && std::abs(kNeutral - kAgx) <= 2 && std::abs(kLinear - kAgx) <= 2);
     RAWFRAME_EXPECT(kBrightLinear == 255 && kBrightAgx < 250 && kBrightAgx > kAgx);
 }
@@ -748,7 +748,7 @@ RAWFRAME_TEST(AgxStaysWithinItsDistanceOfBlender) {
     // Blender's AgX view on its sRGB display, measured from its
     // colour-management configuration through OpenColorIO (D566): each
     // input in linear Rec.709, the 8-bit sRGB Blender shows, and how far
-    // this formulation is allowed from it (D579), its own distance and
+    // this formulation is allowed from it (D580), its own distance and
     // two for the device's rounding. Greys and natural colours are close;
     // saturated ones are as far as the Rec.2020 formulation is from
     // Blender's E-Gamut one.

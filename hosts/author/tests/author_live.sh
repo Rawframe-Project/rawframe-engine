@@ -2,7 +2,7 @@
 # A scene edited while its game runs (D410): a dedicated server plays a copy
 # of runners, watching its sources; an authoring session adds a crate to the
 # level and the running World holds it within its reload period (a loaded
-# machine's sanitized tree given half a minute, D579), as the tooling
+# machine's sanitized tree given half a minute, D580), as the tooling
 # endpoint reads it; moved, the World's crate is written rather than made
 # again; undone in the session, the World lets it go.
 #

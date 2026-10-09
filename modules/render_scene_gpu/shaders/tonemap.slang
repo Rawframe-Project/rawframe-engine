@@ -7,7 +7,7 @@
 // Khronos PBR Neutral; linear), each keeping middle grey where AgX puts
 // it, in linear light for the sRGB picture to encode, dithered by under
 // one step of that encoding (D332). AgX as Troy Sobotka made it, in
-// Blender's Rec.2020 formulation as Filament and three.js write it (D579):
+// Blender's Rec.2020 formulation as Filament and three.js write it (D580):
 // Blender's inset, Filament's outset, Benjamin Wrensch's curve, and the
 // 2.4 power Blender's formation is encoded in.
 
