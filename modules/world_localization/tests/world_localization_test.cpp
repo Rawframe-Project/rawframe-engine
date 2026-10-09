@@ -68,3 +68,13 @@ RAWFRAME_TEST(APlayerChoosesAmongTheOfferedLocalesWhilePlaying) {
     RAWFRAME_EXPECT(text.choose(0) && text.revision() == 2);
     RAWFRAME_EXPECT(text.format("hud.strings", "menu.play", {}) == "Play");
 }
+
+RAWFRAME_TEST(DisplayKeysModeShowsEveryKeyAsItsToken) {
+    // SPEC-0033's development-only display-keys mode (D540): the key itself,
+    // whatever the locale, the table, or the key's presence.
+    world_localization::GameText text = game("tr");
+    RAWFRAME_EXPECT(text.format("hud.strings", "menu.play", {}) == "Oyna");
+    text.showKeys();
+    RAWFRAME_EXPECT(text.format("hud.strings", "menu.play", {}) == "menu.play");
+    RAWFRAME_EXPECT(text.format("other.strings", "menu.quit", {}) == "menu.quit");
+}

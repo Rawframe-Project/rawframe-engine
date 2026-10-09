@@ -61,6 +61,12 @@ public:
     [[nodiscard]] std::uint64_t revision() const noexcept {
         return revision_;
     }
+    /// Every key formatted as its key token, the key itself, so a screen
+    /// says which key each of its words is: SPEC-0033's display-keys mode,
+    /// which only a development build turns on (D540).
+    void showKeys() noexcept {
+        showingKeys_ = true;
+    }
     /// The identity of the table a `text` line names `path`, if it names a
     /// table.
     [[nodiscard]] std::optional<base::Bits128> table(std::string_view path) const noexcept;
@@ -77,6 +83,7 @@ private:
     localization::Locale projectDefault_;
     std::vector<localization::Locale> offered_;
     std::uint64_t revision_ = 0;
+    bool showingKeys_ = false;
 };
 
 /// The Runtime's text: its game's, when it names any and cooked content holds

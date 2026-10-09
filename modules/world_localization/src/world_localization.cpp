@@ -49,6 +49,9 @@ std::optional<base::Bits128> GameText::table(std::string_view path) const noexce
 
 result::Result<std::string>
 GameText::format(std::string_view path, std::string_view key, std::span<const localization::Argument> arguments) const {
+    if (showingKeys_) {
+        return std::string{key};
+    }
     const std::optional<base::Bits128> kTable = table(path);
     if (!kTable.has_value()) {
         return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
@@ -189,6 +192,8 @@ public:
 
         std::vector<localization::Translations> pseudo;
 #if !RAWFRAME_SHIPPING
+        // Keys in place of words (D540): SPEC-0033's display-keys mode.
+        const bool kShowKeys = context.configuration().text("localization.show_keys") == "true";
         if (context.configuration().text("localization.pseudo") == "true") {
             const localization::Locale kPseudo = *localization::parseLocale("en-XA");
             for (const localization::TableDocument& table : tables) {
@@ -223,6 +228,11 @@ public:
         offered.insert(offered.begin(), projectDefault);
         text_ = std::make_unique<GameText>(
             std::move(catalog), std::move(named), std::move(requested), projectDefault, std::move(offered));
+#if !RAWFRAME_SHIPPING
+        if (kShowKeys) {
+            text_->showKeys();
+        }
+#endif
         return {};
     }
 

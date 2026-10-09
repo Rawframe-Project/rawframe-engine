@@ -39,6 +39,7 @@ constexpr diagnostics::EventIdentity kActivated{"ui", "ui_activated"};
 constexpr diagnostics::EventIdentity kImageUnknown{"ui", "image_unknown"};
 constexpr diagnostics::EventIdentity kImageUnread{"ui", "image_unavailable"};
 constexpr diagnostics::EventIdentity kFontUnread{"ui", "font_unavailable"};
+constexpr diagnostics::EventIdentity kKeyUnknown{"ui", "label_unformatted"};
 /// The decoded levels each image may hold.
 constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
 /// The fonts' bytes, all together (D386).
@@ -229,7 +230,7 @@ public:
                                 context.capability(world_localization::kGameText));
             text_ = text;
             reworded_ = text->revision();
-            settings->words = [text, labels = files->description().labels](
+            settings->words = [this, text, labels = files->description().labels](
                                   std::uint64_t label, std::int64_t value) -> std::optional<std::string> {
                 const auto kLabel = std::ranges::find(labels, label, &world_kest::GameLabel::id);
                 if (kLabel == labels.end()) {
@@ -239,7 +240,21 @@ public:
                     localization::Argument{.name = kLabel->argument, .value = value}};
                 auto words = text->format(
                     kLabel->table, kLabel->key, std::span{kArguments}.first(kLabel->argument.empty() ? 0 : 1));
-                return words.has_value() ? std::optional{std::move(*words)} : std::nullopt;
+                if (words.has_value()) {
+                    return std::move(*words);
+                }
+                // A key its table lacks, or one not formatted, shows its key
+                // token, said once (SPEC-0033, D540): never nothing.
+                if (std::ranges::find(unformatted_, label) == unformatted_.end()) {
+                    unformatted_.push_back(label);
+                    emitter_.log(diagnostics::Severity::Warning,
+                                 kKeyUnknown,
+                                 "a label could not be formatted: its key is shown",
+                                 {diagnostics::field("table", kLabel->table),
+                                  diagnostics::field("key", kLabel->key),
+                                  diagnostics::field("reason", std::string{words.error().description()})});
+                }
+                return kLabel->key;
             };
         }
         RAWFRAME_TRY_ASSIGN(clients_, context.capability(world_replication::kClientWorlds));
@@ -636,6 +651,8 @@ private:
     /// given in (D539).
     const world_localization::GameText* text_ = nullptr;
     std::uint64_t reworded_ = 0;
+    /// The labels already said to be unformatted (D540).
+    std::vector<std::uint64_t> unformatted_;
     view::UiTyping* typing_ = nullptr;
     view::UiNavigation* navigation_ = nullptr;
     std::unique_ptr<WorldUi> ui_;
