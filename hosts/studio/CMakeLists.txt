@@ -519,7 +519,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              PROPERTIES PROCESSORS 2)
     endif()
     # Every test here draws a window: labeled so the check can leave them
-    # out of a tree they find nothing in (D493).
+    # out of a tree they find nothing in (D493), and Studio's out of the
+    # thread sanitizer's (D527).
     get_property(window_tests DIRECTORY PROPERTY TESTS)
-    set_tests_properties(${window_tests} PROPERTIES LABELS window)
+    set_tests_properties(${window_tests} PROPERTIES LABELS "window;studio")
 endif()

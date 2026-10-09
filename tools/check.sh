@@ -102,6 +102,11 @@ build_and_test() {
     if [ "$preset" = gcc-shipping ] || [ "$preset" = clang-shipping ] ||
         { [ "$preset" = clang-development ] && [ "$tier" = full ]; }; then
         leave=(-LE window)
+    elif [ "$preset" = clang-thread ] && [ "$tier" = full ]; then
+        # Studio's window tests play under the address sanitizer and in the
+        # debug tree, not here too: they were most of this tree's time, the
+        # full check's longest (D527).
+        leave=(-LE 'alone|studio')
     elif [ "$tier" = full ]; then
         leave=(-LE alone)
     fi
