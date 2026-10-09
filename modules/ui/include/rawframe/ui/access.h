@@ -27,7 +27,10 @@ enum class AccessPlatform : std::uint8_t {
     Copy,
     /// AT-SPI's accessibility bus (Linux): the address AT_SPI_BUS_ADDRESS
     /// names, else the one the session bus gives.
-    Atspi
+    Atspi,
+    /// Android's accessibility framework (D576): a node provider for the
+    /// view `AccessSettings` names, which the window gives as its root.
+    Android
 };
 
 struct AccessSettings {
@@ -41,6 +44,11 @@ struct AccessSettings {
     std::optional<std::array<std::int32_t, 2>> place;
     /// The most nodes the platform's copy holds.
     std::uint32_t nodes = 4096;
+    /// Android's: the main thread's `JNIEnv*`, and the `android.view.View`
+    /// the tree lies in, its origin the tree's (a `jobject`, which the
+    /// access holds a reference of its own to).
+    void* env = nullptr;
+    void* view = nullptr;
 };
 
 /// What a screen reader asked of a node (D572), for the UI's owner to do as
@@ -87,6 +95,11 @@ public:
     /// The node the platform was last told holds focus, none for the root
     /// (D573).
     [[nodiscard]] std::optional<Node> focused() const;
+
+    /// The root the window hands the platform's clients, where the
+    /// platform takes one: Android's node provider, a global reference the
+    /// access keeps while it lives (D576); none elsewhere.
+    [[nodiscard]] void* root() const noexcept;
 
     /// What screen readers asked since last taken, oldest first.
     [[nodiscard]] std::vector<AccessRequest> takeRequests();

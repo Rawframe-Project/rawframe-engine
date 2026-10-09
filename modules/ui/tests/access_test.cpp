@@ -88,6 +88,14 @@ RAWFRAME_TEST(AnAccessIsRefusedWhatItCannotTake) {
         const auto kRefused = Access::create(ui, kRoot, {.platform = AccessPlatform::Atspi});
         RAWFRAME_EXPECT(!kRefused.has_value() && kRefused.error().code() == code(UiError::Unavailable));
     }
+    // Android's needs the main thread's JNIEnv and the view (D576); a copy
+    // is no platform's root.
+    const auto kAndroid = Access::create(ui, kRoot, {.platform = AccessPlatform::Android});
+    RAWFRAME_EXPECT(!kAndroid.has_value() &&
+                    kAndroid.error().code() ==
+                        code(accessBuilt(AccessPlatform::Android) ? UiError::Invalid : UiError::Unavailable));
+    const auto kCopy = Access::create(ui, kRoot, {});
+    RAWFRAME_EXPECT(kCopy.has_value() && (*kCopy)->root() == nullptr);
 }
 
 RAWFRAME_TEST(ASeatReadsItsTreeOnceOpenAndForgetsItOnLeaving) {

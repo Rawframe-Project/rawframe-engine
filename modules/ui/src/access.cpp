@@ -14,6 +14,9 @@
 #if RAWFRAME_UI_ATSPI
 #include <maul-ui/access_atspi.h>
 #endif
+#if RAWFRAME_UI_ANDROID
+#include <maul-ui/access_android.h>
+#endif
 
 namespace rawframe::ui {
 
@@ -75,7 +78,8 @@ result::Status Tree::focus(std::optional<Node> node, bool navigated) {
 }
 
 bool accessBuilt(AccessPlatform platform) noexcept {
-    return platform == AccessPlatform::Copy || (platform == AccessPlatform::Atspi && RAWFRAME_UI_ATSPI);
+    return platform == AccessPlatform::Copy || (platform == AccessPlatform::Atspi && RAWFRAME_UI_ATSPI) ||
+           (platform == AccessPlatform::Android && RAWFRAME_UI_ANDROID);
 }
 
 struct Access::State {
@@ -90,6 +94,9 @@ struct Access::State {
     muiAtspiApp* app = nullptr;
     muiAtspiAdapter* adapter = nullptr;
 #endif
+#if RAWFRAME_UI_ANDROID
+    muiAndroidAdapter* android = nullptr;
+#endif
 
     [[nodiscard]] muiContext* context() const noexcept {
         return tree->state_->context;
@@ -101,6 +108,11 @@ struct Access::State {
             return muiAtspiAdapter_GetTree(adapter);
         }
 #endif
+#if RAWFRAME_UI_ANDROID
+        if (android != nullptr) {
+            return muiAndroidAdapter_GetTree(android);
+        }
+#endif
         return copy;
     }
 
@@ -108,6 +120,9 @@ struct Access::State {
 #if RAWFRAME_UI_ATSPI
         muiDestroyAtspiAdapter(adapter);
         muiDestroyAtspiApp(app);
+#endif
+#if RAWFRAME_UI_ANDROID
+        muiDestroyAndroidAdapter(android);
 #endif
         muiDestroyAccessTree(copy);
         if (tree != nullptr) {
@@ -137,7 +152,7 @@ bool act(Access::State& state, const muiAccessRequest& request) {
     return kScroll && muiPerformAccessAction(state.context(), &request, &handled) == mui_success && handled;
 }
 
-#if RAWFRAME_UI_ATSPI
+#if RAWFRAME_UI_ATSPI || RAWFRAME_UI_ANDROID
 bool actFor(void* user, const muiAccessRequest* request) {
     return act(*static_cast<Access::State*>(user), *request);
 }
@@ -189,6 +204,23 @@ result::Result<std::unique_ptr<Access>> Access::create(Tree& tree, Node root, co
         return std::unique_ptr<Access>{new Access{std::move(state)}};
     }
 #endif
+#if RAWFRAME_UI_ANDROID
+    if (settings.platform == AccessPlatform::Android) {
+        if (settings.env == nullptr || settings.view == nullptr) {
+            return refuse(UiError::Invalid, "Android's accessibility needs the main thread's JNIEnv and the view");
+        }
+        muiAndroidAdapterDef adapter = muiDefaultAndroidAdapterDef();
+        adapter.nodes = settings.nodes;
+        adapter.env = settings.env;
+        adapter.view = settings.view;
+        adapter.scale = settings.scale;
+        adapter.action = &actFor;
+        adapter.user = state.get();
+        RAWFRAME_TRY(checked(muiCreateAndroidAdapter(&adapter, &state->android),
+                             "the window's accessibility could not be made"));
+        return std::unique_ptr<Access>{new Access{std::move(state)}};
+    }
+#endif
     muiAccessTreeDef copy = muiDefaultAccessTreeDef();
     copy.nodes = settings.nodes;
     RAWFRAME_TRY(checked(muiCreateAccessTree(&copy, &state->copy), "an accessibility tree could not be made"));
@@ -212,6 +244,13 @@ result::Status Access::update() {
         return {};
     }
 #endif
+#if RAWFRAME_UI_ANDROID
+    if (state_->android != nullptr) {
+        return kBuilt == mui_empty
+                   ? result::Status{}
+                   : checked(muiAndroidAdapter_Apply(state_->android, &update), "the platform refused the tree");
+    }
+#endif
     return kBuilt == mui_empty ? result::Status{}
                                : checked(muiAccessTree_Apply(state_->copy, &update, nullptr),
                                          "the accessibility tree refused an update");
@@ -226,7 +265,21 @@ result::Status Access::setScale(float scale) {
         return checked(muiAtspiAdapter_SetScale(state_->adapter, scale), "the platform refused a scale");
     }
 #endif
+#if RAWFRAME_UI_ANDROID
+    if (state_->android != nullptr) {
+        return checked(muiAndroidAdapter_SetScale(state_->android, scale), "the platform refused a scale");
+    }
+#endif
     return {};
+}
+
+void* Access::root() const noexcept {
+#if RAWFRAME_UI_ANDROID
+    if (state_->android != nullptr) {
+        return muiAndroidAdapter_GetRoot(state_->android);
+    }
+#endif
+    return nullptr;
 }
 
 void Access::setPlace(std::array<std::int32_t, 2> place) noexcept {
