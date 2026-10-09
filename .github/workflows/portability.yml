@@ -1,10 +1,10 @@
 name: portability
 
 # Builds and tests the engine on macOS (D236), Windows (D237), and ARM64
-# Linux (D241), targets the owner's machine cannot run. On GitHub's own
-# runners, which cost a public repository nothing, nightly and on request
-# only: no push or pull request triggers it, so no fork's code ever runs here
-# or on the owner's machine.
+# Linux (D241), targets the owner's machine cannot run, and builds it for
+# Android (D549). On GitHub's own runners, which cost a public repository
+# nothing, nightly and on request only: no push or pull request triggers it,
+# so no fork's code ever runs here or on the owner's machine.
 on:
   schedule:
     - cron: '17 1 * * *'
@@ -65,6 +65,29 @@ jobs:
         run: cmake --build out/clang-development -- -k 0
       - name: Test
         run: ctest --test-dir out/clang-development --output-on-failure -j4
+
+  # Android, the first mobile target (ADR-0084, D549): the engine, its
+  # programs, and its tests built for 64-bit ARM against NDK r29, whose libc++
+  # parses floating-point numbers (r28's does not). Built, not run: no device
+  # or emulator plays them yet.
+  android:
+    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache
+          curl -sSfL -o "$RUNNER_TEMP/ndk.zip" https://dl.google.com/android/repository/android-ndk-r29-linux.zip
+          echo "4abbbcdc842f3d4879206e9695d52709603e52dd68d3c1fff04b3b5e7a308ecf  $RUNNER_TEMP/ndk.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/ndk.zip" -d "$RUNNER_TEMP"
+          echo "RAWFRAME_ANDROID_NDK=$RUNNER_TEMP/android-ndk-r29" >> "$GITHUB_ENV"
+      - name: Configure
+        run: cmake --preset android-development
+      - name: Build
+        run: cmake --build out/android-development -- -k 0
 
   # A longer search than the check's fixed runs (D242): five minutes a fuzz
   # target from an empty corpus, each finding printed so it can be replayed.
