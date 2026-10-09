@@ -7,6 +7,7 @@
 #ifndef MAUL_AUDIO_SRC_COREAUDIO_CORE_H
 #define MAUL_AUDIO_SRC_COREAUDIO_CORE_H
 
+#include "apple_objects.h"
 #include "context_core.h"
 #include "device.h"
 
@@ -69,6 +70,9 @@ typedef struct maudCoreAudioStream
     // The device an exclusive stream holds in hog mode, or
     // kAudioObjectUnknown.
     AudioObjectID hogged;
+    // An object stream's spatial mixer, which renders for the unit; its
+    // mixer is NULL for other streams.
+    maudAppleObjects objects;
 } maudCoreAudioStream;
 
 typedef struct maudCoreAudio

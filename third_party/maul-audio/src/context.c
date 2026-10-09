@@ -36,7 +36,8 @@ static bool DefValid(const maudContextDef* def)
            def->limits.streams != 0 && def->limits.periodFrames != 0 && def->limits.devices != 0 &&
            def->limits.notifications >= 2 && def->limits.deviceTextBytes != 0 &&
            def->offlineSampleRate >= MIN_RATE && def->offlineSampleRate <= MAX_RATE &&
-           def->backend <= maud_backendWeb;
+           (def->androidJavaVm == nullptr) == (def->androidContext == nullptr) &&
+           def->backend <= maud_backendPrivate;
 }
 
 // The backend of a kind in this build, or NULL.
@@ -65,26 +66,45 @@ static const maudBackend* BackendOfKind(maudBackendKind kind)
 #if defined(MAUD_HAVE_COREAUDIO)
     case maud_backendCoreAudio:
         return maudGetCoreAudioBackend();
+#elif defined(MAUD_HAVE_IOS)
+    case maud_backendCoreAudio:
+        return maudGetIosBackend();
+#endif
+#if defined(MAUD_HAVE_AAUDIO)
+    case maud_backendAaudio:
+        return maudGetAaudioBackend();
 #endif
 #if defined(__EMSCRIPTEN__)
     case maud_backendWeb:
         return maudGetWebBackend();
+#endif
+#if defined(MAUD_HAVE_PRIVATE_BACKEND)
+    case maud_backendPrivate:
+        return maudGetPrivateBackend();
 #endif
     default:
         return nullptr;
     }
 }
 
-// What maud_backendNative tries, in order.
-#if defined(_WIN32)
-static const maudBackendKind s_nativeOrder[] = {maud_backendWasapi};
-#elif defined(__APPLE__)
-static const maudBackendKind s_nativeOrder[] = {maud_backendCoreAudio};
-#elif defined(__EMSCRIPTEN__)
-static const maudBackendKind s_nativeOrder[] = {maud_backendWeb};
+// What maud_backendNative tries, in order: a private backend first
+// where one is built.
+#if defined(MAUD_HAVE_PRIVATE_BACKEND)
+#define PRIVATE_FIRST maud_backendPrivate,
 #else
-static const maudBackendKind s_nativeOrder[] = {maud_backendPipewire, maud_backendPulse,
-                                                maud_backendAlsa};
+#define PRIVATE_FIRST
+#endif
+#if defined(_WIN32)
+static const maudBackendKind s_nativeOrder[] = {PRIVATE_FIRST maud_backendWasapi};
+#elif defined(__ANDROID__)
+static const maudBackendKind s_nativeOrder[] = {PRIVATE_FIRST maud_backendAaudio};
+#elif defined(__APPLE__)
+static const maudBackendKind s_nativeOrder[] = {PRIVATE_FIRST maud_backendCoreAudio};
+#elif defined(__EMSCRIPTEN__)
+static const maudBackendKind s_nativeOrder[] = {PRIVATE_FIRST maud_backendWeb};
+#else
+static const maudBackendKind s_nativeOrder[] = {PRIVATE_FIRST maud_backendPipewire,
+                                                maud_backendPulse, maud_backendAlsa};
 #endif
 
 static void InitStreams(maudStreamTable* streams)
@@ -98,6 +118,7 @@ static void InitStreams(maudStreamTable* streams)
         slot->hidden = false;
         atomic_init(&slot->core.state, maud_streamIdle);
         atomic_init(&slot->core.blockRate, 0);
+        atomic_init(&slot->core.spatialMark, maud_markNone);
         atomic_init(&slot->core.renderingThread, 0);
         atomic_init(&slot->core.position, 0);
         atomic_init(&slot->core.clockSequence, 0);
@@ -329,7 +350,8 @@ static void ReleaseHalf(maudContext* context, maudStreamSlot* slot)
     {
         context->backend->detachStream(context, slot);
     }
-    maudContextRelease(context, slot->core.period.samples, slot->core.sampleBytes, alignof(float));
+    maudContextRelease(context, slot->core.period.samples, slot->core.sampleBytes,
+                       MAUD_STREAM_STORAGE_ALIGN);
     slot->live = false;
     slot->duplex = nullptr;
     slot->hidden = false;

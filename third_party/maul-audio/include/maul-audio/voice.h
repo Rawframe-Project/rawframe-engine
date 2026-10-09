@@ -190,6 +190,177 @@ extern "C"
                                                             uint32_t frameCount,
                                                             maudGainState* stateOut);
 
+    // A noise suppressor. Build its def with
+    // maudDefaultNoiseSuppressorDef. A high-pass filter takes out the
+    // rumble below speech; then each 10 ms it estimates the noise's
+    // spectrum, following it through speech, and takes each frequency
+    // down by how likely it holds only noise, never below a floor. One
+    // gain per frequency applies to all channels.
+    typedef struct maudNoiseSuppressorDef
+    {
+        uint32_t cookie;
+        // The frames' rate, from 8,000 to 384,000 and a multiple of 100,
+        // and their layout.
+        uint32_t sampleRate;
+        maudChannelLayout layout;
+        // The most it takes noise down, in dB, from -40 to -6.
+        float floorDb;
+        // The high-pass filter's corner, from 20 to 400 Hz, or 0 for none.
+        float highPassHz;
+        maudAllocator allocator;
+    } maudNoiseSuppressorDef;
+
+    // What a noise suppressor hears.
+    typedef struct maudNoiseState
+    {
+        // The share of the last 10 ms's frequencies likely to hold speech,
+        // 0 to 1.
+        float speechProbability;
+        // The noise it estimates under the input, in dBFS.
+        float noiseDbfs;
+        // The 10 ms frames analyzed so far.
+        uint64_t frames;
+    } maudNoiseState;
+
+    typedef struct maudNoiseSuppressor maudNoiseSuppressor;
+
+    /// Returns the default noise suppressor def: 48,000, mono, a floor of
+    /// -30 dB, a high-pass at 100 Hz, the default allocator.
+    ///
+    /// @return The def, with a valid cookie.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MAUD_API maudNoiseSuppressorDef maudDefaultNoiseSuppressorDef(void);
+
+    /// Creates a noise suppressor.
+    ///
+    /// @param def            The def, from maudDefaultNoiseSuppressorDef.
+    /// @param suppressorOut  Receives the noise suppressor; NULL on failure.
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a
+    ///         def out of range; `maud_errorCapacity` when the allocator
+    ///         fails.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MAUD_NODISCARD MAUD_API maudResult maudCreateNoiseSuppressor(
+        const maudNoiseSuppressorDef* def, maudNoiseSuppressor** suppressorOut);
+
+    /// Destroys a noise suppressor. NULL is ignored.
+    ///
+    /// @param suppressor  The noise suppressor.
+    /// @par Thread safety
+    /// Safe from any thread; the noise suppressor is used by one thread at
+    /// a time.
+    MAUD_API void maudDestroyNoiseSuppressor(maudNoiseSuppressor* suppressor);
+
+    /// Suppresses noise in interleaved frames in place, in any count; the
+    /// output does not depend on how the frames are cut. It lags the
+    /// input by 10 ms: the first 10 ms out are silence.
+    ///
+    /// @param suppressor  The noise suppressor.
+    /// @param frames      frameCount frames in the def's layout; may be
+    ///                    NULL when frameCount is 0.
+    /// @param frameCount  How many.
+    /// @param stateOut    Receives the state after them; may be NULL.
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL noise
+    ///         suppressor, or NULL frames with a frameCount.
+    /// @par Thread safety
+    /// Real-time safe: no allocation, lock or wait. The noise suppressor
+    /// is used by one thread at a time.
+    MAUD_NODISCARD MAUD_API maudResult maudSuppressNoise(maudNoiseSuppressor* suppressor,
+                                                         float* frames, uint32_t frameCount,
+                                                         maudNoiseState* stateOut);
+
+    // An echo canceller: it takes out of the capture what the render
+    // played into it, as a call's far end heard through the device's
+    // loudspeaker, and the noise with it. Ahead of a multidelay block
+    // frequency-domain adaptive filter, a DC notch on the capture and a
+    // pre-emphasis on both; the filter's rates follow the echo's leakage
+    // into its output, and it adapts in a background copy the output
+    // takes over only when it does better. After it, one gain per
+    // frequency against the noise and the echo the filter leaves, under
+    // the probability of speech. A host runs it in place of the noise
+    // suppressor, and gives it the render already aligned with the
+    // capture (the stream's latencies), both mono at one rate.
+    typedef struct maudEchoCancellerDef
+    {
+        uint32_t cookie;
+        // The frames' rate, from 8,000 to 384,000.
+        uint32_t sampleRate;
+        // The longest echo path it learns, in seconds, from 0.05 to 1.
+        float tailSeconds;
+        // The most it takes noise down, in dB, from -40 to -6 (the echo
+        // left, down to -40 dB where no one speaks).
+        float floorDb;
+        maudAllocator allocator;
+    } maudEchoCancellerDef;
+
+    // What an echo canceller has learnt.
+    typedef struct maudEchoState
+    {
+        // The share of the echo it estimates that is still in its output,
+        // 0.005 to 1: high while it learns or after the path changes.
+        float leakage;
+        // Whether it has learnt the echo path once.
+        bool adapted;
+        // The probability that the last frame held speech, 0.1 to 1.
+        float speechProbability;
+        // The frames processed so far.
+        uint64_t frames;
+    } maudEchoState;
+
+    typedef struct maudEchoCanceller maudEchoCanceller;
+
+    /// Returns the default echo canceller def: 48,000, a path of 0.2 s,
+    /// a noise floor of -15 dB, the default allocator.
+    ///
+    /// @return The def, with a valid cookie.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MAUD_API maudEchoCancellerDef maudDefaultEchoCancellerDef(void);
+
+    /// Creates an echo canceller.
+    ///
+    /// @param def            The def, from maudDefaultEchoCancellerDef.
+    /// @param cancellerOut   Receives the echo canceller; NULL on failure.
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a
+    ///         def out of range; `maud_errorCapacity` when the allocator
+    ///         fails.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MAUD_NODISCARD MAUD_API maudResult maudCreateEchoCanceller(const maudEchoCancellerDef* def,
+                                                               maudEchoCanceller** cancellerOut);
+
+    /// Destroys an echo canceller. NULL is ignored.
+    ///
+    /// @param canceller  The echo canceller.
+    /// @par Thread safety
+    /// Safe from any thread; the echo canceller is used by one thread at a
+    /// time.
+    MAUD_API void maudDestroyEchoCanceller(maudEchoCanceller* canceller);
+
+    /// Takes the echo of the render out of the capture, in place, in any
+    /// count of frames; the output does not depend on how the frames are
+    /// cut. It works in blocks of the smallest power of two of frames
+    /// lasting 8 ms or more (128 at 16,000, 512 at 48,000) and lags the
+    /// input by two: the first two blocks out are silence.
+    ///
+    /// @param canceller   The echo canceller.
+    /// @param capture     frameCount mono frames of the capture; may be NULL
+    ///                    when frameCount is 0.
+    /// @param render      frameCount mono frames of what was played, aligned
+    ///                    with the capture; may be NULL when frameCount is
+    ///                    0.
+    /// @param frameCount  How many.
+    /// @param stateOut    Receives the state after them; may be NULL.
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL echo
+    ///         canceller, or NULL frames with a frameCount.
+    /// @par Thread safety
+    /// Real-time safe: no allocation, lock or wait. The echo canceller is
+    /// used by one thread at a time.
+    MAUD_NODISCARD MAUD_API maudResult maudCancelEcho(maudEchoCanceller* canceller, float* capture,
+                                                      const float* render, uint32_t frameCount,
+                                                      maudEchoState* stateOut);
+
 #ifdef __cplusplus
 }
 #endif

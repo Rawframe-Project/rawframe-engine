@@ -38,6 +38,11 @@ static inline float maudFilter(maudBiquad* filter, float in)
 // The level of a mean square, in dBFS, no lower than MAUD_FLOOR_DBFS.
 float maudLevelDbfs(double meanSquare);
 
+// The exponential integral E1(x) for x > 0, as the log-spectral
+// amplitude gain takes it: its series below 1, its continued fraction
+// above (as Numerical Recipes' expint, n = 1).
+double maudExpIntegral(double x);
+
 // The level below which a frame counts as silence.
 #define MAUD_FLOOR_DBFS -100.0f
 

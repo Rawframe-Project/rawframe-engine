@@ -57,12 +57,24 @@ struct maudBackend
     // Whether the caller's thread renders the streams (maudRenderStream
     // and maudFeedStream), as on the offline backend.
     bool rendersOnCaller;
+    // Whether the backend renders object streams (maul-audio/objects.h):
+    // hands their objects to a platform renderer, or to the caller.
+    bool rendersObjects;
     // Whether the platform has no voice processing, so input streams
     // report none from the start; otherwise the backend reports.
     bool hasNoVoice;
     // Whether it can open a stream for exclusive use; its openStream
     // still refuses a device that cannot be.
     bool exclusive;
+    // What a stream marked contentSpatialized gets from the platform,
+    // from its def and settled format; a backend whose platform says only
+    // once the stream is open reports again through the core's
+    // spatialMark. May be NULL: unknown.
+    maudSpatialMark (*markStream)(const maudStreamDef* def, const maudStreamFormat* format);
+    // Asks the platform for audio focus or gives it back (maudRequestFocus,
+    // whose results it returns); the backend reports the state that
+    // follows through maudReportFocus. May be NULL: no audio focus.
+    maudResult (*requestFocus)(maudContext* context, maudFocusRequest request, maudDeviceRole role);
 };
 
 // The offline backend.
@@ -83,7 +95,17 @@ const maudBackend* maudGetWasapiBackend(void);
 // The CoreAudio backend, in builds with MAUL_AUDIO_COREAUDIO.
 const maudBackend* maudGetCoreAudioBackend(void);
 
+// The iOS backend, in builds with MAUL_AUDIO_IOS.
+const maudBackend* maudGetIosBackend(void);
+
+// The AAudio backend, in builds with MAUL_AUDIO_AAUDIO.
+const maudBackend* maudGetAaudioBackend(void);
+
 // The web backend, in Emscripten builds.
 const maudBackend* maudGetWebBackend(void);
+
+// The private backend, in builds with MAUL_AUDIO_PRIVATE_BACKEND: written
+// outside the library (docs/private-backends.md) against this header.
+const maudBackend* maudGetPrivateBackend(void);
 
 #endif // MAUL_AUDIO_SRC_BACKEND_H

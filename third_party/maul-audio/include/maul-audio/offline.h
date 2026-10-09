@@ -107,6 +107,26 @@ extern "C"
                                                                 maudDeviceId device,
                                                                 maudDeviceForm form);
 
+    /// Changes what a platform spatializer does on an output device, as a
+    /// user turning one on does: a change posts
+    /// maud_notifySpatializerChanged. Offline outputs start with none.
+    ///
+    /// @param context       An offline context.
+    /// @param device        An output device.
+    /// @param spatializer   Its new state.
+    /// @param headTracking  Whether it can follow the listener's head.
+    /// @param objects       The positioned objects it takes; 0 unless on.
+    /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
+    ///         NULL context, an unknown state, objects while not on, or an
+    ///         input device; `maud_errorUnsupported` on a context that is not
+    ///         offline; `maud_errorState` on a thread rendering one of the
+    ///         context's streams.
+    /// @par Thread safety
+    /// Safe from any thread; the context is used by one thread at a time.
+    MAUD_NODISCARD MAUD_API maudResult maudSetOfflineDeviceSpatializer(
+        maudContext* context, maudDeviceId device, maudPlatformSpatializer spatializer,
+        bool headTracking, uint32_t objects);
+
 #ifdef __cplusplus
 }
 #endif

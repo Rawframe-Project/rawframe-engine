@@ -51,6 +51,23 @@ extern "C"
         maud_roleCommunications = 1,
     };
 
+    // What the platform's own spatializer does on an output device.
+    typedef uint8_t maudPlatformSpatializer;
+
+    enum
+    {
+        // The platform does not say.
+        maud_spatializerUnknown = 0,
+        // The platform has no spatializer for the device.
+        maud_spatializerNone = 1,
+        // The platform could spatialize on the device, but the user has not
+        // turned it on.
+        maud_spatializerOff = 2,
+        // The platform spatializes on the device: multichannel streams
+        // (Android's Spatializer) or objects (Windows' spatial formats).
+        maud_spatializerOn = 3,
+    };
+
     // What a device's active port leads to, as the platform reports it.
     // Connections that say nothing of the far end, such as USB and
     // Bluetooth, are unknown.
@@ -92,6 +109,16 @@ extern "C"
         // What its active port leads to; maud_notifyRouteChanged reports a
         // change.
         maudDeviceForm form;
+        // For an output device, the platform's own spatializer there,
+        // whether it can follow the listener's head, and the positioned
+        // objects it takes (0 where it takes none);
+        // maud_notifySpatializerChanged reports a change. Unknown for an
+        // input device. A host choosing between its own binaural mix (with
+        // contentSpatialized in the stream def) and the platform's renderer
+        // reads these.
+        maudPlatformSpatializer spatializer;
+        bool headTracking;
+        uint32_t spatialObjects;
     } maudDeviceInfo;
 
     /// Lists the devices of one direction, in a stable order.

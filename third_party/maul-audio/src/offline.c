@@ -80,7 +80,9 @@ maudResult maudAddOfflineDevice(maudContext* context, const maudOfflineDeviceDef
                  .nativeSampleRate = def->sampleRate,
                  .minSampleRate = OFFLINE_MIN_RATE,
                  .maxSampleRate = OFFLINE_MAX_RATE,
-                 .form = def->form},
+                 .form = def->form,
+                 .spatializer = def->direction == maud_directionOutput ? maud_spatializerNone
+                                                                       : maud_spatializerUnknown},
         .name = def->name,
         .nameLength = def->nameLength,
         .key = def->key,
@@ -144,5 +146,37 @@ maudResult maudSetOfflineDeviceForm(maudContext* context, maudDeviceId device, m
         return maud_errorStale;
     }
     maudSetDeviceForm(context, slot, form);
+    return maud_success;
+}
+
+maudResult maudSetOfflineDeviceSpatializer(maudContext* context, maudDeviceId device,
+                                           maudPlatformSpatializer spatializer, bool headTracking,
+                                           uint32_t objects)
+{
+    maudResult result = CheckOffline(context);
+    if (result != maud_success)
+    {
+        return result;
+    }
+    if (spatializer > maud_spatializerOn || (objects > 0 && spatializer != maud_spatializerOn))
+    {
+        maudCountMisuse(context);
+        return maud_errorInvalid;
+    }
+    maudDeviceSlot* slot = maudFindDevice(context, device);
+    if (slot == nullptr)
+    {
+        return maud_errorStale;
+    }
+    if (slot->info.direction != maud_directionOutput)
+    {
+        maudCountMisuse(context);
+        return maud_errorInvalid;
+    }
+    maudDeviceInfo info = slot->info;
+    info.spatializer = spatializer;
+    info.headTracking = headTracking;
+    info.spatialObjects = objects;
+    maudSetDeviceSpatializer(context, slot, &info);
     return maud_success;
 }

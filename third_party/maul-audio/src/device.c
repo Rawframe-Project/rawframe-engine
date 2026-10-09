@@ -239,7 +239,6 @@ static const maudDeviceSpec* SpecOf(const maudDeviceSlot* slot, const maudDevice
     return nullptr;
 }
 
-// Takes a scanned device's format; true when its native rate changed.
 void maudSetDeviceForm(maudContext* context, maudDeviceSlot* slot, maudDeviceForm form)
 {
     if (slot->info.form == form)
@@ -255,9 +254,30 @@ void maudSetDeviceForm(maudContext* context, maudDeviceSlot* slot, maudDeviceFor
                                   });
 }
 
+void maudSetDeviceSpatializer(maudContext* context, maudDeviceSlot* slot,
+                              const maudDeviceInfo* info)
+{
+    if (slot->info.spatializer == info->spatializer &&
+        slot->info.headTracking == info->headTracking &&
+        slot->info.spatialObjects == info->spatialObjects)
+    {
+        return;
+    }
+    slot->info.spatializer = info->spatializer;
+    slot->info.headTracking = info->headTracking;
+    slot->info.spatialObjects = info->spatialObjects;
+    maudPostNotification(context, &(maudNotification){
+                                      .kind = maud_notifySpatializerChanged,
+                                      .direction = slot->info.direction,
+                                      .deviceId = IdOf(context, slot),
+                                  });
+}
+
+// Takes a scanned device's info; true when its native rate changed.
 static bool Update(maudContext* context, maudDeviceSlot* slot, const maudDeviceInfo* info)
 {
     maudSetDeviceForm(context, slot, info->form);
+    maudSetDeviceSpatializer(context, slot, info);
     bool rateChanged = slot->info.nativeSampleRate != info->nativeSampleRate;
     slot->info.nativeLayout = info->nativeLayout;
     slot->info.nativeSampleRate = info->nativeSampleRate;

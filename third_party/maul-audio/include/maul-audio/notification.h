@@ -7,6 +7,7 @@
 #ifndef MAUL_AUDIO_NOTIFICATION_H
 #define MAUL_AUDIO_NOTIFICATION_H
 
+#include "maul-audio/focus.h"
 #include "maul-audio/stream.h"
 
 #ifdef __cplusplus
@@ -40,6 +41,12 @@ extern "C"
         // deviceId, of direction, now leads to form: its route changed,
         // as when headphones are plugged into the jack its port serves.
         maud_notifyRouteChanged = 9,
+        // The context's audio focus is now focus (maudRequestFocus).
+        maud_notifyFocusChanged = 10,
+        // What the platform's spatializer does on the output device
+        // deviceId changed (maudDeviceInfo's spatializer, headTracking and
+        // spatialObjects).
+        maud_notifySpatializerChanged = 11,
     };
 
     // One change. Fields a kind does not name are zero.
@@ -54,6 +61,7 @@ extern "C"
         uint32_t sampleRate;
         uint32_t droppedCount;
         maudDeviceForm form;
+        maudFocus focus;
     } maudNotification;
 
     /// Takes the oldest notification from the context's queue. On native

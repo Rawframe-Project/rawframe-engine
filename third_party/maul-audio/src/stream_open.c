@@ -49,8 +49,9 @@ static maudResult FindStartingDevice(const maudContext* context, const maudStrea
 static maudResult OpenCore(maudContext* context, const maudStreamDef* def,
                            const maudDeviceInfo* device, uint32_t duplexGroup, maudStreamSlot* slot)
 {
-    if (def->share == maud_shareExclusive &&
-        (!context->backend->exclusive || def->ratePolicy == maud_ratePlatformConverted))
+    if ((def->share == maud_shareExclusive &&
+         (!context->backend->exclusive || def->ratePolicy == maud_ratePlatformConverted)) ||
+        (def->objectCount > 0 && !context->backend->rendersObjects))
     {
         return maud_errorUnsupported;
     }
@@ -64,14 +65,25 @@ static maudResult OpenCore(maudContext* context, const maudStreamDef* def,
     {
         return maud_errorCapacity;
     }
-    size_t bytes;
-    if (ckd_mul(&bytes, (size_t)format.periodFrames,
-                (size_t)maudGetLayoutChannelCount(format.layout)) ||
-        ckd_mul(&bytes, bytes, sizeof(float)))
+    // One block: the period's samples, then an object stream's frames,
+    // then its objects.
+    size_t samplesBytes = 0;
+    size_t objectBytes = 0;
+    size_t bytes = 0;
+    if (ckd_mul(&samplesBytes, (size_t)format.periodFrames,
+                (size_t)maudGetLayoutChannelCount(format.layout) + def->objectCount) ||
+        ckd_mul(&samplesBytes, samplesBytes, sizeof(float)) ||
+        ckd_add(&samplesBytes, samplesBytes, MAUD_STREAM_STORAGE_ALIGN - 1) ||
+        ckd_mul(&objectBytes, (size_t)def->objectCount, sizeof(maudStreamObject)))
     {
         return maud_errorCapacity;
     }
-    float* samples = maudContextAllocate(context, bytes, alignof(float));
+    samplesBytes -= samplesBytes % MAUD_STREAM_STORAGE_ALIGN;
+    if (ckd_add(&bytes, samplesBytes, objectBytes))
+    {
+        return maud_errorCapacity;
+    }
+    float* samples = maudContextAllocate(context, bytes, MAUD_STREAM_STORAGE_ALIGN);
     if (samples == nullptr)
     {
         return maud_errorCapacity;
@@ -83,6 +95,13 @@ static maudResult OpenCore(maudContext* context, const maudStreamDef* def,
     core->duplexGroup = duplexGroup;
     core->exclusive = def->share == maud_shareExclusive;
     maudResetVoice(core);
+    maudSpatialMark mark = maud_markNone;
+    if (def->contentSpatialized)
+    {
+        mark = context->backend->markStream != nullptr ? context->backend->markStream(def, &format)
+                                                       : maud_markUnknown;
+    }
+    atomic_store_explicit(&core->spatialMark, mark, memory_order_release);
     atomic_store_explicit(&core->underruns, 0, memory_order_relaxed);
     atomic_store_explicit(&core->overruns, 0, memory_order_relaxed);
     if (context->backend->hasNoVoice && def->direction == maud_directionInput)
@@ -90,6 +109,12 @@ static maudResult OpenCore(maudContext* context, const maudStreamDef* def,
         maudReportVoice(core, maud_voiceNone);
     }
     maudInitPeriod(&core->period, def, &format, samples);
+    if (def->objectCount > 0)
+    {
+        size_t bedSamples = (size_t)format.periodFrames * core->period.channelCount;
+        maudInitObjects(&core->period, (maudStreamObject*)((char*)samples + samplesBytes),
+                        samples + bedSamples, def->objectCount);
+    }
     atomic_store_explicit(&core->blockRate, format.sampleRate, memory_order_relaxed);
     atomic_store_explicit(&core->position, 0, memory_order_relaxed);
     maudResetClock(core);
@@ -122,7 +147,7 @@ maudResult maudOpenStream(maudContext* context, const maudStreamDef* def, uint32
         if (result != maud_success)
         {
             maudContextRelease(context, slot->core.period.samples, slot->core.sampleBytes,
-                               alignof(float));
+                               MAUD_STREAM_STORAGE_ALIGN);
             return result;
         }
     }

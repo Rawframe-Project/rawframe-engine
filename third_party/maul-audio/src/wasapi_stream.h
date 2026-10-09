@@ -24,6 +24,10 @@ void maudWasapiSetStreamActive(maudContext* context, maudStreamSlot* slot, bool 
 // again if it ran.
 void maudWasapiRetargetStream(maudContext* context, maudStreamSlot* slot);
 
+// Whether a running stream's thread ended on a failure, or it has no
+// client: what the next call opens again.
+bool maudWasapiStreamsToResume(maudContext* context);
+
 // Opens again every running stream whose thread ended on a failure.
 void maudWasapiResumeStreams(maudContext* context);
 

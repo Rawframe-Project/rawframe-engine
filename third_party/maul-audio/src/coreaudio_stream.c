@@ -18,6 +18,7 @@
 #include "context.h"
 #include "coreaudio_core.h"
 #include "coreaudio_hog.h"
+#include "device.h"
 #include "period.h"
 #include "thread.h"
 #include "voice.h"
@@ -62,7 +63,12 @@ static OSStatus Render(void* user, AudioUnitRenderActionFlags* flags, const Audi
     bool running = atomic_load_explicit(&core->state, memory_order_acquire) == maud_streamRunning;
     atomic_store_explicit(&core->renderingThread, maudCurrentThread(), memory_order_release);
     core->period.sampleRate = atomic_load_explicit(&core->blockRate, memory_order_acquire);
-    if (running)
+    OSStatus status = noErr;
+    if (running && entry->objects.mixer != nullptr)
+    {
+        status = maudRenderAppleObjects(&entry->objects, flags, time, frames, data);
+    }
+    else if (running)
     {
         maudPullPeriod(&core->period, out, frames);
     }
@@ -81,7 +87,7 @@ static OSStatus Render(void* user, AudioUnitRenderActionFlags* flags, const Audi
     }
     maudStampOutputClock(core, latency);
     atomic_fetch_add_explicit(&core->position, frames, memory_order_release);
-    return noErr;
+    return status;
 }
 
 // Spreads frames of `from` channels over `to`, in place, back to front
@@ -333,6 +339,8 @@ static void Disconnect(maudContext* context, maudCoreAudioStream* entry)
     {
         entry->voicePartner->voicePartner = nullptr;
     }
+    // The unit is gone, so the mixer renders no more.
+    maudCloseAppleObjects(context, &entry->objects);
     maudStreamCore* core = entry->core;
     *entry = (maudCoreAudioStream){.core = core};
 }
@@ -392,6 +400,22 @@ static maudResult Connect(maudContext* context, maudCoreAudioStream* entry)
     if (!Configure(entry, object))
     {
         return maud_errorPlatform;
+    }
+    // An object stream renders through the spatial mixer, for what its
+    // device leads to.
+    if (entry->core->def.objectCount > 0)
+    {
+        const maudDeviceSlot* device = maudFindDevice(context, entry->core->binding.current);
+        maudResult opened =
+            maudAppleObjectsFit(entry->core)
+                ? maudOpenAppleObjects(context, entry->core,
+                                       device != nullptr ? device->info.form : maud_formUnknown,
+                                       &entry->objects)
+                : maud_errorUnsupported;
+        if (opened != maud_success)
+        {
+            return opened;
+        }
     }
     AskBufferFrames(object, entry->core->format.periodFrames);
     entry->deviceLatency = DeviceLatency(object, input ? kAudioObjectPropertyScopeInput

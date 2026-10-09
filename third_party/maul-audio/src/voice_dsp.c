@@ -46,3 +46,42 @@ float maudLevelDbfs(double meanSquare)
     float level = (float)(10.0 * log10(meanSquare + 1e-12));
     return level > MAUD_FLOOR_DBFS ? level : MAUD_FLOOR_DBFS;
 }
+
+// The exponential integral E1(x) for x > 0: its series below 1, its
+// continued fraction above (as Numerical Recipes' expint, n = 1).
+double maudExpIntegral(double x)
+{
+    if (x < 1.0)
+    {
+        double sum = 0.0;
+        double term = 1.0;
+        for (int k = 1; k < 40; ++k)
+        {
+            term *= -x / k;
+            sum -= term / k;
+            if (fabs(term) < 1e-12 * fabs(sum))
+            {
+                break;
+            }
+        }
+        return -0.57721566490153286 - log(x) + sum;
+    }
+    double b = x + 1.0;
+    double c = 1e300;
+    double d = 1.0 / b;
+    double h = d;
+    for (int i = 1; i < 100; ++i)
+    {
+        double a = -(double)i * i;
+        b += 2.0;
+        d = 1.0 / (a * d + b);
+        c = b + a / c;
+        double delta = c * d;
+        h *= delta;
+        if (fabs(delta - 1.0) < 1e-12)
+        {
+            break;
+        }
+    }
+    return h * exp(-x);
+}

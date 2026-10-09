@@ -32,7 +32,9 @@ extern "C"
         // The platform's audio thread, or one the library starts where the
         // platform has none. On the web it is the page's main thread: the
         // library renders ahead there, from the browser's event loop, and
-        // plays from a queue on the audio thread.
+        // plays from a queue on the audio thread, a SharedArrayBuffer ring
+        // on a cross-origin isolated page and posted chunks elsewhere
+        // (docs/guide.md, "In a browser", gives the latency of each).
         maud_modeCallback = 0,
         // The host's own thread, through the library; the only mode of the
         // offline backend, and refused where the platform owns the audio
@@ -56,6 +58,9 @@ extern "C"
         maud_ratePlatformConverted = 2,
     };
 
+    // One object of an object stream (maul-audio/objects.h).
+    typedef struct maudStreamObject maudStreamObject;
+
     // One period of a stream, as its callback sees it.
     typedef struct maudStreamBlock
     {
@@ -71,6 +76,12 @@ extern "C"
         maudChannelLayout layout;
         // The stream frame index of the block's first frame.
         uint64_t position;
+        // Object streams: the def's objectCount objects to fill and place
+        // (maul-audio/objects.h), and how many active ones the platform
+        // takes this period; the bed is output. NULL and 0 otherwise.
+        maudStreamObject* objects;
+        uint32_t objectCount;
+        uint32_t objectsAvailable;
     } maudStreamBlock;
 
     // The host's real-time callback. It must not allocate, lock, wait or
@@ -103,6 +114,23 @@ extern "C"
         // The device for this stream alone: WASAPI's exclusive mode,
         // CoreAudio's hog mode, an ALSA hardware PCM.
         maud_shareExclusive = 1,
+    };
+
+    // What the platform does with an output stream marked as already
+    // spatialized (contentSpatialized).
+    typedef uint8_t maudSpatialMark;
+
+    enum
+    {
+        // The stream is not marked.
+        maud_markNone = 0,
+        // The platform does not say whether it spatializes the stream.
+        maud_markUnknown = 1,
+        // The platform leaves the stream unprocessed: it took the mark, or
+        // never spatializes such a stream.
+        maud_markHonored = 2,
+        // The platform may spatialize the stream anyway.
+        maud_markIgnored = 3,
     };
 
     // How a stream is made. Build it with maudDefaultStreamDef.
@@ -141,6 +169,17 @@ extern "C"
         maudShareMode share;
         // The role whose default a stream on the null device follows.
         maudDeviceRole role;
+        // Whether an output or duplex stream's content is already
+        // spatialized (a binaural or transaural mix), so that no platform
+        // spatializer processes it again; the status says what the
+        // platform did with the mark. Input streams take false.
+        bool contentSpatialized;
+        // An output stream's positioned objects, up to
+        // MAUD_MAX_STREAM_OBJECTS: an object stream (maul-audio/objects.h),
+        // whose layout is its bed's. Shared only; refused with
+        // maud_errorUnsupported where the backend has no object renderer.
+        // 0 for an ordinary stream.
+        uint32_t objectCount;
         maudStreamCallback callback;
         void* user;
     } maudStreamDef;
@@ -167,7 +206,10 @@ extern "C"
         // It follows the default device, and its direction has no device.
         maud_suspendNoDevice = 2,
         // The platform holds audio until the user acts: on the web, until
-        // a user gesture's handler calls maudResumeContext.
+        // a user gesture's handler calls maudResumeContext; on iOS, while
+        // an interruption (a call, an alarm) lasts, and after one that
+        // ended without the hint to resume, until maudResumeContext or a
+        // focus request.
         maud_suspendPolicy = 3,
         // The platform has not granted access to its device: on the web,
         // until the user allows the microphone. A refusal leaves it here.
@@ -225,6 +267,9 @@ extern "C"
         // device: an exclusive stream, or an ALSA hardware PCM, which does
         // so even when opened shared.
         bool exclusive;
+        // For a stream marked contentSpatialized, what the platform does
+        // with the mark; maud_markNone for an unmarked stream.
+        maudSpatialMark spatialMark;
     } maudStreamStatus;
 
     /// Returns the default stream def: an output stream in callback mode,

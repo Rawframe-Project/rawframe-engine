@@ -20,7 +20,10 @@ static maudResult AddStartingDevice(maudContext* context, maudDirection directio
                  .nativeLayout = maud_layoutStereo,
                  .nativeSampleRate = context->def.offlineSampleRate,
                  .minSampleRate = OFFLINE_MIN_RATE,
-                 .maxSampleRate = OFFLINE_MAX_RATE},
+                 .maxSampleRate = OFFLINE_MAX_RATE,
+                 // No platform renders between the backend and its caller.
+                 .spatializer = direction == maud_directionOutput ? maud_spatializerNone
+                                                                  : maud_spatializerUnknown},
         .name = name,
         .nameLength = __builtin_strlen(name),
         .key = key,
@@ -59,7 +62,18 @@ static maudResult OpenStream(const maudContext* context, const maudStreamDef* de
     return maud_success;
 }
 
+// No platform stands between the offline backend and its caller: a
+// marked stream is left as it is.
+static maudSpatialMark MarkStream(const maudStreamDef* def, const maudStreamFormat* format)
+{
+    (void)def;
+    (void)format;
+    return maud_markHonored;
+}
+
 static const maudBackend s_offline = {
+    .markStream = MarkStream,
+    .rendersObjects = true,
     .kind = maud_backendOffline,
     .openContext = OpenContext,
     .closeContext = nullptr,

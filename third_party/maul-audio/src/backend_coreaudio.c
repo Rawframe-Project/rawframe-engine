@@ -150,6 +150,14 @@ static bool Describe(maudCoreAudio* coreaudio, AudioObjectID object, maudDirecti
     };
     ReadRates(coreaudio, object, &spec->info);
     spec->info.form = maudCoreAudioFormOf(object, direction);
+    // macOS never spatializes an AUHAL client's output, but an object
+    // stream renders through the system's spatial mixer, which takes any
+    // number of objects.
+    if (direction == maud_directionOutput)
+    {
+        spec->info.spatializer = maud_spatializerOn;
+        spec->info.spatialObjects = MAUD_MAX_STREAM_OBJECTS;
+    }
     return true;
 }
 
@@ -385,7 +393,17 @@ static bool SharesClock(const maudContext* context, const maudStreamSlot* output
            memcmp(played->key.bytes, captured->key.bytes, played->key.length) == 0;
 }
 
+// macOS never spatializes an AUHAL client's output.
+static maudSpatialMark MarkStream(const maudStreamDef* def, const maudStreamFormat* format)
+{
+    (void)def;
+    (void)format;
+    return maud_markHonored;
+}
+
 static const maudBackend s_coreaudio = {
+    .markStream = MarkStream,
+    .rendersObjects = true,
     .kind = maud_backendCoreAudio,
     .openContext = OpenContext,
     .closeContext = CloseContext,

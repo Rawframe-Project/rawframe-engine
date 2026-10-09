@@ -107,8 +107,28 @@ static int64_t OutputLatency(const maudWasapiStream* entry)
 }
 
 // Fills the render buffer's free space.
+// One pass of an object stream: the period's bed and objects to the
+// spatial render stream. Windows says nothing of its latency here.
+static HRESULT FillObjects(maudWasapiStream* entry)
+{
+    maudStreamCore* core = entry->core;
+    bool running = atomic_load_explicit(&core->state, memory_order_acquire) == maud_streamRunning;
+    atomic_store_explicit(&core->renderingThread, maudCurrentThread(), memory_order_release);
+    core->period.sampleRate = atomic_load_explicit(&core->blockRate, memory_order_acquire);
+    UINT32 frames = 0;
+    HRESULT result = maudWasapiRenderObjects(&entry->objects, core, running, &frames);
+    atomic_store_explicit(&core->renderingThread, 0, memory_order_release);
+    maudStampOutputClock(core, 0);
+    atomic_fetch_add_explicit(&core->position, frames, memory_order_release);
+    return result;
+}
+
 static HRESULT Fill(maudWasapiStream* entry)
 {
+    if (entry->objects.stream != nullptr)
+    {
+        return FillObjects(entry);
+    }
     // An exclusive client takes a whole buffer at each event.
     UINT32 padding = 0;
     HRESULT result =
@@ -207,9 +227,15 @@ static HRESULT Drain(maudWasapiStream* entry)
 // then serves each period until the stop event or a failure.
 static void Serve(maudWasapiStream* entry)
 {
-    bool output = entry->render != nullptr;
-    HRESULT result = output ? Fill(entry) : S_OK;
-    result = SUCCEEDED(result) ? IAudioClient_Start(entry->client) : result;
+    bool objects = entry->objects.stream != nullptr;
+    bool output = entry->render != nullptr || objects;
+    // An object stream's passes begin once its stream has started.
+    HRESULT result = output && !objects ? Fill(entry) : S_OK;
+    if (SUCCEEDED(result))
+    {
+        result = objects ? ISpatialAudioObjectRenderStream_Start(entry->objects.stream)
+                         : IAudioClient_Start(entry->client);
+    }
     HANDLE events[2] = {entry->stopEvent, entry->bufferEvent};
     while (SUCCEEDED(result) &&
            WaitForMultipleObjects(2, events, FALSE, INFINITE) == WAIT_OBJECT_0 + 1)
@@ -238,6 +264,7 @@ static void RunStream(void* user)
 
 static void Disconnect(maudContext* context, maudWasapiStream* entry)
 {
+    maudWasapiCloseObjects(context, &entry->objects);
     if (entry->render != nullptr)
     {
         IAudioRenderClient_Release(entry->render);
@@ -367,6 +394,18 @@ static maudResult AllocateBuffers(maudContext* context, maudWasapiStream* entry,
     return maud_success;
 }
 
+// An object stream's events and spatial render stream, on device.
+static maudResult ConnectObjects(maudContext* context, maudWasapiStream* entry, IMMDevice* device)
+{
+    entry->bufferEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    entry->stopEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (entry->bufferEvent == nullptr || entry->stopEvent == nullptr)
+    {
+        return maud_errorPlatform;
+    }
+    return maudWasapiOpenObjects(context, device, entry->core, entry->bufferEvent, &entry->objects);
+}
+
 // Opens and initializes the client and its service, and the events.
 static maudResult Connect(maudContext* context, maudWasapiStream* entry)
 {
@@ -376,6 +415,12 @@ static maudResult Connect(maudContext* context, maudWasapiStream* entry)
     if (device == nullptr)
     {
         return maud_errorPlatform;
+    }
+    if (entry->core->def.objectCount > 0)
+    {
+        maudResult connected = ConnectObjects(context, entry, device);
+        IMMDevice_Release(device);
+        return connected;
     }
     HRESULT activated =
         IMMDevice_Activate(device, &s_iidAudioClient, CLSCTX_ALL, nullptr, (void**)&entry->client);
@@ -457,9 +502,16 @@ static maudResult Open(maudContext* context, maudStreamSlot* slot)
     return maud_success;
 }
 
+// Whether the stream has a client, or an object stream its spatial
+// render stream.
+static bool Connected(const maudWasapiStream* entry)
+{
+    return entry->client != nullptr || entry->objects.stream != nullptr;
+}
+
 static void Start(maudWasapiStream* entry)
 {
-    if (entry->client == nullptr || entry->threadRunning)
+    if (!Connected(entry) || entry->threadRunning)
     {
         return;
     }
@@ -481,8 +533,16 @@ static void Stop(maudWasapiStream* entry)
     SetEvent(entry->stopEvent);
     maudJoinWorker(&entry->worker);
     entry->threadRunning = false;
-    IAudioClient_Stop(entry->client);
-    IAudioClient_Reset(entry->client);
+    if (entry->objects.stream != nullptr)
+    {
+        ISpatialAudioObjectRenderStream_Stop(entry->objects.stream);
+        ISpatialAudioObjectRenderStream_Reset(entry->objects.stream);
+    }
+    else
+    {
+        IAudioClient_Stop(entry->client);
+        IAudioClient_Reset(entry->client);
+    }
     entry->written = 0;
 }
 
@@ -522,7 +582,7 @@ void maudWasapiSetStreamActive(maudContext* context, maudStreamSlot* slot, bool 
         Stop(entry);
         return;
     }
-    if (entry->client == nullptr)
+    if (!Connected(entry))
     {
         maudResult result = Open(context, slot);
         (void)result;
@@ -530,15 +590,33 @@ void maudWasapiSetStreamActive(maudContext* context, maudStreamSlot* slot, bool 
     Start(entry);
 }
 
+// A live running stream whose thread ended on a failure, or that has
+// no client.
+static bool ToResume(maudContext* context, maudStreamSlot* slot)
+{
+    const maudWasapiStream* entry = EntryOf(context, slot);
+    bool ended = entry->threadRunning && atomic_load_explicit(&entry->failed, memory_order_acquire);
+    return slot->live && Running(slot) && (ended || !Connected(entry));
+}
+
+bool maudWasapiStreamsToResume(maudContext* context)
+{
+    for (uint32_t i = 0; i < context->streams.capacity; ++i)
+    {
+        if (ToResume(context, &context->streams.slots[i]))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 void maudWasapiResumeStreams(maudContext* context)
 {
     for (uint32_t i = 0; i < context->streams.capacity; ++i)
     {
         maudStreamSlot* slot = &context->streams.slots[i];
-        const maudWasapiStream* entry = EntryOf(context, slot);
-        bool ended =
-            entry->threadRunning && atomic_load_explicit(&entry->failed, memory_order_acquire);
-        if (slot->live && Running(slot) && (ended || entry->client == nullptr))
+        if (ToResume(context, slot))
         {
             maudWasapiRetargetStream(context, slot);
         }

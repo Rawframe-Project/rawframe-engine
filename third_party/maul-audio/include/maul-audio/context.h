@@ -39,6 +39,11 @@ extern "C"
         maud_backendCoreAudio = 6,
         maud_backendAaudio = 7,
         maud_backendWeb = 8,
+        // A backend built from a directory outside the library, as a
+        // console's is (MAUL_AUDIO_PRIVATE_BACKEND; docs/private-backends.md).
+        // Built, it comes first in the native order; unbuilt, asking for it
+        // is unsupported.
+        maud_backendPrivate = 9,
     };
 
     // The named limits of a context. A request past one is refused.
@@ -67,6 +72,20 @@ extern "C"
         // The rate the offline backend's device runs at, in frames per
         // second, from 8,000 to 384,000.
         uint32_t offlineSampleRate;
+        // On Android, the application's JavaVM* and a jobject naming an
+        // android.content.Context, with the java/maul/audio classes
+        // compiled into the application: the context then lists every
+        // device, follows their changes and asks for the microphone once
+        // where the Context is an Activity. NULL both, the default: only
+        // the default output and input. The context keeps a reference of
+        // its own to the Context. One without the other is invalid.
+        // Unused elsewhere.
+        void* androidJavaVm;
+        void* androidContext;
+        // On iOS, whether the Ring/Silent switch silences the context's
+        // output while nothing records (the Ambient category); false, the
+        // default, plays through it, as media does. Unused elsewhere.
+        bool iosSilencedBySwitch;
     } maudContextDef;
 
     /// Returns the default context def: 8 streams, periods of at most
@@ -111,10 +130,11 @@ extern "C"
 
     /// Asks the platform to let the context's audio run. Browsers hold audio
     /// until the user acts: call it from a user gesture's handler, such as
-    /// a click's. Streams held meanwhile are suspended with
-    /// maud_suspendPolicy and resume, with a notification, once the
-    /// platform lets the context run. Where no policy holds audio it does
-    /// nothing.
+    /// a click's. On iOS an interruption that ended without the hint to
+    /// resume holds audio until this is called. Streams held meanwhile are
+    /// suspended with maud_suspendPolicy and resume, with a notification,
+    /// once the platform lets the context run. Where no policy holds audio
+    /// it does nothing.
     ///
     /// @param context  The context.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL context;

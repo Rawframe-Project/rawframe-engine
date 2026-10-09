@@ -51,6 +51,12 @@ size_t maudCutUtf8(const char* text, size_t limit);
 // Sets a live device's form; a change posts maud_notifyRouteChanged.
 void maudSetDeviceForm(maudContext* context, maudDeviceSlot* slot, maudDeviceForm form);
 
+// Sets a live device's spatializer state from info's spatializer,
+// headTracking and spatialObjects; a change posts
+// maud_notifySpatializerChanged.
+void maudSetDeviceSpatializer(maudContext* context, maudDeviceSlot* slot,
+                              const maudDeviceInfo* info);
+
 // Makes a live device the default of its direction for role.
 void maudSetDefaultDevice(maudContext* context, maudDeviceRole role, maudDeviceId device);
 

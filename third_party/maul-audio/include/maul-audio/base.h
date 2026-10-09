@@ -18,7 +18,7 @@ extern "C"
 
 // The library version. CMake reads it from here.
 #define MAUD_VERSION_MAJOR 0
-#define MAUD_VERSION_MINOR 0
+#define MAUD_VERSION_MINOR 1
 #define MAUD_VERSION_PATCH 1
 
 // MAUD_API marks the public functions: dllexport or dllimport in a
@@ -38,8 +38,10 @@ extern "C"
 
 // MAUD_NODISCARD marks a function whose result must be read: every
 // function that returns a status. The attribute is standard in C23 and
-// C++17 and left out for older dialects.
-#if defined(__cplusplus) && __cplusplus >= 201703L
+// C++17 and left out for older dialects. MSVC reports its C++ dialect in
+// _MSVC_LANG, leaving __cplusplus at 199711L unless asked otherwise.
+#if (defined(__cplusplus) && __cplusplus >= 201703L) ||                                            \
+    (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L)
 #define MAUD_NODISCARD [[nodiscard]]
 #elif !defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
 #define MAUD_NODISCARD [[nodiscard]]
@@ -93,6 +95,36 @@ extern "C"
         uint16_t minor;
         uint16_t patch;
     } maudVersion;
+
+    // A point or direction in the listener's frame, in metres: +x to the
+    // right, +y up, -z straight ahead (right-handed; the convention of
+    // OpenAL, Steam Audio and Resonance Audio). A host with another
+    // convention converts at the call.
+    typedef struct maudVector3
+    {
+        float x;
+        float y;
+        float z;
+    } maudVector3;
+
+    // A rotation as a quaternion, (x, y, z) its vector part and w its
+    // scalar part; any nonzero length is normalized where one is taken.
+    typedef struct maudQuaternion
+    {
+        float x;
+        float y;
+        float z;
+        float w;
+    } maudQuaternion;
+
+    // A source as a panner hears it, for encoding into an ambisonic bed or
+    // panning to speakers: where it is (only the direction counts; a zero
+    // vector is straight ahead) and its gain.
+    typedef struct maudPanSource
+    {
+        maudVector3 direction;
+        float gain;
+    } maudPanSource;
 
     /// Returns the version of the library that was linked, which may differ
     /// from the MAUD_VERSION macros a program was compiled with.

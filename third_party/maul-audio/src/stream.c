@@ -16,6 +16,8 @@
 #include "stream_open.h"
 #include "thread.h"
 
+#include "maul-audio/objects.h"
+
 #include <stdckdint.h>
 
 #define STREAM_DEF_COOKIE 0x6D617364u
@@ -59,7 +61,14 @@ static bool DefValid(const maudStreamDef* def)
         return false;
     }
     if (def->share > maud_shareExclusive ||
-        (def->share == maud_shareExclusive && def->device.index1 == 0))
+        (def->share == maud_shareExclusive && def->device.index1 == 0) ||
+        (def->contentSpatialized && def->direction == maud_directionInput))
+    {
+        return false;
+    }
+    if (def->objectCount > MAUD_MAX_STREAM_OBJECTS ||
+        (def->objectCount > 0 &&
+         (def->direction != maud_directionOutput || def->share != maud_shareShared)))
     {
         return false;
     }
@@ -219,6 +228,7 @@ maudResult maudGetStreamStatus(const maudContext* context, maudStreamId stream,
         .underruns = atomic_load_explicit(&slot->core.underruns, memory_order_relaxed),
         .overruns = atomic_load_explicit(&captured->overruns, memory_order_relaxed),
         .exclusive = slot->core.exclusive,
+        .spatialMark = atomic_load_explicit(&slot->core.spatialMark, memory_order_acquire),
     };
     return maud_success;
 }
@@ -280,8 +290,11 @@ int64_t maudGetHostNanoseconds(void)
 
 // Checks a render or feed call and claims the stream for the calling
 // thread. On success the caller must release it with EndRender.
+// Takes a running offline stream of the direction and object count for
+// rendering on the calling thread.
 static maudResult BeginRender(maudContext* context, maudStreamId stream, maudDirection direction,
-                              bool haveFrames, uint32_t frameCount, maudStreamCore** coreOut)
+                              uint32_t objects, bool haveFrames, uint32_t frameCount,
+                              maudStreamCore** coreOut)
 {
     if (context == nullptr)
     {
@@ -299,7 +312,8 @@ static maudResult BeginRender(maudContext* context, maudStreamId stream, maudDir
     }
     maudStreamCore* core = &slot->core;
     size_t samples;
-    if (core->def.direction != direction || (frameCount != 0 && !haveFrames) ||
+    if (core->def.direction != direction || core->def.objectCount != objects ||
+        (frameCount != 0 && !haveFrames) ||
         ckd_mul(&samples, (size_t)frameCount, (size_t)core->period.channelCount) ||
         ckd_mul(&samples, samples, sizeof(float)))
     {
@@ -335,8 +349,8 @@ maudResult maudRenderStream(maudContext* context, maudStreamId stream, float* fr
                             uint32_t frameCount)
 {
     maudStreamCore* core = nullptr;
-    maudResult result =
-        BeginRender(context, stream, maud_directionOutput, framesOut != nullptr, frameCount, &core);
+    maudResult result = BeginRender(context, stream, maud_directionOutput, 0, framesOut != nullptr,
+                                    frameCount, &core);
     if (result != maud_success)
     {
         return result;
@@ -351,12 +365,42 @@ maudResult maudFeedStream(maudContext* context, maudStreamId stream, const float
 {
     maudStreamCore* core = nullptr;
     maudResult result =
-        BeginRender(context, stream, maud_directionInput, frames != nullptr, frameCount, &core);
+        BeginRender(context, stream, maud_directionInput, 0, frames != nullptr, frameCount, &core);
     if (result != maud_success)
     {
         return result;
     }
     maudPushPeriod(&core->period, frames, frameCount);
+    EndRender(core, frameCount);
+    return maud_success;
+}
+
+maudResult maudRenderObjects(maudContext* context, maudStreamId stream, float* bedOut,
+                             maudStreamObject* objectsOut, uint32_t objectCount,
+                             uint32_t frameCount)
+{
+    // The objects' records are written whatever the frame count.
+    if (context != nullptr && objectsOut == nullptr)
+    {
+        maudCountMisuse(context);
+        return maud_errorInvalid;
+    }
+    bool haveFrames = bedOut != nullptr;
+    for (uint32_t i = 0; haveFrames && i < objectCount; ++i)
+    {
+        haveFrames = objectsOut[i].samples != nullptr;
+    }
+    // 0 objects names no object stream.
+    maudStreamCore* core = nullptr;
+    maudResult result =
+        BeginRender(context, stream, maud_directionOutput,
+                    objectCount == 0 ? UINT32_MAX : objectCount, haveFrames, frameCount, &core);
+    if (result != maud_success)
+    {
+        return result;
+    }
+    core->period.objectsAvailable = objectCount;
+    maudPullObjects(&core->period, bedOut, objectsOut, frameCount);
     EndRender(core, frameCount);
     return maud_success;
 }

@@ -9,7 +9,9 @@
 #include "context_core.h"
 #include "device.h"
 #include "sample_convert.h"
+#include "wasapi_apartment.h"
 #include "wasapi_notify.h"
+#include "wasapi_objects.h"
 #include "worker.h"
 
 #include <audioclient.h>
@@ -59,6 +61,9 @@ typedef struct maudWasapiStream
     bool threadRunning;
     // The thread ended on a failure, as when the endpoint went away.
     atomic_bool failed;
+    // An object stream's spatial render stream, which it has in place of
+    // the client; its stream is NULL for other streams.
+    maudWasapiObjects objects;
 } maudWasapiStream;
 
 typedef struct maudWasapi
@@ -67,9 +72,9 @@ typedef struct maudWasapi
     IMMDeviceEnumerator* enumerator;
     maudWasapiNotifier notifier;
     bool registered;
-    // Keeps the multithreaded apartment alive while the context lives.
-    CO_MTA_USAGE_COOKIE apartment;
-    bool apartmentHeld;
+    // The thread every COM object of the backend's lives and is called
+    // on.
+    maudWasapiApartment apartment;
     // Room for a scan of as many endpoints as the context has devices.
     maudWasapiEndpoint* endpoints;
     maudDeviceSpec* specs;
