@@ -318,6 +318,19 @@ std::optional<std::int64_t> WorldUi::activate() {
     return entry.value.press;
 }
 
+std::optional<std::int64_t> WorldUi::ask(const ui::AccessRequest& request) {
+    State& state = *state_;
+    for (const State::Reachable& kFound : state.reachable(false)) {
+        if (kFound.entry->node != request.node) {
+            continue;
+        }
+        state.focusOn(*kFound.entry, false, true);
+        ++state.statistics.navigated;
+        return request.kind == ui::AccessRequest::Kind::Press ? activate() : std::nullopt;
+    }
+    return std::nullopt;
+}
+
 void WorldUi::dismiss() {
     State& state = *state_;
     if (state.focus.has_value() && state.focus->keyboard) {

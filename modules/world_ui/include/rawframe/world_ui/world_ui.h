@@ -198,6 +198,11 @@ public:
     /// The window's UI, every view's, seated where assistive technology
     /// reads it (D571); what its access answered, if one was made.
     [[nodiscard]] result::Status seatIn(ui::AccessSeat& seat);
+    /// What a screen reader asked of a node navigation reaches (D572):
+    /// focus moved to it as navigation moves it; a press focuses and
+    /// activates it as navigation's activation does, its press code, none
+    /// for a field, which takes the keyboard. Nothing for another node.
+    std::optional<std::int64_t> ask(const ui::AccessRequest& request);
 
     /// What a press at `x`, `y`, logical pixels of the window, lands on as
     /// the last update laid the UI out (D421): none when it passes through to

@@ -48,6 +48,9 @@ public:
         /// Whether navigation reaches any node: one that takes presses or
         /// a text field, so a key may enter it (D476).
         std::function<bool()> reachable;
+        /// The press code of a node a screen reader pressed since last
+        /// asked, taken once (D572); none for none.
+        std::function<std::optional<std::int64_t>()> spoken;
     };
 
     UiNavigation() = default;
@@ -68,6 +71,9 @@ public:
     }
     [[nodiscard]] std::optional<std::int64_t> activate() const {
         return answers_.activate ? answers_.activate() : std::nullopt;
+    }
+    [[nodiscard]] std::optional<std::int64_t> spoken() const {
+        return answers_.spoken ? answers_.spoken() : std::nullopt;
     }
     void dismiss() const {
         if (answers_.dismiss) {

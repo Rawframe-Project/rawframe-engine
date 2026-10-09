@@ -431,6 +431,10 @@ public:
                 .reachable =
                     [this] {
                         return !failed_ && ui_->reachable() > 0;
+                    },
+                .spoken =
+                    [this] {
+                        return std::exchange(spoken_, std::nullopt);
                     }});
         }
         return {};
@@ -484,6 +488,16 @@ public:
             return;
         }
         drawn_ = &ui_->drawn();
+        // What screen readers asked since the last frame, done as
+        // navigation does it; a press waits for the players' input (D572).
+        if (seat_ != nullptr) {
+            for (const ui::AccessRequest& kRequest : seat_->takeRequests()) {
+                if (const std::optional<std::int64_t> kPressed = ui_->ask(kRequest); kPressed.has_value()) {
+                    spoken_ = kPressed;
+                }
+                followCaret();
+            }
+        }
         // Told when it grows past the most so far, so a UI being built is
         // told a few times, never a frame at a time.
         if (const std::size_t kNow = ui_->reachable(); kNow > mostReachable_) {
@@ -679,8 +693,11 @@ private:
     std::vector<std::uint64_t> unformatted_;
     view::UiTyping* typing_ = nullptr;
     view::UiNavigation* navigation_ = nullptr;
-    /// Where the window's UI is read for assistive technology (D571).
+    /// Where the window's UI is read for assistive technology (D571), and
+    /// the press code of a node a screen reader pressed, not yet taken by
+    /// the players' input (D572).
     ui::AccessSeat* seat_ = nullptr;
+    std::optional<std::int64_t> spoken_;
     std::unique_ptr<WorldUi> ui_;
     std::vector<world_kest::GameRegion> regions_;
     std::optional<world_kest::GameAspect> aspect_;

@@ -366,6 +366,13 @@ public:
         if (kNavigating) {
             navigate();
         }
+        // A node a screen reader pressed is the sample's press as
+        // navigation's is, unless one came first (D572).
+        if (const std::optional<std::int64_t> kCode =
+                navigation_ != nullptr ? navigation_->spoken() : std::optional<std::int64_t>{};
+            kCode.has_value() && ui_.pressed == 0) {
+            ui_.pressed = *kCode;
+        }
         mapper_->endFrame();
         // The sample starts from the input it made the tick before, nought
         // at first: a value it keeps there, as a view's heading, is whole in
