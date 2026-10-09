@@ -324,6 +324,11 @@ static mnavResult MergeRegions(Merger* merger, uint32_t regionCount, const int32
             }
             else if (result == mnav_success)
             {
+                // Holes merge leftmost first, so every hole still waiting
+                // lies to the right of this one's leftmost corner, and the
+                // outline to its left always shows it a corner (Eberly's
+                // argument). Only input that breaks that, holes crossing
+                // each other or the outline, reaches this.
                 Drop(merger->set, hole);
             }
             if (result != mnav_success)

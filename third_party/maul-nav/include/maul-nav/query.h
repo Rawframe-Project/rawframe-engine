@@ -198,8 +198,9 @@ extern "C"
         double cost;
         // That way's length in meters; the straight path is never longer.
         double length;
-        // The polygons from the start polygon on, in the context's memory
-        // until its next search.
+        // The polygons from the start polygon on, each visit once: a polygon
+        // an off-mesh link leaves and lands back on appears before the link
+        // and after it. In the context's memory until its next search.
         const mnavPolygonId* polygons;
         int32_t polygonCount;
         // The straight path from the start point, the corridor pulled
@@ -278,6 +279,49 @@ extern "C"
                                                     mnavPolygonId startPolygon, mnavPos3 start,
                                                     mnavPolygonId endPolygon, mnavPos3 end,
                                                     mnavPath* pathOut);
+
+    /// Searches for the shortest way on the ground from a point on one
+    /// polygon to a point on another (mnav-0005): Polyanya (Cui, Harabor
+    /// and Grastien, 2017), whose nodes are intervals of portals seen from a
+    /// root, the start, a corner turned at or an off-mesh link's landing
+    /// point. Every included area must have the same cost: a step costs its
+    /// length times that cost, so the way found is the shortest the navmesh
+    /// allows, measured in x and z, not a way through portal midpoints.
+    /// Polygons of excluded areas other than the start polygon are not
+    /// entered. Attached off-mesh links of included kinds are crossed at
+    /// their declared cost, from the takeoff point to the landing point.
+    /// Ties go to the node made first. When the nodes run out, the
+    /// A* search tells whether the end can be reached at all, and an end it
+    /// cannot reach ends the search as no path. The result is that of mnavFindPath:
+    /// the polygons crossed, the turning points, which are the path, and
+    /// the links crossed; cost and length are those of the points, in three
+    /// dimensions. A sliced path search in the same context ends.
+    ///
+    /// @param query        The context; its memory holds the result.
+    /// @param navmesh      The navmesh.
+    /// @param filter       The areas usable and their costs, or NULL for
+    ///                     every walkable area at a cost of 1.
+    /// @param startPolygon The polygon the start point lies on, as
+    ///                     mnavFindNearest gives it.
+    /// @param start        The start point.
+    /// @param endPolygon   The polygon the end point lies on.
+    /// @param end          The end point.
+    /// @param pathOut      Receives the result.
+    /// @return `mnav_success` whenever a search ran, however it ended;
+    /// `mnav_errorInvalid` for a NULL argument, a point that is not finite,
+    /// a polygon id that never existed, a filter not built from
+    /// mnavDefaultQueryFilter or one whose included areas differ in cost;
+    /// `mnav_errorRange` for a filter cost out of its range;
+    /// `mnav_errorStale` for a polygon id whose tile has been replaced or
+    /// removed.
+    /// @par Thread safety
+    /// Safe from any thread; the context is used by one thread at a time.
+    /// Any number of contexts may search one navmesh at once between
+    /// commits.
+    MNAV_NODISCARD MNAV_API mnavResult
+    mnavFindShortestPath(mnavQuery* query, const mnavNavmesh* navmesh,
+                         const mnavQueryFilter* filter, mnavPolygonId startPolygon, mnavPos3 start,
+                         mnavPolygonId endPolygon, mnavPos3 end, mnavPath* pathOut);
 
     /// Begins a path search to run in slices (mnav-0005): the same search
     /// as mnavFindPath, with its own copy of the filter, continued by
@@ -685,7 +729,9 @@ extern "C"
     /// searching from its polygon across the edges that come within the
     /// radius, off-mesh links aside. An edge is a wall when no polygon the
     /// filter includes lies across it, a tile side with no tile loaded
-    /// beyond included.
+    /// beyond included. A wall exactly the radius away lies within it; of
+    /// walls at the same distance it gives one, the same on every
+    /// platform, but which one is not promised.
     ///
     /// @param query   The context; its last search ends.
     /// @param navmesh The navmesh.
@@ -816,7 +862,9 @@ extern "C"
     /// (an edge into a polygon the filter excludes is a wall too) or a tile
     /// side with no tile loaded, or crosses as many polygons as the
     /// context's node limit. Where it leaves through a corner, it goes
-    /// on through an edge that leads on, the lowest-numbered first.
+    /// on through an edge that leads on, the lowest-numbered first; at a
+    /// corner where two walls meet, the normal is one of theirs, the same
+    /// on every platform, but which one is not promised.
     ///
     /// @param query        The context; its memory holds the polygons.
     /// @param navmesh      The navmesh.

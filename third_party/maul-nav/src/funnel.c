@@ -19,16 +19,22 @@
 int32_t mnavPathPolygons(mnavQuery* query, const mnavNavmesh* navmesh, int32_t last)
 {
     int32_t count = 0;
+    // Nodes in one polygon are one visit, except across an off-mesh link:
+    // a link landing on the polygon it took off from leaves it and comes
+    // back, two visits the corridor keeps apart.
+    bool crossed = false;
     for (int32_t n = last; n != MNAV_NO_NODE; n = query->nodes[n].parent)
     {
         const mnavSearchNode* node = &query->nodes[n];
         mnavPolygonId id = {(uint32_t)node->slot + 1, navmesh->slots[node->slot].generation,
                             (uint32_t)node->polygon};
         const mnavPolygonId* previous = count > 0 ? &query->corridor[count - 1] : nullptr;
-        if (previous == nullptr || previous->slot != id.slot || previous->polygon != id.polygon)
+        if (previous == nullptr || crossed || previous->slot != id.slot ||
+            previous->polygon != id.polygon)
         {
             query->corridor[count++] = id;
         }
+        crossed = node->tag == MNAV_TAG_OFFMESH;
     }
     for (int32_t i = 0; i < count / 2; ++i)
     {
@@ -174,9 +180,12 @@ int32_t mnavPullPortals(mnavQuery* query, const mnavNavmesh* navmesh, int32_t po
         first = i + 1;
         if (crossed >= 0)
         {
-            const mnavOffLink* link = &navmesh->links[crossed / 2];
-            query->links[(*linkCount)++] = (mnavPathLink){
-                {(uint32_t)crossed / 2 + 1, link->generation}, link->def.kind, count - 1};
+            // An edge link's crossing is reported as the link its id names.
+            const mnavOffLink* link = &navmesh->links[navmesh->links[crossed / 2].parent];
+            query->links[(*linkCount)++] =
+                (mnavPathLink){{(uint32_t)navmesh->links[crossed / 2].parent + 1, link->generation},
+                               link->def.kind,
+                               count - 1};
         }
     }
     return count;

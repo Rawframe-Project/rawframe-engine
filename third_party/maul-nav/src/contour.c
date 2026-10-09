@@ -418,6 +418,9 @@ static mnavResult Store(mnavMemory* memory, const Work* work, uint32_t region, m
     }
     // Repeats on the ground confuse triangulation; drop the earlier of
     // each pair until none is left, the last against the first included.
+    // One arises only when both passes of a corner the outline touches
+    // twice are kept and everything between them is simplified away,
+    // which no input has yet made.
     for (int32_t i = 0; count > 1 && i < count;)
     {
         const mnavContourVertex* a = &out[i];

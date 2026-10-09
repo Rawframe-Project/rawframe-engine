@@ -39,7 +39,7 @@ void mnavDestroyQuery(mnavQuery* query)
     mnavRelease(memory, query->corridor, nodes, sizeof(mnavPolygonId), alignof(mnavPolygonId));
     mnavRelease(memory, query->table, (size_t)query->tableMask + 1, sizeof(int32_t),
                 alignof(int32_t));
-    mnavRelease(memory, query->heap, nodes, sizeof(int32_t), alignof(int32_t));
+    mnavRelease(memory, query->heap, nodes, sizeof(mnavHeapEntry), alignof(mnavHeapEntry));
     mnavRelease(memory, query->nodes, nodes, sizeof(mnavSearchNode), alignof(mnavSearchNode));
     mnavMemory last = *memory;
     mnavRelease(&last, query, 1, sizeof(mnavQuery), alignof(mnavQuery));
@@ -85,7 +85,7 @@ mnavResult mnavCreateQuery(const mnavQueryDef* def, mnavQuery** queryOut)
                           (void**)&query->nodes);
     if (result == mnav_success)
     {
-        result = mnavAllocate(&query->memory, nodes, sizeof(int32_t), alignof(int32_t),
+        result = mnavAllocate(&query->memory, nodes, sizeof(mnavHeapEntry), alignof(mnavHeapEntry),
                               (void**)&query->heap);
     }
     if (result == mnav_success)

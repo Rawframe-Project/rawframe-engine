@@ -172,6 +172,10 @@ static mnavResult Grow(mnavMemory* memory, mnavFragmentList* list)
 static mnavResult Emit(mnavMemory* memory, const Poly* cell, int32_t x, int32_t z,
                        mnavAreaType area, mnavFragmentList* list)
 {
+    // The loops cut only strictly inside a polygon's range, and a cut
+    // gives both sides its crossing points, so each piece keeps three
+    // corners or more; this and the row's check guard against that ever
+    // failing, and no input has reached them.
     if (cell->count < 3)
     {
         return mnav_success;
@@ -204,23 +208,40 @@ mnavResult mnavAddFragment(mnavMemory* memory, mnavFragmentList* list, mnavFragm
     return mnav_success;
 }
 
-bool mnavTriangleTouchesTile(const mnavTileFrame* frame, const mnavVec3 corners[3])
+// Whether the cells a triangle's corners span along one ground axis, in
+// cells from the tile's corner, meet the tile's: the same values
+// rasterizing computes, one axis at a time. Corners all a cell or more
+// before the tile, or two past its far side, are out without dividing:
+// rounding is monotone, so their cells lie at -1 and below, or at the
+// tile's width and beyond.
+static bool SpansTile(const mnavTileFrame* frame, float a, float b, float c, float min)
 {
-    Poly poly;
-    ToCells(frame, corners, &poly);
-    float low = 0.0f;
-    float high = 0.0f;
-    int32_t first = 0;
-    int32_t last = 0;
-    Bounds(&poly, AXIS_U, &low, &high);
-    CellRange(low, high, &first, &last);
-    if (last < 0 || first >= frame->width)
+    float d[3] = {a - min, b - min, c - min};
+    float before = -frame->cellSize;
+    float past = (float)(frame->width + 2) * frame->cellSize;
+    if ((d[0] <= before && d[1] <= before && d[2] <= before) ||
+        (d[0] > past && d[1] > past && d[2] > past))
     {
         return false;
     }
-    Bounds(&poly, AXIS_W, &low, &high);
+    float u[3] = {d[0] / frame->cellSize, d[1] / frame->cellSize, d[2] / frame->cellSize};
+    float low = u[0];
+    float high = u[0];
+    for (int32_t i = 1; i < 3; ++i)
+    {
+        low = u[i] < low ? u[i] : low;
+        high = u[i] > high ? u[i] : high;
+    }
+    int32_t first = 0;
+    int32_t last = 0;
     CellRange(low, high, &first, &last);
     return last >= 0 && first < frame->width;
+}
+
+bool mnavTriangleTouchesTile(const mnavTileFrame* frame, const mnavVec3 corners[3])
+{
+    return SpansTile(frame, corners[0].x, corners[1].x, corners[2].x, frame->minX) &&
+           SpansTile(frame, corners[0].z, corners[1].z, corners[2].z, frame->minZ);
 }
 
 // Rasterizes one row of cells, z, of a polygon already clipped to it.

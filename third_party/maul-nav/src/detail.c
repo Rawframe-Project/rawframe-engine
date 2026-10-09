@@ -359,6 +359,11 @@ static void Measure(const Builder* builder, const mnavTriangulation* tr, Candida
     const mnavDetailVertex* p = &candidate->point;
     candidate->value = -1;
     candidate->triangle = mnavLocate(tr, p->x, p->z, &candidate->edge);
+    // Samples lie well inside the polygon (WellInside), which the
+    // triangulation covers: one is always found, in a triangle with area,
+    // and never on the outer edge, where an insertion fails. This check,
+    // the area's and the insertion's guard the integer geometry against
+    // disagreeing with that, which no input has made it do.
     if (candidate->triangle < 0)
     {
         return;

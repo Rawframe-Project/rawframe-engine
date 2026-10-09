@@ -67,11 +67,18 @@ typedef struct mnavPolyMesh
 mnavResult mnavBuildPolyMesh(mnavMemory* memory, const mnavContourSet* set, int32_t tileCells,
                              int32_t maxVertices, int32_t maxPolygons, mnavPolyMesh* mesh);
 
+// The entries of the edge table mnavMergePolygons needs for count
+// polygons: a power of two at least twice the most edges they can have.
+int32_t mnavMergeTableSize(int32_t count);
+
 // Merges polygons of one area pairwise into convex polygons of at most
 // MNAV_POLYGON_VERTICES vertices, the pair with the longest shared edge
 // first, the first pair in order on ties, until no pair can merge.
-// Returns the number left at the front of polygons.
-int32_t mnavMergePolygons(const mnavMeshVertex* vertices, mnavPolygon* polygons, int32_t count);
+// table is scratch of mnavMergeTableSize(count) entries, through which
+// only polygons sharing an edge are paired. Returns the number left at
+// the front of polygons.
+int32_t mnavMergePolygons(const mnavMeshVertex* vertices, mnavPolygon* polygons, int32_t count,
+                          int32_t* table);
 
 // Fills each polygon's neighbors and sides, the last step of the mesh.
 mnavResult mnavLinkPolyMesh(mnavMemory* memory, mnavPolyMesh* mesh);

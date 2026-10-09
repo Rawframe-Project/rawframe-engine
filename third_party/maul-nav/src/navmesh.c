@@ -95,6 +95,8 @@ void mnavDestroyNavmesh(mnavNavmesh* navmesh)
                 alignof(mnavOffLink));
     mnavRelease(memory, navmesh->areaChanges, (size_t)navmesh->areaChangeCapacity,
                 sizeof(mnavAreaChange), alignof(mnavAreaChange));
+    mnavRelease(memory, navmesh->arrivals, (size_t)navmesh->arrivalCapacity, sizeof(uint64_t),
+                alignof(uint64_t));
     mnavRelease(memory, navmesh->attachments, (size_t)navmesh->attachmentCapacity, sizeof(uint64_t),
                 alignof(uint64_t));
     mnavRelease(memory, navmesh->places, (size_t)navmesh->placeCapacity, sizeof(mnavPlace),
@@ -721,10 +723,4 @@ mnavResult mnavCheckPolygon(const mnavNavmesh* navmesh, mnavPolygonId id)
         return mnav_errorStale;
     }
     return id.polygon < (uint32_t)slot->tile->mesh.polygonCount ? mnav_success : mnav_errorInvalid;
-}
-
-mnavPos3 mnavVertexWorld(const mnavFrame* f, const mnavMeshVertex* v)
-{
-    return (mnavPos3){f->x0 + v->x * f->cell, f->y0 + (v->y - MNAV_HEIGHT_OFFSET) * f->height,
-                      f->z0 + v->z * f->cell};
 }

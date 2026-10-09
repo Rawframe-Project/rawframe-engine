@@ -111,6 +111,12 @@ static double DetailHeight(const mnavTile* tile, int32_t p, Flat at)
         double wc = 1.0 - wa - wb;
         height = wa * v[0]->y + wb * v[1]->y + wc * v[2]->y;
         best = d;
+        if (best == 0.0)
+        {
+            // On this triangle: no later one can be nearer, and a tie
+            // keeps the first.
+            break;
+        }
     }
     return height;
 }
@@ -197,12 +203,19 @@ static void Consider(Search* s, const mnavFrame* f, int32_t slot, const mnavTile
     Flat local = {(s->point.x - f->x0) / f->cell, (s->point.z - f->z0) / f->cell};
     bool over = false;
     Flat at = NearestOnRing(ring, polygon->count, local, &over);
-    double y = f->y0 + (DetailHeight(tile, p, at) - MNAV_HEIGHT_OFFSET) * f->height;
-    mnavPos3 point = {f->x0 + at.x * f->cell, y, f->z0 + at.z * f->cell};
+    mnavPos3 point = {f->x0 + at.x * f->cell, 0.0, f->z0 + at.z * f->cell};
     double dx = s->point.x - point.x;
-    double dy = s->point.y - point.y;
     double dz = s->point.z - point.z;
-    if (fabs(dx) > s->half.x || fabs(dy) > s->half.y || fabs(dz) > s->half.z)
+    // The height only adds to the distance, and rounding is monotone: a
+    // point beside the polygon whose ground distance alone loses to the
+    // best cannot win, so its detail height is not looked up.
+    if (fabs(dx) > s->half.x || fabs(dz) > s->half.z || (!over && dx * dx + dz * dz > s->bestScore))
+    {
+        return;
+    }
+    point.y = f->y0 + (DetailHeight(tile, p, at) - MNAV_HEIGHT_OFFSET) * f->height;
+    double dy = s->point.y - point.y;
+    if (fabs(dy) > s->half.y)
     {
         return;
     }

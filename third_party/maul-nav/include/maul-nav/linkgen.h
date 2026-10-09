@@ -22,7 +22,9 @@ extern "C"
 #define MNAV_MAX_LINK_REACH 100.0f
 
     // Decides whether the way between two points is free for the agent:
-    // the host's collision test. True to keep the link.
+    // the host's collision test. True to keep the link. It is called only
+    // within mnavGenerateLinks, on the thread that called it, before that
+    // call returns; never afterward or from another thread.
     typedef bool (*mnavClearanceFn)(void* context, mnavPos3 from, mnavPos3 to);
 
     // How links are generated. Build it with mnavDefaultLinkGenDef.
@@ -104,7 +106,8 @@ extern "C"
     /// capacity written.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time,
-    /// and no commit runs on the navmesh.
+    /// and no commit runs on the navmesh. The def's clearance test runs on
+    /// the calling thread, within the call.
     MNAV_NODISCARD MNAV_API mnavResult
     mnavGenerateLinks(mnavQuery* query, const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
                       const mnavLinkGenDef* def, int32_t tileX0, int32_t tileZ0, int32_t tileX1,

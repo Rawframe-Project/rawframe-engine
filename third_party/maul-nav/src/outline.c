@@ -83,6 +83,11 @@ static int32_t Crossings(const mnavVec2* points, int32_t pointCount, double at, 
 // after v, or width.
 static int32_t FirstAtOrAfter(const mnavTileFrame* frame, float min, double v)
 {
+    // The guess is exact for points in binary32, as outline points are;
+    // a slanted edge's crossing is binary64 and may lie a unit in the last
+    // place past a center, which the second loop corrects. The first
+    // guards the opposite rounding, which a search over two million
+    // values never met.
     double guess = ceil((v - (double)min) / (double)frame->cellSize - 0.5);
     int32_t i = guess < 0.0 ? 0 : (guess > (double)frame->width ? frame->width : (int32_t)guess);
     while (i > 0 && Center(min, frame->cellSize, i - 1) >= v)
@@ -169,11 +174,11 @@ static mnavResult Fill(Filler* f, const mnavOutline* outline)
 
 // Fills the outlines of one kind, obstructions or walkable ones, that
 // touch the tile.
-static mnavResult FillAll(Filler* f, const mnavOutline* outlines, int32_t count, bool obstructions)
+static mnavResult FillAll(Filler* f, const mnavOutlineSet* set, bool obstructions)
 {
-    for (int32_t o = 0; o < count; ++o)
+    for (int32_t k = 0; k < set->count; ++k)
     {
-        const mnavOutline* outline = &outlines[o];
+        const mnavOutline* outline = mnavOutlineAt(set, k);
         if ((outline->area == mnav_areaNone) != obstructions ||
             !mnavOutlineTouchesTile(f->frame, outline))
         {
@@ -188,18 +193,31 @@ static mnavResult FillAll(Filler* f, const mnavOutline* outlines, int32_t count,
     return mnav_success;
 }
 
+mnavOutlineSet mnavOutlinesFor(const mnavOutline* outlines, int32_t outlineCount,
+                               const mnavTileIndex* index, int32_t tileX, int32_t tileZ)
+{
+    mnavOutlineSet set = {outlines, nullptr, outlineCount, false};
+    if (index != nullptr)
+    {
+        set.indexed = true;
+        mnavTileIndexList(index, tileX, tileZ, &set.listed, &set.count);
+    }
+    return set;
+}
+
 mnavResult mnavCollectOutlines(mnavMemory* memory, const mnavBakeDef* def,
-                               const mnavTileFrame* frame, const mnavOutline* outlines,
-                               int32_t outlineCount, mnavFragmentList* list)
+                               const mnavTileFrame* frame, const mnavOutlineSet* set,
+                               mnavFragmentList* list)
 {
     int32_t touching = 0;
     int32_t points = 0;
-    for (int32_t o = 0; o < outlineCount; ++o)
+    for (int32_t k = 0; k < set->count; ++k)
     {
-        if (mnavOutlineTouchesTile(frame, &outlines[o]))
+        const mnavOutline* outline = mnavOutlineAt(set, k);
+        if (mnavOutlineTouchesTile(frame, outline))
         {
             touching += 1;
-            points = outlines[o].pointCount > points ? outlines[o].pointCount : points;
+            points = outline->pointCount > points ? outline->pointCount : points;
         }
     }
     if (touching > def->limits.tileTriangles)
@@ -222,11 +240,11 @@ mnavResult mnavCollectOutlines(mnavMemory* memory, const mnavBakeDef* def,
     }
     if (result == mnav_success)
     {
-        result = FillAll(&f, outlines, outlineCount, true);
+        result = FillAll(&f, set, true);
     }
     if (result == mnav_success)
     {
-        result = FillAll(&f, outlines, outlineCount, false);
+        result = FillAll(&f, set, false);
     }
     mnavRelease(memory, f.crossings, (size_t)points, sizeof(double), alignof(double));
     mnavRelease(memory, f.blocked, cells, sizeof(uint8_t), alignof(uint8_t));

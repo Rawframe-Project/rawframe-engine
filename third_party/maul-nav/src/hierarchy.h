@@ -38,6 +38,10 @@ typedef struct mnavTransition
     int32_t runHigh;
     // The transition crossing the same portal the other way, or -1.
     int32_t reverse;
+    // Whether the hierarchy's filter included the polygon entered when
+    // the graph was last brought up to date: all the searches of the
+    // cluster left see of that polygon.
+    bool included;
 } mnavTransition;
 
 // An edge: the transition it leads to and what reaching it costs.
@@ -76,11 +80,13 @@ struct mnavHierarchy
     mnavEdge* edges;
     int32_t edgeCount;
     // What the graph was built from: per slot, the tile's generation, 0
-    // for none, and its areas' hash; the off-mesh links' hash; and per
-    // cluster, whether an update searches it again.
+    // for none, and its areas' hash; the off-mesh links' hash; per slot,
+    // whether an update found its areas changed; and per cluster, whether
+    // an update searches it again.
     uint32_t* generations;
     uint64_t* areaHashes;
     uint64_t linkHash;
+    uint8_t* changed;
     uint8_t* dirty;
     int32_t searches;
     // The abstract search: per transition, and one more for the end.
@@ -96,10 +102,11 @@ struct mnavHierarchy
 void mnavMarkCluster(mnavHierarchy* h, int32_t cluster, uint8_t value);
 
 // Runs Dijkstra's search from a point in a polygon within a cluster,
-// opening the nodes just beyond it; mnav_errorLimit when it runs out of
+// opening the nodes just beyond it, backward when asked (off-mesh links
+// followed from where they land); mnav_errorLimit when it runs out of
 // nodes.
 mnavResult mnavSearchCluster(mnavHierarchy* h, mnavQuery* query, const mnavNavmesh* navmesh,
-                             int32_t cluster, mnavPolygonId polygon, mnavPos3 point);
+                             bool backward, int32_t cluster, mnavPolygonId polygon, mnavPos3 point);
 
 // The cost the last search found to cross transition v's portal, or
 // infinity.

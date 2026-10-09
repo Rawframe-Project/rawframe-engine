@@ -4,7 +4,8 @@
 // Avoidance (mnav-0006): local steering among agents by velocity
 // obstacles (ORCA), apart from the navmesh: nothing here uses a navmesh,
 // and a host may use it without one. It works on the ground plane, a 3D
-// world's (x, z) or a 2D world's (x, y), in meters and seconds.
+// world's (x, z) or a 2D world's (x, y), and for fliers in space, in
+// meters and seconds.
 
 #ifndef MAUL_NAV_AVOIDANCE_H
 #define MAUL_NAV_AVOIDANCE_H
@@ -24,6 +25,15 @@ extern "C"
 #define MNAV_MAX_AVOIDANCE_NEIGHBORS 256
 // The most obstacle points one call may have.
 #define MNAV_MAX_AVOIDANCE_VERTICES 1048576
+// The ranges of avoidance input, which keep its arithmetic accurate and
+// its grid cells within 64-bit integers: each coordinate within this
+// many meters of the origin, each velocity component and maximum speed
+// within this many meters per second, radii up to this many meters, and
+// the step and horizons this many seconds or longer.
+#define MNAV_MAX_AVOIDANCE_COORDINATE 1.0e12
+#define MNAV_MAX_AVOIDANCE_SPEED      1.0e6
+#define MNAV_MAX_AVOIDANCE_RADIUS     1.0e6
+#define MNAV_MIN_AVOIDANCE_TIME       1.0e-6
 
     // A point or a velocity on the ground plane, binary64.
     typedef struct mnavPos2
@@ -32,16 +42,17 @@ extern "C"
         double y;
     } mnavPos2;
 
-    // An agent as the host sees it this step.
+    // An agent as the host sees it this step, its values in the ranges
+    // above.
     typedef struct mnavAgent
     {
         mnavPos2 position;
         mnavPos2 velocity;
         // Where the agent would go, in meters per second.
         mnavPos2 preferred;
-        // More than 0.
+        // More than 0, up to MNAV_MAX_AVOIDANCE_RADIUS.
         double radius;
-        // At least 0.
+        // 0 to MNAV_MAX_AVOIDANCE_SPEED.
         double maxSpeed;
         // More than 0: of each avoidance between two agents, one takes
         // the other's priority over the sum of both.
@@ -61,13 +72,46 @@ extern "C"
         const mnavPos2* points;
         // At least 1.
         int32_t pointCount;
-        // A circle's radius, more than 0; 0 for two or more points.
+        // A circle's radius, more than 0 and up to
+        // MNAV_MAX_AVOIDANCE_RADIUS; 0 for two or more points.
         double radius;
+        // Each component within MNAV_MAX_AVOIDANCE_SPEED.
         mnavPos2 velocity;
         // The host's id for the obstacle, which orders obstacles at equal
         // distances; ids should differ, or the input's order counts.
         uint64_t id;
     } mnavObstacle;
+
+    // An agent in space, for mnavAvoid3D, its values in the ranges above.
+    typedef struct mnavAgent3D
+    {
+        mnavPos3 position;
+        mnavPos3 velocity;
+        // Where the agent would go, in meters per second.
+        mnavPos3 preferred;
+        // More than 0, up to MNAV_MAX_AVOIDANCE_RADIUS.
+        double radius;
+        // 0 to MNAV_MAX_AVOIDANCE_SPEED.
+        double maxSpeed;
+        // More than 0, as mnavAgent's.
+        double priority;
+        // The host's id for the agent, as mnavAgent's.
+        uint64_t id;
+    } mnavAgent3D;
+
+    // A sphere fliers steer round, taking the whole avoidance, as a circle
+    // obstacle on the ground. A moving one moves at its velocity.
+    typedef struct mnavSphere
+    {
+        mnavPos3 center;
+        // More than 0, up to MNAV_MAX_AVOIDANCE_RADIUS.
+        double radius;
+        // Each component within MNAV_MAX_AVOIDANCE_SPEED.
+        mnavPos3 velocity;
+        // The host's id for the sphere, which orders spheres at equal
+        // distances; ids should differ, or the input's order counts.
+        uint64_t id;
+    } mnavSphere;
 
     // The limits of an avoidance set.
     typedef struct mnavAvoidanceLimits
@@ -77,10 +121,11 @@ extern "C"
         // Neighbours each agent avoids, the nearest first, 1 to
         // MNAV_MAX_AVOIDANCE_NEIGHBORS.
         int32_t neighbors;
-        // Obstacle points in one call, 0 to MNAV_MAX_AVOIDANCE_VERTICES.
+        // Obstacle points in one call, a sphere counting as one, 0 to
+        // MNAV_MAX_AVOIDANCE_VERTICES.
         int32_t obstacleVertices;
-        // Obstacle edges and circles each agent avoids, the nearest first,
-        // 1 to MNAV_MAX_AVOIDANCE_NEIGHBORS.
+        // Obstacle edges, circles or spheres each agent avoids, the nearest
+        // first, 1 to MNAV_MAX_AVOIDANCE_NEIGHBORS.
         int32_t obstacleNeighbors;
     } mnavAvoidanceLimits;
 
@@ -94,9 +139,11 @@ extern "C"
         // How far away, center to center, another agent counts as a
         // neighbour, in meters, more than 0.
         double neighborDistance;
-        // How far ahead agents avoid each other, in seconds, more than 0.
+        // How far ahead agents avoid each other, in seconds, at least
+        // MNAV_MIN_AVOIDANCE_TIME.
         double timeHorizon;
-        // How far ahead agents avoid obstacles, in seconds, more than 0.
+        // How far ahead agents avoid obstacles, in seconds, at least
+        // MNAV_MIN_AVOIDANCE_TIME.
         double obstacleTimeHorizon;
     } mnavAvoidanceDef;
 
@@ -151,13 +198,15 @@ extern "C"
     /// @param obstacles     The obstacles.
     /// @param obstacleCount How many, at least 0.
     /// @param step          The step the velocities are for, in seconds,
-    ///                      more than 0: agents already overlapping part
+    ///                      at least MNAV_MIN_AVOIDANCE_TIME: agents
+    ///                      already overlapping part
     ///                      within it.
     /// @param velocitiesOut Receives agentCount velocities, in the agents'
     ///                      order.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with
-    /// agents or obstacles, a negative count, a step not more than 0 or not
-    /// finite, an agent or obstacle point with a value not finite or out of
+    /// agents or obstacles, a negative count, a step not finite or shorter
+    /// than MNAV_MIN_AVOIDANCE_TIME, an agent or obstacle with a value not
+    /// finite or out of
     /// its range, a zero-length obstacle edge, a circle's radius not more
     /// than 0, another obstacle with a radius, or a polygon not
     /// counterclockwise; `mnav_errorLimit` for more agents or obstacle
@@ -168,6 +217,40 @@ extern "C"
                                                  int32_t agentCount, const mnavObstacle* obstacles,
                                                  int32_t obstacleCount, double step,
                                                  mnavPos2* velocitiesOut);
+
+    /// Finds each flier's new velocity, as mnavAvoid does on the ground:
+    /// the one nearest its preferred velocity, no faster than its maximum
+    /// speed, that avoids the spheres within the obstacle horizon and
+    /// colliding with its neighbours within the time horizon if they do
+    /// their share (ORCA in space); when none does, the one that keeps
+    /// clear of the spheres and breaks the agents' constraints least.
+    /// An agent held back from its preferred velocity aims 1% of its speed
+    /// to the right of it, +Y being up; rising vertically it turns toward
+    /// +X, falling toward -X.
+    /// The same agents give the same velocities in any order, on every
+    /// platform.
+    ///
+    /// @param avoidance     The set.
+    /// @param agents        The agents.
+    /// @param agentCount    How many, at least 0.
+    /// @param spheres       The spheres.
+    /// @param sphereCount   How many, at least 0.
+    /// @param step          The step the velocities are for, in seconds,
+    ///                      at least MNAV_MIN_AVOIDANCE_TIME: agents
+    ///                      already overlapping part within it.
+    /// @param velocitiesOut Receives agentCount velocities, in the agents'
+    ///                      order.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with
+    /// agents or spheres, a negative count, a step not finite or shorter
+    /// than MNAV_MIN_AVOIDANCE_TIME, or an agent or sphere with a value not
+    /// finite or out of its range; `mnav_errorLimit` for more agents than
+    /// the set's limit or more spheres than its obstacle points.
+    /// @par Thread safety
+    /// Safe from any thread; the set is used by one thread at a time.
+    MNAV_NODISCARD MNAV_API mnavResult mnavAvoid3D(mnavAvoidance* avoidance,
+                                                   const mnavAgent3D* agents, int32_t agentCount,
+                                                   const mnavSphere* spheres, int32_t sphereCount,
+                                                   double step, mnavPos3* velocitiesOut);
 
     /// Appends each agent's outline, a 16-gon (mnav_debugAgent), and a line
     /// to each neighbour mnavAvoid would give it (mnav_debugNeighbor), at a

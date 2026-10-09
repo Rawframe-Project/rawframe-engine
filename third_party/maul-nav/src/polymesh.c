@@ -34,6 +34,7 @@ typedef struct Builder
     mnavEarScratch ears;
     int32_t* triangles;
     mnavPolygon* polygons;
+    int32_t* mergeTable;
     int32_t ringCapacity;
 } Builder;
 
@@ -203,38 +204,112 @@ static void Merge(mnavPolygon* a, const mnavPolygon* b, int32_t ea, int32_t eb)
     a->count = (uint8_t)n;
 }
 
-int32_t mnavMergePolygons(const mnavMeshVertex* vertices, mnavPolygon* polygons, int32_t count)
+int32_t mnavMergeTableSize(int32_t count)
 {
-    for (;;)
+    int32_t size = 16;
+    while (size < 2 * MNAV_POLYGON_VERTICES * count)
     {
-        int64_t best = 0;
-        int32_t bestA = -1;
-        int32_t bestB = -1;
-        int32_t bestEa = 0;
-        int32_t bestEb = 0;
-        for (int32_t j = 0; j < count - 1; ++j)
+        size *= 2;
+    }
+    return size;
+}
+
+static uint32_t EdgeHash(uint16_t from, uint16_t to)
+{
+    uint32_t h = (uint32_t)from * 0x9E3779B1u ^ (uint32_t)to * 0x85EBCA77u;
+    return h ^ (h >> 15);
+}
+
+// Lists every polygon edge in the table, keyed by its ends in order: an
+// entry is the polygon times MNAV_POLYGON_VERTICES plus the edge.
+static void ListMergeEdges(const mnavPolygon* polygons, int32_t count, int32_t* table,
+                           uint32_t mask)
+{
+    memset(table, 0xFF, ((size_t)mask + 1) * sizeof(int32_t));
+    for (int32_t p = 0; p < count; ++p)
+    {
+        const mnavPolygon* polygon = &polygons[p];
+        for (int32_t i = 0; i < polygon->count; ++i)
         {
-            for (int32_t k = j + 1; k < count; ++k)
+            uint16_t from = polygon->vertices[i];
+            uint16_t to = polygon->vertices[(i + 1) % polygon->count];
+            uint32_t slot = EdgeHash(from, to) & mask;
+            while (table[slot] >= 0)
             {
-                int32_t ea = 0;
-                int32_t eb = 0;
-                int64_t value = MergeValue(vertices, &polygons[j], &polygons[k], &ea, &eb);
-                if (value > best)
+                slot = (slot + 1u) & mask;
+            }
+            table[slot] = p * MNAV_POLYGON_VERTICES + i;
+        }
+    }
+}
+
+// The best merge, as a scan of every pair j < k in order would find it:
+// the greatest value, then the first pair. Only polygons sharing an edge
+// can merge, so polygon j looks up its edges' reverses in the table.
+typedef struct Best
+{
+    int64_t value;
+    int32_t a;
+    int32_t b;
+    int32_t ea;
+    int32_t eb;
+} Best;
+
+static void Consider(const mnavMeshVertex* vertices, const mnavPolygon* polygons, int32_t j,
+                     int32_t k, Best* best)
+{
+    int32_t ea = 0;
+    int32_t eb = 0;
+    int64_t value = MergeValue(vertices, &polygons[j], &polygons[k], &ea, &eb);
+    bool first = value == best->value && (j < best->a || (j == best->a && k < best->b));
+    if (value > best->value || (value > 0 && first))
+    {
+        *best = (Best){value, j, k, ea, eb};
+    }
+}
+
+static Best FindBest(const mnavMeshVertex* vertices, const mnavPolygon* polygons, int32_t count,
+                     const int32_t* table, uint32_t mask)
+{
+    Best best = {0, -1, -1, 0, 0};
+    for (int32_t j = 0; j < count; ++j)
+    {
+        const mnavPolygon* polygon = &polygons[j];
+        for (int32_t i = 0; i < polygon->count; ++i)
+        {
+            uint16_t from = polygon->vertices[i];
+            uint16_t to = polygon->vertices[(i + 1) % polygon->count];
+            for (uint32_t slot = EdgeHash(to, from) & mask; table[slot] >= 0;
+                 slot = (slot + 1u) & mask)
+            {
+                int32_t k = table[slot] / MNAV_POLYGON_VERTICES;
+                int32_t edge = table[slot] % MNAV_POLYGON_VERTICES;
+                const mnavPolygon* other = &polygons[k];
+                if (k > j && other->vertices[edge] == to &&
+                    other->vertices[(edge + 1) % other->count] == from)
                 {
-                    best = value;
-                    bestA = j;
-                    bestB = k;
-                    bestEa = ea;
-                    bestEb = eb;
+                    Consider(vertices, polygons, j, k, &best);
                 }
             }
         }
-        if (bestA < 0)
+    }
+    return best;
+}
+
+int32_t mnavMergePolygons(const mnavMeshVertex* vertices, mnavPolygon* polygons, int32_t count,
+                          int32_t* table)
+{
+    for (;;)
+    {
+        uint32_t mask = (uint32_t)mnavMergeTableSize(count) - 1u;
+        ListMergeEdges(polygons, count, table, mask);
+        Best best = FindBest(vertices, polygons, count, table, mask);
+        if (best.a < 0)
         {
             return count;
         }
-        Merge(&polygons[bestA], &polygons[bestB], bestEa, bestEb);
-        polygons[bestB] = polygons[count - 1];
+        Merge(&polygons[best.a], &polygons[best.b], best.ea, best.eb);
+        polygons[best.b] = polygons[count - 1];
         count -= 1;
     }
 }
@@ -248,6 +323,12 @@ static void ReleaseRing(Builder* builder)
     mnavRelease(memory, builder->ears.ears, (size_t)old, sizeof(uint8_t), alignof(uint8_t));
     mnavRelease(memory, builder->ears.indices, (size_t)old, sizeof(int32_t), alignof(int32_t));
     mnavRelease(memory, builder->welded, (size_t)old, sizeof(int32_t), alignof(int32_t));
+    if (builder->mergeTable != nullptr)
+    {
+        mnavRelease(memory, builder->mergeTable, (size_t)mnavMergeTableSize(old), sizeof(int32_t),
+                    alignof(int32_t));
+    }
+    builder->mergeTable = nullptr;
     builder->polygons = nullptr;
     builder->triangles = nullptr;
     builder->ears = (mnavEarScratch){nullptr, nullptr};
@@ -286,6 +367,11 @@ static mnavResult ReserveRing(Builder* builder, int32_t count)
         result = mnavAllocate(memory, n, sizeof(mnavPolygon), alignof(mnavPolygon),
                               (void**)&builder->polygons);
     }
+    if (result == mnav_success)
+    {
+        result = mnavAllocate(memory, (size_t)mnavMergeTableSize(count), sizeof(int32_t),
+                              alignof(int32_t), (void**)&builder->mergeTable);
+    }
     builder->ringCapacity = count;
     return result;
 }
@@ -307,6 +393,17 @@ static mnavResult Store(Builder* builder, const mnavPolygon* polygon)
     return result;
 }
 
+// Twice the signed area of triangle abc on the ground; negative for the
+// winding of the rings.
+static int64_t TwiceArea(const mnavMeshVertex* v, int32_t a, int32_t b, int32_t c)
+{
+    int64_t abx = (int64_t)v[b].x - v[a].x;
+    int64_t abz = (int64_t)v[b].z - v[a].z;
+    int64_t acx = (int64_t)v[c].x - v[a].x;
+    int64_t acz = (int64_t)v[c].z - v[a].z;
+    return abx * acz - abz * acx;
+}
+
 // Triangulates one ring, welds its vertices, merges its triangles and
 // stores the polygons.
 static mnavResult AddRing(Builder* builder, const mnavContourSet* set, const mnavContour* contour)
@@ -320,7 +417,6 @@ static mnavResult AddRing(Builder* builder, const mnavContourSet* set, const mna
     bool complete = true;
     int32_t triangleCount =
         mnavTriangulate(ring, contour->count, builder->ears, builder->triangles, &complete);
-    builder->mesh->failedRings += complete ? 0 : 1;
     for (int32_t k = 0; k < contour->count && result == mnav_success; ++k)
     {
         result = Weld(builder, &ring[k], &builder->welded[k]);
@@ -336,8 +432,13 @@ static mnavResult AddRing(Builder* builder, const mnavContourSet* set, const mna
         int32_t a = builder->welded[corner[0]];
         int32_t b = builder->welded[corner[1]];
         int32_t c = builder->welded[corner[2]];
-        if (a == b || a == c || b == c)
+        // A triangle with no area, as the last of a ring whose points lie
+        // in a line, covers nothing and could never load; one turned the
+        // wrong way means the ring was cut short.
+        int64_t area = a == b || a == c || b == c ? 0 : TwiceArea(builder->mesh->vertices, a, b, c);
+        if (area >= 0)
         {
+            complete = complete && area == 0;
             continue;
         }
         mnavPolygon* polygon = &builder->polygons[count++];
@@ -350,9 +451,11 @@ static mnavResult AddRing(Builder* builder, const mnavContourSet* set, const mna
         polygon->area = contour->area;
         polygon->region = contour->region;
     }
+    builder->mesh->failedRings += complete ? 0 : 1;
     if (result == mnav_success)
     {
-        count = mnavMergePolygons(builder->mesh->vertices, builder->polygons, count);
+        count = mnavMergePolygons(builder->mesh->vertices, builder->polygons, count,
+                                  builder->mergeTable);
     }
     for (int32_t p = 0; p < count && result == mnav_success; ++p)
     {

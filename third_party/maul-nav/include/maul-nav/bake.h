@@ -92,7 +92,10 @@ extern "C"
         int32_t tileLinks;
         // Tiles in one navmesh.
         int32_t tiles;
-        // Off-mesh links in one navmesh, staged or committed (mnav-0004).
+        // Off-mesh links in one navmesh, staged or committed (mnav-0004),
+        // counted by crossings: a point link takes 1, an edge link 1 +
+        // ceil(width / spacing) up to MNAV_MAX_LINK_CROSSINGS (see
+        // mnavLinkDef.width).
         int32_t links;
         // Bytes the bake may hold allocated at once.
         uint64_t memoryBytes;
@@ -113,6 +116,15 @@ extern "C"
         // Also, a loaded tile is replaced in one commit.
         mnav_tierDynamic = 2,
     };
+
+    // A clock the host passes in: now returns ticks in a unit of the
+    // host's choosing, never going back, and is called from the thread
+    // that bakes.
+    typedef struct mnavClock
+    {
+        uint64_t (*now)(void* context);
+        void* context;
+    } mnavClock;
 
     typedef struct mnavBakeDef
     {
@@ -152,6 +164,9 @@ extern "C"
         // The runtime tier of a navmesh made with this def,
         // mnav_tierStatic by default; the bake ignores it.
         mnavTier tier;
+        // The clock the bake reads between stages for its report; zeroed
+        // for none. It never shapes the tile.
+        mnavClock clock;
     } mnavBakeDef;
 
     // The setting a def check refused.
@@ -327,6 +342,11 @@ extern "C"
         mnavAreaType area;
     } mnavBakeVolume;
 
+    // The triangles of a bake's meshes that may reach each tile of a def's
+    // grid, so that a bake of one tile reads those alone (mnav-0014). Made
+    // by mnavCreateTileIndex.
+    typedef struct mnavTileIndex mnavTileIndex;
+
     // Everything a 3D bake reads: triangle meshes, terrains and volumes.
     typedef struct mnavBakeInput
     {
@@ -336,7 +356,22 @@ extern "C"
         int32_t terrainCount;
         const mnavBakeVolume* volumes;
         int32_t volumeCount;
+        // The meshes' tile index, or NULL to read every triangle: made by
+        // mnavCreateTileIndex from these meshes, unchanged since, with a
+        // def of the same tile grid. Only read during the call.
+        const mnavTileIndex* index;
     } mnavBakeInput;
+
+    // Everything a 2D bake reads: outlines.
+    typedef struct mnavBake2DInput
+    {
+        const mnavOutline* outlines;
+        int32_t outlineCount;
+        // The outlines' tile index, or NULL to read every outline: made by
+        // mnavCreateTileIndex2D from these outlines, unchanged since, with
+        // a def of the same tile grid. Only read during the call.
+        const mnavTileIndex* index;
+    } mnavBake2DInput;
 
     // The kind of input element a check refused.
     typedef uint8_t mnavInputElement;
@@ -450,6 +485,9 @@ extern "C"
         mnav_stageDone = 12,
     };
 
+// The stages a report times, mnav_stageInput to mnav_stageEncode.
+#define MNAV_BAKE_STAGES 12
+
     // What a bake did: its result and the stage it ended in, the first
     // input refused, what the tile holds, and every piece of work it gave
     // up on rather than fail.
@@ -476,6 +514,11 @@ extern "C"
         // The tile's bytes, and the most memory the bake held at once.
         uint64_t tileBytes;
         uint64_t memoryPeak;
+        // For each stage, by mnavBakeStage: the clock's ticks it took, 0
+        // without a clock or for a stage not reached, and the most memory
+        // held at once while it ran.
+        uint64_t stageTicks[MNAV_BAKE_STAGES];
+        uint64_t stageMemory[MNAV_BAKE_STAGES];
         // Holes that no bridge could join to their outline, polygon rings
         // and detail outlines whose triangulation stopped short, detail
         // samples that found no height and took the polygon's, and
@@ -516,7 +559,9 @@ extern "C"
     /// limits and the fingerprint, and a volume's points count as input
     /// triangles too. A refused terrain is reported as the mesh at its
     /// index after the meshes, a refused volume as the one at its index
-    /// after the terrains.
+    /// after the terrains. Given a tile index, the bake checks each mesh's
+    /// counts and pointers and then only the triangles the index lists for
+    /// the tile, with their vertices, before reading them.
     ///
     /// @param baker     The baker; the tile it held before is dropped.
     /// @param input     The meshes and terrains.
@@ -530,12 +575,81 @@ extern "C"
     /// `mnav_errorRange`; a volume with fewer than 3 points, a kind out of
     /// range, an area volume's area not walkable, heights not finite or
     /// backward, or a point not finite (the point) is `mnav_errorInvalid`,
-    /// a point past the extent (the point) `mnav_errorRange`.
+    /// a point past the extent (the point) `mnav_errorRange`; a tile index
+    /// made for another grid, another number of meshes or another number
+    /// of triangles in a mesh is `mnav_errorInvalid`.
     /// @par Thread safety
     /// Safe from any thread; the baker is used by one thread at a time.
     MNAV_NODISCARD MNAV_API mnavResult mnavBakeTileInput(mnavBaker* baker,
                                                          const mnavBakeInput* input, int32_t tileX,
                                                          int32_t tileZ, mnavBakeReport* reportOut);
+
+    /// Makes a tile index of meshes for a def's tile grid (mnav-0014):
+    /// checks every mesh as a bake does, then lists for each tile the
+    /// triangles whose ground bounds, widened by the tile's border and two
+    /// cells, reach it, in input order. A bake given the index through
+    /// mnavBakeInput reads only the tile's list and makes the same tile,
+    /// to the byte, as a bake that reads every triangle. Changing a mesh's
+    /// vertices or triangles calls for a new index.
+    ///
+    /// @param def       The def; the index fits defs with its cell size,
+    ///                  tile cells and agent radius.
+    /// @param meshes    The meshes, in the def's frame. Only read during
+    ///                  the call.
+    /// @param meshCount The number of meshes, at least 0.
+    /// @param indexOut  Receives the index, or NULL on failure.
+    /// @param reportOut Receives the result, the first mesh refused and
+    ///                  what its check found, and the memory peak; the
+    ///                  other fields are 0. May be NULL.
+    /// @return `mnav_success`; `mnav_errorInvalid` for an invalid def, a
+    /// NULL indexOut, a negative count, NULL meshes with a positive count,
+    /// or a mesh its check refuses; `mnav_errorRange` for a mesh past the
+    /// extent; `mnav_errorLimit` past the def's memory limit or past
+    /// 2^31 - 1 listed triangles; `mnav_errorCapacity` when the allocator
+    /// fails.
+    /// @par Thread safety
+    /// Safe from any thread. An index is never changed after it is made,
+    /// so any number of bakes on any threads may read it at once.
+    MNAV_NODISCARD MNAV_API mnavResult mnavCreateTileIndex(const mnavBakeDef* def,
+                                                           const mnavTriangleMesh* meshes,
+                                                           int32_t meshCount,
+                                                           mnavTileIndex** indexOut,
+                                                           mnavBakeReport* reportOut);
+
+    /// Makes a tile index of 2D outlines for a def's tile grid
+    /// (mnav-0014), as mnavCreateTileIndex does of meshes: checks every
+    /// outline as a 2D bake does, then lists for each tile the outlines
+    /// whose bounds, widened by the tile's border and two cells, reach it,
+    /// in input order. A bake given the index through mnavBake2DInput reads
+    /// only the tile's list and makes the same tile, to the byte.
+    ///
+    /// @param def          The def; the index fits defs with its cell
+    ///                     size, tile cells and agent radius.
+    /// @param outlines     The outlines, in the def's frame. Only read
+    ///                     during the call.
+    /// @param outlineCount The number of outlines, at least 0.
+    /// @param indexOut     Receives the index, or NULL on failure.
+    /// @param reportOut    Receives the result, the first outline refused
+    ///                     (in the report's mesh) and what its check found,
+    ///                     and the memory peak; the other fields are 0. May
+    ///                     be NULL.
+    /// @return As mnavCreateTileIndex, for outlines.
+    /// @par Thread safety
+    /// Safe from any thread. An index is never changed after it is made,
+    /// so any number of bakes on any threads may read it at once.
+    MNAV_NODISCARD MNAV_API mnavResult mnavCreateTileIndex2D(const mnavBakeDef* def,
+                                                             const mnavOutline* outlines,
+                                                             int32_t outlineCount,
+                                                             mnavTileIndex** indexOut,
+                                                             mnavBakeReport* reportOut);
+
+    /// Destroys a tile index.
+    ///
+    /// @param index  The index, or NULL.
+    /// @par Thread safety
+    /// Safe from any thread; the index is used by one thread at a time.
+    /// No bake may be reading it.
+    MNAV_API void mnavDestroyTileIndex(mnavTileIndex* index);
 
     /// Bakes tile (tileX, tileZ) of the meshes: checks every mesh, then
     /// rasterizes, filters, partitions, traces and triangulates the tile
@@ -587,6 +701,27 @@ extern "C"
     MNAV_NODISCARD MNAV_API mnavResult mnavBakeTile2D(mnavBaker* baker, const mnavOutline* outlines,
                                                       int32_t outlineCount, int32_t tileX,
                                                       int32_t tileZ, mnavBakeReport* reportOut);
+
+    /// Bakes tile (tileX, tileZ) of 2D outlines as mnavBakeTile2D does,
+    /// from an input record. Given a tile index of the outlines, the bake
+    /// checks only the outlines it lists for the tile, which hold every
+    /// outline reaching it, and makes the same tile to the byte; the
+    /// total of the points still counts every outline.
+    ///
+    /// @param baker     The baker; the tile it held before is dropped.
+    /// @param input     The outlines and the index, or NULL.
+    /// @param tileX     The tile's column.
+    /// @param tileZ     The tile's row.
+    /// @param reportOut Receives the report. May be NULL.
+    /// @return As mnavBakeTile2D; a NULL input is `mnav_errorInvalid`, and
+    /// so is a tile index made for another grid, for meshes, or for
+    /// another number of outlines or of points in one.
+    /// @par Thread safety
+    /// Safe from any thread; the baker is used by one thread at a time.
+    MNAV_NODISCARD MNAV_API mnavResult mnavBakeTile2DInput(mnavBaker* baker,
+                                                           const mnavBake2DInput* input,
+                                                           int32_t tileX, int32_t tileZ,
+                                                           mnavBakeReport* reportOut);
 
     /// Copies the last baked tile's bytes into caller memory.
     ///

@@ -10,6 +10,7 @@
 
 #include "allocator.h"
 #include "raster.h"
+#include "tile_index.h"
 
 #include "maul-nav/bake.h"
 
@@ -32,12 +33,33 @@ typedef mnavResult (*mnavCellVisit)(void* context, int32_t x, int32_t z);
 mnavResult mnavVisitRing(const mnavTileFrame* frame, const mnavVec2* points, int32_t pointCount,
                          double* crossings, mnavCellVisit visit, void* context);
 
-// Adds the fragments of valid outlines for the tile. Returns
+// The outlines a 2D bake reads for a tile, in input order: every one, or
+// those a tile index lists for the tile, which hold all that reach it.
+typedef struct mnavOutlineSet
+{
+    const mnavOutline* outlines;
+    const mnavIndexEntry* listed;
+    int32_t count;
+    bool indexed;
+} mnavOutlineSet;
+
+// The set of outlines for tile (tileX, tileZ): those index lists, or with
+// a NULL index every one.
+mnavOutlineSet mnavOutlinesFor(const mnavOutline* outlines, int32_t outlineCount,
+                               const mnavTileIndex* index, int32_t tileX, int32_t tileZ);
+
+// The k-th outline of a set.
+static inline const mnavOutline* mnavOutlineAt(const mnavOutlineSet* set, int32_t k)
+{
+    return &set->outlines[set->indexed ? set->listed[k].mesh : k];
+}
+
+// Adds the fragments of a set's valid outlines for the tile. Returns
 // mnav_errorLimit past the tileTriangles limit on outlines touching the
 // tile, the tileSpans limit on fragments or the memory limit, and
 // mnav_errorCapacity when the allocator fails.
 mnavResult mnavCollectOutlines(mnavMemory* memory, const mnavBakeDef* def,
-                               const mnavTileFrame* frame, const mnavOutline* outlines,
-                               int32_t outlineCount, mnavFragmentList* list);
+                               const mnavTileFrame* frame, const mnavOutlineSet* set,
+                               mnavFragmentList* list);
 
 #endif // MAUL_NAV_SRC_OUTLINE_H

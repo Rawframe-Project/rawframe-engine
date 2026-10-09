@@ -98,7 +98,7 @@ static void Visit(Mover* m, int32_t n, int32_t slot, int32_t polygon, Ground a, 
     query->nodes[next].polygon = polygon;
     query->nodes[next].parent = n;
     query->table[cell] = next;
-    query->heap[m->tail++] = next;
+    query->indexHeap[m->tail++] = next;
 }
 
 // An edge of the polygon being walked: its world ends, and its ends along
@@ -303,12 +303,12 @@ mnavResult mnavMoveAlongSurface(mnavQuery* query, const mnavNavmesh* navmesh,
     query->nodes[0].polygon = (int32_t)startPolygon.polygon;
     query->nodes[0].parent = MNAV_NO_NODE;
     query->table[mnavFindNode(query, query->nodes[0].slot, query->nodes[0].polygon, 0, 0)] = 0;
-    query->heap[0] = 0;
+    query->indexHeap[0] = 0;
     query->nodeCount = 1;
     int32_t reached = MNAV_NO_NODE;
     for (int32_t head = 0; head < m.tail && reached == MNAV_NO_NODE; ++head)
     {
-        int32_t n = query->heap[head];
+        int32_t n = query->indexHeap[head];
         reached = Walk(&m, n) ? n : MNAV_NO_NODE;
     }
     int32_t last = reached != MNAV_NO_NODE ? reached : m.bestNode;

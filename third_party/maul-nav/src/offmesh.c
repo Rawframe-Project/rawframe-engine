@@ -55,19 +55,100 @@ static mnavResult Find(const mnavNavmesh* navmesh, mnavLinkId id, int32_t* slotO
         return mnav_errorInvalid;
     }
     *slotOut = (int32_t)id.slot - 1;
-    return id.generation < link->generation || link->phase == MNAV_LINK_FREE ? mnav_errorStale
-                                                                             : mnav_success;
+    if (id.generation < link->generation || link->phase == MNAV_LINK_FREE)
+    {
+        return mnav_errorStale;
+    }
+    // An edge link's later crossings have slots no id names.
+    return link->parent == *slotOut ? mnav_success : mnav_errorInvalid;
 }
 
-static mnavResult CheckDef(const mnavLinkDef* def)
+// Whether a point lies within the extent bake input may have round the
+// navmesh's origin, so that the arithmetic on links stays finite.
+static bool InExtent(const mnavNavmesh* navmesh, mnavPos3 p)
+{
+    const mnavBakeDef* def = &navmesh->def;
+    double ground = (double)def->cellSize * (double)MNAV_MAX_EXTENT_CELLS;
+    double vertical = (double)def->cellHeight * (double)MNAV_MAX_HEIGHT_CELLS;
+    return fabs(p.x - def->origin.x) <= ground && fabs(p.z - def->origin.z) <= ground &&
+           fabs(p.y - def->origin.y) <= vertical;
+}
+
+static mnavResult CheckDef(const mnavNavmesh* navmesh, const mnavLinkDef* def)
 {
     if (!FinitePoint(def->start) || !FinitePoint(def->end))
     {
         return mnav_errorInvalid;
     }
+    if (!InExtent(navmesh, def->start) || !InExtent(navmesh, def->end))
+    {
+        return mnav_errorRange;
+    }
     bool radius = def->radius >= 0.0f && def->radius <= MNAV_MAX_LINK_RADIUS;
     bool cost = def->cost >= 0.0f && def->cost <= MNAV_MAX_LINK_COST;
-    return radius && cost && def->kind < MNAV_LINK_KINDS ? mnav_success : mnav_errorRange;
+    bool width = def->width >= 0.0f && def->width <= MNAV_MAX_LINK_WIDTH;
+    if (!(radius && cost && width && def->kind < MNAV_LINK_KINDS))
+    {
+        return mnav_errorRange;
+    }
+    // An edge link needs a direction on the ground: ends so near that the
+    // square of their distance rounds to 0 give none.
+    double gx = def->end.x - def->start.x;
+    double gz = def->end.z - def->start.z;
+    bool flat = gx * gx + gz * gz == 0.0;
+    return def->width > 0.0f && flat ? mnav_errorInvalid : mnav_success;
+}
+
+// How many points a link is crossed at: one for a point link; for an edge
+// link enough that they lie no farther apart than the agent's radius, a
+// cell when the agent has none, at least two and at most
+// MNAV_MAX_LINK_CROSSINGS.
+static int32_t Crossings(const mnavNavmesh* navmesh, const mnavLinkDef* def)
+{
+    if (def->width == 0.0f)
+    {
+        return 1;
+    }
+    double spacing = navmesh->def.agent.radius > 0.0f ? (double)navmesh->def.agent.radius
+                                                      : (double)navmesh->def.cellSize;
+    double gaps = ceil((double)def->width / spacing);
+    return gaps >= (double)(MNAV_MAX_LINK_CROSSINGS - 1) ? MNAV_MAX_LINK_CROSSINGS
+                                                         : 1 + (int32_t)gaps;
+}
+
+// Crossing k of n: the link moved across its ground direction, from one
+// side of its width to the other, and made a point link.
+static mnavLinkDef Crossing(const mnavLinkDef* def, int32_t k, int32_t n)
+{
+    mnavLinkDef c = *def;
+    c.width = 0.0f;
+    if (n == 1)
+    {
+        return c;
+    }
+    double gx = def->end.x - def->start.x;
+    double gz = def->end.z - def->start.z;
+    double ground = sqrt(gx * gx + gz * gz);
+    double along = (double)def->width * ((double)k / (double)(n - 1) - 0.5);
+    double ox = -gz / ground * along;
+    double oz = gx / ground * along;
+    c.start.x += ox;
+    c.start.z += oz;
+    c.end.x += ox;
+    c.end.z += oz;
+    return c;
+}
+
+// The next free slot from s on that may take another generation, or
+// linkSlots.
+static int32_t NextFree(const mnavNavmesh* navmesh, int32_t s)
+{
+    while (s < navmesh->linkSlots && (navmesh->links[s].phase != MNAV_LINK_FREE ||
+                                      navmesh->links[s].generation == UINT32_MAX))
+    {
+        s += 1;
+    }
+    return s;
 }
 
 mnavResult mnavStageLink(mnavNavmesh* navmesh, const mnavLinkDef* def, mnavLinkId* linkOut)
@@ -76,37 +157,41 @@ mnavResult mnavStageLink(mnavNavmesh* navmesh, const mnavLinkDef* def, mnavLinkI
     {
         return mnav_errorInvalid;
     }
-    mnavResult result = CheckDef(def);
+    mnavResult result = CheckDef(navmesh, def);
     if (result != mnav_success)
     {
         return result;
     }
-    if (navmesh->linksHeld == navmesh->def.limits.links)
+    int32_t n = Crossings(navmesh, def);
+    if (navmesh->linksHeld + n > navmesh->def.limits.links)
     {
         return mnav_errorLimit;
     }
-    int32_t s = 0;
-    while (s < navmesh->linkSlots && (navmesh->links[s].phase != MNAV_LINK_FREE ||
-                                      navmesh->links[s].generation == UINT32_MAX))
+    // Room for every crossing first, so that nothing fails half staged.
+    result = mnavReserve(&navmesh->memory, (void**)&navmesh->links, &navmesh->linkCapacity,
+                         navmesh->linkSlots, navmesh->linkSlots + n, sizeof(mnavOffLink),
+                         alignof(mnavOffLink));
+    if (result != mnav_success)
     {
-        s += 1;
+        return result;
     }
-    if (s == navmesh->linkSlots)
+    int32_t first = -1;
+    int32_t s = -1;
+    for (int32_t k = 0; k < n; ++k)
     {
-        result = mnavReserve(&navmesh->memory, (void**)&navmesh->links, &navmesh->linkCapacity,
-                             navmesh->linkSlots, navmesh->linkSlots + 1, sizeof(mnavOffLink),
-                             alignof(mnavOffLink));
-        if (result != mnav_success)
+        s = NextFree(navmesh, s + 1);
+        if (s == navmesh->linkSlots)
         {
-            return result;
+            navmesh->links[navmesh->linkSlots++] = (mnavOffLink){0};
         }
-        navmesh->links[navmesh->linkSlots++] = (mnavOffLink){0};
+        first = k == 0 ? s : first;
+        mnavOffLink* link = &navmesh->links[s];
+        *link = (mnavOffLink){
+            Crossing(def, k, n), link->generation + 1, MNAV_LINK_ADDING, true, {0}, first, k, n};
     }
-    mnavOffLink* link = &navmesh->links[s];
-    *link = (mnavOffLink){*def, link->generation + 1, MNAV_LINK_ADDING, true, {0}};
-    navmesh->linksHeld += 1;
-    navmesh->linksPending += 1;
-    *linkOut = (mnavLinkId){(uint32_t)s + 1, link->generation};
+    navmesh->linksHeld += n;
+    navmesh->linksPending += n;
+    *linkOut = (mnavLinkId){(uint32_t)first + 1, navmesh->links[first].generation};
     return mnav_success;
 }
 
@@ -122,17 +207,24 @@ mnavResult mnavStageLinkRemoval(mnavNavmesh* navmesh, mnavLinkId id)
     {
         return result;
     }
-    mnavOffLink* link = &navmesh->links[s];
-    if (link->phase == MNAV_LINK_ADDING)
+    for (int32_t c = s; c < navmesh->linkSlots; ++c)
     {
-        link->phase = MNAV_LINK_FREE;
-        navmesh->linksHeld -= 1;
-        navmesh->linksPending -= 1;
-    }
-    else if (link->phase == MNAV_LINK_LIVE)
-    {
-        link->phase = MNAV_LINK_REMOVING;
-        navmesh->linksPending += 1;
+        mnavOffLink* link = &navmesh->links[c];
+        if (link->parent != s || link->phase == MNAV_LINK_FREE)
+        {
+            continue;
+        }
+        if (link->phase == MNAV_LINK_ADDING)
+        {
+            link->phase = MNAV_LINK_FREE;
+            navmesh->linksHeld -= 1;
+            navmesh->linksPending -= 1;
+        }
+        else if (link->phase == MNAV_LINK_LIVE)
+        {
+            link->phase = MNAV_LINK_REMOVING;
+            navmesh->linksPending += 1;
+        }
     }
     return mnav_success;
 }
@@ -154,10 +246,15 @@ mnavResult mnavStageLinkEnabled(mnavNavmesh* navmesh, mnavLinkId id, bool enable
     {
         result = mnav_errorTier;
     }
-    if (result == mnav_success && link->enabled != enabled)
+    for (int32_t c = s; result == mnav_success && c < navmesh->linkSlots; ++c)
     {
-        link->enabled = enabled;
-        navmesh->linksPending += 1;
+        mnavOffLink* crossing = &navmesh->links[c];
+        if (crossing->parent == s && crossing->phase != MNAV_LINK_FREE &&
+            crossing->enabled != enabled)
+        {
+            crossing->enabled = enabled;
+            navmesh->linksPending += 1;
+        }
     }
     return result;
 }
@@ -174,8 +271,28 @@ mnavResult mnavGetLink(const mnavNavmesh* navmesh, mnavLinkId id, mnavLinkState*
     {
         result = mnav_errorNotLoaded;
     }
-    *stateOut = result == mnav_success ? navmesh->links[s].state : (mnavLinkState){0};
-    return result;
+    *stateOut = (mnavLinkState){0};
+    if (result != mnav_success)
+    {
+        return result;
+    }
+    // The first attached crossing along the width, and how many are.
+    int32_t best = -1;
+    int32_t attached = 0;
+    for (int32_t c = s; c < navmesh->linkSlots; ++c)
+    {
+        const mnavOffLink* crossing = &navmesh->links[c];
+        if (crossing->parent != s || crossing->phase == MNAV_LINK_FREE || !crossing->state.attached)
+        {
+            continue;
+        }
+        attached += 1;
+        best = best < 0 || crossing->crossing < navmesh->links[best].crossing ? c : best;
+    }
+    *stateOut = best >= 0 ? navmesh->links[best].state : (mnavLinkState){0};
+    stateOut->enabled = navmesh->links[s].state.enabled;
+    stateOut->crossings = attached;
+    return mnav_success;
 }
 
 // The half sizes of the box a link end snaps within: its radius on the
@@ -234,6 +351,11 @@ mnavResult mnavPlanAttachments(mnavNavmesh* navmesh, mnavAttachmentPlan* plan)
     if (result == mnav_success)
     {
         plan->capacity = capacity;
+        result = mnavAllocate(&navmesh->memory, (size_t)capacity, sizeof(uint64_t),
+                              alignof(uint64_t), (void**)&plan->arrivals);
+    }
+    if (result == mnav_success)
+    {
         result = mnavAllocate(&navmesh->memory, (size_t)navmesh->linkSlots, sizeof(bool),
                               alignof(bool), (void**)&plan->resnap);
     }
@@ -256,8 +378,9 @@ mnavResult mnavPlanAttachments(mnavNavmesh* navmesh, mnavAttachmentPlan* plan)
 
 void mnavDropAttachmentPlan(mnavNavmesh* navmesh, mnavAttachmentPlan* plan)
 {
-    mnavRelease(&navmesh->memory, plan->keys, (size_t)plan->capacity, sizeof(uint64_t),
-                alignof(uint64_t));
+    size_t capacity = (size_t)plan->capacity;
+    mnavRelease(&navmesh->memory, plan->keys, capacity, sizeof(uint64_t), alignof(uint64_t));
+    mnavRelease(&navmesh->memory, plan->arrivals, capacity, sizeof(uint64_t), alignof(uint64_t));
     mnavRelease(&navmesh->memory, plan->resnap, (size_t)plan->resnapCount, sizeof(bool),
                 alignof(bool));
     *plan = (mnavAttachmentPlan){0};
@@ -290,6 +413,7 @@ static void Resnap(mnavNavmesh* navmesh, mnavOffLink* link)
     state.attached =
         Snap(navmesh, link->def.start, link->def.radius, &state.startPolygon, &state.start) &&
         Snap(navmesh, link->def.end, link->def.radius, &state.endPolygon, &state.end);
+    state.crossings = state.attached ? 1 : 0;
     link->state = state.attached ? state : (mnavLinkState){0};
 }
 
@@ -313,6 +437,25 @@ static int32_t Attach(mnavNavmesh* navmesh, int32_t s, uint64_t* keys, int32_t c
     return count;
 }
 
+// Writes each attachment again, by the polygon it lands on, and sorts
+// them with the scratch from half on.
+static void Arrive(mnavNavmesh* navmesh, int32_t half)
+{
+    for (int32_t i = 0; i < navmesh->attachmentCount; ++i)
+    {
+        mnavAttachment a = mnavAttachmentOf(navmesh->attachments[i]);
+        const mnavLinkState* state = &navmesh->links[a.link].state;
+        mnavPolygonId landing = a.reverse ? state->startPolygon : state->endPolygon;
+        navmesh->arrivals[i] = mnavAttachmentKey((mnavAttachment){
+            (int32_t)landing.slot - 1, (int32_t)landing.polygon, a.link, a.reverse});
+    }
+    navmesh->arrivalCount =
+        navmesh->attachmentCount > 0
+            ? (int32_t)mnavSortUnique(navmesh->arrivals, navmesh->arrivals + half,
+                                      (size_t)navmesh->attachmentCount)
+            : 0;
+}
+
 void mnavApplyAttachments(mnavNavmesh* navmesh, mnavAttachmentPlan* plan)
 {
     int32_t held = 0;
@@ -331,9 +474,14 @@ void mnavApplyAttachments(mnavNavmesh* navmesh, mnavAttachmentPlan* plan)
     navmesh->linksPending = 0;
     mnavRelease(&navmesh->memory, navmesh->attachments, (size_t)navmesh->attachmentCapacity,
                 sizeof(uint64_t), alignof(uint64_t));
+    mnavRelease(&navmesh->memory, navmesh->arrivals, (size_t)navmesh->arrivalCapacity,
+                sizeof(uint64_t), alignof(uint64_t));
     navmesh->attachments = plan->keys;
     navmesh->attachmentCapacity = plan->capacity;
+    navmesh->arrivals = plan->arrivals;
+    navmesh->arrivalCapacity = plan->capacity;
     plan->keys = nullptr;
+    plan->arrivals = nullptr;
     plan->capacity = 0;
     int32_t count = 0;
     for (int32_t s = 0; s < navmesh->linkSlots; ++s)
@@ -373,18 +521,21 @@ void mnavApplyAttachments(mnavNavmesh* navmesh, mnavAttachmentPlan* plan)
         count > 0 ? (int32_t)mnavSortUnique(navmesh->attachments, navmesh->attachments + half,
                                             (size_t)count)
                   : 0;
+    Arrive(navmesh, half);
 }
 
-int32_t mnavAttachmentsFrom(const mnavNavmesh* navmesh, int32_t slot, int32_t polygon,
-                            int32_t* first)
+// The keys of one polygon in a sorted key array: first receives the index
+// of the first; returns how many.
+static int32_t KeysOf(const uint64_t* keys, int32_t count, int32_t slot, int32_t polygon,
+                      int32_t* first)
 {
     uint64_t low = mnavAttachmentKey((mnavAttachment){slot, polygon, 0, false});
     int32_t lo = 0;
-    int32_t hi = navmesh->attachmentCount;
+    int32_t hi = count;
     while (lo < hi)
     {
         int32_t middle = lo + (hi - lo) / 2;
-        if (navmesh->attachments[middle] < low)
+        if (keys[middle] < low)
         {
             lo = middle + 1;
         }
@@ -394,9 +545,9 @@ int32_t mnavAttachmentsFrom(const mnavNavmesh* navmesh, int32_t slot, int32_t po
         }
     }
     int32_t end = lo;
-    while (end < navmesh->attachmentCount)
+    while (end < count)
     {
-        mnavAttachment a = mnavAttachmentOf(navmesh->attachments[end]);
+        mnavAttachment a = mnavAttachmentOf(keys[end]);
         if (a.slot != slot || a.polygon != polygon)
         {
             break;
@@ -405,4 +556,15 @@ int32_t mnavAttachmentsFrom(const mnavNavmesh* navmesh, int32_t slot, int32_t po
     }
     *first = lo;
     return end - lo;
+}
+
+int32_t mnavAttachmentsFrom(const mnavNavmesh* navmesh, int32_t slot, int32_t polygon,
+                            int32_t* first)
+{
+    return KeysOf(navmesh->attachments, navmesh->attachmentCount, slot, polygon, first);
+}
+
+int32_t mnavAttachmentsTo(const mnavNavmesh* navmesh, int32_t slot, int32_t polygon, int32_t* first)
+{
+    return KeysOf(navmesh->arrivals, navmesh->arrivalCount, slot, polygon, first);
 }

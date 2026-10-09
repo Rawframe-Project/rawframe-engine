@@ -87,8 +87,9 @@ enum
     MNAV_LINK_REMOVING = 3,
 };
 
-// An off-mesh link's slot: the link, its generation (0 before first use)
-// and, once committed, where its ends snapped.
+// An off-mesh link's slot: one crossing of a link, a point link having
+// one; its def, its generation (0 before first use) and, once committed,
+// where its ends snapped.
 typedef struct mnavOffLink
 {
     mnavLinkDef def;
@@ -97,6 +98,12 @@ typedef struct mnavOffLink
     // Whether it is to be enabled at the next commit.
     bool enabled;
     mnavLinkState state;
+    // The slot of the link's first crossing, which its id names, this one
+    // for a point link; the crossing's place along the width, and in the
+    // first, how many there are.
+    int32_t parent;
+    int32_t crossing;
+    int32_t crossings;
 } mnavOffLink;
 
 struct mnavNavmesh
@@ -126,6 +133,12 @@ struct mnavNavmesh
     uint64_t* attachments;
     int32_t attachmentCount;
     int32_t attachmentCapacity;
+    // The same attachments seen from the polygon each lands on: keys of
+    // the landing polygon's slot and index, the link and the direction,
+    // sorted, for searches run backward.
+    uint64_t* arrivals;
+    int32_t arrivalCount;
+    int32_t arrivalCapacity;
     // The areas staged to change, in staging order.
     mnavAreaChange* areaChanges;
     int32_t areaChangeCount;
@@ -170,8 +183,13 @@ mnavFrame mnavFrameOf(const mnavNavmesh* navmesh, int32_t x, int32_t z);
 // tile was replaced or removed.
 mnavResult mnavCheckPolygon(const mnavNavmesh* navmesh, mnavPolygonId id);
 
-// A mesh vertex's world position in a tile's frame.
-mnavPos3 mnavVertexWorld(const mnavFrame* f, const mnavMeshVertex* v);
+// A mesh vertex's world position in a tile's frame. Inline: the searches
+// call it for every portal they open.
+static inline mnavPos3 mnavVertexWorld(const mnavFrame* f, const mnavMeshVertex* v)
+{
+    return (mnavPos3){f->x0 + v->x * f->cell, f->y0 + (v->y - MNAV_HEIGHT_OFFSET) * f->height,
+                      f->z0 + v->z * f->cell};
+}
 
 // New links for one tile, applied when the commit succeeds.
 typedef struct mnavRelink

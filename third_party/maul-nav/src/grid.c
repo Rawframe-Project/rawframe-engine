@@ -87,21 +87,21 @@ static bool Sooner(const GridNode* nodes, int32_t a, int32_t b)
 
 static void Place(Grid* g, int32_t at, int32_t node)
 {
-    g->query->heap[at] = node;
+    g->query->indexHeap[at] = node;
     g->nodes[node].heap = at;
 }
 
 static void SiftUp(Grid* g, int32_t at)
 {
-    int32_t node = g->query->heap[at];
+    int32_t node = g->query->indexHeap[at];
     while (at > 0)
     {
         int32_t up = (at - 1) / 2;
-        if (!Sooner(g->nodes, node, g->query->heap[up]))
+        if (!Sooner(g->nodes, node, g->query->indexHeap[up]))
         {
             break;
         }
-        Place(g, at, g->query->heap[up]);
+        Place(g, at, g->query->indexHeap[up]);
         at = up;
     }
     Place(g, at, node);
@@ -110,8 +110,8 @@ static void SiftUp(Grid* g, int32_t at)
 static int32_t Pop(Grid* g)
 {
     mnavQuery* q = g->query;
-    int32_t top = q->heap[0];
-    int32_t last = q->heap[--q->heapCount];
+    int32_t top = q->indexHeap[0];
+    int32_t last = q->indexHeap[--q->heapCount];
     int32_t at = 0;
     while (q->heapCount > 0)
     {
@@ -120,15 +120,16 @@ static int32_t Pop(Grid* g)
         {
             break;
         }
-        if (child + 1 < q->heapCount && Sooner(g->nodes, q->heap[child + 1], q->heap[child]))
+        if (child + 1 < q->heapCount &&
+            Sooner(g->nodes, q->indexHeap[child + 1], q->indexHeap[child]))
         {
             child += 1;
         }
-        if (!Sooner(g->nodes, q->heap[child], last))
+        if (!Sooner(g->nodes, q->indexHeap[child], last))
         {
             break;
         }
-        Place(g, at, q->heap[child]);
+        Place(g, at, q->indexHeap[child]);
         at = child;
     }
     if (q->heapCount > 0)

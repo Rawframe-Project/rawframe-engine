@@ -96,6 +96,7 @@ static mnavResult Allocate(mnavHierarchy* h)
     Take(h, &r, n.edges, sizeof(mnavEdge), alignof(mnavEdge), (void**)&h->edges);
     Take(h, &r, n.tiles, sizeof(uint32_t), alignof(uint32_t), (void**)&h->generations);
     Take(h, &r, n.tiles, sizeof(uint64_t), alignof(uint64_t), (void**)&h->areaHashes);
+    Take(h, &r, n.tiles, sizeof(uint8_t), alignof(uint8_t), (void**)&h->changed);
     Take(h, &r, n.tiles, sizeof(uint8_t), alignof(uint8_t), (void**)&h->dirty);
     Take(h, &r, n.transitions + 1, sizeof(double), alignof(double), (void**)&h->costs);
     Take(h, &r, n.transitions, sizeof(double), alignof(double), (void**)&h->joins);
@@ -165,6 +166,7 @@ void mnavDestroyHierarchy(mnavHierarchy* hierarchy)
     Give(h, h->edges, n.edges, sizeof(mnavEdge), alignof(mnavEdge));
     Give(h, h->generations, n.tiles, sizeof(uint32_t), alignof(uint32_t));
     Give(h, h->areaHashes, n.tiles, sizeof(uint64_t), alignof(uint64_t));
+    Give(h, h->changed, n.tiles, sizeof(uint8_t), alignof(uint8_t));
     Give(h, h->dirty, n.tiles, sizeof(uint8_t), alignof(uint8_t));
     Give(h, h->costs, n.transitions + 1, sizeof(double), alignof(double));
     Give(h, h->joins, n.transitions, sizeof(double), alignof(double));
@@ -290,7 +292,8 @@ static mnavTransition Cross(const mnavHierarchy* h, const mnavNavmesh* navmesh, 
         side,
         runLow,
         runHigh,
-        -1};
+        -1,
+        false};
 }
 
 // Whether tile link l of a tile leaves the cluster across a side.
@@ -378,7 +381,8 @@ static mnavResult AddLinks(mnavHierarchy* h, const mnavNavmesh* navmesh)
                              0,
                              low,
                              low,
-                             -1};
+                             -1,
+                             false};
     }
     return mnav_success;
 }
@@ -464,7 +468,7 @@ static mnavPolygonId IdOf(const mnavNavmesh* navmesh, int32_t slot, int32_t poly
 }
 
 mnavResult mnavSearchCluster(mnavHierarchy* h, mnavQuery* query, const mnavNavmesh* navmesh,
-                             int32_t cluster, mnavPolygonId polygon, mnavPos3 point)
+                             bool backward, int32_t cluster, mnavPolygonId polygon, mnavPos3 point)
 {
     mnavResult result = mnavBeginPath(query, navmesh, &h->filter, polygon, point, polygon, point);
     if (result != mnav_success)
@@ -473,6 +477,10 @@ mnavResult mnavSearchCluster(mnavHierarchy* h, mnavQuery* query, const mnavNavme
     }
     mnavMarkCluster(h, cluster, 1);
     mnavConfineSearch(query, h->inside, true, true);
+    if (backward)
+    {
+        mnavTurnSearchBackward(query);
+    }
     bool ended = false;
     while (result == mnav_success && !ended)
     {
@@ -497,8 +505,8 @@ static mnavResult AddEdges(mnavHierarchy* h, mnavQuery* query, const mnavNavmesh
 {
     const mnavTransition* t = &h->transitions[u];
     h->searches += 1;
-    mnavResult result =
-        mnavSearchCluster(h, query, navmesh, t->cluster, IdOf(navmesh, t->slot, t->polygon), t->at);
+    mnavResult result = mnavSearchCluster(h, query, navmesh, false, t->cluster,
+                                          IdOf(navmesh, t->slot, t->polygon), t->at);
     if (result != mnav_success)
     {
         return result;
@@ -601,10 +609,22 @@ static uint64_t LinkHash(const mnavNavmesh* navmesh)
     return hash;
 }
 
+// Whether the hierarchy's filter includes the polygon transition u enters.
+static bool Included(const mnavHierarchy* h, const mnavNavmesh* navmesh, int32_t u)
+{
+    const mnavTransition* t = &h->transitions[u];
+    const mnavTile* tile = navmesh->slots[t->slot].tile;
+    return mnavIncludes(&h->filter, tile->mesh.polygons[t->polygon].area);
+}
+
 // Keeps what the graph is built from: each slot's tile generation and
-// areas, and the links.
+// areas, the links, and whether each transition's polygon is included.
 static void Stamp(mnavHierarchy* h, const mnavNavmesh* navmesh)
 {
+    for (int32_t u = 0; u < h->transitionCount; ++u)
+    {
+        h->transitions[u].included = Included(h, navmesh, u);
+    }
     memset(h->generations, 0, (size_t)navmesh->slotCount * sizeof(uint32_t));
     for (int32_t i = 0; i < navmesh->placeCount; ++i)
     {
@@ -640,16 +660,22 @@ static bool SameShape(const mnavHierarchy* h, const mnavNavmesh* navmesh)
 }
 
 // Marks the clusters holding a tile whose areas changed; whether a link
-// lands in one, which may change the transitions.
+// lands in one, which may change the transitions. A transition's
+// crossing lies in the tile it enters, and the searches of the cluster it
+// leaves end there, opening the polygon entered but never walking it: its
+// area costs them nothing, so that cluster is marked only when the
+// filter has come to include or exclude it.
 static bool MarkDirty(mnavHierarchy* h, const mnavNavmesh* navmesh)
 {
     memset(h->dirty, 0, (size_t)h->clusterCount);
+    memset(h->changed, 0, (size_t)navmesh->slotCount);
     for (int32_t i = 0; i < navmesh->placeCount; ++i)
     {
         int32_t slot = navmesh->places[i].slot;
         uint64_t hash = AreaHash(navmesh->slots[slot].tile);
         if (hash != h->areaHashes[slot])
         {
+            h->changed[slot] = 1;
             h->dirty[h->clusterOf[slot]] = 1;
             h->areaHashes[slot] = hash;
         }
@@ -663,6 +689,13 @@ static bool MarkDirty(mnavHierarchy* h, const mnavNavmesh* navmesh)
         {
             return true;
         }
+    }
+    for (int32_t u = 0; u < h->transitionCount; ++u)
+    {
+        mnavTransition* tr = &h->transitions[u];
+        bool now = h->changed[tr->slot] != 0 ? Included(h, navmesh, u) : tr->included;
+        h->dirty[tr->from] = now != tr->included ? 1 : h->dirty[tr->from];
+        tr->included = now;
     }
     return false;
 }

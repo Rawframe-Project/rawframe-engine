@@ -27,6 +27,14 @@
 
 // A portal into a polygon, or the start or end point: where the search
 // stands, the way it came, and its cost so far.
+// An open navmesh search node and its total, its cost plus its
+// heuristic, kept beside it in the heap.
+typedef struct mnavHeapEntry
+{
+    double total;
+    int32_t node;
+} mnavHeapEntry;
+
 typedef struct mnavSearchNode
 {
     // The portal's ends, in the order of the polygon left, and its midpoint;
@@ -63,6 +71,25 @@ typedef struct mnavGridNode
     double length;
     double remaining;
 } mnavGridNode;
+
+// A flight search's node (mnav-0015): an open block of the flight volume,
+// its lowest voxel and side; the point the path passes in it, in voxels
+// of the volume's frame; its length so far and the distance left, in
+// voxels; the way it came, and the neighbor that reached it; whether the
+// way bends through that neighbor's block's center (and, for the end,
+// the face beyond); and its place in the
+// open list, MNAV_NO_NODE before it enters it, or MNAV_CLOSED.
+typedef struct mnavFlightSearchNode
+{
+    int32_t block[4];
+    double point[3];
+    double cost;
+    double remaining;
+    int32_t parent;
+    int32_t via;
+    int32_t bend;
+    int32_t heap;
+} mnavFlightSearchNode;
 
 // A grid node out of the open list, its cost final.
 #define MNAV_CLOSED (-2)
@@ -104,6 +131,10 @@ typedef struct mnavSearch
     // beyond set, nodes outside are opened but never expanded.
     const uint8_t* inside;
     bool beyond;
+    // Whether off-mesh links are followed from where they land back to
+    // where they take off, so that the costs found are those of walking to
+    // the start rather than from it (mnav-0008).
+    bool backward;
     // The nodes whose closing ends the search, its tag -1 for none: a
     // slot, a tag and a range of lows, as nodes' (mnav-0008).
     int32_t goal[4];
@@ -113,15 +144,23 @@ struct mnavQuery
 {
     mnavMemory memory;
     mnavQueryLimits limits;
-    // One block of nodes serves a navmesh or a grid search, whichever ran
-    // last; grid nodes are the smaller.
+    // One block of nodes serves a navmesh, grid or flight search,
+    // whichever ran last; grid and flight nodes are the smaller.
     union
     {
         mnavSearchNode* nodes;
         mnavGridNode* gridNodes;
+        mnavFlightSearchNode* flightNodes;
     };
     int32_t nodeCount;
-    int32_t* heap;
+    // The open list, a binary heap: for a navmesh search, each node with
+    // the total it leaves by, so that comparing two reads the heap alone;
+    // for grid, surface and spatial searches, node indices.
+    union
+    {
+        mnavHeapEntry* heap;
+        int32_t* indexHeap;
+    };
     int32_t heapCount;
     // Open addressing over node keys: node indices, MNAV_NO_NODE for empty.
     int32_t* table;
@@ -129,8 +168,15 @@ struct mnavQuery
     mnavPolygonId* corridor;
     // The corridor's portals, then the straight path: a node gives one
     // portal, an off-mesh link two, and the end one more, so twice the
-    // nodes plus one bound both. Then the links crossed.
-    mnavPortal* portals;
+    // nodes plus one bound both. Then the links crossed. The exact search,
+    // which pulls no corridor, keeps a table of the nodes it made there:
+    // the node table's size of int32_t, at most four per node, where the
+    // portals hold 56 bytes per node.
+    union
+    {
+        mnavPortal* portals;
+        int32_t* madeTable;
+    };
     // The straight path's points, or a grid path's cells.
     union
     {
@@ -154,6 +200,11 @@ uint32_t mnavFindNode(const mnavQuery* query, int32_t slot, int32_t polygon, int
 // its open list empties (mnav-0008).
 void mnavConfineSearch(mnavQuery* query, const uint8_t* inside, bool beyond, bool noEnd);
 
+// Turns the search just begun backward: off-mesh links are followed from
+// where they land to where they take off. Walks cost the same either way,
+// so its costs are those of the way from each node to the start.
+void mnavTurnSearchBackward(mnavQuery* query);
+
 // Aims the search at another point: the end point, and the end polygon's
 // slot and index, or -1 for an end never reached; and at the nodes whose
 // closing ends it, goal's slot, tag and lowest and highest low, its tag
@@ -164,6 +215,13 @@ void mnavAimSearch(mnavQuery* query, mnavPos3 end, int32_t endSlot, int32_t endP
 // Starts the search over from node n, as it was reached: keeps only the
 // nodes on its way, closed, and opens n alone (mnav-0008).
 void mnavRestartSearch(mnavQuery* query, int32_t n);
+
+// Puts node n in the open list, by its cost and heuristic summed; ties
+// go to the node made first.
+void mnavPushNode(mnavQuery* query, int32_t n);
+
+// Takes the first node off the open list.
+int32_t mnavPopNode(mnavQuery* query);
 
 // The search heuristic's scale: the cheapest included area's cost, or less
 // for a kind of link the filter crosses that costs less per meter.

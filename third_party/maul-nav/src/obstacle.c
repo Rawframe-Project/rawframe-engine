@@ -19,9 +19,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// The largest coordinate an obstacle point may have, in meters, as for
-// agents.
-#define MAX_COORDINATE 1.0e12
+// The largest cell index, as for agents.
+#define CELL_LIMIT 0x1p52
 
 // How far inside a line an obstacle's cut-off points may lie and still
 // count as covered by it.
@@ -34,7 +33,8 @@ static bool Finite(mnavPos2 p)
 
 static bool GoodPoint(mnavPos2 p)
 {
-    return Finite(p) && fabs(p.x) <= MAX_COORDINATE && fabs(p.y) <= MAX_COORDINATE;
+    return Finite(p) && fabs(p.x) <= MNAV_MAX_AVOIDANCE_COORDINATE &&
+           fabs(p.y) <= MNAV_MAX_AVOIDANCE_COORDINATE;
 }
 
 // det(a - c, b - a): more than 0 when c lies left of a to b.
@@ -47,8 +47,11 @@ static double LeftOf(mnavPos2 a, mnavPos2 b, mnavPos2 c)
 // point alone, edges of some length, a polygon counterclockwise.
 static bool GoodObstacle(const mnavObstacle* o)
 {
-    if (o->points == nullptr || o->pointCount < 1 || !Finite(o->velocity) || !isfinite(o->radius) ||
-        (o->pointCount == 1) != (o->radius > 0.0) || o->radius < 0.0)
+    if (o->points == nullptr || o->pointCount < 1 || !Finite(o->velocity) ||
+        fabs(o->velocity.x) > MNAV_MAX_AVOIDANCE_SPEED ||
+        fabs(o->velocity.y) > MNAV_MAX_AVOIDANCE_SPEED || !isfinite(o->radius) ||
+        (o->pointCount == 1) != (o->radius > 0.0) || o->radius < 0.0 ||
+        o->radius > MNAV_MAX_AVOIDANCE_RADIUS)
     {
         return false;
     }
@@ -157,22 +160,26 @@ static void Bounds(const mnavObstacleVertex* vertices, int32_t v, mnavPos2* low,
     *high = (mnavPos2){(a.x > b.x ? a.x : b.x) + o->radius, (a.y > b.y ? a.y : b.y) + o->radius};
 }
 
+// The cell holding v, saturated as for agents.
 static int64_t CellOf(double v, double size)
 {
-    return (int64_t)floor(v / size);
+    double cell = floor(v / size);
+    return cell < -CELL_LIMIT ? (int64_t)-CELL_LIMIT
+                              : (cell > CELL_LIMIT ? (int64_t)CELL_LIMIT : (int64_t)cell);
 }
 
-// The entries vertices' bounds take at a cell size.
-static int64_t Entries(const mnavObstacleVertex* vertices, int32_t count, double size)
+// The entries vertices' bounds take at a cell size, counted in binary64
+// since a bound may span more cells than 64 bits count.
+static double Entries(const mnavObstacleVertex* vertices, int32_t count, double size)
 {
-    int64_t total = 0;
+    double total = 0.0;
     for (int32_t v = 0; v < count; ++v)
     {
         mnavPos2 low;
         mnavPos2 high;
         Bounds(vertices, v, &low, &high);
-        total += (CellOf(high.x, size) - CellOf(low.x, size) + 1) *
-                 (CellOf(high.y, size) - CellOf(low.y, size) + 1);
+        total += (double)(CellOf(high.x, size) - CellOf(low.x, size) + 1) *
+                 (double)(CellOf(high.y, size) - CellOf(low.y, size) + 1);
     }
     return total;
 }
@@ -220,7 +227,7 @@ void mnavBuildObstacleGrid(mnavObstacleGrid* grid, const mnavObstacleVertex* ver
 {
     // Long edges on small cells take many entries: the cells double until
     // they fit, which they do once no bound spans more than two cells.
-    while (Entries(vertices, vertexCount, size) > grid->capacity)
+    while (Entries(vertices, vertexCount, size) > (double)grid->capacity)
     {
         size *= 2.0;
     }
@@ -292,10 +299,23 @@ int32_t mnavNearObstacles(const mnavAgent* agent, const mnavObstacleVertex* vert
     int64_t y1 = CellOf(p.y + reach, grid->size);
     int32_t stamp = grid->stamp++;
     int32_t count = 0;
-    for (int64_t x = CellOf(p.x - reach, grid->size); x <= CellOf(p.x + reach, grid->size); ++x)
+    int64_t x1 = CellOf(p.x + reach, grid->size);
+    for (int64_t x = CellOf(p.x - reach, grid->size); x <= x1; ++x)
     {
-        for (int32_t k = FirstAt(grid, x, y0);
-             k < grid->count && grid->cells[k].x == x && grid->cells[k].y <= y1; ++k)
+        // Columns with no entries are skipped, so that a reach of many
+        // cells costs the entries it covers, not its cells.
+        int32_t first = FirstAt(grid, x, y0);
+        if (first == grid->count)
+        {
+            break;
+        }
+        if (grid->cells[first].x > x)
+        {
+            x = grid->cells[first].x - 1;
+            continue;
+        }
+        for (int32_t k = first; k < grid->count && grid->cells[k].x == x && grid->cells[k].y <= y1;
+             ++k)
         {
             int32_t v = grid->cells[k].vertex;
             if (grid->stamps[v] == stamp)
@@ -343,6 +363,16 @@ static bool Covered(const View* w, int32_t o1, int32_t o2, const mnavLine* lines
         }
     }
     return false;
+}
+
+// The unit vector along a, or the fallback when a has no length. The
+// callers keep exact zeros away (an agent on a corner is taken as
+// touching the edge, and a velocity on a cut-off point is not projected
+// on it), so the fallback only guards their rounding.
+static mnavPos2 UnitOr(mnavPos2 a, mnavPos2 fallback)
+{
+    mnavPos2 unit = mnavNormalize2(a);
+    return unit.x == 0.0 && unit.y == 0.0 ? fallback : unit;
 }
 
 // The leg from a convex vertex at relative position rel, on the left
@@ -442,16 +472,19 @@ static bool Project(const View* w, const Legs* legs, mnavLine* line)
     double t = one ? 0.5 : mnavDot2(mnavSub2(v, leftCutoff), cutoff) / mnavDot2(cutoff, cutoff);
     double tLeft = mnavDot2(mnavSub2(v, leftCutoff), legs->left);
     double tRight = mnavDot2(mnavSub2(v, rightCutoff), legs->right);
+    // With no direction from the cut-off point, the edge's outward normal
+    // stands in.
+    mnavPos2 outward = {vs[legs->o1].direction.y, -vs[legs->o1].direction.x};
     if ((t < 0.0 && tLeft < 0.0) || (one && tLeft < 0.0 && tRight < 0.0))
     {
-        mnavPos2 unit = mnavNormalize2(mnavSub2(v, leftCutoff));
+        mnavPos2 unit = UnitOr(mnavSub2(v, leftCutoff), outward);
         *line = (mnavLine){mnavAdd2(leftCutoff, mnavScale2(unit, w->radius * w->inverse)),
                            (mnavPos2){unit.y, -unit.x}};
         return true;
     }
     if (t > 1.0 && tRight < 0.0)
     {
-        mnavPos2 unit = mnavNormalize2(mnavSub2(v, rightCutoff));
+        mnavPos2 unit = UnitOr(mnavSub2(v, rightCutoff), outward);
         *line = (mnavLine){mnavAdd2(rightCutoff, mnavScale2(unit, w->radius * w->inverse)),
                            (mnavPos2){unit.y, -unit.x}};
         return true;
@@ -485,15 +518,18 @@ static bool Touching(const View* w, int32_t o1, int32_t o2, double s, double dis
     mnavPos2 rel1 = mnavSub2(vs[o1].point, w->position);
     mnavPos2 rel2 = mnavSub2(vs[o2].point, w->position);
     double radiusSq = w->radius * w->radius;
+    // An agent on the vertex itself keeps out of the edge, as one touching
+    // its middle does.
+    mnavPos2 away = mnavScale2(vs[o1].direction, -1.0);
     *handled = true;
     if (s < 0.0 && mnavDot2(rel1, rel1) <= radiusSq)
     {
-        *line = (mnavLine){{0.0, 0.0}, mnavNormalize2((mnavPos2){-rel1.y, rel1.x})};
+        *line = (mnavLine){{0.0, 0.0}, UnitOr((mnavPos2){-rel1.y, rel1.x}, away)};
         return vs[o1].convex;
     }
     if (s > 1.0 && mnavDot2(rel2, rel2) <= radiusSq)
     {
-        *line = (mnavLine){{0.0, 0.0}, mnavNormalize2((mnavPos2){-rel2.y, rel2.x})};
+        *line = (mnavLine){{0.0, 0.0}, UnitOr((mnavPos2){-rel2.y, rel2.x}, away)};
         return vs[o2].convex && mnavDet2(rel2, vs[o2].direction) >= 0.0;
     }
     if (s >= 0.0 && s <= 1.0 && distSqLine <= radiusSq)
@@ -525,6 +561,30 @@ static bool EdgeLine(const View* w, int32_t o1, mnavLine* line)
     return FindLegs(w, s, distSqLine, &legs) && Project(w, &legs, line);
 }
 
+// The line of a circle: an agent that never gives way while apart. An
+// agent already overlapping it is asked to leave it within the step, as
+// overlapping agents are, but never faster than its maximum speed: the
+// 3D program keeps obstacle lines, and one it could not keep would let
+// the agent walk on in.
+static mnavLine CircleLine(const mnavAgent* agent, const mnavObstacleVertex* o, double horizon,
+                           double step)
+{
+    double combined = agent->radius + o->radius;
+    mnavPos2 rel = mnavSub2(o->point, agent->position);
+    double distanceSq = mnavDot2(rel, rel);
+    if (distanceSq > combined * combined)
+    {
+        return mnavPairLine(agent->position, agent->velocity, o->point, o->velocity, combined, 1.0,
+                            horizon, step, agent->id < o->id);
+    }
+    // On the center itself no way is out; a fixed one keeps it
+    // deterministic.
+    mnavPos2 away = UnitOr(mnavScale2(rel, -1.0), (mnavPos2){0.0, -1.0});
+    double leave = mnavDot2(o->velocity, away) + (combined - sqrt(distanceSq)) / step;
+    double offset = leave < agent->maxSpeed ? leave : agent->maxSpeed;
+    return (mnavLine){mnavScale2(away, offset), (mnavPos2){away.y, -away.x}};
+}
+
 int32_t mnavObstacleLines(const mnavAgent* agent, const mnavObstacleVertex* vertices,
                           const mnavObstacleNear* near, int32_t nearCount, double horizon,
                           double step, mnavLine* lines)
@@ -535,9 +595,7 @@ int32_t mnavObstacleLines(const mnavAgent* agent, const mnavObstacleVertex* vert
         const mnavObstacleVertex* o = &vertices[near[k].vertex];
         if (o->radius > 0.0)
         {
-            lines[count++] =
-                mnavPairLine(agent->position, agent->velocity, o->point, o->velocity,
-                             agent->radius + o->radius, 1.0, horizon, step, agent->id < o->id);
+            lines[count++] = CircleLine(agent, o, horizon, step);
             continue;
         }
         View w = {vertices, agent->position, mnavSub2(agent->velocity, o->velocity), agent->radius,

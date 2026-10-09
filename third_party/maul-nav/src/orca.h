@@ -40,9 +40,23 @@ static inline double mnavDet2(mnavPos2 a, mnavPos2 b)
     return a.x * b.y - a.y * b.x;
 }
 
+// The unit vector along a, or {0, 0} when a has no length. A vector whose
+// squared length lies near or below the smallest normal number, where it
+// loses precision or rounds to 0, is first scaled up by 2^600, which is
+// exact; longer ones are not touched.
 static inline mnavPos2 mnavNormalize2(mnavPos2 a)
 {
-    return mnavScale2(a, 1.0 / sqrt(mnavDot2(a, a)));
+    double d = mnavDot2(a, a);
+    if (d < 0x1p-1000)
+    {
+        a = mnavScale2(a, 0x1p600);
+        d = mnavDot2(a, a);
+        if (d == 0.0)
+        {
+            return (mnavPos2){0.0, 0.0};
+        }
+    }
+    return mnavScale2(a, 1.0 / sqrt(d));
 }
 
 // Lines whose directions' cross product is within this count as parallel.

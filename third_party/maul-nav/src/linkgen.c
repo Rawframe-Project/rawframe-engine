@@ -95,7 +95,9 @@ static bool Landing(const Gen* g, double x, double z, double low, double high, d
     mnavFound found;
     mnavPos3 center = {x, (low + high) * 0.5, z};
     mnavVec3 half = {(float)g->cell, (float)((high - low) * 0.5 + g->cellHeight), (float)g->cell};
-    // A box a cell wide holding more polygons than this lands nowhere.
+    // A box a cell wide holding more polygons than this lands nowhere. No
+    // navmesh has come near: floors stand an agent's height apart, and a
+    // cell-wide box meets a few polygons on each.
     if (mnavFindPolygons(g->navmesh, g->filter, center, half, ids, CANDIDATES, &found) !=
         mnav_success)
     {
@@ -174,7 +176,8 @@ static void Keep(Gen* g, Spot from, Spot to, bool drop)
                                            d->radius,
                                            drop ? d->dropCost : d->jumpCost,
                                            drop ? d->dropKind : d->jumpKind,
-                                           twoWay};
+                                           twoWay,
+                                           0.0f};
     }
     g->count += 1;
 }
@@ -214,6 +217,8 @@ static void SampleEdge(Gen* g, mnavPolygonId polygon, mnavPos3 a, mnavPos3 b, mn
     double ex = b.x - a.x;
     double ez = b.z - a.z;
     double length = sqrt(ex * ex + ez * ez);
+    // The loader refuses a polygon with an edge of no length on the
+    // ground, so this guards only against that check changing.
     if (length == 0.0)
     {
         return;

@@ -55,11 +55,6 @@ mnavResult mnavCheckFilter(const mnavQueryFilter* filter, const mnavQueryFilter*
     return mnav_success;
 }
 
-bool mnavIncludes(const mnavQueryFilter* filter, mnavAreaType area)
-{
-    return area < MNAV_AREA_TYPES && ((filter->areas >> area) & 1u) != 0;
-}
-
 double mnavCheapest(const mnavQueryFilter* filter)
 {
     double cheapest = (double)INFINITY;

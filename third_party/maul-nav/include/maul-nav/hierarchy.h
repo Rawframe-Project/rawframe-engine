@@ -125,9 +125,10 @@ extern "C"
 
     /// Brings the hierarchy up to the navmesh's last commit. When only
     /// polygon areas changed, only the edges of transitions entering the
-    /// clusters whose tiles changed are searched again; when tiles or
-    /// off-mesh links changed, the hierarchy is built again. The graph is
-    /// the one a build would make.
+    /// clusters whose tiles changed, and the clusters with transitions
+    /// out into those tiles, are searched again; when tiles or off-mesh
+    /// links changed, the hierarchy is built again. The graph is the one a
+    /// build would make.
     ///
     /// @param hierarchy The hierarchy, built for this navmesh.
     /// @param query     A context for the searches within clusters; its
@@ -153,7 +154,10 @@ extern "C"
     /// transitions picks the clusters to cross, and the navmesh search
     /// confined to them gives the path. Paths within one cluster, and ends
     /// the graph does not reach, take the plain search. Paths are near the
-    /// cheapest, not always the cheapest.
+    /// cheapest, not always the cheapest. Where routes through the clusters
+    /// cost the same in the graph, it takes one, the same on every
+    /// platform, but which one is not promised; the paths they refine to
+    /// may differ a little in cost.
     ///
     /// @param query        The context; its memory holds the path.
     /// @param hierarchy    The hierarchy, built for this navmesh.

@@ -186,9 +186,11 @@ static void JoinLinks(mnavHierarchy* h, const mnavQuery* query, const mnavNavmes
 }
 
 // Joins the end to the transitions entering its cluster, and the start to
-// those leaving its own, by searches within the clusters; the walk's cost
-// is the same either way, so the end's search runs from the end. A search
-// out of nodes joins what it reached.
+// those leaving its own, by searches within the clusters. The end's search
+// runs from the end backward: walks cost the same either way, and it
+// follows off-mesh links from where they land, so a one-way link inside
+// the cluster joins the transitions it serves and no other. A search out
+// of nodes joins what it reached.
 static mnavResult Join(mnavHierarchy* h, mnavQuery* query, const mnavNavmesh* navmesh,
                        mnavPolygonId startPolygon, mnavPos3 start, mnavPolygonId endPolygon,
                        mnavPos3 end)
@@ -196,7 +198,7 @@ static mnavResult Join(mnavHierarchy* h, mnavQuery* query, const mnavNavmesh* na
     int32_t first = h->clusterOf[startPolygon.slot - 1];
     int32_t last = h->clusterOf[endPolygon.slot - 1];
     ResetGraph(h);
-    mnavResult result = mnavSearchCluster(h, query, navmesh, last, endPolygon, end);
+    mnavResult result = mnavSearchCluster(h, query, navmesh, true, last, endPolygon, end);
     if (result != mnav_success && result != mnav_errorLimit)
     {
         return result;
@@ -210,7 +212,7 @@ static mnavResult Join(mnavHierarchy* h, mnavQuery* query, const mnavNavmesh* na
         }
     }
     JoinLinks(h, query, navmesh, last);
-    result = mnavSearchCluster(h, query, navmesh, first, startPolygon, start);
+    result = mnavSearchCluster(h, query, navmesh, false, first, startPolygon, start);
     if (result != mnav_success && result != mnav_errorLimit)
     {
         return result;

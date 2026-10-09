@@ -17,8 +17,12 @@
 // mnavDefaultQueryFilter, mnav_errorRange for a cost out of its range.
 mnavResult mnavCheckFilter(const mnavQueryFilter* filter, const mnavQueryFilter** usable);
 
-// Whether a filter includes an area type. No polygon has area 0.
-bool mnavIncludes(const mnavQueryFilter* filter, mnavAreaType area);
+// Whether a filter includes an area type. No polygon has area 0. Inline:
+// every search step asks it.
+static inline bool mnavIncludes(const mnavQueryFilter* filter, mnavAreaType area)
+{
+    return area < MNAV_AREA_TYPES && ((filter->areas >> area) & 1u) != 0;
+}
 
 // Whether a filter lets the agent cross links of a kind.
 bool mnavCrosses(const mnavQueryFilter* filter, mnavLinkKind kind);

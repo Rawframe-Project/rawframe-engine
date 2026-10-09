@@ -36,6 +36,7 @@ mnavAttachment mnavAttachmentOf(uint64_t key);
 typedef struct mnavAttachmentPlan
 {
     uint64_t* keys;
+    uint64_t* arrivals;
     int32_t capacity;
     bool* resnap;
     int32_t resnapCount;
@@ -53,5 +54,11 @@ void mnavApplyAttachments(mnavNavmesh* navmesh, mnavAttachmentPlan* plan);
 // first in navmesh->attachments; returns how many.
 int32_t mnavAttachmentsFrom(const mnavNavmesh* navmesh, int32_t slot, int32_t polygon,
                             int32_t* first);
+
+// The attachments landing on a polygon: first receives the index of the
+// first in navmesh->arrivals, whose keys hold the landing polygon in
+// place of the takeoff one; returns how many.
+int32_t mnavAttachmentsTo(const mnavNavmesh* navmesh, int32_t slot, int32_t polygon,
+                          int32_t* first);
 
 #endif // MAUL_NAV_SRC_OFFMESH_H

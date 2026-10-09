@@ -43,6 +43,7 @@ typedef struct Work
     mnavEarScratch ears;
     int32_t* triangles;
     mnavPolygon* polygons;
+    int32_t* mergeTable;
     int32_t holeCount;
     int32_t holeCapacity;
     bool closed;
@@ -102,6 +103,12 @@ static void ReleaseHole(Work* work)
     mnavMemory* memory = work->memory;
     size_t old = (size_t)work->holeCapacity;
     mnavRelease(memory, work->polygons, old, sizeof(mnavPolygon), alignof(mnavPolygon));
+    if (work->mergeTable != nullptr)
+    {
+        mnavRelease(memory, work->mergeTable, (size_t)mnavMergeTableSize((int32_t)old),
+                    sizeof(int32_t), alignof(int32_t));
+    }
+    work->mergeTable = nullptr;
     mnavRelease(memory, work->triangles, old * 3, sizeof(int32_t), alignof(int32_t));
     mnavRelease(memory, work->ears.ears, old, sizeof(uint8_t), alignof(uint8_t));
     mnavRelease(memory, work->ears.indices, old, sizeof(int32_t), alignof(int32_t));
@@ -150,6 +157,11 @@ static mnavResult ReserveHole(Work* work, int32_t count)
     {
         result = mnavAllocate(memory, n, sizeof(mnavPolygon), alignof(mnavPolygon),
                               (void**)&work->polygons);
+    }
+    if (result == mnav_success)
+    {
+        result = mnavAllocate(memory, (size_t)mnavMergeTableSize(count), sizeof(int32_t),
+                              alignof(int32_t), (void**)&work->mergeTable);
     }
     work->holeCapacity = count;
     return result;
@@ -264,7 +276,12 @@ static bool KeepsOutline(const Work* work, uint16_t vertex)
 }
 
 // Triangulates the hole and merges its triangles. Returns the number of
-// polygons, or -1 when the triangulation does not finish.
+// polygons, or -1 when the triangulation does not finish. The hole's ring
+// is made of the outer edges of convex polygons round the vertex, so it
+// is star-shaped round the vertex's place and triangulates fully unless
+// it passes some vertex twice; the checks for an unfinished
+// triangulation and for triangles with a corner twice guard that case,
+// which no input has yet made.
 static int32_t Fill(Work* work)
 {
     const mnavPolyMesh* mesh = work->mesh;
@@ -306,7 +323,7 @@ static int32_t Fill(Work* work)
         polygon->area = first->area;
         polygon->region = region;
     }
-    return mnavMergePolygons(mesh->vertices, work->polygons, count);
+    return mnavMergePolygons(mesh->vertices, work->polygons, count, work->mergeTable);
 }
 
 // Replaces the polygons around the vertex, in order, with the hole's.

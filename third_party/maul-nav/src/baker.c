@@ -5,12 +5,15 @@
 
 #include "allocator.h"
 #include "bake_def.h"
+#include "bake_input.h"
 #include "border_vertices.h"
+#include "bytes.h"
 #include "compact.h"
 #include "contour.h"
 #include "detail.h"
 #include "erode.h"
 #include "filter.h"
+#include "fingerprint.h"
 #include "heightfield.h"
 #include "holes.h"
 #include "input.h"
@@ -20,6 +23,7 @@
 #include "region.h"
 #include "terrain.h"
 #include "tile.h"
+#include "tile_index.h"
 #include "volume.h"
 
 #include "maul-nav/bake.h"
@@ -37,6 +41,8 @@ struct mnavBaker
     mnavMemory memory;
     uint8_t* tile;
     size_t tileSize;
+    // The clock's ticks when the stage being run began.
+    uint64_t stageStart;
 };
 
 // The stages' results for one tile, released together.
@@ -47,6 +53,7 @@ typedef struct Input
     mnavBakeInput solid;
     const mnavOutline* outlines;
     int32_t outlineCount;
+    const mnavTileIndex* outlineIndex;
     bool flat;
 } Input;
 
@@ -81,7 +88,7 @@ mnavBakeDefResult mnavCreateBaker(const mnavBakeDef* def, mnavBaker** bakerOut)
     {
         return (mnavBakeDefResult){result, mnav_settingNone};
     }
-    *baker = (mnavBaker){*def, cells, memory, nullptr, 0};
+    *baker = (mnavBaker){*def, cells, memory, nullptr, 0, 0};
     *bakerOut = baker;
     return (mnavBakeDefResult){mnav_success, mnav_settingNone};
 }
@@ -106,98 +113,99 @@ void mnavDestroyBaker(mnavBaker* baker)
 
 // Checks every mesh as hostile input and their total against the input
 // limit; names the first refused mesh in the report.
-static mnavResult CheckOutlines(const mnavBaker* baker, const mnavOutline* outlines,
-                                int32_t outlineCount, mnavBakeReport* report)
+// With a tile index, checks that it fits and only the outlines it lists
+// for the tile; the total counts every outline's points.
+static mnavResult CheckOutlines(const mnavBaker* baker, const Input* in, int32_t tileX,
+                                int32_t tileZ, mnavBakeReport* report)
 {
-    if (outlineCount < 0 || (outlineCount > 0 && outlines == nullptr))
+    const mnavOutline* outlines = in->outlines;
+    int32_t outlineCount = in->outlineCount;
+    if (outlineCount < 0 || (outlineCount > 0 && outlines == nullptr) ||
+        (in->outlineIndex != nullptr &&
+         !mnavTileIndexFits2D(in->outlineIndex, &baker->def, &baker->cells, outlines,
+                              outlineCount)))
     {
         return mnav_errorInvalid;
+    }
+    const mnavOutlineSet set =
+        mnavOutlinesFor(outlines, outlineCount, in->outlineIndex, tileX, tileZ);
+    for (int32_t k = 0; k < set.count; ++k)
+    {
+        const mnavOutline* outline = mnavOutlineAt(&set, k);
+        mnavInputResult input = mnavCheckOutline(&baker->def, outline);
+        if (input.result != mnav_success)
+        {
+            report->mesh = (int32_t)(outline - outlines);
+            report->input = input;
+            return input.result;
+        }
     }
     int64_t total = 0;
     for (int32_t o = 0; o < outlineCount; ++o)
     {
-        mnavInputResult input = mnavCheckOutline(&baker->def, &outlines[o]);
-        if (input.result != mnav_success)
-        {
-            report->mesh = o;
-            report->input = input;
-            return input.result;
-        }
         total += outlines[o].pointCount;
     }
     return total > baker->def.limits.inputTriangles ? mnav_errorLimit : mnav_success;
 }
 
-static mnavResult CheckInput(const mnavBaker* baker, const Input* in, mnavBakeReport* report)
+// Checks, with a tile index, that it fits, each mesh's counts and
+// pointers, and the triangles it lists for the tile.
+static mnavResult CheckIndexed(const mnavBaker* baker, const mnavBakeInput* solid, int32_t tileX,
+                               int32_t tileZ, mnavBakeReport* report)
 {
-    if (in->flat)
-    {
-        return CheckOutlines(baker, in->outlines, in->outlineCount, report);
-    }
-    const mnavTriangleMesh* meshes = in->solid.meshes;
-    int32_t meshCount = in->solid.meshCount;
-    int32_t terrainCount = in->solid.terrainCount;
-    int32_t volumeCount = in->solid.volumeCount;
-    if (meshCount < 0 || (meshCount > 0 && meshes == nullptr) || terrainCount < 0 ||
-        (terrainCount > 0 && in->solid.terrains == nullptr) || volumeCount < 0 ||
-        (volumeCount > 0 && in->solid.volumes == nullptr))
+    if (!mnavTileIndexFits(solid->index, &baker->def, &baker->cells, solid->meshes,
+                           solid->meshCount))
     {
         return mnav_errorInvalid;
     }
-    int64_t total = 0;
-    for (int32_t m = 0; m < meshCount; ++m)
+    for (int32_t m = 0; m < solid->meshCount; ++m)
     {
-        mnavInputResult input = mnavCheckTriangleMesh(&baker->def, &meshes[m]);
+        mnavInputResult input = mnavCheckMeshShape(&baker->def, &solid->meshes[m]);
         if (input.result != mnav_success)
         {
             report->mesh = m;
             report->input = input;
             return input.result;
         }
-        total += meshes[m].triangleCount;
     }
-    for (int32_t i = 0; i < terrainCount; ++i)
+    const mnavIndexEntry* list = nullptr;
+    int32_t count = 0;
+    mnavTileIndexList(solid->index, tileX, tileZ, &list, &count);
+    for (int32_t k = 0; k < count; ++k)
     {
-        mnavInputResult input = mnavCheckTerrain(&baker->def, &in->solid.terrains[i]);
+        mnavInputResult input =
+            mnavCheckMeshTriangle(&baker->def, &solid->meshes[list[k].mesh], list[k].triangle);
         if (input.result != mnav_success)
         {
-            report->mesh = meshCount + i;
+            report->mesh = list[k].mesh;
             report->input = input;
             return input.result;
         }
-        total += mnavTerrainTriangles(&in->solid.terrains[i]);
     }
-    for (int32_t i = 0; i < volumeCount; ++i)
+    return mnav_success;
+}
+
+static mnavResult CheckInput(const mnavBaker* baker, const Input* in, int32_t tileX, int32_t tileZ,
+                             mnavBakeReport* report)
+{
+    if (in->flat)
     {
-        mnavInputResult input = mnavCheckVolume(&baker->def, &in->solid.volumes[i]);
-        if (input.result != mnav_success)
-        {
-            report->mesh = meshCount + terrainCount + i;
-            report->input = input;
-            return input.result;
-        }
-        total += in->solid.volumes[i].pointCount;
+        return CheckOutlines(baker, in, tileX, tileZ, report);
     }
-    return total > baker->def.limits.inputTriangles ? mnav_errorLimit : mnav_success;
-}
-
-static uint64_t HashWords(uint64_t hash, const uint32_t* words, int32_t count)
-{
-    return mnavHash64(hash, words, count * (int32_t)sizeof(uint32_t));
-}
-
-static uint32_t Bits32(float f)
-{
-    uint32_t bits = 0;
-    memcpy(&bits, &f, sizeof(bits));
-    return bits;
-}
-
-static uint64_t Bits64(double d)
-{
-    uint64_t bits = 0;
-    memcpy(&bits, &d, sizeof(bits));
-    return bits;
+    if (!mnavCheckInputArrays(&in->solid))
+    {
+        return mnav_errorInvalid;
+    }
+    if (in->solid.index != nullptr)
+    {
+        mnavResult result = CheckIndexed(baker, &in->solid, tileX, tileZ, report);
+        if (result != mnav_success)
+        {
+            return result;
+        }
+    }
+    return mnavCheckSolidInput(&baker->def, &in->solid, in->solid.index != nullptr, &report->mesh,
+                               &report->input);
 }
 
 // The hash of the generator, the settings that shape the tile and its
@@ -205,7 +213,8 @@ static uint64_t Bits64(double d)
 static uint64_t HashSettings(const mnavBakeDef* def, int32_t tileX, int32_t tileZ)
 {
     mnavVersion version = mnavGetVersion();
-    uint64_t origin[3] = {Bits64(def->origin.x), Bits64(def->origin.y), Bits64(def->origin.z)};
+    uint64_t origin[3] = {mnavDoubleBits(def->origin.x), mnavDoubleBits(def->origin.y),
+                          mnavDoubleBits(def->origin.z)};
     const uint32_t words[] = {
         version.major,
         version.minor,
@@ -216,185 +225,100 @@ static uint64_t HashSettings(const mnavBakeDef* def, int32_t tileX, int32_t tile
         (uint32_t)(origin[1] >> 32),
         (uint32_t)origin[2],
         (uint32_t)(origin[2] >> 32),
-        Bits32(def->cellSize),
-        Bits32(def->cellHeight),
+        mnavFloatBits(def->cellSize),
+        mnavFloatBits(def->cellHeight),
         (uint32_t)def->tileCells,
-        Bits32(def->agent.radius),
-        Bits32(def->agent.height),
-        Bits32(def->agent.stepHeight),
-        Bits32(def->agent.maxSlopeDegrees),
-        Bits32(def->minRegionArea),
-        Bits32(def->maxEdgeError),
-        Bits32(def->maxEdgeLength),
-        Bits32(def->detailSampleDistance),
-        Bits32(def->detailMaxError),
+        mnavFloatBits(def->agent.radius),
+        mnavFloatBits(def->agent.height),
+        mnavFloatBits(def->agent.stepHeight),
+        mnavFloatBits(def->agent.maxSlopeDegrees),
+        mnavFloatBits(def->minRegionArea),
+        mnavFloatBits(def->maxEdgeError),
+        mnavFloatBits(def->maxEdgeLength),
+        mnavFloatBits(def->detailSampleDistance),
+        mnavFloatBits(def->detailMaxError),
         (uint32_t)tileX,
         (uint32_t)tileZ,
     };
-    return HashWords(MNAV_HASH_INIT, words, (int32_t)(sizeof(words) / sizeof(words[0])));
+    return mnavHashWords(MNAV_HASH_INIT, words, (int32_t)(sizeof(words) / sizeof(words[0])));
 }
 
-// Adds a triangle that reaches the tile, as rasterization picks it, to
-// the fingerprint, and counts it.
-static uint64_t HashTriangle(const mnavBaker* baker, const mnavTileFrame* frame,
-                             const mnavVec3 corners[3], mnavAreaType given, uint64_t hash,
-                             int32_t* count)
-{
-    int32_t area = mnavTriangleArea(corners, given, baker->cells.cosMaxSlope);
-    if (area < 0 || !mnavTriangleTouchesTile(frame, corners))
-    {
-        return hash;
-    }
-    uint32_t words[10];
-    for (int32_t c = 0; c < 3; ++c)
-    {
-        words[c * 3 + 0] = Bits32(corners[c].x);
-        words[c * 3 + 1] = Bits32(corners[c].y);
-        words[c * 3 + 2] = Bits32(corners[c].z);
-    }
-    words[9] = (uint32_t)area;
-    *count += 1;
-    return HashWords(hash, words, 10);
-}
-
-static uint64_t HashTerrain(const mnavBaker* baker, const mnavTileFrame* frame,
-                            const mnavTerrain* terrain, uint64_t hash, int32_t* count)
-{
-    int32_t c0 = 0;
-    int32_t c1 = -1;
-    int32_t r0 = 0;
-    int32_t r1 = -1;
-    if (!mnavTerrainCells(terrain, frame, &c0, &c1, &r0, &r1))
-    {
-        return hash;
-    }
-    for (int32_t r = r0; r <= r1; ++r)
-    {
-        for (int32_t c = c0; c <= c1; ++c)
-        {
-            for (int32_t k = 0; k < 2; ++k)
-            {
-                mnavVec3 corners[3];
-                mnavAreaType given = 0;
-                if (mnavTerrainTriangle(terrain, c, r, k, corners, &given))
-                {
-                    hash = HashTriangle(baker, frame, corners, given, hash, count);
-                }
-            }
-        }
-    }
-    return hash;
-}
-
-// Adds the volumes that reach the tile to the fingerprint, after a word
-// for include volumes, which reach every tile, when there are any; a bake
-// whose volumes all miss the tile, none of them include volumes, has the
-// fingerprint of one without.
-static uint64_t HashVolumes(const mnavTileFrame* frame, const mnavBakeVolume* volumes,
-                            int32_t count, uint64_t hash)
-{
-    if (count == 0)
-    {
-        return hash;
-    }
-    uint32_t includes = 0;
-    for (int32_t i = 0; i < count; ++i)
-    {
-        includes |= volumes[i].kind == mnav_volumeInclude ? 1u : 0u;
-    }
-    hash = includes != 0 ? HashWords(hash, &includes, 1) : hash;
-    for (int32_t i = 0; i < count; ++i)
-    {
-        const mnavBakeVolume* v = &volumes[i];
-        if (!mnavRingTouchesTile(frame, v->points, v->pointCount))
-        {
-            continue;
-        }
-        const uint32_t head[5] = {(uint32_t)v->kind, (uint32_t)v->area, Bits32(v->minY),
-                                  Bits32(v->maxY), (uint32_t)v->pointCount};
-        hash = HashWords(hash, head, 5);
-        for (int32_t p = 0; p < v->pointCount; ++p)
-        {
-            const uint32_t point[2] = {Bits32(v->points[p].x), Bits32(v->points[p].y)};
-            hash = HashWords(hash, point, 2);
-        }
-    }
-    return hash;
-}
-
-// Adds every input triangle that reaches the tile, as rasterization picks
-// them, meshes' then terrains', and the volumes to the fingerprint, and
-// counts the triangles.
-static uint64_t HashInput(const mnavBaker* baker, const mnavTileFrame* frame,
-                          const mnavBakeInput* input, uint64_t hash, int32_t* count)
-{
-    *count = 0;
-    for (int32_t m = 0; m < input->meshCount; ++m)
-    {
-        const mnavTriangleMesh* mesh = &input->meshes[m];
-        for (int32_t t = 0; t < mesh->triangleCount; ++t)
-        {
-            const int32_t* index = mesh->indices + (size_t)t * 3;
-            const mnavVec3 corners[3] = {mesh->vertices[index[0]], mesh->vertices[index[1]],
-                                         mesh->vertices[index[2]]};
-            mnavAreaType given = mesh->areas != nullptr ? mesh->areas[t] : mnav_areaWalkable;
-            hash = HashTriangle(baker, frame, corners, given, hash, count);
-        }
-    }
-    for (int32_t i = 0; i < input->terrainCount; ++i)
-    {
-        hash = HashTerrain(baker, frame, &input->terrains[i], hash, count);
-    }
-    return HashVolumes(frame, input->volumes, input->volumeCount, hash);
-}
-
-// The detail lookup's search radius: the wall error rounded up, at least
-// one cell.
 // Adds every outline that reaches the tile to the fingerprint, after a
 // word that keeps 2D input apart from 3D, and counts them.
-static uint64_t HashOutlines(const mnavTileFrame* frame, const mnavOutline* outlines,
-                             int32_t outlineCount, uint64_t hash, int32_t* count)
+static uint64_t HashOutlines(const mnavTileFrame* frame, const Input* in, int32_t tileX,
+                             int32_t tileZ, uint64_t hash, int32_t* count)
 {
     const uint32_t tag = 0x32444E41u;
-    hash = HashWords(hash, &tag, 1);
+    hash = mnavHashWords(hash, &tag, 1);
     *count = 0;
-    for (int32_t o = 0; o < outlineCount; ++o)
+    const mnavOutlineSet set =
+        mnavOutlinesFor(in->outlines, in->outlineCount, in->outlineIndex, tileX, tileZ);
+    for (int32_t k = 0; k < set.count; ++k)
     {
-        const mnavOutline* outline = &outlines[o];
+        const mnavOutline* outline = mnavOutlineAt(&set, k);
         if (!mnavOutlineTouchesTile(frame, outline))
         {
             continue;
         }
         *count += 1;
         uint32_t head[2] = {(uint32_t)outline->pointCount, (uint32_t)outline->area};
-        hash = HashWords(hash, head, 2);
+        hash = mnavHashWords(hash, head, 2);
         for (int32_t i = 0; i < outline->pointCount; ++i)
         {
-            uint32_t words[2] = {Bits32(outline->points[i].x), Bits32(outline->points[i].y)};
-            hash = HashWords(hash, words, 2);
+            uint32_t words[2] = {mnavFloatBits(outline->points[i].x),
+                                 mnavFloatBits(outline->points[i].y)};
+            hash = mnavHashWords(hash, words, 2);
         }
     }
     return hash;
 }
 
+// The detail lookup's search radius: the wall error rounded up, at least
+// one cell.
 static int32_t SearchRadius(float edgeError)
 {
     int32_t radius = (int32_t)ceilf(edgeError);
     return radius < 1 ? 1 : radius;
 }
 
-// Runs the stages in order, recording each in the report before it runs.
+// The clock's ticks now, or 0 without a clock.
+static uint64_t Now(const mnavBaker* baker)
+{
+    const mnavClock* clock = &baker->def.clock;
+    return clock->now != nullptr ? clock->now(clock->context) : 0;
+}
+
+// Ends the stage being run: its ticks and the most memory held while it
+// ran go into the report; then the bake enters stage next.
+static void Enter(mnavBaker* baker, mnavBakeReport* report, mnavBakeStage next)
+{
+    uint64_t now = Now(baker);
+    uint64_t peak = baker->memory.peak;
+    mnavBakeStage stage = report->stage;
+    if (stage < MNAV_BAKE_STAGES)
+    {
+        report->stageTicks[stage] += now - baker->stageStart;
+        report->stageMemory[stage] =
+            peak > report->stageMemory[stage] ? peak : report->stageMemory[stage];
+    }
+    report->memoryPeak = peak > report->memoryPeak ? peak : report->memoryPeak;
+    baker->memory.peak = baker->memory.used;
+    baker->stageStart = now;
+    report->stage = next;
+}
+
+// Runs the stages in order, entering each in the report before it runs.
 static mnavResult RunStages(mnavBaker* baker, const Input* in, int32_t tileX, int32_t tileZ,
                             Stages* s, mnavBakeReport* report)
 {
     mnavMemory* memory = &baker->memory;
     const mnavBakeDef* def = &baker->def;
     const mnavBakeCells* cells = &baker->cells;
-    report->stage = mnav_stageRasterize;
+    Enter(baker, report, mnav_stageRasterize);
     bool flat = in->flat;
     mnavResult result =
-        flat ? mnavBuildHeightfield2D(memory, def, cells, in->outlines, in->outlineCount, tileX,
-                                      tileZ, &s->heightfield)
+        flat ? mnavBuildHeightfield2D(memory, def, cells, in->outlines, in->outlineCount,
+                                      in->outlineIndex, tileX, tileZ, &s->heightfield)
              : mnavBuildHeightfieldInput(memory, def, cells, &in->solid, tileX, tileZ,
                                          &s->heightfield);
     if (result != mnav_success)
@@ -407,7 +331,7 @@ static mnavResult RunStages(mnavBaker* baker, const Input* in, int32_t tileX, in
     {
         mnavFilterWalkable(&s->heightfield, cells->agentHeight, cells->agentStep);
     }
-    report->stage = mnav_stageCompact;
+    Enter(baker, report, mnav_stageCompact);
     result = mnavBuildCompactField(memory, &s->heightfield, cells->agentHeight, cells->agentStep,
                                    &s->compact);
     if (result == mnav_success)
@@ -416,7 +340,7 @@ static mnavResult RunStages(mnavBaker* baker, const Input* in, int32_t tileX, in
     }
     if (result == mnav_success)
     {
-        report->stage = mnav_stageErode;
+        Enter(baker, report, mnav_stageErode);
         result = mnavErode(memory, &s->compact, cells->agentRadius);
     }
     if (result == mnav_success)
@@ -425,40 +349,40 @@ static mnavResult RunStages(mnavBaker* baker, const Input* in, int32_t tileX, in
     }
     if (result == mnav_success)
     {
-        report->stage = mnav_stageRegions;
+        Enter(baker, report, mnav_stageRegions);
         result =
             mnavBuildRegions(memory, &s->compact, cells->border, cells->minRegion, &s->regions);
     }
     if (result == mnav_success)
     {
-        report->stage = mnav_stageContours;
+        Enter(baker, report, mnav_stageContours);
         result = mnavBuildContours(memory, &s->compact, &s->regions, cells->border,
                                    cells->edgeError, cells->edgeLength, &s->set);
     }
     if (result == mnav_success)
     {
-        report->stage = mnav_stageHoles;
+        Enter(baker, report, mnav_stageHoles);
         result = mnavMergeHoles(memory, &s->set, s->regions.count);
     }
     if (result == mnav_success)
     {
-        report->stage = mnav_stagePolygons;
+        Enter(baker, report, mnav_stagePolygons);
         result = mnavBuildPolyMesh(memory, &s->set, def->tileCells, def->limits.tileVertices,
                                    def->limits.tilePolygons, &s->mesh);
     }
     if (result == mnav_success)
     {
-        report->stage = mnav_stageBorderVertices;
+        Enter(baker, report, mnav_stageBorderVertices);
         result = mnavRemoveBorderVertices(memory, &s->mesh, def->limits.tilePolygons);
     }
     if (result == mnav_success)
     {
-        report->stage = mnav_stageLinks;
+        Enter(baker, report, mnav_stageLinks);
         result = mnavLinkPolyMesh(memory, &s->mesh);
     }
     if (result == mnav_success)
     {
-        report->stage = mnav_stageDetail;
+        Enter(baker, report, mnav_stageDetail);
         mnavDetailSettings settings = {cells->detailSample, cells->detailError,
                                        SearchRadius(cells->edgeError), cells->border};
         result =
@@ -523,8 +447,9 @@ static mnavResult Bake(mnavBaker* baker, const Input* in, int32_t tileX, int32_t
     }
     DropTile(baker);
     baker->memory.peak = baker->memory.used;
+    baker->stageStart = Now(baker);
     report.stage = mnav_stageInput;
-    mnavResult result = CheckInput(baker, in, &report);
+    mnavResult result = CheckInput(baker, in, tileX, tileZ, &report);
     mnavTileFrame frame = {0};
     if (result == mnav_success &&
         !mnavMakeTileFrame(&baker->def, &baker->cells, tileX, tileZ, &frame))
@@ -536,25 +461,25 @@ static mnavResult Bake(mnavBaker* baker, const Input* in, int32_t tileX, int32_t
     {
         uint64_t settings = HashSettings(&baker->def, tileX, tileZ);
         report.fingerprint =
-            in->flat
-                ? HashOutlines(&frame, in->outlines, in->outlineCount, settings, &report.triangles)
-                : HashInput(baker, &frame, &in->solid, settings, &report.triangles);
+            in->flat ? HashOutlines(&frame, in, tileX, tileZ, settings, &report.triangles)
+                     : mnavFingerprintInput(&frame, baker->cells.cosMaxSlope, &in->solid, tileX,
+                                            tileZ, settings, &report.triangles);
         result = RunStages(baker, in, tileX, tileZ, &stages, &report);
     }
     if (result == mnav_success)
     {
         Count(&stages, &report);
-        report.stage = mnav_stageEncode;
+        Enter(baker, &report, mnav_stageEncode);
         result = Encode(baker, tileX, tileZ, &stages, report.fingerprint);
     }
+    // The last stage run ends here, where the bake ended or failed.
+    Enter(baker, &report, result == mnav_success ? mnav_stageDone : report.stage);
     ReleaseStages(&baker->memory, &stages);
     if (result == mnav_success)
     {
-        report.stage = mnav_stageDone;
         report.tileBytes = baker->tileSize;
     }
     report.result = result;
-    report.memoryPeak = baker->memory.peak;
     if (reportOut != nullptr)
     {
         *reportOut = report;
@@ -565,7 +490,7 @@ static mnavResult Bake(mnavBaker* baker, const Input* in, int32_t tileX, int32_t
 mnavResult mnavBakeTile(mnavBaker* baker, const mnavTriangleMesh* meshes, int32_t meshCount,
                         int32_t tileX, int32_t tileZ, mnavBakeReport* reportOut)
 {
-    Input in = {{meshes, meshCount, nullptr, 0, nullptr, 0}, nullptr, 0, false};
+    Input in = {{meshes, meshCount, nullptr, 0, nullptr, 0, nullptr}, nullptr, 0, nullptr, false};
     return Bake(baker, &in, tileX, tileZ, reportOut);
 }
 
@@ -574,17 +499,31 @@ mnavResult mnavBakeTileInput(mnavBaker* baker, const mnavBakeInput* input, int32
 {
     if (input == nullptr)
     {
-        Input none = {{nullptr, -1, nullptr, 0, nullptr, 0}, nullptr, 0, false};
+        Input none = {{nullptr, -1, nullptr, 0, nullptr, 0, nullptr}, nullptr, 0, nullptr, false};
         return Bake(baker, &none, tileX, tileZ, reportOut);
     }
-    Input in = {*input, nullptr, 0, false};
+    Input in = {*input, nullptr, 0, nullptr, false};
     return Bake(baker, &in, tileX, tileZ, reportOut);
 }
 
 mnavResult mnavBakeTile2D(mnavBaker* baker, const mnavOutline* outlines, int32_t outlineCount,
                           int32_t tileX, int32_t tileZ, mnavBakeReport* reportOut)
 {
-    Input in = {{nullptr, 0, nullptr, 0, nullptr, 0}, outlines, outlineCount, true};
+    Input in = {
+        {nullptr, 0, nullptr, 0, nullptr, 0, nullptr}, outlines, outlineCount, nullptr, true};
+    return Bake(baker, &in, tileX, tileZ, reportOut);
+}
+
+mnavResult mnavBakeTile2DInput(mnavBaker* baker, const mnavBake2DInput* input, int32_t tileX,
+                               int32_t tileZ, mnavBakeReport* reportOut)
+{
+    const mnavBake2DInput none = {nullptr, -1, nullptr};
+    const mnavBake2DInput* in2 = input != nullptr ? input : &none;
+    Input in = {{nullptr, 0, nullptr, 0, nullptr, 0, nullptr},
+                in2->outlines,
+                in2->outlineCount,
+                in2->index,
+                true};
     return Bake(baker, &in, tileX, tileZ, reportOut);
 }
 

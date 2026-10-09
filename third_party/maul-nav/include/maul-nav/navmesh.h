@@ -52,6 +52,10 @@ extern "C"
         mnav_tileDetailTriangles = 5,
         // The payload's size or hash.
         mnav_tilePayload = 6,
+        // A flight tile's cube classes, nodes and leaves (mnav-0015).
+        mnav_tileFlightRoots = 7,
+        mnav_tileFlightNodes = 8,
+        mnav_tileFlightLeaves = 9,
     };
 
     // A tile load's outcome: the status, and the section and element
@@ -199,6 +203,11 @@ extern "C"
 #define MNAV_LINK_KINDS 64
 // The farthest an off-mesh link's end may snap, in meters.
 #define MNAV_MAX_LINK_RADIUS 100.0f
+
+// The widest an edge link may be, in meters, and the most points it is
+// crossed at.
+#define MNAV_MAX_LINK_WIDTH     100.0f
+#define MNAV_MAX_LINK_CROSSINGS 64
 // The dearest off-mesh link, in the filter's cost units.
 #define MNAV_MAX_LINK_COST 1.0e9f
 
@@ -233,6 +242,16 @@ extern "C"
         mnavLinkKind kind;
         // Whether agents may cross it from its end to its start too.
         bool twoWay;
+        // 0 for a point link; otherwise an edge link (mnav-0004): the start
+        // and end are the centers of two edges this wide, in meters, across
+        // the link's direction on the ground, up to MNAV_MAX_LINK_WIDTH.
+        // Agents cross it at points spaced along the width, no farther
+        // apart than the agent's radius (the cell size when the radius is
+        // 0): 1 + ceil(width / spacing) crossings, at most
+        // MNAV_MAX_LINK_CROSSINGS. Each crossing takes one of the navmesh's
+        // links (mnavBakeLimits.links), so a link 16 m wide for agents of
+        // 0.5 m takes 33; size the limit by crossings, not by links.
+        float width;
     } mnavLinkDef;
 
     // An off-mesh link in a navmesh: its 1-based slot and the slot's
@@ -258,6 +277,11 @@ extern "C"
         mnavPolygonId endPolygon;
         mnavPos3 start;
         mnavPos3 end;
+        // How many of its crossings are attached: 1 for an attached point
+        // link; for an edge link, those whose ends both snapped, the
+        // polygons and points above being the first of them along the
+        // width.
+        int32_t crossings;
     } mnavLinkState;
 
     /// Stages an off-mesh link; it is added at the next commit. Its ends
@@ -267,10 +291,15 @@ extern "C"
     /// @param navmesh  The navmesh.
     /// @param def      The link.
     /// @param linkOut  Receives its id, usable once it is committed.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
-    /// point that is not finite; `mnav_errorRange` for a radius, cost or
-    /// kind out of its range; `mnav_errorLimit` when the links, staged and
-    /// committed, would pass the links limit, or memory its limit;
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a
+    /// point that is not finite, or an edge link whose ends lie at one
+    /// place on the ground or so near that the square of their distance
+    /// rounds to 0; `mnav_errorRange` for a point farther from the
+    /// def's origin than bake input may lie (MNAV_MAX_EXTENT_CELLS cells
+    /// on the ground, MNAV_MAX_HEIGHT_CELLS cell heights up or down), or a
+    /// radius, cost, kind or width out of its range; `mnav_errorLimit` when the links' crossings,
+    /// staged and committed, would pass the links limit, or memory its
+    /// limit: the link is refused whole, none of its crossings taken;
     /// `mnav_errorCapacity` when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread; the navmesh is used by one thread at a time,
