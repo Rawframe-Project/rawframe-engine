@@ -18,7 +18,7 @@ maul2d | maul3d) paths=(include src LICENSE) ;;
 maul-unicode) paths=(include src cmake CMakeLists.txt LICENSE) ;;
 maul-window) paths=(include src cmake protocols java tools/gen_web_glue.py CMakeLists.txt LICENSE) ;;
 maul-rhi) paths=(include src khronos directx cmake tools/mrhi_container.py tools/mrhi_msl.py tools/mrhi_dxil.py tools/gen_web_glue.py docs/contract/mrhi.json CMakeLists.txt LICENSE) ;;
-maul-ui) paths=(include src cmake CMakeLists.txt LICENSE THIRD_PARTY.md) ;;
+maul-ui) paths=(include src cmake java CMakeLists.txt LICENSE THIRD_PARTY.md) ;;
 maul-nav) paths=(include src cmake CMakeLists.txt LICENSE) ;;
 maul-audio) paths=(include src cmake CMakeLists.txt LICENSE) ;;
 *)

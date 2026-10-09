@@ -4,7 +4,8 @@
 #
 #   tools/android_apk.sh <out.apk> <librawframe_client.so> <package> <label> [<game files>]
 #
-# Maul Window's Java activity (third_party/maul-window/java) and the client's
+# Maul Window's Java activity (third_party/maul-window/java), Maul UI's
+# accessibility provider (third_party/maul-ui/java, D576), and the client's
 # (hosts/android_client/android/java) compiled by javac and d8,
 # hosts/android_client/android/AndroidManifest.xml with the package and label
 # filled in, linked by aapt2 as debuggable, with the game files' directory,
@@ -30,7 +31,7 @@ sed -e "s/@PACKAGE@/$package/" -e "s/@LABEL@/$label/" \
     hosts/android_client/android/AndroidManifest.xml >"$work/AndroidManifest.xml"
 mkdir -p "$work/classes" "$work/dex" "$work/lib/arm64-v8a"
 javac -nowarn --release 11 -classpath "$jar" -d "$work/classes" \
-    $(find third_party/maul-window/java hosts/android_client/android/java -name '*.java')
+    $(find third_party/maul-window/java third_party/maul-ui/java hosts/android_client/android/java -name '*.java')
 "$tools/d8" --min-api 29 --lib "$jar" --output "$work/dex" $(find "$work/classes" -name '*.class')
 assets=()
 if [ -n "$carried" ]; then
