@@ -61,8 +61,14 @@ for _ in $(seq 200); do
     grep -q '"code":"identity_renewed"' "$work/server.log" 2>/dev/null && break
     sleep 0.05
 done
+# The file follows the renewal, at once or, where it was held open, soon.
+for _ in $(seq 100); do
+    cmp -s "$work/fingerprint" "$work/first" || break
+    sleep 0.05
+done
 if cmp -s "$work/fingerprint" "$work/first"; then
     echo "the fingerprint file still holds the first identity"
+    grep -E '"code":"(identity_renewed|identity_unrenewed|fingerprint_unwritten)"' "$work/server.log"
     exit 1
 fi
 cp "$work/fingerprint" "$work/second"

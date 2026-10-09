@@ -137,6 +137,8 @@ public:
             if (renewal_.has_value()) {
                 renewAt_ = frame.now + renewal_->after;
             }
+        } else if (unwritten_ && frame.iteration % 60 == 0) {
+            writeFingerprint();
         }
         if (renewAt_.has_value() && frame.now >= *renewAt_) {
             renew(frame.now);
@@ -144,12 +146,17 @@ public:
     }
 
 private:
-    /// The fingerprint file, whole or not at all.
+    /// The fingerprint file, whole or not at all. Unwritten, it is tried
+    /// again twice a second and its error logged once: on Windows the
+    /// rename fails while another process, a virus scanner among them,
+    /// holds the old file open (D585).
     void writeFingerprint() {
         if (!fingerprintFile_.has_value() || !identity_.has_value()) {
             return;
         }
-        if (!writeFile(*fingerprintFile_, formatFingerprint(*identity_) + "\n").has_value()) {
+        const bool kWasUnwritten = unwritten_;
+        unwritten_ = !writeFile(*fingerprintFile_, formatFingerprint(*identity_) + "\n").has_value();
+        if (unwritten_ && !kWasUnwritten) {
             context_->emitter().log(diagnostics::Severity::Error,
                                     kUnwritten,
                                     "the fingerprint file cannot be written",
@@ -191,6 +198,8 @@ private:
     /// Where the fingerprint goes on the first iteration and each renewal.
     std::optional<std::string> fingerprintFile_;
     bool written_ = false;
+    /// The last write of the fingerprint file failed.
+    bool unwritten_ = false;
     std::optional<Renewal> renewal_;
     std::optional<execution::MonotonicInstant> renewAt_;
 };
