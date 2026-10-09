@@ -39,6 +39,8 @@ constexpr diagnostics::EventIdentity kActivated{"ui", "ui_activated"};
 constexpr diagnostics::EventIdentity kImageUnknown{"ui", "image_unknown"};
 constexpr diagnostics::EventIdentity kImageUnread{"ui", "image_unavailable"};
 constexpr diagnostics::EventIdentity kFontUnread{"ui", "font_unavailable"};
+constexpr diagnostics::EventIdentity kAccessible{"ui", "accessibility_ready"};
+constexpr diagnostics::EventIdentity kInaccessible{"ui", "accessibility_unavailable"};
 constexpr diagnostics::EventIdentity kKeyUnknown{"ui", "label_unformatted"};
 /// The decoded levels each image may hold.
 constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
@@ -52,7 +54,8 @@ constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        view::kUiTyping.name,
                                        view::kUiNavigation.name,
                                        game_content::kGameContent.name,
-                                       world_localization::kGameText.name};
+                                       world_localization::kGameText.name,
+                                       ui::kAccessSeat.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 std::unexpected<result::Error> refuse(std::string_view why) {
@@ -271,6 +274,9 @@ public:
         if (context.has(view::kUiNavigation.name)) {
             RAWFRAME_TRY_ASSIGN(navigation_, context.capability(view::kUiNavigation));
         }
+        if (context.has(ui::kAccessSeat.name)) {
+            RAWFRAME_TRY_ASSIGN(seat_, context.capability(ui::kAccessSeat));
+        }
         RAWFRAME_TRY_ASSIGN(ui_, WorldUi::create(std::move(*settings)));
         // The players' regions as the scene and the canvas have them (D364,
         // D369): the layout for their count, else the whole window.
@@ -325,6 +331,19 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
+        // The window's UI where assistive technology reads it, when the
+        // program that runs the window asked for it (D571); a machine whose
+        // platform cannot be reached plays on unread.
+        if (seat_ != nullptr && ui_ != nullptr) {
+            if (const result::Status kSeated = ui_->seatIn(*seat_); !kSeated.has_value()) {
+                emitter_.log(diagnostics::Severity::Info,
+                             kInaccessible,
+                             "assistive technology cannot read the UI",
+                             {diagnostics::field("reason", std::string{kSeated.error().description()})});
+            } else if (seat_->access() != nullptr) {
+                emitter_.log(diagnostics::Severity::Info, kAccessible, "assistive technology reads the UI", {});
+            }
+        }
         // Presses anywhere in the window, a mouse being every local
         // player's, against the UI as last laid out (D421).
         if (pointing_ != nullptr && ui_ != nullptr) {
@@ -515,6 +534,10 @@ public:
     }
 
     void stop() noexcept override {
+        // No longer read, before the tree goes.
+        if (seat_ != nullptr) {
+            seat_->leave();
+        }
         if (pointing_ != nullptr) {
             pointing_->answer({});
             pointing_->onPress({});
@@ -656,6 +679,8 @@ private:
     std::vector<std::uint64_t> unformatted_;
     view::UiTyping* typing_ = nullptr;
     view::UiNavigation* navigation_ = nullptr;
+    /// Where the window's UI is read for assistive technology (D571).
+    ui::AccessSeat* seat_ = nullptr;
     std::unique_ptr<WorldUi> ui_;
     std::vector<world_kest::GameRegion> regions_;
     std::optional<world_kest::GameAspect> aspect_;

@@ -103,6 +103,29 @@ std::optional<ui::Interaction> interactionOf(const Node& node) noexcept {
                            .layer = static_cast<ui::Interaction::Layer>(node.layer)};
 }
 
+/// What `node` is to assistive technology, from what it does (D571): a
+/// field, something to press, a modal layer, a view that scrolls, an image
+/// without words. A node with words and none of these is read as a label by
+/// its words; one with neither only lays out others.
+ui::Role roleOf(const Node& node) noexcept {
+    if (node.edit != 0) {
+        return node.edit == 3 ? ui::Role::MultilineTextInput : ui::Role::TextInput;
+    }
+    if (node.press != 0) {
+        return ui::Role::Button;
+    }
+    if (node.layer == 2) {
+        return ui::Role::Dialog;
+    }
+    if (node.scroll != 0) {
+        return ui::Role::ScrollView;
+    }
+    if (node.image != 0 && node.text == 0) {
+        return ui::Role::Image;
+    }
+    return ui::Role::Generic;
+}
+
 /// `node`'s text look.
 ui::TextLook textLookOf(const Node& node, ui::Font font) noexcept {
     return ui::TextLook{.font = font,
@@ -237,6 +260,7 @@ bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const Node& 
     const std::size_t kClasses = kClass != classes.end() ? 1 : 0;
     if (!kLayout.has_value() || !kInteraction.has_value() || !tree->setLayout(*entry.node, *kLayout).has_value() ||
         !tree->setInteraction(*entry.node, *kInteraction).has_value() ||
+        !tree->setRole(*entry.node, roleOf(value)).has_value() ||
         !tree->setClasses(*entry.node, kClasses != 0 ? std::span{&kClass->second, 1} : std::span<const ui::Style>{})
              .has_value() ||
         !giveFocusLook(entry) || (!kEditable && !giveWords(*entry.node, value, entry.player, wordsOf(entry.words)))) {
@@ -303,6 +327,10 @@ bool WorldUi::State::giveWords(ui::Node node,
     } else if (value.text != 0) {
         words = settings.words ? settings.words(player, value.text, value.textValue) : std::nullopt;
         ++(words.has_value() ? statistics.texts : statistics.textsUnknown);
+    }
+    // Something to press is read by its words, which name it (D571).
+    if (roleOf(value) == ui::Role::Button && !tree->setName(node, words.value_or(std::string{})).has_value()) {
+        return false;
     }
     if (!words.has_value()) {
         return tree->clearText(node).has_value();
@@ -597,6 +625,10 @@ void WorldUi::reword() {
     state_->giveWordsAgain([](const Entry& entry) {
         return entry.value.text != 0;
     });
+}
+
+result::Status WorldUi::seatIn(ui::AccessSeat& seat) {
+    return seat.seat(*state_->tree, state_->window);
 }
 
 const ui::DrawList& WorldUi::drawn() const noexcept {

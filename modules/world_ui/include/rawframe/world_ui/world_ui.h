@@ -9,6 +9,7 @@
 
 #include "rawframe/result/result.h"
 #include "rawframe/schema/component.h"
+#include "rawframe/ui/access.h"
 #include "rawframe/ui/styles.h"
 #include "rawframe/ui/tree.h"
 #include "rawframe/view/navigation.h"
@@ -193,6 +194,10 @@ public:
     /// The nodes that show the game's words are given them again (D539):
     /// the locale they are formatted in changed.
     void reword();
+
+    /// The window's UI, every view's, seated where assistive technology
+    /// reads it (D571); what its access answered, if one was made.
+    [[nodiscard]] result::Status seatIn(ui::AccessSeat& seat);
 
     /// What a press at `x`, `y`, logical pixels of the window, lands on as
     /// the last update laid the UI out (D421): none when it passes through to
