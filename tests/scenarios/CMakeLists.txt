@@ -9,8 +9,8 @@ foreach(scenario compensation game_subassets install kest_bots replication repli
     # The install scenario reads SPEC-0021's golden Build and pins the plans
     # made of it.
     target_compile_definitions(rawframe_scenario_${scenario}_tests PRIVATE
-        RAWFRAME_BUILD_GOLDEN="${PROJECT_SOURCE_DIR}/modules/build/tests/golden/"
-        RAWFRAME_PLAN_GOLDEN="${CMAKE_CURRENT_SOURCE_DIR}/golden/"
-        RAWFRAME_SAMPLE_GAMES="${PROJECT_SOURCE_DIR}/games/")
+        RAWFRAME_BUILD_GOLDEN="${RAWFRAME_TEST_FILES}/modules/build/tests/golden/"
+        RAWFRAME_PLAN_GOLDEN="${RAWFRAME_TEST_FILES}/tests/scenarios/golden/"
+        RAWFRAME_SAMPLE_GAMES="${RAWFRAME_TEST_FILES}/games/")
     add_test(NAME scenario_${scenario} COMMAND rawframe_scenario_${scenario}_tests)
 endforeach()

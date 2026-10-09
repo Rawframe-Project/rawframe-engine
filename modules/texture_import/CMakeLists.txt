@@ -12,7 +12,7 @@ target_link_libraries(rawframe_texture_import PRIVATE rawframe_wuffs rawframe_bc
 rawframe_module_tests(NAME texture_import SOURCES tests/environment_test.cpp tests/grading_test.cpp tests/import_test.cpp)
 if(TARGET rawframe_texture_import_tests)
     target_compile_definitions(rawframe_texture_import_tests PRIVATE
-        RAWFRAME_TEXTURE_IMPORT_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/")
+        RAWFRAME_TEXTURE_IMPORT_DATA="${RAWFRAME_TEST_FILES}/modules/texture_import/tests/data/")
 endif()
 rawframe_module_fuzz(NAME texture_import TARGET image RUNS 25000 MAX_LEN 16384 SEEDS tests/data SOURCES tests/fuzz_image.cpp)
 rawframe_module_fuzz(NAME texture_import TARGET radiance RUNS 12000 MAX_LEN 4096 SEEDS tests/seeds/radiance SOURCES tests/fuzz_radiance.cpp)

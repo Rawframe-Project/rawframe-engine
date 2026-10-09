@@ -21,7 +21,7 @@ rawframe_module_fuzz(NAME world_kest TARGET cooked RUNS 10000 MAX_LEN 16384 SEED
 rawframe_module_fuzz(NAME world_kest TARGET descriptions RUNS 10000 MAX_LEN 8192 SEEDS tests/seeds/descriptions SOURCES tests/fuzz_descriptions.cpp)
 if(TARGET rawframe_world_kest_tests)
     target_compile_definitions(rawframe_world_kest_tests PRIVATE
-        RAWFRAME_WORLD_KEST_GAMES="${CMAKE_CURRENT_SOURCE_DIR}/tests/game/"
-        RAWFRAME_SAMPLE_GAMES="${PROJECT_SOURCE_DIR}/games/"
-        RAWFRAME_WORLD_KEST_MODULES="${PROJECT_SOURCE_DIR}/modules/kest_library/kest/")
+        RAWFRAME_WORLD_KEST_GAMES="${RAWFRAME_TEST_FILES}/modules/world_kest/tests/game/"
+        RAWFRAME_SAMPLE_GAMES="${RAWFRAME_TEST_FILES}/games/"
+        RAWFRAME_WORLD_KEST_MODULES="${RAWFRAME_TEST_FILES}/modules/kest_library/kest/")
 endif()

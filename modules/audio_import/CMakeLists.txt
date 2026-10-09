@@ -16,5 +16,5 @@ target_link_libraries(rawframe_audio_import PRIVATE rawframe_audio_import_decode
 rawframe_module_tests(NAME audio_import SOURCES tests/import_test.cpp)
 if(TARGET rawframe_audio_import_tests)
     target_compile_definitions(rawframe_audio_import_tests PRIVATE
-        RAWFRAME_AUDIO_IMPORT_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/")
+        RAWFRAME_AUDIO_IMPORT_DATA="${RAWFRAME_TEST_FILES}/modules/audio_import/tests/data/")
 endif()

@@ -24,13 +24,16 @@ if(TARGET rawframe_network_quic_tests)
     # them where they are.
     target_include_directories(rawframe_network_quic_tests PRIVATE src)
     # A browser's side, played by aioquic (python3-aioquic), under the
-    # Python this machine names (python3 is not a name on Windows, D237).
-    find_package(Python3 REQUIRED COMPONENTS Interpreter)
-    # Forward slashes, which a C string reads as they are.
-    file(TO_CMAKE_PATH "${Python3_EXECUTABLE}" rawframe_python)
-    target_compile_definitions(rawframe_network_quic_tests PRIVATE
-        RAWFRAME_PYTHON="${rawframe_python}"
-        RAWFRAME_WEBTRANSPORT_CLIENT="${CMAKE_CURRENT_SOURCE_DIR}/tests/webtransport_client.py")
+    # Python this machine names (python3 is not a name on Windows, D237);
+    # an Android device has none (D561).
+    if(NOT ANDROID)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        # Forward slashes, which a C string reads as they are.
+        file(TO_CMAKE_PATH "${Python3_EXECUTABLE}" rawframe_python)
+        target_compile_definitions(rawframe_network_quic_tests PRIVATE
+            RAWFRAME_PYTHON="${rawframe_python}"
+            RAWFRAME_WEBTRANSPORT_CLIENT="${CMAKE_CURRENT_SOURCE_DIR}/tests/webtransport_client.py")
+    endif()
 endif()
 rawframe_module_fuzz(NAME network_quic TARGET webtransport SOURCES tests/fuzz_webtransport.cpp)
 if(TARGET rawframe_network_quic_fuzz_webtransport)

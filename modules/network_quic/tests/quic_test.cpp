@@ -400,6 +400,9 @@ RAWFRAME_TEST(SessionsAdmitOverQuic) {
     }
 }
 
+// Where the tests run without Python, on an Android device (D561), no
+// browser is played.
+#if defined(RAWFRAME_WEBTRANSPORT_CLIENT)
 RAWFRAME_TEST(ABrowserReachesTheServerOverWebTransport) {
     // aioquic, an independent HTTP/3 and WebTransport implementation, plays
     // the browser (D172): it opens a session, sends on a stream and as a
@@ -455,6 +458,7 @@ RAWFRAME_TEST(ABrowserReachesTheServerOverWebTransport) {
         std::fprintf(stderr, "%s\n", said.c_str());
     }
 }
+#endif
 
 // A server's identity renewed while it listens (D419): a connection made
 // before keeps going, a client pinned to the new identity is accepted, and

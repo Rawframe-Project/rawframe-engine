@@ -11,5 +11,5 @@ target_link_libraries(rawframe_build PRIVATE rawframe_zstd_compress openssl::cry
 
 rawframe_module_tests(NAME build SOURCES tests/build_test.cpp tests/chunking_test.cpp tests/golden_test.cpp)
 if(TARGET rawframe_build_tests)
-    target_compile_definitions(rawframe_build_tests PRIVATE RAWFRAME_BUILD_GOLDEN="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/")
+    target_compile_definitions(rawframe_build_tests PRIVATE RAWFRAME_BUILD_GOLDEN="${RAWFRAME_TEST_FILES}/modules/build/tests/golden/")
 endif()

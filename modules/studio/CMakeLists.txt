@@ -14,7 +14,8 @@ if(TARGET rawframe_studio_tests AND TARGET rawframe_process_child)
     # A program that ends at once on every system, for a played game whose
     # server ends as it starts (D501): the process tests' child, given an
     # argument it does not know.
+    rawframe_test_program(rawframe_child rawframe_process_child)
     target_compile_definitions(rawframe_studio_tests PRIVATE
-        RAWFRAME_PROCESS_CHILD="$<TARGET_FILE:rawframe_process_child>")
+        RAWFRAME_PROCESS_CHILD="${rawframe_child}")
     add_dependencies(rawframe_studio_tests rawframe_process_child)
 endif()

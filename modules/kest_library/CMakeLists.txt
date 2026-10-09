@@ -22,7 +22,7 @@ rawframe_module_tests(NAME kest_library SOURCES tests/library_test.cpp tests/sou
 rawframe_module_fuzz(NAME kest_library TARGET sources RUNS 10000 MAX_LEN 16384 SEEDS tests/seeds SOURCES tests/fuzz_sources.cpp)
 if(TARGET rawframe_kest_library_tests)
     target_compile_definitions(rawframe_kest_library_tests PRIVATE
-        RAWFRAME_KEST_LIBRARY="${RAWFRAME_KEST_LIBRARY}"
-        RAWFRAME_ENGINE_MODULES="${CMAKE_CURRENT_SOURCE_DIR}/kest/"
-        RAWFRAME_SAMPLE_GAMES="${PROJECT_SOURCE_DIR}/games/")
+        RAWFRAME_KEST_LIBRARY="${RAWFRAME_TEST_FILES}/third_party/kest/lib/"
+        RAWFRAME_ENGINE_MODULES="${RAWFRAME_TEST_FILES}/modules/kest_library/kest/"
+        RAWFRAME_SAMPLE_GAMES="${RAWFRAME_TEST_FILES}/games/")
 endif()

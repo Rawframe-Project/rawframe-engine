@@ -8,6 +8,6 @@ target_link_libraries(rawframe_ui PRIVATE maul-ui)
 
 rawframe_module_tests(NAME ui SOURCES tests/edit_test.cpp tests/text_test.cpp tests/tree_test.cpp tests/scroll_test.cpp tests/style_test.cpp tests/styles_test.cpp)
 if(TARGET rawframe_ui_tests)
-    target_compile_definitions(rawframe_ui_tests PRIVATE RAWFRAME_UI_FONTS="${CMAKE_CURRENT_SOURCE_DIR}/tests/fonts/")
+    target_compile_definitions(rawframe_ui_tests PRIVATE RAWFRAME_UI_FONTS="${RAWFRAME_TEST_FILES}/modules/ui/tests/fonts/")
 endif()
 rawframe_module_fuzz(NAME ui TARGET styles RUNS 20000 SEEDS tests/seeds SOURCES tests/fuzz_styles.cpp)

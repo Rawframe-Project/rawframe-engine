@@ -13,7 +13,8 @@ if(TARGET rawframe_process_tests)
     # Windows, clang-cl's default is older than C++17).
     add_executable(rawframe_process_child tests/child.cpp)
     target_link_libraries(rawframe_process_child PRIVATE rawframe_policy)
+    rawframe_test_program(rawframe_child rawframe_process_child)
     target_compile_definitions(rawframe_process_tests PRIVATE
-        RAWFRAME_PROCESS_CHILD="$<TARGET_FILE:rawframe_process_child>")
+        RAWFRAME_PROCESS_CHILD="${rawframe_child}")
     add_dependencies(rawframe_process_tests rawframe_process_child)
 endif()

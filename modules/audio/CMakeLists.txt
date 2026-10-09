@@ -26,7 +26,7 @@ endif()
 rawframe_module_tests(NAME audio SOURCES tests/decode_test.cpp tests/effects_test.cpp tests/layout_test.cpp tests/mixer_test.cpp
     ${rawframe_audio_output_tests} tests/sound_test.cpp tests/sounds_test.cpp tests/stream_test.cpp)
 if(TARGET rawframe_audio_tests)
-    target_compile_definitions(rawframe_audio_tests PRIVATE RAWFRAME_AUDIO_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/")
+    target_compile_definitions(rawframe_audio_tests PRIVATE RAWFRAME_AUDIO_DATA="${RAWFRAME_TEST_FILES}/modules/audio/tests/data/")
 endif()
 rawframe_module_fuzz(NAME audio TARGET decode MAX_LEN 16384 SEEDS tests/seeds/decode SOURCES tests/fuzz_decode.cpp)
 rawframe_module_fuzz(NAME audio TARGET declarations RUNS 35000 SEEDS tests/seeds/declarations SOURCES tests/fuzz_declarations.cpp)

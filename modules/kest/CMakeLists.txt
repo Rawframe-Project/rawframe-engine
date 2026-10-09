@@ -9,5 +9,5 @@ target_link_libraries(rawframe_kest PRIVATE kest::kest)
 
 rawframe_module_tests(NAME kest SOURCES tests/kest_test.cpp)
 if(TARGET rawframe_kest_tests)
-    target_compile_definitions(rawframe_kest_tests PRIVATE RAWFRAME_KEST_LIBRARY="${RAWFRAME_KEST_LIBRARY}")
+    target_compile_definitions(rawframe_kest_tests PRIVATE RAWFRAME_KEST_LIBRARY="${RAWFRAME_TEST_FILES}/third_party/kest/lib/")
 endif()

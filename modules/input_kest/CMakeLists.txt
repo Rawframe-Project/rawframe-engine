@@ -10,5 +10,5 @@ rawframe_module(NAME input_kest
 rawframe_module_tests(NAME input_kest SOURCES tests/sources_test.cpp)
 if(TARGET rawframe_input_kest_tests)
     target_compile_definitions(rawframe_input_kest_tests PRIVATE
-        RAWFRAME_SAMPLE_GAMES="${PROJECT_SOURCE_DIR}/games/")
+        RAWFRAME_SAMPLE_GAMES="${RAWFRAME_TEST_FILES}/games/")
 endif()

@@ -244,6 +244,23 @@ function(rawframe_module_tests)
     endif()
 endfunction()
 
+# Where a test reads the engine's files and finds the programs it starts: the
+# source and build trees, or, for a tree whose tests run on another machine,
+# where tools/android_tests.sh puts them there (D561).
+set(RAWFRAME_TEST_FILES "${PROJECT_SOURCE_DIR}" CACHE PATH "The source tree's files, as a test reads them")
+set(RAWFRAME_TEST_PROGRAMS "" CACHE PATH "The directory of the programs a test starts; empty for the build tree")
+
+# Names the path a test starts TARGET's program at.
+#
+#   rawframe_test_program(child rawframe_process_child)
+function(rawframe_test_program out target)
+    if(RAWFRAME_TEST_PROGRAMS)
+        set(${out} "${RAWFRAME_TEST_PROGRAMS}/$<TARGET_FILE_NAME:${target}>" PARENT_SCOPE)
+    else()
+        set(${out} "$<TARGET_FILE:${target}>" PARENT_SCOPE)
+    endif()
+endfunction()
+
 # Declares a coverage-guided fuzz target for one module's hostile input
 # (D242): libFuzzer's, built in the address sanitizer tree with Clang, the
 # one tree where the fuzzer and the sanitizers it needs both are. The check

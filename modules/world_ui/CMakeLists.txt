@@ -11,5 +11,5 @@ rawframe_module(NAME world_ui
 rawframe_module_tests(NAME world_ui SOURCES tests/world_ui_test.cpp)
 if(TARGET rawframe_world_ui_tests)
     target_compile_definitions(rawframe_world_ui_tests PRIVATE
-        RAWFRAME_UI_FONTS="${PROJECT_SOURCE_DIR}/modules/ui/tests/fonts/")
+        RAWFRAME_UI_FONTS="${RAWFRAME_TEST_FILES}/modules/ui/tests/fonts/")
 endif()
