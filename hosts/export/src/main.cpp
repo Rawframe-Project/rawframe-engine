@@ -185,7 +185,9 @@ std::string howToPlay(const std::filesystem::path& game, const std::string& game
                        "Closing the window ends both. The server's and the game's records are\n"
                        "written beside them, in server.log and client.log. F11, or Alt and Enter,\n"
                        "puts the window on the whole screen and back; window.fullscreen = true in\n"
-                       "client.conf starts it there.\n";
+                       "client.conf starts it there. Where the graphics device cannot keep up, the\n"
+                       "picture is drawn at fewer pixels, down to half each way;\n"
+                       "scene.render_scale_least_percent = 100 in client.conf keeps every one.\n";
     std::ifstream description{game / gameFile};
     std::string line;
     while (std::getline(description, line)) {
@@ -391,7 +393,10 @@ bool writeNative(const Exported& exported, const std::array<fs::path, 4>& progra
                                 "# this machine's graphics device (a software one where it has none) and\n"
                                 "# heard on its sound device.\n"
                                 "host.iteration_rate = 120\nbots.player = true\nrender.device = any\n"
-                                "audio.play = device\nwindow.title = " +
+                                "audio.play = device\n"
+                                "# Its view drawn at fewer pixels, down to half each way, while the device\n"
+                                "# cannot keep up (D533).\n"
+                                "scene.render_scale_least_percent = 50\nwindow.title = " +
                                 exported.title + "\n" + kContent +
                                 "kest.plan_only = true\nnetwork.quic.pin_file = fingerprint\n"
                                 "bots.endpoint = 127.0.0.1:" +
