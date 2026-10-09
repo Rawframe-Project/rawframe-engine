@@ -151,6 +151,29 @@ def invariantPosition(spirv, wgsl):
         file.write(source)
 
 
+def withoutSource(spirv):
+    # Slang names its own source language (11) in OpSource, which SPIR-V
+    # parsers older than Slang's language refuse: the Android emulator's
+    # host side refused it and fell over (D552). Which language a module
+    # came from is debug information no driver needs, so OpSource,
+    # OpSourceContinued, and OpSourceExtension are dropped, word for word
+    # and nothing else moved.
+    with open(spirv, "rb") as file:
+        data = file.read()
+    words = [int.from_bytes(data[at : at + 4], "little") for at in range(0, len(data), 4)]
+    kept = words[:5]
+    at = 5
+    while at < len(words):
+        count = words[at] >> 16
+        if count == 0:
+            sys.exit(f"{spirv}: an instruction of no words at {at}")
+        if words[at] & 0xFFFF not in (2, 3, 4):
+            kept.extend(words[at : at + count])
+        at += count
+    with open(spirv, "wb") as file:
+        file.write(b"".join(word.to_bytes(4, "little") for word in kept))
+
+
 def checkSlang():
     result = subprocess.run([SLANGC, "-version"], capture_output=True, text=True)
     version = (result.stdout + result.stderr).strip()
@@ -193,6 +216,7 @@ def build(work, shaders, name, material=None):
     run(SLANGC, *inputs, *quiet, "-target", "wgsl", "-o", wgsl, cwd=work)
     if name in INVARIANT:
         invariantPosition(linked, wgsl)
+    withoutSource(linked)
     run("spirv-val", "--target-env", "vulkan1.3", linked)
     reflection = os.path.join(shaders, f"{name}.json")
     metal = os.path.join(work, f"{name}_metal")
