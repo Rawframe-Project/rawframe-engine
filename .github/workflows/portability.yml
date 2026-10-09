@@ -256,6 +256,29 @@ jobs:
             fi
           done
           exit "$failed"
+      # Stalls read and pressed as a screen reader does (D579): its client's
+      # UI through UI Automation while it plays, the purse a button named by
+      # its coins and invoked, and the collect command that gives sent by
+      # the client and taken by the server.
+      - name: Read Stalls through UI Automation
+        shell: bash
+        run: |
+          set -uo pipefail
+          cp -r played/tycoon "$RUNNER_TEMP/read"
+          printf 'host.maximum_iterations = 7200\n' >>"$RUNNER_TEMP/read/client.conf"
+          (cd "$RUNNER_TEMP/read" && timeout 180 ./rawframe-play.exe) &
+          play=$!
+          for _ in $(seq 120); do
+            grep -q '"code":"bots_admitted"' "$RUNNER_TEMP/read/client.log" 2>/dev/null && break
+            sleep 1
+          done
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools/uia_read.ps1 rawframe-client ' coins$'
+          read=$?
+          wait "$play"
+          grep -o '"commandsSent":[0-9]*' "$RUNNER_TEMP/read/client.log" | tail -1
+          grep -o '"commandsTaken":[0-9]*' "$RUNNER_TEMP/read/server.log" | tail -1
+          [ "$read" = 0 ] && grep -q '"commandsSent":1,' "$RUNNER_TEMP/read/client.log" &&
+            grep -q '"commandsTaken":1,' "$RUNNER_TEMP/read/server.log"
       - name: Keep the sample games
         uses: actions/upload-artifact@v7
         with:
