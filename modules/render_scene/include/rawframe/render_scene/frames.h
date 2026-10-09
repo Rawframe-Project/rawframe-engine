@@ -6,6 +6,7 @@
 // after it.
 
 #include "rawframe/composition/participant.h"
+#include "rawframe/execution/time.h"
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/texture/texture.h"
 
@@ -61,9 +62,17 @@ public:
     /// bars (D369), else black.
     [[nodiscard]] virtual std::array<std::uint8_t, 3> bars() const noexcept = 0;
     /// The share of its region's pixels each way a local player's view is
-    /// drawn at (ADR-0052's render scale, D373): `scene.render_scale`, one
-    /// unless asked; the view is scaled to its region.
+    /// drawn at (ADR-0052's render scale, D373): `scene.render_scale_percent`, one
+    /// unless asked, lower while the frames do not keep up where a client
+    /// allows (D533); the view is scaled to its region.
     [[nodiscard]] virtual float renderScale() const noexcept = 0;
+    /// A frame the device drew is done: it certainly took `atLeast` there,
+    /// and at most `atMost`, where it was to take no longer than `budget`.
+    /// Where a client allows a lower render scale, the scale follows
+    /// (D533).
+    virtual void paced(execution::MonotonicDuration atLeast,
+                       execution::MonotonicDuration atMost,
+                       execution::MonotonicDuration budget) noexcept = 0;
     /// The device did not draw the frame the render texture `id` was last
     /// given: one drawn on demand is offered it again in the next
     /// iteration, unless a new one is due.

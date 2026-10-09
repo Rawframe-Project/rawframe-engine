@@ -7,6 +7,7 @@
 #include "rawframe/render_scene/errors.h"
 #include "rawframe/render_scene/frames.h"
 #include "rawframe/render_scene/registrar.h"
+#include "rawframe/render_scene/render_scale.h"
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/preview.h"
@@ -35,6 +36,7 @@ constexpr std::string_view kProvided[] = {kSceneFrames.name};
 constexpr diagnostics::EventIdentity kMaterialUnread{"scene", "material_unread"};
 constexpr diagnostics::EventIdentity kViewRefused{"scene", "view_refused"};
 constexpr diagnostics::EventIdentity kViewsSummary{"scene", "scene_views_summary"};
+constexpr diagnostics::EventIdentity kRenderScaleChanged{"scene", "render_scale_changed"};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        game_content::kGameContent.name,
@@ -66,7 +68,7 @@ public:
         antiAliasing_ = kConfigured.antiAliasing;
         multisamples_ = kConfigured.multisamples;
         quality_ = kConfigured.quality;
-        renderScale_ = kConfigured.renderScale;
+        renderScale_ = RenderScale{kConfigured.renderScalePercent, kConfigured.leastRenderScalePercent};
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
             return {};
         }
@@ -129,11 +131,11 @@ public:
             }
             regionFrames_.resize(regions_.size());
         }
-        // A constrained aspect (D369), or a render scale (D373): one
-        // player's view is placed in the window as a split-screen player's
-        // is in its region.
+        // A constrained aspect (D369), or a render scale (D373), one that
+        // may change too (D533): one player's view is placed in the window
+        // as a split-screen player's is in its region.
         aspect_ = files->description().aspect;
-        if ((aspect_.has_value() || renderScale_ < 1) && regions_.empty()) {
+        if ((aspect_.has_value() || renderScale_.scale() < 1 || renderScale_.follows()) && regions_.empty()) {
             regions_.push_back(world_kest::GameRegion{});
             regionFrames_.resize(1);
         }
@@ -333,7 +335,22 @@ public:
     }
 
     float renderScale() const noexcept override {
-        return renderScale_;
+        return renderScale_.scale();
+    }
+
+    void paced(execution::MonotonicDuration atLeast,
+               execution::MonotonicDuration atMost,
+               execution::MonotonicDuration budget) noexcept override {
+        const std::uint32_t kWas = renderScale_.percent();
+        if (renderScale_.paced(atLeast, atMost, budget)) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kRenderScaleChanged,
+                         "a local player's view is drawn at another render scale",
+                         {diagnostics::field("from", static_cast<std::uint64_t>(kWas)),
+                          diagnostics::field("to", static_cast<std::uint64_t>(renderScale_.percent())),
+                          diagnostics::field("tookAtLeastMicroseconds", atLeast.nanoseconds / 1000),
+                          diagnostics::field("budgetMicroseconds", budget.nanoseconds / 1000)});
+        }
     }
 
     std::array<std::uint8_t, 3> bars() const noexcept override {
@@ -834,7 +851,7 @@ private:
     std::uint64_t marksLit_ = 0;
     /// Each local player's view drawn at this share of its region's pixels
     /// each way (D373).
-    float renderScale_ = 1;
+    RenderScale renderScale_{100, 100};
     std::uint64_t frames_ = 0;
     std::uint64_t drawn_ = 0;
     std::uint64_t culled_ = 0;

@@ -31,8 +31,10 @@ struct SceneConfiguration {
     AntiAliasing antiAliasing = AntiAliasing::Taa;
     std::uint32_t multisamples = kDefaultMultisamples;
     material::Quality quality = material::Quality::High;
-    /// Each local player's view drawn at this part of its region's pixels.
-    float renderScale = 1;
+    /// Each local player's view drawn at most at this many hundredths of
+    /// its region's pixels each way, and at least at the least (D533).
+    std::uint32_t renderScalePercent = 100;
+    std::uint32_t leastRenderScalePercent = 100;
 };
 
 /// Reads every `scene.*` key, refusing one out of its bounds.

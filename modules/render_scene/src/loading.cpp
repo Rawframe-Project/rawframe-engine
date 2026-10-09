@@ -193,7 +193,20 @@ result::Result<SceneConfiguration> readConfiguration(const composition::Configur
                                                            "scene.render_scale_percent is 25 to 100")
                                                   .error()};
     }
-    read.renderScale = static_cast<float>(kPercent) / 100.0F;
+    read.renderScalePercent = static_cast<std::uint32_t>(kPercent);
+    // Where a client allows fewer, the scale follows how the frames keep up
+    // with the device, down to this many (D533).
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kLeast,
+                        configuration.unsignedInteger("scene.render_scale_least_percent", kPercent));
+    if (kLeast < 25 || kLeast > kPercent) {
+        return std::unexpected<result::Error>{
+            result::fail(result::ErrorClass::InvalidArgument,
+                         composition::kCompositionDomain,
+                         code(composition::CompositionError::BadConfiguration),
+                         "scene.render_scale_least_percent is 25 to scene.render_scale_percent")
+                .error()};
+    }
+    read.leastRenderScalePercent = static_cast<std::uint32_t>(kLeast);
     return read;
 }
 

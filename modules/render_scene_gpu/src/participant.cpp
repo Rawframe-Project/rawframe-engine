@@ -119,6 +119,11 @@ public:
             frames_->join(*renderer_, kOrder);
             frames_->join(renderer_->composed(), kComposedOrder);
         }
+        // The render scale follows how the frames keep up (D533).
+        if (const render::FramePace kPace = frames_->pace(); kPace.done != paced_) {
+            paced_ = kPace.done;
+            scene_->paced(kPace.atLeast, kPace.atMost, kPace.budget);
+        }
         const auto kPlanned = frames_->planned();
         if (!kPlanned.has_value()) {
             dropViews();
@@ -307,6 +312,8 @@ private:
     std::optional<render_scene::SceneFrame> capturing_;
     bool asked_ = false;
     bool failed_ = false;
+    /// The frames done the scene was told of (D533).
+    std::uint64_t paced_ = 0;
     diagnostics::Emitter emitter_;
 };
 
