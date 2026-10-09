@@ -463,7 +463,10 @@ struct Host::State {
             (composition->connections() == 0 || clock.now() - drainStart >= settings.drain)) {
             return false;
         }
-        const composition::HostFrame kFrame{.iteration = iteration, .now = clock.now()};
+        const composition::HostFrame kFrame{.iteration = iteration,
+                                            .now = clock.now(),
+                                            .suspended = request.suspended != nullptr &&
+                                                         request.suspended->load(std::memory_order_acquire)};
         for (std::size_t phase = 0; phase < composition::kHostPhaseCount; ++phase) {
             composition->runHostPhase(static_cast<composition::HostPhase>(phase), kFrame);
             if (static_cast<composition::HostPhase>(phase) == composition::HostPhase::Maintenance) {

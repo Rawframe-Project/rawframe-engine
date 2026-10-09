@@ -48,6 +48,12 @@ struct Counts {
     std::atomic<bool> release{false};
     /// How long the participant's stop takes.
     int stopMilliseconds = 0;
+    /// The iterations the platform suspends the program at and resumes it
+    /// at, the flag it sets, and the frames that said it was suspended.
+    int suspendAt = -1;
+    int resumeAt = -1;
+    std::atomic<bool>* suspended = nullptr;
+    std::vector<int> suspendedFrames;
     /// Every status the Host published.
     std::vector<host::HostStatus> statuses;
 };
@@ -67,9 +73,16 @@ public:
         std::this_thread::sleep_for(std::chrono::milliseconds(counts.stopMilliseconds));
 #endif
     }
-    void runHostPhase(HostPhase phase, const composition::HostFrame&) noexcept override {
+    void runHostPhase(HostPhase phase, const composition::HostFrame& frame) noexcept override {
         if (phase == HostPhase::RunWorlds) {
             ++counts.runWorlds;
+            if (frame.suspended) {
+                counts.suspendedFrames.push_back(counts.runWorlds);
+            }
+            if (counts.suspended != nullptr &&
+                (counts.runWorlds == counts.suspendAt || counts.runWorlds == counts.resumeAt)) {
+                counts.suspended->store(counts.runWorlds == counts.suspendAt, std::memory_order_release);
+            }
             serve();
         } else if (phase == HostPhase::Maintenance) {
             ++counts.maintenance;
@@ -154,6 +167,10 @@ void reset() {
     counts.holdWorkerAt = -1;
     counts.release = false;
     counts.stopMilliseconds = 0;
+    counts.suspendAt = -1;
+    counts.resumeAt = -1;
+    counts.suspended = nullptr;
+    counts.suspendedFrames.clear();
     counts.statuses.clear();
     requireMissing = false;
 }
@@ -167,7 +184,10 @@ void observe(const host::HostStatus& status, void*) noexcept {
     }
 }
 
-host::HostExit run(std::string_view configurationText, std::string& log, const std::atomic<bool>* stop = nullptr) {
+host::HostExit run(std::string_view configurationText,
+                   std::string& log,
+                   const std::atomic<bool>* stop = nullptr,
+                   const std::atomic<bool>* suspended = nullptr) {
     const auto kConfiguration = composition::Configuration::parse(configurationText);
     RAWFRAME_EXPECT(kConfiguration.has_value());
     return host::runHost(host::HostRequest{.role = composition::TargetRole::Test,
@@ -175,6 +195,7 @@ host::HostExit run(std::string_view configurationText, std::string& log, const s
                                            .configuration = &*kConfiguration,
                                            .log = {.write = &collect, .context = &log},
                                            .stopRequested = stop,
+                                           .suspended = suspended,
                                            .status = {.publish = &observe, .context = nullptr}});
 }
 
@@ -218,6 +239,28 @@ RAWFRAME_TEST(AHostRunsItsIterationsAndStopsInOrder) {
     // The bound ends the run where it falls: every state, in order.
     RAWFRAME_EXPECT(movesThrough(log, {"starting", "preparing", "ready", "active", "draining", "stopping", "stopped"}));
     RAWFRAME_EXPECT(mentions(log, "\"reason\":\"iteration_bound\"") && counts.admitting == 5 && counts.closed == 0);
+}
+
+RAWFRAME_TEST(FramesSayWhileThePlatformSuspendsTheProgram) {
+    // A program its platform suspends runs on, its frames saying so from
+    // the iteration after `suspending` until the one after `resumed`
+    // (D565): what reaches a person stops for that long.
+    reset();
+    std::string log;
+    std::atomic<bool> suspended{false};
+    counts.suspended = &suspended;
+    counts.suspendAt = 3;
+    counts.resumeAt = 6;
+    const auto kExit =
+        run("host.maximum_iterations = 9\nhost.iteration_rate = 1000\nhost.cpu_workers = 1", log, nullptr, &suspended);
+    RAWFRAME_EXPECT(kExit == host::HostExit::Stopped && counts.runWorlds == 9);
+    RAWFRAME_EXPECT((counts.suspendedFrames == std::vector<int>{4, 5, 6}));
+    // A Host no program suspends says so of no frame.
+    reset();
+    log.clear();
+    RAWFRAME_EXPECT(run("host.maximum_iterations = 3\nhost.iteration_rate = 1000\nhost.cpu_workers = 1", log) ==
+                    host::HostExit::Stopped);
+    RAWFRAME_EXPECT(counts.suspendedFrames.empty());
 }
 
 RAWFRAME_TEST(TheHostAttributesMemoryToItsParticipants) {

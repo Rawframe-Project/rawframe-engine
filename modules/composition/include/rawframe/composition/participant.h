@@ -38,6 +38,10 @@ struct HostFrame {
     std::uint64_t iteration = 0;
     /// Sampled once per iteration, in `advance_clocks`.
     execution::MonotonicInstant now;
+    /// The platform suspended the program (SPEC-0025's `suspending` until
+    /// `resumed`, D565): it runs on, but nothing reaches a person, neither
+    /// pictures nor sound.
+    bool suspended = false;
 };
 
 namespace detail {
