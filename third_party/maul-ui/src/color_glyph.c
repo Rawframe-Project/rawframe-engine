@@ -24,6 +24,7 @@
 #include FT_COLOR_H
 
 #include <math.h>
+#include <stdint.h>
 #include <string.h>
 
 // The glyph's layers' joint box at a size.
@@ -190,7 +191,9 @@ static muiResult Prepare(muiTextService* service, const muiPixelBox* box, muiGly
     *imageOut = (muiGlyphImage){(int32_t)box->left, (int32_t)(box->bottom + box->height),
                                 (uint32_t)box->width, (uint32_t)box->height};
     size_t count = (size_t)box->width * (size_t)box->height;
-    if (count * 4 > capacity)
+    // Where a size_t is 32 bits, a box of 32767 a side holds more floats
+    // than it counts: refused before the sum wraps.
+    if (count > SIZE_MAX / (4 * sizeof(float)) || count * 4 > capacity)
     {
         return mui_errorCapacity;
     }

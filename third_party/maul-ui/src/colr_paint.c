@@ -26,6 +26,7 @@
 #include FT_OUTLINE_H
 
 #include <math.h>
+#include <stdint.h>
 #include <string.h>
 
 #if MUI_COLR_PAINT
@@ -183,11 +184,13 @@ static muiResult PlaceOutline(const muiPaintSource* source, uint32_t glyph, Matr
     return mui_success;
 }
 
-// A walk of a graph: its source, how deep it is, and what went wrong.
+// A walk of a graph: its source, how deep it is, how many paints it
+// visited, and what went wrong.
 typedef struct Walk
 {
     const muiPaintSource* source;
     uint32_t depth;
+    uint32_t visits;
     muiResult result;
 } Walk;
 
@@ -197,12 +200,19 @@ static bool Fail(Walk* walk, muiResult result)
     return false;
 }
 
+// Whether a walk may visit one more paint: within MUI_MAX_PAINT_DEPTH of
+// its root and MUI_MAX_PAINT_VISITS in all.
+static bool MayVisit(Walk* walk)
+{
+    return walk->depth < MUI_MAX_PAINT_DEPTH && walk->visits++ < MUI_MAX_PAINT_VISITS;
+}
+
 // Adds the boxes of a paint's outlines, under their transforms, to box.
 static bool Bounds(Walk* walk, FT_OpaquePaint opaque, Matrix m, muiPixelBox* box)
 {
     FT_Face face = walk->source->font->face;
     FT_COLR_Paint paint;
-    if (walk->depth >= MUI_MAX_PAINT_DEPTH || !FT_Get_Paint(face, opaque, &paint))
+    if (!MayVisit(walk) || !FT_Get_Paint(face, opaque, &paint))
     {
         return Fail(walk, mui_errorFormat);
     }
@@ -281,7 +291,7 @@ muiResult muiColorPaintBox(const muiPaintSource* source, uint32_t glyph, FT_Opaq
     {
         return result;
     }
-    Walk walk = {source, 0, mui_success};
+    Walk walk = {source, 0, 0, mui_success};
     return Bounds(&walk, root, IDENTITY, boxOut) ? mui_success : walk.result;
 }
 
@@ -295,7 +305,8 @@ typedef struct Surfaces
 } Surfaces;
 
 // A level's surface, found again after any deeper level was made; NULL
-// when memory runs out.
+// when memory runs out, or when the levels' size would not fit a size_t,
+// as a large box many levels deep would where it is 32 bits.
 static float* Surface(Surfaces* surfaces, uint32_t level)
 {
     if (level == 0)
@@ -303,6 +314,10 @@ static float* Surface(Surfaces* surfaces, uint32_t level)
         return surfaces->top;
     }
     muiTextService* service = surfaces->walk.source->service;
+    if (surfaces->count > SIZE_MAX / (4 * sizeof(float)) / level)
+    {
+        return nullptr;
+    }
     size_t bytes = surfaces->count * 4 * sizeof(float);
     if (!muiReserveKeeping(&service->allocator, &service->paintSurfaces, (size_t)level * bytes,
                            (size_t)(level - 1) * bytes))
@@ -340,7 +355,13 @@ static bool Layers(Surfaces* surfaces, FT_LayerIterator layers, Matrix m, uint32
         {
             return false;
         }
-        Over(Surface(surfaces, level + 1), Surface(surfaces, level), surfaces->count);
+        float* source = Surface(surfaces, level + 1);
+        float* destination = Surface(surfaces, level);
+        if (source == nullptr || destination == nullptr)
+        {
+            return Fail(&surfaces->walk, mui_errorCapacity);
+        }
+        Over(source, destination, surfaces->count);
     }
     return true;
 }
@@ -362,6 +383,10 @@ static bool MaskBy(Surfaces* surfaces, FT_Outline* outline, uint32_t level)
         return Fail(&surfaces->walk, result);
     }
     float* pixels = Surface(surfaces, level);
+    if (pixels == nullptr)
+    {
+        return Fail(&surfaces->walk, mui_errorCapacity);
+    }
     for (size_t i = 0; i < surfaces->count; i++)
     {
         float k = (float)coverage[i] / 255.0f;
@@ -385,6 +410,10 @@ static bool Mask(Surfaces* surfaces, uint32_t glyph, Matrix m, uint32_t level)
 static bool Fill(Surfaces* surfaces, muiLinearColor color, uint32_t level)
 {
     float* pixels = Surface(surfaces, level);
+    if (pixels == nullptr)
+    {
+        return Fail(&surfaces->walk, mui_errorCapacity);
+    }
     for (size_t i = 0; i < surfaces->count; i++)
     {
         pixels[i * 4] = color.r;
@@ -418,8 +447,14 @@ static bool RenderOther(Surfaces* surfaces, const FT_COLR_Paint* paint, Matrix m
         {
             return false;
         }
-        muiComposite((uint32_t)paint->u.composite.composite_mode, Surface(surfaces, level + 1),
-                     Surface(surfaces, level), surfaces->count);
+        float* source = Surface(surfaces, level + 1);
+        float* backdrop = Surface(surfaces, level);
+        if (source == nullptr || backdrop == nullptr)
+        {
+            return Fail(&surfaces->walk, mui_errorCapacity);
+        }
+        muiComposite((uint32_t)paint->u.composite.composite_mode, source, backdrop,
+                     surfaces->count);
     }
     return true;
 }
@@ -429,7 +464,7 @@ static bool Render(Surfaces* surfaces, FT_OpaquePaint opaque, Matrix m, uint32_t
     Walk* walk = &surfaces->walk;
     FT_Face face = walk->source->font->face;
     FT_COLR_Paint paint;
-    if (walk->depth >= MUI_MAX_PAINT_DEPTH || !FT_Get_Paint(face, opaque, &paint))
+    if (!MayVisit(walk) || !FT_Get_Paint(face, opaque, &paint))
     {
         return Fail(walk, mui_errorFormat);
     }
@@ -501,7 +536,7 @@ muiResult muiPaintColorGlyph(const muiPaintSource* source, uint32_t glyph, FT_Op
                              const muiPixelBox* box, float* pixels)
 {
     Surfaces surfaces = {
-        {source, 0, mui_success}, box, (size_t)box->width * (size_t)box->height, pixels};
+        {source, 0, 0, mui_success}, box, (size_t)box->width * (size_t)box->height, pixels};
     if (!Render(&surfaces, root, IDENTITY, 0))
     {
         return surfaces.walk.result;

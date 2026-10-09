@@ -6,7 +6,10 @@
 // surface over the glyph's box of pixels, transforms composed on the way
 // down from font units, a PaintGlyph's outline a FreeType coverage mask
 // over its child, layers composited source over. At most
-// MUI_MAX_PAINT_DEPTH paints deep, so a cycle in a damaged font ends.
+// MUI_MAX_PAINT_DEPTH paints deep, so a cycle in a damaged font ends, and
+// at most MUI_MAX_PAINT_VISITS paints in all, so a graph that reaches one
+// paint by many paths, which depth alone lets double at each level, ends
+// too.
 
 #ifndef MAUL_UI_SRC_COLR_PAINT_H
 #define MAUL_UI_SRC_COLR_PAINT_H
@@ -21,7 +24,8 @@
 
 enum
 {
-    MUI_MAX_PAINT_DEPTH = 64
+    MUI_MAX_PAINT_DEPTH = 64,
+    MUI_MAX_PAINT_VISITS = 4096
 };
 
 // Whether a glyph has a version 1 graph, and its root.

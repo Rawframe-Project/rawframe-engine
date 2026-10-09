@@ -18,8 +18,8 @@ extern "C"
 
 // The library version. CMake reads it from here.
 #define MUI_VERSION_MAJOR 0
-#define MUI_VERSION_MINOR 0
-#define MUI_VERSION_PATCH 1
+#define MUI_VERSION_MINOR 1
+#define MUI_VERSION_PATCH 0
 
 // MUI_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_ui_EXPORTS is defined while building
