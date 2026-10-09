@@ -62,6 +62,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"input_seen\"[^\n]*\"device\":\"keyboard\".*\"code\":\"text_summary\"[^\n]*\"locale\":\"tr\",\"offered\":2,\"changes\":1}")
+        # Runners' HUD as a screen reader reads it (D571): on a private
+        # accessibility bus, the client's AT-SPI tree walked while it plays,
+        # its window a frame holding the crosshair's image and the points'
+        # label.
+        add_test(NAME client_reads_runners_aloud
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_aloud.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/drawn.conf
+                         games/runners/runners.game
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_reads_runners_aloud PROPERTIES
+                             LABELS window
+                             FIXTURES_REQUIRED runners_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "a11y: 1 frame [^\n]*\na11y: 2 image *\na11y: 2 label 0 points\n.*\"code\":\"accessibility_ready\"")
         # Stalls clicked on its HUD's purse, a panel that takes presses
         # (D421): lighter under the mouse once it is there (D422), the UI
         # takes the click, and the owner builds no stall under it, the World
