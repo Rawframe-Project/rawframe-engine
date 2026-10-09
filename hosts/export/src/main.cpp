@@ -15,7 +15,8 @@
 //                   [--port <port>] [--version <version>] [--tools <directory>]
 //                   [--key <secret key> --publisher <name>] [--target web]
 //                   [--target android --address <host>
-//                    [--android-client <library> --packager <script> [--package <name>]]]
+//                    [--android-client <library> --packager <script> [--package <name>]
+//                     [--android-keystore <file> --android-key-alias <alias>]]]
 //                   [--follow <origin> [--channel <channel>]] [--title <title>]
 //
 // With `--key`, the Build is signed by that secret (`rawframe-build key`
@@ -77,7 +78,10 @@
 // `librawframe_client.so`) and `--packager` (`tools/android_apk.sh`, which
 // finds the SDK by ANDROID_HOME), the export makes the package itself,
 // `android/<name>.apk`, named `<publisher>.<name>` unless `--package` names
-// it (D556).
+// it (D556). With `--android-keystore` and `--android-key-alias`, the
+// publisher's key signs a release package, not debuggable, the keystore's
+// password read by the packager from RAWFRAME_ANDROID_KEYSTORE_PASSWORD and
+// never given on a command line (D581).
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/configuration.h"
@@ -678,6 +682,8 @@ int usage() {
                "                       [--version <version>] [--tools <directory>] [--<tool> <path>]...\n"
                "                       [--key <secret key> --publisher <name>] [--target web]\n"
                "                       [--target android --address <host>]\n"
+               "                       [--android-client <library> --packager <script> [--package <name>]\n"
+               "                        [--android-keystore <file> --android-key-alias <alias>]]\n"
                "                       [--follow <origin> [--channel <channel>]] [--title <title>]\n",
                stderr);
     return 2;
@@ -709,6 +715,8 @@ int main(int argc, char** argv) {
     std::optional<fs::path> androidClient;
     std::optional<fs::path> packager;
     std::optional<std::string> package;
+    std::optional<fs::path> keystore;
+    std::optional<std::string> keyAlias;
     std::optional<std::string> follow;
     std::string channel = "stable";
     std::string title = kGame.filename().string();
@@ -739,6 +747,10 @@ int main(int argc, char** argv) {
             packager = fs::absolute(kValue);
         } else if (kOption == "--package") {
             package = kValue;
+        } else if (kOption == "--android-keystore") {
+            keystore = fs::absolute(kValue);
+        } else if (kOption == "--android-key-alias") {
+            keyAlias = kValue;
         } else if (kOption == "--follow") {
             follow = kValue;
         } else if (kOption == "--channel") {
@@ -764,6 +776,7 @@ int main(int argc, char** argv) {
     if (argc % 2 == 0 || (port.has_value() && !portLike(*port)) || (target != Target::Native && follow.has_value()) ||
         kAndroid != address.has_value() || (address.has_value() && !addressLike(*address)) ||
         (kPackaged && (!kAndroid || !androidClient.has_value() || !packager.has_value())) ||
+        keystore.has_value() != keyAlias.has_value() || (keystore.has_value() && !androidClient.has_value()) ||
         !rawframe::release::channelNamed(channel).has_value() || !titleLike(title)) {
         return usage();
     }
@@ -908,9 +921,14 @@ int main(int argc, char** argv) {
         }
         // Made under the work directory, where the packager keeps its debug
         // key beside it, and moved into the folder alone.
-        if (!runTool(*packager,
-                     {(kWork / "package.apk").string(), androidClient->string(), kPackage, title, kSite.string()},
-                     kWork / "package.log")) {
+        std::vector<std::string> packed = {
+            (kWork / "package.apk").string(), androidClient->string(), kPackage, title, kSite.string()};
+        // A release package, under the publisher's key (D581).
+        if (keystore.has_value()) {
+            packed.push_back(keystore->string());
+            packed.push_back(*keyAlias);
+        }
+        if (!runTool(*packager, std::move(packed), kWork / "package.log")) {
             return 1;
         }
         fs::rename(kWork / "package.apk", kOutput / kApk, error);

@@ -2,7 +2,8 @@
 # Makes the Android client's application (D551) with the SDK's own tools and
 # no Gradle:
 #
-#   tools/android_apk.sh <out.apk> <librawframe_client.so> <package> <label> [<game files>]
+#   tools/android_apk.sh <out.apk> <librawframe_client.so> <package> <label> [<game files>
+#                        [<keystore> <alias>]]
 #
 # Maul Window's Java activity (third_party/maul-window/java), Maul UI's
 # accessibility provider (third_party/maul-ui/java, D576), and the client's
@@ -12,8 +13,11 @@
 # when given, carried as assets/game (its client.conf and the game it names,
 # which the activity unpacks into the app's files, D553), the client's
 # library under lib/arm64-v8a/, aligned, and signed with a debug key kept
-# beside the output. ANDROID_HOME names the SDK; its newest build tools and
-# platform are used.
+# beside the output. Given the publisher's keystore and its key's alias, the
+# package is a release one (D581): not debuggable, signed with that key,
+# whose keystore password RAWFRAME_ANDROID_KEYSTORE_PASSWORD holds, never
+# the command line; the key's own password is the keystore's. ANDROID_HOME
+# names the SDK; its newest build tools and platform are used.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -22,6 +26,14 @@ library="$2"
 package="$3"
 label="$4"
 carried="${5:-}"
+keystore="${6:-}"
+alias="${7:-}"
+if [ -n "$keystore" ] && { [ -z "$alias" ] || [ -z "${RAWFRAME_ANDROID_KEYSTORE_PASSWORD:-}" ]; }; then
+    echo "android_apk.sh: a keystore needs its key's alias and RAWFRAME_ANDROID_KEYSTORE_PASSWORD" >&2
+    exit 2
+fi
+debug=(--debug-mode)
+[ -n "$keystore" ] && debug=()
 tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
 jar="$(ls -d "$ANDROID_HOME"/platforms/android-* | sort -V | tail -1)/android.jar"
 work="$(mktemp -d)"
@@ -40,15 +52,20 @@ if [ -n "$carried" ]; then
     assets=(-A "$work/assets")
 fi
 "$tools/aapt2" link -o "$work/linked.apk" -I "$jar" --manifest "$work/AndroidManifest.xml" \
-    ${assets[@]+"${assets[@]}"} --min-sdk-version 29 --target-sdk-version 35 --debug-mode
+    ${assets[@]+"${assets[@]}"} --min-sdk-version 29 --target-sdk-version 35 ${debug[@]+"${debug[@]}"}
 cp "$library" "$work/lib/arm64-v8a/librawframe_client.so"
 cp "$work/dex/classes.dex" "$work/"
 (cd "$work" && zip -q linked.apk classes.dex lib/arm64-v8a/librawframe_client.so)
 "$tools/zipalign" -f -p 4 "$work/linked.apk" "$work/aligned.apk"
+# No v4 signature file beside it: nothing here installs incrementally.
+if [ -n "$keystore" ]; then
+    "$tools/apksigner" sign --ks "$keystore" --ks-key-alias "$alias" --ks-pass env:RAWFRAME_ANDROID_KEYSTORE_PASSWORD \
+        --v4-signing-enabled false --out "$out" "$work/aligned.apk"
+    exit 0
+fi
 key="$(dirname "$out")/debug.keystore"
 if [ ! -f "$key" ]; then
     keytool -genkeypair -keystore "$key" -storepass android -keypass android -alias debug -keyalg RSA \
         -validity 10000 -dname "CN=Rawframe development" >/dev/null 2>&1
 fi
-# No v4 signature file beside it: nothing here installs incrementally.
 "$tools/apksigner" sign --ks "$key" --ks-pass pass:android --v4-signing-enabled false --out "$out" "$work/aligned.apk"
