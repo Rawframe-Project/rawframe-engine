@@ -8,7 +8,7 @@ namespace rawframe::studio {
 namespace {
 
 constexpr std::string_view kProvided[] = {ui::kUiFrames.name};
-constexpr std::string_view kMaybe[] = {view::kUiPointing.name, view::kUiTyping.name};
+constexpr std::string_view kMaybe[] = {view::kUiPointing.name, view::kUiTyping.name, ui::kAccessSeat.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 result::Status misconfigured(std::string_view why) {
@@ -81,6 +81,9 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     if (context.has(view::kUiTyping.name)) {
         RAWFRAME_TRY_ASSIGN(typing_, context.capability(view::kUiTyping));
     }
+    if (context.has(ui::kAccessSeat.name)) {
+        RAWFRAME_TRY_ASSIGN(seat_, context.capability(ui::kAccessSeat));
+    }
     RAWFRAME_TRY_ASSIGN(tree_, ui::Tree::create());
     // Studio's own font, embedded, sanitized as the cook sanitizes a
     // game's (ADR-0049), never an unchecked font in the tree.
@@ -126,6 +129,19 @@ bool ShellParticipant::openGame() {
 
 result::Status ShellParticipant::start(composition::ParticipantContext& context) noexcept {
     emitter_ = context.emitter();
+    // The window where assistive technology reads it, when its program
+    // asked for it (D575); a machine whose platform cannot be reached is
+    // shown unread.
+    if (seat_ != nullptr) {
+        if (const result::Status kSeated = seat_->seat(*tree_, root_); !kSeated.has_value()) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kInaccessible,
+                         "assistive technology cannot read Studio",
+                         {diagnostics::field("reason", std::string{kSeated.error().description()})});
+        } else if (seat_->access() != nullptr) {
+            emitter_.log(diagnostics::Severity::Info, kAccessible, "assistive technology reads Studio", {});
+        }
+    }
     // A press is acted on as the window's records come, so the keys
     // that follow it find the keyboard where it put it (D426): a field
     // clicked takes what is typed next, however slowly frames come.
@@ -149,6 +165,16 @@ result::Status ShellParticipant::start(composition::ParticipantContext& context)
 
 void ShellParticipant::runHostPhase(composition::HostPhase, const composition::HostFrame&) noexcept {
     drawn_ = nullptr;
+    // A screen reader's press is a pointer's on the node it names (D575);
+    // Studio moves no focus of its own, so one it asks for is not taken.
+    if (seat_ != nullptr) {
+        for (const ui::AccessRequest& kRequest : seat_->takeRequests()) {
+            if (kRequest.kind == ui::AccessRequest::Kind::Press && tree_->contains(kRequest.node)) {
+                const bool kMoving = beforePress();
+                pressOn(kRequest.node, kMoving);
+            }
+        }
+    }
     for (const view::Typing& kTyping : typed_) {
         take(kTyping);
     }
@@ -188,6 +214,9 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
 }
 
 void ShellParticipant::stop() noexcept {
+    if (seat_ != nullptr) {
+        seat_->leave();
+    }
     if (pointing_ != nullptr) {
         pointing_->onPress({});
         pointing_->onWheel({});

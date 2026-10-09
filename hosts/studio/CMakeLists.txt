@@ -25,6 +25,20 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":3,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":21,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+    # Studio read by a screen reader (D575): its window's tree over AT-SPI
+    # holds its buttons, its columns as scroll panes named by their
+    # headings, and its fields as entries named by theirs; runners' level
+    # and then New pressed through AT-SPI as a screen reader presses them
+    # make an entity there, as clicks do.
+    add_test(NAME studio_read_aloud
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_aloud.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene level.scene New "until=entity created"
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_read_aloud PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no"
+                         PASS_REGULAR_EXPRESSION
+                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Scenes\n.*a11y: 3 push button level.scene\n.*a11y: 3 entry new scene or import\n.*a11y: 3 push button New\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
     # Studio clicked: runners' level chosen shows its entities, read from
     # the session, and its ground chosen shows its four components and is
     # chosen in the session; its body's width typed as 12 and given with

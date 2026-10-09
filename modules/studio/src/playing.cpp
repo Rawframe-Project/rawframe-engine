@@ -25,7 +25,7 @@ void ShellParticipant::startPlaying() {
     playing_.emplace(std::move(*started));
     ++played_;
     nextAttach_ = 0;
-    static_cast<void>(words(playNode_, "Stop", kText, 14));
+    static_cast<void>(pressWords(playNode_, "Stop", kText, 14));
     say("starting the game");
 }
 
@@ -40,7 +40,7 @@ void ShellParticipant::stopPlaying() {
     playing_->stop();
     stopping_ = std::move(playing_);
     playing_.reset();
-    static_cast<void>(words(playNode_, "Play", kText, 14));
+    static_cast<void>(pressWords(playNode_, "Play", kText, 14));
     say("game stopped");
 }
 
@@ -63,7 +63,7 @@ void ShellParticipant::cookOrStop() {
         return;
     }
     cooking_ = kId;
-    static_cast<void>(words(cookNode_, "Stop", kText, 14));
+    static_cast<void>(pressWords(cookNode_, "Stop", kText, 14));
     say("cooking");
 }
 
@@ -91,7 +91,7 @@ void ShellParticipant::hearCook() {
             break;
         }
         cooking_.reset();
-        static_cast<void>(words(cookNode_, "Cook", kText, 14));
+        static_cast<void>(pressWords(cookNode_, "Cook", kText, 14));
     }
 }
 

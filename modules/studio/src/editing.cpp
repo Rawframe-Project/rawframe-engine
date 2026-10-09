@@ -21,6 +21,14 @@ ShellParticipant::read(const std::string& scene, std::string_view operation, std
 }
 
 void ShellParticipant::pressAt(float x, float y) {
+    const bool kMoving = beforePress();
+    const auto kHit = tree_->hit(root_, x, y);
+    if (kHit.has_value() && kHit->node.has_value()) {
+        pressOn(*kHit->node, kMoving);
+    }
+}
+
+bool ShellParticipant::beforePress() {
     // Keys read before the press are taken before it, in the order they
     // came (D489): a field's text submitted, and the history row it adds,
     // are there for the press that follows them in one frame.
@@ -40,42 +48,47 @@ void ShellParticipant::pressAt(float x, float y) {
     }
     pressedSinceLayout_ = true;
     // Move to waits for this press alone (D498).
-    const bool kMoving = std::exchange(moving_, false);
-    const auto kHit = tree_->hit(root_, x, y);
-    if (!kHit.has_value() || !kHit->node.has_value()) {
-        return;
-    }
-    // The row is the node hit or the one its words are on.
-    const ui::Node kNode = *kHit->node;
-    if (!cookTool_.empty() && kNode == cookNode_) {
+    return std::exchange(moving_, false);
+}
+
+void ShellParticipant::pressOn(ui::Node node, bool moving) {
+    // The row is the node pressed or the one its words are on.
+    if (!cookTool_.empty() && node == cookNode_) {
         endEdit();
         cookOrStop();
-    } else if (play_.has_value() && kNode == playNode_) {
+    } else if (play_.has_value() && node == playNode_) {
         endEdit();
         if (playing_.has_value()) {
             stopPlaying();
         } else {
             startPlaying();
         }
-    } else if (broken_.has_value() && kNode == openNode_) {
+    } else if (broken_.has_value() && node == openNode_) {
         openEditor();
-    } else if (broken_.has_value() && kNode == retryNode_) {
+    } else if (broken_.has_value() && node == retryNode_) {
         // Read again; shown whole as it now reads, or still as it does not.
         const bool kOpened = openGame();
+        // The window's access goes with the tree it read (D575).
+        if (seat_ != nullptr) {
+            seat_->leave();
+        }
         static_cast<void>(tree_->remove(root_));
         static_cast<void>(build());
+        if (seat_ != nullptr) {
+            static_cast<void>(seat_->seat(*tree_, root_));
+        }
         if (kOpened) {
             say("the game reads");
         }
     } else if (broken_.has_value()) {
         return;
-    } else if (kNode == undoNode_ || kNode == redoNode_) {
+    } else if (node == undoNode_ || node == redoNode_) {
         endEdit();
-        step(kNode == undoNode_ ? "authoring.undo" : "authoring.redo");
-    } else if (kNode == newNode_ && !scene_.empty()) {
+        step(node == undoNode_ ? "authoring.undo" : "authoring.redo");
+    } else if (node == newNode_ && !scene_.empty()) {
         endEdit();
         create();
-    } else if (kNode == deleteNode_ && !entity_.empty()) {
+    } else if (node == deleteNode_ && !entity_.empty()) {
         endEdit();
         // An entity an instance brought is removed through its patch, so
         // Restore takes it back (D154, D450).
@@ -83,30 +96,29 @@ void ShellParticipant::pressAt(float x, float y) {
         commit(operationOn("scene.destroy_entity"),
                kBrought ? "removed from its instance" : "entity deleted",
                kBrought ? std::optional<std::string>{entity_} : std::nullopt);
-    } else if (kNode == duplicateNode_ && !entity_.empty()) {
+    } else if (node == duplicateNode_ && !entity_.empty()) {
         endEdit();
         duplicate();
-    } else if (kNode == moveNode_ && !entity_.empty()) {
+    } else if (node == moveNode_ && !entity_.empty()) {
         endEdit();
         moving_ = true;
         say("choose the scene to move it to");
-    } else if ((kNode == upNode_ || kNode == downNode_) && !entity_.empty()) {
+    } else if ((node == upNode_ || node == downNode_) && !entity_.empty()) {
         endEdit();
-        move(kNode == upNode_ ? -1 : 1);
-    } else if ((kNode == restoreNode_ || kNode == uninstanceNode_) && !entity_.empty()) {
+        move(node == upNode_ ? -1 : 1);
+    } else if ((node == restoreNode_ || node == uninstanceNode_) && !entity_.empty()) {
         endEdit();
         const bool kBrought = entityAt_ < brought_.size() && brought_[entityAt_];
         const bool kRemoved = entityAt_ < removed_.size() && removed_[entityAt_];
-        if (!kBrought || (kNode == restoreNode_ && !kRemoved)) {
+        if (!kBrought || (node == restoreNode_ && !kRemoved)) {
             ++refused_;
             say(kBrought ? "its instance has not removed it" : "no instance brought it");
-        } else if (kNode == restoreNode_) {
+        } else if (node == restoreNode_) {
             commit(operationOn("scene.restore_entity"), "restored", entity_);
         } else {
             commit(operationOn("scene.remove_instance"), "instance removed", std::nullopt);
         }
-    } else if (const auto kAction = std::ranges::find(actions_, kNode, &ActionButton::node);
-               kAction != actions_.end()) {
+    } else if (const auto kAction = std::ranges::find(actions_, node, &ActionButton::node); kAction != actions_.end()) {
         endEdit();
         const ActionButton kAsked = *kAction;
         Value operation = Value::object();
@@ -120,27 +132,27 @@ void ShellParticipant::pressAt(float x, float y) {
             operation.add("field", Value::string(kAsked.field));
         }
         commit(std::move(operation), kAsked.done, entity_);
-    } else if (const auto kEntry = std::ranges::find(entryRows_, kNode); kEntry != entryRows_.end()) {
+    } else if (const auto kEntry = std::ranges::find(entryRows_, node); kEntry != entryRows_.end()) {
         endEdit();
         stepTo(static_cast<std::size_t>(kEntry - entryRows_.begin()));
-    } else if (const auto kScene = std::ranges::find(sceneRows_, kNode); kScene != sceneRows_.end()) {
-        if (kMoving) {
+    } else if (const auto kScene = std::ranges::find(sceneRows_, node); kScene != sceneRows_.end()) {
+        if (moving) {
             moveTo(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         } else {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         }
-    } else if (const auto kEntity = std::ranges::find(entityRows_, kNode); kEntity != entityRows_.end()) {
+    } else if (const auto kEntity = std::ranges::find(entityRows_, node); kEntity != entityRows_.end()) {
         showEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
-    } else if (const auto kFieldAt = std::ranges::find(fields_, kNode, &FieldRow::value); kFieldAt != fields_.end()) {
+    } else if (const auto kFieldAt = std::ranges::find(fields_, node, &FieldRow::value); kFieldAt != fields_.end()) {
         beginEdit(*kFieldAt);
-    } else if (const auto kViewAt = std::ranges::find(viewFields_, kNode, &FieldRow::value);
+    } else if (const auto kViewAt = std::ranges::find(viewFields_, node, &FieldRow::value);
                kViewAt != viewFields_.end()) {
         beginEdit(*kViewAt);
-    } else if (newScene_.has_value() && kNode == newScene_->value) {
+    } else if (newScene_.has_value() && node == newScene_->value) {
         beginEdit(*newScene_);
-    } else if (findField_.has_value() && kNode == findField_->value) {
+    } else if (findField_.has_value() && node == findField_->value) {
         beginEdit(*findField_);
-    } else if (const auto kSceneAt = std::ranges::find(sceneFields_, kNode, &FieldRow::value);
+    } else if (const auto kSceneAt = std::ranges::find(sceneFields_, node, &FieldRow::value);
                kSceneAt != sceneFields_.end()) {
         beginEdit(*kSceneAt);
     } else {

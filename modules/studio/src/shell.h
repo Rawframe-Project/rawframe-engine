@@ -15,6 +15,7 @@
 #include "rawframe/font_import/sanitize.h"
 #include "rawframe/process/child.h"
 #include "rawframe/studio/registrar.h"
+#include "rawframe/ui/access.h"
 #include "rawframe/ui/frames.h"
 #include "rawframe/ui/text_edit.h"
 #include "rawframe/ui/tree.h"
@@ -41,6 +42,9 @@ namespace rawframe::studio {
 
 inline constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"};
 inline constexpr diagnostics::EventIdentity kShown{"studio", "studio_shown"};
+/// Studio's window read by assistive technology (D575), or why not.
+inline constexpr diagnostics::EventIdentity kAccessible{"studio", "studio_accessibility_ready"};
+inline constexpr diagnostics::EventIdentity kInaccessible{"studio", "studio_accessibility_unavailable"};
 inline constexpr diagnostics::EventIdentity kPreviewing{"studio", "studio_previewing"};
 /// The preview shows where the chosen entity stands (D464), so its handles
 /// can be grabbed (D466).
@@ -143,13 +147,18 @@ private:
     /// A button reading `text` under `parent`.
     result::Result<ui::Node> button(ui::Node parent, std::string_view text);
 
+    /// `text` on `node`, something to press, which it names for assistive
+    /// technology (D575).
+    result::Status pressWords(ui::Node node, std::string_view text, std::uint32_t color, float size);
+
     /// The window: a header over three columns, the scenes' with a row for
     /// each scene beside the game.
     result::Status build();
 
-    /// A row of `text` under `column`, its height fixed.
+    /// A row of `text` under `column`, its height fixed; one to press read
+    /// as a button (D575).
     result::Result<ui::Node>
-    row(ui::Node column, std::string_view text, std::uint32_t color, std::uint32_t fill = kRow);
+    row(ui::Node column, std::string_view text, std::uint32_t color, std::uint32_t fill = kRow, bool pressed = false);
 
     /// Removes `rows` from the tree.
     void clear(std::vector<ui::Node>& rows);
@@ -163,10 +172,19 @@ private:
     /// A read of `scene`: one query, `operation`, with `entity` if given.
     std::optional<Value> read(const std::string& scene, std::string_view operation, std::string_view entity = {});
 
-    /// A press at `x`, `y`: a scene row shows its entities, an entity row
-    /// chooses it and shows its components, a field takes the keyboard, and
-    /// a button does its operation.
+    /// A press at `x`, `y`: what `pressOn` does for the node hit.
     void pressAt(float x, float y);
+
+    /// What comes before a press, taken: keys typed, and a layout of what
+    /// an earlier press brought. Whether the press chooses the scene to
+    /// move to.
+    bool beforePress();
+
+    /// A press on `node`, a pointer's or a screen reader's (D575): a scene
+    /// row shows its entities, an entity row chooses it and shows its
+    /// components, a field takes the keyboard, and a button does its
+    /// operation.
+    void pressOn(ui::Node node, bool moving);
 
     void showScene(std::size_t at);
 
@@ -394,6 +412,9 @@ private:
     std::vector<ActionButton> actions_;
     view::UiPointing* pointing_ = nullptr;
     view::UiTyping* typing_ = nullptr;
+    /// Where the window is read for assistive technology, if its program
+    /// lends one (D575).
+    ui::AccessSeat* seat_ = nullptr;
     std::vector<view::Typing> typed_;
     std::unique_ptr<ui::TextEdit> edit_;
     std::vector<FieldRow> fields_;

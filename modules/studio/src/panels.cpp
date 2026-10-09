@@ -39,13 +39,23 @@ result::Result<ui::Node> ShellParticipant::column(ui::Node parent, std::string_v
                             0));
     RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(lastHeading_, ui::Layout{}, 0));
     RAWFRAME_TRY(words(kTitle, heading, kQuiet, 13));
+    // Read as a list that scrolls, by its heading (D575).
+    RAWFRAME_TRY(tree_->setRole(kColumn, ui::Role::ScrollView));
+    RAWFRAME_TRY(tree_->setName(kColumn, heading));
     return kColumn;
 }
 
 result::Result<ui::Node> ShellParticipant::button(ui::Node parent, std::string_view text) {
     RAWFRAME_TRY_ASSIGN(const ui::Node kButton, box(parent, ui::Layout{.padding = {10, 4, 10, 4}}, kRow));
-    RAWFRAME_TRY(words(kButton, text, kText, 14));
+    RAWFRAME_TRY(pressWords(kButton, text, kText, 14));
     return kButton;
+}
+
+result::Status ShellParticipant::pressWords(ui::Node node, std::string_view text, std::uint32_t color, float size) {
+    RAWFRAME_TRY(words(node, text, color, size));
+    // A node's text is read as its value, so a button is named by it too.
+    RAWFRAME_TRY(tree_->setRole(node, ui::Role::Button));
+    return tree_->setName(node, text);
 }
 
 result::Status ShellParticipant::build() {
@@ -72,11 +82,11 @@ result::Status ShellParticipant::build() {
     // Cook before Play, so Play, Undo, and Redo keep their places (D502).
     if (!cookTool_.empty()) {
         RAWFRAME_TRY_ASSIGN(cookNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
-        RAWFRAME_TRY(words(cookNode_, cooking_.has_value() ? "Stop" : "Cook", kText, 14));
+        RAWFRAME_TRY(pressWords(cookNode_, cooking_.has_value() ? "Stop" : "Cook", kText, 14));
     }
     if (play_.has_value()) {
         RAWFRAME_TRY_ASSIGN(playNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {12, 2, 10, 2}}, kRow));
-        RAWFRAME_TRY(words(playNode_, "Play", kText, 14));
+        RAWFRAME_TRY(pressWords(playNode_, "Play", kText, 14));
     }
     RAWFRAME_TRY_ASSIGN(undoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
     RAWFRAME_TRY_ASSIGN(redoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
@@ -98,10 +108,10 @@ result::Status ShellParticipant::build() {
         // before Duplicate, which keeps its place at the heading's end.
         if (catalog_.offers("scene.destroy_entity")) {
             RAWFRAME_TRY_ASSIGN(moveNode_, box(lastHeading_, ui::Layout{.padding = {8, 2, 8, 2}}, kRow));
-            RAWFRAME_TRY(words(moveNode_, "Move to", kText, 13));
+            RAWFRAME_TRY(pressWords(moveNode_, "Move to", kText, 13));
         }
         RAWFRAME_TRY_ASSIGN(duplicateNode_, box(lastHeading_, ui::Layout{.padding = {8, 2, 8, 2}}, kRow));
-        RAWFRAME_TRY(words(duplicateNode_, "Duplicate", kText, 13));
+        RAWFRAME_TRY(pressWords(duplicateNode_, "Duplicate", kText, 13));
     }
     RAWFRAME_TRY_ASSIGN(componentsColumn_, column(kColumns, "Components"));
     // The entities' operations above their rows.
@@ -169,7 +179,7 @@ result::Status ShellParticipant::showScenes() {
     for (std::size_t each = 0; each < scenes_.size(); ++each) {
         RAWFRAME_TRY_ASSIGN(
             const ui::Node kRowNode,
-            row(scenesColumn_, scenes_[each], kText, each == sceneAt_ && !scene_.empty() ? kChosen : kRow));
+            row(scenesColumn_, scenes_[each], kText, each == sceneAt_ && !scene_.empty() ? kChosen : kRow, true));
         sceneRows_.push_back(kRowNode);
     }
     // A new scene is the session's own verb, not an operation the catalog
@@ -186,10 +196,10 @@ result::Status ShellParticipant::showScenes() {
 }
 
 result::Result<ui::Node>
-ShellParticipant::row(ui::Node column, std::string_view text, std::uint32_t color, std::uint32_t fill) {
+ShellParticipant::row(ui::Node column, std::string_view text, std::uint32_t color, std::uint32_t fill, bool pressed) {
     RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode,
                         box(column, ui::Layout{.height = ui::pixels(28), .shrink = 0, .padding = {8, 4, 8, 4}}, fill));
-    RAWFRAME_TRY(words(kRowNode, text, color, 14));
+    RAWFRAME_TRY(pressed ? pressWords(kRowNode, text, color, 14) : words(kRowNode, text, color, 14));
     return kRowNode;
 }
 
@@ -266,7 +276,7 @@ void ShellParticipant::showScene(std::size_t at) {
         if (kRemoved) {
             label += "  (removed)";
         }
-        auto added = row(entitiesColumn_, label, brought != nullptr ? kQuiet : kText);
+        auto added = row(entitiesColumn_, label, brought != nullptr ? kQuiet : kText, kRow, true);
         if (!added.has_value()) {
             break;
         }
@@ -455,7 +465,7 @@ ShellParticipant::componentHeading(std::string_view name, const std::string& com
 
 result::Status ShellParticipant::action(ui::Node row, std::string_view text, ActionButton asked) {
     RAWFRAME_TRY_ASSIGN(asked.node, box(row, ui::Layout{.padding = {8, 2, 8, 2}, .margin = {0, 2, 0, 2}}, kPanel));
-    RAWFRAME_TRY(words(asked.node, text, kQuiet, 13));
+    RAWFRAME_TRY(pressWords(asked.node, text, kQuiet, 13));
     actions_.push_back(std::move(asked));
     return {};
 }
@@ -480,6 +490,9 @@ ShellParticipant::fieldRow(std::string_view name, std::string_view value, std::o
     RAWFRAME_TRY(tree_->setLook(kValue, ui::Look{.fill = kField, .radius = 3}));
     RAWFRAME_TRY(tree_->attach(kLine, kValue));
     RAWFRAME_TRY(words(kValue, value, kText, 14));
+    // Read as a field named by its name, its text its value (D575).
+    RAWFRAME_TRY(tree_->setRole(kValue, ui::Role::TextInput));
+    RAWFRAME_TRY(tree_->setName(kValue, name));
     return std::pair{kLine, kValue};
 }
 
@@ -516,7 +529,8 @@ void ShellParticipant::showHistoryList() {
     }
     historyRows_.push_back(*heading);
     for (const HistoryEntry& entry : historyOf(ask(historyRecord(next(), scene_)))) {
-        auto added = row(scenesColumn_, entry.summary, entry.applied ? kText : kQuiet, entry.applied ? kRow : kField);
+        auto added =
+            row(scenesColumn_, entry.summary, entry.applied ? kText : kQuiet, entry.applied ? kRow : kField, true);
         if (!added.has_value()) {
             return;
         }
@@ -535,8 +549,8 @@ void ShellParticipant::showViewText() {
 }
 
 result::Status ShellParticipant::showHistory() {
-    RAWFRAME_TRY(words(undoNode_, "Undo", undoable_ > 0 ? kText : kQuiet, 14));
-    return words(redoNode_, "Redo", redoable_ > 0 ? kText : kQuiet, 14);
+    RAWFRAME_TRY(pressWords(undoNode_, "Undo", undoable_ > 0 ? kText : kQuiet, 14));
+    return pressWords(redoNode_, "Redo", redoable_ > 0 ? kText : kQuiet, 14);
 }
 
 void ShellParticipant::say(std::string text) {
