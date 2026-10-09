@@ -106,8 +106,8 @@ bool writeLog(void* context, std::span<const char> bytes) noexcept {
     return std::fflush(log) == 0 && kWritten;
 }
 
-/// The process's one client, made when the first activity asks and kept for
-/// the process's life, as the program outlives its activities.
+/// The process's client, made when an activity asks and no program runs,
+/// and kept while it runs, as the program outlives its activities.
 struct AndroidClient {
     std::FILE* log = nullptr;
     std::optional<composition::Configuration> configuration;
@@ -117,10 +117,16 @@ struct AndroidClient {
     /// The player, or none when the configuration cannot be read, said in
     /// the log where there is one.
     window::Program* prepare() {
-        // A process plays once: an activity made after its run ended finds
-        // none.
-        if (player != nullptr) {
-            return nullptr;
+        // An activity made after a run ended, the player having gone back
+        // and come again in the same process, plays anew (D577): Maul
+        // Window asks only when no program runs, and frees the last run's
+        // hold on its player when that run stops.
+        player.reset();
+        configuration.reset();
+        stopRequested.store(false);
+        if (log != nullptr) {
+            std::fclose(log);
+            log = nullptr;
         }
         const std::optional<std::string> kFiles = filesDirectory();
         if (!kFiles.has_value()) {
