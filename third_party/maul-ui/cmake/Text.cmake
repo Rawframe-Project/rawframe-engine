@@ -5,6 +5,11 @@
 # modules read their headers.
 
 target_sources(maul-ui PRIVATE
+    src/bitmap_glyph.c
+    src/color_glyph.c
+    src/colr_composite.c
+    src/colr_gradient.c
+    src/colr_paint.c
     src/distance_field.c
     src/flatten.c
     src/family_store.c
@@ -15,8 +20,14 @@ target_sources(maul-ui PRIVATE
     src/font_store.c
     src/glyph_atlas.c
     src/glyph_image.c
+    src/glyph_outline.c
     src/glyph_table.c
+    src/image_scale.c
+    src/inflate.c
     src/line_break.c
+    src/multi_field.c
+    src/paint_source.c
+    src/png.c
     src/skyline.c
     src/text_block.c
     src/text_blocks.c
@@ -25,8 +36,16 @@ target_sources(maul-ui PRIVATE
     src/text_hit.c
     src/text_move.c
     src/text_layout.c
+    src/text_lines.c
     src/text_paragraph.c
     src/text_service.c
+    src/text_editing.c
+    src/text_editor.c
+    src/text_history.c
+    src/text_keys.c
+    src/text_mask.c
+    src/text_rules.c
+    src/text_runs.c
     src/text_shape.c
     $<TARGET_OBJECTS:maul-unicode>
     $<TARGET_OBJECTS:maul-unicode-harfbuzz>)
@@ -37,6 +56,13 @@ target_include_directories(maul-ui SYSTEM PRIVATE
 # link as C++; Visual Studio projects then apply only C++ settings and
 # drop C23. It links as C, needing no C++ runtime.
 set_target_properties(maul-ui PROPERTIES LINKER_LANGUAGE C)
+# Linking as C, CMake still names the C++ compiler's own libraries,
+# where the NDK's "c++" is a script for its shared runtime whatever
+# ANDROID_STL chose: with the static runtime (the NDK's default), the
+# static one is named instead.
+if(ANDROID AND NOT ANDROID_STL MATCHES "_shared$")
+    list(TRANSFORM CMAKE_CXX_IMPLICIT_LINK_LIBRARIES REPLACE "^c\\+\\+$" "c++_static;c++abi")
+endif()
 
 if(MAUL_UI_TEXT_SYSTEM_LIBRARIES)
     target_link_libraries(maul-ui PRIVATE Freetype::Freetype harfbuzz::harfbuzz)

@@ -9,6 +9,7 @@
 
 #include "paint_host.h"
 
+#include "draw_transform.h"
 #include "layout_node.h"
 #include "tree.h"
 
@@ -88,6 +89,54 @@ muiResult muiDrawSink_AddGlyphRun(muiDrawSink* sink, const muiGlyphRun* run, con
     return mui_success;
 }
 
+// Narrows a span from low up to high to where it meets one.
+static void Meet(float* low, float* high, float otherLow, float otherHigh)
+{
+    *low = fmaxf(*low, otherLow);
+    *high = fminf(*high, otherHigh);
+}
+
+muiResult muiDrawSink_GetVisibleRect(muiDrawSink* sink, muiRect* rectOut)
+{
+    if (sink == nullptr || rectOut == nullptr)
+    {
+        return mui_errorInvalid;
+    }
+    muiPainter* painter = sink->painter;
+    const muiContext* context = painter->context;
+    const muiDrawTables* out = painter->out;
+    const muiRect* surface = &context->layout[painter->root - 1].rect;
+    // On the surface, through every clip the content is drawn in, each
+    // as its rectangle: corners and transforms only take away.
+    float left = 0.0f;
+    float top = 0.0f;
+    float right = surface->width;
+    float bottom = surface->height;
+    for (uint32_t at = sink->state->clip; at != 0; at = out->clips[at].parent)
+    {
+        const muiDrawClip* clip = &out->clips[at];
+        muiDrawTransform t =
+            muiTransformOf(context, painter->root, out, clip->transform, painter->scale);
+        Meet(&left, &right, t.a * clip->rect.x + t.e,
+             t.a * (clip->rect.x + clip->rect.width) + t.e);
+        Meet(&top, &bottom, t.d * clip->rect.y + t.f,
+             t.d * (clip->rect.y + clip->rect.height) + t.f);
+    }
+    // Back through the content's transform, from the content box's top
+    // left; scaled to nothing, nothing shows.
+    muiDrawTransform t =
+        muiTransformOf(context, painter->root, out, sink->state->transform, painter->scale);
+    *rectOut = (muiRect){0.0f, 0.0f, 0.0f, 0.0f};
+    if (t.a > 0.0f && t.d > 0.0f && right > left && bottom > top)
+    {
+        float x = (left - t.e) / t.a - sink->x;
+        float y = (top - t.f) / t.d - sink->y;
+        *rectOut = (muiRect){x, y, (right - left) / t.a, (bottom - top) / t.d};
+    }
+    painter->culled++;
+    return mui_success;
+}
+
 muiResult muiDrawSink_AddRect(muiDrawSink* sink, muiRect rect, muiColor color)
 {
     if (sink == nullptr)
@@ -122,19 +171,9 @@ void muiPaintHostContent(muiPainter* painter, uint32_t slot, const muiPaintState
     {
         return;
     }
-    // The content box, as layout sized it: inside the border and padding,
-    // whose start is the right in a right-to-left node.
-    const muiEdges* border = &layout->style.border;
-    const muiEdges* padding = &layout->style.padding;
-    float start = border->start + padding->start;
-    float end = border->end + padding->end;
-    float top = border->top + padding->top;
-    float bottom = border->bottom + padding->bottom;
-    float left = layout->rtl ? end : start;
-    muiDrawSink sink = {painter, state, state->x + left, state->y + top};
-    float width = fmaxf(layout->rect.width - start - end, 0.0f);
-    float height = fmaxf(layout->rect.height - top - bottom, 0.0f);
+    const muiRect content = muiContentBoxOf(layout, &context->paddings[slot - 1]);
+    muiDrawSink sink = {painter, state, state->x + content.x, state->y + content.y};
     const muiTreeNode* node = muiTreeAt(&context->tree, slot);
-    painter->paint(painter->paintUser, muiTreeIdOf(&context->tree, slot), node->hostKey, width,
-                   height, &sink);
+    painter->paint(painter->paintUser, muiTreeIdOf(&context->tree, slot), node->hostKey,
+                   content.width, content.height, &sink);
 }

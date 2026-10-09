@@ -16,7 +16,7 @@
 
 // Records with no padding, so that their bytes are their fields'.
 static_assert(sizeof(muiDrawBox) == 136 && sizeof(muiDrawShadow) == 68 &&
-                  sizeof(muiDrawImage) == 72 && sizeof(muiDrawGlyphRun) == 48 &&
+                  sizeof(muiDrawImage) == 80 && sizeof(muiDrawGlyphRun) == 48 &&
                   sizeof(muiGlyph) == 12 && sizeof(muiDrawCommand) == 152 &&
                   sizeof(muiDrawClip) == 44 && sizeof(muiDrawGradient) == 96,
               "draw records have no padding");
@@ -237,7 +237,7 @@ static void AddBox(muiPainter* painter, const muiVisualStyle* visual, const Bord
     }
 }
 
-static void AddImage(muiPainter* painter, const muiVisualStyle* visual, muiRect rect,
+static void AddImage(muiPainter* painter, const muiVisualStyle* visual, muiRect rect, bool rtl,
                      const muiPaintState* state)
 {
     if (visual->image == 0)
@@ -253,10 +253,18 @@ static void AddImage(muiPainter* painter, const muiVisualStyle* visual, muiRect 
     command->image.rect = muiSnapRect(rect, painter->scale);
     command->image.image = visual->image;
     command->image.uv = (muiRect){0.0f, 0.0f, 1.0f, 1.0f};
-    // An image does not mirror: its slice's start and end are its left and
-    // right.
+    // Its slice's start and end are its left and right; mirrored, it is
+    // drawn from its right, a uv of negative width, and its insets are as
+    // drawn (record mui-0005).
     command->image.slice = (muiSides){slice->top, slice->end, slice->bottom, slice->start};
+    if (visual->imageMirrors && rtl)
+    {
+        command->image.uv = (muiRect){1.0f, 0.0f, -1.0f, 1.0f};
+        command->image.slice = (muiSides){slice->top, slice->start, slice->bottom, slice->end};
+    }
     command->image.tint = muiPaintColor(painter, visual->imageTint, state->opacity);
+    command->image.repeatX = visual->imageRepeatX;
+    command->image.repeatY = visual->imageRepeatY;
 }
 
 // The padding box of a border box, and its corners' radii.
@@ -293,10 +301,7 @@ static uint32_t AddClip(muiPainter* painter, muiRect rect, muiCorners radii,
     return index;
 }
 
-// A scroll container's transform for its children, after the one it is
-// drawn through; its value comes when the list is done. That one when
-// none fits.
-static uint32_t AddTransform(muiPainter* painter, uint32_t slot, uint32_t parent)
+uint32_t muiAddTransform(muiPainter* painter, uint32_t owner, uint32_t parent)
 {
     muiDrawTables* out = painter->out;
     if (out->transformCount == painter->transformCapacity)
@@ -305,7 +310,7 @@ static uint32_t AddTransform(muiPainter* painter, uint32_t slot, uint32_t parent
         return parent;
     }
     uint32_t index = out->transformCount++;
-    out->transformOwners[index] = slot;
+    out->transformOwners[index] = owner;
     out->transformParents[index] = parent;
     return index;
 }
@@ -315,6 +320,20 @@ bool muiPaintNode(muiPainter* painter, uint32_t slot, muiPaintState* state)
     const muiContext* context = painter->context;
     const muiLayoutNode* layout = &context->layout[slot - 1];
     const muiVisualStyle* visual = &context->visual[slot - 1];
+    // A scaled node and its subtree go through its scale (record
+    // mui-0005): its own commands too, so the state names it until the
+    // node is painted. A scroll container's children go through its
+    // offset after it (record mui-0007). Both come first: a layer below
+    // takes them though the node draws nothing.
+    if (visual->scale.x != 1.0f || visual->scale.y != 1.0f)
+    {
+        state->transform = muiAddTransform(painter, slot | MUI_TRANSFORM_SCALE, state->transform);
+        state->inner = state->transform;
+    }
+    if (layout->style.scrollAxes != mui_scrollNone)
+    {
+        state->inner = muiAddTransform(painter, slot, state->transform);
+    }
     state->opacity = state->inherited * visual->opacity;
     if (state->opacity <= 0.0f)
     {
@@ -333,20 +352,18 @@ bool muiPaintNode(muiPainter* painter, uint32_t slot, muiPaintState* state)
         PaddingBox(&inner, &innerRadii, &borders.widths);
         AddShadow(painter, &visual->innerShadow, inner, innerRadii, true, state);
     }
-    AddImage(painter, visual, rect, state);
+    AddImage(painter, visual, rect, layout->rtl, state);
     if (visual->clip)
     {
         state->clip = AddClip(painter, rect, radii, state);
     }
-    // A scroll container clips at its padding box, and its children go
-    // through its offset (record mui-0007).
+    // A scroll container clips at its padding box.
     if (layout->style.scrollAxes != mui_scrollNone)
     {
         muiRect port = rect;
         muiCorners portRadii = radii;
         PaddingBox(&port, &portRadii, &borders.widths);
         state->clip = AddClip(painter, port, portRadii, state);
-        state->inner = AddTransform(painter, slot, state->transform);
     }
     return true;
 }

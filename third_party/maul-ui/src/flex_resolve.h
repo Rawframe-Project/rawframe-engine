@@ -25,14 +25,15 @@ void muiResolveFlexibleLengths(const muiTree* tree, muiLayoutNode* nodes, uint32
 
 // The space before the first of count items and the extra space between
 // two of them, for free space left on the line (negative when the items
-// overflow).
-void muiJustifySpacing(muiJustify justify, float freeSpace, uint32_t count, float* leadOut,
-                       float* betweenOut);
+// overflow); reversed when the main axis starts at the writing mode's end.
+void muiJustifySpacing(muiJustify justify, float freeSpace, uint32_t count, bool reversed,
+                       float* leadOut, float* betweenOut);
 
 // The space before the first of count lines, the extra space between two
 // of them, and what each line grows by, for free cross space left
-// (negative when the lines overflow).
-void muiAlignContentSpacing(muiAlignContent align, float freeSpace, uint32_t count, float* leadOut,
-                            float* betweenOut, float* growOut);
+// (negative when the lines overflow); reversed when the cross axis starts
+// at the writing mode's end.
+void muiAlignContentSpacing(muiAlignContent align, float freeSpace, uint32_t count, bool reversed,
+                            float* leadOut, float* betweenOut, float* growOut);
 
 #endif // MAUL_UI_SRC_FLEX_RESOLVE_H

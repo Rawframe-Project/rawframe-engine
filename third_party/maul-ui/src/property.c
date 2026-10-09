@@ -129,6 +129,7 @@ static const Row s_layoutRows[] = {
     ENUM(textDirection, mui_textInherit, mui_textRightToLeft),
     ENUM(content, mui_contentNone, mui_contentHost),
     ENUM(scrollAxes, mui_scrollNone, mui_scrollBoth),
+    ENUM(safeArea, 0, mui_edgeStart | mui_edgeEnd | mui_edgeTop | mui_edgeBottom),
 };
 
 static const Row s_visualRows[] = {
@@ -149,6 +150,16 @@ static const Row s_visualRows[] = {
     VISUAL(imageTint, muiColor, kindColor),
     VISUAL(opacity, float, kindFraction),
     {(uint16_t)offsetof(muiVisualStyle, clip), (uint8_t)sizeof(bool), kindEnum, groupVisual, 0, 1},
+    VISUAL(scale.x, float, kindLength),
+    VISUAL(scale.y, float, kindLength),
+    VISUAL(scale.originX, float, kindFraction),
+    VISUAL(scale.originY, float, kindFraction),
+    {(uint16_t)offsetof(muiVisualStyle, imageMirrors), (uint8_t)sizeof(bool), kindEnum, groupVisual,
+     0, 1},
+    {(uint16_t)offsetof(muiVisualStyle, imageRepeatX), (uint8_t)sizeof(muiImageRepeat), kindEnum,
+     groupVisual, mui_imageStretch, mui_imageSpace},
+    {(uint16_t)offsetof(muiVisualStyle, imageRepeatY), (uint8_t)sizeof(muiImageRepeat), kindEnum,
+     groupVisual, mui_imageStretch, mui_imageSpace},
 };
 
 static const Row s_textRows[] = {
@@ -161,6 +172,10 @@ static const Row s_textRows[] = {
     TEXT(slant, uint8_t, kindEnum, mui_slantNormal, mui_slantOblique),
     TEXT(align, uint8_t, kindEnum, mui_textAlignStart, mui_textAlignEnd),
     TEXT(wrap, uint8_t, kindEnum, mui_textWrap, mui_textNoWrap),
+    TEXT(decoration, uint8_t, kindEnum, 0,
+         mui_decorationUnderline | mui_decorationOverline | mui_decorationLineThrough),
+    TEXT(decorationColor, muiColor, kindColor, 0, 0),
+    TEXT(baselineShift, muiDimension, kindSpacing, 0, 0),
 };
 
 static const Row s_interactionRows[] = {
@@ -189,12 +204,12 @@ static const GroupRows s_groups[MUI_PROPERTY_GROUPS] = {
     {s_interactionRows, (uint32_t)(sizeof s_interactionRows / sizeof s_interactionRows[0])},
 };
 
-static_assert(sizeof s_layoutRows / sizeof s_layoutRows[0] == mui_propertyScrollAxes + 1 &&
-                  sizeof s_visualRows / sizeof s_visualRows[0] == (mui_propertyClip & 63) + 1 &&
-                  sizeof s_textRows / sizeof s_textRows[0] == (mui_propertyTextWrap & 63) + 1 &&
-                  sizeof s_interactionRows / sizeof s_interactionRows[0] ==
-                      (mui_propertyExitLayout & 63) + 1,
-              "one row per property");
+static_assert(
+    sizeof s_layoutRows / sizeof s_layoutRows[0] == mui_propertySafeArea + 1 &&
+        sizeof s_visualRows / sizeof s_visualRows[0] == (mui_propertyImageRepeatY & 63) + 1 &&
+        sizeof s_textRows / sizeof s_textRows[0] == (mui_propertyTextBaselineShift & 63) + 1 &&
+        sizeof s_interactionRows / sizeof s_interactionRows[0] == (mui_propertyExitLayout & 63) + 1,
+    "one row per property");
 static_assert(MUI_PROPERTY_GROUP(mui_propertyHitMode) == mui_groupInteraction &&
                   (mui_propertyHitMode & 63) == 0,
               "the interaction group starts at its first id");
@@ -213,9 +228,10 @@ static_assert(sizeof(muiColor) == 4 * sizeof(float) && sizeof(muiShadow) == 8 * 
                   sizeof(muiEdges) == 4 * sizeof(float) &&
                   sizeof(muiGradientStop) == 5 * sizeof(float),
               "compared as floats alone");
-static_assert(MUI_LAYOUT_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyScrollAxes) << 1) - 1 &&
-                  MUI_VISUAL_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyClip) << 1) - 1 &&
-                  MUI_TEXT_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyTextWrap) << 1) - 1 &&
+static_assert(MUI_LAYOUT_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertySafeArea) << 1) - 1 &&
+                  MUI_VISUAL_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyImageRepeatY) << 1) - 1 &&
+                  MUI_TEXT_PROPERTIES ==
+                      (MUI_PROPERTY_BIT(mui_propertyTextBaselineShift) << 1) - 1 &&
                   MUI_INTERACTION_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyExitLayout) << 1) - 1,
               "the masks name every property of their groups");
 
@@ -273,6 +289,7 @@ static const muiVisualStyle s_visualDefaults = {
                     {0.0f, 0.0f, 0.0f, 1.0f}},
     .imageTint = {1.0f, 1.0f, 1.0f, 1.0f},
     .opacity = 1.0f,
+    .scale = {1.0f, 1.0f, 0.5f, 0.5f},
 };
 
 const muiLayoutStyle* muiLayoutDefaults(void)
@@ -292,6 +309,7 @@ static const muiTextStyle s_textDefaults = {
     .size = {0.0f, 16.0f, mui_dimensionValue},
     .lineHeight = {0.0f, 0.0f, mui_dimensionAuto},
     .letterSpacing = {0.0f, 0.0f, mui_dimensionValue},
+    .baselineShift = {0.0f, 0.0f, mui_dimensionValue},
     .weight = 400.0f,
     .slant = mui_slantNormal,
     .align = mui_textAlignStart,
@@ -387,15 +405,15 @@ static bool IsDimensionValid(muiDimension value)
     return value.kind <= mui_dimensionValue && isfinite(value.scale) && isfinite(value.offset);
 }
 
-// None with no stops, or a linear or radial gradient with 2 or more
-// stops in order from 0 to 1.
+// None with no stops, or a linear, radial or conic gradient with 2 or
+// more stops in order from 0 to 1.
 static bool IsGradientValid(const muiGradient* gradient)
 {
     if (gradient->kind == mui_gradientNone)
     {
         return gradient->stopCount == 0;
     }
-    if (gradient->kind > mui_gradientRadial || gradient->stopCount < 2 ||
+    if (gradient->kind > mui_gradientConic || gradient->stopCount < 2 ||
         gradient->stopCount > MUI_MAX_GRADIENT_STOPS || !isfinite(gradient->angle))
     {
         return false;

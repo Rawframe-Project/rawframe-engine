@@ -41,6 +41,11 @@ typedef struct muiTextLine
     uint32_t end;
     uint32_t next;
     float width;
+    // Where the line lies down the paragraph: its top, its height and its
+    // baseline, from the paragraph's top (src/text_paragraph.c).
+    float top;
+    float height;
+    float baseline;
 } muiTextLine;
 
 // The width of bytes from start up to end.
@@ -53,5 +58,14 @@ float muiTextWidth(const muiTextBlock* block, const muiLineScale* scale, uint32_
 // line break has an empty last line; an empty text has none.
 uint32_t muiBreakLines(const muiTextBlock* block, const muiLineScale* scale, muiBreakMode mode,
                        float width, muiTextLine* lines, uint32_t capacity);
+
+// muiBreakLines for the whole paragraphs from from up to to alone; the
+// empty last line is theirs when to is the text's end.
+uint32_t muiBreakLinesWithin(const muiTextBlock* block, const muiLineScale* scale,
+                             muiBreakMode mode, float width, uint32_t from, uint32_t to,
+                             muiTextLine* lines, uint32_t capacity);
+
+// How many break opportunities a block has past from up to to.
+uint32_t muiCountBreaksWithin(const muiTextBlock* block, uint32_t from, uint32_t to);
 
 #endif // MAUL_UI_SRC_LINE_BREAK_H

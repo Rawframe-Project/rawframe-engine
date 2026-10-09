@@ -42,6 +42,7 @@ enum
     mui_dbusMethodCall = 1,
     mui_dbusMethodReturn = 2,
     mui_dbusMessageError = 3,
+    mui_dbusSignal = 4,
     mui_dbusTypeInvalid = 0,
     mui_dbusTypeArray = 'a',
     mui_dbusTypeBoolean = 'b',
@@ -64,6 +65,7 @@ typedef struct muiDBusApi
     muiDBusBool (*busRegister)(DBusConnection* connection, void* error);
     int (*requestName)(DBusConnection* connection, const char* name, unsigned int flags,
                        void* error);
+    void (*addMatch)(DBusConnection* connection, const char* rule, void* error);
     void (*setExitOnDisconnect)(DBusConnection* connection, muiDBusBool exit);
     void (*close)(DBusConnection* connection);
     void (*unrefConnection)(DBusConnection* connection);

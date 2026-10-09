@@ -189,6 +189,31 @@ extern "C"
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_API uint64_t muiGetContextMisuse(const muiContext* context);
 
+    // The work a context has done since it was made, counted where it is
+    // done rather than skipped: a host reads it before and after a frame
+    // and subtracts, so a static frame shows it cost nothing.
+    typedef struct muiWorkCounts
+    {
+        // Nodes whose style a restyle resolved.
+        uint64_t styled;
+        // Sizes the layout solver computed, in its sizing and its final
+        // pass, rather than answered from a node's cache.
+        uint64_t sized;
+        // Calls of the host's measure function.
+        uint64_t measured;
+        // Nodes whose draw commands a build emitted, rather than copied
+        // from the last list or kept with it whole.
+        uint64_t painted;
+    } muiWorkCounts;
+
+    /// Returns the work a context has done since it was made.
+    ///
+    /// @param context  The context.
+    /// @return The counts; all 0 for a NULL context.
+    /// @par Thread safety
+    /// Safe from any thread; the context is used by one thread at a time.
+    MUI_API muiWorkCounts muiGetWorkCounts(const muiContext* context);
+
 #ifdef __cplusplus
 }
 #endif

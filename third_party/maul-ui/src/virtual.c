@@ -240,9 +240,9 @@ static void SetLength(muiContext* context, uint32_t slot, const muiVirtualEntry*
 double muiVirtualViewStart(const muiContext* context, uint32_t slot, const muiVirtualEntry* entry)
 {
     const muiScrollState* scroll = &context->scrolls[slot - 1];
-    const muiLayoutStyle* style = &context->layout[slot - 1].style;
-    return entry->list.axis == mui_listHorizontal ? (double)scroll->x - (double)style->padding.start
-                                                  : (double)scroll->y - (double)style->padding.top;
+    const muiEdges* padding = &context->paddings[slot - 1];
+    return entry->list.axis == mui_listHorizontal ? (double)scroll->x - (double)padding->start
+                                                  : (double)scroll->y - (double)padding->top;
 }
 
 void muiVirtualShift(muiContext* context, uint32_t slot, const muiVirtualEntry* entry, double delta)
@@ -514,6 +514,7 @@ static void Position(muiContext* context, uint32_t slot, const muiVirtualEntry* 
     const muiTree* tree = &context->tree;
     const muiLayoutNode* list = &context->layout[slot - 1];
     const muiLayoutStyle* style = &list->style;
+    const muiEdges* padding = &context->paddings[slot - 1];
     bool horizontal = entry->list.axis == mui_listHorizontal;
     for (uint32_t c = muiTreeAt(tree, slot)->links.firstChild; c != 0;
          c = muiTreeAt(tree, c)->links.next)
@@ -527,16 +528,16 @@ static void Position(muiContext* context, uint32_t slot, const muiVirtualEntry* 
         float offset = (float)muiVirtualOffset(store, entry, item - 1);
         if (!horizontal)
         {
-            rect->y = style->border.top + style->padding.top + offset;
+            rect->y = style->border.top + padding->top + offset;
         }
         else if (list->rtl)
         {
-            rect->x = list->rect.width - style->border.start - style->padding.start - offset -
-                      rect->width;
+            rect->x =
+                list->rect.width - style->border.start - padding->start - offset - rect->width;
         }
         else
         {
-            rect->x = style->border.start + style->padding.start + offset;
+            rect->x = style->border.start + padding->start + offset;
         }
     }
 }
@@ -560,17 +561,29 @@ static void PlaceList(muiContext* context, uint32_t slot, muiVirtualEntry* entry
     muiVirtualShift(context, slot, entry, shift);
     Position(context, slot, entry);
     SetLength(context, slot, entry);
-    const muiLayoutStyle* style = &context->layout[slot - 1].style;
+    // The length its items now need, longer or shorter, with what its
+    // children reached at its last layout; its offset brought within.
+    const muiEdges* padding = &context->paddings[slot - 1];
+    const muiLayoutNode* layout = &context->layout[slot - 1];
     muiScrollState* scroll = &context->scrolls[slot - 1];
-    if (entry->list.axis == mui_listHorizontal)
+    bool horizontal = entry->list.axis == mui_listHorizontal;
+    if (horizontal)
     {
         scroll->extentWidth =
-            fmaxf(scroll->extentWidth, style->padding.start + scroll->listX + style->padding.end);
+            fmaxf(scroll->reachWidth, padding->start + scroll->listX + padding->end);
     }
     else
     {
         scroll->extentHeight =
-            fmaxf(scroll->extentHeight, style->padding.top + scroll->listY + style->padding.bottom);
+            fmaxf(scroll->reachHeight, padding->top + scroll->listY + padding->bottom);
+    }
+    muiSize size = {layout->rect.width, layout->rect.height};
+    float* offset = horizontal ? &scroll->x : &scroll->y;
+    float limit = muiScrollLimit(&layout->style, size, scroll, horizontal);
+    if (*offset > limit)
+    {
+        *offset = limit;
+        muiNoteScrolled(context, slot);
     }
 }
 

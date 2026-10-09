@@ -79,3 +79,8 @@ muiLinearColor muiPremultiply(const double rgb[3], float alpha, float opacity)
     return (muiLinearColor){(float)(rgb[0] * scale), (float)(rgb[1] * scale),
                             (float)(rgb[2] * scale), (float)scale};
 }
+
+float muiEncodeSrgb(float linear)
+{
+    return (float)FromLinear(Unit((double)linear));
+}

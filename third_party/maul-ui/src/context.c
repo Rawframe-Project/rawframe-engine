@@ -19,6 +19,7 @@
 
 // Slots are 1-based uint32_t values with room for a parent link count.
 #define MAX_SLOTS 0x7FFFFFFFu
+static_assert(MAX_SLOTS < MUI_TRANSFORM_SCALE, "a transform's owner has its slot and a flag");
 
 // Every part after the context starts on a cache line, so a record whose
 // size is a multiple of one never has a field split across two, wherever
@@ -84,6 +85,7 @@ typedef struct Parts
 {
     size_t nodes;
     size_t layout;
+    size_t paddings;
     size_t visual;
     size_t text;
     size_t textRecords;
@@ -155,6 +157,7 @@ static Parts LayOut(muiLayout* layout, const muiLimits* limits)
     return (Parts){
         .nodes = muiLayoutAdd(layout, limits->nodes, sizeof(muiTreeNode), CACHE_LINE),
         .layout = muiLayoutAdd(layout, limits->nodes, sizeof(muiLayoutNode), CACHE_LINE),
+        .paddings = muiLayoutAdd(layout, limits->nodes, sizeof(muiEdges), CACHE_LINE),
         .visual = muiLayoutAdd(layout, limits->nodes, sizeof(muiVisualStyle), CACHE_LINE),
         .text = muiLayoutAdd(layout, limits->nodes, sizeof(muiTextStyle), CACHE_LINE),
         .textRecords = muiLayoutAdd(layout, limits->nodes, sizeof(muiTextRecord), CACHE_LINE),
@@ -247,6 +250,7 @@ static void Place(muiContext* context, unsigned char* base, const Parts* parts,
 {
     muiTreeInit(&context->tree, (muiTreeNode*)(base + parts->nodes), limits->nodes);
     context->layout = (muiLayoutNode*)(base + parts->layout);
+    context->paddings = (muiEdges*)(base + parts->paddings);
     context->visual = (muiVisualStyle*)(base + parts->visual);
     context->text = (muiTextStyle*)(base + parts->text);
     context->textRecords = (muiTextRecord*)(base + parts->textRecords);
@@ -373,6 +377,11 @@ void muiDestroyContext(muiContext* context)
 uint64_t muiGetContextMisuse(const muiContext* context)
 {
     return context != nullptr ? context->misuse : 0;
+}
+
+muiWorkCounts muiGetWorkCounts(const muiContext* context)
+{
+    return context != nullptr ? context->work : (muiWorkCounts){0};
 }
 
 muiResult muiRefuse(muiContext* context)

@@ -11,6 +11,7 @@
 #include "pool.h"
 
 #include "maul-ui/base.h"
+#include "maul-ui/text_editor.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -73,9 +74,98 @@ typedef struct muiTextItem
     uint32_t script;
     uint32_t face;
     uint32_t units;
+    // Its run style (src/text_runs.h), 0 the node's, and that style's
+    // size over the node's.
+    uint32_t style;
+    float scale;
 } muiTextItem;
 
-typedef struct muiTextBlock
+// An edit undo keeps: the bytes from start, removed long, became the
+// inserted bytes; both are in the history's bytes from bytes, removed
+// first. The selections before and after it, and what made it.
+typedef struct muiTextEdit
+{
+    uint32_t start;
+    uint32_t removed;
+    uint32_t inserted;
+    uint32_t bytes;
+    muiTextSelection before;
+    muiTextSelection after;
+    uint8_t kind;
+} muiTextEdit;
+
+// A block's editing state: its rules, its selection, the x vertical
+// moves keep (below 0 for none), the unit and the range a press selected
+// for drags, and its history: entryCount muiTextEdit, done of them not
+// undone, over byteCount bytes; the kind of the last edit while typing
+// or deleting may still join it, else 0; the text's revision it last
+// saw.
+typedef struct muiTextEditing
+{
+    bool on;
+    muiTextEditDef def;
+    muiTextSelection selection;
+    float preferredX;
+    // How far the text is scrolled in the content box, the caret kept
+    // in view (src/text_boxes.h).
+    float scrollX;
+    float scrollY;
+    uint8_t grain;
+    uint32_t pressStart;
+    uint32_t pressEnd;
+    muiBuffer entries;
+    uint32_t entryCount;
+    uint32_t done;
+    muiBuffer bytes;
+    uint32_t byteCount;
+    uint8_t open;
+    uint64_t revision;
+} muiTextEditing;
+
+// The end of the paragraph a text has at from: past its mandatory break
+// (UAX #14's BK, CR, LF and NL: VT, FF, LS and PS, CR, LF, CR LF and
+// NEL), or the text's end. A block's analysis and shaping go paragraph
+// by paragraph, so an edit redoes only the paragraphs it reaches.
+uint32_t muiParagraphEnd(const char* text, uint32_t length, uint32_t from);
+
+// Paragraphs edits have changed since something was made of a text:
+// while on, from start up to end of the text now; what was made holds
+// before them, and after them moved by the change in length.
+typedef struct muiStale
+{
+    bool on;
+    uint32_t start;
+    uint32_t end;
+} muiStale;
+
+// A block's lines for a break mode (src/text_lines.h), kept between
+// layouts: count muiTextLine and, per line, its glyphs' width (float),
+// the widest of them, for the text of length bytes, the block's whole
+// shaping numbered shaping (0 none), a line scale of size and spacing,
+// and, wrapping, a width.
+typedef struct muiLineCache
+{
+    muiBuffer lines;
+    muiBuffer widths;
+    uint32_t count;
+    uint32_t length;
+    uint64_t shaping;
+    float size;
+    float spacing;
+    float width;
+    float widest;
+    muiStale stale;
+} muiLineCache;
+
+enum
+{
+    // Wrapping, only mandatory breaks, and every opportunity.
+    MUI_LINE_CACHES = 3
+};
+
+typedef struct muiTextBlock muiTextBlock;
+
+struct muiTextBlock
 {
     // The text, length bytes.
     muiBuffer text;
@@ -87,10 +177,16 @@ typedef struct muiTextBlock
     muiBuffer scripts;
     uint32_t scriptCount;
     // The shaping, valid when shaped, for the font chain of identity
-    // shapedChain and shapedRtl.
+    // shapedChain and shapedRtl, of a text shapedLength bytes long, with
+    // the paragraphs edits changed since; shapings counts the times the
+    // whole text was shaped, which the line caches follow.
     bool shaped;
     bool shapedRtl;
     uint64_t shapedChain;
+    uint32_t shapedLength;
+    muiStale stale;
+    uint64_t shapings;
+    muiLineCache lineCaches[MUI_LINE_CACHES];
     // A byte per byte: the place in the chain of the font it is drawn in.
     muiBuffer faces;
     // A bidi level per byte.
@@ -104,9 +200,11 @@ typedef struct muiTextBlock
     // A byte per byte: 1 where HarfBuzz marks the cluster starting there
     // unsafe to break.
     muiBuffer unsafe;
-    // length + 1 sums from the start of the text: of advances in ems
-    // (double), as glyphs of fonts of different units per em add, and of
-    // clusters (uint32_t).
+    // length + 1 sums from the start of each paragraph: of advances in
+    // ems (double), as glyphs of fonts of different units per em add, and
+    // of clusters (uint32_t). A paragraph's end is the next one's start,
+    // where its sums start again from 0, so differences are taken within
+    // a paragraph, as a line's always lie.
     muiBuffer advances;
     muiBuffer clusters;
     // An input method's composition, while compositionLength is not 0:
@@ -116,7 +214,27 @@ typedef struct muiTextBlock
     uint32_t compositionLength;
     muiBuffer segments;
     uint32_t segmentCount;
-} muiTextBlock;
+    // spanCount muiTextSpan, in the order given.
+    muiBuffer spans;
+    uint32_t spanCount;
+    // With spans that shape: runStyleCount muiRunStyle in runStyles, and a
+    // byte per byte, its run style, in runs; for the node's style and the
+    // spans runKey stands for (src/text_runs.h). runKey is 0 for none.
+    muiBuffer runStyles;
+    uint32_t runStyleCount;
+    muiBuffer runs;
+    uint64_t runKey;
+    // Counts the changes of the text, so an editor sees those it did not
+    // make.
+    uint64_t revision;
+    // Editing, while editing.on (src/text_editing.h).
+    muiTextEditing editing;
+    // A password's mask: a bullet per grapheme cluster, made for the
+    // text of revision maskRevision, laid out in its place
+    // (src/text_mask.h); NULL until made.
+    muiTextBlock* mask;
+    uint64_t maskRevision;
+};
 
 typedef struct muiTextBlockStore
 {

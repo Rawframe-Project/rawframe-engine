@@ -101,6 +101,8 @@ extern "C"
         mui_propertyTextDirection = 38,
         mui_propertyContent = 39,
         mui_propertyScrollAxes = 40,
+        // A mask of edges.
+        mui_propertySafeArea = 41,
         // Visual properties, named after the muiVisualStyle field they set
         // (maul-ui/visual.h). Colors.
         mui_propertyBackground = 64,
@@ -125,6 +127,16 @@ extern "C"
         // A number from 0 to 1, and a flag.
         mui_propertyOpacity = 79,
         mui_propertyClip = 80,
+        // The local scale: numbers of 0 or more, then from 0 to 1.
+        mui_propertyScaleX = 81,
+        mui_propertyScaleY = 82,
+        mui_propertyScaleOriginX = 83,
+        mui_propertyScaleOriginY = 84,
+        // A flag.
+        mui_propertyImageMirrors = 85,
+        // muiImageRepeat values.
+        mui_propertyImageRepeatX = 86,
+        mui_propertyImageRepeatY = 87,
         // Text properties, named after the muiTextStyle field they set
         // (maul-ui/text_style.h), inherited. A color and a font key.
         mui_propertyTextColor = 128,
@@ -138,6 +150,11 @@ extern "C"
         mui_propertyFontSlant = 134,
         mui_propertyTextAlign = 135,
         mui_propertyTextWrap = 136,
+        // A mask of lines, and their color.
+        mui_propertyTextDecoration = 137,
+        mui_propertyTextDecorationColor = 138,
+        // How far a span's text sits above the baseline; spans alone take it.
+        mui_propertyTextBaselineShift = 139,
         // Interaction properties, named after the muiInteractionStyle
         // field they set (maul-ui/interaction.h): an enumerator, a flag,
         // an enumerator.
@@ -170,9 +187,9 @@ extern "C"
 #define MUI_PROPERTY_BIT(property)   ((muiPropertyMask)1 << ((property) & 63))
 // Every layout, visual, text and interaction property, in their groups'
 // masks.
-#define MUI_LAYOUT_PROPERTIES      ((muiPropertyMask)0x1FFFFFFFFFFull)
-#define MUI_VISUAL_PROPERTIES      ((muiPropertyMask)0x1FFFFull)
-#define MUI_TEXT_PROPERTIES        ((muiPropertyMask)0x1FFull)
+#define MUI_LAYOUT_PROPERTIES      ((muiPropertyMask)0x3FFFFFFFFFFull)
+#define MUI_VISUAL_PROPERTIES      ((muiPropertyMask)0xFFFFFFull)
+#define MUI_TEXT_PROPERTIES        ((muiPropertyMask)0xFFFull)
 #define MUI_INTERACTION_PROPERTIES ((muiPropertyMask)0xFFull)
 
     // The states a node can be in, as bits, weakest first: a later
@@ -342,16 +359,31 @@ extern "C"
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_API muiEnvironment muiGetContextEnvironment(const muiContext* context);
 
+    // How a style class is made. Build it with muiDefaultStyleDef.
+    typedef struct muiStyleDef
+    {
+        uint32_t cookie;
+    } muiStyleDef;
+
+    /// Returns the default style class def.
+    ///
+    /// @return The def, with a valid cookie.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MUI_API muiStyleDef muiDefaultStyleDef(void);
+
     /// Creates a style class with no values set.
     ///
     /// @param context     The context.
+    /// @param def         The class: a valid cookie.
     /// @param styleIdOut  Receives the class; set to the null id on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a
-    ///         call from a measure or paint function; `mui_errorCapacity` when the
-    ///         context's style limit is reached.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
+    ///         cookie or a call from a measure or paint function;
+    ///         `mui_errorCapacity` when the context's style limit is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiCreateStyle(muiContext* context, muiStyleId* styleIdOut);
+    MUI_NODISCARD MUI_API muiResult muiCreateStyle(muiContext* context, const muiStyleDef* def,
+                                                   muiStyleId* styleIdOut);
 
     /// Destroys a style class. Nodes and node types that list it skip it,
     /// and every node is styled again at the next muiComputeLayout.
@@ -495,21 +527,37 @@ extern "C"
     MUI_NODISCARD MUI_API muiResult muiStyle_ClearConditions(muiContext* context,
                                                              muiStyleId styleId);
 
+    // How a node type is made. Build it with muiDefaultNodeTypeDef.
+    typedef struct muiNodeTypeDef
+    {
+        uint32_t cookie;
+        // classCount classes, in order, kept as given; a class destroyed
+        // later is skipped. NULL when classCount is 0.
+        const muiStyleId* classes;
+        // At most MUI_MAX_CLASSES.
+        uint32_t classCount;
+    } muiNodeTypeDef;
+
+    /// Returns the default node type def: no classes.
+    ///
+    /// @return The def, with a valid cookie.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MUI_API muiNodeTypeDef muiDefaultNodeTypeDef(void);
+
     /// Creates a node type with an ordered list of classes.
     ///
     /// @param context    The context.
-    /// @param classes    count classes, kept as given; a class destroyed
-    ///                   later is skipped. NULL when count is 0.
-    /// @param count      At most MUI_MAX_CLASSES.
+    /// @param def        The type: a valid cookie and its classes.
     /// @param typeIdOut  Receives the type; set to the null id on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a count
-    ///         over the limit or a call from a measure or paint function;
-    ///         `mui_errorCapacity` when the context's node type limit is
-    ///         reached.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
+    ///         cookie, classes NULL with a count, a count over the limit or a
+    ///         call from a measure or paint function; `mui_errorCapacity`
+    ///         when the context's node type limit is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiCreateNodeType(muiContext* context,
-                                                      const muiStyleId* classes, uint32_t count,
+                                                      const muiNodeTypeDef* def,
                                                       muiNodeTypeId* typeIdOut);
 
     /// Destroys a node type. Its nodes are left with no type, and every

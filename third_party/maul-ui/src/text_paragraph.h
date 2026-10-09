@@ -25,13 +25,19 @@
 typedef struct muiParagraph
 {
     muiTextService* service;
+    // The block laid out, and the node's block it shows: a password's
+    // mask, or the block itself (src/text_mask.h).
     muiTextBlock* block;
+    muiTextBlock* source;
     muiFontChain chain;
     muiComputedTextStyle style;
     muiLineScale scale;
     float lineHeight;
     // From a line's top to its baseline.
     float baseline;
+    // How far lines are scrolled left: an editing block's, once the caret
+    // is followed (muiFollowCaret), else 0.
+    float scrollX;
     bool rtl;
 } muiParagraph;
 
@@ -54,6 +60,26 @@ bool muiPrepareParagraph(const muiTextHost* host, muiNodeId nodeId, uint64_t hos
 // Breaks a paragraph's lines into the service's scratch; false when
 // there is no memory for them.
 bool muiBreakParagraph(muiParagraph* paragraph, muiBreakMode mode, float width, uint32_t* countOut);
+
+// How far a run's text reaches above and below its baseline: the
+// font's ascent and descent at the run's size (its scale times the
+// node's), with half its leading each way, as CSS places an inline box;
+// an automatic line height is the font's, another scales with the run.
+void muiRunReach(const muiParagraph* paragraph, const muiFontMetrics* metrics, float scale,
+                 float* aboveOut, float* belowOut);
+
+// Raises how far a line reaches above and below its baseline to what the
+// spans' runs on it reach, shifted as they are; whether any reached past. Lines are taken in
+// order, cursor (0 for the first) the first item not behind them.
+bool muiLineReach(const muiParagraph* paragraph, const muiTextLine* line, uint32_t* cursor,
+                  float* above, float* below);
+
+// The height of a paragraph's lines, broken: the last one's bottom.
+float muiParagraphHeight(const muiTextLine* lines, uint32_t count);
+
+// The line at a height down a paragraph: the first above it, the last
+// below them all.
+uint32_t muiLineAtY(const muiTextLine* lines, uint32_t count, float y);
 
 // How a paragraph breaks for a measure mode, painting breaking as
 // mui_measureAtMost does.

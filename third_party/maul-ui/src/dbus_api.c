@@ -28,6 +28,7 @@ static bool FindConnection(muiDBusApi* api)
     return FIND(busGetPrivate, dbus_bus_get_private) &&
            FIND(openPrivate, dbus_connection_open_private) &&
            FIND(busRegister, dbus_bus_register) && FIND(requestName, dbus_bus_request_name) &&
+           FIND(addMatch, dbus_bus_add_match) &&
            FIND(setExitOnDisconnect, dbus_connection_set_exit_on_disconnect) &&
            FIND(close, dbus_connection_close) && FIND(unrefConnection, dbus_connection_unref) &&
            FIND(getUnixFd, dbus_connection_get_unix_fd) &&

@@ -13,17 +13,18 @@
 #include "font_chain.h"
 #include "font_store.h"
 #include "text_block.h"
+#include "text_runs.h"
 #include "text_service.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 
-// Shapes a block in a font chain and a base direction, unless it is
-// shaped so already: each grapheme cluster in the first font of the chain
-// that has all its characters, a cluster of characters of no one script
-// staying in the font before it when that font has them; false when
-// memory runs out, which leaves it unshaped.
-bool muiShapeTextBlock(muiTextService* service, muiTextBlock* block, const muiFontChain* chain,
+// Shapes a block in a paragraph's chains and a base direction, unless it
+// is shaped so already: each grapheme cluster in the first font, in its
+// run style's order, that has all its characters, a cluster of
+// characters of no one script staying in the font before it when that
+// font has them; false when memory runs out, which leaves it unshaped.
+bool muiShapeTextBlock(muiTextService* service, muiTextBlock* block, const muiRunChains* chains,
                        bool rtl);
 
 // Whether a line breaking before the byte at offset would shape

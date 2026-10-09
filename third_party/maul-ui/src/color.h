@@ -25,4 +25,8 @@ void muiColorToLinearRgb(muiColor color, double rgbOut[3]);
 // from its linear red, green and blue.
 muiLinearColor muiPremultiply(const double rgb[3], float alpha, float opacity);
 
+// A channel in linear light, from 0 to 1, encoded by sRGB's transfer
+// function.
+float muiEncodeSrgb(float linear);
+
 #endif // MAUL_UI_SRC_COLOR_H

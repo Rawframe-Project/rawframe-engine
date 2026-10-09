@@ -15,6 +15,9 @@ A program that ships Maul UI with text carries FreeType's credit: "Portions
 of this software are copyright © The FreeType Project
 (https://freetype.org). All rights reserved."
 
-Maul Unicode 0.2.0, also fetched, is part of the Maul family (MIT).
+Maul Unicode 0.2.1, also fetched, is part of the Maul family (MIT).
 
-Test data from outside is listed in `test/fonts/README.md`.
+Test data from outside is listed in `test/fonts/README.md`. The samples
+embed one of those fonts, Liberation Sans (SIL Open Font License 1.1,
+`test/fonts/LiberationSans-LICENSE.txt`), in their programs; the library
+contains no font.

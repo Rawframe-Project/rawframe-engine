@@ -331,21 +331,22 @@ static Track TrackOf(const muiContext* context, uint32_t slot, const muiValueRan
 {
     const muiLayoutNode* layout = &context->layout[slot - 1];
     const muiLayoutStyle* style = &layout->style;
+    const muiEdges* padding = &context->paddings[slot - 1];
     bool horizontal = range->axis == mui_rangeHorizontal;
     Track track = {0};
     if (horizontal)
     {
-        float left = layout->rtl ? style->border.end + style->padding.end
-                                 : style->border.start + style->padding.start;
-        float right = layout->rtl ? style->border.start + style->padding.start
-                                  : style->border.end + style->padding.end;
+        float left =
+            layout->rtl ? style->border.end + padding->end : style->border.start + padding->start;
+        float right =
+            layout->rtl ? style->border.start + padding->start : style->border.end + padding->end;
         track.start = left;
         track.end = layout->rect.width - right;
     }
     else
     {
-        track.start = style->border.top + style->padding.top;
-        track.end = layout->rect.height - style->border.bottom - style->padding.bottom;
+        track.start = style->border.top + padding->top;
+        track.end = layout->rect.height - style->border.bottom - padding->bottom;
     }
     uint32_t thumb = muiTreeResolve(&context->tree, range->thumb);
     if (thumb != 0 && thumb != slot && muiTreeIsAncestor(&context->tree, slot, thumb))

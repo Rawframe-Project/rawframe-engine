@@ -254,7 +254,7 @@ muiResult muiSetFallbackFonts(muiTextService* service, const uint64_t* keys, uin
     {
         return mui_errorInvalid;
     }
-    muiResult result = CheckFallbacks(service, keys, count);
+    muiResult result = muiCountText(service, CheckFallbacks(service, keys, count));
     if (result == mui_success)
     {
         for (uint32_t i = 0; i < count; i++)
@@ -287,7 +287,7 @@ muiResult muiCreateFontFamily(muiTextService* service, const muiFontFamilyDef* d
         def->cookie != FONT_FAMILY_DEF_COOKIE || def->faces == nullptr || def->faceCount == 0 ||
         def->faceCount > MAX_FACES)
     {
-        return mui_errorInvalid;
+        return muiRefuseText(service);
     }
     for (uint32_t i = 0; i < def->faceCount; i++)
     {
@@ -296,7 +296,8 @@ muiResult muiCreateFontFamily(muiTextService* service, const muiFontFamilyDef* d
             return mui_errorStale;
         }
     }
-    muiResult checked = CheckFallbacks(service, def->fallbacks, def->fallbackCount);
+    muiResult checked =
+        muiCountText(service, CheckFallbacks(service, def->fallbacks, def->fallbackCount));
     if (checked != mui_success)
     {
         return checked;
@@ -330,7 +331,7 @@ muiResult muiDestroyFontFamily(muiTextService* service, muiFontFamilyId familyId
 {
     if (service == nullptr || familyId.index1 == 0)
     {
-        return mui_errorInvalid;
+        return muiRefuseText(service);
     }
     uint32_t slot = ResolveFamily(service, familyId);
     if (slot == 0)

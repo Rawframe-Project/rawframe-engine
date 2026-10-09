@@ -22,8 +22,10 @@ static bool IsSized(muiMeasureMode mode)
 // Whether a size computed under an old constraint answers a new one, by
 // the rules Yoga's cache uses: the same constraint; an exact size equal to
 // what an unshrunk sizing gave; a max-content size that fits the new
-// space; or a smaller space the old size still fits.
-static bool AxisAnswers(muiMeasureAxis next, muiMeasureAxis old, float result)
+// space; or a smaller space the old size still fits. The two that take a
+// content size for an exact or limited one hold only while it is the
+// content's own (loose).
+static bool AxisAnswers(muiMeasureAxis next, muiMeasureAxis old, float result, bool loose)
 {
     if (next.mode == old.mode && (!IsSized(next.mode) || next.size == old.size))
     {
@@ -31,42 +33,76 @@ static bool AxisAnswers(muiMeasureAxis next, muiMeasureAxis old, float result)
     }
     if (next.mode == mui_measureExact)
     {
-        return old.mode != mui_measureMinContent && next.size == result;
+        return loose && old.mode != mui_measureMinContent && next.size == result;
     }
     if (next.mode == mui_measureAtMost)
     {
-        bool fitsMaxContent = old.mode == mui_measureMaxContent;
+        bool fitsMaxContent = loose && old.mode == mui_measureMaxContent;
         bool stricter = old.mode == mui_measureAtMost && next.size < old.size;
         return (fitsMaxContent || stricter) && result <= next.size;
     }
     return false;
 }
 
-static bool IsScaled(muiDimension dimension)
-{
-    return dimension.kind == mui_dimensionValue && dimension.scale != 0.0f;
-}
-
-// Whether a node's own sizing reads its parent's extents: only its scaled
-// limits do, as the parent resolves the node's size itself. Direction is
-// not part of the key: it moves children, never changes a size.
+// Whether a node's own sizing reads its parent's extents: a scaled size or
+// limit, which the node resolves against the extents in its input (a
+// parent resolves a scaled size too, but a query it leaves open, as with
+// an aspect ratio, still reaches the node's own).
 static bool ReadsParentExtent(const muiSizing* sizing)
 {
-    return IsScaled(sizing->minWidth) || IsScaled(sizing->maxWidth) ||
-           IsScaled(sizing->minHeight) || IsScaled(sizing->maxHeight);
+    return muiIsScaled(sizing->width) || muiIsScaled(sizing->height) ||
+           muiIsScaled(sizing->minWidth) || muiIsScaled(sizing->maxWidth) ||
+           muiIsScaled(sizing->minHeight) || muiIsScaled(sizing->maxHeight);
 }
 
-static const muiCacheEntry* FindCached(const muiLayoutCache* cache, const muiSizingInput* input,
-                                       bool keyExtents)
+// Whether a node's own minimum or maximum limits it along an axis.
+static bool IsLimited(const muiSizing* sizing, bool horizontal)
 {
+    return horizontal ? sizing->minWidth.kind != mui_dimensionAuto ||
+                            sizing->maxWidth.kind != mui_dimensionAuto
+                      : sizing->minHeight.kind != mui_dimensionAuto ||
+                            sizing->maxHeight.kind != mui_dimensionAuto;
+}
+
+// On which axes a node's content size is the content's own (the cache's
+// loose bits): not where its minimum or maximum may have clamped it, as
+// text held to a maximum width is one line long at max-content and wraps
+// at that width; nor anywhere when the node has an aspect ratio, which
+// gives one axis from the other only when that one is definite, or when
+// sizes below take a definite size above them (muiScaledBelow).
+static unsigned LooseOf(const muiSolver* solver, uint32_t node)
+{
+    muiLayoutNode* layout = &solver->nodes[node - 1];
+    if (layout->cache.loose == 0)
+    {
+        bool scaled = layout->style.sizing.aspectRatio != 0.0f ||
+                      muiScaledBelow(solver->tree, solver->nodes, node);
+        const muiSizing* sizing = &layout->style.sizing;
+        layout->cache.loose = (uint8_t)(4u | (!scaled && !IsLimited(sizing, true) ? 1u : 0u) |
+                                        (!scaled && !IsLimited(sizing, false) ? 2u : 0u));
+    }
+    return layout->cache.loose;
+}
+
+static const muiCacheEntry* FindCached(const muiSolver* solver, uint32_t node,
+                                       const muiSizingInput* input)
+{
+    const muiLayoutNode* layout = &solver->nodes[node - 1];
+    bool keyExtents = ReadsParentExtent(&layout->style.sizing);
+    unsigned loose = LooseOf(solver, node);
     for (int i = 0; i < MUI_CACHE_ENTRIES; i++)
     {
-        const muiCacheEntry* entry = &cache->entries[i];
+        const muiCacheEntry* entry = &layout->cache.entries[i];
         bool sameExtents = !keyExtents || (entry->input.parentWidth == input->parentWidth &&
                                            entry->input.parentHeight == input->parentHeight);
-        if (entry->valid && sameExtents &&
-            AxisAnswers(input->width, entry->input.width, entry->size.width) &&
-            AxisAnswers(input->height, entry->input.height, entry->size.height))
+        // Direction is part of the key: a safe area on a start or end edge
+        // below can change a size with it, though most direction moves
+        // children alone; so is whether a height is the content's own.
+        if (entry->valid && sameExtents && entry->input.rtl == input->rtl &&
+            entry->input.contentHeight == input->contentHeight &&
+            entry->input.contentOnly == input->contentOnly &&
+            AxisAnswers(input->width, entry->input.width, entry->size.width, (loose & 1u) != 0) &&
+            AxisAnswers(input->height, entry->input.height, entry->size.height, (loose & 2u) != 0))
         {
             return entry;
         }
@@ -76,6 +112,7 @@ static const muiCacheEntry* FindCached(const muiLayoutCache* cache, const muiSiz
 
 static void StoreCached(muiLayoutCache* cache, const muiSizingInput* input, muiSize size)
 {
+    cache->replaced = cache->replaced || cache->entries[cache->next].valid;
     cache->entries[cache->next] = (muiCacheEntry){.input = *input, .size = size, .valid = true};
     cache->next = (uint8_t)((cache->next + 1) % MUI_CACHE_ENTRIES);
 }
@@ -98,8 +135,9 @@ static float SaneLength(float value)
 static muiSize SizeLeaf(const muiSolver* solver, uint32_t node, const muiSizingInput* input)
 {
     const muiLayoutStyle* style = &solver->nodes[node - 1].style;
-    float boxWidth = muiBoxSum(style, true);
-    float boxHeight = muiBoxSum(style, false);
+    const muiEdges* padding = &solver->paddings[node - 1];
+    float boxWidth = muiBoxSum(padding, style, true);
+    float boxHeight = muiBoxSum(padding, style, false);
     muiSize content = {0.0f, 0.0f};
     // Both sizes exact decide the size, as the final pass always gives
     // them: the host is not asked.
@@ -108,6 +146,7 @@ static muiSize SizeLeaf(const muiSolver* solver, uint32_t node, const muiSizingI
     {
         muiNodeId id = muiTreeIdOf(solver->tree, node);
         uint64_t hostKey = muiTreeAt(solver->tree, node)->hostKey;
+        solver->work->measured++;
         content =
             solver->measure(solver->measureUser, id, hostKey, ContentAxis(input->width, boxWidth),
                             ContentAxis(input->height, boxHeight));
@@ -116,6 +155,10 @@ static muiSize SizeLeaf(const muiSolver* solver, uint32_t node, const muiSizingI
     }
     muiAxisSizing width = muiResolveAxis(&style->sizing, true, input->parentWidth);
     muiAxisSizing height = muiResolveAxis(&style->sizing, false, input->parentHeight);
+    if (input->contentOnly)
+    {
+        width = height = (muiAxisSizing){.maximum = INFINITY};
+    }
     muiSize size;
     size.width =
         input->width.mode == mui_measureExact
@@ -134,8 +177,9 @@ static void Mirror(const muiSolver* solver, uint32_t node, float width)
     for (uint32_t c = muiTreeAt(solver->tree, node)->links.firstChild; c != 0;
          c = muiTreeAt(solver->tree, c)->links.next)
     {
+        // A popped child keeps where it was drawn (src/absolute.c).
         muiRect* rect = &solver->nodes[c - 1].rect;
-        rect->x = width - rect->x - rect->width;
+        rect->x = solver->nodes[c - 1].popped ? rect->x : width - rect->x - rect->width;
     }
 }
 
@@ -157,29 +201,41 @@ static void MarkMoved(const muiSolver* solver, uint32_t node)
 // A scroll container's extent, while its children are still in logical
 // coordinates: the furthest end of their margin boxes (border boxes for
 // absolute ones) plus its end padding, from its padding box's start, at
-// least the padding box; its offsets are brought within it. What changes
-// an extent repaints the container, and so its transform.
-static void MeasureExtent(const muiSolver* solver, uint32_t node, muiSize size)
+// least the padding box; its offsets are brought within it, rtl its own
+// direction. What changes an extent repaints the container, and so its
+// transform.
+static void MeasureExtent(const muiSolver* solver, uint32_t node, muiSize size, bool rtl)
 {
     const muiLayoutStyle* style = &solver->nodes[node - 1].style;
+    const muiEdges* padding = &solver->paddings[node - 1];
     float startX = style->border.start;
     float startY = style->border.top;
-    float reachX = size.width - style->border.end - style->padding.end;
-    float reachY = size.height - style->border.bottom - style->padding.bottom;
+    float reachX = size.width - style->border.end - padding->end;
+    float reachY = size.height - style->border.bottom - padding->bottom;
     for (uint32_t c = muiTreeAt(solver->tree, node)->links.firstChild; c != 0;
          c = muiTreeAt(solver->tree, c)->links.next)
     {
         const muiLayoutNode* child = &solver->nodes[c - 1];
-        muiEdges margins = child->absolute ? (muiEdges){0} : muiMarginsOf(&child->style);
-        reachX = fmaxf(reachX, child->rect.x + child->rect.width + margins.end);
+        if (child->listed)
+        {
+            // Placed along its list after layout: the list's length below
+            // reaches past it, and across it the content box holds it.
+            continue;
+        }
+        muiEdges margins = child->absolute ? (muiEdges){0} : muiMarginsOf(&child->style, rtl);
+        // A popped child is where it was drawn, mirrored under rtl.
+        float x =
+            child->popped && rtl ? size.width - child->rect.x - child->rect.width : child->rect.x;
+        reachX = fmaxf(reachX, x + child->rect.width + margins.end);
         reachY = fmaxf(reachY, child->rect.y + child->rect.height + margins.bottom);
     }
     muiScrollState* scroll = &solver->scrolls[node - 1];
+    scroll->reachWidth = reachX + padding->end - startX;
+    scroll->reachHeight = reachY + padding->bottom - startY;
     // A virtual list's items reach as far as they need, realized or not.
-    reachX = fmaxf(reachX, startX + style->padding.start + scroll->listX);
-    reachY = fmaxf(reachY, startY + style->padding.top + scroll->listY);
-    scroll->extentWidth = reachX + style->padding.end - startX;
-    scroll->extentHeight = reachY + style->padding.bottom - startY;
+    scroll->extentWidth = fmaxf(scroll->reachWidth, padding->start + scroll->listX + padding->end);
+    scroll->extentHeight =
+        fmaxf(scroll->reachHeight, padding->top + scroll->listY + padding->bottom);
     // At the size given here: its parent sets its rectangle after this.
     scroll->x = fminf(scroll->x, muiScrollLimit(style, size, scroll, true));
     scroll->y = fminf(scroll->y, muiScrollLimit(style, size, scroll, false));
@@ -196,7 +252,7 @@ static muiSize SizeContainer(const muiSolver* solver, uint32_t node, const muiSi
         muiPlaceAbsolute(solver, node, size, input->rtl);
         if (solver->nodes[node - 1].style.scrollAxes != mui_scrollNone)
         {
-            MeasureExtent(solver, node, size);
+            MeasureExtent(solver, node, size, input->rtl);
         }
         if (input->rtl)
         {
@@ -207,6 +263,14 @@ static muiSize SizeContainer(const muiSolver* solver, uint32_t node, const muiSi
     return size;
 }
 
+// The node's answer to a query, computed without its aspect ratio.
+static muiSize ContentAnswer(const muiSolver* solver, uint32_t node, const muiSizingInput* input)
+{
+    return muiTreeAt(solver->tree, node)->links.firstChild == 0
+               ? SizeLeaf(solver, node, input)
+               : muiLayoutFlex(solver, node, input, false);
+}
+
 // The node's min-content size along an axis, the other axis as input
 // gives it, computed without its aspect ratio.
 static float ContentSize(const muiSolver* solver, uint32_t node, const muiSizingInput* input,
@@ -215,30 +279,68 @@ static float ContentSize(const muiSolver* solver, uint32_t node, const muiSizing
     muiSizingInput probe = *input;
     muiMeasureAxis* axis = horizontal ? &probe.width : &probe.height;
     *axis = (muiMeasureAxis){0.0f, mui_measureMinContent};
-    muiSize size = muiTreeAt(solver->tree, node)->links.firstChild == 0
-                       ? SizeLeaf(solver, node, &probe)
-                       : muiLayoutFlex(solver, node, &probe, false);
+    muiSize size = ContentAnswer(solver, node, &probe);
     return horizontal ? size.width : size.height;
 }
 
+// The node's content height at the width input gives, its height to come
+// from its aspect ratio as size: a row is laid out at that height, which
+// its items' percentages resolve against; a column or a leaf measures its
+// content.
+static float RatioContentHeight(const muiSolver* solver, uint32_t node, const muiSizingInput* input,
+                                float size)
+{
+    muiFlexDirection direction = solver->nodes[node - 1].style.container.direction;
+    if (muiTreeAt(solver->tree, node)->links.firstChild == 0 ||
+        (direction != mui_flexRow && direction != mui_flexRowReverse))
+    {
+        return ContentSize(solver, node, input, false);
+    }
+    // A row laid out at the ratio's height, definite for its items.
+    muiSizingInput probe = *input;
+    probe.height = muiExact(size);
+    probe.contentHeight = false;
+    return muiFlexRatioContentHeight(solver, node, &probe);
+}
+
 // The size the aspect ratio gives an axis from the other one's, at least
-// the content's min-content size when the axis's minimum is automatic (CSS
-// Sizing 4), within its limits.
+// the content's min-content size when the axis's minimum is automatic
+// (CSS Sizing 4). A width given as a percentage that cannot resolve takes that
+// minimum too; a height so given does not, as in Chrome. Within its
+// limits.
 static muiMeasureAxis RatioAxis(const muiSolver* solver, uint32_t node, const muiSizingInput* input,
                                 bool horizontal, float size)
 {
     const muiLayoutStyle* style = &solver->nodes[node - 1].style;
     muiAxisSizing axis = muiResolveAxis(&style->sizing, horizontal,
                                         horizontal ? input->parentWidth : input->parentHeight);
-    if (axis.minimumAuto)
+    if (axis.minimumAuto && (horizontal || style->sizing.height.kind == mui_dimensionAuto))
     {
-        size = fmaxf(size, ContentSize(solver, node, input, horizontal));
+        // A row's stretched items take a height from the ratio, so they
+        // leave its floor; asked its min-content height, as a column
+        // measures its items, the node counts its content in full.
+        bool full = horizontal || input->height.mode == mui_measureMinContent;
+        float floor = full ? ContentSize(solver, node, input, horizontal)
+                           : RatioContentHeight(solver, node, input, size);
+        muiAxisSizing height = muiResolveAxis(&style->sizing, false, input->parentHeight);
+        if (horizontal && !height.definite)
+        {
+            // A width's floor is capped by the height's maximum through
+            // the ratio, a height not given (as Chrome; a height's floor
+            // is not capped by the width's).
+            float box = muiBoxSum(&solver->paddings[node - 1], style, false);
+            floor = fminf(floor, muiAxisCeiling(&height, box) * style->sizing.aspectRatio);
+        }
+        size = fmaxf(size, floor);
     }
-    return muiExact(muiClampSize(size, axis.minimum, axis.maximum, muiBoxSum(style, horizontal)));
+    return muiExact(muiClampSize(size, axis.minimum, axis.maximum,
+                                 muiBoxSum(&solver->paddings[node - 1], style, horizontal)));
 }
 
 // With an aspect ratio, a node given an exact size on one axis and an
-// automatic one on the other takes the other from the ratio.
+// automatic one on the other takes the other from the ratio. A root or
+// absolute node given both, with a minimum width from its ratio, answers
+// a query for its min-content width with at least its content's.
 static void ApplyAspectRatio(const muiSolver* solver, uint32_t node, muiSizingInput* input)
 {
     const muiSizing* sizing = &solver->nodes[node - 1].style.sizing;
@@ -259,16 +361,51 @@ static void ApplyAspectRatio(const muiSolver* solver, uint32_t node, muiSizingIn
     {
         input->width = RatioAxis(solver, node, input, true, input->height.size * ratio);
     }
+    else if (!exactWidth && !exactHeight && !width.definite && !height.definite)
+    {
+        // Neither size known: the width is its content's within the
+        // height's limits through the ratio, padding and border among
+        // them, and the height follows, as in CSS Sizing 4 and Chrome.
+        const muiLayoutStyle* style = &solver->nodes[node - 1].style;
+        float box = muiBoxSum(&solver->paddings[node - 1], style, false);
+        float size = ContentAnswer(solver, node, input).width;
+        size = fminf(fmaxf(size, fmaxf(height.minimum, box) * ratio),
+                     muiAxisCeiling(&height, box) * ratio);
+        size = muiClampSize(size, width.minimum, width.maximum,
+                            muiBoxSum(&solver->paddings[node - 1], style, true));
+        input->width = muiExact(size);
+        input->height = RatioAxis(solver, node, input, false, size / ratio);
+    }
+    else if (!exactWidth && !exactHeight && !width.definite && height.definite &&
+             input->height.mode != mui_measureMinContent)
+    {
+        // Its style gives the height, the ratio the width, whatever the
+        // query leaves open, as a column asks its items' widths; asked
+        // its min-content height, as for a content size suggestion, its
+        // content answers.
+        const muiLayoutStyle* style = &solver->nodes[node - 1].style;
+        input->height =
+            muiExact(muiClampSize(height.size, height.minimum, height.maximum,
+                                  muiBoxSum(&solver->paddings[node - 1], style, false)));
+        input->width = RatioAxis(solver, node, input, true, input->height.size * ratio);
+    }
+    else if (exactHeight && input->width.mode == mui_measureMinContent && width.definite &&
+             muiRatioWidthMinimum(&solver->nodes[node - 1].style) &&
+             (solver->nodes[node - 1].absolute || muiTreeAt(solver->tree, node)->links.parent == 0))
+    {
+        float content = fminf(ContentSize(solver, node, input, true), width.maximum);
+        const muiLayoutStyle* style = &solver->nodes[node - 1].style;
+        float own = muiClampSize(width.size, width.minimum, width.maximum,
+                                 muiBoxSum(&solver->paddings[node - 1], style, true));
+        input->width = muiExact(fmaxf(own, content));
+    }
 }
 
 // The input with the node's own direction in place of the inherited one.
 static muiSizingInput OwnDirection(const muiLayoutStyle* style, const muiSizingInput* input)
 {
     muiSizingInput own = *input;
-    if (style->textDirection != mui_textInherit)
-    {
-        own.rtl = style->textDirection == mui_textRightToLeft;
-    }
+    own.rtl = muiIsRtl(style, input->rtl);
     return own;
 }
 
@@ -320,6 +457,7 @@ muiSize muiSolveNode(const muiSolver* solver, uint32_t node, const muiSizingInpu
     {
         MUI_ASSERT(input->width.mode == mui_measureExact && input->height.mode == mui_measureExact);
         if (cache->finalValid && cache->finalRtl == input->rtl &&
+            cache->finalContentHeight == input->contentHeight &&
             cache->finalSize.width == input->width.size &&
             cache->finalSize.height == input->height.size)
         {
@@ -333,22 +471,37 @@ muiSize muiSolveNode(const muiSolver* solver, uint32_t node, const muiSizingInpu
         {
             return (muiSize){input->width.size, input->height.size};
         }
-        const muiCacheEntry* hit =
-            FindCached(cache, input, ReadsParentExtent(&solver->nodes[node - 1].style.sizing));
+        const muiCacheEntry* hit = FindCached(solver, node, input);
         if (hit != nullptr)
         {
             return hit->size;
         }
     }
-    muiSizingInput own = OwnDirection(&solver->nodes[node - 1].style, input);
-    ApplyAspectRatio(solver, node, &own);
+    solver->work->sized++;
+    const muiLayoutStyle* style = &solver->nodes[node - 1].style;
+    muiSizingInput own = OwnDirection(style, input);
+    // Its padding with the safe area, in its direction, which its own
+    // sizing reads and later readers find beside it.
+    solver->paddings[node - 1] = muiPaddingOf(style, &solver->safeArea, own.rtl);
+    if (!own.contentOnly)
+    {
+        ApplyAspectRatio(solver, node, &own);
+    }
     muiSize size = muiTreeAt(solver->tree, node)->links.firstChild == 0
                        ? SizeLeaf(solver, node, &own)
                        : SizeContainer(solver, node, &own, perform);
     if (perform)
     {
+        // A scroll container without children still has an extent, its
+        // padding box with its list's reach, and its offsets within it.
+        if (muiTreeAt(solver->tree, node)->links.firstChild == 0 &&
+            style->scrollAxes != mui_scrollNone)
+        {
+            MeasureExtent(solver, node, size, own.rtl);
+        }
         cache->finalValid = true;
         cache->finalRtl = input->rtl;
+        cache->finalContentHeight = input->contentHeight;
         cache->finalSize = size;
         Published(solver, node, size, own.rtl);
     }
@@ -367,9 +520,10 @@ static float LeafBaseline(const muiSolver* solver, uint32_t node, const muiSizin
     {
         return NAN;
     }
-    float top = muiEdgeStart(&style->padding, false) + muiEdgeStart(&style->border, false);
-    float width = fmaxf(input->width.size - muiBoxSum(style, true), 0.0f);
-    float height = fmaxf(input->height.size - muiBoxSum(style, false), 0.0f);
+    const muiEdges padding = muiPaddingOf(style, &solver->safeArea, input->rtl);
+    float top = muiEdgeStart(&padding, false) + muiEdgeStart(&style->border, false);
+    float width = fmaxf(input->width.size - muiBoxSum(&padding, style, true), 0.0f);
+    float height = fmaxf(input->height.size - muiBoxSum(&padding, style, false), 0.0f);
     muiNodeId id = muiTreeIdOf(solver->tree, node);
     uint64_t hostKey = muiTreeAt(solver->tree, node)->hostKey;
     return top + solver->measureBaseline(solver->measureUser, id, hostKey, width, height);
@@ -385,9 +539,22 @@ float muiSolveBaseline(const muiSolver* solver, uint32_t node, const muiSizingIn
     return isfinite(baseline) ? baseline : input->height.size;
 }
 
-muiSizingInput muiRootInput(const muiLayoutStyle* style, float availableWidth,
+void muiRatioRootWidth(const muiSolver* solver, uint32_t root, muiSizingInput* input)
+{
+    if (muiRatioWidthMinimum(&solver->nodes[root - 1].style) &&
+        input->width.mode == mui_measureExact && input->height.mode == mui_measureExact)
+    {
+        muiSizingInput probe = *input;
+        probe.width = (muiMeasureAxis){0.0f, mui_measureMinContent};
+        input->width.size =
+            fmaxf(input->width.size, muiSolveNode(solver, root, &probe, false).width);
+    }
+}
+
+muiSizingInput muiRootInput(const muiLayoutStyle* style, const muiSides* safe, float availableWidth,
                             float availableHeight)
 {
+    const muiEdges padding = muiPaddingOf(style, safe, muiIsRtl(style, false));
     muiSizingInput input = {
         .width = {availableWidth, mui_measureAtMost},
         .height = {availableHeight, mui_measureAtMost},
@@ -398,13 +565,13 @@ muiSizingInput muiRootInput(const muiLayoutStyle* style, float availableWidth,
     muiAxisSizing height = muiResolveAxis(&style->sizing, false, availableHeight);
     if (width.definite)
     {
-        input.width = muiExact(
-            muiClampSize(width.size, width.minimum, width.maximum, muiBoxSum(style, true)));
+        input.width = muiExact(muiClampSize(width.size, width.minimum, width.maximum,
+                                            muiBoxSum(&padding, style, true)));
     }
     if (height.definite)
     {
-        input.height = muiExact(
-            muiClampSize(height.size, height.minimum, height.maximum, muiBoxSum(style, false)));
+        input.height = muiExact(muiClampSize(height.size, height.minimum, height.maximum,
+                                             muiBoxSum(&padding, style, false)));
     }
     return input;
 }

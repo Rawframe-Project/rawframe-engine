@@ -5,6 +5,7 @@
 // cluster in the text or on screen, by word, and by line.
 
 #include "text_boxes.h"
+#include "text_mask.h"
 
 #include "maul-ui/text_edit.h"
 #include "maul-unicode/encoding.h"
@@ -206,6 +207,21 @@ muiResult muiTextMove(const muiTextHost* host, muiNodeId nodeId, float width, mu
         *positionOut = Downstream(0);
         return mui_success;
     }
+    const muiTextBlock* source = laid.paragraph.source;
+    if (muiIsMasked(source))
+    {
+        // A password is one word, as every platform moves through one.
+        movement = movement == mui_movePreviousWordStart ? mui_moveTextStart
+                   : movement == mui_moveNextWordStart || movement == mui_moveNextWordEnd
+                       ? mui_moveTextEnd
+                       : movement;
+        from.offset = muiMaskOffset(source, from.offset);
+    }
     from.offset = from.offset < length ? from.offset : length;
-    return Move(&laid, from, movement, preferredX, positionOut) ? mui_success : mui_errorCapacity;
+    if (!Move(&laid, from, movement, preferredX, positionOut))
+    {
+        return mui_errorCapacity;
+    }
+    positionOut->offset = muiUnmaskOffset(source, positionOut->offset);
+    return mui_success;
 }

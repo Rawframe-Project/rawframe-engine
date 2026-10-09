@@ -16,6 +16,8 @@
 #include "style_store.h"
 #include "token_store.h"
 
+#define TOKEN_DEF_COOKIE 0x6D75746Bu // "mutk"
+
 // Whether the aliases from target lead to slot.
 static bool LeadsTo(const muiTokenStore* store, muiTokenId target, uint32_t slot)
 {
@@ -30,7 +32,12 @@ static bool LeadsTo(const muiTokenStore* store, muiTokenId target, uint32_t slot
     return false;
 }
 
-muiResult muiCreateToken(muiContext* context, const muiTokenValue* value, muiTokenId* tokenIdOut)
+muiTokenDef muiDefaultTokenDef(void)
+{
+    return (muiTokenDef){.cookie = TOKEN_DEF_COOKIE, .value = {.type = mui_tokenNumber}};
+}
+
+muiResult muiCreateToken(muiContext* context, const muiTokenDef* def, muiTokenId* tokenIdOut)
 {
     if (tokenIdOut != nullptr)
     {
@@ -40,8 +47,8 @@ muiResult muiCreateToken(muiContext* context, const muiTokenValue* value, muiTok
     {
         return mui_errorInvalid;
     }
-    if (value == nullptr || tokenIdOut == nullptr || !muiIsTokenValueValid(value) ||
-        muiIsInHostCall(context))
+    if (def == nullptr || tokenIdOut == nullptr || def->cookie != TOKEN_DEF_COOKIE ||
+        !muiIsTokenValueValid(&def->value) || muiIsInHostCall(context))
     {
         return muiRefuse(context);
     }
@@ -51,7 +58,7 @@ muiResult muiCreateToken(muiContext* context, const muiTokenValue* value, muiTok
     {
         return mui_errorCapacity;
     }
-    store->tokens[slot - 1] = (muiToken){.value = *value};
+    store->tokens[slot - 1] = (muiToken){.value = def->value};
     *tokenIdOut = (muiTokenId){slot, muiPoolGeneration(&store->pool, slot)};
     // A new token is named by nothing yet, so no node restyles.
     return mui_success;

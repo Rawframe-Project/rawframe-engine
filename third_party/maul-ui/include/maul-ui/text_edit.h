@@ -5,7 +5,8 @@
 // node's text, from points, to carets and moved by cluster, word or line,
 // the rectangles a range of it covers, the text laid out as muiPaintText
 // paints it, what a deletion removes, and an input method's composition
-// held in a block. Selection, input and undo are the caller's.
+// held in a block. maul-ui/text_editor.h builds selection and undo on
+// them.
 
 #ifndef MAUL_UI_TEXT_EDIT_H
 #define MAUL_UI_TEXT_EDIT_H

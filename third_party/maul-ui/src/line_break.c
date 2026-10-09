@@ -75,24 +75,53 @@ static void Emit(Lines* out, uint32_t start, uint32_t next)
     if (out->count < out->capacity)
     {
         uint32_t end = VisibleEnd(out->block->text.data, start, next);
-        out->lines[out->count] =
-            (muiTextLine){start, end, next, muiTextWidth(out->block, out->scale, start, end)};
+        // Its place down the paragraph comes after breaking.
+        out->lines[out->count] = (muiTextLine){
+            start, end, next, muiTextWidth(out->block, out->scale, start, end), 0.0f, 0.0f, 0.0f};
     }
     out->count++;
+}
+
+// The first of a block's break opportunities past an offset.
+static uint32_t BreakAfter(const muiTextBlock* block, uint32_t offset)
+{
+    const muiTextBreak* breaks = block->breaks.data;
+    uint32_t low = 0;
+    uint32_t high = block->breakCount;
+    while (low < high)
+    {
+        uint32_t middle = low + (high - low) / 2;
+        low = breaks[middle].offset <= offset ? middle + 1 : low;
+        high = breaks[middle].offset <= offset ? high : middle;
+    }
+    return low;
+}
+
+uint32_t muiCountBreaksWithin(const muiTextBlock* block, uint32_t from, uint32_t to)
+{
+    return BreakAfter(block, to) - BreakAfter(block, from);
 }
 
 uint32_t muiBreakLines(const muiTextBlock* block, const muiLineScale* scale, muiBreakMode mode,
                        float width, muiTextLine* lines, uint32_t capacity)
 {
+    return muiBreakLinesWithin(block, scale, mode, width, 0, block->length, lines, capacity);
+}
+
+uint32_t muiBreakLinesWithin(const muiTextBlock* block, const muiLineScale* scale,
+                             muiBreakMode mode, float width, uint32_t from, uint32_t to,
+                             muiTextLine* lines, uint32_t capacity)
+{
     Lines out = {block, scale, lines, capacity, 0};
     const muiTextBreak* breaks = block->breaks.data;
     const unsigned char* text = block->text.data;
     float limit = width + 1.0f / (float)(1 << SLACK_SHIFT);
-    uint32_t start = 0;
+    uint32_t start = from;
     // The last opportunity the line fits up to, when there is one.
     uint32_t fit = 0;
     bool fits = false;
-    for (uint32_t i = 0; i < block->breakCount;)
+    uint32_t last = BreakAfter(block, to);
+    for (uint32_t i = BreakAfter(block, from); i < last;)
     {
         uint32_t offset = breaks[i].offset;
         bool mandatory = breaks[i].mandatory != 0;
@@ -118,7 +147,7 @@ uint32_t muiBreakLines(const muiTextBlock* block, const muiLineScale* scale, mui
         i++;
     }
     // A last line break leaves an empty line after it.
-    if (block->length != 0 && BreakBefore(text, 0, block->length) != 0)
+    if (to == block->length && block->length != 0 && BreakBefore(text, 0, block->length) != 0)
     {
         Emit(&out, block->length, block->length);
     }

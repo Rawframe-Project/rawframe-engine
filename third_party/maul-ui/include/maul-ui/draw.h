@@ -41,15 +41,6 @@ extern "C"
         float bottomLeft;
     } muiCorners;
 
-    // A value per side, physical: top first, then clockwise.
-    typedef struct muiSides
-    {
-        float top;
-        float right;
-        float bottom;
-        float left;
-    } muiSides;
-
     // What a command draws.
     typedef uint32_t muiDrawKind;
 
@@ -80,9 +71,10 @@ extern "C"
         MUI_MAX_DRAW_STOPS = 4
     };
 
-    // A gradient of the gradient table. kind is mui_gradientLinear or
-    // mui_gradientRadial (maul-ui/visual.h); angle is in degrees clockwise
-    // from toward the top, for a linear one.
+    // A gradient of the gradient table. kind is mui_gradientLinear,
+    // mui_gradientRadial or mui_gradientConic (maul-ui/visual.h); angle is
+    // in degrees clockwise from toward the top, for a linear one and where
+    // a conic one starts.
     typedef struct muiDrawGradient
     {
         uint32_t kind;
@@ -124,9 +116,13 @@ extern "C"
     } muiDrawShadow;
 
     // An image the host's key names, its uv rectangle (0 to 1 for all of
-    // it) drawn into rect and multiplied by tint. Slice insets, in image
-    // pixels, cut it into nine parts whose corners keep their size at one
-    // logical unit per pixel; all 0 stretches it whole.
+    // it) drawn into rect and multiplied by tint; a negative width or
+    // height draws it flipped, from the rectangle's far edge. Slice
+    // insets, in image pixels as drawn, cut it into nine parts whose
+    // corners keep their size at one logical unit per pixel; all 0
+    // makes it all middle. repeatX and repeatY fill the middle across
+    // (the top, middle and bottom parts) and up (the left, middle and
+    // right) as muiImageRepeat says; 0 stretches it.
     typedef struct muiDrawImage
     {
         muiRect rect;
@@ -134,6 +130,9 @@ extern "C"
         muiRect uv;
         muiSides slice;
         muiLinearColor tint;
+        muiImageRepeat repeatX;
+        muiImageRepeat repeatY;
+        uint8_t reserved[6];
     } muiDrawImage;
 
     // A run of glyphs of the glyph table: firstGlyph and glyphCount name
@@ -313,6 +312,28 @@ extern "C"
     /// only during the call of the paint function given it.
     MUI_NODISCARD MUI_API muiResult muiDrawSink_AddRect(muiDrawSink* sink, muiRect rect,
                                                         muiColor color);
+
+    /// Gives the part of the content box's plane the paint function's
+    /// content can be seen in: within the surface and every clip it is
+    /// drawn in, through the scales and scroll offsets above it. Rounded
+    /// corners are taken as their rectangles, so the part may be larger
+    /// than what shows, never smaller. A paint function may leave out what
+    /// lies outside it.
+    ///
+    /// A node whose paint function asks is painted again by every build
+    /// rather than copied from the last list, scrolling alone included,
+    /// as what can be seen changes with it; a function that paints much
+    /// gains, one that paints little need not ask.
+    ///
+    /// @param sink     The sink the paint function was given.
+    /// @param rectOut  Receives the part, relative to the content box's
+    ///                 top left; of width and height 0 when nothing of it
+    ///                 can be seen. It may reach past the content box.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument.
+    /// @par Thread safety
+    /// Safe from any thread; the sink is used by one thread at a time, and
+    /// only during the call of the paint function given it.
+    MUI_NODISCARD MUI_API muiResult muiDrawSink_GetVisibleRect(muiDrawSink* sink, muiRect* rectOut);
 
     /// Paints a root's subtree, as its last muiComputeLayout left it, into
     /// the context's list, and clears the subtree's paint requests. When

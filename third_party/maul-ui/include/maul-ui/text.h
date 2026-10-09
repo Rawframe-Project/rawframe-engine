@@ -71,6 +71,18 @@ extern "C"
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_API void muiDestroyTextService(muiTextService* service);
 
+    /// Returns how many calls the service has refused as invalid input
+    /// (`mui_errorInvalid`), its glyph atlases' and text editing's among
+    /// them: a count release builds can watch to catch a host's bugs.
+    /// Stale ids are not misuse, and queries taking the service as const
+    /// count nothing.
+    ///
+    /// @param service  The service.
+    /// @return The count; 0 for a NULL service.
+    /// @par Thread safety
+    /// Safe from any thread; the service is used by one thread at a time.
+    MUI_API uint64_t muiGetTextServiceMisuse(const muiTextService* service);
+
 #ifdef __cplusplus
 }
 #endif

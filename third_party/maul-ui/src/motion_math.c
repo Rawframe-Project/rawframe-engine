@@ -122,6 +122,39 @@ void muiSinCos(double x, double* sineOut, double* cosineOut)
     }
 }
 
+// The arctangent of z from 0 to 1: z halved in angle twice, by
+// atan z = 2 atan(z / (1 + sqrt(1 + z^2))), to at most tan(pi / 16), then
+// the series to z^25 / 25.
+static double AtanReduced(double z)
+{
+    for (int i = 0; i < 2; i++)
+    {
+        z = z / (1.0 + sqrt(1.0 + z * z));
+    }
+    double z2 = z * z;
+    double sum = 0.0;
+    for (int k = 12; k >= 0; k--)
+    {
+        double term = 1.0 / (double)(2 * k + 1);
+        sum = (k % 2 == 0 ? term : -term) + z2 * sum;
+    }
+    return 4.0 * z * sum;
+}
+
+double muiAtan2(double y, double x)
+{
+    double ax = x < 0.0 ? -x : x;
+    double ay = y < 0.0 ? -y : y;
+    if (ax == 0.0 && ay == 0.0)
+    {
+        return 0.0;
+    }
+    const double halfPi = HALF_PI_HIGH + HALF_PI_LOW;
+    double angle = ay > ax ? halfPi - AtanReduced(ax / ay) : AtanReduced(ay / ax);
+    angle = x < 0.0 ? 2.0 * halfPi - angle : angle;
+    return y < 0.0 ? -angle : angle;
+}
+
 double muiLog(double x)
 {
     if (isnan(x) || x < 0.0)

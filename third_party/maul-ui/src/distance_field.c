@@ -398,10 +398,11 @@ static bool IsPointInside(const muiSegment* pieces, uint32_t count, const muiFie
     return IsInside(grid, winding);
 }
 
-// Whether the part of a piece from a to b along it is on the edge:
-// inside on one side of its middle and not on the other.
-static bool IsOnEdge(const muiSegment* pieces, uint32_t count, const muiFieldGrid* grid,
-                     const muiSegment* p, float a, float b)
+// Whether the part of a piece from a to b along it is on the edge,
+// inside on one side of its middle and not on the other: 1 with the
+// inside on its left, -1 on its right, 0 when not on the edge.
+static int EdgeSide(const muiSegment* pieces, uint32_t count, const muiFieldGrid* grid,
+                    const muiSegment* p, float a, float b)
 {
     float dx = p->x1 - p->x0;
     float dy = p->y1 - p->y0;
@@ -411,21 +412,37 @@ static bool IsOnEdge(const muiSegment* pieces, uint32_t count, const muiFieldGri
     float nudge = (fabsf(mx) + fabsf(my) + 64.0f) * NUDGE / sqrtf(dx * dx + dy * dy);
     float nx = -dy * nudge;
     float ny = dx * nudge;
-    return IsPointInside(pieces, count, grid, mx + nx, my + ny) !=
-           IsPointInside(pieces, count, grid, mx - nx, my - ny);
+    bool left = IsPointInside(pieces, count, grid, mx + nx, my + ny);
+    bool right = IsPointInside(pieces, count, grid, mx - nx, my - ny);
+    return left == right ? 0 : left ? 1 : -1;
+}
+
+// Adds an edge segment, its origin and side where there is room for them.
+static uint32_t AddEdge(const muiFieldScratch* scratch, uint32_t found, muiSegment segment,
+                        uint32_t origin, int side)
+{
+    scratch->edge[found] = segment;
+    if (scratch->edgeOrigins != nullptr)
+    {
+        scratch->edgeOrigins[found] = origin;
+        scratch->edgeSides[found] = (int8_t)side;
+    }
+    return found + 1;
 }
 
 // Adds the parts of a piece other pieces cross that are on the edge: it
 // is cut where they cross. When more cross it than are noted, or the room
 // left is short, it is kept whole.
 static uint32_t SplitPiece(const muiSegment* pieces, uint32_t count, const muiFieldGrid* grid,
-                           const muiSegment* p, const Hits* hits, muiSegment* edge, uint32_t found,
-                           size_t room)
+                           uint32_t index, const Hits* hits, const muiFieldScratch* scratch,
+                           uint32_t found, size_t room, uint32_t origin)
 {
+    const muiSegment* p = &pieces[index];
     if (hits->splits > MAX_SPLITS || (size_t)found + hits->splits + 1 > room)
     {
-        edge[found++] = *p;
-        return found;
+        // Kept whole, on the side its middle's windings say.
+        int side = EdgeSide(pieces, count, grid, p, 0.0f, 1.0f);
+        return AddEdge(scratch, found, *p, origin, side != 0 ? side : 1);
     }
     float dx = p->x1 - p->x0;
     float dy = p->y1 - p->y0;
@@ -433,12 +450,15 @@ static uint32_t SplitPiece(const muiSegment* pieces, uint32_t count, const muiFi
     {
         float a = k == 0 ? 0.0f : hits->places[k - 1];
         float b = k == hits->splits ? 1.0f : hits->places[k];
-        if (IsOnEdge(pieces, count, grid, p, a, b))
+        int side = EdgeSide(pieces, count, grid, p, a, b);
+        if (side != 0)
         {
-            edge[found++] =
-                (muiSegment){k == 0 ? p->x0 : p->x0 + a * dx, k == 0 ? p->y0 : p->y0 + a * dy,
-                             k == hits->splits ? p->x1 : p->x0 + b * dx,
-                             k == hits->splits ? p->y1 : p->y0 + b * dy};
+            found = AddEdge(scratch, found,
+                            (muiSegment){k == 0 ? p->x0 : p->x0 + a * dx,
+                                         k == 0 ? p->y0 : p->y0 + a * dy,
+                                         k == hits->splits ? p->x1 : p->x0 + b * dx,
+                                         k == hits->splits ? p->y1 : p->y0 + b * dy},
+                            origin, side);
         }
     }
     return found;
@@ -454,15 +474,17 @@ size_t muiEdgeRoom(uint32_t count)
 // for each run between such places, and runs of one segment are joined.
 // A piece others cross is cut there and each part found on its own.
 static uint32_t FindEdge(const muiSegment* pieces, const uint32_t* origins, uint32_t count,
-                         const muiFieldGrid* grid, const muiFieldScratch* scratch, muiSegment* edge)
+                         const muiFieldGrid* grid, const muiFieldScratch* scratch)
 {
+    muiSegment* edge = scratch->edge;
     size_t room = muiEdgeRoom(count);
     uint32_t found = 0;
     // Whether the last edge segment may grow by the next piece, and
-    // whether on holds for it.
+    // whether side, the side the inside is on or 0 off the edge, holds
+    // for it.
     bool joinable = false;
     bool known = false;
-    bool on = false;
+    int side = 0;
     for (uint32_t i = 0; i < count; i++)
     {
         const muiSegment* p = &pieces[i];
@@ -477,14 +499,15 @@ static uint32_t FindEdge(const muiSegment* pieces, const uint32_t* origins, uint
         if (hits.splits > 0)
         {
             // A whole piece leaves room for the rest, one each.
-            found = SplitPiece(pieces, count, grid, p, &hits, edge, found, room - (count - i - 1));
+            found = SplitPiece(pieces, count, grid, i, &hits, scratch, found,
+                               room - (count - i - 1), origins[i]);
             known = false;
             joinable = false;
             continue;
         }
-        on = known ? on : IsOnEdge(pieces, count, grid, p, 0.0f, 1.0f);
+        side = known ? side : EdgeSide(pieces, count, grid, p, 0.0f, 1.0f);
         known = !hits.end;
-        if (!on)
+        if (side == 0)
         {
             joinable = false;
             continue;
@@ -495,7 +518,7 @@ static uint32_t FindEdge(const muiSegment* pieces, const uint32_t* origins, uint
             edge[found - 1].y1 = p->y1;
             continue;
         }
-        edge[found++] = *p;
+        found = AddEdge(scratch, found, *p, origins[i], side);
         joinable = true;
     }
     return found;
@@ -559,10 +582,8 @@ static void MeasureSegment(const muiSegment* s, const muiFieldGrid* grid, const 
     }
 }
 
-// Sets each pixel's squared distance to that of the nearest segment
-// within reach, else the reach's.
-static void Measure(const muiSegment* segments, uint32_t count, const muiFieldGrid* grid,
-                    float* distances)
+void muiMeasureField(const muiSegment* segments, uint32_t count, const muiFieldGrid* grid,
+                     float* distances)
 {
     float reach = (float)grid->spread;
     for (size_t i = 0; i < (size_t)grid->width * grid->height; i++)
@@ -579,17 +600,25 @@ static void Measure(const muiSegment* segments, uint32_t count, const muiFieldGr
     }
 }
 
+uint32_t muiFindFieldEdge(const muiSegment* pieces, const uint32_t* origins, uint32_t count,
+                          const muiFieldGrid* grid, const muiFieldScratch* scratch,
+                          unsigned char* inside)
+{
+    Cross(pieces, count, grid, scratch->rowStarts, scratch->crossings);
+    Bucket(pieces, count, grid, scratch->cellStarts, scratch->cellPieces);
+    uint32_t edges = FindEdge(pieces, origins, count, grid, scratch);
+    Fill(grid, scratch->rowStarts, scratch->crossings, inside);
+    return edges;
+}
+
 void muiDrawDistanceField(const muiSegment* pieces, const uint32_t* origins, uint32_t count,
                           const muiFieldGrid* grid, const muiFieldScratch* scratch,
                           unsigned char* pixels)
 {
-    Cross(pieces, count, grid, scratch->rowStarts, scratch->crossings);
-    Bucket(pieces, count, grid, scratch->cellStarts, scratch->cellPieces);
-    uint32_t edges = FindEdge(pieces, origins, count, grid, scratch, scratch->edge);
-    Measure(scratch->edge, edges, grid, scratch->distances);
     // The pixels say which centers are inside until the field replaces
     // them.
-    Fill(grid, scratch->rowStarts, scratch->crossings, pixels);
+    uint32_t edges = muiFindFieldEdge(pieces, origins, count, grid, scratch, pixels);
+    muiMeasureField(scratch->edge, edges, grid, scratch->distances);
     float scale = 128.0f / (float)grid->spread;
     for (size_t at = 0; at < (size_t)grid->width * grid->height; at++)
     {

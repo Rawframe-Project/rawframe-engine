@@ -43,18 +43,28 @@ typedef struct muiPaintState
     muiDrawRange clips;
     muiDrawRange gradients;
     muiDrawRange transforms;
+    // How many nodes of its subtree, outside layers, had host content
+    // that asked what is visible, which a copy would not keep right; and
+    // during its build, how many had before it.
+    uint32_t culled;
+    uint32_t culledBefore;
 } muiPaintState;
 
 // One list's tables. Entry 0 of the clips and gradients is the
 // placeholder for none; glyphs have none, as runs name spans.
+// Marks a transform's owner as one of a local scale.
+#define MUI_TRANSFORM_SCALE 0x80000000u
+
 typedef struct muiDrawTables
 {
     muiDrawCommand* commands;
     muiDrawClip* clips;
     muiDrawGradient* gradients;
     muiGlyph* glyphs;
-    // Entry 0 is the identity; each other is a scroll container's (its
-    // owner's slot), a translation by its offset after its parent entry's.
+    // Entry 0 is the identity; each other is owned by a node (its slot):
+    // a scroll container's, a translation by its offset, or with
+    // MUI_TRANSFORM_SCALE a scaled node's, a scale about its origin, after
+    // its parent entry's.
     muiDrawTransform* transforms;
     uint32_t* transformOwners;
     uint32_t* transformParents;
@@ -77,6 +87,9 @@ typedef struct muiDrawStore
     uint32_t gradientCapacity;
     uint32_t glyphCapacity;
     uint32_t transformCapacity;
+    // How many nodes' host content asked what is visible in the shown
+    // list: scrolling alone then builds a list of its own.
+    uint32_t culled;
     // The root slot of the shown list. Its header's scale is 0 when there
     // is no list to take from: none was built yet, or the last build
     // failed.

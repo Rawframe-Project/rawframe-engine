@@ -35,16 +35,31 @@ extern "C"
         uint32_t generation;
     } muiThemeId;
 
+    // How a theme is made. Build it with muiDefaultThemeDef.
+    typedef struct muiThemeDef
+    {
+        uint32_t cookie;
+    } muiThemeDef;
+
+    /// Returns the default theme def.
+    ///
+    /// @return The def, with a valid cookie.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MUI_API muiThemeDef muiDefaultThemeDef(void);
+
     /// Creates a theme that overrides no token.
     ///
     /// @param context     The context.
+    /// @param def         The theme: a valid cookie.
     /// @param themeIdOut  Receives the theme; set to the null id on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a
-    ///         call from a measure or paint function; `mui_errorCapacity` when the
-    ///         context's theme limit is reached.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
+    ///         cookie or a call from a measure or paint function;
+    ///         `mui_errorCapacity` when the context's theme limit is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiCreateTheme(muiContext* context, muiThemeId* themeIdOut);
+    MUI_NODISCARD MUI_API muiResult muiCreateTheme(muiContext* context, const muiThemeDef* def,
+                                                   muiThemeId* themeIdOut);
 
     /// Destroys a theme and its overrides. Nodes it was set on read
     /// through no theme of their own, and every node is restyled.

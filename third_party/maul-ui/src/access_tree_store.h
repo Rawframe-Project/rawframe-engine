@@ -86,4 +86,8 @@ uint32_t muiHeldSlotOf(const muiAccessTree* tree, uint64_t id);
 // Frees what a held node owns.
 void muiFreeHeld(const muiAccessTree* tree, const muiHeldNode* held);
 
+// Whether a node's new record, held now, may show the tree otherwise than
+// its old one did, by what the view's rules read (access_view.c).
+bool muiViewDiffers(const muiAccessTree* tree, const muiHeldNode* old, const muiHeldNode* now);
+
 #endif // MAUL_UI_SRC_ACCESS_TREE_STORE_H

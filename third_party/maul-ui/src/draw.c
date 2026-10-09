@@ -13,6 +13,7 @@
 
 #include "context.h"
 #include "draw_store.h"
+#include "draw_transform.h"
 #include "layer.h"
 #include "paint.h"
 #include "paint_host.h"
@@ -34,6 +35,8 @@ typedef struct Build
     // the origin 0 for the list's root, its laid-out place for a layer;
     // no clip, full opacity.
     muiPaintState top;
+    // The nodes painted rather than copied (muiWorkCounts).
+    uint64_t painted;
 } Build;
 
 // Where a copied subtree's indices land: its own clips, gradients and
@@ -75,7 +78,7 @@ static bool CanCopy(const Build* build, uint32_t slot, const muiPaintState* old,
     const muiTree* tree = &build->painter.context->tree;
     return build->previous != nullptr && old->build == build->previousBuild &&
            (muiTreeAt(tree, slot)->dirty.subtree & mui_stagePaint) == 0 && old->x == x &&
-           old->y == y && old->inherited == inherited;
+           old->y == y && old->inherited == inherited && old->culled == 0;
 }
 
 // Copies a subtree's commands, clips, gradients and glyphs; false when
@@ -239,11 +242,13 @@ static bool Visit(Build* build, const muiPaintState* top, uint32_t root, uint32_
     uint32_t clip = above->clip;
     uint32_t transform = above->inner;
     float inherited = above->opacity;
+    state->culledBefore = build->painter.culled;
     if (CanCopy(build, at, state, x, y, inherited))
     {
         (void)Copy(build, at, state, clip, transform);
         return false;
     }
+    build->painted++;
     // Field by field: a whole struct built on the stack and copied stalls
     // on reading back its narrower stores.
     const muiDrawTables* out = build->painter.out;
@@ -260,15 +265,15 @@ static bool Visit(Build* build, const muiPaintState* top, uint32_t root, uint32_
     state->transform = transform;
     state->inner = transform;
     state->transforms = (muiDrawRange){out->transformCount, 0};
-    if (!muiPaintNode(&build->painter, at, state))
-    {
-        return false;
-    }
-    if (build->painter.paint != nullptr)
+    bool painted = muiPaintNode(&build->painter, at, state);
+    if (painted && build->painter.paint != nullptr)
     {
         muiPaintHostContent(&build->painter, at, state);
     }
-    return true;
+    // Drawn through its scale, it is painted in its parent's: the state
+    // keeps that one, as a copy of it does.
+    state->transform = transform;
+    return painted;
 }
 
 // Ends a node's spans where its subtree ended.
@@ -280,6 +285,7 @@ static void Leave(Build* build, uint32_t at)
     state->clips.end = out->clipCount;
     state->gradients.end = out->gradientCount;
     state->transforms.end = out->transformCount;
+    state->culled = build->painter.culled - state->culledBefore;
 }
 
 // The first of a node and its next siblings that roots no layer, or 0.
@@ -328,22 +334,61 @@ static void Walk(Build* build, uint32_t root)
     }
 }
 
-// The origin of a node's parent: its ancestors' places added up to the
-// list's root, in doubles as hit testing adds them.
-static void ParentOrigin(const muiContext* context, uint32_t root, uint32_t node, float* xOut,
-                         float* yOut)
+// How many transforms a node owns: one for a scale, one for scrolling.
+static uint32_t TransformsOf(const muiContext* context, uint32_t slot)
 {
+    const muiLocalScale* scale = &context->visual[slot - 1].scale;
+    return (scale->x != 1.0f || scale->y != 1.0f ? 1u : 0u) +
+           (context->layout[slot - 1].style.scrollAxes != mui_scrollNone ? 1u : 0u);
+}
+
+// The transform a layer's parent's children go through, so that the
+// layer scrolls and scales with them: the parent's, or for a parent not
+// painted now (in a layer above, or below a node that draws nothing) its
+// and its ancestors' transforms up to one that was, added again: their
+// values come from the same owners.
+static uint32_t ParentTransform(Build* build, uint32_t root, uint32_t parent)
+{
+    const muiContext* context = build->painter.context;
     const muiTree* tree = &context->tree;
-    double x = 0.0;
-    double y = 0.0;
-    for (uint32_t at = node; at != root;)
+    const muiPaintState* states = build->store->states;
+    uint32_t count = 0;
+    uint32_t at = parent;
+    while (at != 0 && states[at - 1].build != build->build)
     {
-        at = muiTreeAt(tree, at)->links.parent;
-        x += (double)context->layout[at - 1].rect.x;
-        y += (double)context->layout[at - 1].rect.y;
+        count += TransformsOf(context, at);
+        at = at == root ? 0 : muiTreeAt(tree, at)->links.parent;
     }
-    *xOut = (float)x;
-    *yOut = (float)y;
+    uint32_t base = at != 0 ? states[at - 1].inner : 0;
+    muiDrawTables* out = build->painter.out;
+    if (count == 0 || count > build->painter.transformCapacity - out->transformCount)
+    {
+        build->painter.full = count != 0;
+        return base;
+    }
+    // From the bottom up, each entry after the one above it: a node's
+    // scroll after its scale.
+    uint32_t first = out->transformCount;
+    uint32_t next = first + count;
+    out->transformCount = next;
+    for (at = parent; next > first; at = muiTreeAt(tree, at)->links.parent)
+    {
+        const muiLocalScale* scale = &context->visual[at - 1].scale;
+        const uint32_t owners[2] = {
+            context->layout[at - 1].style.scrollAxes != mui_scrollNone ? at : 0,
+            scale->x != 1.0f || scale->y != 1.0f ? at | MUI_TRANSFORM_SCALE : 0,
+        };
+        for (int i = 0; i < 2; i++)
+        {
+            if (owners[i] != 0)
+            {
+                next--;
+                out->transformOwners[next] = owners[i];
+                out->transformParents[next] = next == first ? base : next - 1;
+            }
+        }
+    }
+    return first + count - 1;
 }
 
 // The next layer below the root to walk after place, from the bottom,
@@ -356,12 +401,9 @@ static uint32_t NextLayer(Build* build, uint32_t root, uint32_t* place)
         uint32_t layer = muiLayerAt(context, (*place)++);
         if (layer != 0 && layer != root && muiTreeIsAncestor(&context->tree, root, layer))
         {
-            ParentOrigin(context, root, layer, &build->top.x, &build->top.y);
-            // Through the transform its parent's children are, so that it
-            // scrolls with them; a parent not painted yet has none.
-            const muiPaintState* parent =
-                &build->store->states[muiTreeAt(&context->tree, layer)->links.parent - 1];
-            build->top.inner = parent->build == build->build ? parent->inner : 0;
+            muiParentOrigin(context, root, layer, &build->top.x, &build->top.y);
+            build->top.inner =
+                ParentTransform(build, root, muiTreeAt(&context->tree, layer)->links.parent);
             return layer;
         }
     }
@@ -389,33 +431,18 @@ static void Empty(muiDrawTables* tables)
     tables->transformCount = 1;
 }
 
-// Gives each scroll container's transform its value: its parent entry's,
-// translated by the container's offset, logical x leftward under right
-// to left, rounded to device pixels so that snapped edges stay snapped.
-static void SetTransforms(const muiContext* context, muiDrawTables* tables, float scale)
-{
-    for (uint32_t i = 1; i < tables->transformCount; i++)
-    {
-        uint32_t owner = tables->transformOwners[i];
-        const muiScrollState* scroll = &context->scrolls[owner - 1];
-        const muiLayoutNode* layout = &context->layout[owner - 1];
-        muiDrawTransform value = tables->transforms[tables->transformParents[i]];
-        value.e += roundf(muiScrollShiftX(layout, scroll) * scale) / scale;
-        value.f += roundf(muiScrollShiftY(layout, scroll) * scale) / scale;
-        tables->transforms[i] = value;
-    }
-}
-
 // Whether the last list stands for this build: of this root, surface and
-// scale, with no paint requested below the root. A failed build left a
-// header of scale 0, which no build has. A new node in the root's slot
-// is requested every stage until a build of it, which records it.
-static bool IsUnchanged(const muiDrawStore* store, const muiTree* tree, uint32_t root,
-                        const muiDrawInput* input)
+// scale, with no paint requested below the root, nor scrolling where
+// host content culled to what was visible. A failed build left a header
+// of scale 0, which no build has. A new node in the root's slot is
+// requested every stage until a build of it, which records it.
+static bool IsUnchanged(const muiContext* context, uint32_t root, const muiDrawInput* input)
 {
+    const muiDrawStore* store = &context->draw;
     return store->rootIndex == root && store->header.surface == input->surface &&
            store->header.scale == input->scale &&
-           (muiTreeAt(tree, root)->dirty.subtree & mui_stagePaint) == 0;
+           (muiTreeAt(&context->tree, root)->dirty.subtree & mui_stagePaint) == 0 &&
+           (!context->scrolled || store->culled == 0);
 }
 
 muiResult muiBuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawInput* input)
@@ -435,13 +462,13 @@ muiResult muiBuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawI
         return mui_errorStale;
     }
     muiDrawStore* store = &context->draw;
-    if (IsUnchanged(store, &context->tree, root, input))
+    if (IsUnchanged(context, root, input))
     {
         // Scrolling alone moves the transforms: a list of its own, the same
         // commands.
         if (context->scrolled)
         {
-            SetTransforms(context, &store->tables[store->current], input->scale);
+            muiSetTransforms(context, root, &store->tables[store->current], input->scale);
             store->header.generation++;
             context->scrolled = false;
         }
@@ -466,6 +493,7 @@ muiResult muiBuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawI
     build.painter.paint = input->paint;
     build.painter.paintUser = input->paintUser;
     build.painter.scale = input->scale;
+    build.painter.root = root;
     build.store = store;
     build.previous = takes ? &store->tables[store->current] : nullptr;
     build.previousBuild = store->header.generation;
@@ -477,6 +505,7 @@ muiResult muiBuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawI
     WalkAll(&build, root);
     context->inHostCall = false;
     context->misuse += build.painter.misuse;
+    context->work.painted += build.painted;
     store->current = next;
     if (build.painter.full)
     {
@@ -493,7 +522,8 @@ muiResult muiBuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawI
         .scale = input->scale,
     };
     store->rootIndex = root;
-    SetTransforms(context, build.painter.out, input->scale);
+    store->culled = build.painter.culled;
+    muiSetTransforms(context, root, build.painter.out, input->scale);
     context->scrolled = false;
     (void)muiTreeSweep(&context->tree, root, mui_stagePaint);
     return mui_success;

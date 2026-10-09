@@ -59,8 +59,11 @@ typedef struct muiFieldScratch
     // width * height + 1 entries, and count.
     uint32_t* cellStarts;
     uint32_t* cellPieces;
-    // muiEdgeRoom entries.
+    // muiEdgeRoom entries; for a multi-channel field also each edge
+    // segment's piece origin and the side its inside is on, else NULL.
     muiSegment* edge;
+    uint32_t* edgeOrigins;
+    int8_t* edgeSides;
     // width * height entries.
     float* distances;
 } muiFieldScratch;
@@ -78,6 +81,20 @@ size_t muiEdgeRoom(uint32_t count);
 
 // How many times the grid's row center lines cross the pieces.
 size_t muiCountCrossings(const muiSegment* pieces, uint32_t count, const muiFieldGrid* grid);
+
+// Finds the union's edge of the pieces into scratch->edge, in contour
+// order, with each segment's origin and side (1 inside on its left, -1 on
+// its right) when the scratch has room for them, and marks each pixel 1
+// whose center is inside, 0 otherwise, a byte per pixel, rows from the
+// top. Returns how many edge segments there are.
+uint32_t muiFindFieldEdge(const muiSegment* pieces, const uint32_t* origins, uint32_t count,
+                          const muiFieldGrid* grid, const muiFieldScratch* scratch,
+                          unsigned char* inside);
+
+// Sets each pixel's squared distance in scratch->distances to that of the
+// nearest of an edge's segments within the spread, else the spread's.
+void muiMeasureField(const muiSegment* edge, uint32_t count, const muiFieldGrid* grid,
+                     float* distances);
 
 // Writes the field of the pieces, a byte per pixel, rows from the top:
 // 128 at the outline and 128 / spread more for each pixel inside, less

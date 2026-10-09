@@ -25,6 +25,19 @@ typedef struct muiSizingInput
     float parentHeight;
     // The direction the node inherits: right to left when set.
     bool rtl;
+    // Whether an exact height is the node's own content height: a flex
+    // item's that was not stretched, a column item's flexed in a column
+    // with no definite height, a root's or an absolute node's automatic
+    // one. CSS keeps such a height indefinite (Flexbox 9.8): percentages
+    // below do not resolve against it, nor do its stretched items count
+    // as definite.
+    bool contentHeight;
+    // Whether the answer is the content's alone, the node's aspect ratio
+    // and its own limits left out: a flex item's base from its content
+    // is its max-content size, unclamped (Flexbox 9.2.3), and a column's
+    // automatic minimum for a ratio item reads its content's width
+    // (section 4.5, as Chrome).
+    bool contentOnly;
 } muiSizingInput;
 
 typedef struct muiCacheEntry
@@ -36,6 +49,7 @@ typedef struct muiCacheEntry
 
 enum
 {
+    // A power of two that fits the cache's next field.
     MUI_CACHE_ENTRIES = 4
 };
 
@@ -44,10 +58,22 @@ enum
 typedef struct muiLayoutCache
 {
     muiCacheEntry entries[MUI_CACHE_ENTRIES];
-    // The entry the next miss replaces.
-    uint8_t next;
-    bool finalValid;
-    bool finalRtl;
+    // The entry the next miss replaces, of MUI_CACHE_ENTRIES; whether a
+    // node below resolves a size against its parent's extents
+    // (muiScaledBelow): 0 not yet known, 1 none does, 2 one does.
+    uint8_t next : 2;
+    uint8_t scaledBelow : 2;
+    // On which axes a content size is the content's own, so answers an
+    // exact or limited query (src/solve.c): 0 not yet known, else 4 with
+    // 1 for the width and 2 for the height.
+    uint8_t loose : 3;
+    // Whether a miss replaced a valid entry since the cache was cleared:
+    // a query its parent asked may be lost (src/layout_bound.c); and the
+    // direction and content height the node was last laid out with.
+    bool replaced : 1;
+    bool finalValid : 1;
+    bool finalRtl : 1;
+    bool finalContentHeight : 1;
     muiSize finalSize;
 } muiLayoutCache;
 
@@ -125,6 +151,56 @@ typedef struct muiLayoutNode
 // Nodes are whole cache lines, so that every node's rectangle and cache
 // sit on the same lines in each.
 static_assert(sizeof(muiLayoutNode) % 64 == 0, "a layout node is whole cache lines");
+
+// Whether a dimension scales its parent's extent.
+static inline bool muiIsScaled(muiDimension dimension)
+{
+    return dimension.kind == mui_dimensionValue && dimension.scale != 0.0f;
+}
+
+// Whether a node below node sizes itself from a definite size above it:
+// a size resolved against its parent's extents, or an aspect ratio,
+// which a stretched cross size makes definite. A content query leaves
+// those sizes indefinite where an exact or limited one may give them, so
+// a content size then answers content queries alone. Kept in the cache
+// and cleared with it, as any change below clears it.
+static inline bool muiScaledBelow(const muiTree* tree, muiLayoutNode* nodes, uint32_t node)
+{
+    muiLayoutCache* cache = &nodes[node - 1].cache;
+    if (cache->scaledBelow == 0)
+    {
+        bool scaled = false;
+        for (uint32_t c = muiTreeAt(tree, node)->links.firstChild; c != 0 && !scaled;
+             c = muiTreeAt(tree, c)->links.next)
+        {
+            const muiLayoutStyle* style = &nodes[c - 1].style;
+            const muiSizing* sizing = &style->sizing;
+            scaled = muiIsScaled(sizing->width) || muiIsScaled(sizing->height) ||
+                     muiIsScaled(sizing->minWidth) || muiIsScaled(sizing->maxWidth) ||
+                     muiIsScaled(sizing->minHeight) || muiIsScaled(sizing->maxHeight) ||
+                     muiIsScaled(style->item.basis) || sizing->aspectRatio != 0.0f ||
+                     muiScaledBelow(tree, nodes, c);
+        }
+        cache->scaledBelow = scaled ? 2 : 1;
+    }
+    return cache->scaledBelow == 2;
+}
+
+// A node's content box in its border box, as layout sized it: inside the
+// border and the padding it was laid out with, whose start is the right in
+// a right-to-left node.
+static inline muiRect muiContentBoxOf(const muiLayoutNode* layout, const muiEdges* padding)
+{
+    const muiEdges* border = &layout->style.border;
+    float start = border->start + padding->start;
+    float end = border->end + padding->end;
+    float top = border->top + padding->top;
+    float bottom = border->bottom + padding->bottom;
+    float width = layout->rect.width - start - end;
+    float height = layout->rect.height - top - bottom;
+    return (muiRect){layout->rtl ? end : start, top, width > 0.0f ? width : 0.0f,
+                     height > 0.0f ? height : 0.0f};
+}
 
 static inline bool muiIsSameRect(muiRect a, muiRect b)
 {

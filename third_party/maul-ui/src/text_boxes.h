@@ -55,8 +55,16 @@ typedef struct muiTextEdge
 // Whether a host has its service and context.
 bool muiIsTextHostValid(const muiTextHost* host);
 
-// Lays a node's text out as painting does at a width.
+// Lays a node's text out as painting does at a width, scrolled as
+// muiFollowCaret leaves an editing block.
 muiResult muiLayText(const muiTextHost* host, muiNodeId nodeId, float width, muiLaidText* out);
+
+// Scrolls an editing block's laid-out text in a content box of the
+// laid width and a height: from where it was, just far enough that the
+// caret shows, then no further than the text reaches, so a shorter text
+// comes back; the lines and the paragraph laid out scrolled with it.
+// Text not editing stays where it is.
+void muiFollowCaret(muiLaidText* laid, float height);
 
 // Writes a line's boxes left to right into the service's scratch, valid
 // until the next call; false when memory runs out.

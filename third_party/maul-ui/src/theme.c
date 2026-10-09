@@ -18,7 +18,14 @@
 #include "token_store.h"
 #include "tree.h"
 
-muiResult muiCreateTheme(muiContext* context, muiThemeId* themeIdOut)
+#define THEME_DEF_COOKIE 0x6D757468u // "muth"
+
+muiThemeDef muiDefaultThemeDef(void)
+{
+    return (muiThemeDef){.cookie = THEME_DEF_COOKIE};
+}
+
+muiResult muiCreateTheme(muiContext* context, const muiThemeDef* def, muiThemeId* themeIdOut)
 {
     if (themeIdOut != nullptr)
     {
@@ -28,7 +35,8 @@ muiResult muiCreateTheme(muiContext* context, muiThemeId* themeIdOut)
     {
         return mui_errorInvalid;
     }
-    if (themeIdOut == nullptr || muiIsInHostCall(context))
+    if (def == nullptr || themeIdOut == nullptr || def->cookie != THEME_DEF_COOKIE ||
+        muiIsInHostCall(context))
     {
         return muiRefuse(context);
     }

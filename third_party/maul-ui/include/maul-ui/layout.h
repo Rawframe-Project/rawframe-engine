@@ -29,7 +29,10 @@ extern "C"
         // maximum, no limit; as a minimum, the automatic minimum size.
         mui_dimensionAuto = 0,
         // scale x the parent's content extent on the axis + offset; with an
-        // indefinite parent extent, automatic.
+        // indefinite parent extent, automatic. As in CSS, a parent's height
+        // is indefinite when it is its content's: not given, not stretched
+        // across a line, not flexed in a column of definite height. A
+        // scaled cross size is not automatic, so it does not stretch.
         mui_dimensionValue = 1,
     };
 
@@ -158,6 +161,15 @@ extern "C"
         muiAlign alignSelf;
     } muiFlexItem;
 
+    // A value per side, physical: top first, then clockwise.
+    typedef struct muiSides
+    {
+        float top;
+        float right;
+        float bottom;
+        float left;
+    } muiSides;
+
     // Sides of a box, as bits.
     typedef uint8_t muiEdgeMask;
 
@@ -262,6 +274,12 @@ extern "C"
         muiTextDirection textDirection;
         muiContentKind content;
         muiScrollAxes scrollAxes;
+        // The edges whose padding is at least the surface's safe-area
+        // inset on the physical side each falls on in the node's direction
+        // (muiLayoutInput): where content meets the surface's edge, as a
+        // bar whose background reaches it and whose content does not.
+        // Nothing is consumed: a node below one that asks pads again.
+        muiEdgeMask safeArea;
     } muiLayoutStyle;
 
     // A rectangle: its origin and size.
@@ -308,7 +326,11 @@ extern "C"
     // muiComputeLayout, on the calling thread, and may not change the
     // context; a call that would is refused as misuse. It is never asked
     // with both axes exact, as the size is then decided: a host lays its
-    // content out for painting at the node's rectangle.
+    // content out for painting at the node's rectangle. Its answer is to
+    // depend on the request alone, and content that fits within a size is
+    // to measure the same within any smaller one it still fits, as text
+    // broken greedily into lines does: layout keeps answers and gives them
+    // again to such requests.
     typedef muiSize (*muiMeasureFunction)(void* user, muiNodeId nodeId, uint64_t hostKey,
                                           muiMeasureAxis width, muiMeasureAxis height);
 
@@ -336,6 +358,12 @@ extern "C"
         // measureUser; NULL gives none, and a baseline is then the bottom
         // of the node's border box, as CSS synthesizes one.
         muiBaselineFunction baseline;
+        // The surface's safe-area insets, physical, finite and 0 or more:
+        // what a display's cutouts, rounded corners and system bars cover,
+        // as iOS's safeAreaInsets and Android's WindowInsets give them.
+        // Nodes pad by them on the edges their safeArea names; new ones
+        // lay those nodes out again.
+        muiSides safeArea;
     } muiLayoutInput;
 
     /// Returns the default layout style: CSS's initial values (row, one
@@ -447,6 +475,39 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_API muiRect muiNode_GetRect(const muiContext* context, muiNodeId nodeId);
+
+    /// Returns a node's content box from the last muiComputeLayout that
+    /// reached it, relative to its border box: inside its border and
+    /// padding, the start's on the right in a right-to-left node, as its
+    /// paint function and its text's carets are given it.
+    ///
+    /// @param context  The context.
+    /// @param nodeId   The node.
+    /// @return The rectangle; all zero before any layout, for a stale id or
+    ///         a NULL context.
+    /// @par Thread safety
+    /// Safe from any thread; the context is used by one thread at a time.
+    MUI_API muiRect muiNode_GetContentRect(const muiContext* context, muiNodeId nodeId);
+
+    /// Carries a point of a node's border box into the space its topmost
+    /// ancestor's rectangle is in, where pointer events are given, through
+    /// its own and its ancestors' places, local scales and scroll
+    /// containers' offsets as the last muiComputeLayout, styling and
+    /// scrolling left them: so a host places a
+    /// window's candidate box at a caret, or its own popup beside a node.
+    ///
+    /// @param context  The context.
+    /// @param nodeId   The node.
+    /// @param x        The point, from the border box's top left.
+    /// @param y        Likewise.
+    /// @param xOut     Receives the point's x there; unchanged on failure.
+    /// @param yOut     Likewise its y.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a
+    ///         point not finite; `mui_errorStale` for a node that is gone.
+    /// @par Thread safety
+    /// Safe from any thread; the context is used by one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiNode_MapToRoot(const muiContext* context, muiNodeId nodeId,
+                                                      float x, float y, float* xOut, float* yOut);
 
 #ifdef __cplusplus
 }

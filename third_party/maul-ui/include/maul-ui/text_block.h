@@ -18,7 +18,9 @@
 #include "maul-ui/draw.h"
 #include "maul-ui/font.h"
 #include "maul-ui/layout.h"
+#include "maul-ui/style.h"
 #include "maul-ui/text.h"
+#include "maul-ui/text_style.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -44,20 +46,38 @@ extern "C"
         const muiContext* context;
     } muiTextHost;
 
-    /// Creates a text block holding a copy of UTF-8 text. Ill-formed
-    /// sequences are laid out as U+FFFD.
+    // How a text block is made. Build it with muiDefaultTextBlockDef.
+    typedef struct muiTextBlockDef
+    {
+        uint32_t cookie;
+        // UTF-8 text, copied; ill-formed sequences are laid out as
+        // U+FFFD. May be NULL when length is 0.
+        const char* text;
+        // Its length in bytes, below 2^31.
+        size_t length;
+    } muiTextBlockDef;
+
+    /// Returns the default text block def: no text.
+    ///
+    /// @return The def, with a valid cookie.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MUI_API muiTextBlockDef muiDefaultTextBlockDef(void);
+
+    /// Creates a text block holding a copy of a def's text.
     ///
     /// @param service  The service.
-    /// @param text     The text; may be NULL when length is 0.
-    /// @param length   Its length in bytes, below 2^31.
+    /// @param def      The block: a valid cookie and its text.
     /// @param blockOut Receives the block's id; the null id on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a
-    ///         length of 2^31 or more; `mui_errorCapacity` when the
-    ///         service's limit of blocks is reached or memory runs out.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
+    ///         cookie, text NULL with a length or a length of 2^31 or more;
+    ///         `mui_errorCapacity` when the service's limit of blocks is
+    ///         reached or memory runs out.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiCreateTextBlock(muiTextService* service, const char* text,
-                                                       size_t length, muiTextBlockId* blockOut);
+    MUI_NODISCARD MUI_API muiResult muiCreateTextBlock(muiTextService* service,
+                                                       const muiTextBlockDef* def,
+                                                       muiTextBlockId* blockOut);
 
     /// Destroys a text block.
     ///
@@ -114,6 +134,74 @@ extern "C"
                                                          muiTextBlockId blockId, uint32_t start,
                                                          uint32_t end, const char* text,
                                                          size_t length);
+
+    enum
+    {
+        // The most spans a block holds.
+        MUI_MAX_TEXT_SPANS = 4096
+    };
+
+    // A span of a block's text styled apart from the rest: its bytes from
+    // start, and the text properties mask names (MUI_TEXT_PROPERTIES bits)
+    // with their values in style, which win over the node's computed text
+    // style over those bytes. Spans are what a host's rich-text markup
+    // turns into; Maul UI parses none.
+    typedef struct muiTextSpan
+    {
+        uint32_t start;
+        uint32_t length;
+        muiPropertyMask mask;
+        muiTextStyle style;
+    } muiTextSpan;
+
+    /// Sets the spans of a block's text, copied, replacing the ones it had;
+    /// later ones win where they overlap, as a stack of styles does.
+    /// Spans set the text color, the decoration and its color, and the
+    /// font, size, weight and slant their runs are shaped in: a size is
+    /// against the node's, as a child's text is against its parent's, and
+    /// a line is as tall as the runs on it reach (record mui-0006). A block
+    /// takes up to 31 run styles apart from the node's; a span making more
+    /// is shaped in the style under it. Setting the text drops them; replacing
+    /// a range moves those after it, a span growing with text put strictly
+    /// inside it; a span start inside the range goes to the new text's
+    /// end, a span end inside it to the range's start, and a span left
+    /// empty is dropped. Mark the nodes showing the block changed
+    /// (muiNode_MarkContentChanged).
+    ///
+    /// @param service  The service.
+    /// @param blockId  The block.
+    /// @param spans    The spans; NULL when count is 0.
+    /// @param count    How many, at most MUI_MAX_TEXT_SPANS; 0 clears them.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, the
+    ///         null id, NULL spans with a count, too many, a span empty,
+    ///         past the text or with an edge inside a UTF-8 sequence, a mask
+    ///         naming another property, or a value not valid for its
+    ///         property; `mui_errorStale` for a block that is gone;
+    ///         `mui_errorCapacity` when memory runs out, which keeps the old
+    ///         spans.
+    /// @par Thread safety
+    /// Safe from any thread; the service is used by one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiTextBlock_SetSpans(muiTextService* service,
+                                                          muiTextBlockId blockId,
+                                                          const muiTextSpan* spans, uint32_t count);
+
+    /// Reads a block's spans, as moved by the edits since they were set:
+    /// what a host saves of a block's rich text.
+    ///
+    /// @param service    The service.
+    /// @param blockId    The block.
+    /// @param spansOut   Receives them, valid until its spans or text
+    ///                   change or the block is destroyed; NULL for none.
+    /// @param countOut   Receives how many.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or the
+    ///         null id; `mui_errorStale` for a block that is gone. Nothing
+    ///         is written on failure.
+    /// @par Thread safety
+    /// Safe from any thread; the service is used by one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiTextBlock_GetSpans(const muiTextService* service,
+                                                          muiTextBlockId blockId,
+                                                          const muiTextSpan** spansOut,
+                                                          uint32_t* countOut);
 
     /// Reads a block's text.
     ///
@@ -237,10 +325,12 @@ extern "C"
     MUI_API void muiPaintText(void* user, muiNodeId nodeId, uint64_t hostKey, float width,
                               float height, muiDrawSink* sink);
 
-    /// Returns the baseline of a text block's first line, as a
+    /// Reads a text block's text for accessibility, as a
     /// maul-ui/access.h's muiAccessTextFunction: user is a muiTextHost,
     /// and hostKey a block's key. The block's text, which the record
-    /// leaves out when it is not well-formed UTF-8.
+    /// leaves out when it is not well-formed UTF-8; for an editing
+    /// password (maul-ui/text_editor.h), a bullet per character, as it
+    /// is shown.
     ///
     /// @param user       A muiTextHost.
     /// @param nodeId     The node.
@@ -248,7 +338,8 @@ extern "C"
     /// @param textOut    Receives the text, valid until the block is
     ///                   edited or destroyed.
     /// @param lengthOut  Receives its length.
-    /// @return Whether the key names a block.
+    /// @return Whether the key names a block; false, too, when memory for
+    ///         a password's bullets runs out.
     /// @par Thread safety
     /// Safe from any thread; the service and context are used by one
     /// thread at a time.

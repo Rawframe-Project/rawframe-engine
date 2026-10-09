@@ -22,25 +22,23 @@ enum
     MAX_CLUSTER_POINTS = 32
 };
 
-// The bidi levels of every paragraph of the text, each with the base
-// direction.
-static bool ResolveLevels(muiTextService* service, muiTextBlock* block, bool rtl)
+// The bidi levels of a paragraph's bytes from start up to end, each of
+// Maul Unicode's paragraphs within them with the base direction.
+static bool ResolveLevels(muiTextService* service, muiTextBlock* block, uint32_t start,
+                          uint32_t end, bool rtl)
 {
-    const muiAllocator* allocator = &service->allocator;
-    uint32_t length = block->length;
-    if (!muiReserve(allocator, &block->levels, length + 1u) ||
-        !muiReserve(allocator, &service->workspace, length + 1u))
+    if (!muiReserve(&service->allocator, &service->workspace, end - start + 1u))
     {
         return false;
     }
     const char* text = block->text.data;
     uint8_t* levels = block->levels.data;
     muniBidiDirection direction = rtl ? muni_bidiRightToLeft : muni_bidiLeftToRight;
-    for (uint32_t offset = 0; offset < length;)
+    for (uint32_t offset = start; offset < end;)
     {
         size_t paragraph = 0;
         uint8_t level = 0;
-        if (muniResolveBidi(text + offset, length - offset, direction, levels + offset,
+        if (muniResolveBidi(text + offset, end - offset, direction, levels + offset,
                             service->workspace.data, &paragraph, &level) != muni_success ||
             paragraph == 0)
         {
@@ -51,17 +49,35 @@ static bool ResolveLevels(muiTextService* service, muiTextBlock* block, bool rtl
     return true;
 }
 
-// Splits the text where its level, script or font changes; writes the
-// items when items is not NULL, and returns their count.
-static uint32_t SplitItems(const muiTextBlock* block, const muiFontChain* chain, muiTextItem* items)
+// The first script run ending past an offset.
+static uint32_t ScriptAt(const muiTextBlock* block, uint32_t offset)
+{
+    const muiTextScript* scripts = block->scripts.data;
+    uint32_t low = 0;
+    uint32_t high = block->scriptCount;
+    while (low < high)
+    {
+        uint32_t middle = low + (high - low) / 2;
+        low = scripts[middle].end <= offset ? middle + 1 : low;
+        high = scripts[middle].end <= offset ? high : middle;
+    }
+    return low;
+}
+
+// Splits a paragraph's bytes from first up to last where the level,
+// script, font or run style changes; writes the items when items is not
+// NULL, and returns their count.
+static uint32_t SplitItems(const muiTextBlock* block, const muiFontChain* chain, uint32_t first,
+                           uint32_t last, muiTextItem* items)
 {
     const uint8_t* levels = block->levels.data;
-    // With one font in the chain, every byte is in it.
-    const uint8_t* faces = chain->count > 1 ? block->faces.data : nullptr;
+    // With one font in the chain and one style, every byte is in it.
+    const uint8_t* faces =
+        chain->count > 1 || block->runStyleCount != 0 ? block->faces.data : nullptr;
     const muiTextScript* scripts = block->scripts.data;
     uint32_t count = 0;
-    uint32_t script = 0;
-    for (uint32_t start = 0; start < block->length;)
+    uint32_t script = ScriptAt(block, first);
+    for (uint32_t start = first; start < last;)
     {
         while (scripts[script].end <= start)
         {
@@ -69,8 +85,9 @@ static uint32_t SplitItems(const muiTextBlock* block, const muiFontChain* chain,
         }
         uint32_t end = start + 1;
         uint32_t face = faces != nullptr ? faces[start] : 0;
+        uint32_t style = muiRunOf(block, start);
         while (end < scripts[script].end && levels[end] == levels[start] &&
-               (faces == nullptr || faces[end] == face))
+               (faces == nullptr || faces[end] == face) && muiRunOf(block, end) == style)
         {
             end++;
         }
@@ -83,6 +100,8 @@ static uint32_t SplitItems(const muiTextBlock* block, const muiFontChain* chain,
                 .script = scripts[script].script,
                 .face = face,
                 .units = chain->fonts[face]->metrics.unitsPerEm,
+                .style = style,
+                .scale = muiRunScale(block, style),
             };
         }
         count++;
@@ -106,14 +125,32 @@ static bool Covers(const muiFont* font, const uint32_t* points, uint32_t count)
     return true;
 }
 
-// The place in the chain of the font a cluster of characters, those that
-// draw, is drawn in, given the font before it, or none (-1).
-static uint32_t ChooseFace(const muiFontChain* chain, const uint32_t* points, uint32_t count,
-                           int64_t before)
+// Whether a run style's order holds a face.
+static bool Holds(const uint8_t* order, uint32_t count, int64_t face)
 {
+    for (uint32_t i = 0; i < count; i++)
+    {
+        if (order[i] == face)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The place in the chain of the font a cluster of characters, those that
+// draw, is drawn in, tried in a run style's order, given the font before
+// it, or none (-1).
+static uint32_t ChooseFace(const muiFontChain* chain, const uint8_t* order, uint32_t faces,
+                           const uint32_t* points, uint32_t count, int64_t before)
+{
+    if (!Holds(order, faces, before))
+    {
+        before = -1;
+    }
     if (count == 0)
     {
-        return before >= 0 ? (uint32_t)before : 0;
+        return before >= 0 ? (uint32_t)before : order[0];
     }
     // Characters of no one script stay in the font before them.
     muniScript script = muniGetScript(points[0]);
@@ -122,41 +159,40 @@ static uint32_t ChooseFace(const muiFontChain* chain, const uint32_t* points, ui
     {
         return (uint32_t)before;
     }
-    for (uint32_t face = 0; face < chain->count; face++)
+    for (uint32_t i = 0; i < faces; i++)
     {
-        if (Covers(chain->fonts[face], points, count))
+        if (Covers(chain->fonts[order[i]], points, count))
         {
-            return face;
+            return order[i];
         }
     }
     // None has them all: the first with the first character, else the
     // font before, else the first font.
-    for (uint32_t face = 0; face < chain->count; face++)
+    for (uint32_t i = 0; i < faces; i++)
     {
-        if (Covers(chain->fonts[face], points, 1))
+        if (Covers(chain->fonts[order[i]], points, 1))
         {
-            return face;
+            return order[i];
         }
     }
-    return common && before >= 0 ? (uint32_t)before : 0;
+    return common && before >= 0 ? (uint32_t)before : order[0];
 }
 
-// Writes the place in the chain of each byte's font, unless the chain
-// has one font.
-static bool ChooseFaces(muiTextService* service, muiTextBlock* block, const muiFontChain* chain)
+// Writes the place in the chain of the font of each byte of a paragraph
+// from first up to last, the font before its first cluster none; faces
+// are kept unless the chain has one font and the block one style.
+static bool ChooseFaces(const muiTextBlock* block, const muiRunChains* chains, uint32_t first,
+                        uint32_t last)
 {
-    uint32_t length = block->length;
-    if (chain->count == 1)
+    const muiFontChain* chain = &chains->chain;
+    if (chain->count == 1 && block->runStyleCount == 0)
     {
         return true;
     }
-    if (!muiReserve(&service->allocator, &block->faces, length + 1u))
-    {
-        return false;
-    }
-    uint8_t* faces = block->faces.data;
-    memset(faces, 0, length + 1u);
-    const char* text = block->text.data;
+    uint8_t* faces = (uint8_t*)block->faces.data + first;
+    memset(faces, 0, last - first);
+    const char* text = (const char*)block->text.data + first;
+    uint32_t length = last - first;
     muniSegmentIterator graphemes;
     if (muniInitGraphemeIterator(&graphemes, text, length, false) != muni_success)
     {
@@ -186,7 +222,9 @@ static bool ChooseFaces(muiTextService* service, muiTextBlock* block, const muiF
             }
             at += size;
         }
-        uint32_t face = ChooseFace(chain, points, count, before);
+        uint32_t style = muiRunOf(block, first + (uint32_t)start);
+        uint32_t face = ChooseFace(chain, chains->order[style], chains->orderCount[style], points,
+                                   count, before);
         memset(faces + start, (int)face, end - start);
         before = face;
         start = end;
@@ -206,10 +244,11 @@ typedef struct Output
 // Shapes bytes from to up to to of a piece of text as one item of the
 // level and script, the piece being the context, and appends its glyphs
 // with clusters as offsets in the whole text, which starts offset bytes
-// before the piece.
-static bool ShapeRange(muiTextService* service, hb_buffer_t* buffer, hb_font_t* font,
-                       const muiTextBlock* block, uint32_t offset, uint32_t length,
-                       const muiTextItem* range, Output* out)
+// before the piece; an item starting at begins or ending at ends starts
+// or ends the text for HarfBuzz.
+static bool ShapeWithin(muiTextService* service, hb_buffer_t* buffer, hb_font_t* font,
+                        const muiTextBlock* block, uint32_t offset, uint32_t length,
+                        uint32_t begins, uint32_t ends, const muiTextItem* range, Output* out)
 {
     hb_buffer_clear_contents(buffer);
     hb_buffer_set_direction(buffer, (range->level & 1) != 0 ? HB_DIRECTION_RTL : HB_DIRECTION_LTR);
@@ -217,8 +256,8 @@ static bool ShapeRange(muiTextService* service, hb_buffer_t* buffer, hb_font_t* 
     // Default ignorables, such as bidi controls, draw nothing, so they
     // get no glyphs.
     unsigned int flags = HB_BUFFER_FLAG_REMOVE_DEFAULT_IGNORABLES;
-    flags |= range->start == 0 ? HB_BUFFER_FLAG_BOT : 0u;
-    flags |= range->end == block->length ? HB_BUFFER_FLAG_EOT : 0u;
+    flags |= range->start == begins ? HB_BUFFER_FLAG_BOT : 0u;
+    flags |= range->end == ends ? HB_BUFFER_FLAG_EOT : 0u;
     hb_buffer_set_flags(buffer, (hb_buffer_flags_t)flags);
     const char* text = block->text.data;
     hb_buffer_add_utf8(buffer, text + offset, (int)length, range->start - offset,
@@ -238,11 +277,15 @@ static bool ShapeRange(muiTextService* service, hb_buffer_t* buffer, hb_font_t* 
     const hb_glyph_info_t* infos = hb_buffer_get_glyph_infos(buffer, nullptr);
     const hb_glyph_position_t* positions = hb_buffer_get_glyph_positions(buffer, nullptr);
     muiShapedGlyph* glyphs = (muiShapedGlyph*)out->glyphs->data + *out->count;
+    // A damaged font's cmap or substitutions can name a glyph it does not
+    // have: its missing glyph is drawn instead.
+    unsigned int glyphCount = hb_face_get_glyph_count(hb_font_get_face(font));
     for (unsigned int i = 0; i < count; i++)
     {
         uint32_t cluster = infos[i].cluster + offset;
-        glyphs[i] = (muiShapedGlyph){infos[i].codepoint, cluster, positions[i].x_advance,
-                                     positions[i].x_offset, positions[i].y_offset};
+        uint32_t glyph = infos[i].codepoint < glyphCount ? infos[i].codepoint : 0;
+        glyphs[i] = (muiShapedGlyph){glyph, cluster, positions[i].x_advance, positions[i].x_offset,
+                                     positions[i].y_offset};
         if (out->unsafe != nullptr &&
             (hb_glyph_info_get_glyph_flags(&infos[i]) & HB_GLYPH_FLAG_UNSAFE_TO_BREAK) != 0)
         {
@@ -251,6 +294,14 @@ static bool ShapeRange(muiTextService* service, hb_buffer_t* buffer, hb_font_t* 
     }
     *out->count += count;
     return true;
+}
+
+// ShapeWithin for a line of the whole text.
+static bool ShapeRange(muiTextService* service, hb_buffer_t* buffer, hb_font_t* font,
+                       const muiTextBlock* block, uint32_t offset, uint32_t length,
+                       const muiTextItem* range, Output* out)
+{
+    return ShapeWithin(service, buffer, font, block, offset, length, 0, block->length, range, out);
 }
 
 static hb_buffer_t* MakeBuffer(const muiTextService* service)
@@ -265,30 +316,26 @@ static hb_buffer_t* MakeBuffer(const muiTextService* service)
     return buffer;
 }
 
-// Sums of advances, in ems, and of cluster starts before each byte. A
-// cluster's advance counts at its first byte.
-static bool SumAdvances(muiTextService* service, muiTextBlock* block)
+// Sums of a paragraph's advances, in ems, and of its cluster starts,
+// before each of its bytes from first up to last and at last, from 0 at
+// first. A cluster's advance counts at its first byte.
+static void SumAdvances(muiTextBlock* block, uint32_t first, uint32_t last,
+                        const muiTextItem* items, uint32_t itemCount, const muiShapedGlyph* glyphs)
 {
-    uint32_t length = block->length;
-    if (!muiReserve(&service->allocator, &block->advances, (length + 1u) * sizeof(double)) ||
-        !muiReserve(&service->allocator, &block->clusters, (length + 1u) * sizeof(uint32_t)))
-    {
-        return false;
-    }
-    double* advances = block->advances.data;
-    uint32_t* clusters = block->clusters.data;
+    double* advances = (double*)block->advances.data + first;
+    uint32_t* clusters = (uint32_t*)block->clusters.data + first;
+    uint32_t length = last - first;
     memset(advances, 0, (length + 1u) * sizeof(double));
     memset(clusters, 0, (length + 1u) * sizeof(uint32_t));
-    const muiShapedGlyph* glyphs = block->glyphs.data;
-    const muiTextItem* items = block->items.data;
-    for (uint32_t k = 0; k < block->itemCount; k++)
+    for (uint32_t k = 0; k < itemCount; k++)
     {
         const muiShapedGlyph* own = glyphs + items[k].firstGlyph;
-        double perUnit = 1.0 / (double)items[k].units;
+        // In ems of the node's size: a run's own size over it.
+        double perUnit = (double)items[k].scale / (double)items[k].units;
         for (uint32_t i = 0; i < items[k].glyphCount; i++)
         {
-            advances[own[i].cluster + 1] += (double)own[i].advance * perUnit;
-            clusters[own[i].cluster + 1] = 1;
+            advances[own[i].cluster - first + 1] += (double)own[i].advance * perUnit;
+            clusters[own[i].cluster - first + 1] = 1;
         }
     }
     for (uint32_t i = 1; i <= length; i++)
@@ -296,7 +343,6 @@ static bool SumAdvances(muiTextService* service, muiTextBlock* block)
         advances[i] += advances[i - 1];
         clusters[i] += clusters[i - 1];
     }
-    return true;
 }
 
 // The HarfBuzz font of an item's face in a chain.
@@ -305,50 +351,253 @@ static hb_font_t* ShaperOf(const muiFontChain* chain, const muiTextItem* item)
     return muiShapingFontOf(chain->fonts[item->face], chain->keys[item->face]);
 }
 
-static bool Shape(muiTextService* service, muiTextBlock* block, const muiFontChain* chain, bool rtl)
+// What shaping a region of whole paragraphs makes: its items and glyphs,
+// apart from the block's; the per-byte tables go into the block's.
+typedef struct Region
 {
-    block->glyphCount = 0;
-    block->itemCount = 0;
-    uint32_t length = block->length;
-    if (!ResolveLevels(service, block, rtl) || !ChooseFaces(service, block, chain) ||
-        !muiReserve(&service->allocator, &block->unsafe, length + 1u))
-    {
-        return false;
-    }
-    memset(block->unsafe.data, 0, length + 1u);
-    uint32_t count = SplitItems(block, chain, nullptr);
-    if (!muiReserve(&service->allocator, &block->items, (count + 1u) * sizeof(muiTextItem)))
-    {
-        return false;
-    }
-    muiTextItem* items = block->items.data;
-    (void)SplitItems(block, chain, items);
-    block->itemCount = count;
-    hb_buffer_t* buffer = MakeBuffer(service);
-    bool shaped = buffer != nullptr;
-    Output out = {&block->glyphs, &block->glyphCount, block->unsafe.data};
-    for (uint32_t i = 0; shaped && i < count; i++)
-    {
-        items[i].firstGlyph = block->glyphCount;
-        hb_font_t* shaper = ShaperOf(chain, &items[i]);
-        shaped = shaper != nullptr &&
-                 ShapeRange(service, buffer, shaper, block, 0, length, &items[i], &out);
-        items[i].glyphCount = block->glyphCount - items[i].firstGlyph;
-    }
-    hb_buffer_destroy(buffer);
-    return shaped && SumAdvances(service, block);
+    muiBuffer items;
+    uint32_t itemCount;
+    muiBuffer glyphs;
+    uint32_t glyphCount;
+} Region;
+
+static void FreeRegion(const muiAllocator* allocator, Region* region)
+{
+    muiFreeBuffer(allocator, &region->items);
+    muiFreeBuffer(allocator, &region->glyphs);
 }
 
-bool muiShapeTextBlock(muiTextService* service, muiTextBlock* block, const muiFontChain* chain,
+// Shapes a paragraph from first up to last on its own: its levels,
+// fonts, items and glyphs, HarfBuzz taking it as the whole text, and its
+// sums, appended to a region.
+static bool ShapeParagraph(muiTextService* service, muiTextBlock* block, const muiRunChains* chains,
+                           bool rtl, uint32_t first, uint32_t last, hb_buffer_t* buffer,
+                           Region* region)
+{
+    const muiFontChain* chain = &chains->chain;
+    if (!ResolveLevels(service, block, first, last, rtl) ||
+        !ChooseFaces(block, chains, first, last))
+    {
+        return false;
+    }
+    memset((uint8_t*)block->unsafe.data + first, 0, last - first);
+    uint32_t count = SplitItems(block, chain, first, last, nullptr);
+    uint32_t kept = region->itemCount;
+    if (!muiReserveKeeping(&service->allocator, &region->items,
+                           ((size_t)kept + count + 1u) * sizeof(muiTextItem),
+                           (size_t)kept * sizeof(muiTextItem)))
+    {
+        return false;
+    }
+    muiTextItem* items = (muiTextItem*)region->items.data + kept;
+    (void)SplitItems(block, chain, first, last, items);
+    region->itemCount += count;
+    bool shaped = true;
+    Output out = {&region->glyphs, &region->glyphCount, block->unsafe.data};
+    for (uint32_t i = 0; shaped && i < count; i++)
+    {
+        items[i].firstGlyph = region->glyphCount;
+        hb_font_t* shaper = ShaperOf(chain, &items[i]);
+        shaped = shaper != nullptr && ShapeWithin(service, buffer, shaper, block, first,
+                                                  last - first, first, last, &items[i], &out);
+        items[i].glyphCount = region->glyphCount - items[i].firstGlyph;
+    }
+    if (shaped)
+    {
+        SumAdvances(block, first, last, items, count, region->glyphs.data);
+    }
+    return shaped;
+}
+
+// Shapes the paragraphs from start up to end into a region; the block's
+// per-byte tables hold room for its whole text.
+static bool ShapeRegion(muiTextService* service, muiTextBlock* block, const muiRunChains* chains,
+                        bool rtl, uint32_t start, uint32_t end, Region* region)
+{
+    hb_buffer_t* buffer = MakeBuffer(service);
+    bool shaped = buffer != nullptr;
+    const char* text = block->text.data;
+    // An empty text's sums are its start's.
+    ((double*)block->advances.data)[start] = 0.0;
+    ((uint32_t*)block->clusters.data)[start] = 0;
+    for (uint32_t at = start; shaped && at < end;)
+    {
+        uint32_t next = muiParagraphEnd(text, end, at);
+        shaped = ShapeParagraph(service, block, chains, rtl, at, next, buffer, region);
+        at = next;
+    }
+    hb_buffer_destroy(buffer);
+    // The sums at the region's end start the paragraph after it.
+    if (shaped && end < block->length)
+    {
+        ((double*)block->advances.data)[end] = 0.0;
+        ((uint32_t*)block->clusters.data)[end] = 0;
+    }
+    return shaped;
+}
+
+// Room in the block's per-byte tables for its text, keeping kept entries.
+static bool ReserveTables(muiTextService* service, muiTextBlock* block, const muiFontChain* chain,
+                          size_t kept)
+{
+    const muiAllocator* allocator = &service->allocator;
+    size_t entries = (size_t)block->length + 1u;
+    bool faces = chain->count > 1 || block->runStyleCount != 0;
+    return muiReserveKeeping(allocator, &block->levels, entries, kept) &&
+           (!faces || muiReserveKeeping(allocator, &block->faces, entries, kept)) &&
+           muiReserveKeeping(allocator, &block->unsafe, entries, kept) &&
+           muiReserveKeeping(allocator, &block->advances, entries * sizeof(double),
+                             kept * sizeof(double)) &&
+           muiReserveKeeping(allocator, &block->clusters, entries * sizeof(uint32_t),
+                             kept * sizeof(uint32_t));
+}
+
+// Shapes the block's whole text.
+static bool Shape(muiTextService* service, muiTextBlock* block, const muiRunChains* chains,
+                  bool rtl)
+{
+    block->shapings++;
+    block->glyphCount = 0;
+    block->itemCount = 0;
+    Region region = {0};
+    bool shaped = ReserveTables(service, block, &chains->chain, 0) &&
+                  ShapeRegion(service, block, chains, rtl, 0, block->length, &region);
+    if (shaped)
+    {
+        muiFreeBuffer(&service->allocator, &block->items);
+        muiFreeBuffer(&service->allocator, &block->glyphs);
+        block->items = region.items;
+        block->itemCount = region.itemCount;
+        block->glyphs = region.glyphs;
+        block->glyphCount = region.glyphCount;
+        region = (Region){0};
+    }
+    FreeRegion(&service->allocator, &region);
+    return shaped;
+}
+
+// Moves a table's entries from from on (count of them, each of a size)
+// to to.
+static void MoveEntries(muiBuffer* buffer, size_t size, uint32_t from, uint32_t to, size_t count)
+{
+    if (buffer->data != nullptr && count != 0)
+    {
+        memmove((char*)buffer->data + (size_t)to * size, (char*)buffer->data + (size_t)from * size,
+                count * size);
+    }
+}
+
+// The block's items and glyphs with the region's in place of those from
+// start up to oldEnd of the text it was shaped for, those after moved by
+// delta bytes.
+static bool SpliceItems(muiTextService* service, muiTextBlock* block, uint32_t start,
+                        uint32_t oldEnd, int64_t delta, const Region* region)
+{
+    muiTextItem* items = block->items.data;
+    uint32_t before = 0;
+    while (before < block->itemCount && items[before].end <= start)
+    {
+        before++;
+    }
+    uint32_t after = before;
+    while (after < block->itemCount && items[after].start < oldEnd)
+    {
+        after++;
+    }
+    uint32_t glyphsBefore =
+        before > 0 ? items[before - 1].firstGlyph + items[before - 1].glyphCount : 0;
+    uint32_t glyphsAfter = after < block->itemCount ? items[after].firstGlyph : block->glyphCount;
+    uint32_t tailItems = block->itemCount - after;
+    uint32_t tailGlyphs = block->glyphCount - glyphsAfter;
+    uint32_t itemCount = before + region->itemCount + tailItems;
+    uint32_t glyphCount = glyphsBefore + region->glyphCount + tailGlyphs;
+    const muiAllocator* allocator = &service->allocator;
+    if (!muiReserveKeeping(allocator, &block->items, ((size_t)itemCount + 1u) * sizeof(muiTextItem),
+                           (size_t)block->itemCount * sizeof(muiTextItem)) ||
+        !muiReserveKeeping(allocator, &block->glyphs,
+                           ((size_t)glyphCount + 1u) * sizeof(muiShapedGlyph),
+                           (size_t)block->glyphCount * sizeof(muiShapedGlyph)))
+    {
+        return false;
+    }
+    MoveEntries(&block->items, sizeof(muiTextItem), after, before + region->itemCount, tailItems);
+    MoveEntries(&block->glyphs, sizeof(muiShapedGlyph), glyphsAfter,
+                glyphsBefore + region->glyphCount, tailGlyphs);
+    items = block->items.data;
+    muiShapedGlyph* glyphs = block->glyphs.data;
+    const muiTextItem* own = region->items.data;
+    for (uint32_t i = 0; i < region->itemCount; i++)
+    {
+        items[before + i] = own[i];
+        items[before + i].firstGlyph += glyphsBefore;
+    }
+    if (region->glyphCount != 0)
+    {
+        memcpy(glyphs + glyphsBefore, region->glyphs.data,
+               region->glyphCount * sizeof(muiShapedGlyph));
+    }
+    for (uint32_t i = before + region->itemCount; i < itemCount; i++)
+    {
+        items[i].start = (uint32_t)((int64_t)items[i].start + delta);
+        items[i].end = (uint32_t)((int64_t)items[i].end + delta);
+        items[i].firstGlyph = items[i].firstGlyph - glyphsAfter + glyphsBefore + region->glyphCount;
+    }
+    for (uint32_t i = glyphsBefore + region->glyphCount; i < glyphCount; i++)
+    {
+        glyphs[i].cluster = (uint32_t)((int64_t)glyphs[i].cluster + delta);
+    }
+    block->itemCount = itemCount;
+    block->glyphCount = glyphCount;
+    return true;
+}
+
+// Shapes again only the block's stale paragraphs: the per-byte tables'
+// entries after them move by the change in length, and the items and
+// glyphs of the paragraphs between are replaced, as shaping the whole
+// text would make them, paragraph by paragraph.
+static bool Reshape(muiTextService* service, muiTextBlock* block, const muiRunChains* chains,
+                    bool rtl)
+{
+    uint32_t start = block->stale.start;
+    uint32_t end = block->stale.end;
+    int64_t delta = (int64_t)block->length - (int64_t)block->shapedLength;
+    uint32_t oldEnd = (uint32_t)((int64_t)end - delta);
+    size_t tail = (size_t)block->shapedLength - oldEnd + 1u;
+    bool faces = chains->chain.count > 1 || block->runStyleCount != 0;
+    if (!ReserveTables(service, block, &chains->chain, (size_t)block->shapedLength + 1u))
+    {
+        return false;
+    }
+    MoveEntries(&block->levels, 1, oldEnd, end, tail);
+    if (faces)
+    {
+        MoveEntries(&block->faces, 1, oldEnd, end, tail);
+    }
+    MoveEntries(&block->unsafe, 1, oldEnd, end, tail);
+    MoveEntries(&block->advances, sizeof(double), oldEnd, end, tail);
+    MoveEntries(&block->clusters, sizeof(uint32_t), oldEnd, end, tail);
+    Region region = {0};
+    bool shaped = ShapeRegion(service, block, chains, rtl, start, end, &region) &&
+                  SpliceItems(service, block, start, oldEnd, delta, &region);
+    FreeRegion(&service->allocator, &region);
+    return shaped;
+}
+
+bool muiShapeTextBlock(muiTextService* service, muiTextBlock* block, const muiRunChains* chains,
                        bool rtl)
 {
-    if (block->shaped && block->shapedChain == chain->identity && block->shapedRtl == rtl)
+    bool same =
+        block->shaped && block->shapedChain == chains->chain.identity && block->shapedRtl == rtl;
+    if (same && !block->stale.on)
     {
         return true;
     }
-    block->shaped = Shape(service, block, chain, rtl);
-    block->shapedChain = chain->identity;
+    block->shaped = same && block->runStyleCount == 0 ? Reshape(service, block, chains, rtl)
+                                                      : Shape(service, block, chains, rtl);
+    block->shapedChain = chains->chain.identity;
     block->shapedRtl = rtl;
+    block->shapedLength = block->length;
+    block->stale.on = false;
     return block->shaped;
 }
 

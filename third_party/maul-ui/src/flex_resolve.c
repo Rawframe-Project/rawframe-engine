@@ -168,8 +168,15 @@ void muiResolveFlexibleLengths(const muiTree* tree, muiLayoutNode* nodes, uint32
     }
 }
 
-void muiJustifySpacing(muiJustify justify, float freeSpace, uint32_t count, float* leadOut,
-                       float* betweenOut)
+// Where overflowing content goes under safe alignment: to the writing
+// mode's start (CSS Box Alignment), the far end of a reversed axis.
+static float SafeLead(float freeSpace, bool reversed)
+{
+    return reversed ? fminf(freeSpace, 0.0f) : 0.0f;
+}
+
+void muiJustifySpacing(muiJustify justify, float freeSpace, uint32_t count, bool reversed,
+                       float* leadOut, float* betweenOut)
 {
     float lead = 0.0f;
     float between = 0.0f;
@@ -187,14 +194,14 @@ void muiJustifySpacing(muiJustify justify, float freeSpace, uint32_t count, floa
         break;
     case mui_justifySpaceAround:
         // Overflow packs at the start: the distributed values fall back to
-        // safe alignment (CSS Box Alignment), and safe alignment never
-        // pushes content past the start.
+        // safe centring (CSS Box Alignment), which never pushes content
+        // past the writing mode's start.
         between = count > 0 ? positive / (float)count : 0.0f;
-        lead = between / 2.0f;
+        lead = between / 2.0f + SafeLead(freeSpace, reversed);
         break;
     case mui_justifySpaceEvenly:
         between = positive / (float)(count + 1);
-        lead = between;
+        lead = between + SafeLead(freeSpace, reversed);
         break;
     default:
         break;
@@ -203,8 +210,8 @@ void muiJustifySpacing(muiJustify justify, float freeSpace, uint32_t count, floa
     *betweenOut = between;
 }
 
-void muiAlignContentSpacing(muiAlignContent align, float freeSpace, uint32_t count, float* leadOut,
-                            float* betweenOut, float* growOut)
+void muiAlignContentSpacing(muiAlignContent align, float freeSpace, uint32_t count, bool reversed,
+                            float* leadOut, float* betweenOut, float* growOut)
 {
     float lead = 0.0f;
     float between = 0.0f;
@@ -226,11 +233,11 @@ void muiAlignContentSpacing(muiAlignContent align, float freeSpace, uint32_t cou
         break;
     case mui_alignContentSpaceAround:
         between = count > 0 ? positive / (float)count : 0.0f;
-        lead = between / 2.0f;
+        lead = between / 2.0f + SafeLead(freeSpace, reversed);
         break;
     case mui_alignContentSpaceEvenly:
         between = positive / (float)(count + 1);
-        lead = between;
+        lead = between + SafeLead(freeSpace, reversed);
         break;
     default:
         break;

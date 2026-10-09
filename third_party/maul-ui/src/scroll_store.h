@@ -28,6 +28,11 @@ typedef struct muiScrollState
     // content box's start (src/virtual.c): the extent is at least that.
     float listX;
     float listY;
+    // How far its children and padding box reach, from the padding box's
+    // start, as layout last measured them (src/solve.c): the extent is
+    // that or the list's length, whichever is further.
+    float reachWidth;
+    float reachHeight;
 } muiScrollState;
 
 // The default rule (muiDefaultScrollRule).

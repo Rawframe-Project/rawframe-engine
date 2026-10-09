@@ -41,6 +41,10 @@ typedef struct muiPainter
     uint32_t glyphCapacity;
     uint32_t transformCapacity;
     float scale;
+    // The list's root, and how many nodes' host content asked what is
+    // visible so far.
+    uint32_t root;
+    uint32_t culled;
     bool full;
     muiPaintFunction paint;
     void* paintUser;
@@ -67,9 +71,17 @@ muiRect muiSnapRect(muiRect rect, float scale);
 // list is.
 muiDrawCommand* muiTakeCommand(muiPainter* painter, muiDrawKind kind, const muiPaintState* state);
 
+// Adds a transform after parent, owned by a node (its slot, with
+// MUI_TRANSFORM_SCALE for its scale), whose value comes when the list is
+// done; parent when none fits, the painter then full.
+uint32_t muiAddTransform(muiPainter* painter, uint32_t owner, uint32_t parent);
+
 // Paints a node's own commands at the origin, clip and inherited opacity
-// in state, and leaves in state the clip and opacity its children are
-// painted in. False when the node, and so its subtree, draws nothing.
+// in state, and leaves in state the clip, transform and opacity its
+// children are painted in. A scaled node's transform is its scale's,
+// which its host content goes through too, until the caller puts back the
+// one it is painted in. False when the node, and so its subtree, draws
+// nothing.
 bool muiPaintNode(muiPainter* painter, uint32_t slot, muiPaintState* state);
 
 #endif // MAUL_UI_SRC_PAINT_H

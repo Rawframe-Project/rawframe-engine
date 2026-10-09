@@ -24,6 +24,9 @@ static muiTextRecord Compute(const muiTextStyle* own, muiPropertyMask given,
     out->slant = GIVEN(mui_propertyFontSlant) ? own->slant : above->slant;
     out->align = GIVEN(mui_propertyTextAlign) ? own->align : above->align;
     out->wrap = GIVEN(mui_propertyTextWrap) ? own->wrap : above->wrap;
+    out->decoration = GIVEN(mui_propertyTextDecoration) ? own->decoration : above->decoration;
+    out->decorationColor =
+        GIVEN(mui_propertyTextDecorationColor) ? own->decorationColor : above->decorationColor;
     record.lineHeight = GIVEN(mui_propertyLineHeight) ? own->lineHeight : parent->lineHeight;
     record.letterSpacing =
         GIVEN(mui_propertyLetterSpacing) ? own->letterSpacing : parent->letterSpacing;
@@ -69,10 +72,15 @@ static bool SizesDiffer(const muiComputedTextStyle* a, const muiComputedTextStyl
            a->wrap != b->wrap || a->automaticLineHeight != b->automaticLineHeight;
 }
 
+static bool SameColor(muiColor a, muiColor b)
+{
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
 static bool PaintDiffers(const muiComputedTextStyle* a, const muiComputedTextStyle* b)
 {
-    return a->color.r != b->color.r || a->color.g != b->color.g || a->color.b != b->color.b ||
-           a->color.a != b->color.a || a->align != b->align;
+    return !SameColor(a->color, b->color) || a->align != b->align ||
+           a->decoration != b->decoration || !SameColor(a->decorationColor, b->decorationColor);
 }
 
 // Computes one node's record; true when what its children inherit

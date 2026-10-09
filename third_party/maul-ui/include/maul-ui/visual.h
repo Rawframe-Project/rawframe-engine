@@ -41,6 +41,10 @@ extern "C"
         mui_gradientLinear = 1,
         // Outward from the centre, as CSS's ellipse to the farthest corner.
         mui_gradientRadial = 2,
+        // Around the centre from the angle, clockwise, as CSS's
+        // conic-gradient(from angle): stop positions are fractions of a
+        // turn, and the seam where the turn starts is hard.
+        mui_gradientConic = 3,
     };
 
     enum
@@ -62,8 +66,9 @@ extern "C"
         muiGradientKind kind;
         // From 2 to MUI_MAX_GRADIENT_STOPS for a gradient, 0 for none.
         uint8_t stopCount;
-        // For a linear gradient, in degrees clockwise from toward the top,
-        // as CSS's linear-gradient.
+        // In degrees clockwise from toward the top: a linear gradient's
+        // direction, as CSS's linear-gradient, and where a conic one's
+        // turn starts, as CSS's conic-gradient.
         float angle;
         // In order of position.
         muiGradientStop stops[MUI_MAX_GRADIENT_STOPS];
@@ -101,6 +106,38 @@ extern "C"
         float spread;
     } muiShadow;
 
+    // A scale of a node and its subtree after layout: drawn, hit tested
+    // and reported through it, about an origin in its border box, while
+    // layout and what places by layout (scrolling, popups, directional
+    // navigation) keep its laid-out box (record mui-0005).
+    typedef struct muiLocalScale
+    {
+        // Per axis, finite and 0 or more; 1 leaves it as laid out, and 0
+        // draws it as nothing and hits it nowhere.
+        float x;
+        float y;
+        // The point that stays, as fractions of the border box from 0 to
+        // 1: x from its start edge, mirrored under right to left.
+        float originX;
+        float originY;
+    } muiLocalScale;
+
+    // How an image fills its middle along one axis, as CSS's
+    // border-image-repeat: stretched; repeated, its tiles centred;
+    // rounded, a whole number of tiles stretched to fit; or spaced, whole
+    // tiles with equal gaps before, between and after them. A tile is the
+    // image's middle at one logical unit a pixel, as its slices are drawn;
+    // an image without slices is all middle.
+    typedef uint8_t muiImageRepeat;
+
+    enum
+    {
+        mui_imageStretch = 0,
+        mui_imageRepeat = 1,
+        mui_imageRound = 2,
+        mui_imageSpace = 3,
+    };
+
     // Every visual value. Build it with muiDefaultVisualStyle.
     typedef struct muiVisualStyle
     {
@@ -120,15 +157,25 @@ extern "C"
         muiEdges imageSlice;
         // Multiplies the image's colors.
         muiColor imageTint;
+        // Whether the image mirrors under right to left, as an icon that
+        // points a way does: drawn flipped, its slice's start and end then
+        // its right and left.
+        bool imageMirrors;
+        // How the image fills its middle across and up; stretched by
+        // default.
+        muiImageRepeat imageRepeatX;
+        muiImageRepeat imageRepeatY;
         // The node and its subtree, from 0 to 1.
         float opacity;
         // Whether the node clips its children to its rounded border box.
         bool clip;
+        muiLocalScale scale;
     } muiVisualStyle;
 
     /// Returns the default visual style: clear background, no gradient,
     /// square corners, opaque black border colors, no shadows or image, a
-    /// white tint, opacity 1 and no clipping.
+    /// white tint that does not mirror, opacity 1, no clipping and a scale
+    /// of 1 about the centre.
     ///
     /// @return The values.
     /// @par Thread safety

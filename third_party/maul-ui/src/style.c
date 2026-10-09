@@ -19,6 +19,9 @@
 #include "maul-ui/text_style.h"
 #include "maul-ui/visual.h"
 
+#define STYLE_DEF_COOKIE     0x6D757374u // "must"
+#define NODE_TYPE_DEF_COOKIE 0x6D756E74u // "munt"
+
 // The condition of a variant that has one, or NULL.
 static const muiCondition* ConditionOf(const muiStyleClass* class, muiVariant variant)
 {
@@ -27,7 +30,12 @@ static const muiCondition* ConditionOf(const muiStyleClass* class, muiVariant va
                : nullptr;
 }
 
-muiResult muiCreateStyle(muiContext* context, muiStyleId* styleIdOut)
+muiStyleDef muiDefaultStyleDef(void)
+{
+    return (muiStyleDef){.cookie = STYLE_DEF_COOKIE};
+}
+
+muiResult muiCreateStyle(muiContext* context, const muiStyleDef* def, muiStyleId* styleIdOut)
 {
     if (styleIdOut != nullptr)
     {
@@ -37,7 +45,8 @@ muiResult muiCreateStyle(muiContext* context, muiStyleId* styleIdOut)
     {
         return mui_errorInvalid;
     }
-    if (styleIdOut == nullptr || muiIsInHostCall(context))
+    if (def == nullptr || styleIdOut == nullptr || def->cookie != STYLE_DEF_COOKIE ||
+        muiIsInHostCall(context))
     {
         return muiRefuse(context);
     }
@@ -439,7 +448,12 @@ muiEnvironment muiGetContextEnvironment(const muiContext* context)
     return context != nullptr ? context->environment : muiDefaultEnvironment();
 }
 
-muiResult muiCreateNodeType(muiContext* context, const muiStyleId* classes, uint32_t count,
+muiNodeTypeDef muiDefaultNodeTypeDef(void)
+{
+    return (muiNodeTypeDef){.cookie = NODE_TYPE_DEF_COOKIE};
+}
+
+muiResult muiCreateNodeType(muiContext* context, const muiNodeTypeDef* def,
                             muiNodeTypeId* typeIdOut)
 {
     if (typeIdOut != nullptr)
@@ -450,7 +464,8 @@ muiResult muiCreateNodeType(muiContext* context, const muiStyleId* classes, uint
     {
         return mui_errorInvalid;
     }
-    if (typeIdOut == nullptr || !muiIsClassListValid(classes, count) || muiIsInHostCall(context))
+    if (def == nullptr || typeIdOut == nullptr || def->cookie != NODE_TYPE_DEF_COOKIE ||
+        !muiIsClassListValid(def->classes, def->classCount) || muiIsInHostCall(context))
     {
         return muiRefuse(context);
     }
@@ -460,7 +475,7 @@ muiResult muiCreateNodeType(muiContext* context, const muiStyleId* classes, uint
     {
         return mui_errorCapacity;
     }
-    muiSetClassList(&store->types[slot - 1], classes, count);
+    muiSetClassList(&store->types[slot - 1], def->classes, def->classCount);
     // No node can have a type that did not exist, so none restyles.
     *typeIdOut = (muiNodeTypeId){slot, muiPoolGeneration(&store->typePool, slot)};
     return mui_success;

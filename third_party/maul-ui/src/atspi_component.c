@@ -16,6 +16,24 @@
 #define COORD_PARENT 2
 #define LAYER_WIDGET 3
 
+// A sum kept within int32's range: a client's point past it is held by
+// no node either way.
+static int32_t Saturated(int64_t value)
+{
+    return value < INT32_MIN ? INT32_MIN : (value > INT32_MAX ? INT32_MAX : (int32_t)value);
+}
+
+// A whole number of pixels within int32's range; 0 for NaN.
+static int32_t Whole(float value)
+{
+    if (isnan(value))
+    {
+        return 0;
+    }
+    return value >= 2147483648.0f ? INT32_MAX
+                                  : (value <= -2147483648.0f ? INT32_MIN : (int32_t)value);
+}
+
 void muiAtspiExtentsOf(const muiAtspiAdapter* adapter, uint64_t id, bool screen,
                        int32_t extentsOut[4])
 {
@@ -27,10 +45,10 @@ void muiAtspiExtentsOf(const muiAtspiAdapter* adapter, uint64_t id, bool screen,
     float top = floorf(bounds.y * scale);
     float right = ceilf((bounds.x + bounds.width) * scale);
     float bottom = ceilf((bounds.y + bounds.height) * scale);
-    extentsOut[0] = (int32_t)left + (screen ? adapter->x : 0);
-    extentsOut[1] = (int32_t)top + (screen ? adapter->y : 0);
-    extentsOut[2] = (int32_t)(right - left);
-    extentsOut[3] = (int32_t)(bottom - top);
+    extentsOut[0] = Saturated((int64_t)Whole(left) + (screen ? adapter->x : 0));
+    extentsOut[1] = Saturated((int64_t)Whole(top) + (screen ? adapter->y : 0));
+    extentsOut[2] = Whole(right - left);
+    extentsOut[3] = Whole(bottom - top);
 }
 
 // An object's extents in a coordinate type; the parent's are those of
@@ -43,8 +61,8 @@ static void Extents(const muiAtspiObject* object, uint32_t coordinates, int32_t 
     {
         int32_t origin[4];
         muiAtspiExtentsOf(object->adapter, parent.node->id, false, origin);
-        extentsOut[0] -= origin[0];
-        extentsOut[1] -= origin[1];
+        extentsOut[0] = Saturated((int64_t)extentsOut[0] - origin[0]);
+        extentsOut[1] = Saturated((int64_t)extentsOut[1] - origin[1]);
     }
 }
 
@@ -53,8 +71,8 @@ static void ToWindow(const muiAtspiObject* object, uint32_t coordinates, int32_t
 {
     if (coordinates == COORD_SCREEN)
     {
-        *x -= object->adapter->x;
-        *y -= object->adapter->y;
+        *x = Saturated((int64_t)*x - object->adapter->x);
+        *y = Saturated((int64_t)*y - object->adapter->y);
     }
     else if (coordinates == COORD_PARENT)
     {
@@ -64,15 +82,15 @@ static void ToWindow(const muiAtspiObject* object, uint32_t coordinates, int32_t
         {
             muiAtspiExtentsOf(object->adapter, parent.node->id, false, origin);
         }
-        *x += origin[0];
-        *y += origin[1];
+        *x = Saturated((int64_t)*x + origin[0]);
+        *y = Saturated((int64_t)*y + origin[1]);
     }
 }
 
 static bool Holds(const int32_t extents[4], int32_t x, int32_t y)
 {
-    return x >= extents[0] && x < extents[0] + extents[2] && y >= extents[1] &&
-           y < extents[1] + extents[3];
+    return x >= extents[0] && (int64_t)x < (int64_t)extents[0] + extents[2] && y >= extents[1] &&
+           (int64_t)y < (int64_t)extents[1] + extents[3];
 }
 
 // The deepest shown node under a point in the window, from an object

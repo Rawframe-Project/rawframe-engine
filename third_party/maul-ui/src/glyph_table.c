@@ -20,13 +20,15 @@ static uint32_t Hash(const muiGlyphKey* key)
 {
     uint64_t h = key->font * 0x9E3779B97F4A7C15u;
     h ^= ((uint64_t)key->glyph << 32 | key->sizeBin) * 0xC2B2AE3D27D4EB4Fu;
+    h ^= ((uint64_t)key->palette << 32 | key->tint) * 0x94D049BB133111EBu;
     h ^= h >> 29;
     return (uint32_t)(h * 0x165667B19E3779F9u >> 32);
 }
 
 static bool SameKey(const muiGlyphKey* a, const muiGlyphKey* b)
 {
-    return a->font == b->font && a->glyph == b->glyph && a->sizeBin == b->sizeBin;
+    return a->font == b->font && a->glyph == b->glyph && a->sizeBin == b->sizeBin &&
+           a->palette == b->palette && a->tint == b->tint;
 }
 
 bool muiIsEntryStale(const muiAtlasEntry* entry, const uint32_t* generations)

@@ -43,6 +43,13 @@ struct muiSolver
     const muiPaintState* painted;
     // Each node's scroll state, whose extents layout measures.
     muiScrollState* scrolls;
+    // Each node's padding as laid out, with the safe area (record
+    // mui-0003), which the solver writes as it sizes a node and its
+    // parent reads; and the safe area.
+    muiEdges* paddings;
+    muiSides safeArea;
+    // Where sizes solved and measure calls are counted.
+    muiWorkCounts* work;
 };
 
 #endif // MAUL_UI_SRC_SOLVER_H

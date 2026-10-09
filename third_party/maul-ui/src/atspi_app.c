@@ -37,9 +37,11 @@ muiAtspiAdapterDef muiDefaultAtspiAdapterDef(void)
 }
 
 // Copies a string a message holds; false for none, or one too long.
-static bool ReadString(const muiDBusApi* dbus, muiDBusIter* iter, char* out, size_t size)
+// Reads a string of a type, a string or an object path: what libdbus
+// checked as that type is all that may later be sent as it.
+static bool ReadString(const muiDBusApi* dbus, muiDBusIter* iter, int type, char* out, size_t size)
 {
-    if (dbus->argType(iter) != mui_dbusTypeString && dbus->argType(iter) != mui_dbusTypeObjectPath)
+    if (dbus->argType(iter) != type)
     {
         return false;
     }
@@ -76,8 +78,8 @@ static bool AddressOf(const muiDBusApi* dbus, char* out, size_t size)
         call != nullptr ? dbus->sendWithReplyAndBlock(session, call, ADDRESS_TIMEOUT_MS, nullptr)
                         : nullptr;
     muiDBusIter iter;
-    bool found =
-        reply != nullptr && dbus->iterInit(reply, &iter) && ReadString(dbus, &iter, out, size);
+    bool found = reply != nullptr && dbus->iterInit(reply, &iter) &&
+                 ReadString(dbus, &iter, mui_dbusTypeString, out, size);
     if (reply != nullptr)
     {
         dbus->unrefMessage(reply);
@@ -138,9 +140,10 @@ static void TakeEmbedding(muiAtspiApp* app)
         dbus->iterInit(reply, &iter) && dbus->argType(&iter) == mui_dbusTypeStruct)
     {
         dbus->recurse(&iter, &desktop);
-        app->registered = ReadString(dbus, &desktop, app->desktopName, ATSPI_NAME_SIZE) &&
-                          dbus->next(&desktop) &&
-                          ReadString(dbus, &desktop, app->desktopPath, ATSPI_NAME_SIZE);
+        app->registered =
+            ReadString(dbus, &desktop, mui_dbusTypeString, app->desktopName, ATSPI_NAME_SIZE) &&
+            dbus->next(&desktop) &&
+            ReadString(dbus, &desktop, mui_dbusTypeObjectPath, app->desktopPath, ATSPI_NAME_SIZE);
     }
     if (reply != nullptr)
     {
@@ -273,9 +276,46 @@ static bool IsValidAdapter(const muiAtspiAdapterDef* def)
            def->nodes <= ((uint32_t)1 << 24) && def->action != nullptr && def->scale > 0.0f;
 }
 
+// The told records' map is at most half full.
+static uint32_t MapSizeOf(uint32_t nodes)
+{
+    uint32_t size = 2;
+    while (size < 2 * nodes)
+    {
+        size *= 2;
+    }
+    return size;
+}
+
+// The adapter, then its arrays, those of 8 bytes first.
 static size_t AdapterSize(uint32_t nodes)
 {
-    return sizeof(muiAtspiAdapter) + (size_t)nodes * sizeof(uint64_t);
+    size_t map = MapSizeOf(nodes);
+    return sizeof(muiAtspiAdapter) +
+           (size_t)nodes * (2 * sizeof(uint64_t) + sizeof(muiAtspiPlace)) +
+           (size_t)nodes * sizeof(muiAtspiTold) + map * (sizeof(uint64_t) + sizeof(void*)) +
+           (size_t)nodes * sizeof(uint32_t);
+}
+
+static void Lay(muiAtspiAdapter* adapter, unsigned char* block, uint32_t nodes)
+{
+    uint32_t map = MapSizeOf(nodes);
+    unsigned char* at = block + sizeof(muiAtspiAdapter);
+    adapter->scratch = (uint64_t*)at;
+    adapter->walk = adapter->scratch + nodes;
+    adapter->places = (muiAtspiPlace*)(adapter->walk + nodes);
+    adapter->told = (muiAtspiTold*)(adapter->places + nodes);
+    uint64_t* keys = (uint64_t*)(adapter->told + nodes);
+    void** values = (void**)(keys + map);
+    adapter->freeTold = (uint32_t*)(values + map);
+    // The block's memory may be another's: nothing is told yet.
+    memset(adapter->told, 0, (size_t)nodes * sizeof(muiAtspiTold));
+    muiIdMapInit(&adapter->toldById, keys, values, map);
+    for (uint32_t i = 0; i < nodes; i++)
+    {
+        adapter->freeTold[i] = nodes - 1 - i;
+    }
+    adapter->freeCount = nodes;
 }
 
 muiResult muiCreateAtspiAdapter(muiAtspiApp* app, const muiAtspiAdapterDef* def,
@@ -307,9 +347,9 @@ muiResult muiCreateAtspiAdapter(muiAtspiApp* app, const muiAtspiAdapterDef* def,
         .scale = def->scale,
         .action = def->action,
         .user = def->user,
-        .scratch = (uint64_t*)(block + sizeof(muiAtspiAdapter)),
         .nodes = def->nodes,
     };
+    Lay(adapter, block, def->nodes);
     muiAccessTreeDef treeDef = muiDefaultAccessTreeDef();
     treeDef.allocator = app->allocator;
     treeDef.nodes = def->nodes;
@@ -332,6 +372,7 @@ void muiDestroyAtspiAdapter(muiAtspiAdapter* adapter)
         return;
     }
     muiAtspiApp* app = adapter->app;
+    muiAtspiTellGone(adapter);
     uint32_t at = 0;
     while (at < app->windowCount && app->windows[at] != adapter)
     {
@@ -344,12 +385,6 @@ void muiDestroyAtspiAdapter(muiAtspiAdapter* adapter)
     app->windowCount--;
     muiDestroyAccessTree(adapter->tree);
     muiRelease(&app->allocator, adapter, adapter->blockSize, alignof(max_align_t));
-}
-
-muiResult muiAtspiAdapter_Apply(muiAtspiAdapter* adapter, const muiAccessUpdate* update)
-{
-    return adapter != nullptr ? muiAccessTree_Apply(adapter->tree, update, nullptr)
-                              : mui_errorInvalid;
 }
 
 const muiAccessTree* muiAtspiAdapter_GetTree(const muiAtspiAdapter* adapter)

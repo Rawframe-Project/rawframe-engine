@@ -142,8 +142,9 @@ result::Result<Node> Tree::add(std::uint64_t key) {
 
 result::Result<Node> Tree::addEditable(std::uint64_t key) {
     muiTextBlockId block{};
+    const muiTextBlockDef kEmpty = muiDefaultTextBlockDef();
     RAWFRAME_TRY(
-        checked(muiCreateTextBlock(state_->text, nullptr, 0, &block), "an editable node's text could not be made"));
+        checked(muiCreateTextBlock(state_->text, &kEmpty, &block), "an editable node's text could not be made"));
     muiNodeDef def = muiDefaultNodeDef();
     def.hostKey = muiTextBlock_GetKey(block);
     muiNodeId made{};
@@ -403,8 +404,10 @@ result::Status Tree::setText(Node node, std::string_view text, const TextLook& l
                              "a node's text could not be set"));
     } else {
         muiTextBlockId block{};
-        RAWFRAME_TRY(checked(muiCreateTextBlock(state_->text, text.data(), text.size(), &block),
-                             "a node's text could not be made"));
+        muiTextBlockDef def = muiDefaultTextBlockDef();
+        def.text = text.data();
+        def.length = text.size();
+        RAWFRAME_TRY(checked(muiCreateTextBlock(state_->text, &def, &block), "a node's text could not be made"));
         // A slot's earlier node is gone, and its text with it.
         if (const auto kOld = state_->texts.find(kNode.index1); kOld != state_->texts.end()) {
             (void)muiDestroyTextBlock(state_->text, kOld->second.block);

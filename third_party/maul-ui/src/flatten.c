@@ -21,8 +21,11 @@ enum
 typedef struct Walk
 {
     muiSegment* segments;
+    uint32_t* curves;
     uint32_t capacity;
     uint32_t count;
+    // The line or curve being added.
+    uint32_t curve;
     float x;
     float y;
 } Walk;
@@ -37,6 +40,10 @@ static void Add(Walk* walk, float x, float y)
     if (walk->count < walk->capacity)
     {
         walk->segments[walk->count] = (muiSegment){walk->x, walk->y, x, y};
+        if (walk->curves != nullptr)
+        {
+            walk->curves[walk->count] = walk->curve;
+        }
     }
     walk->count++;
     walk->x = x;
@@ -59,7 +66,9 @@ static int MoveTo(const FT_Vector* to, void* user)
 
 static int LineTo(const FT_Vector* to, void* user)
 {
-    Add(user, Pixels(to->x), Pixels(to->y));
+    Walk* walk = user;
+    Add(walk, Pixels(to->x), Pixels(to->y));
+    walk->curve++;
     return 0;
 }
 
@@ -81,6 +90,7 @@ static int ConicTo(const FT_Vector* control, const FT_Vector* to, void* user)
         Add(walk, u * u * x0 + 2.0f * u * t * x1 + t * t * x2,
             u * u * y0 + 2.0f * u * t * y1 + t * t * y2);
     }
+    walk->curve++;
     return 0;
 }
 
@@ -113,14 +123,15 @@ static int CubicTo(const FT_Vector* control1, const FT_Vector* control2, const F
         float d = t * t * t;
         Add(walk, a * x0 + b * x1 + c * x2 + d * x3, a * y0 + b * y1 + c * y2 + d * y3);
     }
+    walk->curve++;
     return 0;
 }
 
-bool muiFlattenOutline(const FT_Outline* outline, muiSegment* segments, uint32_t capacity,
-                       uint32_t* countOut)
+bool muiFlattenOutline(const FT_Outline* outline, muiSegment* segments, uint32_t* curves,
+                       uint32_t capacity, uint32_t* countOut)
 {
     static const FT_Outline_Funcs funcs = {MoveTo, LineTo, ConicTo, CubicTo, 0, 0};
-    Walk walk = {segments, capacity, 0, 0.0f, 0.0f};
+    Walk walk = {segments, curves, capacity, 0, 0, 0.0f, 0.0f};
     FT_Error error = FT_Outline_Decompose((FT_Outline*)outline, &funcs, &walk);
     *countOut = walk.count;
     return error == 0;

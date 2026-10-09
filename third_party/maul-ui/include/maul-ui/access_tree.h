@@ -39,8 +39,13 @@ extern "C"
     // What applying an update changed, reported once the tree holds all
     // of it: nodes added, in the update's order; nodes updated, with
     // what they were; nodes let go, with their subtrees, each with what
-    // it was; then the focus, when it moved. Any of the functions may be
-    // NULL. The records they are given are valid during the call.
+    // it was; then shownChanged, once, when the tree as platforms see it
+    // (muiAccessTree_GetShownChildren) may differ: nodes came or went,
+    // the root or the focus moved, or a record changed a node's children
+    // or what the view's rules read (hidden, clipping, a generic node's
+    // role or label, a box where it or its parent clips); then the
+    // focus, when it moved. Any of the functions may be NULL. The
+    // records they are given are valid during the call.
     typedef struct muiAccessChanges
     {
         void* user;
@@ -48,6 +53,7 @@ extern "C"
         void (*updated)(void* user, const muiAccessTree* tree, const muiAccessNode* old);
         void (*removed)(void* user, const muiAccessTree* tree, const muiAccessNode* old);
         void (*focusMoved)(void* user, const muiAccessTree* tree, uint64_t old, uint64_t focus);
+        void (*shownChanged)(void* user, const muiAccessTree* tree);
     } muiAccessChanges;
 
     /// The default def: the C library's allocation, 4096 nodes, as many as

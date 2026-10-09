@@ -208,8 +208,8 @@ extern "C"
                                                                 muiInteractionStyle* valuesOut);
 
     // What a point hits: the node, the null id for none, the point in its
-    // border box, and whether input it leaves unused passes through to
-    // what lies behind the UI (always, when nothing is hit; never, when a
+    // border box (in its own space, its local scale divided out), and whether input it leaves
+    // unused passes through to what lies behind the UI (always, when nothing is hit; never, when a
     // modal layer blocks it).
     typedef struct muiHit
     {
@@ -227,7 +227,8 @@ extern "C"
     /// not in; a point a modal layer's subtree misses hits the modal
     /// layer's root, blocked, and nothing below it. Opacity does not
     /// matter, as in CSS. Positions are those painting gives, the root at
-    /// its own rectangle.
+    /// its own rectangle, through local scales: a node scaled to nothing
+    /// on an axis is hit nowhere.
     ///
     /// @param context  The context.
     /// @param rootId   The root of the subtree.

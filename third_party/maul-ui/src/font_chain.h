@@ -21,14 +21,17 @@ enum
 {
     // The first font and the most fallbacks of a family and of the
     // service.
-    MUI_MAX_CHAIN = 1 + 2 * MUI_MAX_FALLBACKS
+    MUI_MAX_CHAIN = 1 + 2 * MUI_MAX_FALLBACKS,
+    // The most faces of a paragraph's chains together: its styles' share
+    // the faces they have in common (src/text_runs.h).
+    MUI_MAX_FACES = 32
 };
 
 typedef struct muiFontChain
 {
-    muiFont* fonts[MUI_MAX_CHAIN];
+    muiFont* fonts[MUI_MAX_FACES];
     // Each font's key, naming its instance.
-    uint64_t keys[MUI_MAX_CHAIN];
+    uint64_t keys[MUI_MAX_FACES];
     uint32_t count;
     // What tells one chain from another, made of the keys.
     uint64_t identity;

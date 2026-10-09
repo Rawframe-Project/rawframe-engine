@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The exponential, sine and cosine that springs need, and the logarithm,
-// power and cube root that colors need, written here so that they give
+// The exponential, sine and cosine that springs need, the logarithm,
+// power and cube root that colors need, and the angle a sweep gradient
+// needs, written here so that they give
 // the same bits on every platform (record mui-0001): only arithmetic,
 // floor, sqrt and the exact scaling of a double by a power of two.
 
@@ -17,6 +18,11 @@ double muiExp(double x);
 // reduction up to 2^20; larger arguments lose accuracy. A spring's argument
 // stays far below.
 void muiSinCos(double x, double* sineOut, double* cosineOut);
+
+// The angle of the point x, y from the positive x axis, counter-clockwise,
+// in radians from -pi to pi, within a few units in the last place; 0 at
+// the origin.
+double muiAtan2(double y, double x);
 
 // The natural logarithm of x, within a few units in the last place: -inf
 // for 0, NaN below 0, inf for inf.

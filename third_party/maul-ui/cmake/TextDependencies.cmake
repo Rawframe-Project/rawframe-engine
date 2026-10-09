@@ -13,7 +13,7 @@ include(FetchContent)
 
 set(MAUL_UI_FREETYPE_VERSION 2.14.3)
 set(MAUL_UI_HARFBUZZ_VERSION 14.5.1)
-set(MAUL_UI_UNICODE_VERSION 0.2.0)
+set(MAUL_UI_UNICODE_VERSION 0.2.1)
 
 if(MAUL_UI_TEXT_SYSTEM_LIBRARIES)
     find_package(Freetype REQUIRED)
@@ -61,7 +61,6 @@ else()
         ${ft}/src/base/ftsystem.c
         ${ft}/src/cff/cff.c
         ${ft}/src/psaux/psaux.c
-        ${ft}/src/pshinter/pshinter.c
         ${ft}/src/psnames/psnames.c
         ${ft}/src/sfnt/sfnt.c
         ${ft}/src/smooth/smooth.c

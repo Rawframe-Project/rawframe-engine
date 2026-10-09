@@ -108,6 +108,7 @@ enum
     STATE_HAS_POPUP = 42,
     STATE_READ_ONLY = 43,
 };
+static_assert(STATE_READ_ONLY == MUI_ATSPI_LAST_STATE, "the last state the adapter gives");
 
 // Each Maul UI role's.
 static const uint8_t s_roles[MUI_ROLE_LAST + 1] = {
@@ -120,7 +121,10 @@ static const uint8_t s_roles[MUI_ROLE_LAST + 1] = {
     [mui_roleCheckBox] = ROLE_CHECK_BOX,
     [mui_roleRadioButton] = ROLE_RADIO_BUTTON,
     [mui_roleRadioGroup] = ROLE_GROUPING,
-    [mui_roleSwitch] = ROLE_SWITCH,
+    // A toggle button: AT-SPI's switch role (2.56) is past the last role
+    // older clients know, which they show as "last defined" (as GTK and
+    // the browsers map it).
+    [mui_roleSwitch] = ROLE_TOGGLE_BUTTON,
     [mui_roleTextInput] = ROLE_ENTRY,
     [mui_roleMultilineTextInput] = ROLE_ENTRY,
     [mui_roleSearchInput] = ROLE_ENTRY,
@@ -273,12 +277,16 @@ static const RoleName s_names[] = {
     {ROLE_LOG, "log"},
     {ROLE_MARQUEE, "marquee"},
     {ROLE_TIMER, "timer"},
-    {ROLE_SWITCH, "switch"},
 };
 
-uint32_t muiAtspiRoleOf(const muiAccessNode* node)
+uint32_t muiAtspiRoleOf(const muiAccessTree* tree, const muiAccessNode* node)
 {
-    return node->role <= MUI_ROLE_LAST ? s_roles[node->role] : ROLE_UNKNOWN;
+    uint32_t role = node->role <= MUI_ROLE_LAST ? s_roles[node->role] : ROLE_UNKNOWN;
+    // A window's root is its top-level object, which clients look for
+    // as a frame or a dialog to follow focus within: no other window
+    // stands for it on the bus.
+    bool top = role == ROLE_FRAME || role == ROLE_DIALOG;
+    return node->id == muiAccessTree_GetRoot(tree) && !top ? ROLE_FRAME : role;
 }
 
 const char* muiAtspiRoleName(uint32_t role)
@@ -329,23 +337,40 @@ static bool IsClipped(const muiAccessTree* tree, uint64_t id, uint32_t limit)
     return false;
 }
 
-void muiAtspiStatesOf(const muiAtspiAdapter* adapter, const muiAccessNode* node,
-                      uint32_t statesOut[2])
+// AT-SPI's names of the states the adapter gives, for events.
+static const char* const s_stateNames[STATE_READ_ONLY + 1] = {
+    [STATE_ACTIVE] = "active",           [STATE_BUSY] = "busy",
+    [STATE_CHECKED] = "checked",         [STATE_COLLAPSED] = "collapsed",
+    [STATE_EDITABLE] = "editable",       [STATE_ENABLED] = "enabled",
+    [STATE_EXPANDABLE] = "expandable",   [STATE_EXPANDED] = "expanded",
+    [STATE_FOCUSABLE] = "focusable",     [STATE_FOCUSED] = "focused",
+    [STATE_HORIZONTAL] = "horizontal",   [STATE_MODAL] = "modal",
+    [STATE_MULTI_LINE] = "multi-line",   [STATE_MULTISELECTABLE] = "multiselectable",
+    [STATE_SELECTABLE] = "selectable",   [STATE_SELECTED] = "selected",
+    [STATE_SENSITIVE] = "sensitive",     [STATE_SHOWING] = "showing",
+    [STATE_SINGLE_LINE] = "single-line", [STATE_VERTICAL] = "vertical",
+    [STATE_VISIBLE] = "visible",         [STATE_INDETERMINATE] = "indeterminate",
+    [STATE_REQUIRED] = "required",       [STATE_INVALID_ENTRY] = "invalid-entry",
+    [STATE_IS_DEFAULT] = "is-default",   [STATE_CHECKABLE] = "checkable",
+    [STATE_HAS_POPUP] = "has-popup",     [STATE_READ_ONLY] = "read-only",
+};
+
+const char* muiAtspiStateName(uint32_t state)
 {
-    const muiAccessTree* tree = adapter->tree;
+    return state <= STATE_READ_ONLY && s_stateNames[state] != nullptr ? s_stateNames[state] : "";
+}
+
+void muiAtspiRecordStatesOf(const muiAccessNode* node, uint32_t statesOut[2])
+{
     uint32_t flags = node->flags;
     const muiAccessValues* values = &node->values;
     bool enabled = (flags & mui_accessDisabled) == 0;
-    bool shown = muiAccessTree_IsShown(tree, node->id);
     bool text = IsTextInput(node->role);
     statesOut[0] = 0;
     statesOut[1] = 0;
     Set(statesOut, STATE_ENABLED, enabled);
     Set(statesOut, STATE_SENSITIVE, enabled);
-    Set(statesOut, STATE_VISIBLE, shown);
-    Set(statesOut, STATE_SHOWING, shown && !IsClipped(tree, node->id, adapter->nodes));
     Set(statesOut, STATE_FOCUSABLE, (flags & mui_accessFocusable) != 0);
-    Set(statesOut, STATE_FOCUSED, node->id == muiAccessTree_GetFocus(tree));
     Set(statesOut, STATE_CHECKABLE, (flags & mui_accessCheckable) != 0);
     Set(statesOut, STATE_CHECKED, (flags & mui_accessChecked) != 0);
     Set(statesOut, STATE_INDETERMINATE, (flags & mui_accessMixed) != 0);
@@ -368,6 +393,23 @@ void muiAtspiStatesOf(const muiAtspiAdapter* adapter, const muiAccessNode* node,
     Set(statesOut, STATE_IS_DEFAULT, node->role == mui_roleDefaultButton);
     Set(statesOut, STATE_HAS_POPUP, values->popup != mui_popupNone);
     Set(statesOut, STATE_INVALID_ENTRY, values->invalid != mui_invalidNone);
+}
+
+bool muiAtspiShowsFocus(const muiAccessTree* tree, const muiAccessNode* node)
+{
+    return node->id == muiAccessTree_GetFocus(tree) &&
+           (node->id != muiAccessTree_GetRoot(tree) || (node->flags & mui_accessFocusable) != 0);
+}
+
+void muiAtspiStatesOf(const muiAtspiAdapter* adapter, const muiAccessNode* node,
+                      uint32_t statesOut[2])
+{
+    const muiAccessTree* tree = adapter->tree;
+    bool shown = muiAccessTree_IsShown(tree, node->id);
+    muiAtspiRecordStatesOf(node, statesOut);
+    Set(statesOut, STATE_VISIBLE, shown);
+    Set(statesOut, STATE_SHOWING, shown && !IsClipped(tree, node->id, adapter->nodes));
+    Set(statesOut, STATE_FOCUSED, muiAtspiShowsFocus(tree, node));
     // A window's root is active: the host does not yet say when its
     // window loses the system's focus.
     Set(statesOut, STATE_ACTIVE, node->id == muiAccessTree_GetRoot(tree));

@@ -6,6 +6,7 @@
 // as boxes of grapheme clusters.
 
 #include "text_boxes.h"
+#include "text_mask.h"
 
 #include "maul-ui/text_edit.h"
 
@@ -29,11 +30,13 @@ muiResult muiTextHitTest(const muiTextHost* host, muiNodeId nodeId, float width,
         *positionOut = (muiTextPosition){0, mui_affinityDownstream};
         return mui_success;
     }
-    float row = floorf(y / laid.paragraph.lineHeight);
-    uint32_t index = !(row >= 0.0f)                 ? 0
-                     : row >= (float)laid.lineCount ? laid.lineCount - 1
-                                                    : (uint32_t)row;
-    return muiHitLine(&laid, index, x, positionOut) ? mui_success : mui_errorCapacity;
+    uint32_t index = muiLineAtY(laid.lines, laid.lineCount, y);
+    if (!muiHitLine(&laid, index, x, positionOut))
+    {
+        return mui_errorCapacity;
+    }
+    positionOut->offset = muiUnmaskOffset(laid.paragraph.source, positionOut->offset);
+    return mui_success;
 }
 
 muiResult muiTextGetCaret(const muiTextHost* host, muiNodeId nodeId, float width,
@@ -57,6 +60,7 @@ muiResult muiTextGetCaret(const muiTextHost* host, muiNodeId nodeId, float width
         *caretOut = (muiTextCaret){start, 0.0f, paragraph->lineHeight, rtl};
         return mui_success;
     }
+    position.offset = muiMaskOffset(paragraph->source, position.offset);
     uint32_t index = muiLineOfPosition(&laid, position);
     float x = 0.0f;
     bool runRtl = false;
@@ -64,8 +68,8 @@ muiResult muiTextGetCaret(const muiTextHost* host, muiNodeId nodeId, float width
     {
         return mui_errorCapacity;
     }
-    *caretOut =
-        (muiTextCaret){x, (float)index * paragraph->lineHeight, paragraph->lineHeight, runRtl};
+    const muiTextLine* line = &laid.lines[index];
+    *caretOut = (muiTextCaret){x, line->top, line->height, runRtl};
     return mui_success;
 }
 
@@ -102,6 +106,8 @@ muiResult muiTextGetRangeRects(const muiTextHost* host, muiNodeId nodeId, float 
     {
         return result;
     }
+    start = muiMaskOffset(laid.paragraph.source, start);
+    end = muiMaskOffset(laid.paragraph.source, end);
     uint32_t count = 0;
     for (uint32_t index = 0; index < laid.lineCount && start < end; index++)
     {
@@ -115,8 +121,7 @@ muiResult muiTextGetRangeRects(const muiTextHost* host, muiNodeId nodeId, float 
         {
             return mui_errorCapacity;
         }
-        count = AddStretches(&boxes, start, end, (float)index * laid.paragraph.lineHeight,
-                             laid.paragraph.lineHeight, rects, capacity, count);
+        count = AddStretches(&boxes, start, end, line->top, line->height, rects, capacity, count);
     }
     *countOut = count;
     return count <= capacity ? mui_success : mui_errorCapacity;

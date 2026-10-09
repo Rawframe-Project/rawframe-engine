@@ -7,9 +7,8 @@
 
 #include "allocator.h"
 #include "atspi.h"
+#include "chars.h"
 
-#include <inttypes.h>
-#include <stdio.h>
 #include <string.h>
 
 #define ERROR_UNKNOWN_OBJECT "org.freedesktop.DBus.Error.UnknownObject"
@@ -18,8 +17,10 @@
 #define ERROR_NO_MEMORY      "org.freedesktop.DBus.Error.NoMemory"
 
 #define INTERFACE_ACCESSIBLE  "org.a11y.atspi.Accessible"
+#define INTERFACE_ACTION      "org.a11y.atspi.Action"
 #define INTERFACE_APPLICATION "org.a11y.atspi.Application"
 #define INTERFACE_COMPONENT   "org.a11y.atspi.Component"
+#define INTERFACE_VALUE       "org.a11y.atspi.Value"
 #define INTERFACE_PROPERTIES  "org.freedesktop.DBus.Properties"
 #define INTERFACE_INTROSPECT  "org.freedesktop.DBus.Introspectable"
 
@@ -124,17 +125,26 @@ static bool AppendNamed(muiAtspiApp* app, muiDBusIter* iter, const char* name, c
            dbus->closeContainer(iter, &reference);
 }
 
-bool muiAtspiAppendReference(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject* object)
+void muiAtspiPathOf(const muiAtspiObject* object, char pathOut[ATSPI_PATH_SIZE])
 {
-    const char* name = app->dbus.uniqueName(app->connection);
     if (object->node == nullptr)
     {
-        return AppendNamed(app, iter, name, ATSPI_ROOT_PATH);
+        muiChars root = muiCharsIn(pathOut, ATSPI_PATH_SIZE);
+        muiPutText(&root, ATSPI_ROOT_PATH);
+        return;
     }
+    muiChars chars = muiCharsIn(pathOut, ATSPI_PATH_SIZE);
+    muiPutText(&chars, ATSPI_PREFIX "w");
+    muiPutUnsigned(&chars, object->adapter->window);
+    muiPutText(&chars, "n");
+    muiPutHex(&chars, object->node->id, 1, false);
+}
+
+bool muiAtspiAppendReference(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject* object)
+{
     char path[ATSPI_PATH_SIZE];
-    (void)snprintf(path, sizeof(path), "%sw%" PRIu32 "n%" PRIx64, ATSPI_PREFIX,
-                   object->adapter->window, object->node->id);
-    return AppendNamed(app, iter, name, path);
+    muiAtspiPathOf(object, path);
+    return AppendNamed(app, iter, app->dbus.uniqueName(app->connection), path);
 }
 
 // The desktop the root is embedded in, or the null object before the
@@ -158,8 +168,10 @@ muiAtspiObject muiAtspiObjectOf(muiAtspiAdapter* adapter, uint64_t id)
 
 muiAtspiObject muiAtspiParentOf(const muiAtspiObject* object)
 {
-    uint64_t parent = muiAccessTree_GetShownParent(object->adapter->tree, object->node->id);
-    return parent != 0 ? muiAtspiObjectOf(object->adapter, parent) : (muiAtspiObject){0};
+    // A window's root has no shown parent, and the id 0 no node: the
+    // application root.
+    return muiAtspiObjectOf(object->adapter,
+                            muiAccessTree_GetShownParent(object->adapter->tree, object->node->id));
 }
 
 uint32_t muiAtspiChildrenOf(const muiAtspiObject* object, const uint64_t** idsOut)
@@ -249,36 +261,45 @@ bool muiAtspiAppendParent(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObj
     return muiAtspiAppendReference(app, iter, &parent);
 }
 
-// The interfaces an object has.
-static const char* const s_rootInterfaces[] = {INTERFACE_ACCESSIBLE, INTERFACE_APPLICATION};
-static const char* const s_nodeInterfaces[] = {INTERFACE_ACCESSIBLE, INTERFACE_COMPONENT};
-
-static const char* const* InterfacesOf(const muiAtspiObject* object, uint32_t* countOut)
+uint32_t muiAtspiInterfacesOf(const muiAtspiObject* object, const char* interfacesOut[4])
 {
-    *countOut = 2;
-    return object->node == nullptr ? s_rootInterfaces : s_nodeInterfaces;
+    uint32_t count = 0;
+    interfacesOut[count++] = INTERFACE_ACCESSIBLE;
+    if (object->node == nullptr)
+    {
+        interfacesOut[count++] = INTERFACE_APPLICATION;
+        return count;
+    }
+    interfacesOut[count++] = INTERFACE_COMPONENT;
+    if (muiAtspiActionCount(object->node) != 0)
+    {
+        interfacesOut[count++] = INTERFACE_ACTION;
+    }
+    if ((object->node->flags & mui_accessNumeric) != 0)
+    {
+        interfacesOut[count++] = INTERFACE_VALUE;
+    }
+    return count;
 }
 
 static void Introspect(muiAtspiApp* app, DBusMessage* call, const muiAtspiObject* object)
 {
     char xml[1024];
-    size_t length = (size_t)snprintf(
-        xml, sizeof(xml),
-        "<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN\" "
-        "\"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n<node>\n"
-        "  <interface name=\"" INTERFACE_INTROSPECT "\"/>\n"
-        "  <interface name=\"" INTERFACE_PROPERTIES "\"/>\n");
-    uint32_t count = 0;
-    const char* const* interfaces = InterfacesOf(object, &count);
-    for (uint32_t i = 0; i < count && length < sizeof(xml); i++)
+    muiChars chars = muiCharsIn(xml, sizeof xml);
+    muiPutText(&chars,
+               "<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN\" "
+               "\"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n<node>\n"
+               "  <interface name=\"" INTERFACE_INTROSPECT "\"/>\n"
+               "  <interface name=\"" INTERFACE_PROPERTIES "\"/>\n");
+    const char* interfaces[4];
+    uint32_t count = muiAtspiInterfacesOf(object, interfaces);
+    for (uint32_t i = 0; i < count; i++)
     {
-        length += (size_t)snprintf(xml + length, sizeof(xml) - length,
-                                   "  <interface name=\"%s\"/>\n", interfaces[i]);
+        muiPutText(&chars, "  <interface name=\"");
+        muiPutText(&chars, interfaces[i]);
+        muiPutText(&chars, "\"/>\n");
     }
-    if (length < sizeof(xml))
-    {
-        (void)snprintf(xml + length, sizeof(xml) - length, "</node>\n");
-    }
+    muiPutText(&chars, "</node>\n");
     DBusMessage* reply = app->dbus.newMethodReturn(call);
     muiDBusIter iter;
     if (reply != nullptr)
@@ -323,8 +344,8 @@ static bool AppendInterfaces(muiAtspiApp* app, muiDBusIter* iter, const muiAtspi
 {
     const muiDBusApi* dbus = &app->dbus;
     muiDBusIter array;
-    uint32_t count = 0;
-    const char* const* interfaces = InterfacesOf(object, &count);
+    const char* interfaces[4];
+    uint32_t count = muiAtspiInterfacesOf(object, interfaces);
     bool ok = dbus->openContainer(iter, mui_dbusTypeArray, "s", &array);
     for (uint32_t i = 0; i < count && ok; i++)
     {
@@ -348,12 +369,91 @@ static bool AppendStates(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObje
            dbus->closeContainer(iter, &array);
 }
 
-// An empty array of a signature: no relations or attributes yet.
-static bool AppendEmpty(muiAtspiApp* app, muiDBusIter* iter, const char* signature)
+// AT-SPI's relation for each of Maul UI's, 0 for none: an active
+// descendant is told by an event instead.
+static const uint32_t s_relations[MUI_ACCESS_RELATIONS] = {
+    [mui_relationLabelledBy] = 2, [mui_relationDescribedBy] = 18, [mui_relationControls] = 3,
+    [mui_relationDetails] = 19,   [mui_relationFlowTo] = 10,      [mui_relationErrorMessage] = 21,
+    [mui_relationPopupFor] = 15,
+};
+
+// The relations a node has, a(ua(so)): for each kind, its targets that
+// the window holds.
+static bool AppendRelations(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject* object)
 {
+    const muiDBusApi* dbus = &app->dbus;
+    const muiAccessNode* node = object->node;
     muiDBusIter array;
-    return app->dbus.openContainer(iter, mui_dbusTypeArray, signature, &array) &&
-           app->dbus.closeContainer(iter, &array);
+    bool ok = dbus->openContainer(iter, mui_dbusTypeArray, "(ua(so))", &array);
+    for (uint32_t kind = 0; kind < MUI_ACCESS_RELATIONS && node != nullptr && ok; kind++)
+    {
+        bool any = false;
+        for (uint32_t i = 0; i < node->linkCount; i++)
+        {
+            any |= node->links[i].kind == kind && s_relations[kind] != 0 &&
+                   muiAccessTree_Find(object->adapter->tree, node->links[i].target) != nullptr;
+        }
+        if (!any)
+        {
+            continue;
+        }
+        muiDBusIter relation;
+        muiDBusIter targets;
+        ok = dbus->openContainer(&array, mui_dbusTypeStruct, nullptr, &relation) &&
+             dbus->appendBasic(&relation, mui_dbusTypeUint32, &s_relations[kind]) &&
+             dbus->openContainer(&relation, mui_dbusTypeArray, "(so)", &targets);
+        for (uint32_t i = 0; i < node->linkCount && ok; i++)
+        {
+            muiAtspiObject target = muiAtspiObjectOf(object->adapter, node->links[i].target);
+            ok = node->links[i].kind != kind || target.node == nullptr ||
+                 muiAtspiAppendReference(app, &targets, &target);
+        }
+        ok = ok && dbus->closeContainer(&relation, &targets) &&
+             dbus->closeContainer(&array, &relation);
+    }
+    return ok && dbus->closeContainer(iter, &array);
+}
+
+static bool AppendAttribute(muiAtspiApp* app, muiDBusIter* array, const char* name,
+                            const char* value)
+{
+    muiDBusIter entry;
+    return app->dbus.openContainer(array, mui_dbusTypeDictEntry, nullptr, &entry) &&
+           muiAtspiAppendString(app, &entry, name) && muiAtspiAppendString(app, &entry, value) &&
+           app->dbus.closeContainer(array, &entry);
+}
+
+static bool AppendNumber(muiAtspiApp* app, muiDBusIter* array, const char* name, uint32_t value)
+{
+    char text[16];
+    muiChars chars = muiCharsIn(text, sizeof text);
+    muiPutUnsigned(&chars, value);
+    return value == 0 || AppendAttribute(app, array, name, text);
+}
+
+// A node's attributes, a{ss}: its level and place in a set, how it is
+// live, and its placeholder, where it has them.
+static bool AppendAttributes(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject* object)
+{
+    const muiDBusApi* dbus = &app->dbus;
+    const muiAccessNode* node = object->node;
+    muiDBusIter array;
+    bool ok = dbus->openContainer(iter, mui_dbusTypeArray, "{ss}", &array);
+    if (node != nullptr && ok)
+    {
+        const muiAccessValues* values = &node->values;
+        const char* live = values->live == mui_liveAssertive ? "assertive"
+                           : values->live == mui_livePolite  ? "polite"
+                                                             : nullptr;
+        const char* placeholder = node->text[mui_accessPlaceholder];
+        ok = AppendNumber(app, &array, "level", values->level) &&
+             AppendNumber(app, &array, "posinset", values->setPosition) &&
+             AppendNumber(app, &array, "setsize", values->setSize) &&
+             (live == nullptr || AppendAttribute(app, &array, "live", live)) &&
+             (placeholder == nullptr ||
+              AppendAttribute(app, &array, "placeholder-text", placeholder));
+    }
+    return ok && dbus->closeContainer(iter, &array);
 }
 
 // Writes the answer of an Accessible method; false for an unknown one,
@@ -361,7 +461,8 @@ static bool AppendEmpty(muiAtspiApp* app, muiDBusIter* iter, const char* signatu
 static bool AppendAccessible(muiAtspiApp* app, muiDBusIter* iter, DBusMessage* call,
                              const muiAtspiObject* object, const char* member, bool* ok)
 {
-    uint32_t role = object->node != nullptr ? muiAtspiRoleOf(object->node) : ROLE_APPLICATION;
+    uint32_t role = object->node != nullptr ? muiAtspiRoleOf(object->adapter->tree, object->node)
+                                            : ROLE_APPLICATION;
     int32_t index = 0;
     muiAtspiObject child;
     if (strcmp(member, "GetChildAtIndex") == 0)
@@ -393,11 +494,11 @@ static bool AppendAccessible(muiAtspiApp* app, muiDBusIter* iter, DBusMessage* c
     }
     else if (strcmp(member, "GetRelationSet") == 0)
     {
-        *ok = AppendEmpty(app, iter, "(ua(so))");
+        *ok = AppendRelations(app, iter, object);
     }
     else if (strcmp(member, "GetAttributes") == 0)
     {
-        *ok = AppendEmpty(app, iter, "{ss}");
+        *ok = AppendAttributes(app, iter, object);
     }
     else if (strcmp(member, "GetApplication") == 0)
     {
@@ -468,6 +569,11 @@ bool muiAtspiAnswer(muiAtspiApp* app, DBusMessage* call)
     else if (strcmp(interface, INTERFACE_ACCESSIBLE) == 0)
     {
         AnswerAccessible(app, call, &object, member);
+    }
+    else if (strcmp(interface, INTERFACE_ACTION) == 0 && object.node != nullptr &&
+             muiAtspiActionCount(object.node) != 0 &&
+             muiAtspiAnswerAction(app, call, &object, member))
+    {
     }
     else if (strcmp(interface, INTERFACE_COMPONENT) != 0 || object.node == nullptr ||
              !muiAtspiAnswerComponent(app, call, &object, member))

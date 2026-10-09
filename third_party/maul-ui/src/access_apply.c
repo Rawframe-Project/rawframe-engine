@@ -363,10 +363,16 @@ static uint32_t Commit(muiAccessTree* tree, const muiAccessUpdate* update, uint3
 
 // Tells the host what changed, then frees what was replaced.
 static void Report(muiAccessTree* tree, const muiAccessChanges* changes, uint32_t added,
-                   uint32_t retired, uint64_t oldFocus)
+                   uint32_t retired, uint64_t oldRoot, uint64_t oldFocus)
 {
     if (changes != nullptr)
     {
+        // The root or the focus moves, or a record changes its children or
+        // what the view reads. Nodes come and go only so: a node added is
+        // listed by a parent whose children changed, or is the new root;
+        // one let go was left out by its parent, or went with the old
+        // root; a stray sent and let go was never shown.
+        bool shown = tree->root != oldRoot || tree->focus != oldFocus;
         for (uint32_t i = 0; i < added && changes->added != nullptr; i++)
         {
             const muiHeldNode* held = &tree->held[tree->added[i] - 1];
@@ -384,6 +390,14 @@ static void Report(muiAccessTree* tree, const muiAccessChanges* changes, uint32_
             {
                 report(changes->user, tree, &node->held.node);
             }
+            shown =
+                shown || (!node->removed &&
+                          muiViewDiffers(tree, &node->held,
+                                         &tree->held[muiHeldSlotOf(tree, node->held.node.id) - 1]));
+        }
+        if (shown && changes->shownChanged != nullptr)
+        {
+            changes->shownChanged(changes->user, tree);
         }
         if (changes->focusMoved != nullptr && tree->focus != oldFocus)
         {
@@ -470,6 +484,6 @@ muiResult muiAccessTree_Apply(muiAccessTree* tree, const muiAccessUpdate* update
     tree->focus = update->focus != 0 && muiHeldSlotOf(tree, update->focus) != 0 ? update->focus
                   : muiHeldSlotOf(tree, tree->focus) != 0                       ? tree->focus
                                                                                 : tree->root;
-    Report(tree, changes, added, retired, oldFocus);
+    Report(tree, changes, added, retired, oldRoot, oldFocus);
     return mui_success;
 }

@@ -125,8 +125,7 @@ static Parts LayOut(muiLayout* layout, const muiTextLimits* limits)
 // Whether every module the text component reads fonts with is there.
 static bool HasModules(FT_Library library)
 {
-    static const char* const names[] = {"truetype", "cff",     "sfnt",  "psaux",
-                                        "pshinter", "psnames", "smooth"};
+    static const char* const names[] = {"truetype", "cff", "sfnt", "psaux", "psnames", "smooth"};
     for (size_t i = 0; i < sizeof names / sizeof names[0]; i++)
     {
         if (FT_Get_Module(library, names[i]) == nullptr)
@@ -146,12 +145,27 @@ static void Release(muiTextService* service)
     muiFreeBuffer(&service->allocator, &service->lineItems);
     muiFreeBuffer(&service->allocator, &service->lineGlyphs);
     muiFreeBuffer(&service->allocator, &service->hitBoxes);
+    muiFreeBuffer(&service->allocator, &service->editScratch);
     muiFreeBuffer(&service->allocator, &service->fieldSegments);
     muiFreeBuffer(&service->allocator, &service->fieldPieces);
     muiFreeBuffer(&service->allocator, &service->fieldOrigins);
     muiFreeBuffer(&service->allocator, &service->fieldRows);
     muiFreeBuffer(&service->allocator, &service->fieldCrossings);
     muiFreeBuffer(&service->allocator, &service->fieldCells);
+    muiFreeBuffer(&service->allocator, &service->fieldCurves);
+    muiFreeBuffer(&service->allocator, &service->fieldEdgeOrigins);
+    muiFreeBuffer(&service->allocator, &service->fieldEdgeSides);
+    muiFreeBuffer(&service->allocator, &service->fieldEdgeColors);
+    muiFreeBuffer(&service->allocator, &service->fieldLoops);
+    muiFreeBuffer(&service->allocator, &service->fieldChannels);
+    muiFreeBuffer(&service->allocator, &service->fieldInside);
+    muiFreeBuffer(&service->allocator, &service->colorCoverage);
+    muiFreeBuffer(&service->allocator, &service->colorPixels);
+    muiFreeBuffer(&service->allocator, &service->paintSurfaces);
+    muiFreeBuffer(&service->allocator, &service->paintStops);
+    muiFreeBuffer(&service->allocator, &service->bitmapScratch);
+    muiFreeBuffer(&service->allocator, &service->bitmapRgba);
+    muiFreeBuffer(&service->allocator, &service->bitmapLinear);
     muiFreeBuffer(&service->allocator, &service->fieldCellPieces);
     muiFreeBuffer(&service->allocator, &service->fieldEdge);
     muiFreeBuffer(&service->allocator, &service->fieldDistances);
@@ -233,6 +247,11 @@ muiResult muiCreateTextService(const muiTextServiceDef* def, muiTextService** se
     }
     *serviceOut = service;
     return mui_success;
+}
+
+uint64_t muiGetTextServiceMisuse(const muiTextService* service)
+{
+    return service != nullptr ? service->misuse : 0;
 }
 
 void muiDestroyTextService(muiTextService* service)

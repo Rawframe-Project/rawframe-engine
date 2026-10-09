@@ -8,8 +8,14 @@
 
 #include "text_boxes.h"
 
+#include "text_lines.h"
+#include "text_mask.h"
+
+#include "maul-ui/layout.h"
 #include "maul-unicode/bidi.h"
 #include "maul-unicode/segment.h"
+
+#include <math.h>
 
 muiResult muiLayText(const muiTextHost* host, muiNodeId nodeId, float width, muiLaidText* out)
 {
@@ -20,14 +26,80 @@ muiResult muiLayText(const muiTextHost* host, muiNodeId nodeId, float width, mui
         return host->service->failures != failures ? mui_errorCapacity : mui_errorStale;
     }
     muiParagraph* paragraph = &out->paragraph;
-    if (!muiBreakParagraph(paragraph, muiParagraphBreakMode(paragraph, mui_measureAtMost), width,
-                           &out->lineCount))
+    if (!muiLayLines(paragraph, muiParagraphBreakMode(paragraph, mui_measureAtMost), width,
+                     &out->lineCount))
     {
         return mui_errorCapacity;
     }
     out->lines = paragraph->service->lines.data;
     out->width = width;
+    muiFollowCaret(out, muiNode_GetContentRect(host->context, nodeId).height);
     return mui_success;
+}
+
+// A scroll kept between the least and the most a text needs.
+static float Clamp(float scroll, float least, float most)
+{
+    return scroll < least ? least : scroll > most ? most : scroll;
+}
+
+// How far a scroll must go to show a span of a box from its start: from
+// where it is, to the span's start or its end.
+static float Show(float scroll, float start, float end, float box)
+{
+    if (start < scroll)
+    {
+        return start;
+    }
+    return end > scroll + box ? end - box : scroll;
+}
+
+void muiFollowCaret(muiLaidText* laid, float height)
+{
+    muiParagraph* paragraph = &laid->paragraph;
+    muiTextEditing* editing = &paragraph->source->editing;
+    paragraph->scrollX = 0.0f;
+    if (!editing->on || laid->lineCount == 0)
+    {
+        return;
+    }
+    muiTextPosition caret = editing->selection.caret;
+    caret.offset = muiMaskOffset(paragraph->source, caret.offset);
+    uint32_t index = muiLineOfPosition(laid, caret);
+    float x = 0.0f;
+    bool rtl = false;
+    if (!muiCaretX(laid, index, caret, &x, &rtl))
+    {
+        return;
+    }
+    // The text's reach across, unscrolled: a line may start left of the
+    // box, as a right-to-left one overflowing does.
+    float left = 0.0f;
+    float right = 0.0f;
+    for (uint32_t i = 0; i < laid->lineCount; i++)
+    {
+        float start = muiAlignLine(paragraph, laid->lines[i].width, laid->width);
+        left = i == 0 || start < left ? start : left;
+        right =
+            i == 0 || start + laid->lines[i].width > right ? start + laid->lines[i].width : right;
+    }
+    const muiTextLine* line = &laid->lines[index];
+    // A caret is drawn a unit wide.
+    float scrollX = Show(editing->scrollX, x, x + 1.0f, laid->width);
+    float scrollY = Show(editing->scrollY, line->top, line->top + line->height, height);
+    float bottom = muiParagraphHeight(laid->lines, laid->lineCount);
+    // Room past the text's end for the caret there.
+    scrollX = Clamp(scrollX, fminf(left, 0.0f), fmaxf(right + 1.0f - laid->width, 0.0f));
+    scrollY = Clamp(scrollY, 0.0f, fmaxf(bottom - height, 0.0f));
+    editing->scrollX = scrollX;
+    editing->scrollY = scrollY;
+    paragraph->scrollX = scrollX;
+    muiTextLine* lines = paragraph->service->lines.data;
+    for (uint32_t i = 0; i < laid->lineCount; i++)
+    {
+        lines[i].top -= scrollY;
+        lines[i].baseline -= scrollY;
+    }
 }
 
 enum

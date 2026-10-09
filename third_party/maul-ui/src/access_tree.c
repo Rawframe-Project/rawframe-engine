@@ -9,10 +9,9 @@
 #include "access_tree.h"
 #include "access_tree_store.h"
 #include "allocator.h"
+#include "chars.h"
 
-#include <inttypes.h>
 #include <stdalign.h>
-#include <stdio.h>
 #include <string.h>
 
 #define TREE_DEF_COOKIE 0x6D756174u // "muat"
@@ -366,15 +365,22 @@ static void PutText(Writer* writer, const char* text)
 static void PutCount(Writer* writer, const char* prefix, uint32_t value)
 {
     char number[32];
-    int count = snprintf(number, sizeof(number), "%s%" PRIu32, prefix, value);
-    Put(writer, number, count > 0 ? (size_t)count : 0);
+    muiChars chars = muiCharsIn(number, sizeof number);
+    muiPutText(&chars, prefix);
+    muiPutUnsigned(&chars, value);
+    Put(writer, number, chars.length);
 }
 
-static void PutFormat(Writer* writer, const char* format, double a, double b)
+// Two numbers after a prefix, by a separator, each as "%g" writes it.
+static void PutPair(Writer* writer, const char* prefix, double a, const char* between, double b)
 {
-    char number[64];
-    int count = snprintf(number, sizeof(number), format, a, b);
-    Put(writer, number, count > 0 ? (size_t)count : 0);
+    char number[80];
+    muiChars chars = muiCharsIn(number, sizeof number);
+    muiPutText(&chars, prefix);
+    muiPutGeneral(&chars, a, 6);
+    muiPutText(&chars, between);
+    muiPutGeneral(&chars, b, 6);
+    Put(writer, number, chars.length);
 }
 
 // A text in quotes, a quote, a backslash or a control byte escaped.
@@ -392,8 +398,10 @@ static void PutQuoted(Writer* writer, const char* text, uint32_t length)
         else if (byte < 0x20 || byte == 0x7F)
         {
             char escaped[8];
-            int count = snprintf(escaped, sizeof(escaped), "\\x%02X", byte);
-            Put(writer, escaped, (size_t)count);
+            muiChars chars = muiCharsIn(escaped, sizeof escaped);
+            muiPutText(&chars, "\\x");
+            muiPutHex(&chars, byte, 2, true);
+            Put(writer, escaped, chars.length);
         }
         else
         {
@@ -423,8 +431,8 @@ static void PutNode(Writer* writer, const muiAccessNode* node, uint32_t depth)
     {
         PutCount(writer, " actions=", node->actions);
     }
-    PutFormat(writer, " %gx%g", (double)node->bounds.width, (double)node->bounds.height);
-    PutFormat(writer, " @%g,%g", (double)node->transform.e, (double)node->transform.f);
+    PutPair(writer, " ", (double)node->bounds.width, "x", (double)node->bounds.height);
+    PutPair(writer, " @", (double)node->transform.e, ",", (double)node->transform.f);
     for (uint32_t kind = 0; kind < MUI_ACCESS_TEXTS; kind++)
     {
         if (node->text[kind] != nullptr)

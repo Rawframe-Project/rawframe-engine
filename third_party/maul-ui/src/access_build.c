@@ -10,6 +10,7 @@
 #include "context.h"
 #include "focus.h"
 #include "layer.h"
+#include "place.h"
 #include "range.h"
 #include "scroll_store.h"
 #include "style_store.h"
@@ -119,16 +120,18 @@ static void PlaceOf(const muiContext* context, uint32_t slot, muiAccessNode* nod
     const muiScrollState* scroll = &context->scrolls[slot - 1];
     uint32_t parent = muiTreeAt(&context->tree, slot)->links.parent;
     node->bounds = (muiRect){0.0f, 0.0f, layout->rect.width, layout->rect.height};
-    // Its place in its parent, which moves by the parent's scroll as
-    // painting moves it.
-    float x = layout->rect.x;
-    float y = layout->rect.y;
+    // Its place in its parent, through its local scale, which moves by the
+    // parent's scroll as painting moves it.
+    const muiPlace step = muiPlaceStep(context, slot);
+    double x = step.offsetX;
+    double y = step.offsetY;
     if (parent != 0)
     {
-        x += muiScrollShiftX(&context->layout[parent - 1], &context->scrolls[parent - 1]);
-        y += muiScrollShiftY(&context->layout[parent - 1], &context->scrolls[parent - 1]);
+        x += (double)muiScrollShiftX(&context->layout[parent - 1], &context->scrolls[parent - 1]);
+        y += (double)muiScrollShiftY(&context->layout[parent - 1], &context->scrolls[parent - 1]);
     }
-    node->transform = (muiDrawTransform){1.0f, 0.0f, 0.0f, 1.0f, x, y};
+    node->transform =
+        (muiDrawTransform){(float)step.scaleX, 0.0f, 0.0f, (float)step.scaleY, (float)x, (float)y};
     if ((node->flags & mui_accessScrolls) != 0)
     {
         const muiSize size = {layout->rect.width, layout->rect.height};
@@ -220,6 +223,15 @@ uint32_t muiAccessDerive(const muiContext* context, uint32_t slot, muiAccessNode
     {
         nodeOut->text[kind] = entry->text[kind];
         nodeOut->textLength[kind] = entry->length[kind];
+    }
+    // A password input's value is never the host's own text, which would
+    // be the password and would also keep the text service's mask from
+    // being read: assistive technology reads only the mask, a bullet a
+    // cluster, as the input shows it (mui-0006, mui-0008).
+    if (nodeOut->role == mui_rolePasswordInput)
+    {
+        nodeOut->text[mui_accessValue] = nullptr;
+        nodeOut->textLength[mui_accessValue] = 0;
     }
     return childrenOut != nullptr ? ChildrenOf(context, slot, childrenOut) : 0;
 }

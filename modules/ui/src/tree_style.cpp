@@ -67,7 +67,8 @@ muiPropertyMask maskOf(LookParts parts) noexcept {
 
 result::Result<Style> Tree::addStyle() {
     muiStyleId made{};
-    RAWFRAME_TRY(checked(muiCreateStyle(state_->context, &made), "a style class could not be made"));
+    const muiStyleDef kDef = muiDefaultStyleDef();
+    RAWFRAME_TRY(checked(muiCreateStyle(state_->context, &kDef, &made), "a style class could not be made"));
     return Style{.key = made.index1 | (std::uint64_t{made.generation} << 32U)};
 }
 

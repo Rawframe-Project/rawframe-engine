@@ -11,6 +11,7 @@
 
 #include "context.h"
 #include "focus.h"
+#include "place.h"
 #include "pointer.h"
 #include "popup.h"
 #include "scroll.h"
@@ -86,11 +87,9 @@ static Target TargetAt(const muiContext* context, const Target* hit, const muiPo
     Target target = {hit->root, slot, pointer->x, pointer->y, true};
     if (slot != 0)
     {
-        double x = 0.0;
-        double y = 0.0;
-        muiScrollOriginOf(context, hit->root, slot, &x, &y);
-        target.x = (float)((double)pointer->x - x);
-        target.y = (float)((double)pointer->y - y);
+        const muiPlace place = muiPlaceOf(context, hit->root, slot);
+        target.x = (float)muiUnplaceX(&place, (double)pointer->x);
+        target.y = (float)muiUnplaceY(&place, (double)pointer->y);
         target.passThrough = context->interaction[slot - 1].passThrough;
     }
     return target;
@@ -153,11 +152,12 @@ static void PostDrag(muiContext* context, const muiPointer* pointer, muiPointerR
 {
     uint32_t slot = SlotOf(context, node);
     uint32_t root = SlotOf(context, pointer->root);
-    double x = 0.0;
-    double y = 0.0;
+    // The point in the node's own space, through places, scrolling and
+    // local scales.
+    muiPlace place = {1.0, 1.0, 0.0, 0.0};
     if (slot != 0 && root != 0)
     {
-        muiScrollOriginOf(context, root, slot, &x, &y);
+        place = muiPlaceOf(context, root, slot);
     }
     const muiPointerRecord record = {
         .kind = kind,
@@ -166,8 +166,8 @@ static void PostDrag(muiContext* context, const muiPointer* pointer, muiPointerR
         .passThrough = slot == 0 || context->interaction[slot - 1].passThrough,
         .pointer = pointer->id,
         .node = node,
-        .x = (float)((double)pointer->x - x),
-        .y = (float)((double)pointer->y - y),
+        .x = (float)muiUnplaceX(&place, (double)pointer->x),
+        .y = (float)muiUnplaceY(&place, (double)pointer->y),
         .timeNs = pointer->timeNs,
         .offsetX = pointer->x - pointer->pressX,
         .offsetY = pointer->y - pointer->pressY,

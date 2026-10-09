@@ -102,6 +102,41 @@ static Status StatusOf(const muiAccessTree* tree, uint32_t parentSlot, uint32_t 
     return flattened ? Status_flattened : Status_shown;
 }
 
+static bool BoxDiffers(const muiAccessNode* old, const muiAccessNode* now)
+{
+    const muiRect* a = &old->bounds;
+    const muiRect* b = &now->bounds;
+    const muiDrawTransform* s = &old->transform;
+    const muiDrawTransform* t = &now->transform;
+    return a->x != b->x || a->y != b->y || a->width != b->width || a->height != b->height ||
+           s->a != t->a || s->b != t->b || s->c != t->c || s->d != t->d || s->e != t->e ||
+           s->f != t->f;
+}
+
+bool muiViewDiffers(const muiAccessTree* tree, const muiHeldNode* old, const muiHeldNode* now)
+{
+    const muiAccessNode* a = &old->node;
+    const muiAccessNode* b = &now->node;
+    const uint32_t shaping = mui_accessHidden | mui_accessClipsChildren;
+    uint32_t count = a->childCount;
+    if (count != b->childCount ||
+        (count != 0 && memcmp(old->children, now->children, count * sizeof(uint64_t)) != 0) ||
+        ((a->flags ^ b->flags) & shaping) != 0 ||
+        (a->role == mui_roleGeneric) != (b->role == mui_roleGeneric) ||
+        (a->text[mui_accessLabel] == nullptr) != (b->text[mui_accessLabel] == nullptr))
+    {
+        return true;
+    }
+    // A box counts where it or its parent clips (IsClippedOut).
+    if (!BoxDiffers(a, b))
+    {
+        return false;
+    }
+    const muiHeldNode* parent = now->parent != 0 ? &tree->held[now->parent - 1] : nullptr;
+    return (b->flags & mui_accessClipsChildren) != 0 ||
+           (parent != nullptr && (parent->node.flags & mui_accessClipsChildren) != 0);
+}
+
 static uint32_t IndexIn(const muiAccessTree* tree, uint32_t parentSlot, uint64_t id)
 {
     const muiHeldNode* parent = &tree->held[parentSlot - 1];

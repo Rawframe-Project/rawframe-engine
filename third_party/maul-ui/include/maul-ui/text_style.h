@@ -56,6 +56,18 @@ extern "C"
         mui_textNoWrap = 1,
     };
 
+    // Lines drawn with text, as bits, solid, where the font's metrics put
+    // them: under it, over it and through it (record mui-0006).
+    typedef uint8_t muiTextDecoration;
+
+    enum
+    {
+        mui_decorationNone = 0,
+        mui_decorationUnderline = 1,
+        mui_decorationOverline = 2,
+        mui_decorationLineThrough = 4,
+    };
+
     // Every text value a style can set. Build it with muiDefaultTextStyle.
     typedef struct muiTextStyle
     {
@@ -81,6 +93,17 @@ extern "C"
         muiFontSlant slant;
         muiTextAlign align;
         muiTextWrap wrap;
+        muiTextDecoration decoration;
+        // The decorations' color, sRGB-encoded with straight alpha; alpha 0
+        // is the text's own color, as CSS's currentColor, which a node
+        // below with another color draws them in.
+        muiColor decorationColor;
+        // How far a span's text sits above the baseline, below it when
+        // negative: scale times the node's size, plus offset. CSS's sub is
+        // {-0.2, 0} and its super {1/3, 0}, the drops CSS gives them
+        // without font data. Not inherited, and a node's own does nothing,
+        // as CSS's baseline-shift on a block container (record mui-0006).
+        muiDimension baselineShift;
     } muiTextStyle;
 
     // A node's text values as inherited and resolved to logical units.
@@ -98,11 +121,15 @@ extern "C"
         muiTextWrap wrap;
         // Whether the line height is the font's own.
         bool automaticLineHeight;
+        muiTextDecoration decoration;
+        // As given: alpha 0 is the text's color.
+        muiColor decorationColor;
     } muiComputedTextStyle;
 
     /// Returns the default text style: opaque black, font 0, 16 logical
     /// units, the font's own line height, no letter spacing, weight 400,
-    /// upright, at the start, wrapping. A root takes these for what no
+    /// upright, at the start, wrapping, with no decoration, whose color is
+    /// the text's. A root takes these for what no
     /// layer gives it.
     ///
     /// @return The style.

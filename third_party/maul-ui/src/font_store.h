@@ -37,6 +37,13 @@ typedef struct muiFontAxis
     FT_Fixed maximum;
 } muiFontAxis;
 
+// A table of a font's, a view of its bytes; size 0 for none.
+typedef struct muiFontTable
+{
+    const uint8_t* data;
+    uint32_t size;
+} muiFontTable;
+
 typedef struct muiFont
 {
     // The file's bytes: copy when the service made one, else the
@@ -63,6 +70,12 @@ typedef struct muiFont
     uint32_t weightClass;
     uint32_t widthClass;
     muiFontSlant faceSlant;
+    // Whether the font has a COLR table, so glyphs may have colour layers.
+    bool colorLayers;
+    // The colour bitmap tables: CBLC and CBDT, and sbix.
+    muiFontTable cblc;
+    muiFontTable cbdt;
+    muiFontTable sbix;
     // Shaping fonts of other instances, by their key's top bits, replaced
     // in turn.
     uint64_t shaperInstances[MUI_SHAPING_SLOTS];

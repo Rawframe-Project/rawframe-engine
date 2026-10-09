@@ -58,22 +58,37 @@ extern "C"
         };
     } muiTokenValue;
 
-    /// Creates a token holding a value; its type is the value's, for good.
+    // How a token is made. Build it with muiDefaultTokenDef.
+    typedef struct muiTokenDef
+    {
+        uint32_t cookie;
+        // The value: a known type and a member valid for it (components
+        // of a color from 0 to 1, a finite number, a dimension of a known
+        // kind with finite parts, a shadow and a gradient as
+        // muiStyle_SetVisualValues takes them). Its type is the token's,
+        // for good.
+        muiTokenValue value;
+    } muiTokenDef;
+
+    /// Returns the default token def: the number 0.
+    ///
+    /// @return The def, with a valid cookie.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MUI_API muiTokenDef muiDefaultTokenDef(void);
+
+    /// Creates a token holding a value.
     ///
     /// @param context     The context.
-    /// @param value       The value: a known type and a member valid for it
-    ///                    (components of a color from 0 to 1, a finite
-    ///                    number, a dimension of a known kind with finite
-    ///                    parts, a shadow and a gradient as
-    ///                    muiStyle_SetVisualValues takes them).
+    /// @param def         The token: a valid cookie and its value.
     /// @param tokenIdOut  Receives the token; set to the null id on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a
-    ///         value outside the above or a call from a measure or paint function;
-    ///         `mui_errorCapacity` when the context's token limit is
-    ///         reached.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
+    ///         cookie, a value outside the def's or a call from a measure or
+    ///         paint function; `mui_errorCapacity` when the context's token
+    ///         limit is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiCreateToken(muiContext* context, const muiTokenValue* value,
+    MUI_NODISCARD MUI_API muiResult muiCreateToken(muiContext* context, const muiTokenDef* def,
                                                    muiTokenId* tokenIdOut);
 
     /// Destroys a token. Variants that name it, and tokens that alias it,

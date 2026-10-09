@@ -11,6 +11,7 @@
 #define MAUL_UI_GLYPH_IMAGE_H
 
 #include "maul-ui/base.h"
+#include "maul-ui/draw.h"
 #include "maul-ui/text.h"
 
 #ifdef __cplusplus
@@ -38,7 +39,8 @@ extern "C"
     /// Renders a glyph as coverage: a byte per pixel, rows from the top,
     /// 0 outside the outline to 255 inside, linear in the area covered
     /// (a renderer applies any gamma). A glyph with no outline, such as
-    /// a space, has an empty image. A glyph run's glyph at (x, y) from
+    /// a space or any glyph of a font of bitmaps alone, has an empty
+    /// image. A glyph run's glyph at (x, y) from
     /// its origin, drawn at a scale, has its pen at (originX + x) * scale
     /// and its baseline at (originY + y) * scale, y rounded to a pixel;
     /// its em is the run's size times the scale.
@@ -70,6 +72,50 @@ extern "C"
                                                    uint32_t glyph, float pixelSize, float offsetX,
                                                    muiGlyphImage* imageOut, unsigned char* pixels,
                                                    size_t capacity);
+
+    /// Renders a colour glyph (COLR, with its CPAL palettes) at a size,
+    /// placed as muiRenderGlyph places coverage: four bytes a pixel, rows
+    /// from the top, red, green, blue and alpha. A version 1 glyph's paint
+    /// graph is drawn where the glyph has one: its layers, solid fills,
+    /// gradients, glyph outlines, other colour glyphs, transforms,
+    /// composites and clip box. A version 0 glyph's layers are each another
+    /// glyph's outline filled with its palette entry. Entry 0xFFFF is the
+    /// text's colour, and everything is composited in premultiplied linear
+    /// light; the pixels are stored as an sRGB texture holds premultiplied
+    /// colour, red, green and blue encoded with sRGB's transfer function
+    /// and alpha linear. A glyph without COLR colour is drawn from its
+    /// colour bitmap where the font has one (CBLC and CBDT, or sbix), from
+    /// the strike that suits the size, scaled to it. A glyph without colour
+    /// gives `mui_empty` and an empty image, to be drawn as coverage.
+    ///
+    /// @param service     The service.
+    /// @param font        A font key, as a glyph run carries; 0 for the
+    ///                    default font.
+    /// @param glyph       A glyph id of the font.
+    /// @param pixelSize   The em in device pixels, from 1/64 to
+    ///                    MUI_MAX_GLYPH_PIXEL_SIZE.
+    /// @param offsetX     How far the pen is right of a pixel boundary,
+    ///                    from 0 up to 1, as muiRenderGlyph takes it.
+    /// @param palette     The font's palette to fill from; the first for one
+    ///                    the font does not have.
+    /// @param foreground  The text's colour, linear and premultiplied.
+    /// @param imageOut    Receives the image's place and size, also when
+    ///                    pixels hold too few bytes.
+    /// @param pixels      Receives width * height * 4 bytes; may be NULL
+    ///                    when capacity is 0.
+    /// @param capacity    How many bytes pixels holds.
+    /// @return `mui_success`; `mui_empty` for a glyph without colour;
+    ///         `mui_errorFormat` for a paint graph more than 64 paints
+    ///         deep, as one that paints itself is; otherwise as
+    ///         muiRenderGlyph.
+    /// @par Thread safety
+    /// Safe from any thread; the service is used by one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiRenderColorGlyph(muiTextService* service, uint64_t font,
+                                                        uint32_t glyph, float pixelSize,
+                                                        float offsetX, uint32_t palette,
+                                                        muiLinearColor foreground,
+                                                        muiGlyphImage* imageOut,
+                                                        unsigned char* pixels, size_t capacity);
 
     /// Renders a glyph as a signed distance field, which a renderer scales
     /// to any size: a byte per pixel, rows from the top, 128 at the
@@ -108,6 +154,38 @@ extern "C"
                                                         uint32_t glyph, float pixelSize,
                                                         uint32_t spread, muiGlyphImage* imageOut,
                                                         unsigned char* pixels, size_t capacity);
+
+    /// Renders a glyph's multi-channel signed distance field (MTSDF) for a
+    /// renderer that scales it: four bytes a pixel. Red, green and blue
+    /// are three distances, each to the outline's edges of one colour, and
+    /// their median is the distance with the outline's corners kept sharp
+    /// at any scale (Chlumský's method, as msdfgen's); alpha is the field
+    /// muiRenderGlyphField renders, byte for byte, for outlines, glows and
+    /// shadows. Each channel is 128 at its distance's 0 and 128 / spread
+    /// more for each pixel inside, less outside, held within 0 and 255.
+    /// The image is placed and sized as muiRenderGlyphField places it, and
+    /// overlapping contours are their union.
+    ///
+    /// @param service    The service.
+    /// @param font       A font key, as a glyph run carries; 0 for the
+    ///                   default font.
+    /// @param glyph      A glyph id of the font.
+    /// @param pixelSize  The em in pixels of the image, from 1/64 to
+    ///                   MUI_MAX_GLYPH_PIXEL_SIZE.
+    /// @param spread     How far the field reaches past the outline, from
+    ///                   MUI_MIN_FIELD_SPREAD to MUI_MAX_FIELD_SPREAD
+    ///                   pixels.
+    /// @param imageOut   Receives the image's place and size, also when
+    ///                   pixels hold too few bytes.
+    /// @param pixels     Receives width * height * 4 bytes, red, green, blue
+    ///                   and alpha a pixel; may be NULL when capacity is 0.
+    /// @param capacity   How many bytes pixels holds.
+    /// @return As muiRenderGlyphField.
+    /// @par Thread safety
+    /// Safe from any thread; the service is used by one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiRenderGlyphMultiField(
+        muiTextService* service, uint64_t font, uint32_t glyph, float pixelSize, uint32_t spread,
+        muiGlyphImage* imageOut, unsigned char* pixels, size_t capacity);
 
 #ifdef __cplusplus
 }

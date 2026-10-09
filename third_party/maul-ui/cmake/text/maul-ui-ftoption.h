@@ -23,5 +23,10 @@
 #undef FT_CONFIG_OPTION_INCREMENTAL
 #undef FT_CONFIG_OPTION_SVG
 #undef TT_CONFIG_OPTION_BDF
+// Glyphs are always loaded unhinted (FT_LOAD_NO_HINTING): distance fields
+// and outlines are drawn at any scale, so the TrueType bytecode
+// interpreter that hints them is never run.
+#undef TT_CONFIG_OPTION_BYTECODE_INTERPRETER
+#undef TT_CONFIG_OPTION_SUBPIXEL_HINTING
 
 #endif // MAUL_UI_FTOPTION_H
