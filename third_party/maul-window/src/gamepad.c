@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The gamepad component's functions: listing, facts, state and rumble.
+// The gamepad component's functions: listing, facts, state, rumble and
+// motion.
 
 #include "maul-window/gamepad.h"
 
@@ -103,4 +104,73 @@ mwinResult mwinSetGamepadRumble(mwinContext* context, mwinGamepadId gamepad, flo
         return mwin_errorUnsupported;
     }
     return context->backend->rumble(context, (uint32_t)slot, low, high, durationMs);
+}
+
+mwinResult mwinSetGamepadTriggerRumble(mwinContext* context, mwinGamepadId gamepad, float left,
+                                       float right, uint32_t durationMs)
+{
+    if (context == nullptr || !IsStrength(left) || !IsStrength(right))
+    {
+        return mwinMisuse(context);
+    }
+    int32_t slot = mwinFindGamepad(context, gamepad);
+    if (slot < 0)
+    {
+        return mwin_errorStale;
+    }
+    if ((context->gamepads[slot].info.capabilities & mwin_padTriggerRumble) == 0 ||
+        context->backend->triggerRumble == nullptr)
+    {
+        return mwin_errorUnsupported;
+    }
+    return context->backend->triggerRumble(context, (uint32_t)slot, left, right, durationMs);
+}
+
+mwinResult mwinSetGamepadMotion(mwinContext* context, mwinGamepadId gamepad, bool enabled)
+{
+    if (context == nullptr)
+    {
+        return mwinMisuse(context);
+    }
+    int32_t slot = mwinFindGamepad(context, gamepad);
+    if (slot < 0)
+    {
+        return mwin_errorStale;
+    }
+    mwinGamepad* pad = &context->gamepads[slot];
+    if ((pad->info.capabilities & mwin_padMotion) == 0 || context->backend->setMotion == nullptr)
+    {
+        return mwin_errorUnsupported;
+    }
+    mwinResult status = context->backend->setMotion(context, (uint32_t)slot, enabled);
+    if (status == mwin_success)
+    {
+        pad->motionOn = enabled;
+        pad->motion = (mwinGamepadMotion){0};
+    }
+    return status;
+}
+
+mwinResult mwinGetGamepadMotion(mwinContext* context, mwinGamepadId gamepad,
+                                mwinGamepadMotion* motionOut)
+{
+    if (context == nullptr || motionOut == nullptr)
+    {
+        return mwinMisuse(context);
+    }
+    int32_t slot = mwinFindGamepad(context, gamepad);
+    if (slot < 0)
+    {
+        return mwin_errorStale;
+    }
+    mwinGamepad* pad = &context->gamepads[slot];
+    if ((pad->info.capabilities & mwin_padMotion) == 0)
+    {
+        return mwin_errorUnsupported;
+    }
+    *motionOut = pad->motion;
+    pad->motion.rotation[0] = 0.0f;
+    pad->motion.rotation[1] = 0.0f;
+    pad->motion.rotation[2] = 0.0f;
+    return mwin_success;
 }

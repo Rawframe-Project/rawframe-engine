@@ -7,6 +7,7 @@
 
 enable_language(OBJC)
 set(MWIN_MACOS_SOURCES
+    src/apple_clipboard.m
     src/apple_locale.m
     src/apple_text.m
     src/backend_macos.m

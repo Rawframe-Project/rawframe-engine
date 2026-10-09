@@ -11,6 +11,7 @@
 #include "allocator.h"
 #include "backend.h"
 #include "core.h"
+#include "key_reach.h"
 #include "x11.h"
 #include "x11_api.h"
 #include "x11_clipboard.h"
@@ -18,12 +19,10 @@
 #include "x11_drop.h"
 #include "x11_input.h"
 #include "x11_output.h"
+#include "x11_resources.h"
 #include "x11_window.h"
 
 #include <string.h>
-
-// The pixels per inch of a scale of 1.
-#define BASE_DPI 96.0f
 
 static const char* const s_atomNames[MWIN_X11_ATOMS] = {
     "WM_PROTOCOLS",
@@ -67,6 +66,14 @@ static const char* const s_atomNames[MWIN_X11_ATOMS] = {
     "_NET_WM_WINDOW_TYPE_POPUP_MENU",
     "_NET_WM_WINDOW_TYPE_TOOLTIP",
     "_NET_WM_MOVERESIZE",
+    "EDID",
+    "vrr_capable",
+    "Abs Pressure",
+    "Abs Tilt X",
+    "Abs Tilt Y",
+    "STYLUS",
+    "ERASER",
+    "TABLET",
 };
 
 static mwinX11Platform* PlatformOf(const mwinContext* context)
@@ -122,79 +129,53 @@ static bool InternAtoms(mwinX11Platform* platform)
     return interned;
 }
 
-// A property of the root window, or NULL; the caller releases it.
-static xcb_get_property_reply_t* RootProperty(const mwinX11Platform* platform, xcb_atom_t property,
-                                              xcb_atom_t type, uint32_t longs)
+// A property of a window, or NULL; the caller releases it.
+static xcb_get_property_reply_t* WindowProperty(const mwinX11Platform* platform,
+                                                xcb_window_t window, xcb_atom_t property,
+                                                xcb_atom_t type, uint32_t longs)
 {
     const mwinX11Api* api = &platform->api;
     return api->getPropertyReply(
         platform->connection,
-        api->getProperty(platform->connection, 0, platform->screen->root, property, type, 0, longs),
-        nullptr);
-}
-
-// The number after "Xft.dpi:" in a resource string, or 0.
-static float ParseDpi(const char* text, size_t length)
-{
-    static const char key[] = "Xft.dpi:";
-    size_t keyLength = sizeof(key) - 1;
-    for (size_t at = 0; at + keyLength <= length; at++)
-    {
-        if ((at > 0 && text[at - 1] != '\n') || memcmp(text + at, key, keyLength) != 0)
-        {
-            continue;
-        }
-        size_t i = at + keyLength;
-        while (i < length && (text[i] == ' ' || text[i] == '\t'))
-        {
-            i++;
-        }
-        float value = 0.0f;
-        // The weight of the next fraction digit, 0 before the point.
-        float fraction = 0.0f;
-        for (; i < length && ((text[i] >= '0' && text[i] <= '9') || text[i] == '.'); i++)
-        {
-            if (text[i] == '.')
-            {
-                if (fraction > 0.0f)
-                {
-                    break;
-                }
-                fraction = 0.1f;
-                continue;
-            }
-            float digit = (float)(text[i] - '0');
-            value = fraction > 0.0f ? value + digit * fraction : value * 10.0f + digit;
-            fraction /= 10.0f;
-        }
-        return value;
-    }
-    return 0.0f;
+        api->getProperty(platform->connection, 0, window, property, type, 0, longs), nullptr);
 }
 
 // The scale desktops set through Xft.dpi, 1 where it is not set.
 static float ReadScale(const mwinX11Platform* platform)
 {
-    xcb_get_property_reply_t* reply =
-        RootProperty(platform, XCB_ATOM_RESOURCE_MANAGER, XCB_ATOM_STRING, 16384);
-    float dpi = 0.0f;
+    xcb_get_property_reply_t* reply = WindowProperty(
+        platform, platform->screen->root, XCB_ATOM_RESOURCE_MANAGER, XCB_ATOM_STRING, 16384);
+    float scale = 1.0f;
     if (reply != nullptr)
     {
-        dpi = ParseDpi(platform->api.getPropertyValue(reply),
-                       (size_t)platform->api.getPropertyValueLength(reply));
+        scale = mwinX11ScaleOfResources(platform->api.getPropertyValue(reply),
+                                        (size_t)platform->api.getPropertyValueLength(reply));
         mwinReleaseSystemMemory(reply);
     }
-    return dpi >= BASE_DPI / 4.0f && dpi <= BASE_DPI * 8.0f ? dpi / BASE_DPI : 1.0f;
+    return scale;
 }
 
-// Whether an EWMH window manager runs: the root names its check window.
+// The check window a window names, 0 for none.
+static xcb_window_t CheckWindow(const mwinX11Platform* platform, xcb_window_t window)
+{
+    xcb_get_property_reply_t* reply = WindowProperty(
+        platform, window, platform->atoms[mwin_atomNetSupportingWmCheck], XCB_ATOM_WINDOW, 1);
+    xcb_window_t check = 0;
+    if (reply != nullptr && platform->api.getPropertyValueLength(reply) == sizeof(check))
+    {
+        memcpy(&check, platform->api.getPropertyValue(reply), sizeof(check));
+    }
+    mwinReleaseSystemMemory(reply);
+    return check;
+}
+
+// Whether an EWMH window manager runs: the root names its check window,
+// which names itself. A window manager that quit leaves the root's
+// property behind, naming a window gone.
 static bool HasWindowManager(const mwinX11Platform* platform)
 {
-    xcb_get_property_reply_t* reply =
-        RootProperty(platform, platform->atoms[mwin_atomNetSupportingWmCheck], XCB_ATOM_WINDOW, 1);
-    bool found = reply != nullptr && platform->api.getPropertyValueLength(reply) >= 4;
-    mwinReleaseSystemMemory(reply);
-    return found;
+    xcb_window_t check = CheckWindow(platform, platform->screen->root);
+    return check != 0 && CheckWindow(platform, check) == check;
 }
 
 // Asks for RandR 1.5 and its screen change events.
@@ -222,7 +203,14 @@ static void StartRandr(mwinX11Platform* platform)
     platform->randrEvent = extension->first_event;
     api->randrSelectInput(platform->connection, platform->screen->root,
                           XCB_RANDR_NOTIFY_MASK_SCREEN_CHANGE | XCB_RANDR_NOTIFY_MASK_CRTC_CHANGE |
-                              XCB_RANDR_NOTIFY_MASK_OUTPUT_CHANGE);
+                              XCB_RANDR_NOTIFY_MASK_OUTPUT_CHANGE |
+                              XCB_RANDR_NOTIFY_MASK_OUTPUT_PROPERTY);
+    // A monitor set or deleted (xrandr --setmonitor, a desktop splitting
+    // a wide display) changes no output: the server tells it only as the
+    // root window's ConfigureNotify.
+    uint32_t mask = XCB_EVENT_MASK_STRUCTURE_NOTIFY;
+    api->changeWindowAttributes(platform->connection, platform->screen->root, XCB_CW_EVENT_MASK,
+                                &mask);
 }
 
 // Connects to the display and learns what the backend needs of it.
@@ -280,6 +268,7 @@ static void Stop(mwinContext* context)
         api->disconnect(platform->connection);
     }
     mwinX11StopKeyboard(platform);
+    mwinImeStop(&platform->ime);
     mwinLinuxServicesStop(&platform->services);
 #ifdef MAUL_WINDOW_GAMEPAD
     mwinLinuxPadsStop(&platform->pads);
@@ -311,8 +300,10 @@ static mwinResult Start(mwinContext* context)
     platform->context = context;
     platform->scale = 1.0f;
     platform->pointer.focus = -1;
+    platform->keyboard.focus = -1;
     platform->drag.slot = -1;
     mwinLinuxServicesStart(&platform->services, context);
+    mwinImeStart(&platform->ime, context, &platform->services.bus);
     context->backendData = platform;
     mwinResult status = Connect(platform);
 #ifdef MAUL_WINDOW_GAMEPAD
@@ -330,12 +321,18 @@ static mwinResult Start(mwinContext* context)
 
 static void Dispatch(mwinX11Platform* platform, const xcb_generic_event_t* event)
 {
+    uint8_t type = event->response_type & 0x7F;
+    if (type == XCB_CONFIGURE_NOTIFY &&
+        ((const xcb_configure_notify_event_t*)event)->window == platform->screen->root)
+    {
+        mwinX11RefreshMonitors(platform);
+        return;
+    }
     if (mwinX11HandleClipboardEvent(platform, event) || mwinX11HandleDropEvent(platform, event) ||
         mwinX11HandleWindowEvent(platform, event) || mwinX11HandleInputEvent(platform, event))
     {
         return;
     }
-    uint8_t type = event->response_type & 0x7F;
     if (platform->randrEvent != 0 &&
         (type == platform->randrEvent + XCB_RANDR_SCREEN_CHANGE_NOTIFY ||
          type == platform->randrEvent + XCB_RANDR_NOTIFY))
@@ -360,6 +357,7 @@ static void Pump(mwinContext* context)
     mwinX11CheckClipboard(platform, mwinMonotonicNow());
     mwinX11CheckDrop(platform, mwinMonotonicNow());
     mwinLinuxServicesPump(&platform->services, mwinMonotonicNow(), mwinWantsAwake(context));
+    mwinImePump(&platform->ime, mwinMonotonicNow());
 #ifdef MAUL_WINDOW_GAMEPAD
     mwinLinuxPadsPump(&platform->pads);
 #endif
@@ -417,7 +415,23 @@ static mwinResult Rumble(mwinContext* context, uint32_t slot, float low, float h
 }
 
 const mwinBackendOps mwinX11Backend = {
-    Start,         Stop, Run,        mwinX11CreateWindow, mwinX11DestroyWindow,
-    mwinX11Submit, Now,  MapKeyCode, KeyboardLayout,      NativeHandles,
+    Start,
+    Stop,
+    Run,
+    mwinX11CreateWindow,
+    mwinX11DestroyWindow,
+    mwinX11Submit,
+    Now,
+    MapKeyCode,
+    KeyboardLayout,
+    NativeHandles,
     Rumble,
+    mwinX11ReleaseCursor,
+    nullptr,
+#ifdef MAUL_WINDOW_GAMEPAD
+    mwinLinuxPadsSetMotion,
+#else
+    nullptr,
+#endif
+    mwinLinuxKeyReach,
 };

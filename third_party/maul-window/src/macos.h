@@ -40,9 +40,11 @@ typedef struct mwinMacWindow
     // whether the pointer is over it.
     uint8_t buttons;
     bool pointerInside;
-    // The cursor asked for.
+    // The cursor asked for: a shape, or a cursor made from images when
+    // cursorImage is live (mwin-0027).
     mwinCursorMode cursorMode;
     mwinCursorShape cursorShape;
+    mwinCursorId cursorImage;
     // Whether the window accepts text, where its caret is, and an input
     // method's marked text (nil when none) with its selection in UTF-16
     // units.
@@ -165,12 +167,14 @@ mwinOutcome mwinMacSetTextInput(mwinMacPlatform* platform, uint32_t slot, bool e
                                 mwinRect caret);
 
 // The cursor a window shows over its view (macos_cursor.m); a cursor
-// mode or shape request's outcome; capturing the cursor while the window
-// is the key window, or letting it go; letting every cursor go at the
-// stop.
+// mode, shape or image request's outcome; the backend's releaseCursor;
+// capturing the cursor while the window is the key window, or letting it
+// go; letting every cursor go at the stop.
 NSCursor* mwinMacCursorOf(mwinMacPlatform* platform, const mwinMacWindow* window);
 mwinOutcome mwinMacSetCursorMode(mwinMacPlatform* platform, uint32_t slot, mwinCursorMode mode);
 mwinOutcome mwinMacSetCursorShape(mwinMacPlatform* platform, uint32_t slot, mwinCursorShape shape);
+mwinOutcome mwinMacSetCursorImage(mwinMacPlatform* platform, uint32_t slot, mwinCursorId cursor);
+void mwinMacReleaseCursor(mwinContext* context, uint32_t slot);
 void mwinMacApplyCapture(mwinMacPlatform* platform, uint32_t slot, bool focused);
 void mwinMacForgetCursors(mwinMacPlatform* platform);
 
@@ -184,6 +188,7 @@ void mwinMacPenProximity(mwinMacPlatform* platform, NSEvent* event);
 // each pump (macos_services.m).
 mwinOutcome mwinMacWriteClipboard(const mwinMacPlatform* platform);
 mwinOutcome mwinMacReadClipboard(mwinMacPlatform* platform);
+mwinOutcome mwinMacReadClipboardData(mwinMacPlatform* platform, const mwinRequest* request);
 mwinOutcome mwinMacOpenUrl(const mwinRequest* request);
 mwinOutcome mwinMacRevealFile(const mwinRequest* request);
 void mwinMacKeepAwake(mwinMacPlatform* platform, bool wanted);
@@ -229,8 +234,13 @@ bool mwinMacIsMenu(const mwinMacPlatform* platform, uint32_t slot);
 // screen, or of its owner's content for a popup (macos_window.m).
 void mwinMacPlace(mwinMacPlatform* platform, uint32_t slot, mwinPosition position);
 
-// An icon request's outcome: the application's icon (macos_icon.m).
+struct mwinIconCopyImage;
+
+// An icon request's outcome: the application's icon (macos_icon.m);
+// and an image of an icon's or a cursor's as a representation of a
+// size in points, autoreleased, or nil.
 mwinOutcome mwinMacSetIcon(const mwinRequest* request);
+NSBitmapImageRep* mwinMacImageRep(const struct mwinIconCopyImage* image, NSSize size);
 
 // Window chrome (macos_chrome.m): the style mask of a style, and a
 // window given a style; a press, a drag and a release that the hit

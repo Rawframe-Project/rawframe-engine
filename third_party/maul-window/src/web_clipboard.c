@@ -6,6 +6,7 @@
 #include "web_clipboard.h"
 
 #include "allocator.h"
+#include "clipboard_data.h"
 #include "web_js.h"
 
 EM_JS_DEPS(mwin_web_clipboard, "$UTF8ToString");
@@ -28,7 +29,8 @@ EM_JS(bool, mwinPageClipboardWrite, (const mwinContext* context, uint32_t slot, 
     return true;
 });
 
-// The text read waits as UTF-8, a lone surrogate encoded as U+FFFD.
+// The text read waits as UTF-8, a lone surrogate encoded as U+FFFD,
+// with the bytes of data reads in the order their records come.
 EM_JS(bool, mwinPageClipboardRead, (const mwinContext* context, uint32_t slot, uint32_t generation), {
     const clipboard = navigator.clipboard;
     if (!clipboard || !clipboard.readText) {
@@ -42,6 +44,64 @@ EM_JS(bool, mwinPageClipboardRead, (const mwinContext* context, uint32_t slot, u
         state.clipboardTexts.push(new TextEncoder().encode(text));
         answer(0);
     }, error => answer(refused(error)));
+    return true;
+});
+
+// Data goes as a ClipboardItem of Blobs: the three types every browser
+// takes as they are, any other as a web custom format, its type after
+// "web ". Each item is staged, then the staged ones written together.
+// Records of data carry x 1.
+EM_JS(void, mwinPageClipboardStage, (const mwinContext* context, const char* mime,
+                         uint32_t mimeLength, const uint8_t* bytes, uint32_t length), {
+    const state = Module.mwinWeb.get(context);
+    const type = UTF8ToString(mime, mimeLength);
+    const lower = type.toLowerCase();
+    const name = ['text/plain', 'text/html', 'image/png'].includes(lower) ? lower : 'web ' + type;
+    state.clipboardStaged = state.clipboardStaged || {};
+    state.clipboardStaged[name] = new Blob([HEAPU8.slice(bytes, bytes + length)], {type: name});
+});
+
+EM_JS(bool, mwinPageClipboardWriteStaged, (const mwinContext* context, uint32_t slot,
+                               uint32_t generation), {
+    const state = Module.mwinWeb.get(context);
+    const staged = state.clipboardStaged || {};
+    state.clipboardStaged = {};
+    const clipboard = navigator.clipboard;
+    if (!clipboard || !clipboard.write || typeof ClipboardItem === 'undefined') {
+        return false;
+    }
+    const refused = error => (error && error.name === 'NotAllowedError' ? 2 : 5);
+    const answer = code => state.push(24, slot, code, 1, 0, 0, 0, 0, 0, generation);
+    Promise.resolve().then(() => clipboard.write([new ClipboardItem(staged)]))
+        .then(() => answer(0), error => answer(refused(error)));
+    return true;
+});
+
+// The data of a type waits as bytes; a clipboard without it fails.
+EM_JS(bool, mwinPageClipboardReadData, (const mwinContext* context, uint32_t slot,
+                            uint32_t generation, const char* mime, uint32_t mimeLength), {
+    const clipboard = navigator.clipboard;
+    if (!clipboard || !clipboard.read) {
+        return false;
+    }
+    const state = Module.mwinWeb.get(context);
+    state.clipboardTexts = state.clipboardTexts || [];
+    const type = UTF8ToString(mime, mimeLength);
+    const lower = type.toLowerCase();
+    const name = ['text/plain', 'text/html', 'image/png'].includes(lower) ? lower : 'web ' + type;
+    const refused = error => (error && error.name === 'NotAllowedError' ? 2 : 5);
+    const answer = code => state.push(25, slot, code, 1, 0, 0, 0, 0, 0, generation);
+    clipboard.read().then(items => {
+        const item = items.find(each => each.types.includes(name));
+        if (!item) {
+            answer(5);
+            return;
+        }
+        return item.getType(name).then(blob => blob.arrayBuffer()).then(buffer => {
+            state.clipboardTexts.push(new Uint8Array(buffer));
+            answer(0);
+        });
+    }).catch(error => answer(refused(error)));
     return true;
 });
 
@@ -73,8 +133,35 @@ int mwinWebReadClipboard(mwinContext* context, uint32_t slot)
                : mwin_outcomeUnsupported;
 }
 
-// Takes a done read's text into the context: the outcome.
-static mwinOutcome Take(mwinContext* context)
+int mwinWebWriteClipboardData(mwinContext* context, uint32_t slot)
+{
+    const mwinClipboardCopy* copy = context->clipboardData;
+    if (mwinOffersClipboardText(context))
+    {
+        mwinPageClipboardStage(context, "text/plain", 10, (const uint8_t*)context->clipboardOffer,
+                               context->clipboardOfferLength);
+    }
+    for (uint32_t i = 0; copy != nullptr && i < copy->count; i++)
+    {
+        const mwinClipboardDataItem* item = &copy->items[i];
+        mwinPageClipboardStage(context, item->mime, item->mimeLength,
+                               mwinClipboardBytesOf(copy, item), item->length);
+    }
+    return mwinPageClipboardWriteStaged(context, slot, context->windows[slot].generation)
+               ? -1
+               : mwin_outcomeUnsupported;
+}
+
+int mwinWebReadClipboardData(mwinContext* context, uint32_t slot, const mwinRequest* request)
+{
+    return mwinPageClipboardReadData(context, slot, context->windows[slot].generation,
+                                     request->value.text.bytes, request->value.text.length)
+               ? -1
+               : mwin_outcomeUnsupported;
+}
+
+// Takes a done read's text or data into the context: the outcome.
+static mwinOutcome Take(mwinContext* context, bool data)
 {
     uint32_t length = mwinPageClipboardWaiting(context);
     char* bytes = length > 0 && length <= context->limits.clipboardBytes
@@ -89,7 +176,8 @@ static mwinOutcome Take(mwinContext* context)
     {
         return mwin_outcomeFailed;
     }
-    mwinOutcome outcome = mwinTakeClipboardText(context, bytes, length);
+    mwinOutcome outcome = data ? mwinTakeClipboardData(context, bytes, length)
+                               : mwinTakeClipboardText(context, bytes, length);
     if (bytes != nullptr)
     {
         mwinRelease(&context->allocator, bytes, length, 1);
@@ -101,11 +189,12 @@ void mwinWebHandleClipboardRecord(mwinWebPlatform* platform, const mwinWebRecord
 {
     mwinContext* context = platform->context;
     bool read = record->kind == mwin_webClipboardRead;
+    bool data = record->x != 0.0f;
     mwinOutcome outcome = (mwinOutcome)record->code;
-    // A done read's text is taken even when its window went.
+    // A done read's bytes are taken even when its window went.
     if (read && outcome == mwin_outcomeDone)
     {
-        outcome = Take(context);
+        outcome = Take(context, data);
     }
     uint32_t slot = (uint32_t)record->slot;
     const mwinWindow* window = &context->windows[slot];
@@ -113,9 +202,12 @@ void mwinWebHandleClipboardRecord(mwinWebPlatform* platform, const mwinWebRecord
     {
         return;
     }
+    static const mwinRequestKind kinds[2][2] = {
+        {mwin_requestClipboardWrite, mwin_requestClipboardWriteData},
+        {mwin_requestClipboardRead, mwin_requestClipboardReadData},
+    };
     int32_t request =
-        mwinFindActiveRequest(window, context->limits.requestsPerWindow,
-                              read ? mwin_requestClipboardRead : mwin_requestClipboardWrite);
+        mwinFindActiveRequest(window, context->limits.requestsPerWindow, kinds[read][data]);
     if (request >= 0)
     {
         mwinComplete(context, slot, (uint32_t)request, outcome);

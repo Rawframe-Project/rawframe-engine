@@ -107,7 +107,8 @@ static mwinResult RequestText(mwinContext* context, mwinWindowId window, mwinReq
 
 void mwinReleaseRequestText(const mwinContext* context, mwinRequest* request)
 {
-    bool text = request->kind == mwin_requestOpenUrl || request->kind == mwin_requestRevealFile;
+    bool text = request->kind == mwin_requestOpenUrl || request->kind == mwin_requestRevealFile ||
+                request->kind == mwin_requestClipboardReadData;
     if (text && request->value.text.bytes != nullptr)
     {
         mwinRelease(&context->allocator, request->value.text.bytes, request->value.text.length + 1u,

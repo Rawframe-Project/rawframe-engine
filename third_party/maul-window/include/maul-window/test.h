@@ -12,6 +12,7 @@
 #define MAUL_WINDOW_TEST_H
 
 #include "maul-window/event.h"
+#include "maul-window/input.h"
 #include "maul-window/monitor.h"
 #include "maul-window/system.h"
 
@@ -52,7 +53,8 @@ extern "C"
     /// window, focus moved, the scale changed, a key went down, text was
     /// typed, the application is suspending. The report reaches the stream
     /// at the next pump, stamped with the time of this call; text is copied
-    /// from the record's pointer. The pump runs a frame at once after a
+    /// from the record's pointer, and a composition's offsets are fitted
+    /// to its text as a platform's are. The pump runs a frame at once after a
     /// lifecycle or surface report, as a platform that waits for the
     /// program would make it; a lifecycle report needs no window.
     /// Completions, input state resets and the created and destroyed
@@ -268,6 +270,74 @@ extern "C"
                                                          float* highOut, uint32_t* durationMsOut,
                                                          uint32_t* countOut);
 
+    /// Reads the last trigger rumble a gamepad of the test platform was
+    /// given.
+    ///
+    /// @param context        A context of the test backend.
+    /// @param gamepad        The gamepad.
+    /// @param leftOut        Receives the left trigger's strength.
+    /// @param rightOut       Receives the right trigger's strength.
+    /// @param durationMsOut  Receives the duration.
+    /// @param countOut       Receives how many trigger rumbles it was
+    ///                       given.
+    /// @return As mwinTestChangeGamepad.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinTestGetTriggerRumble(const mwinContext* context,
+                                                                mwinGamepadId gamepad,
+                                                                float* leftOut, float* rightOut,
+                                                                uint32_t* durationMsOut,
+                                                                uint32_t* countOut);
+
+    /// Reads whether the test platform was told to turn a gamepad's motion
+    /// sensors on.
+    ///
+    /// @param context  A context of the test backend.
+    /// @param gamepad  The gamepad.
+    /// @param onOut    Receives true while they are on.
+    /// @return As mwinTestChangeGamepad.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinTestGetMotionOn(const mwinContext* context,
+                                                           mwinGamepadId gamepad, bool* onOut);
+
+    /// Gives a gamepad's motion sensors a sample, at once, as the platform
+    /// would; kept only while they are on.
+    ///
+    /// @param context       A context of the test backend.
+    /// @param gamepad       The gamepad.
+    /// @param acceleration  In m/s^2, gravity included.
+    /// @param rotationRate  In radians per second.
+    /// @param timeNs        When it was taken, on any steady clock.
+    /// @return As mwinTestRemoveGamepad, with `mwin_errorInvalid` for a
+    ///         NULL array.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinTestGamepadMotion(mwinContext* context,
+                                                             mwinGamepadId gamepad,
+                                                             const float acceleration[3],
+                                                             const float rotationRate[3],
+                                                             uint64_t timeNs);
+
+    /// Sets what mwinGetKeyReach answers for a chord on the test platform,
+    /// which answers mwin_keyReachDelivered for every chord until set.
+    /// Setting mwin_keyReachDelivered forgets the chord.
+    ///
+    /// @param context    A context of the test backend.
+    /// @param code       The key.
+    /// @param modifiers  The modifiers held with it; the lock bits are
+    ///                   ignored.
+    /// @param reach      The answer.
+    /// @return `mwin_success`; `mwin_errorCapacity` when 32 chords are
+    ///         already set; `mwin_errorUnsupported` for a context of
+    ///         another backend; `mwin_errorInvalid` for a NULL context, a
+    ///         code that is not a key or an answer out of range.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinTestSetKeyReach(mwinContext* context, mwinKeyCode code,
+                                                           mwinModifiers modifiers,
+                                                           mwinKeyReach reach);
+
     /// Puts bytes on the test platform's clipboard, at once, as another
     /// program would: they need not be UTF-8.
     ///
@@ -312,6 +382,65 @@ extern "C"
     MWIN_NODISCARD MWIN_API mwinResult mwinTestGetClipboard(const mwinContext* context,
                                                             char* buffer, size_t capacity,
                                                             size_t* lengthOut);
+
+    /// Puts data of one MIME type on the test platform's clipboard, at
+    /// once, as another program would: its text goes.
+    ///
+    /// @param context     A context of the test backend.
+    /// @param mime        The type, 1 to MWIN_CLIPBOARD_MIME bytes, taken
+    ///                    as it is.
+    /// @param mimeLength  Its bytes.
+    /// @param bytes       The data. May be NULL when length is 0.
+    /// @param length      Its bytes.
+    /// @return As mwinTestSetClipboard.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinTestSetClipboardData(mwinContext* context,
+                                                                const char* mime, size_t mimeLength,
+                                                                const void* bytes, size_t length);
+
+    /// Reads the test platform's clipboard data of a MIME type, as the
+    /// program last wrote it or mwinTestSetClipboardData put it there.
+    ///
+    /// @param context     A context of the test backend.
+    /// @param mime        The type, as written.
+    /// @param mimeLength  Its bytes.
+    /// @param buffer      Receives the bytes. May be NULL when capacity is
+    ///                    0.
+    /// @param capacity    The bytes buffer holds.
+    /// @param lengthOut   Receives their number.
+    /// @return As mwinTestGetClipboard, with `mwin_errorInvalid` for a
+    ///         type the clipboard does not hold.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinTestGetClipboardData(const mwinContext* context,
+                                                                const char* mime, size_t mimeLength,
+                                                                void* buffer, size_t capacity,
+                                                                size_t* lengthOut);
+
+    /// Puts bytes in the test platform's primary selection, at once, as
+    /// another program would: they need not be UTF-8.
+    ///
+    /// @param context  A context of the test backend.
+    /// @param bytes    The bytes. May be NULL when length is 0.
+    /// @param length   Their number.
+    /// @return As mwinTestSetClipboard.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinTestSetPrimary(mwinContext* context, const char* bytes,
+                                                          size_t length);
+
+    /// Reads the test platform's primary selection as bytes.
+    ///
+    /// @param context    A context of the test backend.
+    /// @param buffer     Receives the bytes. May be NULL when capacity is 0.
+    /// @param capacity   The bytes buffer holds.
+    /// @param lengthOut  Receives their number.
+    /// @return As mwinTestGetClipboard.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinTestGetPrimary(const mwinContext* context, char* buffer,
+                                                          size_t capacity, size_t* lengthOut);
 
     /// Drops files and text on a window of the test platform: gathered at
     /// once, delivered in order with the reports at the next pump. The
@@ -400,6 +529,61 @@ extern "C"
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinTestGetIcon(const mwinContext* context,
                                                        uint32_t* countOut, uint64_t* checksumOut);
+
+    /// Reads the cursor made from images a window shows, with the image it
+    /// took for the test backend's scale (mwin-0027).
+    ///
+    /// @param context    A context of the test backend.
+    /// @param window     The window.
+    /// @param cursorOut  Receives the cursor; a zero id while the window
+    ///                   shows a shape.
+    /// @param imageOut   Receives the image's index. May be NULL.
+    /// @return `mwin_success`; `mwin_errorStale` for a window that no
+    ///         longer exists; `mwin_errorUnsupported` for a context of
+    ///         another backend; `mwin_errorInvalid` for a NULL argument.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinTestGetCursor(const mwinContext* context,
+                                                         mwinWindowId window,
+                                                         mwinCursorId* cursorOut,
+                                                         uint32_t* imageOut);
+
+    /// Reads what a window last had carried out of its on-screen keyboard
+    /// requests: whether the keyboard shows, and the purpose asked for
+    /// (mwin-0038). Hidden with mwin_purposeText before any.
+    ///
+    /// @param context     A context of the test backend.
+    /// @param window      The window.
+    /// @param visibleOut  Receives whether the keyboard shows.
+    /// @param purposeOut  Receives the purpose of the text field.
+    /// @return `mwin_success`; `mwin_errorStale` for a window that no
+    ///         longer exists; `mwin_errorUnsupported` for a context of
+    ///         another backend; `mwin_errorInvalid` for a NULL argument.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinTestGetVirtualKeyboard(const mwinContext* context,
+                                                                  mwinWindowId window,
+                                                                  bool* visibleOut,
+                                                                  mwinInputPurpose* purposeOut);
+
+    /// Reads what a window last had carried out of its text input
+    /// requests: whether it accepts text, and the caret it gave, which a
+    /// platform places candidate windows by (mwin-0038). Not accepting,
+    /// with an empty caret, before any.
+    ///
+    /// @param context     A context of the test backend.
+    /// @param window      The window.
+    /// @param enabledOut  Receives whether the window accepts text.
+    /// @param caretOut    Receives the caret, in the window's logical
+    ///                    units.
+    /// @return `mwin_success`; `mwin_errorStale` for a window that no
+    ///         longer exists; `mwin_errorUnsupported` for a context of
+    ///         another backend; `mwin_errorInvalid` for a NULL argument.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinTestGetTextInput(const mwinContext* context,
+                                                            mwinWindowId window, bool* enabledOut,
+                                                            mwinRect* caretOut);
 
     /// Plays an accessibility client asking the window for its tree, as a
     /// screen reader would: the first time, mwin_eventAccessibilityRequested

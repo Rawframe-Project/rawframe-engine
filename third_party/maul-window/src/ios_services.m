@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The iOS clipboard and services (ios.h): text on the general
-// pasteboard, written and read at once while the request is submitted
+// The iOS clipboard and services (ios.h): text, and data by MIME type as
+// UTType names it (mwin-0029), on the general pasteboard, written and
+// read at once while the request is submitted
 // (reading what another application put there, iOS may ask the user
 // first, and the answer waits for them; a refusal reads as no text);
 // addresses opened by UIKit, answered when it says whether it could;
@@ -11,23 +12,54 @@
 // file in.
 
 #include "answer.h"
+#include "apple_clipboard.h"
+#include "clipboard_data.h"
 #include "ios.h"
 
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <string.h>
 
 mwinOutcome mwinIOSWriteClipboard(const mwinIOSPlatform* platform)
 {
     const mwinContext* context = platform->context;
-    NSString* text = [[NSString alloc] initWithBytes:context->clipboardOffer
-                                              length:context->clipboardOfferLength
-                                            encoding:NSUTF8StringEncoding];
-    if (text == nil)
+    const mwinClipboardCopy* copy = context->clipboardData;
+    NSMutableDictionary* entry = [NSMutableDictionary dictionary];
+    if (mwinOffersClipboardText(context))
     {
-        return mwin_outcomeFailed;
+        NSString* text = [[[NSString alloc] initWithBytes:context->clipboardOffer
+                                                   length:context->clipboardOfferLength
+                                                 encoding:NSUTF8StringEncoding] autorelease];
+        if (text == nil)
+        {
+            return mwin_outcomeFailed;
+        }
+        entry[UTTypeUTF8PlainText.identifier] = text;
     }
-    UIPasteboard.generalPasteboard.string = text;
-    [text release];
+    for (uint32_t i = 0; copy != nullptr && i < copy->count; i++)
+    {
+        const mwinClipboardDataItem* item = &copy->items[i];
+        NSString* type = mwinAppleClipboardType(item->mime, item->mimeLength);
+        if (type == nil)
+        {
+            return mwin_outcomeFailed;
+        }
+        entry[type] = [NSData dataWithBytes:mwinClipboardBytesOf(copy, item) length:item->length];
+    }
+    UIPasteboard.generalPasteboard.items = @[ entry ];
     return mwin_outcomeDone;
+}
+
+mwinOutcome mwinIOSReadClipboardData(mwinIOSPlatform* platform, const mwinRequest* request)
+{
+    UIPasteboard* pasteboard = UIPasteboard.generalPasteboard;
+    NSString* type = mwinAppleClipboardType(request->value.text.bytes, request->value.text.length);
+    // Only a type the pasteboard has is asked for: asking whether it has
+    // one asks nobody.
+    NSData* data = type != nil && [pasteboard containsPasteboardTypes:@[ type ]]
+                       ? [pasteboard dataForPasteboardType:type]
+                       : nil;
+    return data != nil ? mwinTakeClipboardData(platform->context, data.bytes, data.length)
+                       : mwin_outcomeFailed;
 }
 
 mwinOutcome mwinIOSReadClipboard(mwinIOSPlatform* platform)

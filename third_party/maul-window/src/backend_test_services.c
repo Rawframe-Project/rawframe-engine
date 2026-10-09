@@ -7,6 +7,7 @@
 #include "accessibility.h"
 #include "allocator.h"
 #include "backend_test.h"
+#include "clipboard_data.h"
 #include "dialog.h"
 #include "icon.h"
 
@@ -15,7 +16,8 @@
 #include <stdio.h>
 #include <string.h>
 
-void mwinTestReleaseClipboard(const mwinContext* context, mwinTestPlatform* platform)
+// Lets go of the platform's text, or its data.
+static void ReleaseText(const mwinContext* context, mwinTestPlatform* platform)
 {
     if (platform->clipboard != nullptr)
     {
@@ -24,6 +26,28 @@ void mwinTestReleaseClipboard(const mwinContext* context, mwinTestPlatform* plat
     }
     platform->clipboard = nullptr;
     platform->clipboardBytes = 0;
+}
+
+static void ReleaseData(const mwinContext* context, mwinTestPlatform* platform)
+{
+    if (platform->data != nullptr)
+    {
+        mwinRelease(&context->allocator, platform->data, platform->data->size,
+                    alignof(mwinClipboardCopy));
+    }
+    platform->data = nullptr;
+}
+
+void mwinTestReleaseClipboard(const mwinContext* context, mwinTestPlatform* platform)
+{
+    ReleaseText(context, platform);
+    ReleaseData(context, platform);
+    if (platform->primary != nullptr)
+    {
+        mwinRelease(&context->allocator, platform->primary, platform->primaryBytes, 1);
+    }
+    platform->primary = nullptr;
+    platform->primaryBytes = 0;
 }
 
 // Puts bytes on the platform's clipboard; false when there is no room.
@@ -39,25 +63,109 @@ static bool SetClipboard(const mwinContext* context, const void* data, size_t by
     {
         memcpy(copy, data, bytes);
     }
-    mwinTestReleaseClipboard(context, platform);
+    ReleaseText(context, platform);
     platform->clipboard = copy;
     platform->clipboardBytes = bytes;
     platform->utf16 = utf16;
     return true;
 }
 
-mwinOutcome mwinTestUseClipboard(mwinContext* context, mwinRequestKind kind)
+// Puts a copy of a data block on the platform's clipboard, or none;
+// false when there is no room.
+static bool SetData(const mwinContext* context, const mwinClipboardCopy* data)
+{
+    mwinTestPlatform* platform = mwinTestPlatformOf(context);
+    mwinClipboardCopy* copy =
+        data != nullptr ? mwinAllocate(&context->allocator, data->size, alignof(mwinClipboardCopy))
+                        : nullptr;
+    if (data != nullptr && copy == nullptr)
+    {
+        return false;
+    }
+    if (data != nullptr)
+    {
+        memcpy(copy, data, data->size);
+    }
+    ReleaseData(context, platform);
+    platform->data = copy;
+    return true;
+}
+
+static bool SetPrimary(const mwinContext* context, const char* bytes, size_t length)
+{
+    mwinTestPlatform* platform = mwinTestPlatformOf(context);
+    char* copy = length > 0 ? mwinAllocate(&context->allocator, length, 1) : nullptr;
+    if (length > 0 && copy == nullptr)
+    {
+        return false;
+    }
+    if (length > 0)
+    {
+        memcpy(copy, bytes, length);
+    }
+    if (platform->primary != nullptr)
+    {
+        mwinRelease(&context->allocator, platform->primary, platform->primaryBytes, 1);
+    }
+    platform->primary = copy;
+    platform->primaryBytes = length;
+    return true;
+}
+
+// The platform's item of a type, or NULL.
+static const mwinClipboardDataItem* FindItem(const mwinTestPlatform* platform, const char* mime,
+                                             size_t length)
+{
+    const mwinClipboardCopy* data = platform->data;
+    for (uint32_t i = 0; data != nullptr && i < data->count; i++)
+    {
+        const mwinClipboardDataItem* item = &data->items[i];
+        if (item->mimeLength == length && memcmp(item->mime, mime, length) == 0)
+        {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
+mwinOutcome mwinTestUseClipboard(mwinContext* context, const mwinRequest* request)
 {
     const mwinTestPlatform* platform = mwinTestPlatformOf(context);
-    if (kind == mwin_requestClipboardWrite)
+    bool done = true;
+    switch (request->kind)
     {
-        return SetClipboard(context, context->clipboardOffer, context->clipboardOfferLength, false)
-                   ? mwin_outcomeDone
+    case mwin_requestClipboardWrite:
+        // Text alone: the data goes.
+        done =
+            SetClipboard(context, context->clipboardOffer, context->clipboardOfferLength, false) &&
+            SetData(context, nullptr);
+        break;
+    case mwin_requestClipboardWriteData:
+        done =
+            SetClipboard(context, context->clipboardOffer, context->clipboardOfferLength, false) &&
+            SetData(context, context->clipboardData);
+        break;
+    case mwin_requestClipboardReadData:
+    {
+        const mwinClipboardDataItem* item =
+            FindItem(platform, request->value.text.bytes, request->value.text.length);
+        return item != nullptr
+                   ? mwinTakeClipboardData(context, mwinClipboardBytesOf(platform->data, item),
+                                           item->length)
                    : mwin_outcomeFailed;
     }
-    return platform->utf16
-               ? mwinTakeClipboardUtf16(context, platform->clipboard, platform->clipboardBytes / 2)
-               : mwinTakeClipboardText(context, platform->clipboard, platform->clipboardBytes);
+    case mwin_requestPrimaryWrite:
+        done = SetPrimary(context, context->primaryOffer, context->primaryOfferLength);
+        break;
+    case mwin_requestPrimaryRead:
+        return mwinTakePrimaryText(context, platform->primary, platform->primaryBytes);
+    default:
+        return platform->utf16
+                   ? mwinTakeClipboardUtf16(context, platform->clipboard,
+                                            platform->clipboardBytes / 2)
+                   : mwinTakeClipboardText(context, platform->clipboard, platform->clipboardBytes);
+    }
+    return done ? mwin_outcomeDone : mwin_outcomeFailed;
 }
 
 mwinResult mwinTestSetClipboard(mwinContext* context, const char* bytes, size_t length)
@@ -102,6 +210,99 @@ mwinResult mwinTestGetClipboard(const mwinContext* context, char* buffer, size_t
     if (length > 0 && capacity > 0)
     {
         memcpy(buffer, platform->clipboard, length < capacity ? length : capacity);
+    }
+    *lengthOut = length;
+    return length > capacity ? mwin_errorCapacity : mwin_success;
+}
+
+mwinResult mwinTestSetClipboardData(mwinContext* context, const char* mime, size_t mimeLength,
+                                    const void* bytes, size_t length)
+{
+    if (context == nullptr || mime == nullptr || mimeLength == 0 ||
+        mimeLength > MWIN_CLIPBOARD_MIME || (bytes == nullptr && length != 0))
+    {
+        return mwinMisuse(context);
+    }
+    if (mwinTestPlatformOf(context) == nullptr)
+    {
+        return mwin_errorUnsupported;
+    }
+    size_t size = sizeof(mwinClipboardCopy) + length;
+    mwinClipboardCopy* data = mwinAllocate(&context->allocator, size, alignof(mwinClipboardCopy));
+    if (data == nullptr)
+    {
+        return mwin_errorCapacity;
+    }
+    *data = (mwinClipboardCopy){.size = size, .count = 1};
+    memcpy(data->items[0].mime, mime, mimeLength);
+    data->items[0].mimeLength = (uint32_t)mimeLength;
+    data->items[0].length = (uint32_t)length;
+    if (length > 0)
+    {
+        memcpy(data + 1, bytes, length);
+    }
+    // Another program's copy: the text goes with what was there.
+    bool done = SetClipboard(context, nullptr, 0, false) && SetData(context, data);
+    mwinRelease(&context->allocator, data, size, alignof(mwinClipboardCopy));
+    return done ? mwin_success : mwin_errorCapacity;
+}
+
+mwinResult mwinTestGetClipboardData(const mwinContext* context, const char* mime, size_t mimeLength,
+                                    void* buffer, size_t capacity, size_t* lengthOut)
+{
+    if (context == nullptr || mime == nullptr || lengthOut == nullptr ||
+        (buffer == nullptr && capacity > 0))
+    {
+        return mwinMisuse(context);
+    }
+    const mwinTestPlatform* platform = mwinTestPlatformOf(context);
+    if (platform == nullptr)
+    {
+        return mwin_errorUnsupported;
+    }
+    const mwinClipboardDataItem* item = FindItem(platform, mime, mimeLength);
+    if (item == nullptr)
+    {
+        return mwinMisuse(context);
+    }
+    if (item->length > 0 && capacity > 0)
+    {
+        memcpy(buffer, mwinClipboardBytesOf(platform->data, item),
+               item->length < capacity ? item->length : capacity);
+    }
+    *lengthOut = item->length;
+    return item->length > capacity ? mwin_errorCapacity : mwin_success;
+}
+
+mwinResult mwinTestSetPrimary(mwinContext* context, const char* bytes, size_t length)
+{
+    if (context == nullptr || (bytes == nullptr && length != 0))
+    {
+        return mwinMisuse(context);
+    }
+    if (mwinTestPlatformOf(context) == nullptr)
+    {
+        return mwin_errorUnsupported;
+    }
+    return SetPrimary(context, bytes, length) ? mwin_success : mwin_errorCapacity;
+}
+
+mwinResult mwinTestGetPrimary(const mwinContext* context, char* buffer, size_t capacity,
+                              size_t* lengthOut)
+{
+    if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity > 0))
+    {
+        return mwinMisuse(context);
+    }
+    const mwinTestPlatform* platform = mwinTestPlatformOf(context);
+    if (platform == nullptr)
+    {
+        return mwin_errorUnsupported;
+    }
+    size_t length = platform->primaryBytes;
+    if (length > 0 && capacity > 0)
+    {
+        memcpy(buffer, platform->primary, length < capacity ? length : capacity);
     }
     *lengthOut = length;
     return length > capacity ? mwin_errorCapacity : mwin_success;
@@ -320,5 +521,60 @@ mwinResult mwinTestAskAccessibility(mwinContext* context, mwinWindowId window)
         return mwin_errorStale;
     }
     mwinNoteAccessibilityAsked(context, window.index1 - 1);
+    return mwin_success;
+}
+
+// The modifiers a chord is set and asked with: Shift, Control, Alt, Meta.
+#define CHORD_MODIFIERS (mwin_modShift | mwin_modControl | mwin_modAlt | mwin_modMeta)
+
+mwinKeyReach mwinTestKeyReachOf(const mwinContext* context, mwinKeyCode code,
+                                mwinModifiers modifiers)
+{
+    const mwinTestPlatform* platform = mwinTestPlatformOf(context);
+    for (uint32_t i = 0; i < platform->keyReachCount; i++)
+    {
+        const mwinTestKeyReach* set = &platform->keyReaches[i];
+        if (set->code == code && set->modifiers == (modifiers & CHORD_MODIFIERS))
+        {
+            return set->reach;
+        }
+    }
+    return mwin_keyReachDelivered;
+}
+
+mwinResult mwinTestSetKeyReach(mwinContext* context, mwinKeyCode code, mwinModifiers modifiers,
+                               mwinKeyReach reach)
+{
+    if (context == nullptr || code == mwin_codeUnknown || code > mwin_codeMetaRight ||
+        reach > mwin_keyReachNever)
+    {
+        return mwinMisuse(context);
+    }
+    mwinTestPlatform* platform = mwinTestPlatformOf(context);
+    if (platform == nullptr)
+    {
+        return mwin_errorUnsupported;
+    }
+    uint8_t chord = (uint8_t)(modifiers & CHORD_MODIFIERS);
+    uint32_t found = 0;
+    while (found < platform->keyReachCount && (platform->keyReaches[found].code != code ||
+                                               platform->keyReaches[found].modifiers != chord))
+    {
+        found++;
+    }
+    if (reach == mwin_keyReachDelivered)
+    {
+        if (found < platform->keyReachCount)
+        {
+            platform->keyReaches[found] = platform->keyReaches[--platform->keyReachCount];
+        }
+        return mwin_success;
+    }
+    if (found == MWIN_TEST_KEY_REACHES)
+    {
+        return mwin_errorCapacity;
+    }
+    platform->keyReaches[found] = (mwinTestKeyReach){code, chord, reach};
+    platform->keyReachCount += found == platform->keyReachCount;
     return mwin_success;
 }

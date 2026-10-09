@@ -58,6 +58,9 @@ MWIN_WEB_IMPORT(mwinWebScreen) void mwinWebScreen(float* out);
 // Looks at devicePixelRatio, reporting a change the browser did not.
 MWIN_WEB_IMPORT(mwinWebCheckScale) void mwinWebCheckScale(const mwinContext* context);
 
+// Whether the screen and browser show HDR (dynamic-range: high).
+MWIN_WEB_IMPORT(mwinWebHighDynamicRange) bool mwinWebHighDynamicRange(void);
+
 // The preferred color scheme (an mwinTheme) and reduced motion.
 MWIN_WEB_IMPORT(mwinWebTheme) int mwinWebTheme(void);
 MWIN_WEB_IMPORT(mwinWebReducedMotion) bool mwinWebReducedMotion(void);

@@ -8,6 +8,7 @@
 #ifndef MAUL_WINDOW_SRC_WIN32_ICON_H
 #define MAUL_WINDOW_SRC_WIN32_ICON_H
 
+#include "icon.h"
 #include "win32.h"
 
 // Sets the window's icon from a request's images; none gives back the
@@ -16,5 +17,10 @@ mwinOutcome mwinWin32SetIcon(mwinWin32Window* window, const mwinRequest* request
 
 // Destroys the icons made for a window, once it is gone.
 void mwinWin32ReleaseIcons(mwinWin32Window* window);
+
+// An icon made from an image, or a cursor with its hotspot: NULL when
+// Windows refuses.
+HICON mwinWin32MakeIcon(const mwinIconCopyImage* image, bool cursor, uint32_t hotspotX,
+                        uint32_t hotspotY);
 
 #endif // MAUL_WINDOW_SRC_WIN32_ICON_H

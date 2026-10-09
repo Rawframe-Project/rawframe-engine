@@ -13,13 +13,18 @@
 // the other desktop platforms; iOS gives an application in the
 // background none, and runs no frames there. It needs GameController of
 // macOS 11.3 or iOS 14.5; before it, no pad is found. The motors are
-// CoreHaptics' (apple_rumble.m).
+// CoreHaptics' (apple_rumble.m). Motion is GCMotion's: its handler,
+// called on the main queue, posts each sample, acceleration from g to
+// m/s^2 and both turned into the contract's frame as SDL turns them.
 
 #include "apple_pad.h"
 
 #import <GameController/GameController.h>
 #include <math.h>
 #include <string.h>
+#include <time.h>
+
+#define STANDARD_GRAVITY 9.80665
 
 static int32_t List(void* self, void** pads, uint32_t capacity)
     API_AVAILABLE(macos(11.0), ios(14.0))
@@ -88,13 +93,15 @@ static bool Read(void* self, void* pad, mwinPadReading* reading)
     return true;
 }
 
-static bool Vibrate(void* self, void* pad, float low, float high)
+// The grips' motors; no pad is granted the triggers' yet.
+static bool Vibrate(void* self, void* pad, const float motors[4])
 {
-    return mwinAppleRumble(self, (id)pad, low, high);
+    return mwinAppleRumble(self, (id)pad, motors);
 }
 
 // The vendor name as UTF-8 that fits, a character never split.
 static void Describe(void* self, void* pad, mwinGamepadInfo* info)
+    API_AVAILABLE(macos(11.0), ios(14.0))
 {
     (void)self;
     NSString* name = ((GCController*)pad).vendorName;
@@ -111,7 +118,14 @@ static void Describe(void* self, void* pad, mwinGamepadInfo* info)
                  range:NSMakeRange(0, name.length)
         remainingRange:nullptr];
     info->nameLength = (uint32_t)used;
-    info->capabilities = mwinAppleCanRumble((id)pad) ? mwin_padRumble : 0;
+    GCController* controller = pad;
+    info->capabilities =
+        (mwinGamepadCapabilities)((mwinAppleCanRumble(controller) ? mwin_padRumble : 0) |
+                                  (mwinAppleCanRumbleTriggers(controller) ? mwin_padTriggerRumble
+                                                                          : 0) |
+                                  (controller.motion != nil && controller.motion.hasRotationRate
+                                       ? mwin_padMotion
+                                       : 0));
 }
 
 static int8_t Battery(void* self, void* pad) API_AVAILABLE(macos(11.0), ios(14.0))
@@ -182,4 +196,53 @@ void mwinApplePumpPads(mwinApplePads* pads, uint64_t nowNs)
     {
         mwinPadTrackerPump(&pads->tracker, nowNs);
     }
+}
+
+mwinResult mwinAppleSetMotion(mwinApplePads* pads, uint32_t slot, bool enabled)
+{
+    if (@available(macOS 11.3, iOS 14.5, *))
+    {
+        GCController* controller = nil;
+        for (uint32_t i = 0; i < pads->tracker.count; i++)
+        {
+            if (pads->tracker.pads[i].slot == slot)
+            {
+                controller = (GCController*)pads->tracker.pads[i].pad;
+            }
+        }
+        GCMotion* motion = controller.motion;
+        if (motion == nil)
+        {
+            return mwin_errorPlatform;
+        }
+        if (motion.sensorsRequireManualActivation)
+        {
+            motion.sensorsActive = enabled;
+        }
+        if (!enabled)
+        {
+            motion.valueChangedHandler = nil;
+            return mwin_success;
+        }
+        // The pad by id: a sample after it is gone posts nothing.
+        mwinContext* context = pads->tracker.context;
+        mwinGamepadId gamepad = mwinGamepadIdOf(context, slot);
+        motion.valueChangedHandler = ^(GCMotion* moved) {
+          int32_t live = mwinFindGamepad(context, gamepad);
+          if (live < 0)
+          {
+              return;
+          }
+          GCAcceleration a = moved.acceleration;
+          GCRotationRate r = moved.rotationRate;
+          const float acceleration[3] = {(float)(-a.x * STANDARD_GRAVITY),
+                                         (float)(-a.y * STANDARD_GRAVITY),
+                                         (float)(-a.z * STANDARD_GRAVITY)};
+          const float rate[3] = {(float)r.x, (float)r.z, (float)-r.y};
+          mwinPostGamepadMotion(context, (uint32_t)live, acceleration, rate,
+                                clock_gettime_nsec_np(CLOCK_UPTIME_RAW));
+        };
+        return mwin_success;
+    }
+    return mwin_errorPlatform;
 }

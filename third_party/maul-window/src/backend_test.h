@@ -12,7 +12,10 @@
 
 #include "maul-window/services.h"
 
-#define MWIN_TEST_KINDS (mwin_requestAccessibilityRoot + 1)
+#define MWIN_TEST_KINDS (mwin_requestPrimaryRead + 1)
+
+// The chords whose reach a test sets.
+#define MWIN_TEST_KEY_REACHES 32
 
 // The bytes of the paths a dialog chooses, and of the last dialog's
 // description.
@@ -20,6 +23,14 @@
 
 // A request waiting for the next pump. The generations tell it from a
 // later window or request in the same slots.
+// A chord's reach, as mwinTestSetKeyReach set it.
+typedef struct mwinTestKeyReach
+{
+    mwinKeyCode code;
+    uint8_t modifiers;
+    mwinKeyReach reach;
+} mwinTestKeyReach;
+
 typedef struct mwinTestPending
 {
     uint32_t slot;
@@ -42,11 +53,43 @@ typedef struct mwinTestRumble
     uint32_t count;
 } mwinTestRumble;
 
+// What a gamepad was given: its motors' last rumble, its triggers'
+// (low the left, high the right), and whether its motion sensors are
+// on.
+typedef struct mwinTestPad
+{
+    mwinTestRumble rumble;
+    mwinTestRumble triggers;
+    bool motion;
+} mwinTestPad;
+
+// The cursor made from images a window shows, with the image it took;
+// a zero id while it shows a shape.
+typedef struct mwinTestCursor
+{
+    mwinCursorId cursor;
+    uint32_t image;
+} mwinTestCursor;
+
+// What a window last asked of text input and the on-screen keyboard, as
+// carried out: whether it accepts text and its caret; whether the
+// keyboard shows and the purpose it was asked for.
+typedef struct mwinTestText
+{
+    bool enabled;
+    mwinRect caret;
+    bool keyboard;
+    mwinInputPurpose purpose;
+} mwinTestText;
+
 typedef struct mwinTestPlatform
 {
     mwinTestPending* pending;
     // One per gamepad slot.
-    mwinTestRumble* rumbles;
+    mwinTestPad* pads;
+    // One per window slot.
+    mwinTestCursor* cursors;
+    mwinTestText* texts;
     uint32_t pendingCount;
     uint32_t pendingCapacity;
     mwinEvent reports[MWIN_TEST_REPORTS];
@@ -61,6 +104,11 @@ typedef struct mwinTestPlatform
     void* clipboard;
     size_t clipboardBytes;
     bool utf16;
+    // Its data, a copy of the core's block of the same form
+    // (clipboard_data.h), or NULL; its primary selection's bytes.
+    struct mwinClipboardCopy* data;
+    char* primary;
+    size_t primaryBytes;
     // A drop gathered in the context waits for its report.
     bool dropWaiting;
     // The last address opened and path revealed.
@@ -75,6 +123,8 @@ typedef struct mwinTestPlatform
     bool hold;
     uint64_t timeNs;
     float scale;
+    mwinTestKeyReach keyReaches[MWIN_TEST_KEY_REACHES];
+    uint32_t keyReachCount;
 } mwinTestPlatform;
 
 // The test platform of a context of the test backend, or NULL.
@@ -90,10 +140,15 @@ mwinResult mwinTestQueueReport(mwinTestPlatform* platform, const mwinEvent* even
 
 // Uses the clipboard as a platform would: a write replaces its text, a
 // read takes it.
-mwinOutcome mwinTestUseClipboard(mwinContext* context, mwinRequestKind kind);
+// Carries out a clipboard or primary selection request: its outcome.
+mwinOutcome mwinTestUseClipboard(mwinContext* context, const mwinRequest* request);
 
 // Opens an address or reveals a path as a platform would: it keeps it.
 void mwinTestOpen(mwinContext* context, const mwinRequest* request);
+
+// What mwinGetKeyReach answers: the reach a test set, else delivered.
+mwinKeyReach mwinTestKeyReachOf(const mwinContext* context, mwinKeyCode code,
+                                mwinModifiers modifiers);
 
 // Writes the icon down.
 void mwinTestSetIcon(mwinContext* context, const mwinRequest* request);
@@ -102,6 +157,11 @@ void mwinTestSetIcon(mwinContext* context, const mwinRequest* request);
 // outcome, given how it ended.
 mwinOutcome mwinTestAnswerDialog(mwinContext* context, uint32_t slot, uint32_t request,
                                  mwinOutcome outcome);
+
+// Carries out a text input or on-screen keyboard request, keeping what
+// it asked for where mwinTestGetTextInput and mwinTestGetVirtualKeyboard
+// read it.
+void mwinTestCarryOutText(mwinContext* context, uint32_t slot, const mwinRequest* request);
 
 // Gives the platform's clipboard back; the backend's stop calls it.
 void mwinTestReleaseClipboard(const mwinContext* context, mwinTestPlatform* platform);

@@ -205,6 +205,11 @@ extern "C"
         mwin_requestIcon = 21,
         mwin_requestHitRegions = 22,
         mwin_requestAccessibilityRoot = 23,
+        mwin_requestCursorImage = 24,
+        mwin_requestClipboardWriteData = 25,
+        mwin_requestClipboardReadData = 26,
+        mwin_requestPrimaryWrite = 27,
+        mwin_requestPrimaryRead = 28,
     };
 
     // How a request ended.
@@ -291,8 +296,11 @@ extern "C"
     } mwinPreeditSegment;
 
     // An input method's composition. The text, its segments and the
-    // offsets are in bytes; the caret is -1 where the method hides it.
-    // Valid until the frame that drained it returns.
+    // offsets are in bytes, each on a character boundary within the text,
+    // the selection in order and no segment empty; the caret is -1 where
+    // the method hides it. The library fits what the platform hands it
+    // (an offset inside a character, past the end, a selection backwards)
+    // to that (mwin-0034). Valid until the frame that drained it returns.
     typedef struct mwinPreeditEvent
     {
         const char* text;

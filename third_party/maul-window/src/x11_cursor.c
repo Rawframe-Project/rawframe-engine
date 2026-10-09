@@ -6,6 +6,7 @@
 #include "x11_cursor.h"
 
 #include "allocator.h"
+#include "cursor.h"
 
 // Each shape's names in cursor themes: the CSS name, then the X11 name,
 // which the core cursor font also has.
@@ -94,10 +95,122 @@ static xcb_cursor_t ShapeCursor(mwinX11Platform* platform, mwinCursorShape shape
     return cursors->shapes[shape];
 }
 
-// Sets the cursor the window's mode and shape call for.
+// Whether a picture format is 32-bit ARGB, 8 bits a channel.
+static bool IsArgb(const xcb_render_pictforminfo_t* info)
+{
+    const xcb_render_directformat_t* direct = &info->direct;
+    return info->type == XCB_RENDER_PICT_TYPE_DIRECT && info->depth == 32 &&
+           direct->alpha_shift == 24 && direct->alpha_mask == 0xFF && direct->red_shift == 16 &&
+           direct->red_mask == 0xFF && direct->green_shift == 8 && direct->green_mask == 0xFF &&
+           direct->blue_shift == 0 && direct->blue_mask == 0xFF;
+}
+
+// RENDER's ARGB format, looked up once; 0 without RENDER or the format.
+static xcb_render_pictformat_t ArgbFormat(mwinX11Platform* platform)
+{
+    mwinX11Cursors* cursors = &platform->cursors;
+    const mwinX11Api* api = &platform->api;
+    if (cursors->formatSought || api->renderLibrary == nullptr)
+    {
+        return cursors->format;
+    }
+    cursors->formatSought = true;
+    const xcb_query_extension_reply_t* extension =
+        api->getExtensionData(platform->connection, api->renderId);
+    if (extension == nullptr || extension->present == 0)
+    {
+        return 0;
+    }
+    xcb_render_query_pict_formats_reply_t* reply = api->renderQueryFormatsReply(
+        platform->connection, api->renderQueryFormats(platform->connection), nullptr);
+    if (reply != nullptr)
+    {
+        const xcb_render_pictforminfo_t* formats = api->renderFormats(reply);
+        int count = api->renderFormatsLength(reply);
+        for (int i = 0; i < count && cursors->format == 0; i++)
+        {
+            cursors->format = IsArgb(&formats[i]) ? formats[i].id : 0;
+        }
+        mwinReleaseSystemMemory(reply);
+    }
+    return cursors->format;
+}
+
+static uint8_t Premultiply(uint8_t channel, uint8_t alpha)
+{
+    return (uint8_t)(((uint32_t)channel * alpha + 127) / 255);
+}
+
+// The X server's cursor of an image: its pixels premultiplied, in the
+// server's byte order, on a 32-bit pixmap made a picture.
+static xcb_cursor_t MakeCursor(mwinX11Platform* platform, const mwinCursor* cursor, uint32_t image)
+{
+    const mwinX11Api* api = &platform->api;
+    xcb_connection_t* connection = platform->connection;
+    const mwinIconCopyImage* source = &cursor->images->images[image];
+    uint32_t size = source->width * source->height * 4;
+    uint8_t* pixels = mwinAllocate(&platform->context->allocator, size, 4);
+    if (pixels == nullptr)
+    {
+        return XCB_CURSOR_NONE;
+    }
+    bool mostFirst = api->getSetup(connection)->image_byte_order == XCB_IMAGE_ORDER_MSB_FIRST;
+    for (uint32_t i = 0; i < size; i += 4)
+    {
+        const uint8_t* rgba = &source->pixels[i];
+        uint8_t argb[4] = {rgba[3], Premultiply(rgba[0], rgba[3]), Premultiply(rgba[1], rgba[3]),
+                           Premultiply(rgba[2], rgba[3])};
+        for (uint32_t c = 0; c < 4; c++)
+        {
+            pixels[i + (mostFirst ? c : 3 - c)] = argb[c];
+        }
+    }
+    uint16_t width = (uint16_t)source->width;
+    uint16_t height = (uint16_t)source->height;
+    xcb_pixmap_t pixmap = api->generateId(connection);
+    api->createPixmap(connection, 32, pixmap, platform->screen->root, width, height);
+    xcb_gcontext_t gc = api->generateId(connection);
+    api->createGc(connection, gc, pixmap, 0, nullptr);
+    // At most 128 by 128 pixels: 64 KiB, under the core request limit.
+    api->putImage(connection, XCB_IMAGE_FORMAT_Z_PIXMAP, pixmap, gc, width, height, 0, 0, 0, 32,
+                  size, pixels);
+    api->freeGc(connection, gc);
+    mwinRelease(&platform->context->allocator, pixels, size, 4);
+    xcb_render_picture_t picture = api->generateId(connection);
+    api->renderCreatePicture(connection, picture, pixmap, platform->cursors.format, 0, nullptr);
+    uint32_t x = 0;
+    uint32_t y = 0;
+    mwinCursorHotspotOf(cursor, image, &x, &y);
+    xcb_cursor_t made = api->generateId(connection);
+    api->renderCreateCursor(connection, made, picture, (uint16_t)x, (uint16_t)y);
+    api->renderFreePicture(connection, picture);
+    api->freePixmap(connection, pixmap);
+    return made;
+}
+
+// The cursor made from images the window shows, made for the scale the
+// first time; none when the window shows a shape.
+static xcb_cursor_t ImageCursor(mwinX11Platform* platform, const mwinX11Window* window)
+{
+    mwinCursor* cursor = mwinFindCursor(platform->context, window->cursorImage);
+    if (cursor == nullptr)
+    {
+        return XCB_CURSOR_NONE;
+    }
+    uint32_t image = mwinCursorImageFor(cursor, platform->scale);
+    if (cursor->nativeId[image] == XCB_CURSOR_NONE)
+    {
+        cursor->nativeId[image] = MakeCursor(platform, cursor, image);
+    }
+    return cursor->nativeId[image];
+}
+
+// Sets the cursor the window's mode, shape or image call for.
 static void Apply(mwinX11Platform* platform, const mwinX11Window* window)
 {
+    xcb_cursor_t image = ImageCursor(platform, window);
     xcb_cursor_t cursor = IsHidden(window->cursorMode) ? platform->cursors.blank
+                          : image != XCB_CURSOR_NONE   ? image
                                                        : ShapeCursor(platform, window->cursorShape);
     platform->api.changeWindowAttributes(platform->connection, window->window, XCB_CW_CURSOR,
                                          &cursor);
@@ -164,8 +277,46 @@ mwinOutcome mwinX11SetCursorShape(mwinX11Platform* platform, uint32_t slot, mwin
     }
     mwinX11Window* window = &platform->windows[slot];
     window->cursorShape = shape;
+    window->cursorImage = (mwinCursorId){0};
     Apply(platform, window);
     return mwin_outcomeDone;
+}
+
+mwinOutcome mwinX11SetCursorImage(mwinX11Platform* platform, uint32_t slot, mwinCursorId cursor)
+{
+    if (ArgbFormat(platform) == 0)
+    {
+        return mwin_outcomeUnsupported;
+    }
+    mwinX11Window* window = &platform->windows[slot];
+    window->cursorImage = cursor;
+    Apply(platform, window);
+    return mwin_outcomeDone;
+}
+
+void mwinX11ReleaseCursor(mwinContext* context, uint32_t slot)
+{
+    // Its windows show the default shape from here.
+    mwinX11Platform* platform = context->backendData;
+    for (uint32_t i = 0; i < context->limits.windows; i++)
+    {
+        mwinX11Window* window = &platform->windows[i];
+        if (window->window != XCB_WINDOW_NONE && window->cursorImage.index1 == slot + 1)
+        {
+            window->cursorShape = mwin_shapeDefault;
+            window->cursorImage = (mwinCursorId){0};
+            Apply(platform, window);
+        }
+    }
+    mwinCursor* cursor = &context->cursors[slot];
+    for (uint32_t i = 0; i < MWIN_CURSOR_IMAGES; i++)
+    {
+        if (cursor->nativeId[i] != XCB_CURSOR_NONE)
+        {
+            platform->api.freeCursor(platform->connection, cursor->nativeId[i]);
+            cursor->nativeId[i] = XCB_CURSOR_NONE;
+        }
+    }
 }
 
 void mwinX11CursorFocus(mwinX11Platform* platform, uint32_t slot, bool focused)

@@ -15,19 +15,26 @@ void mwinPadTrackerStart(mwinPadTracker* tracker, mwinContext* context,
     *tracker = (mwinPadTracker){.context = context, .runtime = *runtime};
 }
 
-static void Still(mwinPadTracker* tracker, mwinTrackedPad* pad)
+// Stops a pair of a pad's motors, the grips' (0) or the triggers' (1).
+static void Still(mwinPadTracker* tracker, mwinTrackedPad* pad, int pair)
 {
-    (void)tracker->runtime.vibrate(tracker->runtime.self, pad->pad, 0.0f, 0.0f);
-    pad->rumbleEndsNs = 0;
+    pad->motors[pair * 2] = 0.0f;
+    pad->motors[pair * 2 + 1] = 0.0f;
+    pad->endsNs[pair] = 0;
+    (void)tracker->runtime.vibrate(tracker->runtime.self, pad->pad, pad->motors);
 }
 
 void mwinPadTrackerStop(mwinPadTracker* tracker)
 {
     for (uint32_t i = 0; i < tracker->count; i++)
     {
-        if (tracker->pads[i].rumbleEndsNs != 0)
+        mwinTrackedPad* pad = &tracker->pads[i];
+        if (pad->endsNs[0] != 0 || pad->endsNs[1] != 0)
         {
-            Still(tracker, &tracker->pads[i]);
+            pad->endsNs[1] = 0;
+            pad->motors[2] = 0.0f;
+            pad->motors[3] = 0.0f;
+            Still(tracker, pad, 0);
         }
         tracker->runtime.release(tracker->runtime.self, tracker->pads[i].pad);
     }
@@ -179,9 +186,12 @@ void mwinPadTrackerPump(mwinPadTracker* tracker, uint64_t nowNs)
             pad->timestamp = reading.timestamp;
             Post(tracker, pad, &reading, nowNs);
         }
-        if (pad->rumbleEndsNs != 0 && nowNs >= pad->rumbleEndsNs)
+        for (int pair = 0; pair < 2; pair++)
         {
-            Still(tracker, pad);
+            if (pad->endsNs[pair] != 0 && nowNs >= pad->endsNs[pair])
+            {
+                Still(tracker, pad, pair);
+            }
         }
     }
 }
@@ -204,8 +214,9 @@ bool mwinPadTrackerOwns(const mwinPadTracker* tracker, uint32_t slot)
     return PadOf(tracker, slot) >= 0;
 }
 
-mwinResult mwinPadTrackerRumble(mwinPadTracker* tracker, uint32_t slot, float low, float high,
-                                uint32_t durationMs, uint64_t nowNs)
+// Runs a pair of a pad's motors for a time, the other pair as it runs.
+static mwinResult Run(mwinPadTracker* tracker, uint32_t slot, int pair, float a, float b,
+                      uint32_t durationMs, uint64_t nowNs)
 {
     int32_t index = PadOf(tracker, slot);
     if (index < 0)
@@ -214,11 +225,29 @@ mwinResult mwinPadTrackerRumble(mwinPadTracker* tracker, uint32_t slot, float lo
     }
     mwinTrackedPad* pad = &tracker->pads[index];
     bool running = durationMs > 0;
-    if (!tracker->runtime.vibrate(tracker->runtime.self, pad->pad, running ? low : 0.0f,
-                                  running ? high : 0.0f))
+    float motors[4] = {pad->motors[0], pad->motors[1], pad->motors[2], pad->motors[3]};
+    motors[pair * 2] = running ? a : 0.0f;
+    motors[pair * 2 + 1] = running ? b : 0.0f;
+    if (!tracker->runtime.vibrate(tracker->runtime.self, pad->pad, motors))
     {
         return mwin_errorPlatform;
     }
-    pad->rumbleEndsNs = durationMs > 0 ? nowNs + (uint64_t)durationMs * 1000000u : 0;
+    for (int i = 0; i < 4; i++)
+    {
+        pad->motors[i] = motors[i];
+    }
+    pad->endsNs[pair] = running ? nowNs + (uint64_t)durationMs * 1000000u : 0;
     return mwin_success;
+}
+
+mwinResult mwinPadTrackerRumble(mwinPadTracker* tracker, uint32_t slot, float low, float high,
+                                uint32_t durationMs, uint64_t nowNs)
+{
+    return Run(tracker, slot, 0, low, high, durationMs, nowNs);
+}
+
+mwinResult mwinPadTrackerTriggerRumble(mwinPadTracker* tracker, uint32_t slot, float left,
+                                       float right, uint32_t durationMs, uint64_t nowNs)
+{
+    return Run(tracker, slot, 1, left, right, durationMs, nowNs);
 }

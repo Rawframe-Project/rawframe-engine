@@ -269,9 +269,12 @@ static int CarryOut(mwinContext* context, uint32_t slot, const mwinRequest* requ
         return mwinIOSSetVirtualKeyboard(platform, slot, (request->value.code & 0x80u) != 0,
                                          (mwinInputPurpose)(request->value.code & 0x7Fu));
     case mwin_requestClipboardWrite:
+    case mwin_requestClipboardWriteData:
         return mwinIOSWriteClipboard(platform);
     case mwin_requestClipboardRead:
         return mwinIOSReadClipboard(platform);
+    case mwin_requestClipboardReadData:
+        return mwinIOSReadClipboardData(platform, request);
     case mwin_requestOpenUrl:
         return mwinIOSOpenUrl(platform, slot, (uint32_t)(request - core->requests));
     case mwin_requestKeepAwake:

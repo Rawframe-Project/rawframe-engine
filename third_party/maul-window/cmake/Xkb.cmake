@@ -28,11 +28,17 @@ endif()
 # mappings compiled from SDL_GameControllerDB.
 if(MAUL_WINDOW_GAMEPAD)
     set(MWIN_LINUX_PAD_SOURCES
+        src/linux_battery.c
+        src/linux_motion.c
         src/linux_pad.c
         src/pad_db.c
         src/pad_map.c
         src/generated/pad_linux.c)
     target_sources(maul-window PRIVATE ${MWIN_LINUX_PAD_SOURCES})
-    # inotify and the event clock are Linux's, outside strict C.
-    set_source_files_properties(src/linux_pad.c PROPERTIES COMPILE_DEFINITIONS _GNU_SOURCE)
+    # inotify and the event clock are Linux's, outside strict C; sysfs is
+    # read with POSIX's directory calls.
+    set_source_files_properties(src/linux_pad.c src/linux_motion.c PROPERTIES
+        COMPILE_DEFINITIONS _GNU_SOURCE)
+    set_source_files_properties(src/linux_battery.c PROPERTIES
+        COMPILE_DEFINITIONS _POSIX_C_SOURCE=200809L)
 endif()

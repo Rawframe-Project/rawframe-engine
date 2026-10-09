@@ -10,6 +10,7 @@
 
 #include "allocator.h"
 #include "core.h"
+#include "cursor.h"
 
 #include <stdalign.h>
 #include <stdlib.h>
@@ -49,6 +50,7 @@ mwinContextDef mwinDefaultContextDef(void)
     def.limits.droppedFiles = 256;
     def.limits.dialogFiles = 256;
     def.limits.dialogBytes = 1u << 20;
+    def.limits.cursors = 16;
     def.backend = mwin_backendNative;
     return def;
 }
@@ -150,8 +152,10 @@ static void Plan(mwinLayout* layout, const mwinLimits* limits, unsigned char* bl
     size_t monitors = mwinLayoutAdd(layout, limits->monitors, sizeof(mwinMonitor), PART);
     size_t gamepads = mwinLayoutAdd(layout, limits->gamepads, sizeof(mwinGamepad), PART);
     size_t windows = mwinLayoutAdd(layout, limits->windows, sizeof(mwinWindow), PART);
+    size_t cursors = mwinLayoutAdd(layout, limits->cursors, sizeof(mwinCursor), PART);
     if (block != nullptr)
     {
+        context->cursors = (mwinCursor*)(block + cursors);
         context->locales = (char*)(block + locales);
         context->monitors = (mwinMonitor*)(block + monitors);
         context->gamepads = (mwinGamepad*)(block + gamepads);
@@ -315,6 +319,7 @@ mwinResult mwinRunLaunched(const mwinAppDef* def, void* launch)
             {
                 return status;
             }
+            mwinReleaseCursors(context);
             backends[i]->stop(context);
             DestroyContext(context);
             return status;
@@ -390,6 +395,7 @@ mwinResult mwinRunLoop(mwinContext* context, void (*pump)(mwinContext* context))
 
 void mwinFinishRun(mwinContext* context)
 {
+    mwinReleaseCursors(context);
     context->backend->stop(context);
     DestroyContext(context);
 }

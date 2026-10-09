@@ -68,17 +68,18 @@ static mwinMonitorInfo InfoOf(UIScreen* screen, bool primary, CGFloat left)
     info.scale = (float)scale;
     info.refreshMilliHz = (uint32_t)screen.maximumFramesPerSecond * 1000u;
     info.variableRefresh = screen.maximumFramesPerSecond > 60;
+    // Extended dynamic range as on macOS (mwin-0036), from iOS 16.
+    if (@available(iOS 16.0, *))
+    {
+        CGFloat potential = screen.potentialEDRHeadroom;
+        info.hdr = (mwinHdrFacts){
+            .known = true,
+            .active = screen.currentEDRHeadroom > 1.0,
+            .headroom = potential > 1.0 ? (float)potential : 1.0f,
+        };
+    }
     info.primary = primary;
     return info;
-}
-
-static bool SameInfo(const mwinMonitorInfo* a, const mwinMonitorInfo* b)
-{
-    return a->nameLength == b->nameLength && memcmp(a->name, b->name, a->nameLength) == 0 &&
-           memcmp(&a->bounds, &b->bounds, sizeof(a->bounds)) == 0 &&
-           memcmp(&a->workArea, &b->workArea, sizeof(a->workArea)) == 0 && a->scale == b->scale &&
-           a->refreshMilliHz == b->refreshMilliHz && a->variableRefresh == b->variableRefresh &&
-           a->primary == b->primary;
 }
 
 void mwinIOSReadScreens(mwinIOSPlatform* platform, uint64_t timeNs)
@@ -104,7 +105,7 @@ void mwinIOSReadScreens(mwinIOSPlatform* platform, uint64_t timeNs)
         int32_t slot = mwinIOSMonitorOf(platform, screen);
         if (slot >= 0)
         {
-            if (!SameInfo(&info, &platform->screenInfo[slot]))
+            if (!mwinSameMonitorInfo(&info, &platform->screenInfo[slot]))
             {
                 platform->screenInfo[slot] = info;
                 mwinChangeMonitor(context, (uint32_t)slot, &info, timeNs);

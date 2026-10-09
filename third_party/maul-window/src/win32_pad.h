@@ -75,8 +75,10 @@ void mwinWin32PadsStop(mwinWin32Pads* pads);
 // Reads the pads, finds new ones and stops rumbles due, at a time.
 void mwinWin32PadsPump(mwinWin32Pads* pads, uint64_t nowNs);
 
-// The backend's rumble.
+// The backend's rumble and trigger rumble.
 mwinResult mwinWin32PadsRumble(mwinWin32Pads* pads, uint32_t slot, float low, float high,
                                uint32_t durationMs, uint64_t nowNs);
+mwinResult mwinWin32PadsTriggerRumble(mwinWin32Pads* pads, uint32_t slot, float left, float right,
+                                      uint32_t durationMs, uint64_t nowNs);
 
 #endif // MAUL_WINDOW_SRC_WIN32_PAD_H

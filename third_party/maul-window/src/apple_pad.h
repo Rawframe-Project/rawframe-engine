@@ -32,11 +32,17 @@ void mwinAppleStartPads(mwinApplePads* pads, mwinContext* context);
 void mwinAppleStopPads(mwinApplePads* pads);
 void mwinApplePumpPads(mwinApplePads* pads, uint64_t nowNs);
 
-// Whether a controller has motors; runs them, each from 0 to 1, both 0
-// stopping them; lets go of the motors of controllers not kept, or of
+// Whether a controller has motors, and motors in its triggers; runs
+// them (heavy, light, left trigger, right trigger), each from 0 to 1, 0
+// stopping one; lets go of the motors of controllers not kept, or of
 // all with nil (apple_rumble.m).
 bool mwinAppleCanRumble(id controller);
-bool mwinAppleRumble(mwinApplePads* pads, id controller, float low, float high);
+bool mwinAppleCanRumbleTriggers(id controller);
+bool mwinAppleRumble(mwinApplePads* pads, id controller, const float motors[4]);
 void mwinAppleForgetRumbles(mwinApplePads* pads, NSArray* kept);
+
+// Turns the motion sensors of the pad in a core slot on, each sample
+// posted to the core as it comes, or off (apple_pad.m).
+mwinResult mwinAppleSetMotion(mwinApplePads* pads, uint32_t slot, bool enabled);
 
 #endif // MAUL_WINDOW_SRC_APPLE_PAD_H

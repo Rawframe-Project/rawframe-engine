@@ -9,8 +9,12 @@
 // focus. macOS has no way to keep a cursor inside a window short of
 // warping it back after it left, so confinement is unsupported. Shapes
 // macOS lacks (the diagonal resizes before macOS 15, waiting and
-// progress) are the arrow.
+// progress) are the arrow. A cursor made from images is one NSCursor
+// whose image holds each as a representation the first image's size in
+// points, so AppKit draws the one the display's scale needs.
 
+#include "cursor.h"
+#include "icon.h"
 #include "macos.h"
 
 static NSCursor* ShapeCursor(mwinCursorShape shape)
@@ -55,11 +59,43 @@ static bool IsHidden(mwinCursorMode mode)
     return mode == mwin_cursorHidden || mode == mwin_cursorCaptured;
 }
 
+// The NSCursor of the cursor made from images the window shows, made
+// the first time; nil when the window shows a shape.
+static NSCursor* ImageCursor(mwinMacPlatform* platform, const mwinMacWindow* window)
+{
+    mwinCursor* cursor = mwinFindCursor(platform->context, window->cursorImage);
+    if (cursor == nullptr)
+    {
+        return nil;
+    }
+    if (cursor->native[0] == nullptr)
+    {
+        const mwinIconCopy* copy = cursor->images;
+        NSSize size = NSMakeSize(copy->images[0].width, copy->images[0].height);
+        NSImage* image = [[NSImage alloc] initWithSize:size];
+        for (uint32_t i = 0; i < copy->count; i++)
+        {
+            NSBitmapImageRep* rep = mwinMacImageRep(&copy->images[i], size);
+            if (rep != nil)
+            {
+                [image addRepresentation:rep];
+            }
+        }
+        // The hot spot is from the image's top left, in points.
+        cursor->native[0] =
+            [[NSCursor alloc] initWithImage:image
+                                    hotSpot:NSMakePoint(cursor->hotspotX, cursor->hotspotY)];
+        [image release];
+    }
+    return (NSCursor*)cursor->native[0];
+}
+
 NSCursor* mwinMacCursorOf(mwinMacPlatform* platform, const mwinMacWindow* window)
 {
     if (!IsHidden(window->cursorMode))
     {
-        return ShapeCursor(window->cursorShape);
+        NSCursor* image = ImageCursor(platform, window);
+        return image != nil ? image : ShapeCursor(window->cursorShape);
     }
     if (platform->blankCursor == nil)
     {
@@ -137,8 +173,36 @@ mwinOutcome mwinMacSetCursorShape(mwinMacPlatform* platform, uint32_t slot, mwin
 {
     mwinMacWindow* window = &platform->windows[slot];
     window->cursorShape = shape;
+    window->cursorImage = (mwinCursorId){0};
     Refresh(platform, window);
     return mwin_outcomeDone;
+}
+
+mwinOutcome mwinMacSetCursorImage(mwinMacPlatform* platform, uint32_t slot, mwinCursorId cursor)
+{
+    mwinMacWindow* window = &platform->windows[slot];
+    window->cursorImage = cursor;
+    Refresh(platform, window);
+    return mwin_outcomeDone;
+}
+
+void mwinMacReleaseCursor(mwinContext* context, uint32_t slot)
+{
+    mwinMacPlatform* platform = context->backendData;
+    // Its windows show the default shape from here.
+    for (uint32_t i = 0; i < context->limits.windows; i++)
+    {
+        mwinMacWindow* window = &platform->windows[i];
+        if (window->window != nil && window->cursorImage.index1 == slot + 1)
+        {
+            window->cursorShape = mwin_shapeDefault;
+            window->cursorImage = (mwinCursorId){0};
+            Refresh(platform, window);
+        }
+    }
+    mwinCursor* cursor = &context->cursors[slot];
+    [(NSCursor*)cursor->native[0] release];
+    cursor->native[0] = nullptr;
 }
 
 void mwinMacForgetCursors(mwinMacPlatform* platform)

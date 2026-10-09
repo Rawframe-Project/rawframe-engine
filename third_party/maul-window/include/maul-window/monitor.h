@@ -32,7 +32,8 @@ extern "C"
     } mwinPixelRect;
 
     // What a monitor says about high dynamic range. The luminances are in
-    // nits, 0 where the platform does not tell.
+    // nits, 0 where the platform does not tell; some platforms tell the
+    // headroom alone (mwin-0036).
     typedef struct mwinHdrFacts
     {
         // The platform reports HDR facts for this monitor.
@@ -44,12 +45,19 @@ extern "C"
         // The luminance the platform shows SDR white at, which SDR content
         // scales to in HDR output.
         float sdrWhiteNits;
+        // The peak over SDR white the output can show now, which content
+        // tone maps to: 1 where it shows nothing brighter than SDR white,
+        // 0 where unknown. On macOS and iOS it is what the screen shows
+        // once content asks for extended dynamic range, which turns
+        // `active` on.
+        float headroom;
     } mwinHdrFacts;
 
     // What the platform tells about a monitor.
     typedef struct mwinMonitorInfo
     {
-        // UTF-8, not NUL-terminated.
+        // UTF-8, not NUL-terminated; a longer name, or one with ill-formed
+        // bytes, is cut to the whole characters before the cut or the fault.
         char name[MWIN_MONITOR_NAME_BYTES];
         uint32_t nameLength;
         // Where it is on the desktop and its size, and the part windows

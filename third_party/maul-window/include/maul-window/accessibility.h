@@ -6,6 +6,12 @@
 // the program implements, tells the program when a client first asks for
 // a window's tree, and on the web keeps an element next to the canvas
 // for the program's ARIA elements (its selector is in mwinNativeHandles).
+// The focus on an element there, where a screen reader may move it, is
+// the window's as the canvas's is, and keys there reach the program; the
+// page keeps their default actions, and a field there (an input, text
+// area, select or editable element) keeps the text typed into it, which
+// comes as no mwin_eventTextInput. A focus request leaves the focus on
+// such an element.
 //
 // On Linux, AT-SPI is a service of the application on the session's
 // accessibility bus, and asks nothing of the window system. Its adapter

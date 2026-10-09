@@ -199,6 +199,7 @@ void mwinIOSEndComposition(mwinIOSPlatform* platform, uint32_t slot, bool accept
 // timer turned off while wanted.
 mwinOutcome mwinIOSWriteClipboard(const mwinIOSPlatform* platform);
 mwinOutcome mwinIOSReadClipboard(mwinIOSPlatform* platform);
+mwinOutcome mwinIOSReadClipboardData(mwinIOSPlatform* platform, const mwinRequest* request);
 int mwinIOSOpenUrl(mwinIOSPlatform* platform, uint32_t slot, uint32_t request);
 void mwinIOSKeepAwake(mwinIOSPlatform* platform, bool wanted);
 

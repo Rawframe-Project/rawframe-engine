@@ -1,24 +1,27 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The X11 clipboard.
+// The X11 clipboard and primary selection as their owner.
 
 #include "x11_clipboard.h"
 
 #include "allocator.h"
+#include "clipboard_data.h"
 #include "monotonic.h"
 
-#include <stdckdint.h>
 #include <string.h>
 
-// The largest piece of text sent at once; more goes in pieces (INCR).
+// The largest piece sent at once; more goes in pieces (INCR).
 #define PIECE_BYTES (64u * 1024u)
 
-// How long a read, or a reader taking pieces, may take.
+// How long a reader taking pieces may take over each.
 #define DEADLINE_NS 5000000000u
 
-// Makes the hidden window; false when the X server refused.
-static bool EnsureWindow(mwinX11Platform* platform)
+// The most targets a selection offers: TARGETS, TIMESTAMP, the two text
+// targets and the data's types.
+#define MAX_TARGETS (4 + MWIN_CLIPBOARD_ITEMS)
+
+bool mwinX11EnsureClipboardWindow(mwinX11Platform* platform)
 {
     mwinX11Clipboard* clipboard = &platform->clipboard;
     const mwinX11Api* api = &platform->api;
@@ -38,24 +41,14 @@ static bool EnsureWindow(mwinX11Platform* platform)
     return error == nullptr;
 }
 
-// Ends a read: its text given back.
-static void EndRead(mwinX11Platform* platform)
+xcb_atom_t mwinX11SelectionAtom(const mwinX11Platform* platform, int selection)
 {
-    mwinX11Clipboard* clipboard = &platform->clipboard;
-    if (clipboard->buffer != nullptr)
-    {
-        mwinRelease(&platform->context->allocator, clipboard->buffer, clipboard->capacity, 1);
-    }
-    clipboard->buffer = nullptr;
-    clipboard->used = 0;
-    clipboard->capacity = 0;
-    clipboard->reading = false;
-    clipboard->incremental = false;
+    return selection == mwin_x11Primary ? XCB_ATOM_PRIMARY : platform->atoms[mwin_atomClipboard];
 }
 
 void mwinX11StopClipboard(mwinX11Platform* platform)
 {
-    EndRead(platform);
+    mwinX11EndRead(platform);
     if (platform->clipboard.window != 0)
     {
         platform->api.destroyWindow(platform->connection, platform->clipboard.window);
@@ -63,165 +56,101 @@ void mwinX11StopClipboard(mwinX11Platform* platform)
     platform->clipboard = (mwinX11Clipboard){0};
 }
 
-int mwinX11WriteClipboard(mwinX11Platform* platform)
+// Interns the atoms of the data written's types, sent together before
+// any reply; false when the X server answered none for one.
+static bool InternTypes(mwinX11Platform* platform)
+{
+    const mwinX11Api* api = &platform->api;
+    const mwinClipboardCopy* copy = platform->context->clipboardData;
+    uint32_t count = copy != nullptr ? copy->count : 0;
+    xcb_intern_atom_cookie_t cookies[MWIN_CLIPBOARD_ITEMS];
+    memset(platform->clipboard.types, 0, sizeof(platform->clipboard.types));
+    for (uint32_t i = 0; i < count; i++)
+    {
+        cookies[i] = api->internAtom(platform->connection, 0, (uint16_t)copy->items[i].mimeLength,
+                                     copy->items[i].mime);
+    }
+    bool interned = true;
+    for (uint32_t i = 0; i < count; i++)
+    {
+        xcb_intern_atom_reply_t* reply =
+            api->internAtomReply(platform->connection, cookies[i], nullptr);
+        platform->clipboard.types[i] = reply != nullptr ? reply->atom : XCB_ATOM_NONE;
+        interned = interned && reply != nullptr;
+        mwinReleaseSystemMemory(reply);
+    }
+    return interned;
+}
+
+int mwinX11WriteSelection(mwinX11Platform* platform, mwinRequestKind kind)
 {
     mwinX11Clipboard* clipboard = &platform->clipboard;
     const mwinX11Api* api = &platform->api;
-    if (!EnsureWindow(platform))
+    int selection = kind == mwin_requestPrimaryWrite ? mwin_x11Primary : mwin_x11Clipboard;
+    if (!mwinX11EnsureClipboardWindow(platform))
     {
         return mwin_outcomeFailed;
     }
-    // The readers taking the last text in pieces are dropped.
-    memset(clipboard->sends, 0, sizeof(clipboard->sends));
+    // The readers taking the last text or data in pieces are dropped.
+    for (int i = 0; i < MWIN_X11_SENDS; i++)
+    {
+        clipboard->sends[i].requestor =
+            clipboard->sends[i].selection == selection ? 0 : clipboard->sends[i].requestor;
+    }
+    if (selection == mwin_x11Clipboard && !InternTypes(platform))
+    {
+        clipboard->owned[selection] = false;
+        return mwin_outcomeFailed;
+    }
     xcb_timestamp_t time = platform->inputTime;
-    xcb_atom_t selection = platform->atoms[mwin_atomClipboard];
-    api->setSelectionOwner(platform->connection, clipboard->window, selection, time);
+    xcb_atom_t atom = mwinX11SelectionAtom(platform, selection);
+    api->setSelectionOwner(platform->connection, clipboard->window, atom, time);
     xcb_get_selection_owner_reply_t* reply = api->getSelectionOwnerReply(
-        platform->connection, api->getSelectionOwner(platform->connection, selection), nullptr);
-    clipboard->owned = reply != nullptr && reply->owner == clipboard->window;
-    clipboard->ownedTime = time;
+        platform->connection, api->getSelectionOwner(platform->connection, atom), nullptr);
+    clipboard->owned[selection] = reply != nullptr && reply->owner == clipboard->window;
+    clipboard->ownedTime[selection] = time;
     mwinReleaseSystemMemory(reply);
-    return clipboard->owned ? mwin_outcomeDone : mwin_outcomeFailed;
+    return clipboard->owned[selection] ? mwin_outcomeDone : mwin_outcomeFailed;
 }
 
-int mwinX11ReadClipboard(mwinX11Platform* platform)
+// The selection a request names when the program owns it, -1 else.
+static int OwnedSelection(const mwinX11Platform* platform, xcb_atom_t atom)
 {
-    mwinX11Clipboard* clipboard = &platform->clipboard;
-    mwinContext* context = platform->context;
-    if (clipboard->owned)
+    for (int selection = 0; selection < MWIN_X11_SELECTIONS; selection++)
     {
-        return mwinTakeClipboardText(context, context->clipboardOffer,
-                                     context->clipboardOfferLength);
+        if (platform->clipboard.owned[selection] &&
+            mwinX11SelectionAtom(platform, selection) == atom)
+        {
+            return selection;
+        }
     }
-    // A read under way answers this one too.
-    if (clipboard->reading)
-    {
-        return -1;
-    }
-    if (!EnsureWindow(platform))
-    {
-        return mwin_outcomeFailed;
-    }
-    platform->api.convertSelection(platform->connection, clipboard->window,
-                                   platform->atoms[mwin_atomClipboard],
-                                   platform->atoms[mwin_atomUtf8String],
-                                   platform->atoms[mwin_atomSelection], platform->inputTime);
-    clipboard->reading = true;
-    clipboard->deadlineNs = mwinMonotonicNow() + DEADLINE_NS;
     return -1;
 }
 
-// Answers the read requests of every window, and ends the read.
-static void Finish(mwinX11Platform* platform, mwinOutcome outcome)
+// Whether a selection offers text: the primary selection always.
+static bool OffersText(const mwinContext* context, int selection)
 {
-    mwinContext* context = platform->context;
-    EndRead(platform);
-    for (uint32_t slot = 0; slot < context->limits.windows; slot++)
-    {
-        const mwinWindow* window = &context->windows[slot];
-        int32_t request = window->status == mwin_slotLive
-                              ? mwinFindActiveRequest(window, context->limits.requestsPerWindow,
-                                                      mwin_requestClipboardRead)
-                              : -1;
-        if (request >= 0)
-        {
-            mwinComplete(context, slot, (uint32_t)request, outcome);
-        }
-    }
+    return selection == mwin_x11Primary || mwinOffersClipboardText(context);
 }
 
-// Adds bytes to the read's text: false, with the outcome, when they
-// pass the limit or the allocator has no room.
-static bool Append(mwinX11Platform* platform, const char* bytes, uint32_t length,
-                   mwinOutcome* outcomeOut)
+// The bytes a selection serves: its text (item -1) or an item of the
+// clipboard's data.
+static const char* SourceOf(const mwinContext* context, int selection, int item,
+                            uint32_t* lengthOut)
 {
-    mwinX11Clipboard* clipboard = &platform->clipboard;
-    const mwinContext* context = platform->context;
-    if (length > context->limits.clipboardBytes - clipboard->used)
+    if (selection == mwin_x11Primary)
     {
-        *outcomeOut = mwin_outcomeTooLarge;
-        return false;
+        *lengthOut = context->primaryOfferLength;
+        return context->primaryOffer;
     }
-    uint32_t needed = clipboard->used + length;
-    if (needed > clipboard->capacity)
+    if (item < 0)
     {
-        // Doubling saturates, then the limit caps it.
-        uint32_t doubled = 0;
-        if (ckd_mul(&doubled, clipboard->capacity, 2u))
-        {
-            doubled = UINT32_MAX;
-        }
-        uint32_t capacity = needed > doubled ? needed : doubled;
-        capacity =
-            capacity < context->limits.clipboardBytes ? capacity : context->limits.clipboardBytes;
-        char* grown = mwinAllocate(&context->allocator, capacity, 1);
-        if (grown == nullptr)
-        {
-            *outcomeOut = mwin_outcomeFailed;
-            return false;
-        }
-        if (clipboard->buffer != nullptr)
-        {
-            memcpy(grown, clipboard->buffer, clipboard->used);
-            mwinRelease(&context->allocator, clipboard->buffer, clipboard->capacity, 1);
-        }
-        clipboard->buffer = grown;
-        clipboard->capacity = capacity;
+        *lengthOut = context->clipboardOfferLength;
+        return context->clipboardOffer;
     }
-    if (length > 0)
-    {
-        memcpy(clipboard->buffer + clipboard->used, bytes, length);
-    }
-    clipboard->used = needed;
-    return true;
-}
-
-// Takes the selection property off the hidden window: the reply, or
-// NULL. Asking for one word past the limit tells text too large.
-static xcb_get_property_reply_t* TakeProperty(const mwinX11Platform* platform)
-{
-    const mwinX11Api* api = &platform->api;
-    const mwinX11Clipboard* clipboard = &platform->clipboard;
-    uint32_t room = platform->context->limits.clipboardBytes - clipboard->used;
-    return api->getPropertyReply(platform->connection,
-                                 api->getProperty(platform->connection, 1, clipboard->window,
-                                                  platform->atoms[mwin_atomSelection],
-                                                  XCB_GET_PROPERTY_TYPE_ANY, 0, room / 4 + 1),
-                                 nullptr);
-}
-
-// The owner's answer, or a piece of its text: takes the property.
-static void TakePiece(mwinX11Platform* platform, bool answer)
-{
-    mwinX11Clipboard* clipboard = &platform->clipboard;
-    const mwinX11Api* api = &platform->api;
-    xcb_get_property_reply_t* reply = TakeProperty(platform);
-    if (reply == nullptr)
-    {
-        Finish(platform, mwin_outcomeFailed);
-        return;
-    }
-    // The length is in bytes, whatever the format.
-    uint32_t length = (uint32_t)api->getPropertyValueLength(reply);
-    const char* bytes = api->getPropertyValue(reply);
-    mwinOutcome outcome = mwin_outcomeDone;
-    if (answer && reply->type == platform->atoms[mwin_atomIncr])
-    {
-        // Deleting the property asked for the first piece.
-        clipboard->incremental = true;
-        clipboard->deadlineNs = mwinMonotonicNow() + DEADLINE_NS;
-    }
-    else if (reply->bytes_after > 0 || !Append(platform, bytes, length, &outcome))
-    {
-        Finish(platform, reply->bytes_after > 0 ? mwin_outcomeTooLarge : outcome);
-    }
-    else if (!clipboard->incremental || length == 0)
-    {
-        // The whole text, or the empty piece that ends the pieces.
-        Finish(platform,
-               mwinTakeClipboardText(platform->context, clipboard->buffer, clipboard->used));
-    }
-    mwinReleaseSystemMemory(reply);
+    const mwinClipboardCopy* copy = context->clipboardData;
+    *lengthOut = copy->items[item].length;
+    return (const char*)mwinClipboardBytesOf(copy, &copy->items[item]);
 }
 
 // Sends the selection notification that answers a request.
@@ -243,9 +172,9 @@ static void Notify(const mwinX11Platform* platform, const xcb_selection_request_
                             event.bytes);
 }
 
-// Starts sending the text in pieces: false when every place is taken.
+// Starts sending bytes in pieces: false when every place is taken.
 static bool SendInPieces(mwinX11Platform* platform, const xcb_selection_request_event_t* request,
-                         xcb_atom_t property)
+                         xcb_atom_t property, int selection, int item, uint32_t length)
 {
     mwinX11Clipboard* clipboard = &platform->clipboard;
     const mwinX11Api* api = &platform->api;
@@ -259,12 +188,13 @@ static bool SendInPieces(mwinX11Platform* platform, const xcb_selection_request_
         uint32_t mask = XCB_EVENT_MASK_PROPERTY_CHANGE;
         api->changeWindowAttributes(platform->connection, request->requestor, XCB_CW_EVENT_MASK,
                                     &mask);
-        uint32_t length = platform->context->clipboardOfferLength;
         api->changeProperty(platform->connection, XCB_PROP_MODE_REPLACE, request->requestor,
                             property, platform->atoms[mwin_atomIncr], 32, 1, &length);
         clipboard->sends[i].requestor = request->requestor;
         clipboard->sends[i].property = property;
         clipboard->sends[i].type = request->target;
+        clipboard->sends[i].selection = (uint8_t)selection;
+        clipboard->sends[i].item = (int8_t)item;
         clipboard->sends[i].offset = 0;
         clipboard->sends[i].deadlineNs = mwinMonotonicNow() + DEADLINE_NS;
         return true;
@@ -272,47 +202,89 @@ static bool SendInPieces(mwinX11Platform* platform, const xcb_selection_request_
     return false;
 }
 
-// Answers another client's request for the selection: the property it
-// was given, or none for a refusal.
+// Puts a selection's targets on the requestor's property.
+static void ServeTargets(const mwinX11Platform* platform,
+                         const xcb_selection_request_event_t* request, xcb_atom_t property,
+                         int selection)
+{
+    const xcb_atom_t* atoms = platform->atoms;
+    const mwinClipboardCopy* copy = platform->context->clipboardData;
+    xcb_atom_t targets[MAX_TARGETS] = {atoms[mwin_atomTargets], atoms[mwin_atomTimestamp]};
+    uint32_t count = 2;
+    if (OffersText(platform->context, selection))
+    {
+        targets[count++] = atoms[mwin_atomUtf8String];
+        targets[count++] = atoms[mwin_atomTextPlainUtf8];
+    }
+    for (uint32_t i = 0; selection == mwin_x11Clipboard && copy != nullptr && i < copy->count; i++)
+    {
+        targets[count++] = platform->clipboard.types[i];
+    }
+    platform->api.changeProperty(platform->connection, XCB_PROP_MODE_REPLACE, request->requestor,
+                                 property, XCB_ATOM_ATOM, 32, count, targets);
+}
+
+// The item of the clipboard's data a target asks for, -2 for none; -1
+// is the text.
+static int ItemOf(const mwinX11Platform* platform, xcb_atom_t target, int selection)
+{
+    const xcb_atom_t* atoms = platform->atoms;
+    if (target == atoms[mwin_atomUtf8String] || target == atoms[mwin_atomTextPlainUtf8])
+    {
+        return OffersText(platform->context, selection) ? -1 : -2;
+    }
+    const mwinClipboardCopy* copy = platform->context->clipboardData;
+    for (uint32_t i = 0; selection == mwin_x11Clipboard && copy != nullptr && i < copy->count; i++)
+    {
+        if (platform->clipboard.types[i] == target)
+        {
+            return (int)i;
+        }
+    }
+    return -2;
+}
+
+// Answers another client's request for a selection: the property it was
+// given, or none for a refusal.
 static xcb_atom_t Serve(mwinX11Platform* platform, const xcb_selection_request_event_t* request)
 {
     const mwinX11Api* api = &platform->api;
     const xcb_atom_t* atoms = platform->atoms;
-    const mwinContext* context = platform->context;
     // A client older than ICCCM 2 names no property: the target serves.
     xcb_atom_t property = request->property != XCB_ATOM_NONE ? request->property : request->target;
     xcb_atom_t target = request->target;
-    bool text = target == atoms[mwin_atomUtf8String] || target == atoms[mwin_atomTextPlainUtf8];
-    if (!platform->clipboard.owned || request->selection != atoms[mwin_atomClipboard])
+    int selection = OwnedSelection(platform, request->selection);
+    if (selection < 0)
     {
         return XCB_ATOM_NONE;
     }
     if (target == atoms[mwin_atomTargets])
     {
-        xcb_atom_t targets[] = {atoms[mwin_atomTargets], atoms[mwin_atomTimestamp],
-                                atoms[mwin_atomUtf8String], atoms[mwin_atomTextPlainUtf8]};
-        api->changeProperty(platform->connection, XCB_PROP_MODE_REPLACE, request->requestor,
-                            property, XCB_ATOM_ATOM, 32, 4, targets);
+        ServeTargets(platform, request, property, selection);
         return property;
     }
     if (target == atoms[mwin_atomTimestamp])
     {
         api->changeProperty(platform->connection, XCB_PROP_MODE_REPLACE, request->requestor,
-                            property, XCB_ATOM_INTEGER, 32, 1, &platform->clipboard.ownedTime);
+                            property, XCB_ATOM_INTEGER, 32, 1,
+                            &platform->clipboard.ownedTime[selection]);
         return property;
     }
-    if (text && context->clipboardOfferLength > PIECE_BYTES)
+    int item = ItemOf(platform, target, selection);
+    if (item < -1)
     {
-        return SendInPieces(platform, request, property) ? property : XCB_ATOM_NONE;
+        return XCB_ATOM_NONE;
     }
-    if (text)
+    uint32_t length = 0;
+    const char* bytes = SourceOf(platform->context, selection, item, &length);
+    if (length > PIECE_BYTES)
     {
-        api->changeProperty(platform->connection, XCB_PROP_MODE_REPLACE, request->requestor,
-                            property, target, 8, context->clipboardOfferLength,
-                            context->clipboardOffer);
-        return property;
+        return SendInPieces(platform, request, property, selection, item, length) ? property
+                                                                                  : XCB_ATOM_NONE;
     }
-    return XCB_ATOM_NONE;
+    api->changeProperty(platform->connection, XCB_PROP_MODE_REPLACE, request->requestor, property,
+                        target, 8, length, bytes);
+    return property;
 }
 
 // A reader took the last piece: sends the next, or the empty one that
@@ -320,7 +292,6 @@ static xcb_atom_t Serve(mwinX11Platform* platform, const xcb_selection_request_e
 static bool SendPiece(mwinX11Platform* platform, const xcb_property_notify_event_t* event)
 {
     mwinX11Clipboard* clipboard = &platform->clipboard;
-    const mwinContext* context = platform->context;
     for (int i = 0; i < MWIN_X11_SENDS; i++)
     {
         if (clipboard->sends[i].requestor != event->window ||
@@ -328,12 +299,15 @@ static bool SendPiece(mwinX11Platform* platform, const xcb_property_notify_event
         {
             continue;
         }
+        uint32_t total = 0;
+        const char* bytes = SourceOf(platform->context, clipboard->sends[i].selection,
+                                     clipboard->sends[i].item, &total);
         uint32_t offset = clipboard->sends[i].offset;
-        uint32_t left = context->clipboardOfferLength - offset;
+        uint32_t left = total - offset;
         uint32_t length = left < PIECE_BYTES ? left : PIECE_BYTES;
         platform->api.changeProperty(platform->connection, XCB_PROP_MODE_REPLACE, event->window,
                                      event->atom, clipboard->sends[i].type, 8, length,
-                                     context->clipboardOffer + offset);
+                                     bytes + offset);
         clipboard->sends[i].offset += length;
         clipboard->sends[i].deadlineNs = mwinMonotonicNow() + DEADLINE_NS;
         if (length == 0)
@@ -343,39 +317,6 @@ static bool SendPiece(mwinX11Platform* platform, const xcb_property_notify_event
         return true;
     }
     return false;
-}
-
-static bool OnProperty(mwinX11Platform* platform, const xcb_property_notify_event_t* event)
-{
-    mwinX11Clipboard* clipboard = &platform->clipboard;
-    if (event->window == clipboard->window && event->atom == platform->atoms[mwin_atomSelection])
-    {
-        if (clipboard->incremental && event->state == XCB_PROPERTY_NEW_VALUE)
-        {
-            TakePiece(platform, false);
-        }
-        return true;
-    }
-    return SendPiece(platform, event);
-}
-
-// The owner's answer to a read.
-static void OnNotify(mwinX11Platform* platform, const xcb_selection_notify_event_t* notify)
-{
-    const mwinX11Clipboard* clipboard = &platform->clipboard;
-    if (!clipboard->reading || clipboard->incremental)
-    {
-        return;
-    }
-    // No owner, or one without UTF-8 text: empty text.
-    if (notify->property == XCB_ATOM_NONE)
-    {
-        Finish(platform, mwinTakeClipboardText(platform->context, nullptr, 0));
-    }
-    else
-    {
-        TakePiece(platform, true);
-    }
 }
 
 bool mwinX11HandleClipboardEvent(mwinX11Platform* platform, const xcb_generic_event_t* event)
@@ -397,26 +338,37 @@ bool mwinX11HandleClipboardEvent(mwinX11Platform* platform, const xcb_generic_ev
     }
     if (type == XCB_SELECTION_CLEAR && ((const xcb_selection_clear_event_t*)event)->owner == window)
     {
-        clipboard->owned = false;
+        int selection =
+            OwnedSelection(platform, ((const xcb_selection_clear_event_t*)event)->selection);
+        if (selection >= 0)
+        {
+            clipboard->owned[selection] = false;
+        }
         return true;
     }
     if (type == XCB_SELECTION_NOTIFY &&
         ((const xcb_selection_notify_event_t*)event)->requestor == window)
     {
-        OnNotify(platform, (const xcb_selection_notify_event_t*)event);
+        mwinX11OnReadNotify(platform, (const xcb_selection_notify_event_t*)event);
         return true;
     }
-    return type == XCB_PROPERTY_NOTIFY &&
-           OnProperty(platform, (const xcb_property_notify_event_t*)event);
+    if (type != XCB_PROPERTY_NOTIFY)
+    {
+        return false;
+    }
+    const xcb_property_notify_event_t* property = (const xcb_property_notify_event_t*)event;
+    if (property->window == window && property->atom == platform->atoms[mwin_atomSelection])
+    {
+        mwinX11OnReadProperty(platform, property);
+        return true;
+    }
+    return SendPiece(platform, property);
 }
 
 void mwinX11CheckClipboard(mwinX11Platform* platform, uint64_t nowNs)
 {
     mwinX11Clipboard* clipboard = &platform->clipboard;
-    if (clipboard->reading && nowNs >= clipboard->deadlineNs)
-    {
-        Finish(platform, mwin_outcomeFailed);
-    }
+    mwinX11CheckRead(platform, nowNs);
     for (int i = 0; i < MWIN_X11_SENDS; i++)
     {
         if (clipboard->sends[i].requestor != 0 && nowNs >= clipboard->sends[i].deadlineNs)

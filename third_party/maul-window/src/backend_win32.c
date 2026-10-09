@@ -9,6 +9,7 @@
 #include "allocator.h"
 #include "backend.h"
 #include "core.h"
+#include "key_reach.h"
 #include "win32.h"
 #include "win32_dialog.h"
 #include "win32_drop.h"
@@ -16,6 +17,7 @@
 #include "win32_output.h"
 #include "win32_services.h"
 #include "win32_system.h"
+#include "win32_touch_keyboard.h"
 #include "win32_window.h"
 
 #include <string.h>
@@ -111,6 +113,7 @@ static void Stop(mwinContext* context)
     mwinWin32PadsStop(&platform->pads);
 #endif
     mwinWin32KeepAwake(platform, false);
+    mwinWin32StopTouchKeyboard(platform);
     mwinWin32StopOle(platform);
     mwinRelease(&context->allocator, platform, PlatformBytes(context), alignof(max_align_t));
     context->backendData = nullptr;
@@ -223,8 +226,33 @@ static mwinResult Rumble(mwinContext* context, uint32_t slot, float low, float h
 #endif
 }
 
+#ifdef MAUL_WINDOW_GAMEPAD
+static mwinResult TriggerRumble(mwinContext* context, uint32_t slot, float left, float right,
+                                uint32_t durationMs)
+{
+    return mwinWin32PadsTriggerRumble(&PlatformOf(context)->pads, slot, left, right, durationMs,
+                                      mwinWin32Now());
+}
+#endif
+
 const mwinBackendOps mwinWin32Backend = {
-    Start,           Stop, Run,        mwinWin32CreateWindow, mwinWin32DestroyWindow,
-    mwinWin32Submit, Now,  MapKeyCode, KeyboardLayout,        NativeHandles,
+    Start,
+    Stop,
+    Run,
+    mwinWin32CreateWindow,
+    mwinWin32DestroyWindow,
+    mwinWin32Submit,
+    Now,
+    MapKeyCode,
+    KeyboardLayout,
+    NativeHandles,
     Rumble,
+    mwinWin32ReleaseCursor,
+#ifdef MAUL_WINDOW_GAMEPAD
+    TriggerRumble,
+#else
+    nullptr,
+#endif
+    nullptr,
+    mwinWindowsKeyReach,
 };

@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Wayland clipboard.
+// The Wayland clipboard: the data device, its offers and sources, and the
+// readers of the program's text, data and primary selection.
 
 #include "wayland_clipboard.h"
 
+#include "clipboard_data.h"
 #include "wayland_drop.h"
 
 #include <errno.h>
@@ -18,15 +20,12 @@
 // wl_data_device_manager 3, the version the backend implements.
 #define DATA_MANAGER_VERSION 3
 
-// How long a read waits for the other client to finish.
-#define READ_DEADLINE_NS 5000000000u
-
 // The text types the backend offers and takes, best first.
 static const char* const s_types[] = {"text/plain;charset=utf-8", "UTF8_STRING", "text/plain"};
 
 #define TYPES ((int8_t)(sizeof(s_types) / sizeof(s_types[0])))
 
-static int8_t TypeOf(const char* type)
+int8_t mwinWaylandTextType(const char* type)
 {
     for (int8_t i = 0; i < TYPES; i++)
     {
@@ -36,6 +35,33 @@ static int8_t TypeOf(const char* type)
         }
     }
     return -1;
+}
+
+const char* mwinWaylandTextTypeName(int8_t index)
+{
+    return s_types[index];
+}
+
+void mwinWaylandOfferText(const mwinWaylandPlatform* platform, void* source, uint32_t opcode)
+{
+    uint32_t version = mwinWlVersion(&platform->api, source);
+    for (int8_t i = 0; i < TYPES; i++)
+    {
+        (void)platform->api.proxyMarshalFlags((struct wl_proxy*)source, opcode, nullptr, version, 0,
+                                              s_types[i]);
+    }
+}
+
+// Keeps a type of an offer while there is room and a data read could ask
+// for it.
+static void KeepType(mwinWaylandTypes* types, const char* type)
+{
+    size_t length = strlen(type);
+    if (length <= MWIN_CLIPBOARD_MIME && length < sizeof(types->bytes) - types->length)
+    {
+        memcpy(types->bytes + types->length, type, length + 1);
+        types->length += (uint16_t)(length + 1);
+    }
 }
 
 static void DestroyOffer(const mwinWaylandApi* api, struct wl_data_offer* offer)
@@ -49,7 +75,7 @@ static void DestroyOffer(const mwinWaylandApi* api, struct wl_data_offer* offer)
 static void OnOfferType(void* data, struct wl_data_offer* offer, const char* type)
 {
     mwinWaylandClipboard* clipboard = &((mwinWaylandPlatform*)data)->clipboard;
-    int8_t found = TypeOf(type);
+    int8_t found = mwinWaylandTextType(type);
     bool better = found >= 0 && (clipboard->incomingType < 0 || found < clipboard->incomingType);
     if (offer == clipboard->incoming && better)
     {
@@ -58,6 +84,10 @@ static void OnOfferType(void* data, struct wl_data_offer* offer, const char* typ
     if (offer == clipboard->incoming && strcmp(type, "text/uri-list") == 0)
     {
         clipboard->incomingFiles = true;
+    }
+    if (offer == clipboard->incoming)
+    {
+        KeepType(&clipboard->incomingTypes, type);
     }
 }
 
@@ -81,6 +111,7 @@ static void OnDataOffer(void* data, struct wl_data_device* device, struct wl_dat
     platform->clipboard.incoming = offer;
     platform->clipboard.incomingType = -1;
     platform->clipboard.incomingFiles = false;
+    platform->clipboard.incomingTypes.length = 0;
     mwinWlListen(&platform->api, offer, &s_offerListener, platform);
 }
 
@@ -127,10 +158,17 @@ static void OnSelection(void* data, struct wl_data_device* device, struct wl_dat
     (void)device;
     mwinWaylandPlatform* platform = data;
     mwinWaylandClipboard* clipboard = &platform->clipboard;
+    // The selection announced again keeps its offer and what is known of
+    // it.
+    if (offer == clipboard->selection)
+    {
+        return;
+    }
     DestroyOffer(&platform->api, clipboard->selection);
     clipboard->selection = offer;
-    clipboard->selectionType =
-        offer != nullptr && offer == clipboard->incoming ? clipboard->incomingType : -1;
+    bool known = offer != nullptr && offer == clipboard->incoming;
+    clipboard->selectionType = known ? clipboard->incomingType : -1;
+    clipboard->selectionTypes = known ? clipboard->incomingTypes : (mwinWaylandTypes){0};
     clipboard->incoming = nullptr;
 }
 
@@ -158,6 +196,7 @@ void mwinWaylandInitClipboard(mwinWaylandClipboard* clipboard)
 void mwinWaylandAttachClipboard(mwinWaylandPlatform* platform)
 {
     mwinWaylandClipboard* clipboard = &platform->clipboard;
+    mwinWaylandAttachPrimary(platform);
     if (clipboard->manager == nullptr || platform->seat == nullptr || clipboard->device != nullptr)
     {
         return;
@@ -168,12 +207,11 @@ void mwinWaylandAttachClipboard(mwinWaylandPlatform* platform)
     mwinWlListen(&platform->api, clipboard->device, &s_deviceListener, platform);
 }
 
-// Stops serving the program's text: its readers get what they have.
-static void CloseSends(mwinWaylandClipboard* clipboard)
+void mwinWaylandCloseSends(mwinWaylandClipboard* clipboard, bool primary)
 {
     for (int i = 0; i < MWIN_WAYLAND_SENDS; i++)
     {
-        if (clipboard->sends[i].fd >= 0)
+        if (clipboard->sends[i].fd >= 0 && clipboard->sends[i].primary == primary)
         {
             (void)close(clipboard->sends[i].fd);
             clipboard->sends[i].fd = -1;
@@ -181,10 +219,12 @@ static void CloseSends(mwinWaylandClipboard* clipboard)
     }
 }
 
+// Stops serving the program's text and data: its readers get what they
+// have.
 static void DestroySource(mwinWaylandPlatform* platform)
 {
     mwinWaylandClipboard* clipboard = &platform->clipboard;
-    CloseSends(clipboard);
+    mwinWaylandCloseSends(clipboard, false);
     if (clipboard->source != nullptr)
     {
         (void)mwinWlRequest(&platform->api, clipboard->source, WL_DATA_SOURCE_DESTROY, nullptr,
@@ -193,25 +233,12 @@ static void DestroySource(mwinWaylandPlatform* platform)
     }
 }
 
-static void AnswerReads(mwinContext* context, mwinOutcome outcome);
-
-// Ends a read: its pipe closed and its text given back.
-static void EndRead(mwinWaylandPlatform* platform)
-{
-    mwinWaylandClosePipe(&platform->clipboard.reading, platform->context);
-}
-
 void mwinWaylandDetachClipboard(mwinWaylandPlatform* platform)
 {
     mwinWaylandClipboard* clipboard = &platform->clipboard;
     const mwinWaylandApi* api = &platform->api;
     mwinWaylandEndDrag(platform);
-    // Without the seat, a read under way cannot finish.
-    if (clipboard->reading.fd >= 0)
-    {
-        EndRead(platform);
-        AnswerReads(platform->context, mwin_outcomeFailed);
-    }
+    mwinWaylandDetachPrimary(platform);
     DestroySource(platform);
     DestroyOffer(api, clipboard->selection);
     DestroyOffer(api, clipboard->incoming);
@@ -230,6 +257,8 @@ void mwinWaylandDetachClipboard(mwinWaylandPlatform* platform)
         }
         clipboard->device = nullptr;
     }
+    // Without the seat, a read under way cannot finish.
+    mwinWaylandFailRead(platform);
 }
 
 static void OnTarget(void* data, struct wl_data_source* source, const char* type)
@@ -239,23 +268,43 @@ static void OnTarget(void* data, struct wl_data_source* source, const char* type
     (void)type;
 }
 
-// A reader's pipe, written without blocking at each pump; dropped when
-// every place is taken.
-static void OnSend(void* data, struct wl_data_source* source, const char* type, int32_t fd)
+void mwinWaylandAddSend(mwinWaylandPlatform* platform, int32_t fd, bool primary, int8_t item)
 {
-    (void)source;
-    (void)type;
-    mwinWaylandClipboard* clipboard = &((mwinWaylandPlatform*)data)->clipboard;
+    mwinWaylandClipboard* clipboard = &platform->clipboard;
     for (int i = 0; i < MWIN_WAYLAND_SENDS; i++)
     {
         if (clipboard->sends[i].fd < 0 && fcntl(fd, F_SETFL, O_NONBLOCK) == 0)
         {
             clipboard->sends[i].fd = fd;
             clipboard->sends[i].offset = 0;
+            clipboard->sends[i].primary = primary;
+            clipboard->sends[i].item = item;
             return;
         }
     }
     (void)close(fd);
+}
+
+// A reader's pipe, for the text or an item of the data: written without
+// blocking at each pump; closed for a type the source lacks.
+static void OnSend(void* data, struct wl_data_source* source, const char* type, int32_t fd)
+{
+    (void)source;
+    mwinWaylandPlatform* platform = data;
+    const mwinContext* context = platform->context;
+    const mwinClipboardDataItem* item = mwinFindClipboardItem(context, type, strlen(type));
+    if (item != nullptr)
+    {
+        mwinWaylandAddSend(platform, fd, false, (int8_t)(item - context->clipboardData->items));
+    }
+    else if (mwinWaylandTextType(type) >= 0 && mwinOffersClipboardText(context))
+    {
+        mwinWaylandAddSend(platform, fd, false, -1);
+    }
+    else
+    {
+        (void)close(fd);
+    }
 }
 
 // Another client took the selection.
@@ -282,10 +331,12 @@ static const struct wl_data_source_listener s_sourceListener = {
     OnTarget, OnSend, OnCancelled, OnSourceEvent, OnSourceEvent, OnSourceAction,
 };
 
-int mwinWaylandWriteClipboard(mwinWaylandPlatform* platform)
+// Sets a source of the clipboard's text, when it has one, and data.
+static int WriteClipboard(mwinWaylandPlatform* platform)
 {
     mwinWaylandClipboard* clipboard = &platform->clipboard;
     const mwinWaylandApi* api = &platform->api;
+    const mwinClipboardCopy* copy = platform->context->clipboardData;
     if (clipboard->device == nullptr)
     {
         return mwin_outcomeUnsupported;
@@ -295,11 +346,14 @@ int mwinWaylandWriteClipboard(mwinWaylandPlatform* platform)
         mwinWlRequest(api, clipboard->manager, WL_DATA_DEVICE_MANAGER_CREATE_DATA_SOURCE,
                       &wl_data_source_interface, 0);
     mwinWlListen(api, source, &s_sourceListener, platform);
-    uint32_t version = mwinWlVersion(api, source);
-    for (int8_t i = 0; i < TYPES; i++)
+    if (mwinOffersClipboardText(platform->context))
+    {
+        mwinWaylandOfferText(platform, source, WL_DATA_SOURCE_OFFER);
+    }
+    for (uint32_t i = 0; copy != nullptr && i < copy->count; i++)
     {
         (void)api->proxyMarshalFlags((struct wl_proxy*)source, WL_DATA_SOURCE_OFFER, nullptr,
-                                     version, 0, s_types[i]);
+                                     mwinWlVersion(api, source), 0, copy->items[i].mime);
     }
     (void)api->proxyMarshalFlags((struct wl_proxy*)clipboard->device, WL_DATA_DEVICE_SET_SELECTION,
                                  nullptr, mwinWlVersion(api, clipboard->device), 0, source,
@@ -308,49 +362,10 @@ int mwinWaylandWriteClipboard(mwinWaylandPlatform* platform)
     return mwin_outcomeDone;
 }
 
-// Starts taking the selection's text through a pipe; false when it
-// cannot.
-static bool StartRead(mwinWaylandPlatform* platform)
+int mwinWaylandWriteSelection(mwinWaylandPlatform* platform, mwinRequestKind kind)
 {
-    mwinWaylandClipboard* clipboard = &platform->clipboard;
-    int writer = mwinWaylandOpenPipe(&clipboard->reading);
-    if (writer < 0)
-    {
-        return false;
-    }
-    // The request carries a copy of the writing end.
-    (void)platform->api.proxyMarshalFlags((struct wl_proxy*)clipboard->selection,
-                                          WL_DATA_OFFER_RECEIVE, nullptr,
-                                          mwinWlVersion(&platform->api, clipboard->selection), 0,
-                                          s_types[clipboard->selectionType], writer);
-    (void)close(writer);
-    clipboard->deadlineNs = mwinMonotonicNow() + READ_DEADLINE_NS;
-    return true;
-}
-
-int mwinWaylandReadClipboard(mwinWaylandPlatform* platform)
-{
-    mwinWaylandClipboard* clipboard = &platform->clipboard;
-    mwinContext* context = platform->context;
-    if (clipboard->device == nullptr)
-    {
-        return mwin_outcomeUnsupported;
-    }
-    if (clipboard->source != nullptr)
-    {
-        return mwinTakeClipboardText(context, context->clipboardOffer,
-                                     context->clipboardOfferLength);
-    }
-    // A read under way answers this one too.
-    if (clipboard->reading.fd >= 0)
-    {
-        return -1;
-    }
-    if (clipboard->selection == nullptr || clipboard->selectionType < 0)
-    {
-        return mwinTakeClipboardText(context, nullptr, 0);
-    }
-    return StartRead(platform) ? -1 : mwin_outcomeFailed;
+    return kind == mwin_requestPrimaryWrite ? mwinWaylandWritePrimary(platform)
+                                            : WriteClipboard(platform);
 }
 
 // Writes without the process being killed by SIGPIPE when the reader
@@ -379,10 +394,29 @@ static ssize_t WriteQuietly(int fd, const void* bytes, size_t size)
     return written;
 }
 
+// The bytes a reader takes: the primary selection's text, the
+// clipboard's text (item -1) or an item of its data.
+static const char* SourceOf(const mwinContext* context, bool primary, int8_t item,
+                            uint32_t* lengthOut)
+{
+    if (primary)
+    {
+        *lengthOut = context->primaryOfferLength;
+        return context->primaryOffer;
+    }
+    if (item < 0)
+    {
+        *lengthOut = context->clipboardOfferLength;
+        return context->clipboardOffer;
+    }
+    const mwinClipboardCopy* copy = context->clipboardData;
+    *lengthOut = copy->items[item].length;
+    return (const char*)mwinClipboardBytesOf(copy, &copy->items[item]);
+}
+
 static void PumpSends(mwinWaylandPlatform* platform)
 {
     mwinWaylandClipboard* clipboard = &platform->clipboard;
-    const mwinContext* context = platform->context;
     for (int i = 0; i < MWIN_WAYLAND_SENDS; i++)
     {
         uint32_t offset = clipboard->sends[i].offset;
@@ -390,14 +424,15 @@ static void PumpSends(mwinWaylandPlatform* platform)
         {
             continue;
         }
+        uint32_t length = 0;
+        const char* bytes = SourceOf(platform->context, clipboard->sends[i].primary,
+                                     clipboard->sends[i].item, &length);
         ssize_t written =
-            offset < context->clipboardOfferLength
-                ? WriteQuietly(clipboard->sends[i].fd, context->clipboardOffer + offset,
-                               context->clipboardOfferLength - offset)
-                : 0;
+            offset < length ? WriteQuietly(clipboard->sends[i].fd, bytes + offset, length - offset)
+                            : 0;
         bool waiting = written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK);
         clipboard->sends[i].offset += written > 0 ? (uint32_t)written : 0;
-        bool done = clipboard->sends[i].offset >= context->clipboardOfferLength;
+        bool done = clipboard->sends[i].offset >= length;
         if ((written < 0 && !waiting) || done)
         {
             (void)close(clipboard->sends[i].fd);
@@ -406,45 +441,8 @@ static void PumpSends(mwinWaylandPlatform* platform)
     }
 }
 
-// Answers the read requests of every window.
-static void AnswerReads(mwinContext* context, mwinOutcome outcome)
-{
-    for (uint32_t slot = 0; slot < context->limits.windows; slot++)
-    {
-        const mwinWindow* window = &context->windows[slot];
-        int32_t request = window->status == mwin_slotLive
-                              ? mwinFindActiveRequest(window, context->limits.requestsPerWindow,
-                                                      mwin_requestClipboardRead)
-                              : -1;
-        if (request >= 0)
-        {
-            mwinComplete(context, slot, (uint32_t)request, outcome);
-        }
-    }
-}
-
 void mwinWaylandPumpClipboard(mwinWaylandPlatform* platform, uint64_t nowNs)
 {
     PumpSends(platform);
-    mwinWaylandClipboard* clipboard = &platform->clipboard;
-    const mwinContext* context = platform->context;
-    if (clipboard->reading.fd < 0)
-    {
-        return;
-    }
-    int outcome = mwinWaylandReadPipe(&clipboard->reading, context, context->limits.clipboardBytes);
-    if (outcome == mwin_outcomeDone)
-    {
-        outcome = mwinTakeClipboardText(platform->context, clipboard->reading.bytes,
-                                        clipboard->reading.length);
-    }
-    if (outcome < 0 && nowNs >= clipboard->deadlineNs)
-    {
-        outcome = mwin_outcomeFailed;
-    }
-    if (outcome >= 0)
-    {
-        EndRead(platform);
-        AnswerReads(platform->context, (mwinOutcome)outcome);
-    }
+    mwinWaylandPumpRead(platform, nowNs);
 }

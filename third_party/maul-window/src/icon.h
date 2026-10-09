@@ -25,6 +25,15 @@ typedef struct mwinIconCopy
     mwinIconCopyImage images[];
 } mwinIconCopy;
 
+// Whether an image has pixels, a size of at most most a side and a
+// stride its rows fit.
+bool mwinIsIconImage(const mwinIconImage* image, uint32_t most);
+
+// Copies images into one block from the context's allocator, rows
+// packed: the copy, or NULL when the allocator fails.
+mwinIconCopy* mwinCopyIconImages(const mwinContext* context, const mwinIconImage* images,
+                                 uint32_t count);
+
 // The image a platform takes for a size: the smallest at least as
 // large, else the largest.
 const mwinIconCopyImage* mwinIconFor(const mwinIconCopy* icon, uint32_t size);

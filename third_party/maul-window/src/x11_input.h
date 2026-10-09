@@ -5,8 +5,8 @@
 // through XKB: xkbcommon-x11 reads its keymap and XKB's state events
 // keep modifiers and layout group current; with detectable autorepeat
 // the X server's repeats come as presses of a key already held. Text
-// comes from the keymap, through compose sequences; X11 has no input
-// method here, as XIM needs Xlib. The pointer is the core pointer:
+// comes from the keymap, through compose sequences, unless an input
+// method over D-Bus takes the key (linux_ime.h). The pointer is the core pointer:
 // buttons 4 to 7 turn the wheel, a detent each, and quick clicks are
 // counted by the backend (clicks.h). XInput 2's raw motion, before the
 // X server's acceleration, arrives as raw deltas while a focused window
@@ -36,6 +36,10 @@ bool mwinX11HandleInputEvent(mwinX11Platform* platform, const xcb_generic_event_
 
 // A window lost focus: the keys held are forgotten.
 void mwinX11ForgetKeys(mwinX11Platform* platform);
+
+// Tells the input method the window with the keyboard's focus that takes
+// text, and its caret, after either changes.
+void mwinX11FollowIme(mwinX11Platform* platform);
 
 // The window in a slot goes.
 void mwinX11ForgetPointer(mwinX11Platform* platform, uint32_t slot);

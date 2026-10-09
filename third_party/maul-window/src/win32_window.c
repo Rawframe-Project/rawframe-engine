@@ -17,6 +17,7 @@
 #include "win32_pointer.h"
 #include "win32_services.h"
 #include "win32_system.h"
+#include "win32_touch_keyboard.h"
 
 #include "maul-unicode/encoding.h"
 
@@ -609,6 +610,7 @@ void mwinWin32DestroyWindow(mwinContext* context, uint32_t slot)
     if (hwnd != nullptr)
     {
         mwinWin32DetachDrop(window);
+        mwinWin32DetachPane(window);
         mwinWin32ForgetObject(window);
     }
     // The window's last messages find no window of the program's; its
@@ -807,13 +809,18 @@ static int CarryOut(mwinWin32Window* window, mwinWindow* core, uint32_t index)
         return mwinWin32SetCursorMode(window, request->value.code);
     case mwin_requestCursorShape:
         return mwinWin32SetCursorShape(window, request->value.code);
+    case mwin_requestCursorImage:
+        return mwinWin32SetCursorImage(window, request->value.cursor);
     case mwin_requestTextInput:
         return mwinWin32SetTextInput(window, request->value.textInput.enabled,
                                      request->value.textInput.caret);
     case mwin_requestClipboardWrite:
+    case mwin_requestClipboardWriteData:
         return mwinWin32WriteClipboard(window);
     case mwin_requestClipboardRead:
         return mwinWin32ReadClipboard(window);
+    case mwin_requestClipboardReadData:
+        return mwinWin32ReadClipboardData(window, request);
     case mwin_requestOpenUrl:
         return mwinWin32OpenUrl(window, request);
     case mwin_requestRevealFile:
@@ -831,6 +838,10 @@ static int CarryOut(mwinWin32Window* window, mwinWindow* core, uint32_t index)
     case mwin_requestAccessibilityRoot:
         // WM_GETOBJECT reads it (win32_accessibility.c).
         return mwin_outcomeDone;
+    case mwin_requestVirtualKeyboard:
+        // The purpose in the low bits, the high bit set to show.
+        return mwinWin32SetTouchKeyboard(window, (request->value.code & 0x80u) != 0,
+                                         (mwinInputPurpose)(request->value.code & 0x7Fu));
     default:
         return mwin_outcomeUnsupported;
     }

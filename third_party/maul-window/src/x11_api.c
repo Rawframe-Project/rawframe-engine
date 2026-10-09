@@ -58,7 +58,8 @@ static bool FindCore(mwinX11Api* api)
            FIND(library, translateCoordinatesReply, xcb_translate_coordinates_reply) &&
            FIND(library, changeWindowAttributes, xcb_change_window_attributes) &&
            FIND(library, createPixmap, xcb_create_pixmap) &&
-           FIND(library, freePixmap, xcb_free_pixmap) &&
+           FIND(library, freePixmap, xcb_free_pixmap) && FIND(library, createGc, xcb_create_gc) &&
+           FIND(library, freeGc, xcb_free_gc) && FIND(library, putImage, xcb_put_image) &&
            FIND(library, createCursor, xcb_create_cursor) &&
            FIND(library, freeCursor, xcb_free_cursor) &&
            FIND(library, grabPointer, xcb_grab_pointer) &&
@@ -82,7 +83,24 @@ static bool FindRandr(mwinX11Api* api)
            FIND(randrLibrary, randrGetMonitors, xcb_randr_get_monitors) &&
            FIND(randrLibrary, randrGetMonitorsReply, xcb_randr_get_monitors_reply) &&
            FIND(randrLibrary, randrMonitorsIterator, xcb_randr_get_monitors_monitors_iterator) &&
-           FIND(randrLibrary, randrMonitorInfoNext, xcb_randr_monitor_info_next);
+           FIND(randrLibrary, randrMonitorInfoNext, xcb_randr_monitor_info_next) &&
+           FIND(randrLibrary, randrMonitorOutputs, xcb_randr_monitor_info_outputs) &&
+           FIND(randrLibrary, randrMonitorOutputsLength, xcb_randr_monitor_info_outputs_length) &&
+           FIND(randrLibrary, randrGetOutputProperty, xcb_randr_get_output_property) &&
+           FIND(randrLibrary, randrGetOutputPropertyReply, xcb_randr_get_output_property_reply) &&
+           FIND(randrLibrary, randrOutputPropertyData, xcb_randr_get_output_property_data) &&
+           FIND(randrLibrary, randrOutputPropertyDataLength,
+                xcb_randr_get_output_property_data_length) &&
+           FIND(randrLibrary, randrGetResources, xcb_randr_get_screen_resources_current) &&
+           FIND(randrLibrary, randrGetResourcesReply,
+                xcb_randr_get_screen_resources_current_reply) &&
+           FIND(randrLibrary, randrResourceModes, xcb_randr_get_screen_resources_current_modes) &&
+           FIND(randrLibrary, randrResourceModesLength,
+                xcb_randr_get_screen_resources_current_modes_length) &&
+           FIND(randrLibrary, randrGetOutputInfo, xcb_randr_get_output_info) &&
+           FIND(randrLibrary, randrGetOutputInfoReply, xcb_randr_get_output_info_reply) &&
+           FIND(randrLibrary, randrGetCrtcInfo, xcb_randr_get_crtc_info) &&
+           FIND(randrLibrary, randrGetCrtcInfoReply, xcb_randr_get_crtc_info_reply);
 }
 
 static bool FindKeyboard(mwinX11Api* api)
@@ -101,6 +119,20 @@ static bool FindCursors(mwinX11Api* api)
     return FIND(cursorLibrary, cursorContextNew, xcb_cursor_context_new) &&
            FIND(cursorLibrary, cursorLoad, xcb_cursor_load_cursor) &&
            FIND(cursorLibrary, cursorContextFree, xcb_cursor_context_free);
+}
+
+static bool FindRender(mwinX11Api* api)
+{
+    // The extension's id is data, not a function.
+    api->renderId = dlsym(api->renderLibrary, "xcb_render_id");
+    return api->renderId != nullptr &&
+           FIND(renderLibrary, renderQueryFormats, xcb_render_query_pict_formats) &&
+           FIND(renderLibrary, renderQueryFormatsReply, xcb_render_query_pict_formats_reply) &&
+           FIND(renderLibrary, renderFormats, xcb_render_query_pict_formats_formats) &&
+           FIND(renderLibrary, renderFormatsLength, xcb_render_query_pict_formats_formats_length) &&
+           FIND(renderLibrary, renderCreatePicture, xcb_render_create_picture) &&
+           FIND(renderLibrary, renderFreePicture, xcb_render_free_picture) &&
+           FIND(renderLibrary, renderCreateCursor, xcb_render_create_cursor);
 }
 
 static bool FindXinput(mwinX11Api* api)
@@ -127,7 +159,13 @@ static bool FindXinput(mwinX11Api* api)
            FIND(xinputLibrary, deviceInfoNext, xcb_input_xi_device_info_next) &&
            FIND(xinputLibrary, deviceClasses, xcb_input_xi_device_info_classes_iterator) &&
            FIND(xinputLibrary, deviceClassNext, xcb_input_device_class_next) &&
-           FIND(xinputLibrary, xiUngrabDevice, xcb_input_xi_ungrab_device);
+           FIND(xinputLibrary, xiUngrabDevice, xcb_input_xi_ungrab_device) &&
+           FIND(xinputLibrary, deviceName, xcb_input_xi_device_info_name) &&
+           FIND(xinputLibrary, deviceNameLength, xcb_input_xi_device_info_name_length) &&
+           FIND(xinputLibrary, listInputDevices, xcb_input_list_input_devices) &&
+           FIND(xinputLibrary, listInputDevicesReply, xcb_input_list_input_devices_reply) &&
+           FIND(xinputLibrary, inputDevices, xcb_input_list_input_devices_devices) &&
+           FIND(xinputLibrary, inputDevicesLength, xcb_input_list_input_devices_devices_length);
 }
 
 // Opens an optional library, or leaves it NULL when it or one of its
@@ -155,6 +193,7 @@ mwinResult mwinLoadX11(mwinX11Api* api)
     // Each links libxcb itself, and shares the one libxcb.so.1 loaded.
     OpenOptional(api, &api->randrLibrary, "libxcb-randr.so.0", FindRandr);
     OpenOptional(api, &api->cursorLibrary, "libxcb-cursor.so.0", FindCursors);
+    OpenOptional(api, &api->renderLibrary, "libxcb-render.so.0", FindRender);
     OpenOptional(api, &api->xinputLibrary, "libxcb-xinput.so.0", FindXinput);
     api->xcbXkbLibrary = dlopen("libxcb-xkb.so.1", RTLD_NOW | RTLD_LOCAL);
     if (api->xcbXkbLibrary != nullptr)
@@ -171,8 +210,8 @@ mwinResult mwinLoadX11(mwinX11Api* api)
 
 void mwinUnloadX11(mwinX11Api* api)
 {
-    void* optional[] = {api->randrLibrary, api->cursorLibrary, api->xkbX11Library,
-                        api->xcbXkbLibrary, api->xinputLibrary};
+    void* optional[] = {api->randrLibrary,  api->cursorLibrary, api->renderLibrary,
+                        api->xkbX11Library, api->xcbXkbLibrary, api->xinputLibrary};
     for (size_t i = 0; i < sizeof(optional) / sizeof(optional[0]); i++)
     {
         if (optional[i] != nullptr)

@@ -51,6 +51,20 @@ static void RefreshOf(NSScreen* screen, mwinMonitorInfo* info)
     CGDisplayModeRelease(mode);
 }
 
+// The screen's extended dynamic range (mwin-0036): Apple tells headroom,
+// never nits. The headroom is what the screen shows over SDR white at its
+// brightness now once content asks for EDR; EDR is on while content on
+// the screen goes above SDR white.
+static mwinHdrFacts HdrOf(NSScreen* screen)
+{
+    CGFloat potential = screen.maximumPotentialExtendedDynamicRangeColorComponentValue;
+    return (mwinHdrFacts){
+        .known = true,
+        .active = screen.maximumExtendedDynamicRangeColorComponentValue > 1.0,
+        .headroom = potential > 1.0 ? (float)potential : 1.0f,
+    };
+}
+
 static mwinMonitorInfo InfoOf(NSScreen* screen, bool primary, CGFloat primaryHeight)
 {
     mwinMonitorInfo info = {0};
@@ -78,6 +92,7 @@ static mwinMonitorInfo InfoOf(NSScreen* screen, bool primary, CGFloat primaryHei
     info.heightMm = (uint32_t)lround(millimeters.height);
     info.scale = (float)scale;
     RefreshOf(screen, &info);
+    info.hdr = HdrOf(screen);
     info.primary = primary;
     return info;
 }

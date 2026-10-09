@@ -27,16 +27,16 @@ int32_t mwinFindGamepad(const mwinContext* context, mwinGamepadId gamepad)
                : -1;
 }
 
-// Keeps a gamepad's facts, with a name that is not UTF-8 left empty and
-// raw counts kept to what the state holds.
+// Keeps a gamepad's facts: its name cut to its longest well-formed
+// prefix (a device's bytes, which a backend may cut inside a character)
+// and raw counts kept to what the state holds.
 static void Store(mwinGamepad* gamepad, const mwinGamepadInfo* info)
 {
     gamepad->info = *info;
-    if (info->nameLength > MWIN_GAMEPAD_NAME_BYTES ||
-        muniValidateUtf8(info->name, info->nameLength).status != muni_success)
-    {
-        gamepad->info.nameLength = 0;
-    }
+    uint32_t length =
+        info->nameLength < MWIN_GAMEPAD_NAME_BYTES ? info->nameLength : MWIN_GAMEPAD_NAME_BYTES;
+    muniTextResult valid = muniValidateUtf8(info->name, length);
+    gamepad->info.nameLength = valid.status == muni_success ? length : (uint32_t)valid.offset;
     uint8_t buttons =
         info->rawButtons < MWIN_GAMEPAD_RAW_BUTTONS ? info->rawButtons : MWIN_GAMEPAD_RAW_BUTTONS;
     uint8_t axes = info->rawAxes < MWIN_GAMEPAD_RAW_AXES ? info->rawAxes : MWIN_GAMEPAD_RAW_AXES;
@@ -62,6 +62,8 @@ int32_t mwinAddGamepad(mwinContext* context, const mwinGamepadInfo* info, uint64
             gamepad->generation += 1;
             gamepad->arrival = context->arrivals++;
             gamepad->state = (mwinGamepadState){0};
+            gamepad->motionOn = false;
+            gamepad->motion = (mwinGamepadMotion){0};
             Store(gamepad, info);
             PostGlobal(context, i, mwin_eventGamepadAdded, timeNs);
             return (int32_t)i;
@@ -124,4 +126,29 @@ void mwinPostGamepadAxis(mwinContext* context, uint32_t slot, uint8_t axis, floa
     event.data.gamepadAxis =
         (mwinGamepadAxisEvent){mwinGamepadIdOf(context, slot), axis, !gamepad->info.mapped, value};
     mwinPostGamepadRecord(context, &event);
+}
+
+// A sample apart from the one before by more than this is after a gap
+// (the sensors paused, the link dropped): it turns the pad only by its
+// rate over this long.
+#define MOTION_GAP_NS 100000000ull
+
+void mwinPostGamepadMotion(mwinContext* context, uint32_t slot, const float acceleration[3],
+                           const float rotationRate[3], uint64_t timeNs)
+{
+    mwinGamepad* gamepad = &context->gamepads[slot];
+    if (!gamepad->motionOn)
+    {
+        return;
+    }
+    mwinGamepadMotion* motion = &gamepad->motion;
+    uint64_t since = motion->timeNs != 0 && timeNs > motion->timeNs ? timeNs - motion->timeNs : 0;
+    float seconds = (float)(since < MOTION_GAP_NS ? since : MOTION_GAP_NS) * 1e-9f;
+    for (int i = 0; i < 3; i++)
+    {
+        motion->acceleration[i] = acceleration[i];
+        motion->rotationRate[i] = rotationRate[i];
+        motion->rotation[i] += rotationRate[i] * seconds;
+    }
+    motion->timeNs = timeNs;
 }

@@ -35,10 +35,12 @@ typedef struct mwinWebWindow
     mwinPixelSize pixels;
     float scale;
     bool fullscreen;
-    // The cursor the program asked for, the buttons held, the last
+    // The cursor the program asked for (a shape, or a cursor made from
+    // images when cursorImage is live), the buttons held, the last
     // press, and the pen's flags at its last record.
     mwinCursorMode cursorMode;
     mwinCursorShape cursorShape;
+    mwinCursorId cursorImage;
     uint8_t buttons;
     mwinClickCounter clicks;
     mwinPenFlags penFlags;
@@ -62,6 +64,9 @@ typedef struct mwinWebPlatform
     bool awake;
     // The gamepads, with the gamepad component.
     mwinWebPads pads;
+    // The browser's family and the system under it, for the chords they
+    // keep (mwinWebReadKeyHost).
+    uint8_t keyHost;
 } mwinWebPlatform;
 
 // What the page reports, one record at a time.
@@ -80,7 +85,8 @@ typedef enum mwinWebRecordKind
     mwin_webFullscreenFailed = 5,
     // The page was shown (code 1) or hidden.
     mwin_webVisibility = 6,
-    // A preference the facts come from changed.
+    // A preference the facts or the screen's HDR facts come from
+    // changed.
     mwin_webFacts = 7,
     // The preferred languages changed.
     mwin_webLocales = 8,
@@ -113,8 +119,8 @@ typedef enum mwinWebRecordKind
     // A canvas left the document, or came back.
     mwin_webSurfaceLost = 22,
     mwin_webSurfaceRestored = 23,
-    // A clipboard write or read ended: code its mwinOutcome; a read that
-    // is done has its text waiting as bytes.
+    // A clipboard write or read ended: code its mwinOutcome, x 1 for
+    // data; a read that is done has its text or data waiting as bytes.
     mwin_webClipboardWritten = 24,
     mwin_webClipboardRead = 25,
     // A drag over a canvas: code 0 entered, 1 moved, 2 left; x, y where,

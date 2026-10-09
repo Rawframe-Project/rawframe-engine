@@ -24,6 +24,7 @@
 #include "allocator.h"
 #include "android.h"
 #include "backend.h"
+#include "key_reach.h"
 
 #include <string.h>
 #include <time.h>
@@ -187,6 +188,7 @@ static void Pump(mwinContext* context)
     mwinAndroidPumpDialogs(platform, &budget);
     mwinAndroidPumpDrops(platform, &budget);
     mwinAndroidPumpFacts(platform, mwinAndroidNow());
+    mwinAndroidPumpScreen(platform, mwinAndroidNow());
 #ifdef MAUL_WINDOW_GAMEPAD
     mwinAndroidPumpPads(platform, mwinAndroidNow());
 #endif
@@ -264,6 +266,7 @@ static void OnStart(ANativeActivity* activity)
     mwinAndroidJoinAccessibility(platform);
     // Settings changed in the settings application come back with it.
     mwinAndroidReadSystem(platform);
+    mwinAndroidReadScreen(platform);
     if (platform->suspended && !Lifecycle(platform, true))
     {
         return;
@@ -403,6 +406,7 @@ static void OnConfigurationChanged(ANativeActivity* activity)
         AConfiguration_fromAssetManager(platform->configuration, activity->assetManager);
         mwinAndroidReadSize(platform);
         mwinAndroidReadSystem(platform);
+        mwinAndroidReadScreen(platform);
     }
 }
 
@@ -423,10 +427,15 @@ static void Attach(mwinAndroidPlatform* platform, ANativeActivity* activity)
     callbacks->onInputQueueDestroyed = OnInputQueueDestroyed;
     callbacks->onConfigurationChanged = OnConfigurationChanged;
     AConfiguration_fromAssetManager(platform->configuration, activity->assetManager);
-    // A window kept awake keeps the joining activity's display awake too.
+    // A window kept awake keeps the joining activity's display awake too,
+    // and its cursor shows over the joining activity's view.
     if (platform->slot >= 0 && platform->context->windows[platform->slot].state.awake)
     {
         mwinAndroidApplyAwake(platform, true);
+    }
+    if (platform->slot >= 0)
+    {
+        mwinAndroidApplyCursor(platform);
     }
 }
 
@@ -469,6 +478,7 @@ static void Stop(mwinContext* context)
     mwinAndroidStopDialogs(platform);
     mwinAndroidStopDrops(platform);
     mwinAndroidStopFacts(platform);
+    mwinAndroidStopScreen(platform);
     mwinAndroidStopAccessibility(platform);
 #ifdef MAUL_WINDOW_GAMEPAD
     mwinAndroidStopPads(platform);
@@ -515,8 +525,9 @@ static mwinResult Start(mwinContext* context)
     context->backendData = platform;
     bool found =
         mwinAndroidFindInput(platform) && mwinAndroidFindText(platform, activity) &&
-        mwinAndroidFindServices(platform, activity) && mwinAndroidFindDialogs(platform, activity) &&
-        mwinAndroidFindDrops(platform, activity) && mwinAndroidFindFacts(platform, activity) &&
+        mwinAndroidFindCursors(platform) && mwinAndroidFindServices(platform, activity) &&
+        mwinAndroidFindDialogs(platform, activity) && mwinAndroidFindDrops(platform, activity) &&
+        mwinAndroidFindFacts(platform, activity) && mwinAndroidFindScreen(platform, activity) &&
         mwinAndroidFindAccessibility(platform, activity);
 #ifdef MAUL_WINDOW_GAMEPAD
     found = found && mwinAndroidFindPads(platform, activity);
@@ -589,6 +600,13 @@ static mwinResult Rumble(mwinContext* context, uint32_t slot, float low, float h
 #endif
 }
 
+#ifdef MAUL_WINDOW_GAMEPAD
+static mwinResult SetMotion(mwinContext* context, uint32_t slot, bool enabled)
+{
+    return mwinAndroidSetMotion(mwinAndroidPlatformOf(context), slot, enabled);
+}
+#endif
+
 const mwinBackendOps mwinAndroidBackend = {
     Start,
     Stop,
@@ -601,4 +619,12 @@ const mwinBackendOps mwinAndroidBackend = {
     KeyboardLayout,
     NativeHandles,
     Rumble,
+    mwinAndroidReleaseCursor,
+    nullptr,
+#ifdef MAUL_WINDOW_GAMEPAD
+    SetMotion,
+#else
+    nullptr,
+#endif
+    mwinAndroidKeyReach,
 };

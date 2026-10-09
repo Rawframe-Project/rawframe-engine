@@ -113,19 +113,25 @@ add_library(maul-window ${MAUL_LIBRARY_KIND}
     src/allocator.c
     src/base.c
     src/clipboard.c
+    src/clipboard_data.c
     src/context.c
     src/dialog.c
     src/drop.c
+    src/edid.c
     src/file_list.c
     src/accessibility.c
     src/chrome.c
     src/icon.c
+    src/cursor.c
     src/input.c
+    src/key_reach.c
     src/message_box.c
     src/monitor.c
     src/native.c
     src/pad.c
+    src/preedit_fit.c
     src/queue.c
+    src/selection_reads.c
     src/services.c
     src/system.c
     src/text.c
@@ -144,7 +150,8 @@ if(MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11)
         COMPILE_DEFINITIONS _POSIX_C_SOURCE=200809L)
 endif()
 if(MAUL_WINDOW_TEST_BACKEND)
-    target_sources(maul-window PRIVATE src/backend_test.c src/backend_test_services.c)
+    target_sources(maul-window PRIVATE src/backend_test.c src/backend_test_services.c
+        src/backend_test_text.c)
     target_compile_definitions(maul-window PRIVATE MAUL_WINDOW_TEST_BACKEND)
 endif()
 # The gamepad component: its functions, and the backends' gamepad code.
@@ -194,6 +201,8 @@ set(MAUL_PKG_REQUIRES_PRIVATE "maul-unicode >= ${MAUL_WINDOW_UNICODE_VERSION}")
 if(MAUL_WINDOW_BUILD_TESTS)
     enable_testing()
     maul_add_test(base)
+    # The guide's opening program, built only (family record 0019).
+    maul_add_test(guide_hello MANUAL)
     if(MAUL_WINDOW_TEST_BACKEND)
         maul_add_test(window)
         maul_add_test(input)
@@ -203,13 +212,20 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(ime)
         maul_add_test(properties)
         maul_add_test(clipboard)
+        maul_add_test(clipboard_data)
         maul_add_test(drop)
         maul_add_test(services)
         maul_add_test(dialog)
         maul_add_test(icon WHITEBOX)
+        maul_add_test(cursor WHITEBOX)
         maul_add_test(owned)
         maul_add_test(chrome WHITEBOX)
         maul_add_test(accessibility WHITEBOX)
+        maul_add_test(key_reach WHITEBOX)
+    maul_add_test(edid WHITEBOX)
+        maul_add_test(text WHITEBOX)
+        maul_add_test(file_list WHITEBOX)
+        maul_add_test(selection WHITEBOX)
         # Android's pointers as records, on every platform: elsewhere the test
         # builds the backend's translator itself.
         maul_add_test(android_motion WHITEBOX)
@@ -235,12 +251,20 @@ if(MAUL_WINDOW_BUILD_TESTS)
         set_tests_properties(wayland PROPERTIES SKIP_RETURN_CODE 77)
         mwin_add_wayland_server_test(wayland_input)
         mwin_add_wayland_server_test(wayland_clipboard)
+        mwin_add_wayland_server_test(wayland_clipboard_data)
         mwin_add_wayland_server_test(wayland_drop)
         mwin_add_wayland_server_test(wayland_services)
         mwin_add_wayland_server_test(wayland_icon)
         mwin_add_wayland_server_test(wayland_owned)
+        mwin_add_wayland_server_test(wayland_pen)
         mwin_add_wayland_server_test(wayland_chrome)
         mwin_add_wayland_server_test(wayland_focus)
+        mwin_add_wayland_server_test(wayland_monitor)
+        mwin_add_wayland_server_test(wayland_monitor_facts)
+        mwin_add_wayland_server_test(wayland_states)
+        mwin_add_wayland_server_test(wayland_text)
+        mwin_add_wayland_server_test(wayland_seat)
+        mwin_add_wayland_server_test(wayland_theme)
         # The pipes other clients write into, read against their limits.
         maul_add_test(wayland_pipe WHITEBOX POSIX)
         if(TARGET test_wayland_pipe)
@@ -253,7 +277,7 @@ if(MAUL_WINDOW_BUILD_TESTS)
         target_compile_definitions(test_x11 PRIVATE _POSIX_C_SOURCE=200809L)
         set_tests_properties(x11 PROPERTIES SKIP_RETURN_CODE 77)
         # Drives the X server through XTEST, which the test links.
-        pkg_check_modules(MWIN_TEST_XCB REQUIRED IMPORTED_TARGET xcb xcb-xtest)
+        pkg_check_modules(MWIN_TEST_XCB REQUIRED IMPORTED_TARGET xcb xcb-xtest xcb-xfixes)
         maul_add_test(x11_input POSIX)
         target_compile_definitions(test_x11_input PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_x11_input PRIVATE PkgConfig::MWIN_TEST_XCB)
@@ -263,6 +287,10 @@ if(MAUL_WINDOW_BUILD_TESTS)
         target_compile_definitions(test_x11_clipboard PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_x11_clipboard PRIVATE PkgConfig::MWIN_TEST_XCB)
         set_tests_properties(x11_clipboard PROPERTIES SKIP_RETURN_CODE 77)
+        # Its data and PRIMARY likewise.
+        maul_add_test(x11_clipboard_data POSIX)
+        target_compile_definitions(test_x11_clipboard_data PRIVATE _POSIX_C_SOURCE=200809L)
+        target_link_libraries(test_x11_clipboard_data PRIVATE PkgConfig::MWIN_TEST_XCB)
         # Window icons read back by the test's own connection.
         maul_add_test(x11_icon POSIX)
         target_compile_definitions(test_x11_icon PRIVATE _POSIX_C_SOURCE=200809L)
@@ -273,6 +301,18 @@ if(MAUL_WINDOW_BUILD_TESTS)
         target_compile_definitions(test_x11_drop PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_x11_drop PRIVATE PkgConfig::MWIN_TEST_XCB)
         set_tests_properties(x11_drop PROPERTIES SKIP_RETURN_CODE 77)
+        # Reads at the edges of the clipboard's limit.
+        maul_add_test(x11_clipboard_limits POSIX)
+        target_compile_definitions(test_x11_clipboard_limits PRIVATE _POSIX_C_SOURCE=200809L)
+        target_link_libraries(test_x11_clipboard_limits PRIVATE PkgConfig::MWIN_TEST_XCB)
+        # Readers of large texts, more than are served at once.
+        maul_add_test(x11_clipboard_readers POSIX)
+        target_compile_definitions(test_x11_clipboard_readers PRIVATE _POSIX_C_SOURCE=200809L)
+        target_link_libraries(test_x11_clipboard_readers PRIVATE PkgConfig::MWIN_TEST_XCB)
+        # Window manager hints and states read back and set.
+        maul_add_test(x11_hints POSIX)
+        target_compile_definitions(test_x11_hints PRIVATE _POSIX_C_SOURCE=200809L)
+        target_link_libraries(test_x11_hints PRIVATE PkgConfig::MWIN_TEST_XCB)
         # Owned windows and popups read back by the test's own connection.
         maul_add_test(x11_owned POSIX)
         target_compile_definitions(test_x11_owned PRIVATE _POSIX_C_SOURCE=200809L)
@@ -281,18 +321,47 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(x11_chrome POSIX)
         target_compile_definitions(test_x11_chrome PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_x11_chrome PRIVATE PkgConfig::MWIN_TEST_XCB)
+        # Monitors set and deleted through RandR by the test's own connection.
+        pkg_check_modules(MWIN_TEST_RANDR REQUIRED IMPORTED_TARGET xcb xcb-randr)
+        maul_add_test(x11_monitor POSIX)
+        target_compile_definitions(test_x11_monitor PRIVATE _POSIX_C_SOURCE=200809L)
+        target_link_libraries(test_x11_monitor PRIVATE PkgConfig::MWIN_TEST_RANDR)
+        # The facts an output's properties give.
+        maul_add_test(x11_monitor_facts POSIX)
+        target_compile_definitions(test_x11_monitor_facts PRIVATE _POSIX_C_SOURCE=200809L)
+        target_link_libraries(test_x11_monitor_facts PRIVATE PkgConfig::MWIN_TEST_RANDR m)
         # The wheel movement of scroll valuators.
         maul_add_test(x11_scroll WHITEBOX)
-        # The tests that move the X server's focus or pointer take turns.
-        set_tests_properties(x11 x11_input x11_clipboard x11_icon x11_drop x11_owned x11_chrome
-                             PROPERTIES SKIP_RETURN_CODE 77 RESOURCE_LOCK x11-focus)
+        # Which devices are pens, and the records their events make.
+        maul_add_test(x11_pen WHITEBOX)
+        # The scale of Xft.dpi.
+        maul_add_test(x11_resources WHITEBOX)
+        # The tests that move the X server's focus or pointer, or own its
+        # selections, take turns.
+        set_tests_properties(x11 x11_input x11_clipboard x11_clipboard_data
+                             x11_clipboard_limits x11_clipboard_readers x11_hints x11_icon
+                             x11_drop x11_owned x11_chrome x11_monitor x11_monitor_facts PROPERTIES
+                             SKIP_RETURN_CODE 77
+                             RESOURCE_LOCK x11-focus)
     endif()
     if(MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11)
         # Stand-ins for zenity and kdialog on PATH.
         maul_add_test(message_box POSIX)
         target_compile_definitions(test_message_box PRIVATE _POSIX_C_SOURCE=200809L)
+        # Linux input event codes as key codes.
+        maul_add_test(evdev WHITEBOX)
+        # A gamepad's battery from a sysfs tree of the test's own.
+        if(MAUL_WINDOW_GAMEPAD)
+            maul_add_test(linux_battery WHITEBOX)
+            if(TARGET test_linux_battery)
+                target_compile_definitions(test_linux_battery PRIVATE _POSIX_C_SOURCE=200809L)
+            endif()
+        endif()
         # The preferred locales the environment names.
         maul_add_test(linux_locale WHITEBOX)
+        if(TARGET test_linux_locale)
+            target_compile_definitions(test_linux_locale PRIVATE _POSIX_C_SOURCE=200809L)
+        endif()
     endif()
     if(MAUL_WINDOW_X11)
         # xdg-open on PATH and a session bus of the test's own; X11, and
@@ -316,8 +385,15 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(linux_power POSIX)
         target_compile_definitions(test_linux_power PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_linux_power PRIVATE ${CMAKE_DL_LIBS})
-        set(MWIN_BUS_TESTS linux_services linux_awake linux_dialog linux_settings linux_power)
+        # Input methods through Fcitx 5 and IBus of the test's own (mwin-0030).
+        maul_add_test(x11_ime POSIX)
+        target_compile_definitions(test_x11_ime PRIVATE _POSIX_C_SOURCE=200809L)
+        target_link_libraries(test_x11_ime PRIVATE ${CMAKE_DL_LIBS} PkgConfig::MWIN_TEST_XCB)
+        set(MWIN_BUS_TESTS linux_services linux_awake linux_dialog linux_settings linux_power
+            x11_ime)
         set_tests_properties(${MWIN_BUS_TESTS} PROPERTIES SKIP_RETURN_CODE 77)
+        # It moves the X server's focus, as the X11 tests do.
+        set_tests_properties(x11_ime PROPERTIES RESOURCE_LOCK x11-focus)
         if(MAUL_WINDOW_TSAN)
             set_tests_properties(${MWIN_BUS_TESTS} PROPERTIES
                 ENVIRONMENT "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/test/tsan.supp")
@@ -330,7 +406,15 @@ if(MAUL_WINDOW_BUILD_TESTS)
         # display.
         maul_add_test(linux_gamepad POSIX)
         target_compile_definitions(test_linux_gamepad PRIVATE _GNU_SOURCE)
-        set_tests_properties(linux_gamepad PROPERTIES SKIP_RETURN_CODE 77)
+        set_tests_properties(linux_gamepad PROPERTIES SKIP_RETURN_CODE 77 RESOURCE_LOCK uinput)
+        # Where both backends are built, the X11 one too, Wayland's
+        # display hidden; the pads of one run would be the other's.
+        if(MAUL_WINDOW_WAYLAND AND MAUL_WINDOW_X11)
+            add_test(NAME linux_gamepad_x11 COMMAND test_linux_gamepad)
+            set_tests_properties(linux_gamepad_x11 PROPERTIES SKIP_RETURN_CODE 77
+                                 ENVIRONMENT_MODIFICATION "WAYLAND_DISPLAY=unset:"
+                                 RESOURCE_LOCK uinput)
+        endif()
     endif()
     if(MAUL_WINDOW_WEB)
         # Runs in headless Chrome through puppeteer, which the runner
@@ -351,6 +435,7 @@ if(MAUL_WINDOW_BUILD_TESTS)
         endfunction()
         mwin_add_web_test(web)
         mwin_add_web_test(web_input)
+        mwin_add_web_test(web_host)
         mwin_add_web_test(web_ime)
         mwin_add_web_test(web_lifecycle)
         if(MAUL_WINDOW_GAMEPAD)
@@ -392,7 +477,8 @@ if(MAUL_WINDOW_BUILD_TESTS)
     if(MAUL_WINDOW_ANDROID AND DEFINED ENV{ANDROID_HOME})
         # Applications in the emulator, built by tools/build_android_app.sh
         # without Gradle and run by tools/run_android_app.sh.
-        set(MWIN_ANDROID_TESTS android android_input android_ime android_pad android_services android_dialog android_drop android_system android_access)
+        set(MWIN_ANDROID_TESTS android android_input android_cursor android_ime android_pad
+            android_services android_dialog android_drop android_system android_access)
         foreach(name ${MWIN_ANDROID_TESTS})
             set(package maul.window.tests.${name})
             add_library(test_${name} SHARED test/test_${name}.c)
@@ -497,12 +583,15 @@ if(MAUL_WINDOW_BUILD_TESTS)
         # Custom chrome and hit regions read back from Windows.
         maul_add_test(win32_chrome)
         target_link_libraries(test_win32_chrome PRIVATE user32)
+        # The touch keyboard shown and hidden through the window's InputPane.
+        maul_add_test(win32_touch_keyboard WHITEBOX)
+        target_link_libraries(test_win32_touch_keyboard PRIVATE user32)
         # The accessibility root handed to UI Automation.
         maul_add_test(win32_accessibility)
         target_link_libraries(test_win32_accessibility PRIVATE user32 ole32 oleaut32 uuid)
         set_tests_properties(win32 win32_input win32_pointer win32_ime win32_system
                              win32_clipboard win32_drop win32_services win32_dialog win32_owned
-                             win32_chrome
+                             win32_chrome win32_touch_keyboard
                              PROPERTIES RESOURCE_LOCK desktop)
     endif()
     maul_add_header_tests()
@@ -518,7 +607,7 @@ if(MAUL_WINDOW_FUZZ)
     # the sanitizers watch its code, not only the targets'.
     target_compile_options(maul-window PRIVATE -fsanitize=fuzzer-no-link,address,undefined)
     target_link_options(maul-window PUBLIC -fsanitize=address,undefined)
-    set(MWIN_FUZZ_AREAS payload)
+    set(MWIN_FUZZ_AREAS edid payload preedit)
     if(MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11)
         list(APPEND MWIN_FUZZ_AREAS locale)
     endif()

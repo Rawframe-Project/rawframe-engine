@@ -184,6 +184,25 @@ extern "C"
         mwin_modNumLock = 32,
     };
 
+    // Whether a chord, a key with modifiers, reaches the program
+    // (mwinGetKeyReach).
+    typedef uint8_t mwinKeyReach;
+
+    enum
+    {
+        // Its records arrive and nothing else acts on it, as far as the
+        // library knows.
+        mwin_keyReachDelivered = 0,
+        // Its records arrive and the platform acts on it too: a browser's
+        // shortcut, Alt+F4 closing a window on Windows.
+        mwin_keyReachShared = 1,
+        // The desktop's own shortcuts, which the user may change, may take
+        // it: no record arrives when they do.
+        mwin_keyReachUncertain = 2,
+        // The platform always takes it: no record ever arrives.
+        mwin_keyReachNever = 3,
+    };
+
     // A mouse button.
     typedef uint8_t mwinMouseButton;
 
@@ -228,6 +247,32 @@ extern "C"
         mwin_shapeWait = 10,
         mwin_shapeProgress = 11,
     };
+
+// The images one cursor holds, and the most pixels of a side.
+#define MWIN_CURSOR_IMAGES 4
+#define MWIN_CURSOR_SIZE   128
+
+    // A cursor made from images (mwin-0027): an id of the context's,
+    // checked by generation.
+    typedef struct mwinCursorId
+    {
+        uint32_t index1;
+        uint32_t generation;
+    } mwinCursorId;
+
+    // A cursor's images. Build it with mwinDefaultCursorDef.
+    typedef struct mwinCursorDef
+    {
+        uint32_t cookie;
+        // The cursor at scale 1 first, then the same cursor at higher
+        // scales, larger; each in the icon's form, at most
+        // MWIN_CURSOR_SIZE a side. Only read during the call.
+        const mwinIconImage* images;
+        uint32_t imageCount;
+        // The hotspot, in the first image's pixels from its top left.
+        uint32_t hotspotX;
+        uint32_t hotspotY;
+    } mwinCursorDef;
 
     // What a text field takes, which picks an on-screen keyboard's layout.
     typedef uint8_t mwinInputPurpose;
@@ -308,6 +353,62 @@ extern "C"
                                                               mwinCursorShape shape,
                                                               mwinRequestId* requestOut);
 
+    /// Returns the default cursor def: no images, the hotspot at 0, 0.
+    ///
+    /// @return The def, with a valid cookie.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MWIN_API mwinCursorDef mwinDefaultCursorDef(void);
+
+    /// Makes a cursor from images, to show over windows with
+    /// mwinRequestCursorImage. Each window takes the image for its scale:
+    /// the smallest at least the first image's size times the scale, else
+    /// the largest, its hotspot scaled with it.
+    ///
+    /// @param context    The context.
+    /// @param def        The images and hotspot.
+    /// @param cursorOut  Receives the cursor's id.
+    /// @return `mwin_success`; `mwin_errorInvalid` for a NULL argument, a
+    ///         def without its cookie, no images or more than
+    ///         MWIN_CURSOR_IMAGES, an image without pixels, with no width
+    ///         or height or more than MWIN_CURSOR_SIZE, or a stride below
+    ///         its width times 4, an image not wider than the one before,
+    ///         or a hotspot outside the first image;
+    ///         `mwin_errorCapacity` past the limit's cursors or when the
+    ///         allocator fails.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinCreateCursor(mwinContext* context,
+                                                        const mwinCursorDef* def,
+                                                        mwinCursorId* cursorOut);
+
+    /// Destroys a cursor. Windows showing it show the default shape.
+    ///
+    /// @param context  The context.
+    /// @param cursor   The cursor.
+    /// @return `mwin_success`; `mwin_errorInvalid` for a NULL context;
+    ///         `mwin_errorStale` for an id that is not live.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinDestroyCursor(mwinContext* context, mwinCursorId cursor);
+
+    /// Asks for a cursor made with mwinCreateCursor over a window, in place
+    /// of a shape until a shape is asked for again. Platforms without image
+    /// cursors (iOS) answer mwin_outcomeUnsupported.
+    ///
+    /// @param context     The context.
+    /// @param window      The window.
+    /// @param cursor      The cursor.
+    /// @param requestOut  Receives the request's id. May be NULL.
+    /// @return As mwinRequestTitle, with `mwin_errorStale` for a cursor
+    ///         that is not live.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinRequestCursorImage(mwinContext* context,
+                                                              mwinWindowId window,
+                                                              mwinCursorId cursor,
+                                                              mwinRequestId* requestOut);
+
     /// Returns what a physical key means under the current keyboard
     /// layout, as a key record would carry it.
     ///
@@ -335,6 +436,27 @@ extern "C"
     MWIN_NODISCARD MWIN_API mwinResult mwinGetKeyboardLayout(const mwinContext* context,
                                                              char* buffer, size_t capacity,
                                                              size_t* lengthOut);
+
+    /// Tells whether a chord reaches the program on the platform the
+    /// context runs on, for a rebinding UI to refuse a chord that never
+    /// arrives and warn about one the platform may take: Ctrl+W in
+    /// Chromium, Alt+Tab on Windows and Command+Tab on Apple's systems
+    /// never arrive; the desktop's configurable shortcuts are uncertain.
+    /// The answer is the library's knowledge of the platform, not a
+    /// promise: a desktop may keep chords nothing lists.
+    ///
+    /// @param context    The context.
+    /// @param code       The key.
+    /// @param modifiers  The modifiers held with it; the lock bits are
+    ///                   ignored.
+    /// @param reachOut   Receives the answer.
+    /// @return `mwin_success`; `mwin_errorInvalid` for a NULL argument or
+    ///         a code that is not a key.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinGetKeyReach(const mwinContext* context, mwinKeyCode code,
+                                                       mwinModifiers modifiers,
+                                                       mwinKeyReach* reachOut);
 
 #ifdef __cplusplus
 }

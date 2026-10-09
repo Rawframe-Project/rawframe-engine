@@ -15,6 +15,7 @@
 // the newest waiting record of their kind when their ring is full.
 
 #include "core.h"
+#include "preedit_fit.h"
 #include "text.h"
 
 #include "maul-unicode/encoding.h"
@@ -298,26 +299,13 @@ static void PostReset(mwinContext* context, uint32_t slot, uint64_t timeNs)
     (void)Append(context, &context->windows[slot].rings[mwin_classNotification], &reset);
 }
 
-// Whether a composition's offsets and segments lie within its text.
-static bool IsPreeditValid(const mwinPreeditEvent* preedit)
+// Whether a composition's segments can be read: at most
+// MWIN_MAX_PREEDIT_SEGMENTS, and somewhere when there are any. Its
+// offsets are fitted to its text afterwards (preedit_fit.h).
+static bool AreSegmentsReadable(const mwinPreeditEvent* preedit)
 {
-    if (preedit->caret < -1 || preedit->caret > (int64_t)preedit->length ||
-        preedit->selectionStart > preedit->selectionEnd ||
-        preedit->selectionEnd > preedit->length ||
-        preedit->segmentCount > MWIN_MAX_PREEDIT_SEGMENTS ||
-        (preedit->segments == nullptr && preedit->segmentCount != 0))
-    {
-        return false;
-    }
-    for (uint32_t i = 0; i < preedit->segmentCount; i++)
-    {
-        const mwinPreeditSegment* segment = &preedit->segments[i];
-        if (segment->start > preedit->length || preedit->length - segment->start < segment->length)
-        {
-            return false;
-        }
-    }
-    return true;
+    return preedit->segmentCount <= MWIN_MAX_PREEDIT_SEGMENTS &&
+           (preedit->segments != nullptr || preedit->segmentCount == 0);
 }
 
 // Moves a record's text, and a composition's segments before it, into
@@ -330,7 +318,7 @@ static bool TakeText(mwinContext* context, uint32_t slot, mwinEvent* record)
     bool preedit = record->type == mwin_eventImePreedit;
     uint32_t segments = preedit ? record->data.preedit.segmentCount : 0;
     if ((text == nullptr && length != 0) || muniValidateUtf8(text, length).status != muni_success ||
-        (preedit && !IsPreeditValid(&record->data.preedit)))
+        (preedit && !AreSegmentsReadable(&record->data.preedit)))
     {
         return false;
     }
@@ -338,6 +326,10 @@ static bool TakeText(mwinContext* context, uint32_t slot, mwinEvent* record)
     if (length + segmentBytes == 0)
     {
         record->data.text.text = "";
+        if (preedit)
+        {
+            mwinFitPreedit(&record->data.preedit, nullptr);
+        }
         return true;
     }
     unsigned char* block = mwinReserveText(&context->windows[slot].text, segmentBytes + length,
@@ -357,6 +349,10 @@ static bool TakeText(mwinContext* context, uint32_t slot, mwinEvent* record)
         memcpy(block + segmentBytes, text, length);
     }
     record->data.text.text = (const char*)block + segmentBytes;
+    if (preedit)
+    {
+        mwinFitPreedit(&record->data.preedit, (mwinPreeditSegment*)block);
+    }
     return true;
 }
 

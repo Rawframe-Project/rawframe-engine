@@ -5,6 +5,9 @@
 
 #include "win32_input.h"
 
+#include "cursor.h"
+#include "win32_icon.h"
+
 #include "maul-unicode/encoding.h"
 
 #include <math.h>
@@ -423,15 +426,18 @@ bool mwinWin32HandleInput(mwinWin32Window* window, UINT message, WPARAM wParam, 
         OnRawInput(window, lParam);
         return false;
     case WM_SETCURSOR:
+    {
         if (LOWORD(lParam) != HTCLIENT)
         {
             return false;
         }
-        SetCursor(IsHidden(window->cursorMode)
-                      ? nullptr
-                      : LoadCursorW(nullptr, s_cursors[window->cursorShape]));
+        HCURSOR image = mwinWin32CursorOf(window);
+        SetCursor(IsHidden(window->cursorMode) ? nullptr
+                  : image != nullptr ? image
+                                     : LoadCursorW(nullptr, s_cursors[window->cursorShape]));
         *result = TRUE;
         return true;
+    }
     default:
         return HandleKeyboard(window, message, wParam, lParam, result);
     }
@@ -487,12 +493,24 @@ mwinOutcome mwinWin32SetCursorMode(mwinWin32Window* window, mwinCursorMode mode)
 mwinOutcome mwinWin32SetCursorShape(mwinWin32Window* window, mwinCursorShape shape)
 {
     window->cursorShape = shape;
+    window->cursorImage = (mwinCursorId){0};
     POINT point;
     if (GetCursorPos(&point) && WindowFromPoint(point) == window->hwnd)
     {
         SendMessageW(window->hwnd, WM_SETCURSOR, (WPARAM)window->hwnd, HTCLIENT);
     }
     return mwin_outcomeDone;
+}
+
+mwinOutcome mwinWin32SetCursorImage(mwinWin32Window* window, mwinCursorId cursor)
+{
+    window->cursorImage = cursor;
+    POINT point;
+    if (GetCursorPos(&point) && WindowFromPoint(point) == window->hwnd)
+    {
+        SendMessageW(window->hwnd, WM_SETCURSOR, (WPARAM)window->hwnd, HTCLIENT);
+    }
+    return mwinWin32CursorOf(window) != nullptr ? mwin_outcomeDone : mwin_outcomeFailed;
 }
 
 mwinKey mwinWin32MapKeyCode(mwinKeyCode code)
@@ -526,4 +544,45 @@ mwinResult mwinWin32KeyboardLayout(char* buffer, size_t capacity, size_t* length
     }
     *lengthOut = length;
     return length > capacity ? mwin_errorCapacity : mwin_success;
+}
+
+HCURSOR mwinWin32CursorOf(const mwinWin32Window* window)
+{
+    mwinCursor* cursor = mwinFindCursor(window->platform->context, window->cursorImage);
+    if (cursor == nullptr)
+    {
+        return nullptr;
+    }
+    uint32_t image = mwinCursorImageFor(cursor, mwinWin32Scale(window->dpi));
+    if (cursor->native[image] == nullptr)
+    {
+        uint32_t x = 0;
+        uint32_t y = 0;
+        mwinCursorHotspotOf(cursor, image, &x, &y);
+        cursor->native[image] = mwinWin32MakeIcon(&cursor->images->images[image], true, x, y);
+    }
+    return cursor->native[image];
+}
+
+void mwinWin32ReleaseCursor(mwinContext* context, uint32_t slot)
+{
+    // Its windows show the default shape from here.
+    mwinWin32Platform* platform = context->backendData;
+    for (uint32_t i = 0; i < context->limits.windows; i++)
+    {
+        mwinWin32Window* window = &platform->windows[i];
+        if (window->hwnd != nullptr && window->cursorImage.index1 == slot + 1)
+        {
+            (void)mwinWin32SetCursorShape(window, mwin_shapeDefault);
+        }
+    }
+    mwinCursor* cursor = &context->cursors[slot];
+    for (uint32_t i = 0; i < MWIN_CURSOR_IMAGES; i++)
+    {
+        if (cursor->native[i] != nullptr)
+        {
+            DestroyCursor(cursor->native[i]);
+            cursor->native[i] = nullptr;
+        }
+    }
 }

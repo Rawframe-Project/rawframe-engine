@@ -7,12 +7,17 @@
 // SDL numbers it, so SDL_GameControllerDB's mappings apply; one the
 // database lacks is mapped by the kernel's gamepad layout when it has
 // one (BTN_SOUTH and the rest), and raw otherwise. Rumble is force
-// feedback, where the device takes it and the node opens for writing.
+// feedback, where the device takes it and the node opens for writing;
+// motion comes from the pad's motion device (linux_motion.h), found with
+// the pad or when it comes after it; the battery from the power supply
+// beside it in sysfs (linux_battery.h), read again every few seconds.
 
 #ifndef MAUL_WINDOW_SRC_LINUX_PAD_H
 #define MAUL_WINDOW_SRC_LINUX_PAD_H
 
 #include "core.h"
+#include "linux_battery.h"
+#include "linux_motion.h"
 #include "pad_db.h"
 #include "pad_map.h"
 
@@ -43,6 +48,10 @@ typedef struct mwinLinuxPad
     int32_t maximum[MWIN_LINUX_PAD_AXES];
     // The rumble effect uploaded, or -1.
     int16_t effect;
+    // Who it is, its motion device (fd -1 for none) and its battery.
+    mwinLinuxPadIdentity identity;
+    mwinLinuxMotion motion;
+    mwinLinuxBattery battery;
 } mwinLinuxPad;
 
 typedef struct mwinLinuxPads
@@ -50,6 +59,8 @@ typedef struct mwinLinuxPads
     mwinContext* context;
     // The inotify watch of /dev/input, or -1.
     int watch;
+    // When the batteries were last read.
+    uint64_t batteryNs;
     // One per gamepad slot of the context.
     mwinLinuxPad* pads;
 } mwinLinuxPads;
@@ -62,8 +73,11 @@ void mwinLinuxPadsStop(mwinLinuxPads* pads);
 // Reads what the devices and /dev/input say, without waiting.
 void mwinLinuxPadsPump(mwinLinuxPads* pads);
 
-// The backends' rumble.
+// The backends' rumble, and their motion sensors turned on or off: the
+// motion device streams whenever it is open, so turning them is the
+// core's alone.
 mwinResult mwinLinuxPadsRumble(mwinLinuxPads* pads, uint32_t slot, float low, float high,
                                uint32_t durationMs);
+mwinResult mwinLinuxPadsSetMotion(mwinContext* context, uint32_t slot, bool enabled);
 
 #endif // MAUL_WINDOW_SRC_LINUX_PAD_H

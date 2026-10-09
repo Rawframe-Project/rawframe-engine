@@ -10,14 +10,15 @@
 #include <stdckdint.h>
 #include <string.h>
 
-static bool IsImage(const mwinIconImage* image)
+bool mwinIsIconImage(const mwinIconImage* image, uint32_t most)
 {
     return image->pixels != nullptr && image->width > 0 && image->height > 0 &&
-           image->width <= MWIN_ICON_SIZE && image->height <= MWIN_ICON_SIZE &&
+           image->width <= most && image->height <= most &&
            image->stride >= (size_t)image->width * 4;
 }
 
-static mwinIconCopy* Copy(const mwinContext* context, const mwinIconImage* images, uint32_t count)
+mwinIconCopy* mwinCopyIconImages(const mwinContext* context, const mwinIconImage* images,
+                                 uint32_t count)
 {
     // The copy, its images and their pixels, in checked arithmetic.
     size_t size = 0;
@@ -59,13 +60,13 @@ mwinResult mwinRequestIcon(mwinContext* context, mwinWindowId window, const mwin
         context != nullptr && count <= MWIN_ICON_IMAGES && (images != nullptr || count == 0);
     for (uint32_t i = 0; valid && i < count; i++)
     {
-        valid = IsImage(&images[i]);
+        valid = mwinIsIconImage(&images[i], MWIN_ICON_SIZE);
     }
     if (!valid)
     {
         return mwinMisuse(context);
     }
-    mwinIconCopy* icon = Copy(context, images, count);
+    mwinIconCopy* icon = mwinCopyIconImages(context, images, count);
     if (icon == nullptr)
     {
         return mwin_errorCapacity;

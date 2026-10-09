@@ -7,7 +7,8 @@
 // not say; read at each pump, their controls posted only when the
 // reading's time moves; their batteries read when they are looked for.
 // A runtime keeps a motor running until told otherwise, so a rumble is
-// stopped at the pump after its time runs out. The runtime is a table of
+// stopped at the pump after its time runs out; the triggers' motors run
+// and stop apart from the others, all four sent together. The runtime is a table of
 // functions, so a test can stand in for it.
 
 #ifndef MAUL_WINDOW_SRC_PAD_TRACKER_H
@@ -38,9 +39,9 @@ typedef struct mwinPadRuntime
     int32_t (*list)(void* self, void** pads, uint32_t capacity);
     void (*release)(void* self, void* pad);
     bool (*read)(void* self, void* pad, mwinPadReading* reading);
-    // Runs the heavy and light motors, each from 0 to 1; both 0 stops
-    // them.
-    bool (*vibrate)(void* self, void* pad, float low, float high);
+    // Runs the heavy and light motors and the left and right triggers'
+    // motors, in that order, each from 0 to 1; all 0 stops them.
+    bool (*vibrate)(void* self, void* pad, const float motors[4]);
     // Its name, vendor, product and capabilities into info.
     void (*describe)(void* self, void* pad, mwinGamepadInfo* info);
     // Its battery's charge in percent, or -1 where it has none or says
@@ -55,10 +56,12 @@ typedef struct mwinTrackedPad
     // The runtime's reference, and the core's gamepad slot.
     void* pad;
     uint32_t slot;
-    // The last reading's time, and when the motors stop (0 while they
-    // are still).
+    // The last reading's time; the motors' strengths as last sent, the
+    // heavy, light, left and right ones; and when each pair stops, the
+    // grips' and the triggers' (0 while they are still).
     uint64_t timestamp;
-    uint64_t rumbleEndsNs;
+    float motors[4];
+    uint64_t endsNs[2];
 } mwinTrackedPad;
 
 typedef struct mwinPadTracker
@@ -84,5 +87,8 @@ void mwinPadTrackerPump(mwinPadTracker* tracker, uint64_t nowNs);
 bool mwinPadTrackerOwns(const mwinPadTracker* tracker, uint32_t slot);
 mwinResult mwinPadTrackerRumble(mwinPadTracker* tracker, uint32_t slot, float low, float high,
                                 uint32_t durationMs, uint64_t nowNs);
+// The trigger rumble of the pad in a core slot.
+mwinResult mwinPadTrackerTriggerRumble(mwinPadTracker* tracker, uint32_t slot, float left,
+                                       float right, uint32_t durationMs, uint64_t nowNs);
 
 #endif // MAUL_WINDOW_SRC_PAD_TRACKER_H

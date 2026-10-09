@@ -51,6 +51,18 @@ typedef struct mwinWin32DropTarget
     int32_t y;
 } mwinWin32DropTarget;
 
+// A window's handler of the touch keyboard's showing and hiding:
+// IFrameworkInputPaneHandler's methods first, so a pointer to it is one
+// to the interface (win32_touch_keyboard.c); the input pane it is
+// advised with, and the cookie, while it is.
+typedef struct mwinWin32PaneHandler
+{
+    const void* methods;
+    mwinWin32Window* window;
+    struct IFrameworkInputPane* pane;
+    DWORD cookie;
+} mwinWin32PaneHandler;
+
 struct mwinWin32Window
 {
     mwinWin32Platform* platform;
@@ -74,9 +86,11 @@ struct mwinWin32Window
     // Borderless full screen, and the placement to come back to.
     bool fullscreen;
     WINDOWPLACEMENT restore;
-    // The cursor the program asked for over the window.
+    // The cursor the program asked for over the window: a shape, or a
+    // cursor made from images when cursorImage is live (mwin-0027).
     mwinCursorMode cursorMode;
     mwinCursorShape cursorShape;
+    mwinCursorId cursorImage;
     // The pointer is over the window (a leave is asked for), the
     // buttons held, and the last press.
     bool tracking;
@@ -105,6 +119,10 @@ struct mwinWin32Window
     // The program was told the pointer is over the window; over the
     // regions Windows handles its records still come.
     bool pointerInside;
+    // The touch keyboard's handler, and the part of the client area in
+    // logical units it was last reported to cover.
+    mwinWin32PaneHandler paneHandler;
+    mwinRect covered;
 };
 
 // A monitor by its HMONITOR, which Windows keeps while it is connected.
@@ -155,6 +173,15 @@ struct mwinWin32Platform
     // tried (win32_accessibility.c).
     LRESULT(WINAPI* uiaReturn)(HWND, WPARAM, LPARAM, void*);
     bool uiaTried;
+    // msctf and combase, and what the touch keyboard uses of them, once
+    // a request loaded them (win32_touch_keyboard.c).
+    HMODULE msctf;
+    HMODULE combase;
+    HRESULT(WINAPI* setInputScope)(HWND, int);
+    HRESULT(WINAPI* activate)(void*, const IID*, void**);
+    HRESULT(WINAPI* makeString)(const WCHAR*, UINT32, void**);
+    HRESULT(WINAPI* deleteString)(void*);
+    bool keyboardTried;
 };
 
 // The logical units per pixel of a DPI.

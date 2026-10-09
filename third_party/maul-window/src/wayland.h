@@ -14,6 +14,7 @@
 #include "linux_pad.h"
 #include "linux_services.h"
 #include "monotonic.h"
+#include "selection_reads.h"
 #include "wayland_api.h"
 #include "wayland_pipe.h"
 #include "xkb_api.h"
@@ -97,10 +98,12 @@ typedef struct mwinWaylandWindow
     bool minimized;
     // A mode request waits for the compositor's next configure, or -1.
     int32_t modeRequest;
-    // The cursor the program asked for over the window, and the pointer
-    // constraint its mode needs.
+    // The cursor the program asked for over the window: a shape, or a
+    // cursor made from images when cursorImage is live (mwin-0027); and
+    // the pointer constraint its mode needs.
     mwinCursorMode cursorMode;
     mwinCursorShape cursorShape;
+    mwinCursorId cursorImage;
     struct zwp_locked_pointer_v1* locked;
     struct zwp_confined_pointer_v1* confined;
     // The window accepts text, and where its caret is.
@@ -114,18 +117,38 @@ typedef struct mwinWaylandWindow
 
 // An output the compositor announced, and the monitor slot it fills, or
 // -1 before its first done event.
+// What an image description's information tells, while it arrives:
+// the transfer function and the luminances in nits, 0 where untold.
+typedef struct mwinWaylandColorFacts
+{
+    uint32_t transfer;
+    float referenceNits;
+    float targetMaxNits;
+    float maxCll;
+    float maxFall;
+} mwinWaylandColorFacts;
+
 typedef struct mwinWaylandOutput
 {
     mwinWaylandPlatform* platform;
     struct wl_output* output;
     uint32_t name;
     int32_t monitor;
-    // Facts arrive one event at a time; done makes them true together.
+    // Facts arrive one event at a time; done makes them true together,
+    // and the monitor appears at the first done.
     mwinMonitorInfo info;
+    bool done;
     int32_t x;
     int32_t y;
     int32_t transform;
     int32_t scale;
+    // The output's image description, with the color manager: the
+    // object that tells it changed, the description asked for and its
+    // information while they arrive.
+    struct wp_color_management_output_v1* color;
+    struct wp_image_description_v1* description;
+    struct wp_image_description_info_v1* information;
+    mwinWaylandColorFacts colorFacts;
 } mwinWaylandOutput;
 
 // The seat's keyboard: its xkb keyboard, the window with keyboard
@@ -186,8 +209,65 @@ typedef struct mwinWaylandCursorTheme
     struct wl_surface* surface;
 } mwinWaylandCursorTheme;
 
+// The surface cursors made from images show on (mwin-0027), its
+// viewport where there is a viewporter, and the buffer attached to it.
+typedef struct mwinWaylandImageCursor
+{
+    struct wl_surface* surface;
+    struct wp_viewport* viewport;
+    struct wl_buffer* buffer;
+} mwinWaylandImageCursor;
+
 // The most touches followed at once.
 #define MWIN_WAYLAND_TOUCHES 16
+
+// The most tablet tools followed at once.
+#define MWIN_WAYLAND_TOOLS 8
+
+// A tablet tool as a pen (mwin-0037): what it is, the window it is near
+// (-1 for none) and the serial of its coming near, which cursor
+// requests quote; the pen as last posted, and the changes gathered until
+// the tool's frame event. Its cursor shape device and the surface theme
+// cursors show on for it, made when first needed.
+typedef struct mwinWaylandTool
+{
+    struct zwp_tablet_tool_v2* tool;
+    mwinWaylandPlatform* platform;
+    bool eraser;
+    // A puck or a finger, whose tilt is left out; whether the tool tells
+    // tilt and pressure.
+    bool puck;
+    bool tilts;
+    bool presses;
+    int32_t focus;
+    uint32_t serial;
+    mwinPenEvent pen;
+    float pressure;
+    bool near;
+    bool left;
+    bool moved;
+    bool down;
+    bool up;
+    // The barrel button pressed (1) or released (-1) in this frame.
+    int8_t barrel;
+    struct wp_cursor_shape_device_v1* shapeDevice;
+    struct wl_surface* themeSurface;
+} mwinWaylandTool;
+
+// The most tablets kept at once.
+#define MWIN_WAYLAND_TABLETS 4
+
+// The first seat's tablets, through the tablet manager where the
+// compositor has it. The tablets themselves say nothing a pen record
+// carries, but a compositor tells a tool near a surface only to a client
+// that keeps the tool's tablet.
+typedef struct mwinWaylandTablets
+{
+    struct zwp_tablet_manager_v2* manager;
+    struct zwp_tablet_seat_v2* seat;
+    struct zwp_tablet_v2* tablets[MWIN_WAYLAND_TABLETS];
+    mwinWaylandTool tools[MWIN_WAYLAND_TOOLS];
+} mwinWaylandTablets;
 
 // The seat's touch screen: each touch point by its id, with the window
 // it began on.
@@ -225,12 +305,27 @@ typedef struct mwinWaylandText
     mwinWaylandString commit;
 } mwinWaylandText;
 
-// The most readers served the program's text at once.
+// The most readers served the program's text or data at once.
 #define MWIN_WAYLAND_SENDS 4
 
-// The clipboard: the data device, the selection another client offers
-// and the text type it has, the source while the program owns the
-// selection with the pipes of its readers, and a read under way.
+// The most bytes of MIME types kept of an offer.
+#define MWIN_WAYLAND_TYPE_BYTES 1024
+
+// The MIME types an offer has, each with a NUL after it, as many as fit;
+// those longer than a data read may ask for are left out.
+typedef struct mwinWaylandTypes
+{
+    char bytes[MWIN_WAYLAND_TYPE_BYTES];
+    uint16_t length;
+} mwinWaylandTypes;
+
+// The clipboard and the primary selection (mwin-0029). For the
+// clipboard: the data device, the newest offer and its types until the
+// selection names it, the selection another client offers and its
+// types, and the source while the program owns it. For the primary
+// selection, through its protocol: its device, offers with their best
+// text type, and source. The pipes of the readers of either source,
+// each with its item of the data (-1 the text); and a read under way.
 typedef struct mwinWaylandClipboard
 {
     struct wl_data_device_manager* manager;
@@ -241,16 +336,28 @@ typedef struct mwinWaylandClipboard
     int8_t incomingType;
     // The newest offer has files (text/uri-list).
     bool incomingFiles;
+    mwinWaylandTypes incomingTypes;
     struct wl_data_offer* selection;
     int8_t selectionType;
+    mwinWaylandTypes selectionTypes;
     struct wl_data_source* source;
+    struct zwp_primary_selection_device_manager_v1* primaryManager;
+    struct zwp_primary_selection_device_v1* primaryDevice;
+    struct zwp_primary_selection_offer_v1* primaryIncoming;
+    int8_t primaryIncomingType;
+    struct zwp_primary_selection_offer_v1* primarySelection;
+    int8_t primarySelectionType;
+    struct zwp_primary_selection_source_v1* primarySource;
     struct
     {
         int fd;
         uint32_t offset;
+        bool primary;
+        int8_t item;
     } sends[MWIN_WAYLAND_SENDS];
-    // The read's pipe, and when it fails.
+    // The read's pipe, what it is of, and when it fails.
     mwinWaylandPipe reading;
+    mwinSelectionRead read;
     uint64_t deadlineNs;
 } mwinWaylandClipboard;
 
@@ -293,6 +400,8 @@ struct mwinWaylandPlatform
     struct zwp_idle_inhibit_manager_v1* idleInhibits;
     // Without it, windows have the compositor's icons.
     struct xdg_toplevel_icon_manager_v1* toplevelIcons;
+    // Without it, monitors' HDR facts are unknown.
+    struct wp_color_manager_v1* colorManager;
     struct wp_cursor_shape_manager_v1* cursorShapes;
     struct zwp_pointer_constraints_v1* constraints;
     struct zwp_relative_pointer_manager_v1* relativePointers;
@@ -302,6 +411,7 @@ struct mwinWaylandPlatform
     // Without it, focus requests are unsupported.
     struct xdg_activation_v1* activation;
     mwinWaylandCursorTheme cursorTheme;
+    mwinWaylandImageCursor imageCursor;
     // The first seat, its registry name, and its keyboard. libxkbcommon
     // loads with the context; without it there is no keyboard.
     struct wl_seat* seat;
@@ -310,6 +420,7 @@ struct mwinWaylandPlatform
     mwinWaylandKeyboard keyboard;
     mwinWaylandPointer pointer;
     mwinWaylandTouch touch;
+    mwinWaylandTablets tablets;
     mwinWaylandText text;
     mwinWaylandClipboard clipboard;
     mwinWaylandDrag drag;
@@ -327,12 +438,12 @@ struct mwinWaylandPlatform
     char* title;
 };
 
-// The integer scale an image needs over a window: its scale, rounded
-// up. Cursor images and the frame are drawn at it.
 // Shared memory of a size, mapped for writing: its descriptor, or -1
 // (wayland_frame.c).
 int mwinWaylandMapMemory(size_t bytes, void** memory);
 
+// The integer scale an image needs over a window: its scale, rounded
+// up. Cursor images and the frame are drawn at it.
 static inline int32_t mwinWaylandImageScale(const mwinWaylandWindow* window)
 {
     return window->scale120 != 0 ? (int32_t)((window->scale120 + 119u) / 120u)

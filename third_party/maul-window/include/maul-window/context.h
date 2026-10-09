@@ -73,6 +73,8 @@ extern "C"
         // Files a dialog chooses, and the bytes of their paths.
         uint16_t dialogFiles;
         uint32_t dialogBytes;
+        // Cursors made from images that exist at once.
+        uint16_t cursors;
     } mwinLimits;
 
     // How a context is made. Build it with mwinDefaultContextDef.

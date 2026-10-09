@@ -12,6 +12,8 @@
 
 #include "maul-unicode/encoding.h"
 
+#include <string.h>
+
 mwinMonitorId mwinMonitorIdOf(const mwinContext* context, uint32_t slot)
 {
     return (mwinMonitorId){slot + 1, context->monitors[slot].generation};
@@ -29,15 +31,16 @@ int32_t mwinFindMonitor(const mwinContext* context, mwinMonitorId monitor)
                : -1;
 }
 
-// Keeps a monitor's facts, with a name that is not UTF-8 left empty.
+// Keeps a monitor's facts, its name cut to its longest well-formed
+// prefix: a backend cuts a long name at MWIN_MONITOR_NAME_BYTES, which
+// may split a character, and another program's bytes may be ill-formed.
 static void Store(mwinMonitor* monitor, const mwinMonitorInfo* info)
 {
     monitor->info = *info;
-    if (info->nameLength > MWIN_MONITOR_NAME_BYTES ||
-        muniValidateUtf8(info->name, info->nameLength).status != muni_success)
-    {
-        monitor->info.nameLength = 0;
-    }
+    uint32_t length =
+        info->nameLength < MWIN_MONITOR_NAME_BYTES ? info->nameLength : MWIN_MONITOR_NAME_BYTES;
+    muniTextResult valid = muniValidateUtf8(info->name, length);
+    monitor->info.nameLength = valid.status == muni_success ? length : (uint32_t)valid.offset;
 }
 
 static void PostMonitor(mwinContext* context, uint32_t slot, mwinEventType type, uint64_t timeNs)
@@ -71,6 +74,27 @@ void mwinChangeMonitor(mwinContext* context, uint32_t slot, const mwinMonitorInf
 {
     Store(&context->monitors[slot], info);
     PostMonitor(context, slot, mwin_eventMonitorChanged, timeNs);
+}
+
+static bool SameRect(mwinPixelRect a, mwinPixelRect b)
+{
+    return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;
+}
+
+static bool SameHdr(mwinHdrFacts a, mwinHdrFacts b)
+{
+    return a.known == b.known && a.active == b.active && a.peakNits == b.peakNits &&
+           a.fullFrameNits == b.fullFrameNits && a.sdrWhiteNits == b.sdrWhiteNits &&
+           a.headroom == b.headroom;
+}
+
+bool mwinSameMonitorInfo(const mwinMonitorInfo* a, const mwinMonitorInfo* b)
+{
+    return a->nameLength == b->nameLength && memcmp(a->name, b->name, a->nameLength) == 0 &&
+           SameRect(a->bounds, b->bounds) && SameRect(a->workArea, b->workArea) &&
+           a->widthMm == b->widthMm && a->heightMm == b->heightMm && a->scale == b->scale &&
+           a->refreshMilliHz == b->refreshMilliHz && a->variableRefresh == b->variableRefresh &&
+           a->primary == b->primary && SameHdr(a->hdr, b->hdr);
 }
 
 void mwinRemoveMonitor(mwinContext* context, uint32_t slot, uint64_t timeNs)

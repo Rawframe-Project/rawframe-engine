@@ -7,9 +7,10 @@
 
 #include "icon.h"
 
-// An icon of an image: its colour a 32-bit DIB with straight alpha,
-// rows from the top, and an empty mask.
-static HICON Make(const mwinIconCopyImage* image)
+// An icon of an image, or a cursor with its hotspot: its colour a 32-bit
+// DIB with straight alpha, rows from the top, and an empty mask.
+HICON mwinWin32MakeIcon(const mwinIconCopyImage* image, bool cursor, uint32_t hotspotX,
+                        uint32_t hotspotY)
 {
     BITMAPV5HEADER header = {
         .bV5Size = sizeof(header),
@@ -42,7 +43,13 @@ static HICON Make(const mwinIconCopyImage* image)
             out[i * 4 + 2] = in[0];
             out[i * 4 + 3] = in[3];
         }
-        ICONINFO info = {.fIcon = TRUE, .hbmMask = mask, .hbmColor = color};
+        ICONINFO info = {
+            .fIcon = !cursor,
+            .xHotspot = hotspotX,
+            .yHotspot = hotspotY,
+            .hbmMask = mask,
+            .hbmColor = color,
+        };
         icon = CreateIconIndirect(&info);
     }
     if (color != nullptr)
@@ -64,8 +71,8 @@ mwinOutcome mwinWin32SetIcon(mwinWin32Window* window, const mwinRequest* request
     {
         int bigSide = GetSystemMetricsForDpi(SM_CXICON, window->dpi);
         int smallSide = GetSystemMetricsForDpi(SM_CXSMICON, window->dpi);
-        icons[0] = Make(mwinIconFor(copy, (uint32_t)bigSide));
-        icons[1] = Make(mwinIconFor(copy, (uint32_t)smallSide));
+        icons[0] = mwinWin32MakeIcon(mwinIconFor(copy, (uint32_t)bigSide), false, 0, 0);
+        icons[1] = mwinWin32MakeIcon(mwinIconFor(copy, (uint32_t)smallSide), false, 0, 0);
         if (icons[0] == nullptr || icons[1] == nullptr)
         {
             for (int i = 0; i < 2; i++)

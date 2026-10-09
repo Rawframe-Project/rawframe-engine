@@ -278,6 +278,15 @@ void mwinWin32PadsPump(mwinWin32Pads* pads, uint64_t nowNs)
     }
 }
 
+mwinResult mwinWin32PadsTriggerRumble(mwinWin32Pads* pads, uint32_t slot, float left, float right,
+                                      uint32_t durationMs, uint64_t nowNs)
+{
+    // Only Windows.Gaming.Input grants it; XInput has no trigger motors.
+    return pads->runtime
+               ? mwinPadTrackerTriggerRumble(&pads->xbox, slot, left, right, durationMs, nowNs)
+               : mwin_errorPlatform;
+}
+
 mwinResult mwinWin32PadsRumble(mwinWin32Pads* pads, uint32_t slot, float low, float high,
                                uint32_t durationMs, uint64_t nowNs)
 {

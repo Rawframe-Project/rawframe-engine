@@ -12,6 +12,7 @@
 #include "backend.h"
 #include "web.h"
 #include "web_clipboard.h"
+#include "web_cursor.h"
 #include "web_drop.h"
 #include "web_input.h"
 #include "web_js.h"
@@ -59,7 +60,9 @@ static uint64_t NowNs(void)
     return mwinWebNanoseconds(mwinWebNow());
 }
 
-// The screen as a monitor, in device pixels.
+// The screen as a monitor, in device pixels. Its HDR facts are whether
+// it shows HDR (mwin-0036): the browser tells no luminance, so the
+// headroom of HDR output is unknown.
 static void ReadScreen(mwinWebPlatform* platform)
 {
     float screen[4];
@@ -72,13 +75,16 @@ static void ReadScreen(mwinWebPlatform* platform)
                                     (uint32_t)lroundf(screen[3] * scale)};
     info.scale = scale;
     info.primary = true;
+    bool high = mwinWebHighDynamicRange();
+    info.hdr = (mwinHdrFacts){.known = true, .active = high, .headroom = high ? 0.0f : 1.0f};
+    mwinContext* context = platform->context;
     if (platform->monitor < 0)
     {
-        platform->monitor = mwinAddMonitor(platform->context, &info, NowNs());
+        platform->monitor = mwinAddMonitor(context, &info, NowNs());
     }
-    else
+    else if (!mwinSameMonitorInfo(&context->monitors[platform->monitor].info, &info))
     {
-        mwinChangeMonitor(platform->context, (uint32_t)platform->monitor, &info, NowNs());
+        mwinChangeMonitor(context, (uint32_t)platform->monitor, &info, NowNs());
     }
 }
 
@@ -211,6 +217,7 @@ static mwinResult Start(mwinContext* context)
     platform->context = context;
     platform->monitor = -1;
     platform->scale = mwinWebScale();
+    platform->keyHost = mwinWebReadKeyHost();
     context->backendData = platform;
     mwinWebAttach(context, Lifecycle);
     mwinWebAttachInput(context);
@@ -274,6 +281,9 @@ static void Pump(mwinContext* context)
                           timeNs);
             break;
         case mwin_webFacts:
+            ReadFacts(platform);
+            ReadScreen(platform);
+            break;
         case mwin_webLocales:
             ReadFacts(platform);
             break;
@@ -391,7 +401,7 @@ static mwinResult Rumble(mwinContext* context, uint32_t slot, float low, float h
                          uint32_t durationMs)
 {
 #ifdef MAUL_WINDOW_GAMEPAD
-    return mwinWebPadsRumble(&PlatformOf(context)->pads, slot, low, high, durationMs);
+    return mwinWebPadsRumble(&PlatformOf(context)->pads, slot, low, high, durationMs, NowNs());
 #else
     (void)context;
     (void)slot;
@@ -402,8 +412,33 @@ static mwinResult Rumble(mwinContext* context, uint32_t slot, float low, float h
 #endif
 }
 
+#ifdef MAUL_WINDOW_GAMEPAD
+static mwinResult TriggerRumble(mwinContext* context, uint32_t slot, float left, float right,
+                                uint32_t durationMs)
+{
+    return mwinWebPadsTriggerRumble(&PlatformOf(context)->pads, slot, left, right, durationMs,
+                                    NowNs());
+}
+#endif
+
 const mwinBackendOps mwinWebBackend = {
-    Start,         Stop, Run,        mwinWebCreateWindow, mwinWebDestroyWindow,
-    mwinWebSubmit, Now,  MapKeyCode, KeyboardLayout,      NativeHandles,
+    Start,
+    Stop,
+    Run,
+    mwinWebCreateWindow,
+    mwinWebDestroyWindow,
+    mwinWebSubmit,
+    Now,
+    MapKeyCode,
+    KeyboardLayout,
+    NativeHandles,
     Rumble,
+    mwinWebReleaseCursor,
+#ifdef MAUL_WINDOW_GAMEPAD
+    TriggerRumble,
+#else
+    nullptr,
+#endif
+    nullptr,
+    mwinWebKeyReach,
 };

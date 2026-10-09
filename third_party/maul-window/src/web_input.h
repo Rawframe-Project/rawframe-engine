@@ -8,7 +8,8 @@
 // the wheel in detents. A captured cursor is a pointer lock, which the
 // browser grants after a user's gesture and the user can end with
 // Escape; a page cannot confine the pointer. Browser shortcuts (with
-// Control or Meta, F5, F11, F12) stay the browser's.
+// Control or Meta, F5, F11, F12) stay the browser's, and the chords the
+// browser and the system keep are told by mwinWebKeyReach.
 
 #ifndef MAUL_WINDOW_SRC_WEB_INPUT_H
 #define MAUL_WINDOW_SRC_WEB_INPUT_H
@@ -23,12 +24,19 @@ void mwinWebWatchCanvas(const mwinContext* context, uint32_t slot);
 // Handles an input record.
 void mwinWebHandleInputRecord(mwinWebPlatform* platform, const mwinWebRecord* record);
 
-// Carries out a cursor request: its outcome, or -1 when the page
+// Carries out a cursor mode request: its outcome, or -1 when the page
 // answers later.
 int mwinWebSetCursorMode(mwinWebPlatform* platform, uint32_t slot, mwinCursorMode mode);
-int mwinWebSetCursorShape(mwinWebPlatform* platform, uint32_t slot, mwinCursorShape shape);
 
 // The backend's mapKeyCode.
 mwinKey mwinWebMapKeyCode(const mwinContext* context, mwinKeyCode code);
+
+// Reads which browser family runs the page, Chromium or another, and
+// the system under it, for mwinWebKeyReach.
+uint8_t mwinWebReadKeyHost(void);
+
+// The backend's keyReach: the browser's answer or the system's, which
+// ever keeps the chord more.
+mwinKeyReach mwinWebKeyReach(const mwinContext* context, mwinKeyCode code, mwinModifiers modifiers);
 
 #endif // MAUL_WINDOW_SRC_WEB_INPUT_H

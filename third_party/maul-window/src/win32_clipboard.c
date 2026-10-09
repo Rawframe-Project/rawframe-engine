@@ -5,9 +5,12 @@
 
 #include "win32_clipboard.h"
 
+#include "clipboard_data.h"
+
 #include "maul-unicode/encoding.h"
 
 #include <stdckdint.h>
+#include <string.h>
 #include <wchar.h>
 
 #define OPEN_TRIES 5
@@ -50,26 +53,93 @@ static HGLOBAL Wide(const mwinContext* context)
     return memory;
 }
 
+// The clipboard format of a MIME type: Windows' own names for PNG and
+// HTML, else a format registered under the type itself; 0 when none
+// could be registered.
+static UINT FormatOf(const char* mime, size_t length)
+{
+    static const wchar_t png[] = L"PNG";
+    static const wchar_t html[] = L"HTML Format";
+    wchar_t name[MWIN_CLIPBOARD_MIME + 1];
+    for (size_t i = 0; i < length; i++)
+    {
+        name[i] = (wchar_t)mime[i];
+    }
+    name[length] = 0;
+    const wchar_t* registered = mwinSameMime(mime, length, "image/png", 9)   ? png
+                                : mwinSameMime(mime, length, "text/html", 9) ? html
+                                                                             : name;
+    return RegisterClipboardFormatW(registered);
+}
+
+// Bytes in memory the clipboard takes; NULL when there is none.
+static HGLOBAL Copy(const uint8_t* bytes, size_t length)
+{
+    HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, length > 0 ? length : 1);
+    uint8_t* copy = memory != nullptr ? GlobalLock(memory) : nullptr;
+    if (copy == nullptr)
+    {
+        return memory != nullptr ? GlobalFree(memory) : nullptr;
+    }
+    if (length > 0)
+    {
+        memcpy(copy, bytes, length);
+    }
+    GlobalUnlock(memory);
+    return memory;
+}
+
+// Sets memory as a format of the clipboard, which owns it once set:
+// false, the memory freed, when it is not.
+static bool Set(UINT format, HGLOBAL memory)
+{
+    bool set = format != 0 && memory != nullptr && SetClipboardData(format, memory) != nullptr;
+    if (!set && memory != nullptr)
+    {
+        GlobalFree(memory);
+    }
+    return set;
+}
+
 mwinOutcome mwinWin32WriteClipboard(const mwinWin32Window* window)
 {
-    HGLOBAL memory = Wide(window->platform->context);
-    if (memory == nullptr)
-    {
-        return mwin_outcomeFailed;
-    }
+    const mwinContext* context = window->platform->context;
+    const mwinClipboardCopy* copy = context->clipboardData;
     if (!Open(window->hwnd))
     {
-        GlobalFree(memory);
         return mwin_outcomeFailed;
     }
-    // The clipboard owns the memory once it is set.
-    bool set = EmptyClipboard() && SetClipboardData(CF_UNICODETEXT, memory) != nullptr;
-    if (!set)
+    bool set = EmptyClipboard() &&
+               (!mwinOffersClipboardText(context) || Set(CF_UNICODETEXT, Wide(context)));
+    for (uint32_t i = 0; set && copy != nullptr && i < copy->count; i++)
     {
-        GlobalFree(memory);
+        const mwinClipboardDataItem* item = &copy->items[i];
+        set = Set(FormatOf(item->mime, item->mimeLength),
+                  Copy(mwinClipboardBytesOf(copy, item), item->length));
     }
     CloseClipboard();
     return set ? mwin_outcomeDone : mwin_outcomeFailed;
+}
+
+mwinOutcome mwinWin32ReadClipboardData(const mwinWin32Window* window, const mwinRequest* request)
+{
+    mwinContext* context = window->platform->context;
+    UINT format = FormatOf(request->value.text.bytes, request->value.text.length);
+    if (format == 0 || !Open(window->hwnd))
+    {
+        return mwin_outcomeFailed;
+    }
+    HANDLE memory = GetClipboardData(format);
+    const uint8_t* bytes = memory != nullptr ? GlobalLock(memory) : nullptr;
+    mwinOutcome outcome = mwin_outcomeFailed;
+    if (bytes != nullptr)
+    {
+        // The memory's size, which may run past the bytes put there.
+        outcome = mwinTakeClipboardData(context, bytes, GlobalSize(memory));
+        GlobalUnlock(memory);
+    }
+    CloseClipboard();
+    return outcome;
 }
 
 mwinOutcome mwinWin32ReadClipboard(const mwinWin32Window* window)

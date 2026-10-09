@@ -25,6 +25,15 @@ bool mwinWin32HandleInput(mwinWin32Window* window, UINT message, WPARAM wParam, 
 // Carries out a cursor mode or shape request of the window in a slot.
 mwinOutcome mwinWin32SetCursorMode(mwinWin32Window* window, mwinCursorMode mode);
 mwinOutcome mwinWin32SetCursorShape(mwinWin32Window* window, mwinCursorShape shape);
+mwinOutcome mwinWin32SetCursorImage(mwinWin32Window* window, mwinCursorId cursor);
+
+// The cursor made from images the window shows, made at the window's DPI
+// the first time; NULL while it shows a shape or the cursor is gone.
+HCURSOR mwinWin32CursorOf(const mwinWin32Window* window);
+
+// Destroys the cursors made for the cursor in a slot, and shows the
+// default shape over the windows showing it (mwin-0027).
+void mwinWin32ReleaseCursor(mwinContext* context, uint32_t slot);
 
 // Clips the cursor as the window's mode wants, now that the window has
 // focus or moved; or lets it go.

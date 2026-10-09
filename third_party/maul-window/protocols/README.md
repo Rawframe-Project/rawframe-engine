@@ -6,3 +6,5 @@ with their own copyright and licence (MIT) inside each file.
 
 - `xdg-toplevel-icon-v1.xml`: staging, wayland-protocols 1.37 (window
   icons, mwin-0014).
+- `color-management-v1.xml`: staging, wayland-protocols 1.45 (a
+  monitor's HDR facts, mwin-0036).

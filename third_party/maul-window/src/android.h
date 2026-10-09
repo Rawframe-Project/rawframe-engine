@@ -44,6 +44,12 @@ typedef struct mwinAndroidWindow
     mwinRect caret;
     mwinInsets safeArea;
     mwinRect covered;
+    // The cursor asked for: a shape, or a cursor made from images when
+    // cursorImage is live (mwin-0027).
+    mwinCursorShape cursorShape;
+    mwinCursorId cursorImage;
+    // Whether the window was told its monitor.
+    bool displayTold;
 } mwinAndroidWindow;
 
 // The window's insets as the activity last told them, in pixels: the
@@ -64,7 +70,7 @@ typedef struct mwinAndroidInsets
 // and the library's methods that show the keyboard and drop the input
 // method's composition; its services and facts helpers
 // (maul.window.Services and maul.window.Facts, global references) and
-// their methods.
+// their methods; the activity's methods for the pointer's icon.
 typedef struct mwinAndroidJava
 {
     JNIEnv* env;
@@ -79,7 +85,22 @@ typedef struct mwinAndroidJava
     jclass facts;
     jmethodID readFacts;
     jmethodID readLocales;
+    jmethodID showPointerShape;
+    jmethodID showPointer;
+    jmethodID makePointer;
 } mwinAndroidJava;
+
+// The activity's display as the one monitor: the library's Java helper
+// (maul.window.Screen, a global reference) and its methods, the
+// monitor's slot (-1 before it is read) and when it was last read.
+typedef struct mwinAndroidScreen
+{
+    jclass screen;
+    jmethodID readFacts;
+    jmethodID readName;
+    int32_t monitor;
+    uint64_t readNs;
+} mwinAndroidScreen;
 
 // The key codes the backend keeps a state of: the keyboard's usages up
 // to the right Meta key.
@@ -111,6 +132,9 @@ typedef struct mwinAndroidPad
     uint32_t slot;
     mwinAndroidPadLayout layout;
     int8_t battery;
+    // The latest acceleration and rotation rate its sensors gave.
+    float acceleration[3];
+    float rotationRate[3];
 } mwinAndroidPad;
 
 // The gamepads followed, and when they were last looked for; the
@@ -129,6 +153,8 @@ typedef struct mwinAndroidPads
     jmethodID ranges;
     jmethodID battery;
     jmethodID rumble;
+    jmethodID hasMotion;
+    jmethodID motion;
     jintArray keys;
 } mwinAndroidPads;
 
@@ -206,6 +232,7 @@ struct mwinAndroidPlatform
     mwinAndroidDocuments documents;
     mwinAndroidDrops drops;
     mwinAndroidAccessibility accessibility;
+    mwinAndroidScreen screen;
     // When the facts were last read.
     uint64_t factsReadNs;
 };
@@ -264,12 +291,14 @@ void mwinAndroidForgetInput(mwinAndroidPlatform* platform);
 // Gamepads (android_pad.c): the Java helper found, at the start; the
 // gamepads looked for every half second and when an event comes from
 // one not followed; an event of a gamepad followed, true when it was
-// one; the motors run; everything let go, the motors stopped.
+// one; the motors run; the motion sensors turned on or off; everything
+// let go, the motors and sensors stopped.
 bool mwinAndroidFindPads(mwinAndroidPlatform* platform, ANativeActivity* activity);
 void mwinAndroidPumpPads(mwinAndroidPlatform* platform, uint64_t nowNs);
 bool mwinAndroidPadInput(mwinAndroidPlatform* platform, const AInputEvent* event);
 mwinResult mwinAndroidRumble(mwinAndroidPlatform* platform, uint32_t slot, float low, float high,
                              uint32_t durationMs);
+mwinResult mwinAndroidSetMotion(mwinAndroidPlatform* platform, uint32_t slot, bool enabled);
 void mwinAndroidStopPads(mwinAndroidPlatform* platform);
 
 // File dialogs (android_dialog.c): the Java helper found and its
@@ -322,6 +351,15 @@ mwinOutcome mwinAndroidReadClipboard(const mwinAndroidPlatform* platform);
 mwinOutcome mwinAndroidOpenUrl(const mwinAndroidPlatform* platform, const mwinRequest* request);
 void mwinAndroidApplyAwake(const mwinAndroidPlatform* platform, bool awake);
 
+// The mouse pointer's icon over the view (android_cursor.c): the Java
+// activity's methods found at the start; the icon shown again for a new
+// activity; the shape and image requests; the backend's releaseCursor.
+bool mwinAndroidFindCursors(mwinAndroidPlatform* platform);
+void mwinAndroidApplyCursor(mwinAndroidPlatform* platform);
+mwinOutcome mwinAndroidSetCursorShape(mwinAndroidPlatform* platform, mwinCursorShape shape);
+mwinOutcome mwinAndroidSetCursorImage(mwinAndroidPlatform* platform, mwinCursorId cursor);
+void mwinAndroidReleaseCursor(mwinContext* context, uint32_t slot);
+
 // Input methods, the keyboard and the insets (android_text.c): the Java
 // activity's native methods registered and its methods found, at the
 // start; the insets posted as they change and when the window is made;
@@ -336,6 +374,17 @@ void mwinAndroidPostInsets(mwinAndroidPlatform* platform);
 mwinOutcome mwinAndroidSetTextInput(mwinAndroidPlatform* platform, bool enabled, mwinRect caret);
 mwinOutcome mwinAndroidSetKeyboard(mwinAndroidPlatform* platform, bool visible,
                                    mwinInputPurpose purpose);
+
+// The activity's display as the one monitor (android_output.c): the
+// Java helper's methods found at the start and released at the stop;
+// the display read when an activity starts and its configuration
+// changes, and every two seconds after, as its HDR/SDR ratio changes
+// with what it shows; the window told its monitor once it is made.
+bool mwinAndroidFindScreen(mwinAndroidPlatform* platform, ANativeActivity* activity);
+void mwinAndroidStopScreen(mwinAndroidPlatform* platform);
+void mwinAndroidReadScreen(mwinAndroidPlatform* platform);
+void mwinAndroidPumpScreen(mwinAndroidPlatform* platform, uint64_t nowNs);
+void mwinAndroidPostDisplay(mwinAndroidPlatform* platform);
 
 // The backend's window operations (android_window.c).
 void mwinAndroidCreateWindow(mwinContext* context, uint32_t slot);

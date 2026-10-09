@@ -38,6 +38,19 @@ typedef struct mwinBackendOps
     // Runs the motors of the gamepad in a slot, which has mwin_padRumble.
     mwinResult (*rumble)(mwinContext* context, uint32_t slot, float low, float high,
                          uint32_t durationMs);
+    // Frees what the backend made for the cursor in a slot, which is being
+    // destroyed, and shows the default shape over the windows showing it;
+    // NULL for a backend that makes nothing for cursors.
+    void (*releaseCursor)(mwinContext* context, uint32_t cursor);
+    // Runs the trigger motors of the gamepad in a slot, which has
+    // mwin_padTriggerRumble; turns the motion sensors of one with
+    // mwin_padMotion on or off. NULL for a backend that grants neither.
+    mwinResult (*triggerRumble)(mwinContext* context, uint32_t slot, float left, float right,
+                                uint32_t durationMs);
+    mwinResult (*setMotion)(mwinContext* context, uint32_t slot, bool enabled);
+    // What mwinGetKeyReach answers for a chord, a valid code with the
+    // modifiers held.
+    mwinKeyReach (*keyReach)(const mwinContext* context, mwinKeyCode code, mwinModifiers modifiers);
 } mwinBackendOps;
 
 // The loop of a backend that pumps: init, then pump and frame until a

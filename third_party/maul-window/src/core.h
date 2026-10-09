@@ -18,6 +18,7 @@
 #include "file_list.h"
 
 #include "maul-window/event.h"
+#include "maul-window/input.h"
 #include "maul-window/monitor.h"
 #include "maul-window/system.h"
 
@@ -114,6 +115,8 @@ typedef struct mwinRequest
         struct mwinIconCopy* icon;
         // An accessibility root (accessibility.h).
         void* root;
+        // A cursor made from images (cursor.h).
+        mwinCursorId cursor;
     } value;
 } mwinRequest;
 
@@ -167,6 +170,9 @@ typedef struct mwinGamepad
     uint64_t arrival;
     mwinGamepadInfo info;
     mwinGamepadState state;
+    // Its motion sensors are on, and their motion since the last read.
+    bool motionOn;
+    mwinGamepadMotion motion;
 } mwinGamepad;
 
 // The rings of the gamepads' records: buttons, and axes.
@@ -210,17 +216,28 @@ struct mwinContext
     // One per gamepad slot, the rings of their records, and the arrivals
     // counted.
     mwinGamepad* gamepads;
+    // One per cursor slot (cursor.h).
+    struct mwinCursor* cursors;
     mwinRing gamepadRings[2];
     uint64_t arrivals;
     mwinSystemFacts facts;
     char* locales;
     uint16_t localeLength;
     // The text last written to the clipboard and the text the last read
-    // found, each in a block of its own length from the allocator.
+    // found, each in a block of its own length from the allocator; the
+    // data last written and the data the last data read found; the
+    // primary selection's text written and found, likewise.
     char* clipboardOffer;
     uint32_t clipboardOfferLength;
     char* clipboardFound;
     uint32_t clipboardFoundLength;
+    struct mwinClipboardCopy* clipboardData;
+    uint8_t* clipboardDataFound;
+    uint32_t clipboardDataFoundLength;
+    char* primaryOffer;
+    uint32_t primaryOfferLength;
+    char* primaryFound;
+    uint32_t primaryFoundLength;
     // The drop being gathered, and the last one delivered with its
     // number.
     mwinDropPayload dropping;
@@ -274,6 +291,10 @@ int32_t mwinAddMonitor(mwinContext* context, const mwinMonitorInfo* info, uint64
 void mwinChangeMonitor(mwinContext* context, uint32_t slot, const mwinMonitorInfo* info,
                        uint64_t timeNs);
 
+// Whether two reads of a monitor tell the same facts, so a backend
+// reports a change only when one is.
+bool mwinSameMonitorInfo(const mwinMonitorInfo* a, const mwinMonitorInfo* b);
+
 // A monitor was disconnected; its slot is free once the record is
 // drained.
 void mwinRemoveMonitor(mwinContext* context, uint32_t slot, uint64_t timeNs);
@@ -298,6 +319,11 @@ void mwinPostGamepadButton(mwinContext* context, uint32_t slot, uint8_t button, 
                            uint64_t timeNs);
 void mwinPostGamepadAxis(mwinContext* context, uint32_t slot, uint8_t axis, float value,
                          uint64_t timeNs);
+// A sample of a gamepad's motion sensors, kept while they are on, in
+// the contract's units and frame, at a time on any steady clock the
+// backend keeps for the gamepad.
+void mwinPostGamepadMotion(mwinContext* context, uint32_t slot, const float acceleration[3],
+                           const float rotationRate[3], uint64_t timeNs);
 mwinGamepadId mwinGamepadIdOf(const mwinContext* context, uint32_t slot);
 int32_t mwinFindGamepad(const mwinContext* context, mwinGamepadId gamepad);
 void mwinReleaseGamepad(mwinContext* context, mwinGamepadId gamepad);
@@ -337,6 +363,12 @@ void mwinComplete(mwinContext* context, uint32_t slot, uint32_t request, mwinOut
 // too large, or failed when the allocator has no room.
 mwinOutcome mwinTakeClipboardText(mwinContext* context, const char* bytes, size_t length);
 mwinOutcome mwinTakeClipboardUtf16(mwinContext* context, const uint16_t* units, size_t length);
+
+// Holds what a data read or a primary selection read found, as
+// mwinTakeClipboardText does (clipboard_data.c): data as it is, the
+// primary selection's text repaired.
+mwinOutcome mwinTakeClipboardData(mwinContext* context, const void* bytes, size_t length);
+mwinOutcome mwinTakePrimaryText(mwinContext* context, const char* bytes, size_t length);
 
 // Frees the clipboard's text; the context's end calls it.
 void mwinReleaseClipboard(mwinContext* context);

@@ -5,6 +5,8 @@
 
 #include "web_input.h"
 
+#include "key_reach.h"
+#include "web_cursor.h"
 #include "web_js.h"
 
 #include "maul-unicode/encoding.h"
@@ -88,9 +90,16 @@ EM_JS(void, mwinPageWatchKeys, (const mwinContext* context, uint32_t slot), {
                          ['F5', 'F11', 'F12'].includes(e.code);
         // In the text field (web_text.c) keys type through the page, its
         // input events bringing the text; only Tab is kept from moving
-        // the focus.
+        // the focus. In the accessibility host the page keeps every key,
+        // the elements there being the program's adapter's, and a field
+        // there brings its own text.
         const texting = e.target === entry.textarea;
-        if (texting ? e.code === 'Tab' : !shortcut) {
+        const hosted = entry.host.contains(e.target);
+        const field = hosted && (e.target.isContentEditable ||
+                                 e.target instanceof HTMLInputElement ||
+                                 e.target instanceof HTMLTextAreaElement ||
+                                 e.target instanceof HTMLSelectElement);
+        if (!hosted && (texting ? e.code === 'Tab' : !shortcut)) {
             e.preventDefault();
         }
         if (code === 0 || e.isComposing || e.key === 'Process') {
@@ -100,7 +109,7 @@ EM_JS(void, mwinPageWatchKeys, (const mwinContext* context, uint32_t slot), {
                    input.meaning(e.code, e.key, e.shiftKey), 0, 0, 0, modifiers(e));
         // A character, typed alone or with AltGr (Control and Alt).
         const typed = !e.metaKey && (!e.ctrlKey || e.altKey) && [...e.key].length === 1;
-        if (down && typed && !texting) {
+        if (down && typed && !texting && !field) {
             state.push(11, slot, e.key.codePointAt(0));
         }
     };
@@ -108,11 +117,15 @@ EM_JS(void, mwinPageWatchKeys, (const mwinContext* context, uint32_t slot), {
     const onUp = e => key(e, false);
     entry.keyDown = onDown;
     entry.keyUp = onUp;
-    entry.canvas.addEventListener('keydown', onDown);
-    entry.canvas.addEventListener('keyup', onUp);
+    for (const target of [entry.canvas, entry.host]) {
+        target.addEventListener('keydown', onDown);
+        target.addEventListener('keyup', onUp);
+    }
     entry.listeners.push(() => {
-        entry.canvas.removeEventListener('keydown', onDown);
-        entry.canvas.removeEventListener('keyup', onUp);
+        for (const target of [entry.canvas, entry.host]) {
+            target.removeEventListener('keydown', onDown);
+            target.removeEventListener('keyup', onUp);
+        }
     });
 });
 
@@ -197,13 +210,6 @@ EM_JS(int, mwinPageLockPointer, (const mwinContext* context, uint32_t slot, bool
         });
     }
     return 0;
-});
-
-EM_JS(void, mwinPageSetCursor, (const mwinContext* context, uint32_t slot, int shape, bool hidden), {
-    const shapes = ['default', 'text', 'pointer', 'crosshair', 'move', 'ew-resize', 'ns-resize',
-                    'nesw-resize', 'nwse-resize', 'not-allowed', 'wait', 'progress'];
-    Module.mwinWeb.get(context).canvases[slot].canvas.style.cursor =
-        hidden ? 'none' : shapes[shape];
 });
 
 EM_JS(int, mwinPageKeyMeaning, (const mwinContext* context, int code), {
@@ -343,8 +349,7 @@ static void AnswerLock(mwinWebPlatform* platform, uint32_t slot, bool locked, bo
     if (!failed && locked == wanted)
     {
         platform->windows[slot].cursorMode = mode;
-        mwinPageSetCursor(context, slot, platform->windows[slot].cursorShape,
-                          mode != mwin_cursorVisible);
+        mwinWebApplyCursor(platform, slot);
         mwinComplete(context, slot, (uint32_t)request, mwin_outcomeDone);
     }
     else if (failed)
@@ -402,16 +407,7 @@ int mwinWebSetCursorMode(mwinWebPlatform* platform, uint32_t slot, mwinCursorMod
         return answer < 0 ? mwin_outcomeUnsupported : -1;
     }
     platform->windows[slot].cursorMode = mode;
-    mwinPageSetCursor(platform->context, slot, platform->windows[slot].cursorShape,
-                      mode != mwin_cursorVisible);
-    return mwin_outcomeDone;
-}
-
-int mwinWebSetCursorShape(mwinWebPlatform* platform, uint32_t slot, mwinCursorShape shape)
-{
-    mwinWebWindow* window = &platform->windows[slot];
-    window->cursorShape = shape;
-    mwinPageSetCursor(platform->context, slot, shape, window->cursorMode != mwin_cursorVisible);
+    mwinWebApplyCursor(platform, slot);
     return mwin_outcomeDone;
 }
 
@@ -419,4 +415,54 @@ mwinKey mwinWebMapKeyCode(const mwinContext* context, mwinKeyCode code)
 {
     int meaning = mwinPageKeyMeaning(context, (int)code);
     return meaning > 0 ? (mwinKey)meaning : MWIN_KEY_NAMED | code;
+}
+
+// The system in the low bits (KEY_HOST_*), Chromium in the high one.
+// Chromium-based browsers name a brand "Chromium" in userAgentData,
+// which the others lack; an iPad's Safari calls itself a Mac with touch.
+// clang-format off
+EM_JS(int, mwinPageKeyHost, (void), {
+    if (typeof navigator === 'undefined') {
+        return 0;
+    }
+    const data = navigator.userAgentData;
+    const chromium = data && data.brands.some(b => b.brand === 'Chromium') ? 8 : 0;
+    const name = (data && data.platform) || navigator.platform || "";
+    const agent = navigator.userAgent || "";
+    const touch = navigator.maxTouchPoints > 1;
+    const system = /Android/.test(name) || /Android/.test(agent) ? 4
+                 : /iPhone|iPad|iPod|iOS/.test(name) || (/Mac/.test(name) && touch) ? 3
+                 : /Mac/.test(name) ? 2
+                 : /Win/.test(name) ? 1
+                 : /Linux|CrOS|Chrome OS|X11/.test(name) ? 5 : 0;
+    return chromium | system;
+});
+// clang-format on
+
+#define KEY_HOST_SYSTEM   7u
+#define KEY_HOST_CHROMIUM 8u
+
+uint8_t mwinWebReadKeyHost(void)
+{
+    return (uint8_t)mwinPageKeyHost();
+}
+
+mwinKeyReach mwinWebKeyReach(const mwinContext* context, mwinKeyCode code, mwinModifiers modifiers)
+{
+    static const mwinKeyRules* const systems[] = {
+        nullptr,          &mwinKeyRulesWindows, &mwinKeyRulesMacos,
+        &mwinKeyRulesIos, &mwinKeyRulesAndroid, &mwinKeyRulesLinux,
+    };
+    const mwinWebPlatform* platform = context->backendData;
+    uint8_t host = platform->keyHost;
+    mwinKeyReach reach = mwinFindKeyReach((host & KEY_HOST_CHROMIUM) != 0 ? &mwinKeyRulesChromium
+                                                                          : &mwinKeyRulesBrowser,
+                                          code, modifiers);
+    uint32_t system = host & KEY_HOST_SYSTEM;
+    if (system < sizeof(systems) / sizeof(systems[0]) && systems[system] != nullptr)
+    {
+        mwinKeyReach kept = mwinFindKeyReach(systems[system], code, modifiers);
+        reach = kept > reach ? kept : reach;
+    }
+    return reach;
 }

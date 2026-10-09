@@ -13,7 +13,7 @@
 
 #include <string.h>
 
-static NSBitmapImageRep* RepOf(const mwinIconCopyImage* image, NSSize size)
+NSBitmapImageRep* mwinMacImageRep(const mwinIconCopyImage* image, NSSize size)
 {
     NSBitmapImageRep* rep =
         [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nullptr
@@ -48,7 +48,7 @@ mwinOutcome mwinMacSetIcon(const mwinRequest* request)
     NSImage* icon = [[[NSImage alloc] initWithSize:size] autorelease];
     for (uint32_t i = 0; i < copy->count; i++)
     {
-        NSBitmapImageRep* rep = RepOf(&copy->images[i], size);
+        NSBitmapImageRep* rep = mwinMacImageRep(&copy->images[i], size);
         if (rep == nil)
         {
             return mwin_outcomeFailed;

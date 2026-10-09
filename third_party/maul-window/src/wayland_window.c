@@ -14,6 +14,7 @@
 #include "wayland_output.h"
 #include "wayland_pointer.h"
 #include "wayland_popup.h"
+#include "wayland_tablet.h"
 #include "wayland_text.h"
 
 #include <math.h>
@@ -489,6 +490,7 @@ void mwinWaylandDestroyWindow(mwinContext* context, uint32_t slot)
     mwinWaylandWindow* window = &platform->windows[slot];
     mwinWaylandForgetKeyboardFocus(platform, slot);
     mwinWaylandForgetPointerFocus(platform, slot);
+    mwinWaylandForgetToolFocus(platform, slot);
     mwinWaylandDropCursor(platform, slot);
     mwinWaylandForgetTextFocus(platform, slot);
     mwinWaylandDestroyFrame(platform, slot);
@@ -640,14 +642,20 @@ static int CarryOut(mwinWaylandWindow* window, mwinWindow* core, uint32_t index)
         return mwinWaylandSetCursorMode(window->platform, window->slot, request->value.code);
     case mwin_requestCursorShape:
         return mwinWaylandSetCursorShape(window->platform, window->slot, request->value.code);
+    case mwin_requestCursorImage:
+        return mwinWaylandSetCursorImage(window->platform, window->slot, request->value.cursor);
     case mwin_requestTextInput:
         return mwinWaylandSetTextInput(window->platform, window->slot,
                                        request->value.textInput.enabled,
                                        request->value.textInput.caret);
     case mwin_requestClipboardWrite:
-        return mwinWaylandWriteClipboard(window->platform);
+    case mwin_requestClipboardWriteData:
+    case mwin_requestPrimaryWrite:
+        return mwinWaylandWriteSelection(window->platform, request->kind);
     case mwin_requestClipboardRead:
-        return mwinWaylandReadClipboard(window->platform);
+    case mwin_requestClipboardReadData:
+    case mwin_requestPrimaryRead:
+        return mwinWaylandReadSelection(window->platform, request);
     case mwin_requestOpenUrl:
         return mwinLinuxOpenUrl(&window->platform->services, window->slot, index);
     case mwin_requestRevealFile:

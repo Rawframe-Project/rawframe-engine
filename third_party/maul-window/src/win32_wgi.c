@@ -360,13 +360,27 @@ static bool Read(void* self, void* pad, mwinPadReading* reading)
     return true;
 }
 
-// The grips' motors; the triggers' stay still.
-static bool Vibrate(void* self, void* pad, float low, float high)
+// The grips' motors and the triggers'.
+static bool Vibrate(void* self, void* pad, const float motors[4])
 {
     (void)self;
     Gamepad* gamepad = pad;
-    Vibration value = {(double)low, (double)high, 0.0, 0.0};
+    Vibration value = {(double)motors[0], (double)motors[1], (double)motors[2], (double)motors[3]};
     return SUCCEEDED(gamepad->v->setVibration(gamepad, value));
+}
+
+// Whether a pad has motors in its triggers: Microsoft's from the Xbox
+// One on; the Xbox 360's and other makers' pads have none, and the
+// runtime would fold the triggers' strengths into the grips'.
+static bool HasTriggerMotors(uint16_t vendor, uint16_t product)
+{
+    static const uint16_t xbox360[] = {0x028E, 0x028F, 0x0291, 0x02A0, 0x02A1, 0x0719};
+    bool found = vendor == 0x045E;
+    for (size_t i = 0; found && i < sizeof(xbox360) / sizeof(xbox360[0]); i++)
+    {
+        found = product != xbox360[i];
+    }
+    return found;
 }
 
 // The name the controller gives, as UTF-8 that fits: at most 21 UTF-16
@@ -426,6 +440,10 @@ static void Describe(void* self, void* pad, mwinGamepadInfo* info)
         static const char plain[] = "Xbox controller";
         memcpy(info->name, plain, sizeof(plain) - 1);
         info->nameLength = sizeof(plain) - 1;
+    }
+    if (HasTriggerMotors(info->vendor, info->product))
+    {
+        info->capabilities |= mwin_padTriggerRumble;
     }
 }
 

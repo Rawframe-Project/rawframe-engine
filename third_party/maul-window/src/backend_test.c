@@ -13,6 +13,7 @@
 #include "allocator.h"
 #include "backend.h"
 #include "core.h"
+#include "cursor.h"
 
 #include "maul-unicode/encoding.h"
 #include "maul-window/test.h"
@@ -22,12 +23,14 @@
 
 // Where the platform block's parts lie, laid out with checked
 // arithmetic: the platform, a pending answer per request slot of every
-// window, and a rumble per gamepad.
+// window, and what each gamepad was given.
 typedef struct PlatformParts
 {
     mwinLayout layout;
     size_t pending;
-    size_t rumbles;
+    size_t pads;
+    size_t cursors;
+    size_t texts;
 } PlatformParts;
 
 static uint32_t PendingCapacity(const mwinLimits* limits)
@@ -41,8 +44,12 @@ static PlatformParts PartsOf(const mwinLimits* limits)
     (void)mwinLayoutAdd(&parts.layout, 1, sizeof(mwinTestPlatform), alignof(mwinTestPlatform));
     parts.pending = mwinLayoutAdd(&parts.layout, PendingCapacity(limits), sizeof(mwinTestPending),
                                   alignof(mwinTestPending));
-    parts.rumbles = mwinLayoutAdd(&parts.layout, limits->gamepads, sizeof(mwinTestRumble),
-                                  alignof(mwinTestRumble));
+    parts.pads =
+        mwinLayoutAdd(&parts.layout, limits->gamepads, sizeof(mwinTestPad), alignof(mwinTestPad));
+    parts.cursors = mwinLayoutAdd(&parts.layout, limits->windows, sizeof(mwinTestCursor),
+                                  alignof(mwinTestCursor));
+    parts.texts =
+        mwinLayoutAdd(&parts.layout, limits->windows, sizeof(mwinTestText), alignof(mwinTestText));
     return parts;
 }
 
@@ -66,7 +73,9 @@ static mwinResult Start(mwinContext* context)
     mwinTestPlatform* platform = (mwinTestPlatform*)block;
     platform->pending = (mwinTestPending*)(block + parts.pending);
     platform->pendingCapacity = PendingCapacity(&context->limits);
-    platform->rumbles = (mwinTestRumble*)(block + parts.rumbles);
+    platform->pads = (mwinTestPad*)(block + parts.pads);
+    platform->cursors = (mwinTestCursor*)(block + parts.cursors);
+    platform->texts = (mwinTestText*)(block + parts.texts);
     platform->scale = 1.0f;
     context->backendData = platform;
     return mwin_success;
@@ -126,8 +135,36 @@ static void CreateWindow(mwinContext* context, uint32_t slot)
 
 static void DestroyWindow(mwinContext* context, uint32_t slot)
 {
-    (void)context;
-    (void)slot;
+    mwinTestPlatformOf(context)->cursors[slot] = (mwinTestCursor){0};
+    mwinTestPlatformOf(context)->texts[slot] = (mwinTestText){0};
+}
+
+// Shows a cursor made from images over the window in a slot, taking the
+// image for the platform's scale and marking it made.
+static mwinOutcome ShowCursor(mwinContext* context, uint32_t slot, mwinCursorId id)
+{
+    mwinTestPlatform* platform = mwinTestPlatformOf(context);
+    mwinCursor* cursor = mwinFindCursor(context, id);
+    if (cursor == nullptr)
+    {
+        return mwin_outcomeFailed;
+    }
+    uint32_t image = mwinCursorImageFor(cursor, platform->scale);
+    cursor->nativeId[image] = 1;
+    platform->cursors[slot] = (mwinTestCursor){id, image};
+    return mwin_outcomeDone;
+}
+
+static void ReleaseCursor(mwinContext* context, uint32_t cursor)
+{
+    mwinTestPlatform* platform = mwinTestPlatformOf(context);
+    for (uint32_t slot = 0; slot < context->limits.windows; slot++)
+    {
+        if (platform->cursors[slot].cursor.index1 == cursor + 1)
+        {
+            platform->cursors[slot] = (mwinTestCursor){0};
+        }
+    }
 }
 
 static void Submit(mwinContext* context, uint32_t slot, uint32_t request)
@@ -260,33 +297,16 @@ static mwinOutcome CarryOut(mwinContext* context, uint32_t slot, const mwinReque
         Focus(context, slot);
         break;
     case mwin_requestTextInput:
-        if (!request->value.textInput.enabled && window->state.composing)
-        {
-            // Leaving text input ends the composition.
-            mwinEvent end = {0};
-            end.type = mwin_eventImePreedit;
-            end.timeNs = Now(context);
-            end.data.preedit.caret = -1;
-            mwinPost(context, slot, &end);
-        }
-        break;
     case mwin_requestVirtualKeyboard:
-    {
-        // The keyboard covers the lower two fifths of the window.
-        mwinSize size = window->state.size;
-        mwinEvent event = {0};
-        event.type = mwin_eventVirtualKeyboardChanged;
-        event.timeNs = Now(context);
-        if ((request->value.code & 0x80u) != 0)
-        {
-            event.data.rect = (mwinRect){0.0f, size.height * 0.6f, size.width, size.height * 0.4f};
-        }
-        mwinPost(context, slot, &event);
+        mwinTestCarryOutText(context, slot, request);
         break;
-    }
     case mwin_requestClipboardWrite:
     case mwin_requestClipboardRead:
-        return mwinTestUseClipboard(context, request->kind);
+    case mwin_requestClipboardWriteData:
+    case mwin_requestClipboardReadData:
+    case mwin_requestPrimaryWrite:
+    case mwin_requestPrimaryRead:
+        return mwinTestUseClipboard(context, request);
     case mwin_requestOpenUrl:
     case mwin_requestRevealFile:
         mwinTestOpen(context, request);
@@ -294,6 +314,11 @@ static mwinOutcome CarryOut(mwinContext* context, uint32_t slot, const mwinReque
     case mwin_requestIcon:
         mwinTestSetIcon(context, request);
         break;
+    case mwin_requestCursorShape:
+        mwinTestPlatformOf(context)->cursors[slot] = (mwinTestCursor){0};
+        break;
+    case mwin_requestCursorImage:
+        return ShowCursor(context, slot, request->value.cursor);
     default:
         break; // the cursor changes on screen, with nothing to report
     }
@@ -440,14 +465,41 @@ static void NativeHandles(const mwinContext* context, uint32_t slot, mwinNativeH
 static mwinResult RumbleGamepad(mwinContext* context, uint32_t slot, float low, float high,
                                 uint32_t durationMs)
 {
-    mwinTestRumble* rumble = &mwinTestPlatformOf(context)->rumbles[slot];
+    mwinTestRumble* rumble = &mwinTestPlatformOf(context)->pads[slot].rumble;
     *rumble = (mwinTestRumble){low, high, durationMs, rumble->count + 1};
     return mwin_success;
 }
 
+static mwinResult RumbleTriggers(mwinContext* context, uint32_t slot, float left, float right,
+                                 uint32_t durationMs)
+{
+    mwinTestRumble* rumble = &mwinTestPlatformOf(context)->pads[slot].triggers;
+    *rumble = (mwinTestRumble){left, right, durationMs, rumble->count + 1};
+    return mwin_success;
+}
+
+static mwinResult SetMotion(mwinContext* context, uint32_t slot, bool enabled)
+{
+    mwinTestPlatformOf(context)->pads[slot].motion = enabled;
+    return mwin_success;
+}
+
 const mwinBackendOps mwinTestBackend = {
-    Start,      Stop,           Run,           CreateWindow,  DestroyWindow, Submit, Now,
-    MapKeyCode, KeyboardLayout, NativeHandles, RumbleGamepad,
+    Start,
+    Stop,
+    Run,
+    CreateWindow,
+    DestroyWindow,
+    Submit,
+    Now,
+    MapKeyCode,
+    KeyboardLayout,
+    NativeHandles,
+    RumbleGamepad,
+    ReleaseCursor,
+    RumbleTriggers,
+    SetMotion,
+    mwinTestKeyReachOf,
 };
 
 mwinResult mwinTestSetAnswer(mwinContext* context, mwinRequestKind kind, mwinOutcome outcome)
@@ -747,7 +799,7 @@ mwinResult mwinTestAddGamepad(mwinContext* context, const mwinGamepadInfo* info,
     {
         return mwin_errorCapacity;
     }
-    mwinTestPlatformOf(context)->rumbles[slot] = (mwinTestRumble){0};
+    mwinTestPlatformOf(context)->pads[slot] = (mwinTestPad){0};
     *gamepadOut = mwinGamepadIdOf(context, (uint32_t)slot);
     return mwin_success;
 }
@@ -800,8 +852,10 @@ mwinResult mwinTestGamepadAxis(mwinContext* context, mwinGamepadId gamepad, uint
     return status;
 }
 
-mwinResult mwinTestGetRumble(const mwinContext* context, mwinGamepadId gamepad, float* lowOut,
-                             float* highOut, uint32_t* durationMsOut, uint32_t* countOut)
+// Reads one of a test gamepad's rumbles: its motors' or its triggers'.
+static mwinResult GetRumble(const mwinContext* context, mwinGamepadId gamepad, bool triggers,
+                            float* lowOut, float* highOut, uint32_t* durationMsOut,
+                            uint32_t* countOut)
 {
     if (lowOut == nullptr || highOut == nullptr || durationMsOut == nullptr || countOut == nullptr)
     {
@@ -811,11 +865,80 @@ mwinResult mwinTestGetRumble(const mwinContext* context, mwinGamepadId gamepad, 
     mwinResult status = FindTestGamepad(context, gamepad, &slot);
     if (status == mwin_success)
     {
-        const mwinTestRumble* rumble = &mwinTestPlatformOf(context)->rumbles[slot];
+        const mwinTestPad* pad = &mwinTestPlatformOf(context)->pads[slot];
+        const mwinTestRumble* rumble = triggers ? &pad->triggers : &pad->rumble;
         *lowOut = rumble->low;
         *highOut = rumble->high;
         *durationMsOut = rumble->durationMs;
         *countOut = rumble->count;
     }
     return status;
+}
+
+mwinResult mwinTestGetRumble(const mwinContext* context, mwinGamepadId gamepad, float* lowOut,
+                             float* highOut, uint32_t* durationMsOut, uint32_t* countOut)
+{
+    return GetRumble(context, gamepad, false, lowOut, highOut, durationMsOut, countOut);
+}
+
+mwinResult mwinTestGetTriggerRumble(const mwinContext* context, mwinGamepadId gamepad,
+                                    float* leftOut, float* rightOut, uint32_t* durationMsOut,
+                                    uint32_t* countOut)
+{
+    return GetRumble(context, gamepad, true, leftOut, rightOut, durationMsOut, countOut);
+}
+
+mwinResult mwinTestGetMotionOn(const mwinContext* context, mwinGamepadId gamepad, bool* onOut)
+{
+    if (onOut == nullptr)
+    {
+        return mwinMisuse(context);
+    }
+    int32_t slot = -1;
+    mwinResult status = FindTestGamepad(context, gamepad, &slot);
+    if (status == mwin_success)
+    {
+        *onOut = mwinTestPlatformOf(context)->pads[slot].motion;
+    }
+    return status;
+}
+
+mwinResult mwinTestGamepadMotion(mwinContext* context, mwinGamepadId gamepad,
+                                 const float acceleration[3], const float rotationRate[3],
+                                 uint64_t timeNs)
+{
+    int32_t slot = -1;
+    mwinResult status = acceleration != nullptr && rotationRate != nullptr
+                            ? FindTestGamepad(context, gamepad, &slot)
+                            : mwinMisuse(context);
+    if (status == mwin_success)
+    {
+        mwinPostGamepadMotion(context, (uint32_t)slot, acceleration, rotationRate, timeNs);
+    }
+    return status;
+}
+
+mwinResult mwinTestGetCursor(const mwinContext* context, mwinWindowId window,
+                             mwinCursorId* cursorOut, uint32_t* imageOut)
+{
+    if (context == nullptr || cursorOut == nullptr)
+    {
+        return mwin_errorInvalid;
+    }
+    const mwinTestPlatform* platform = mwinTestPlatformOf(context);
+    if (platform == nullptr)
+    {
+        return mwin_errorUnsupported;
+    }
+    if (mwinFindWindow(context, window) == nullptr)
+    {
+        return mwin_errorStale;
+    }
+    const mwinTestCursor* shown = &platform->cursors[window.index1 - 1];
+    *cursorOut = shown->cursor;
+    if (imageOut != nullptr)
+    {
+        *imageOut = shown->image;
+    }
+    return mwin_success;
 }

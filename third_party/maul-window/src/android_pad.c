@@ -20,6 +20,10 @@
 // - Rumble runs the device's motors (two, heavy then light, where
 //   Android 12 lists them; else its one at the stronger): Android times
 //   the effect, and the latest call replaces it.
+// - Motion is the device's accelerometer and gyroscope (Android 12 and
+//   later), whose listener hands each sample to the library on the main
+//   thread, in m/s^2 and rad/s and in the frame the kernel's driver
+//   gives, the contract's for the pads that have them.
 
 #include "android.h"
 
@@ -37,6 +41,27 @@ static mwinAndroidPad* PadOf(mwinAndroidPads* pads, int32_t device)
         }
     }
     return nullptr;
+}
+
+// A sample of a gamepad's sensors: the latest of the other sensor posted
+// with it.
+static void JNICALL MotionSample(JNIEnv* env, jclass type, jlong program, jint device,
+                                 jboolean gyro, jfloat x, jfloat y, jfloat z, jlong timeNs)
+{
+    (void)env;
+    (void)type;
+    mwinAndroidPlatform* platform = mwinAndroidProgramOf(program);
+    mwinAndroidPad* pad = platform != nullptr ? PadOf(&platform->pads, device) : nullptr;
+    if (pad == nullptr)
+    {
+        return;
+    }
+    float* values = gyro ? pad->rotationRate : pad->acceleration;
+    values[0] = x;
+    values[1] = y;
+    values[2] = z;
+    mwinPostGamepadMotion(platform->context, pad->slot, pad->acceleration, pad->rotationRate,
+                          (uint64_t)timeNs);
 }
 
 bool mwinAndroidFindPads(mwinAndroidPlatform* platform, ANativeActivity* activity)
@@ -61,12 +86,19 @@ bool mwinAndroidFindPads(mwinAndroidPlatform* platform, ANativeActivity* activit
     pads->ranges = (*env)->GetStaticMethodID(env, type, "ranges", "(I[I)[F");
     pads->battery = (*env)->GetStaticMethodID(env, type, "battery", "(I)I");
     pads->rumble = (*env)->GetStaticMethodID(env, type, "rumble", "(IFFI)Z");
+    pads->hasMotion = (*env)->GetStaticMethodID(env, type, "hasMotion", "(I)Z");
+    pads->motion = (*env)->GetStaticMethodID(env, type, "motion", "(IZ)Z");
+    static const JNINativeMethod natives[] = {
+        {"nativeMotion", "(JIZFFFJ)V", (void*)MotionSample},
+    };
+    bool registered = (*env)->RegisterNatives(env, type, natives, 1) == JNI_OK;
     (*env)->ExceptionClear(env);
     (*env)->DeleteLocalRef(env, type);
     (*env)->DeleteLocalRef(env, keys);
     return pads->type != nullptr && pads->keys != nullptr && pads->list != nullptr &&
            pads->name != nullptr && pads->describe != nullptr && pads->ranges != nullptr &&
-           pads->battery != nullptr && pads->rumble != nullptr;
+           pads->battery != nullptr && pads->rumble != nullptr && pads->hasMotion != nullptr &&
+           pads->motion != nullptr && registered;
 }
 
 static int8_t BatteryOf(const mwinAndroidPlatform* platform, int32_t device)
@@ -128,6 +160,10 @@ static bool Describe(const mwinAndroidPlatform* platform, int32_t device,
             .product = (uint16_t)head[1],
             .capabilities = head[2] > 0 ? mwin_padRumble : 0,
         };
+        if ((*env)->CallStaticBooleanMethod(env, pads->type, pads->hasMotion, (jint)device))
+        {
+            info->capabilities |= mwin_padMotion;
+        }
         (*env)->GetByteArrayRegion(env, name, 0, (jsize)info->nameLength, (jbyte*)info->name);
         mwinAndroidPadLayoutOf(layout, info);
         described = !(*env)->ExceptionCheck(env);
@@ -162,9 +198,24 @@ static void Add(mwinAndroidPlatform* platform, int32_t device, uint64_t nowNs)
     }
 }
 
+// Turns a device's sensors on or off: false when Java failed.
+static bool Sense(const mwinAndroidPlatform* platform, int32_t device, bool on)
+{
+    JNIEnv* env = platform->java.env;
+    jboolean done = (*env)->CallStaticBooleanMethod(env, platform->pads.type, platform->pads.motion,
+                                                    (jint)device, (jboolean)on);
+    bool thrown = (*env)->ExceptionCheck(env);
+    (*env)->ExceptionClear(env);
+    return done && !thrown;
+}
+
 static void Remove(mwinAndroidPlatform* platform, uint32_t index, uint64_t nowNs)
 {
     mwinAndroidPads* pads = &platform->pads;
+    if (platform->context->gamepads[pads->pads[index].slot].motionOn)
+    {
+        (void)Sense(platform, pads->pads[index].device, false);
+    }
     mwinRemoveGamepad(platform->context, pads->pads[index].slot, nowNs);
     pads->count -= 1;
     pads->pads[index] = pads->pads[pads->count];
@@ -336,12 +387,32 @@ mwinResult mwinAndroidRumble(mwinAndroidPlatform* platform, uint32_t slot, float
     return mwin_errorStale;
 }
 
+mwinResult mwinAndroidSetMotion(mwinAndroidPlatform* platform, uint32_t slot, bool enabled)
+{
+    mwinAndroidPads* pads = &platform->pads;
+    for (uint32_t i = 0; i < pads->count; i++)
+    {
+        if (pads->pads[i].slot == slot)
+        {
+            memset(pads->pads[i].acceleration, 0, sizeof(pads->pads[i].acceleration));
+            memset(pads->pads[i].rotationRate, 0, sizeof(pads->pads[i].rotationRate));
+            return Sense(platform, pads->pads[i].device, enabled) ? mwin_success
+                                                                  : mwin_errorPlatform;
+        }
+    }
+    return mwin_errorStale;
+}
+
 void mwinAndroidStopPads(mwinAndroidPlatform* platform)
 {
     JNIEnv* env = platform->java.env;
     mwinAndroidPads* pads = &platform->pads;
     for (uint32_t i = 0; pads->type != nullptr && i < pads->count; i++)
     {
+        if (platform->context->gamepads[pads->pads[i].slot].motionOn)
+        {
+            (void)Sense(platform, pads->pads[i].device, false);
+        }
         if ((platform->context->gamepads[pads->pads[i].slot].info.capabilities & mwin_padRumble) !=
             0)
         {

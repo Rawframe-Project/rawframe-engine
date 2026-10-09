@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Cursor requests and the keyboard layout, which the backend answers.
+// Cursor requests, the keyboard layout and the chords the platform
+// keeps, which the backend answers.
 
 #include "maul-window/input.h"
 
@@ -94,6 +95,18 @@ mwinKey mwinMapKeyCode(const mwinContext* context, mwinKeyCode code)
         return 0;
     }
     return context->backend->mapKeyCode(context, code);
+}
+
+mwinResult mwinGetKeyReach(const mwinContext* context, mwinKeyCode code, mwinModifiers modifiers,
+                           mwinKeyReach* reachOut)
+{
+    if (context == nullptr || reachOut == nullptr || code == mwin_codeUnknown ||
+        code > mwin_codeMetaRight)
+    {
+        return mwinMisuse(context);
+    }
+    *reachOut = context->backend->keyReach(context, code, modifiers);
+    return mwin_success;
 }
 
 mwinResult mwinGetKeyboardLayout(const mwinContext* context, char* buffer, size_t capacity,

@@ -6,6 +6,7 @@
 #include "maul-window/clipboard.h"
 
 #include "allocator.h"
+#include "clipboard_data.h"
 #include "core.h"
 #include "utf8.h"
 
@@ -95,6 +96,7 @@ void mwinReleaseClipboard(mwinContext* context)
     context->clipboardOfferLength = 0;
     context->clipboardFound = nullptr;
     context->clipboardFoundLength = 0;
+    mwinReleaseClipboardExtras(context);
 }
 
 mwinResult mwinRequestClipboardWrite(mwinContext* context, mwinWindowId window, const char* text,
@@ -127,9 +129,11 @@ mwinResult mwinRequestClipboardWrite(mwinContext* context, mwinWindowId window, 
     {
         memcpy(copy, text, length);
     }
+    // Text alone: the data written before goes.
     Release(context, context->clipboardOffer, context->clipboardOfferLength);
     context->clipboardOffer = copy;
     context->clipboardOfferLength = (uint32_t)length;
+    mwinReleaseClipboardData(context);
     mwinSubmitRequest(context, slot, request, requestOut);
     return mwin_success;
 }

@@ -45,9 +45,11 @@ enum
     mwin_dbusTypeDouble = 'd',
     mwin_dbusTypeStruct = 'r',
     mwin_dbusTypeDictEntry = 'e',
+    mwin_dbusTypeInt32 = 'i',
     mwin_dbusTypeObjectPath = 'o',
     mwin_dbusTypeString = 's',
     mwin_dbusTypeUint32 = 'u',
+    mwin_dbusTypeUint64 = 't',
     mwin_dbusTypeVariant = 'v',
 };
 

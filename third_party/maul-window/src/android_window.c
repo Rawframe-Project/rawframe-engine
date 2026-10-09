@@ -91,6 +91,7 @@ void mwinAndroidSurfaceCame(mwinAndroidPlatform* platform)
     uint32_t slot = (uint32_t)platform->slot;
     window->created = true;
     PostType(platform, mwin_eventWindowCreated);
+    mwinAndroidPostDisplay(platform);
     mwinAndroidReadSize(platform);
     mwinAndroidPostInsets(platform);
     PostType(platform, mwin_eventShown);
@@ -172,6 +173,10 @@ static int CarryOut(mwinAndroidPlatform* platform, uint32_t slot, uint32_t index
                                       (mwinInputPurpose)(request->value.code & 0x7Fu));
     case mwin_requestAccessibilityRoot:
         return mwinAndroidSetAccessibilityRoot(platform, request->value.root);
+    case mwin_requestCursorShape:
+        return mwinAndroidSetCursorShape(platform, request->value.code);
+    case mwin_requestCursorImage:
+        return mwinAndroidSetCursorImage(platform, request->value.cursor);
     default:
         return mwin_outcomeUnsupported;
     }

@@ -10,12 +10,17 @@
 
 #include "clicks.h"
 #include "core.h"
+#include "linux_ime.h"
 #include "linux_pad.h"
 #include "linux_services.h"
 #include "monotonic.h"
+#include "selection_reads.h"
 #include "x11_api.h"
+#include "x11_pen.h"
 #include "x11_scroll.h"
 #include "xkb_keyboard.h"
+
+#include "maul-window/clipboard.h"
 
 // The atoms the backend interns at start, in the order of s_atomNames
 // in backend_x11.c.
@@ -62,6 +67,14 @@ enum
     mwin_atomNetWmWindowTypePopupMenu,
     mwin_atomNetWmWindowTypeTooltip,
     mwin_atomNetWmMoveresize,
+    mwin_atomEdid,
+    mwin_atomVrrCapable,
+    mwin_atomAbsPressure,
+    mwin_atomAbsTiltX,
+    mwin_atomAbsTiltY,
+    mwin_atomStylus,
+    mwin_atomEraser,
+    mwin_atomTablet,
     MWIN_X11_ATOMS,
 };
 
@@ -91,24 +104,32 @@ typedef struct mwinX11Window
     // -1, until its deadline.
     int32_t modeRequest;
     uint64_t modeDeadlineNs;
-    // The cursor the program asked for over the window, and whether the
-    // pointer is grabbed to keep it inside.
+    // The cursor the program asked for over the window: a shape, or a
+    // cursor made from images when cursorImage is live (mwin-0027); and
+    // whether the pointer is grabbed to keep it inside.
     mwinCursorMode cursorMode;
     mwinCursorShape cursorShape;
+    mwinCursorId cursorImage;
     bool confined;
     // A popup's place from its owner's corner, in pixels.
     int32_t offsetX;
     int32_t offsetY;
+    // Whether the program takes text in it, and its caret, in window
+    // coordinates (mwinRequestTextInput).
+    bool textInput;
+    mwinRect caret;
 } mwinX11Window;
 
-// The core keyboard through XKB: the device, XKB's event code, and the
-// keys held, which tell the X server's repeats from new presses.
+// The core keyboard through XKB: the device, XKB's event code, the
+// keys held, which tell the X server's repeats from new presses, and
+// the window with the keyboard's focus, or -1.
 typedef struct mwinX11Keyboard
 {
     mwinXkbKeyboard xkb;
     int32_t device;
     uint8_t event;
     uint8_t held[32];
+    int32_t focus;
 } mwinX11Keyboard;
 
 // The core pointer: the window it is over, or -1, where, the buttons
@@ -124,12 +145,16 @@ typedef struct mwinX11Pointer
 } mwinX11Pointer;
 
 // The cursors the backend made: an empty one that hides the pointer,
-// and each shape loaded from the cursor theme, 0 before it is.
+// and each shape loaded from the cursor theme, 0 before it is. Cursors
+// from images need RENDER's 32-bit ARGB picture format, looked up the
+// first time one is asked for: 0 where there is none.
 typedef struct mwinX11Cursors
 {
     xcb_cursor_context_t* context;
     xcb_cursor_t blank;
     xcb_cursor_t shapes[16];
+    bool formatSought;
+    xcb_render_pictformat_t format;
 } mwinX11Cursors;
 
 // A monitor from RandR, by the atom of its name.
@@ -140,29 +165,45 @@ typedef struct mwinX11Output
     bool seen;
 } mwinX11Output;
 
-// The most readers served the program's text a piece at a time at once.
+// The most readers served the program's text or data a piece at a time
+// at once.
 #define MWIN_X11_SENDS 4
 
-// The clipboard: a hidden window that owns the selection and receives
-// it, made at its first use; the readers the program's text goes to in
-// pieces (INCR); and a read under way, its text in a block of capacity
+// The selections the program owns and reads: CLIPBOARD and PRIMARY.
+enum
+{
+    mwin_x11Clipboard,
+    mwin_x11Primary,
+    MWIN_X11_SELECTIONS,
+};
+
+// The clipboard and the primary selection: a hidden window that owns
+// them and receives them, made at its first use; for each, whether the
+// program owns it and since when, and for CLIPBOARD the atoms of its
+// data's MIME types; the readers its text or an item goes to in pieces
+// (INCR), the selection and the item (-1 the text) each takes; and a
+// read under way, what it is of, its bytes in a block of capacity
 // bytes from the allocator.
 typedef struct mwinX11Clipboard
 {
     xcb_window_t window;
-    bool owned;
-    xcb_timestamp_t ownedTime;
+    bool owned[MWIN_X11_SELECTIONS];
+    xcb_timestamp_t ownedTime[MWIN_X11_SELECTIONS];
+    xcb_atom_t types[MWIN_CLIPBOARD_ITEMS];
     struct
     {
         xcb_window_t requestor;
         xcb_atom_t property;
         xcb_atom_t type;
+        uint8_t selection;
+        int8_t item;
         uint32_t offset;
         uint64_t deadlineNs;
     } sends[MWIN_X11_SENDS];
     // Waiting for the owner's answer, then for its pieces.
     bool reading;
     bool incremental;
+    mwinSelectionRead read;
     uint64_t deadlineNs;
     char* buffer;
     uint32_t used;
@@ -209,6 +250,9 @@ struct mwinX11Platform
     // valuators of its devices (x11_scroll.h).
     bool smoothScroll;
     mwinX11Scroll scroll;
+    // The devices that are pens, whose events make pen records
+    // (x11_pen.h).
+    mwinX11Pens pens;
     // libxkbcommon, and the keyboard, where both load.
     mwinXkbApi xkbApi;
     mwinX11Keyboard keyboard;
@@ -218,6 +262,8 @@ struct mwinX11Platform
     mwinX11Drag drag;
     // Addresses, files and the bus (linux_services.c).
     mwinLinuxServices services;
+    // The input method over the session bus (linux_ime.c, W40).
+    mwinLinuxIme ime;
     // The time of the latest key or button event, which taking the
     // selection quotes.
     xcb_timestamp_t inputTime;

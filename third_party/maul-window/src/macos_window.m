@@ -482,13 +482,18 @@ static int CarryOut(mwinContext* context, uint32_t slot, const mwinRequest* requ
         return mwinMacSetCursorMode(platform, slot, request->value.code);
     case mwin_requestCursorShape:
         return mwinMacSetCursorShape(platform, slot, request->value.code);
+    case mwin_requestCursorImage:
+        return mwinMacSetCursorImage(platform, slot, request->value.cursor);
     case mwin_requestTextInput:
         return mwinMacSetTextInput(platform, slot, request->value.textInput.enabled,
                                    request->value.textInput.caret);
     case mwin_requestClipboardWrite:
+    case mwin_requestClipboardWriteData:
         return mwinMacWriteClipboard(platform);
     case mwin_requestClipboardRead:
         return mwinMacReadClipboard(platform);
+    case mwin_requestClipboardReadData:
+        return mwinMacReadClipboardData(platform, request);
     case mwin_requestOpenUrl:
         return mwinMacOpenUrl(request);
     case mwin_requestRevealFile:

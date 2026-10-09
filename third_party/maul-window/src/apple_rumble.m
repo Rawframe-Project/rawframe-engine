@@ -5,7 +5,8 @@
 // haptics reach each grip has two engines: the left grip's is the heavy,
 // low motor and the right's the light, high one, as on Xbox pads. One
 // that reaches only its whole body has one engine, which runs at the
-// stronger of the two. Each engine plays one continuous event of no end
+// stronger of the two. A pad whose haptics reach each trigger has an
+// engine for each too. Each engine plays one continuous event of no end
 // whose intensity follows the motor's; a motor at 0 stops its player.
 // The engines are made when a pad first rumbles and kept, per pad, until
 // the pad is gone or the pads stop. CoreHaptics would tell of a reset
@@ -124,13 +125,16 @@ API_AVAILABLE(macos(11.0), ios(14.0))
 }
 @end
 
-// A pad's motors: two, one per grip, or one.
+// A pad's motors: two, one per grip, or one; and one per trigger, or
+// none.
 API_AVAILABLE(macos(11.0), ios(14.0))
 @interface MwinAppleMotors : NSObject
 {
   @public
     MwinAppleMotor* low;
     MwinAppleMotor* high;
+    MwinAppleMotor* left;
+    MwinAppleMotor* right;
 }
 @end
 
@@ -140,6 +144,8 @@ API_AVAILABLE(macos(11.0), ios(14.0))
 {
     [low release];
     [high release];
+    [left release];
+    [right release];
     [super dealloc];
 }
 @end
@@ -149,6 +155,13 @@ static bool HasGrips(GCController* controller) API_AVAILABLE(macos(11.0), ios(14
     NSSet<GCHapticsLocality>* places = controller.haptics.supportedLocalities;
     return [places containsObject:GCHapticsLocalityLeftHandle] &&
            [places containsObject:GCHapticsLocalityRightHandle];
+}
+
+static bool HasTriggers(GCController* controller) API_AVAILABLE(macos(11.0), ios(14.0))
+{
+    NSSet<GCHapticsLocality>* places = controller.haptics.supportedLocalities;
+    return [places containsObject:GCHapticsLocalityLeftTrigger] &&
+           [places containsObject:GCHapticsLocalityRightTrigger];
 }
 
 static MwinAppleMotor* MotorOf(GCController* controller, GCHapticsLocality locality)
@@ -170,7 +183,16 @@ bool mwinAppleCanRumble(id controller)
     return false;
 }
 
-bool mwinAppleRumble(mwinApplePads* pads, id controller, float low, float high)
+bool mwinAppleCanRumbleTriggers(id controller)
+{
+    if (@available(macOS 11.0, iOS 14.0, *))
+    {
+        return ((GCController*)controller).haptics != nil && HasTriggers(controller);
+    }
+    return false;
+}
+
+bool mwinAppleRumble(mwinApplePads* pads, id controller, const float motors[4])
 {
     if (@available(macOS 11.0, iOS 14.0, *))
     {
@@ -179,23 +201,40 @@ bool mwinAppleRumble(mwinApplePads* pads, id controller, float low, float high)
             pads->rumbles = [[NSMapTable strongToStrongObjectsMapTable] retain];
         }
         NSMapTable* rumbles = pads->rumbles;
-        MwinAppleMotors* motors = [rumbles objectForKey:controller];
-        if (motors == nil)
+        MwinAppleMotors* made = [rumbles objectForKey:controller];
+        if (made == nil)
         {
-            motors = [[MwinAppleMotors alloc] init];
+            made = [[MwinAppleMotors alloc] init];
             bool grips = HasGrips(controller);
-            motors->low =
+            bool triggers = HasTriggers(controller);
+            made->low =
                 MotorOf(controller, grips ? GCHapticsLocalityLeftHandle : GCHapticsLocalityDefault);
-            motors->high = grips ? MotorOf(controller, GCHapticsLocalityRightHandle) : nil;
-            [rumbles setObject:motors forKey:controller];
-            [motors release];
+            made->high = grips ? MotorOf(controller, GCHapticsLocalityRightHandle) : nil;
+            made->left = triggers ? MotorOf(controller, GCHapticsLocalityLeftTrigger) : nil;
+            made->right = triggers ? MotorOf(controller, GCHapticsLocalityRightTrigger) : nil;
+            [rumbles setObject:made forKey:controller];
+            [made release];
         }
-        if (motors->high == nil)
+        float low = motors[0];
+        float high = motors[1];
+        // Every motor is run, whichever fails.
+        bool ran = true;
+        if (made->high == nil)
         {
-            return [motors->low run:low > high ? low : high];
+            ran = [made->low run:low > high ? low : high];
         }
-        bool lowRan = [motors->low run:low];
-        return [motors->high run:high] && lowRan;
+        else
+        {
+            bool lowRan = [made->low run:low];
+            ran = [made->high run:high] && lowRan;
+        }
+        if (made->left != nil)
+        {
+            bool leftRan = [made->left run:motors[2]];
+            bool rightRan = [made->right run:motors[3]];
+            ran = ran && leftRan && rightRan;
+        }
+        return ran;
     }
     return false;
 }

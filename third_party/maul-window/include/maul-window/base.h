@@ -18,7 +18,7 @@ extern "C"
 
 // The library version. CMake reads it from here.
 #define MWIN_VERSION_MAJOR 0
-#define MWIN_VERSION_MINOR 5
+#define MWIN_VERSION_MINOR 10
 #define MWIN_VERSION_PATCH 0
 
 // MWIN_API marks the public functions: dllexport or dllimport in a
@@ -38,8 +38,10 @@ extern "C"
 
 // MWIN_NODISCARD marks a function whose result must be read: every
 // function that returns a status. The attribute is standard in C23 and
-// C++17 and left out for older dialects.
-#if defined(__cplusplus) && __cplusplus >= 201703L
+// C++17 and left out for older dialects. MSVC keeps __cplusplus at
+// 199711L unless /Zc:__cplusplus is given, so _MSVC_LANG is read too.
+#if (defined(__cplusplus) && __cplusplus >= 201703L) ||                                            \
+    (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L)
 #define MWIN_NODISCARD [[nodiscard]]
 #elif !defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
 #define MWIN_NODISCARD [[nodiscard]]
