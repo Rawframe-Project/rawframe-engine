@@ -29,9 +29,14 @@ struct XcbHandles {
     std::uint32_t window = 0;
 };
 
-/// An Android window: its `ANativeWindow*`.
+/// An Android window: its `ANativeWindow*`, the `ANativeActivity*` it
+/// belongs to, through which the program reaches Java, and the global
+/// reference to the activity's `android.view.View`, which hosts the
+/// accessibility root (D576). All three change with the activity.
 struct AndroidHandles {
     void* window = nullptr;
+    void* activity = nullptr;
+    void* view = nullptr;
 };
 
 /// A macOS or iOS view and its `CAMetalLayer`.

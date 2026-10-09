@@ -56,6 +56,7 @@ constexpr auto kKinds = std::to_array<std::pair<EventKind, mwinEventType>>({
     {EventKind::MonitorAdded, mwin_eventMonitorAdded},
     {EventKind::MonitorRemoved, mwin_eventMonitorRemoved},
     {EventKind::DisplayChanged, mwin_eventDisplayChanged},
+    {EventKind::AccessibilityRequested, mwin_eventAccessibilityRequested},
     {EventKind::GamepadAdded, mwin_eventGamepadAdded},
     {EventKind::GamepadRemoved, mwin_eventGamepadRemoved},
     {EventKind::GamepadButtonDown, mwin_eventGamepadButtonDown},
@@ -91,6 +92,7 @@ constexpr auto kRequests = std::to_array<std::pair<RequestKind, mwinRequestKind>
     {RequestKind::Focus, mwin_requestFocus},
     {RequestKind::CursorMode, mwin_requestCursorMode},
     {RequestKind::TextInput, mwin_requestTextInput},
+    {RequestKind::AccessibilityRoot, mwin_requestAccessibilityRoot},
 });
 
 Mode modeOf(mwinWindowMode mode) noexcept {

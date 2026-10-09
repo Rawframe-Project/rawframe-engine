@@ -141,6 +141,12 @@ public:
     /// keys they consume make no key records; `caret` places the candidate
     /// list. Ask again to move the caret.
     [[nodiscard]] result::Result<RequestId> requestTextInput(WindowId window, bool enabled, Rect caret);
+    /// Hands the platform's accessibility clients the root of the window's
+    /// tree, which the program's adapter implements, or none (D576): on
+    /// Android an `AccessibilityNodeProvider`'s global reference, kept by
+    /// the window while it is the root. X11, Wayland, and the web take no
+    /// root and answer Unsupported.
+    [[nodiscard]] result::Result<RequestId> requestAccessibilityRoot(WindowId window, void* root);
 
     /// Runs a gamepad's motors, the heavy low-frequency one and the light
     /// high-frequency one, each from nought to one, for `milliseconds` or

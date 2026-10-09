@@ -1,5 +1,6 @@
 #include "platform.h"
 
+#include <maul-window/accessibility.h>
 #include <maul-window/gamepad.h>
 #include <maul-window/input.h>
 #include <maul-window/monitor.h>
@@ -248,6 +249,12 @@ result::Result<RequestId> Windows::requestTextInput(WindowId window, bool enable
     return requested(kStatus, request, "a text input request");
 }
 
+result::Result<RequestId> Windows::requestAccessibilityRoot(WindowId window, void* root) {
+    mwinRequestId request{};
+    const mwinResult kStatus = mwinRequestAccessibilityRoot(platform_->context, toMaul(window), root, &request);
+    return requested(kStatus, request, "an accessibility root request");
+}
+
 DisplayFacts Windows::display(WindowId window) const {
     mwinWindowState state{};
     if (mwinGetWindowState(platform_->context, toMaul(window), &state) != mwin_success || state.monitor.index1 == 0) {
@@ -282,7 +289,9 @@ result::Result<HandleBundle> Windows::handles(WindowId window) const {
         bundle.handles = XcbHandles{.connection = native.handles.x11.connection, .window = native.handles.x11.window};
         break;
     case mwin_platformAndroid:
-        bundle.handles = AndroidHandles{.window = native.handles.android.window};
+        bundle.handles = AndroidHandles{.window = native.handles.android.window,
+                                        .activity = native.handles.android.activity,
+                                        .view = native.handles.android.view};
         break;
     case mwin_platformMacOS:
     case mwin_platformIOS:

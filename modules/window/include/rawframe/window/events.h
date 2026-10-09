@@ -82,7 +82,8 @@ enum class RequestKind : std::uint8_t {
     Visible,
     Focus,
     CursorMode,
-    TextInput
+    TextInput,
+    AccessibilityRoot
 };
 
 /// How a request ended.
@@ -264,6 +265,9 @@ enum class EventKind : std::uint8_t {
     MonitorRemoved,
     /// The window moved to the monitor in `monitor`.
     DisplayChanged,
+    /// An accessibility client first asked for the window's tree, on the
+    /// platforms that say so (Win32, macOS, iOS, Android; D576).
+    AccessibilityRequested,
     GamepadAdded,
     GamepadRemoved,
     GamepadButtonDown,
