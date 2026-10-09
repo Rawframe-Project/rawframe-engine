@@ -43,6 +43,33 @@ jobs:
         run: cmake --build out/clang-development -- -k 0
       - name: Test
         run: ctest --test-dir out/clang-development --output-on-failure -j3
+      # Stalls exported, played, and read and pressed as a screen reader
+      # does (D579): its client's UI through the AX API while it plays, the
+      # purse a button named by its coins and pressed, and the collect
+      # command that gives sent by the client and taken by the server.
+      - name: Read Stalls through the AX API
+        run: |
+          set -uo pipefail
+          tree=out/clang-development
+          "$tree/hosts/export/rawframe-export" games/tycoon "$RUNNER_TEMP/read" \
+            --cook "$tree/hosts/cook/rawframe-cook" --build "$tree/hosts/build/rawframe-build" \
+            --server "$tree/hosts/dedicated_server/rawframe-server" \
+            --client "$tree/hosts/client/rawframe-client" --play "$tree/launcher/play/rawframe-play"
+          printf 'host.maximum_iterations = 7200\n' >>"$RUNNER_TEMP/read/client.conf"
+          (cd "$RUNNER_TEMP/read" && ./rawframe-play) &
+          play=$!
+          for _ in $(seq 120); do
+            grep -q '"code":"bots_admitted"' "$RUNNER_TEMP/read/client.log" 2>/dev/null && break
+            sleep 1
+          done
+          swift tools/ax_read.swift rawframe-client ' coins$'
+          read=$?
+          wait "$play"
+          grep -o '"code":"\(bots_admitted\|device_ready\|device_unavailable\|frame_summary\)"[^}]*}' "$RUNNER_TEMP/read/client.log" | head -4
+          grep -o '"commandsSent":[0-9]*' "$RUNNER_TEMP/read/client.log" | tail -1
+          grep -o '"commandsTaken":[0-9]*' "$RUNNER_TEMP/read/server.log" | tail -1
+          [ "$read" = 0 ] && grep -q '"commandsSent":1,' "$RUNNER_TEMP/read/client.log" &&
+            grep -q '"commandsTaken":1,' "$RUNNER_TEMP/read/server.log"
 
   # The dedicated server's next target after x86-64 Linux (ADR-0006): ARM
   # servers are the cheaper ones to host on (D241).
