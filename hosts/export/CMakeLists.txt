@@ -3,12 +3,24 @@
 # no runtime closure contains it.
 rawframe_host(NAME export_tool OUTPUT rawframe-export
     SOURCES src/main.cpp
-    DEPS process release content document input composition result base
+    DEPS process release content document input network_quic composition result base
 )
 
 if(RAWFRAME_BUILD_TESTS)
     add_test(NAME export_usage COMMAND rawframe_host_export_tool)
     set_tests_properties(export_usage PROPERTIES WILL_FAIL TRUE)
+    # Runners exported for Android (D555): its package's configuration pinned
+    # to the identity the exported server holds, and that server, started as
+    # written, admitting a bot that plays from the package's library.
+    add_test(NAME runners_exported_android
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/exported_android.sh
+                     $<TARGET_FILE:rawframe_host_export_tool> $<TARGET_FILE:rawframe_host_cook_tool>
+                     $<TARGET_FILE:rawframe_host_build_tool> $<TARGET_FILE:rawframe_host_dedicated_server>
+                     $<TARGET_FILE:rawframe_host_bots> games/runners ${CMAKE_CURRENT_BINARY_DIR}/runners_android
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(runners_exported_android PROPERTIES
+                         PASS_REGULAR_EXPRESSION
+                         "android export: \"target\":\"android\", pinned to the server's identity: yes, admitted 1")
     # Stalls exported under a studio's key and played from its folder with
     # the real client in a window (D396): the key set pinned and the secret
     # left out, its font read from the folder's library, the player

@@ -14,6 +14,7 @@
 //   rawframe-export <game directory> <output directory> [--game <file>]
 //                   [--port <port>] [--version <version>] [--tools <directory>]
 //                   [--key <secret key> --publisher <name>] [--target web]
+//                   [--target android --address <host>]
 //                   [--follow <origin> [--channel <channel>]] [--title <title>]
 //
 // With `--key`, the Build is signed by that secret (`rawframe-build key`
@@ -58,6 +59,20 @@
 // (`rawframe-web-client.wasm`, `maul-window.mjs`, `maul-rhi.mjs`, and
 // `page/`, the page's own files) unless named (`--web-client`,
 // `--maul-window`, `--maul-rhi`, `--page`).
+//
+// With `--target android` (D555) the game is packed for Android and the
+// folder holds what its package carries and the server it plays on.
+// `android/game/` is the directory `tools/android_apk.sh` carries into the
+// client's package (D553): the library with its active Composition, and the
+// client's configuration, pinned to the server's identity and reaching it at
+// `--address`, the host or IP address a phone reaches the server's machine
+// by. `server/` holds the dedicated server, listening on every address at
+// the port with that identity, which the export makes once (a self-signed
+// P-256 certificate and its key, `server/identity.pem` and
+// `server/identity.key`): a package is made once and cannot read a
+// fingerprint a server writes as it starts, as a page or a native folder
+// does. The identity is the game server's secret; the package holds only its
+// fingerprint.
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/configuration.h"
@@ -65,6 +80,7 @@
 #include "rawframe/content/library.h"
 #include "rawframe/document/json.h"
 #include "rawframe/input/actions.h"
+#include "rawframe/network_quic/certificate.h"
 #include "rawframe/process/child.h"
 #include "rawframe/process/self.h"
 #include "rawframe/release/release.h"
@@ -427,6 +443,30 @@ bool writeInto(const Exported& exported,
     return true;
 }
 
+/// Writes a secret to `file` under the output, readable and writable by its
+/// owner alone before any of it is written (as `rawframe-build key` keeps a
+/// publisher's), and adds it to `written`.
+bool writeSecretInto(const Exported& exported,
+                     const std::string& file,
+                     std::string_view text,
+                     std::vector<std::string>& written) {
+    const fs::path kPath = exported.output / file;
+    std::error_code error;
+    std::ofstream out{kPath, std::ios::binary | std::ios::trunc};
+    fs::permissions(kPath, fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::replace, error);
+    if (!out || error) {
+        std::fprintf(stderr, "rawframe-export: %s cannot be kept secret\n", file.c_str());
+        return false;
+    }
+    out.write(text.data(), static_cast<std::streamsize>(text.size()));
+    if (!out) {
+        std::fprintf(stderr, "rawframe-export: %s cannot be written\n", file.c_str());
+        return false;
+    }
+    written.push_back(file);
+    return true;
+}
+
 /// The folder that plays on this machine: the server, the client, the
 /// launcher, and their configurations.
 bool writeNative(const Exported& exported, const std::array<fs::path, 4>& programs, std::vector<std::string>& written) {
@@ -547,6 +587,55 @@ bool writeWeb(const Exported& exported, const WebFiles& from, std::vector<std::s
     return true;
 }
 
+/// What an Android package carries under `android/game/`, and the server it
+/// plays on under `server/`, pinned to an identity made here (D555).
+bool writeAndroid(const Exported& exported,
+                  const std::string& address,
+                  const fs::path& server,
+                  std::vector<std::string>& written) {
+    // Ten years: a package pins it for as long as it is played.
+    const auto kIdentity = network_quic::makeSelfSignedCertificate("rawframe-game-server", 3650);
+    if (!kIdentity.has_value() || !network_quic::fingerprintOf(*kIdentity).has_value()) {
+        std::fputs("rawframe-export: the server's identity cannot be made\n", stderr);
+        return false;
+    }
+    const network_quic::Fingerprint kFingerprint = *network_quic::fingerprintOf(*kIdentity);
+    const std::string kContent = "kest.game_resource = " + exported.gameResource + "\ncontent.library = library\n";
+    const std::string kServer = "# The game's dedicated server, on every address, with the identity the\n"
+                                "# Android package is pinned to. Run it from anywhere: rawframe-server" +
+                                exported.suffix +
+                                " --config server.conf\n"
+                                "host.iteration_rate = 120\nworld.tick_rate = 60\n"
+                                "kest.game_resource = " +
+                                exported.gameResource +
+                                "\ncontent.library = ../android/game/library\n"
+                                "network.quic.certificate_file = identity.pem\n"
+                                "network.quic.private_key_file = identity.key\n"
+                                "replication.endpoint = :" +
+                                exported.port + "\n";
+    const std::string kClient =
+        "# The player on Android, from the activity's window, pinned to the server's\n"
+        "# identity, drawn on the phone's Vulkan device and heard on its sound.\n"
+        "host.iteration_rate = 120\nbots.player = true\nrender.device = any\n"
+        "audio.play = device\nscene.render_scale_least_percent = 50\n"
+        "render.read_every = 0\n" +
+        kContent + "kest.plan_only = true\nnetwork.quic.pin = " + network_quic::formatFingerprint(kFingerprint) +
+        "\nbots.endpoint = " + address + ":" + exported.port + "\n";
+    return copyInto(server, exported, "server/rawframe-server" + exported.suffix, written) &&
+           writeInto(exported, "server/identity.pem", kIdentity->certificatePem, written) &&
+           writeSecretInto(exported, "server/identity.key", kIdentity->privateKeyPem, written) &&
+           writeInto(exported, "server/server.conf", kServer, written) &&
+           writeInto(exported, "android/game/client.conf", kClient, written);
+}
+
+/// Whether `address` names a host or an IPv4 address alone: letters,
+/// digits, dots, and dashes.
+bool addressLike(std::string_view address) {
+    return !address.empty() && address.size() <= 253 && std::ranges::all_of(address, [](char each) {
+        return std::isalnum(static_cast<unsigned char>(each)) != 0 || each == '.' || each == '-';
+    });
+}
+
 /// Whether `title` fits one configuration value: a line, not blank, of
 /// at most the value bound, with no space at either end to be trimmed off.
 bool titleLike(std::string_view title) {
@@ -559,6 +648,7 @@ int usage() {
     std::fputs("usage: rawframe-export <game directory> <output directory> [--game <file>] [--port <port>]\n"
                "                       [--version <version>] [--tools <directory>] [--<tool> <path>]...\n"
                "                       [--key <secret key> --publisher <name>] [--target web]\n"
+               "                       [--target android --address <host>]\n"
                "                       [--follow <origin> [--channel <channel>]] [--title <title>]\n",
                stderr);
     return 2;
@@ -580,7 +670,13 @@ int main(int argc, char** argv) {
     std::string version = "0.1.0";
     std::optional<fs::path> key;
     std::string publisher = "local";
-    bool web = false;
+    enum class Target {
+        Native,
+        Web,
+        Android
+    };
+    Target target = Target::Native;
+    std::optional<std::string> address;
     std::optional<std::string> follow;
     std::string channel = "stable";
     std::string title = kGame.filename().string();
@@ -601,8 +697,10 @@ int main(int argc, char** argv) {
             publisher = kValue;
         } else if (kOption == "--tools") {
             toolDirectory = kValue;
-        } else if (kOption == "--target" && (kValue == "web" || kValue == "native")) {
-            web = kValue == "web";
+        } else if (kOption == "--target" && (kValue == "web" || kValue == "native" || kValue == "android")) {
+            target = kValue == "web" ? Target::Web : kValue == "android" ? Target::Android : Target::Native;
+        } else if (kOption == "--address") {
+            address = kValue;
         } else if (kOption == "--follow") {
             follow = kValue;
         } else if (kOption == "--channel") {
@@ -618,7 +716,12 @@ int main(int argc, char** argv) {
         }
     }
     // A web export's page updates as its site does; following is native.
-    if (argc % 2 == 0 || (port.has_value() && !portLike(*port)) || (web && follow.has_value()) ||
+    // An Android package reaches its server at the address given, and only
+    // it is given one.
+    const bool kWeb = target == Target::Web;
+    const bool kAndroid = target == Target::Android;
+    if (argc % 2 == 0 || (port.has_value() && !portLike(*port)) || (target != Target::Native && follow.has_value()) ||
+        kAndroid != address.has_value() || (address.has_value() && !addressLike(*address)) ||
         !rawframe::release::channelNamed(channel).has_value() || !titleLike(title)) {
         return usage();
     }
@@ -650,8 +753,9 @@ int main(int argc, char** argv) {
 
     // The working files under the output, gone at the end.
     const fs::path kWork = kOutput / ".export";
-    // The folder the client plays from: the site, for the web.
-    const fs::path kSite = web ? kOutput / "web" : kOutput;
+    // The folder the client plays from: the site, for the web, and what the
+    // package carries, for Android.
+    const fs::path kSite = kWeb ? kOutput / "web" : kAndroid ? kOutput / "android" / "game" : kOutput;
     const fs::path kLibrary = kSite / "library";
     fs::create_directories(kWork, error);
     fs::create_directories(kLibrary / "keys", error);
@@ -688,8 +792,12 @@ int main(int argc, char** argv) {
                                  (kWork / "build").string(),
                                  publisher + "/" + kName,
                                  version,
-                                 std::string{web ? "web" : kPlatform},
-                                 std::string{web ? "wasm32" : kArchitecture},
+                                 std::string{kWeb       ? "web"
+                                             : kAndroid ? "android"
+                                                        : kPlatform},
+                                 std::string{kWeb       ? "wasm32"
+                                             : kAndroid ? "arm64"
+                                                        : kArchitecture},
                                  "client",
                                  std::string{"build."} + RAWFRAME_CONFIGURATION_NAME,
                                  "tool",
@@ -716,10 +824,11 @@ int main(int argc, char** argv) {
     if (!kComposition.has_value()) {
         return 1;
     }
-    // A native folder's library is installed as rawframe-install leaves one:
-    // the record kept by its digest and named active (D434).
+    // A native folder's library, and an Android package's, is installed as
+    // rawframe-install leaves one: the record kept by its digest and named
+    // active (D434).
     std::vector<std::string> installed;
-    if (!web && !installRecord(kOutput, kLibrary, kSite / kRecord, installed)) {
+    if (!kWeb && !installRecord(kOutput, kLibrary, kSite / kRecord, installed)) {
         return 1;
     }
 
@@ -735,19 +844,20 @@ int main(int argc, char** argv) {
                              .suffix = kSuffix};
     std::vector<std::string> written = std::move(installed);
     const bool kWritten =
-        web ? writeWeb(kExported,
-                       {.client = kWebFile("web-client", "rawframe-web-client.wasm"),
-                        .window = kWebFile("maul-window", "maul-window.mjs"),
-                        .device = kWebFile("maul-rhi", "maul-rhi.mjs"),
-                        .page = kWebFile("page", "page"),
-                        .server = kTool("server")},
-                       written)
-            : writeNative(kExported, {kTool("server"), kTool("client"), kTool("play"), kTool("install")}, written);
+        kAndroid ? writeAndroid(kExported, *address, kTool("server"), written)
+        : kWeb   ? writeWeb(kExported,
+                            {.client = kWebFile("web-client", "rawframe-web-client.wasm"),
+                             .window = kWebFile("maul-window", "maul-window.mjs"),
+                             .device = kWebFile("maul-rhi", "maul-rhi.mjs"),
+                             .page = kWebFile("page", "page"),
+                             .server = kTool("server")},
+                          written)
+                 : writeNative(kExported, {kTool("server"), kTool("client"), kTool("play"), kTool("install")}, written);
     if (!kWritten) {
         return 1;
     }
     // How to play it, for a native folder's player.
-    if (!web) {
+    if (target == Target::Native) {
         if (!writeText(kOutput / "README.txt", howToPlay(kGame, gameFile, kSuffix))) {
             std::fputs("rawframe-export: README.txt cannot be written\n", stderr);
             return 1;
@@ -773,7 +883,7 @@ int main(int argc, char** argv) {
     receipt.add("game", document::Value::string(kGameResource));
     receipt.add("kind", document::Value::string("export.receipt"));
     receipt.add("port", document::Value::integer(std::stoll(*port)));
-    receipt.add("target", document::Value::string(web ? "web" : "native"));
+    receipt.add("target", document::Value::string(kWeb ? "web" : kAndroid ? "android" : "native"));
     const auto kReceipt = document::writeCanonicalRecord(receipt);
     if (!kReceipt.has_value() || !writeText(kOutput / "export.receipt", *kReceipt)) {
         std::fputs("rawframe-export: the receipt cannot be written\n", stderr);

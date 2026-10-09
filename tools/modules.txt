@@ -85,7 +85,7 @@ cook_tool: cook host process localization animation material graph mesh_import m
 build_tool: build install release signature content document result base
 install_tool: http install release content result base
 play_tool: process composition result base
-export_tool: process release content document input composition result base
+export_tool: process release content document input network_quic composition result base
 scene_tool: world_kest scene kest result base
 studio_tool: studio window_host render render_canvas_gpu host window composition result base
 author: authoring_session authoring process world_kest kest content scene schema document execution result base
