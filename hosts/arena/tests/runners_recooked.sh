@@ -34,6 +34,10 @@ replication.endpoint = arena
 bots.count = 4
 bots.endpoint = arena
 audio.record = $work/heard.wav
+# What is checked is what is heard, not how fast a loaded machine ticks
+# (D516, D569).
+world.degraded_ms = 600000
+world.overload_ms = 0
 CONF
 
 (cd "$repository" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson") &

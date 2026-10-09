@@ -122,6 +122,7 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_cook_tool> $<TARGET_FILE:rawframe_host_build_tool>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/runners_with_package)
     set_tests_properties(runners_with_package PROPERTIES
+                         PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "\"peak\":(0\\.[1-9]|[1-9])[^,]*,\"cues\":[1-9]")
     # Runners composed with the runners-timers and runners-sting mods, each
     # cooked, packed, and signed apart: the game takes them, the timers join
