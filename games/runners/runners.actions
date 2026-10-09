@@ -92,6 +92,18 @@
           "control": "pointer"
         }
       ]
+    },
+    {
+      "actionId": "4f6a2c19b83e7d05",
+      "name": "language",
+      "valueType": "bool",
+      "displayName": "Language",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "physicalKey": "key_l"
+        }
+      ]
     }
   ],
   "contexts": [
@@ -103,7 +115,8 @@
         "jump",
         "aim",
         "fire",
-        "point"
+        "point",
+        "language"
       ]
     }
   ],

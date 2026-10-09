@@ -49,6 +49,19 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"viewWidth\":800,\"viewHeight\":600,.*\"code\":\"frame_summary\"[^\n]*\"width\":800,\"height\":600,[^\n]*\"framesShown\":[1-9][0-9]+,.*\"reconfigured\":[2-9]")
+        # Runners' player presses L, and the HUD's words are given in the
+        # game's next locale, Turkish, while it plays (D539).
+        add_test(NAME client_speaks_runners
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/drawn.conf
+                         games/runners/runners.game keys=l
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_speaks_runners PROPERTIES
+                             FIXTURES_REQUIRED runners_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"text_summary\"[^\n]*\"locale\":\"tr\",\"offered\":2,\"changes\":1}")
         # Stalls clicked on its HUD's purse, a panel that takes presses
         # (D421): lighter under the mouse once it is there (D422), the UI
         # takes the click, and the owner builds no stall under it, the World
@@ -204,7 +217,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # second client in some: two of a preset's processors each, so a full
         # check, eight trees at once, starts fewer at once and none is starved
         # past its input (D491), as Studio's played tests (D467, D496).
-        set_tests_properties(client_plays_runners client_drawn client_clicks_stalls client_types_stalls client_types_stalls_frozen client_navigates_stalls client_navigates_stalls_frozen client_plaza_drawn client_previews_plaza
+        set_tests_properties(client_plays_runners client_drawn client_speaks_runners client_clicks_stalls client_types_stalls client_types_stalls_frozen client_navigates_stalls client_navigates_stalls_frozen client_plaza_drawn client_previews_plaza
                              client_turns_plaza
                              PROPERTIES PROCESSORS 2)
     endif()
