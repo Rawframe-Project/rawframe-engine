@@ -29,6 +29,9 @@ pinned=no
 [ -n "$pin" ] && [ "$pin" = "$held" ] && pinned=yes
 target=$(grep -o '"target":"[a-z]*"' "$out/export.receipt")
 
+# Bounded to half a minute of iterations as well, so it ends where it
+# cannot be asked to (an interrupt from Git's bash on Windows).
+printf 'host.maximum_iterations = 3600\n' >>"$out/server/server.conf"
 (cd "$out/server" && exec ./rawframe-server --config server.conf) >"$out/server.log" 2>&1 &
 served=$!
 for _ in $(seq 200); do

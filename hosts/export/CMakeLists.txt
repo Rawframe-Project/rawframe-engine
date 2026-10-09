@@ -19,6 +19,7 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_bots> games/runners ${CMAKE_CURRENT_BINARY_DIR}/runners_android
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(runners_exported_android PROPERTIES
+                         TIMEOUT 300
                          PASS_REGULAR_EXPRESSION
                          "android export: \"target\":\"android\", pinned to the server's identity: yes, admitted 1")
     # Stalls exported under a studio's key and played from its folder with
