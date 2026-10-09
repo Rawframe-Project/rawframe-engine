@@ -117,7 +117,8 @@ fi
                    -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-"$android_api"
                    -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH)
     elif [ -n "$ios" ]; then
-        compilers=(-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphonesimulator -DCMAKE_OSX_ARCHITECTURES=arm64
+        compilers=(-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_SYSTEM_PROCESSOR=arm64 -DCMAKE_OSX_SYSROOT=iphonesimulator
+                   -DCMAKE_OSX_ARCHITECTURES=arm64
                    -DCMAKE_OSX_DEPLOYMENT_TARGET="$ios" -DCMAKE_C_COMPILER="$(xcrun -f clang)"
                    -DCMAKE_CXX_COMPILER="$(xcrun -f clang++)" -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH
                    -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH)
