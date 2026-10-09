@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The Android client's application (D551, tools/android_apk.sh): Maul
-     Window's activity running the client's native library. The network is
-     its server's, over QUIC. -->
+     Window's activity, after the files the package carries are unpacked
+     (rawframe.client.Activity, D553), running the client's native library. The network is
+     its server's, over QUIC. The on-screen keyboard stays hidden until the
+     client asks for text input, which Maul Window shows it for (D552):
+     otherwise the activity's input view, taking focus, brings it up at
+     start. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="@PACKAGE@">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
     <application android:label="@LABEL@" android:hasCode="true">
-        <activity android:name="maul.window.Activity" android:exported="true">
+        <activity android:name="rawframe.client.Activity" android:exported="true"
+            android:windowSoftInputMode="stateAlwaysHidden">
             <meta-data android:name="android.app.lib_name" android:value="rawframe_client" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
