@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Android client's application (D551, tools/android_apk.sh): Maul
+     Window's activity running the client's native library. The network is
+     its server's, over QUIC. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="@PACKAGE@">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
+    <application android:label="@LABEL@" android:hasCode="true">
+        <activity android:name="maul.window.Activity" android:exported="true">
+            <meta-data android:name="android.app.lib_name" android:value="rawframe_client" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -68,8 +68,9 @@ jobs:
 
   # Android, the first mobile target (ADR-0084, D549): the engine, its
   # programs, and its tests built for 64-bit ARM against NDK r29, whose libc++
-  # parses floating-point numbers (r28's does not). Built, not run: no device
-  # or emulator plays them yet.
+  # parses floating-point numbers (r28's does not), and the client's
+  # application made (D551). Built, not run: no device or emulator plays them
+  # yet.
   android:
     if: github.repository == 'Rawframe-Project/rawframe-engine'
     runs-on: ubuntu-24.04
@@ -88,6 +89,10 @@ jobs:
         run: cmake --preset android-development
       - name: Build
         run: cmake --build out/android-development -- -k 0
+      - name: Application
+        # The client's application, made with the runner's SDK (D551).
+        run: tools/android_apk.sh "$RUNNER_TEMP/rawframe-client.apk"
+          out/android-development/hosts/android_client/librawframe_client.so dev.rawframe.client "Rawframe client"
 
   # A longer search than the check's fixed runs (D242): five minutes a fuzz
   # target from an empty corpus, each finding printed so it can be replayed.
