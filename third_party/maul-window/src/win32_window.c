@@ -533,11 +533,14 @@ static HWND Make(mwinWin32Window* window, const mwinWindow* core, DWORD style)
     SIZE frame = FrameSize(FramedStyle(window, style), ToPixels(core->def.size.width, window->dpi),
                            ToPixels(core->def.size.height, window->dpi), window->dpi);
     POINT origin = {CW_USEDEFAULT, CW_USEDEFAULT};
-    DWORD extended = owner != nullptr ? 0 : WS_EX_APPWINDOW;
+    // Topmost as it is made: a SetWindowPos right after creation was seen
+    // not to take on Windows.
+    DWORD topmost = (core->def.style & mwin_styleAlwaysOnTop) != 0 ? WS_EX_TOPMOST : 0;
+    DWORD extended = (owner != nullptr ? 0 : WS_EX_APPWINDOW) | topmost;
     if (IsPopup(window))
     {
         origin = PopupOrigin(window, core->def.position);
-        extended = WS_EX_TOOLWINDOW |
+        extended = WS_EX_TOOLWINDOW | topmost |
                    (core->def.kind == mwin_windowTooltip ? WS_EX_NOACTIVATE | WS_EX_TOPMOST : 0);
     }
     return CreateWindowExW(extended, MWIN_WIN32_CLASS,
@@ -583,10 +586,6 @@ void mwinWin32CreateWindow(mwinContext* context, uint32_t slot)
     mwinWin32StartIme(window);
     mwinWin32ApplyTheme(window);
     Establish(window);
-    if ((core->def.style & mwin_styleAlwaysOnTop) != 0)
-    {
-        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    }
     if (core->def.mode == mwin_modeBorderlessFullscreen)
     {
         EnterFullscreen(window);

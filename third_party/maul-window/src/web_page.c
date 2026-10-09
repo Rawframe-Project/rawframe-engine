@@ -65,6 +65,24 @@ EM_JS(void, mwinWebAttach, (mwinContext* context, mwinWebLifecycle lifecycle), {
                          '(dynamic-range: high)']) {
         listen(matchMedia(query), 'change', () => push(7, -1, 0));
     }
+    // Whether the device runs on its battery, where the browser tells
+    // (the Battery Status API, Chromium's): unknown (0) until it answers
+    // or where it refuses, else no (1) while it charges or has no battery
+    // and yes (2) while it discharges.
+    state.onBattery = 0;
+    if (navigator.getBattery) {
+        navigator.getBattery().then(battery => {
+            if (map.get(context) !== state) {
+                return;
+            }
+            const read = () => {
+                state.onBattery = battery.charging ? 1 : 2;
+                push(7, -1, 0);
+            };
+            listen(battery, 'chargingchange', read);
+            read();
+        }, () => {});
+    }
     // devicePixelRatio, looked at whenever it may have changed: a media
     // query for the current ratio, a resize of the page (zooming), a
     // canvas's new pixels, whichever the browser reports first, and at
@@ -322,6 +340,10 @@ EM_JS(int, mwinWebTheme, (void), {
 
 EM_JS(bool, mwinWebReducedMotion, (void), {
     return matchMedia('(prefers-reduced-motion: reduce)').matches;
+});
+
+EM_JS(int, mwinWebOnBattery, (const mwinContext* context), {
+    return Module.mwinWeb.get(context).onBattery;
 });
 
 EM_JS(uint32_t, mwinWebLocales, (char* out, uint32_t capacity), {

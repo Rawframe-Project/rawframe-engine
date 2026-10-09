@@ -35,9 +35,7 @@ static void EndComposition(mwinWin32Window* window)
     Post(window, &end);
 }
 
-// The UTF-8 bytes of the first units of a UTF-16 string, a lone
-// surrogate as U+FFFD.
-static uint32_t BytesBefore(const WCHAR* units, uint32_t count, uint32_t index)
+uint32_t mwinWin32Utf8Before(const WCHAR* units, uint32_t count, uint32_t index)
 {
     uint32_t bytes = 0;
     for (uint32_t i = 0; i < index && i < count; i++)
@@ -102,17 +100,17 @@ static mwinPreeditStyle StyleOf(BYTE attribute)
 // The composition's clauses, in bytes, from the attribute of each unit;
 // past the last segment the rest joins it. Returns the count, with the
 // target clauses' span in *preedit's selection.
-static uint32_t Segment(const mwinWin32Platform* platform, uint32_t units, uint32_t attributes,
-                        mwinPreeditSegment* segments, mwinPreeditEvent* preedit)
+static uint32_t Segment(const WCHAR* text, uint32_t units, const BYTE* attributeOf,
+                        uint32_t attributes, mwinPreeditSegment* segments,
+                        mwinPreeditEvent* preedit)
 {
-    const WCHAR* text = platform->imeUnits;
     uint32_t count = 0;
     bool targeted = false;
     for (uint32_t i = 0; i < units; i++)
     {
-        mwinPreeditStyle style = i < attributes ? StyleOf(platform->imeAttributes[i]) : 0;
-        uint32_t start = BytesBefore(text, units, i);
-        uint32_t end = BytesBefore(text, units, i + 1);
+        mwinPreeditStyle style = i < attributes ? StyleOf(attributeOf[i]) : mwin_preeditPlain;
+        uint32_t start = mwinWin32Utf8Before(text, units, i);
+        uint32_t end = mwinWin32Utf8Before(text, units, i + 1);
         if (count == 0 || (segments[count - 1].style != style && count < MWIN_MAX_PREEDIT_SEGMENTS))
         {
             segments[count++] = (mwinPreeditSegment){start, 0, style};
@@ -126,6 +124,19 @@ static uint32_t Segment(const mwinWin32Platform* platform, uint32_t units, uint3
         }
     }
     return count;
+}
+
+void mwinWin32ShapePreedit(const WCHAR* units, uint32_t count, const BYTE* attributes,
+                           LONG attributeCount, LONG caret, mwinPreeditSegment* segments,
+                           mwinPreeditEvent* preedit)
+{
+    preedit->caret = caret >= 0 ? (int32_t)mwinWin32Utf8Before(units, count, (uint32_t)caret) : -1;
+    preedit->selectionStart = preedit->selectionEnd =
+        preedit->caret >= 0 ? (uint32_t)preedit->caret : 0;
+    preedit->segmentCount =
+        Segment(units, count, attributes, attributeCount > 0 ? (uint32_t)attributeCount : 0,
+                segments, preedit);
+    preedit->segments = segments;
 }
 
 // The composition as it is now; an empty one ends it.
@@ -147,13 +158,8 @@ static void PostComposition(mwinWin32Window* window, HIMC context)
     mwinPreeditEvent* preedit = &event.data.preedit;
     preedit->text = platform->imeBytes;
     preedit->length = length;
-    preedit->caret =
-        caret >= 0 ? (int32_t)BytesBefore(platform->imeUnits, units, (uint32_t)caret) : -1;
-    preedit->selectionStart = preedit->selectionEnd =
-        preedit->caret >= 0 ? (uint32_t)preedit->caret : 0;
-    preedit->segmentCount =
-        Segment(platform, units, attributes > 0 ? (uint32_t)attributes : 0, segments, preedit);
-    preedit->segments = segments;
+    mwinWin32ShapePreedit(platform->imeUnits, units, platform->imeAttributes, attributes, caret,
+                          segments, preedit);
     Post(window, &event);
 }
 

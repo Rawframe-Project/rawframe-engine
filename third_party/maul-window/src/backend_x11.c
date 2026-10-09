@@ -71,6 +71,7 @@ static const char* const s_atomNames[MWIN_X11_ATOMS] = {
     "Abs Pressure",
     "Abs Tilt X",
     "Abs Tilt Y",
+    "Abs MT Pressure",
     "STYLUS",
     "ERASER",
     "TABLET",

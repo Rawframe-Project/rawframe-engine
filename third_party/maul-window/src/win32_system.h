@@ -21,6 +21,17 @@ void mwinWin32ReadSystem(mwinWin32Platform* platform);
 // theme.
 void mwinWin32ApplyTheme(const mwinWin32Window* window);
 
+// The text scale of the setting's percent: 1 for one out of range.
+float mwinWin32TextScaleOf(DWORD percent);
+
+// The power facts of Windows' power status.
+void mwinWin32PowerFacts(const SYSTEM_POWER_STATUS* power, mwinSystemFacts* facts);
+
+// Joins the preferred UI languages Windows lists, each ending in a null
+// and the list in two, count units in all, with commas in place: the
+// list's length in units.
+uint32_t mwinWin32JoinLocales(WCHAR* units, ULONG count);
+
 // Whether a message of a window's announces a change of the facts.
 bool mwinWin32IsSystemChange(UINT message, WPARAM wParam);
 

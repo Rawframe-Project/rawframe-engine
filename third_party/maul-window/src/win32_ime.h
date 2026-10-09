@@ -13,6 +13,19 @@
 
 #include "win32.h"
 
+// The UTF-8 bytes of the first index units of count UTF-16 units, a
+// pair as one character of four, a lone surrogate as U+FFFD's three.
+uint32_t mwinWin32Utf8Before(const WCHAR* units, uint32_t count, uint32_t index);
+
+// A composition's caret, selection and clauses, in UTF-8 bytes, from its
+// units, the clause attribute of each (attributeCount of them, those
+// past the last unattributed) and the caret in units (-1 for none): the
+// target clauses' span is the selection, else it is empty at the caret.
+// segments holds MWIN_MAX_PREEDIT_SEGMENTS.
+void mwinWin32ShapePreedit(const WCHAR* units, uint32_t count, const BYTE* attributes,
+                           LONG attributeCount, LONG caret, mwinPreeditSegment* segments,
+                           mwinPreeditEvent* preedit);
+
 // Handles an input method message of a window: true when handled, with
 // the result in *result.
 bool mwinWin32HandleIme(mwinWin32Window* window, UINT message, WPARAM wParam, LPARAM lParam,

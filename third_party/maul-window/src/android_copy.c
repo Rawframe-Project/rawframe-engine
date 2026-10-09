@@ -7,8 +7,7 @@
 #include "android_copy.h"
 
 #include "allocator.h"
-
-#include "maul-unicode/encoding.h"
+#include "android_name.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -18,9 +17,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-// The bytes read and written at once, and the longest name a copy keeps.
+// The bytes read and written at once.
 #define BLOCK_BYTES (64u << 10)
-#define NAME_BYTES  255u
 
 static int RemoveEntry(const char* path, const struct stat* status, int flag, struct FTW* walk)
 {
@@ -82,38 +80,15 @@ void mwinAndroidCloseAll(JNIEnv* env, jintArray descriptors)
     }
 }
 
-// A copy's name, ended by a NUL: the provider's in UTF-8, cut to whole
-// characters within NAME_BYTES, '/' made '_'; "Document" for none or a
-// name that is not one ("." and "..").
+// A copy's name from the provider's (android_name.h).
 static void NameOf(JNIEnv* env, jstring given, char* name)
 {
     jsize count = given != nullptr ? (*env)->GetStringLength(env, given) : 0;
     const jchar* units = count > 0 ? (*env)->GetStringChars(env, given, nullptr) : nullptr;
-    size_t taken = units != nullptr ? (size_t)count : 0;
-    size_t needed = 0;
-    // Units dropped from the end until the rest fits, never half a pair.
-    for (;;)
-    {
-        (void)muniConvertUtf16ToUtf8(units, taken, nullptr, 0, muni_convertReplace, &needed);
-        if (needed <= NAME_BYTES || taken == 0)
-        {
-            break;
-        }
-        taken -= taken >= 2 && units[taken - 1] >= 0xDC00 && units[taken - 1] <= 0xDFFF ? 2 : 1;
-    }
-    (void)muniConvertUtf16ToUtf8(units, taken, name, NAME_BYTES, muni_convertReplace, &needed);
-    name[needed] = '\0';
+    mwinAndroidNameOf(units, units != nullptr ? (size_t)count : 0, name);
     if (units != nullptr)
     {
         (*env)->ReleaseStringChars(env, given, units);
-    }
-    if (needed == 0 || strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
-    {
-        (void)snprintf(name, NAME_BYTES + 1, "Document");
-    }
-    for (char* at = strchr(name, '/'); at != nullptr; at = strchr(at, '/'))
-    {
-        *at = '_';
     }
 }
 
@@ -147,7 +122,7 @@ static bool KeepPath(const mwinAllocator* allocator, mwinAndroidCopy* copy, cons
 static bool MakeCopy(const mwinAllocator* allocator, mwinAndroidCopy* copy, JNIEnv* env,
                      jstring given, uint32_t index)
 {
-    char name[NAME_BYTES + 1];
+    char name[MWIN_ANDROID_NAME_BYTES + 1];
     NameOf(env, given, name);
     // The kind's folder, the job's, and the document's.
     char folder[PATH_MAX];

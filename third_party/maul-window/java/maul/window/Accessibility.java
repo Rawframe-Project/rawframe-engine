@@ -8,18 +8,25 @@ import android.view.ViewParent;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
+import java.lang.reflect.Method;
 
 /**
  * The program's accessibility root on the library's view: the view's
  * provider is the root, and touch exploration, whose hovers reach the
  * library's native input rather than the view, finds the virtual view
- * under the finger through the root's Explorer and announces it, as
+ * under the finger through the root's Explorer, or its public
+ * virtualViewAt of the same meaning, and announces it, as
  * ExploreByTouchHelper does. Called on the main thread only.
  */
 final class Accessibility {
     // How a hover moves, as MotionEvent's actions.
     private static final int HOVER_MOVE = 7;
     private static final int HOVER_EXIT = 10;
+
+    // The class of the last root explored without Explorer, and its
+    // virtualViewAt, or null for none.
+    private static Class<?> located;
+    private static Method locate;
 
     private Accessibility() {
     }
@@ -48,8 +55,8 @@ final class Accessibility {
      */
     static int explore(View view, Object root, int action, float x, float y, int hovered) {
         int now = View.NO_ID;
-        if (action != HOVER_EXIT && root instanceof Explorer) {
-            now = ((Explorer) root).virtualViewAt(x, y);
+        if (action != HOVER_EXIT) {
+            now = virtualViewAt(root, x, y);
         }
         if (now != hovered) {
             AccessibilityNodeProvider provider = (AccessibilityNodeProvider) root;
@@ -61,6 +68,36 @@ final class Accessibility {
             }
         }
         return now;
+    }
+
+    /**
+     * The virtual view under a place, from the root's Explorer, or else
+     * from a public method int virtualViewAt(float, float), which a root
+     * of a library that cannot name this one's interface offers (Maul UI's
+     * provider); View.NO_ID for a root with neither.
+     */
+    private static int virtualViewAt(Object root, float x, float y) {
+        if (root instanceof Explorer) {
+            return ((Explorer) root).virtualViewAt(x, y);
+        }
+        if (root.getClass() != located) {
+            located = root.getClass();
+            locate = null;
+            try {
+                Method method = located.getMethod("virtualViewAt", float.class, float.class);
+                locate = method.getReturnType() == int.class ? method : null;
+            } catch (NoSuchMethodException e) {
+                locate = null;
+            }
+        }
+        if (locate == null) {
+            return View.NO_ID;
+        }
+        try {
+            return (Integer) locate.invoke(root, x, y);
+        } catch (ReflectiveOperationException e) {
+            return View.NO_ID;
+        }
     }
 
     // An event for a virtual view, filled from its node.

@@ -316,18 +316,23 @@ static mwinX11PenAxis PenAxisOf(const mwinX11Platform* platform, xcb_atom_t labe
                                                   : mwin_x11PenAxes;
 }
 
-// A slave pointer device: its scroll valuators, and whether it is a pen,
-// with the valuators of its pressure and tilt.
+// A slave pointer device: its scroll valuators, whether it is a pen, with
+// the valuators of its pressure and tilt, and whether it is a touch
+// screen, with the valuator of its touches' pressure.
 static void ReadDevice(mwinX11Platform* platform, const xcb_input_xi_device_info_t* info,
                        xcb_atom_t type)
 {
     const mwinX11Api* api = &platform->api;
     bool pressure = false;
+    bool direct = false;
     for (xcb_input_device_class_iterator_t item = api->deviceClasses(info); item.rem > 0;
          api->deviceClassNext(&item))
     {
         const xcb_input_scroll_class_t* scroll = (const xcb_input_scroll_class_t*)item.data;
         const xcb_input_valuator_class_t* valuator = (const xcb_input_valuator_class_t*)item.data;
+        const xcb_input_touch_class_t* touch = (const xcb_input_touch_class_t*)item.data;
+        direct = direct || (item.data->type == XCB_INPUT_DEVICE_CLASS_TYPE_TOUCH &&
+                            touch->mode == XCB_INPUT_TOUCH_MODE_DIRECT);
         if (item.data->type == XCB_INPUT_DEVICE_CLASS_TYPE_SCROLL)
         {
             mwinX11AddScrollAxis(&platform->scroll, info->deviceid, scroll->number,
@@ -357,6 +362,19 @@ static void ReadDevice(mwinX11Platform* platform, const xcb_input_xi_device_info
             mwinX11SetPenAxis(pen, axis, valuator->number, valuator->min, valuator->max);
         }
     }
+    mwinX11TouchDevice* screen =
+        direct ? mwinX11AddTouchDevice(&platform->touches, info->deviceid) : nullptr;
+    for (xcb_input_device_class_iterator_t item = api->deviceClasses(info);
+         screen != nullptr && item.rem > 0; api->deviceClassNext(&item))
+    {
+        const xcb_input_valuator_class_t* valuator = (const xcb_input_valuator_class_t*)item.data;
+        if (item.data->type == XCB_INPUT_DEVICE_CLASS_TYPE_VALUATOR &&
+            valuator->label != XCB_ATOM_NONE &&
+            valuator->label == platform->atoms[mwin_atomAbsMtPressure])
+        {
+            mwinX11SetTouchPressure(screen, valuator->number, valuator->min, valuator->max);
+        }
+    }
 }
 
 // Every pointer device read anew: the scroll valuators, and the pens.
@@ -365,6 +383,7 @@ static void ReadDevices(mwinX11Platform* platform)
     const mwinX11Api* api = &platform->api;
     platform->scroll = (mwinX11Scroll){0};
     platform->pens = (mwinX11Pens){0};
+    mwinX11ClearTouchDevices(&platform->touches);
     xcb_input_list_input_devices_reply_t* list = api->listInputDevicesReply(
         platform->connection, api->listInputDevices(platform->connection), nullptr);
     xcb_input_xi_query_device_reply_t* reply = api->xiQueryDeviceReply(
@@ -396,9 +415,10 @@ void mwinX11StartRawMotion(mwinX11Platform* platform)
         return;
     }
     xcb_input_xi_query_version_reply_t* version = api->xiQueryVersionReply(
-        platform->connection, api->xiQueryVersion(platform->connection, 2, 1), nullptr);
+        platform->connection, api->xiQueryVersion(platform->connection, 2, 2), nullptr);
     bool recent = version != nullptr && version->major_version >= 2;
     platform->smoothScroll = recent && (version->major_version > 2 || version->minor_version >= 1);
+    platform->touch = recent && (version->major_version > 2 || version->minor_version >= 2);
     mwinReleaseSystemMemory(version);
     if (!recent)
     {
@@ -436,7 +456,13 @@ void mwinX11SelectPointer(const mwinX11Platform* platform, xcb_window_t window)
         uint32_t mask;
     } select = {{XCB_INPUT_DEVICE_ALL_MASTER, 1},
                 XCB_INPUT_XI_EVENT_MASK_BUTTON_PRESS | XCB_INPUT_XI_EVENT_MASK_BUTTON_RELEASE |
-                    XCB_INPUT_XI_EVENT_MASK_MOTION};
+                    XCB_INPUT_XI_EVENT_MASK_MOTION |
+                    // The three together or none; selecting them stops the
+                    // pointer the server makes from a touch.
+                    (platform->touch ? XCB_INPUT_XI_EVENT_MASK_TOUCH_BEGIN |
+                                           XCB_INPUT_XI_EVENT_MASK_TOUCH_UPDATE |
+                                           XCB_INPUT_XI_EVENT_MASK_TOUCH_END
+                                     : 0u)};
     platform->api.xiSelectEvents(platform->connection, window, 1, &select.head);
 }
 
@@ -605,8 +631,28 @@ static void OnXiButton(mwinX11Platform* platform, const xcb_input_button_press_e
     platform->pointer.device = 0;
 }
 
-// An XInput event: raw motion, the pointer through XI2, or a change of
-// the devices.
+// A touch screen's touch event as its touch record (mwin-0039). It has
+// the layout of a button event, whose valuator readers it takes.
+static void OnXiTouch(mwinX11Platform* platform, const xcb_input_touch_begin_event_t* event,
+                      mwinX11TouchInput input)
+{
+    const mwinX11Api* api = &platform->api;
+    const xcb_input_button_press_event_t* fields = (const xcb_input_button_press_event_t*)event;
+    int32_t slot = mwinX11SlotOf(platform, event->event);
+    mwinEvent record;
+    if (mwinX11TouchRecordOf(&platform->touches, event->sourceid, input, event->detail,
+                             PlaceOf(platform, event->event_x, event->event_y),
+                             api->valuatorMask(fields), api->valuatorMaskLength(fields),
+                             api->axisValues(fields), api->axisValuesLength(fields), &record) > 0 &&
+        slot >= 0)
+    {
+        record.timeNs = mwinMonotonicFromMilliseconds(event->time);
+        mwinPost(platform->context, (uint32_t)slot, &record);
+    }
+}
+
+// An XInput event: raw motion, the pointer and touches through XI2, or a
+// change of the devices.
 static void OnXi(mwinX11Platform* platform, const xcb_ge_generic_event_t* event)
 {
     switch (event->event_type)
@@ -621,6 +667,15 @@ static void OnXi(mwinX11Platform* platform, const xcb_ge_generic_event_t* event)
     case XCB_INPUT_BUTTON_RELEASE:
         OnXiButton(platform, (const xcb_input_button_press_event_t*)event,
                    event->event_type == XCB_INPUT_BUTTON_PRESS);
+        break;
+    case XCB_INPUT_TOUCH_BEGIN:
+        OnXiTouch(platform, (const xcb_input_touch_begin_event_t*)event, mwin_x11TouchBegin);
+        break;
+    case XCB_INPUT_TOUCH_UPDATE:
+        OnXiTouch(platform, (const xcb_input_touch_begin_event_t*)event, mwin_x11TouchUpdate);
+        break;
+    case XCB_INPUT_TOUCH_END:
+        OnXiTouch(platform, (const xcb_input_touch_begin_event_t*)event, mwin_x11TouchEnd);
         break;
     case XCB_INPUT_DEVICE_CHANGED:
         // A master switched devices, whose valuators count from anew, or

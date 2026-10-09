@@ -12,6 +12,7 @@ target_sources(maul-window PRIVATE
     src/android_drop.c
     src/android_input.c
     src/android_motion.c
+    src/android_name.c
     src/android_output.c
     src/android_services.c
     src/android_system.c

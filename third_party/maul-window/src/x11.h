@@ -18,6 +18,7 @@
 #include "x11_api.h"
 #include "x11_pen.h"
 #include "x11_scroll.h"
+#include "x11_touch.h"
 #include "xkb_keyboard.h"
 
 #include "maul-window/clipboard.h"
@@ -72,6 +73,7 @@ enum
     mwin_atomAbsPressure,
     mwin_atomAbsTiltX,
     mwin_atomAbsTiltY,
+    mwin_atomAbsMtPressure,
     mwin_atomStylus,
     mwin_atomEraser,
     mwin_atomTablet,
@@ -253,6 +255,10 @@ struct mwinX11Platform
     // The devices that are pens, whose events make pen records
     // (x11_pen.h).
     mwinX11Pens pens;
+    // XI 2.2: windows read touches, those of the touch screens making
+    // touch records (x11_touch.h).
+    bool touch;
+    mwinX11Touches touches;
     // libxkbcommon, and the keyboard, where both load.
     mwinXkbApi xkbApi;
     mwinX11Keyboard keyboard;

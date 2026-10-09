@@ -232,6 +232,12 @@ if(MAUL_WINDOW_BUILD_TESTS)
         if(TARGET test_android_motion AND NOT MAUL_WINDOW_ANDROID)
             target_sources(test_android_motion PRIVATE ${PROJECT_SOURCE_DIR}/src/android_motion.c)
         endif()
+        # The names of Android's document copies, on every platform.
+        maul_add_test(android_name WHITEBOX)
+        if(TARGET test_android_name AND NOT MAUL_WINDOW_ANDROID)
+            target_sources(test_android_name PRIVATE ${PROJECT_SOURCE_DIR}/src/android_name.c)
+            target_link_libraries(test_android_name PRIVATE maul-unicode::maul-unicode)
+        endif()
         if(MAUL_WINDOW_GAMEPAD)
             maul_add_test(gamepad)
             # The runtime pads' tracking against a stand-in runtime.
@@ -334,6 +340,9 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(x11_scroll WHITEBOX)
         # Which devices are pens, and the records their events make.
         maul_add_test(x11_pen WHITEBOX)
+        # Which devices are touch screens, and the records their touches
+        # make.
+        maul_add_test(x11_touch WHITEBOX)
         # The scale of Xft.dpi.
         maul_add_test(x11_resources WHITEBOX)
         # The tests that move the X server's focus or pointer, or own its
@@ -444,6 +453,8 @@ if(MAUL_WINDOW_BUILD_TESTS)
         mwin_add_web_test(web_clipboard)
         mwin_add_web_test(web_services)
         mwin_add_web_test(web_drop)
+        mwin_add_web_test(web_locales)
+        mwin_add_web_test(web_power)
     endif()
     if(MAUL_WINDOW_MACOS)
         # Needs the session's window server, which CI's macOS runners have.
@@ -535,7 +546,7 @@ if(MAUL_WINDOW_BUILD_TESTS)
     endif()
     if(MAUL_WINDOW_WIN32)
         maul_add_test(win32)
-        target_link_libraries(test_win32 PRIVATE user32)
+        target_link_libraries(test_win32 PRIVATE user32 shcore)
         # Drives the desktop through SendInput.
         maul_add_test(win32_input)
         target_link_libraries(test_win32_input PRIVATE user32)
@@ -560,11 +571,17 @@ if(MAUL_WINDOW_BUILD_TESTS)
         # Changes the user's settings for a moment, and puts them back.
         maul_add_test(win32_system)
         target_link_libraries(test_win32_system PRIVATE user32 advapi32 dwmapi)
+        # What Windows reports, read without its settings.
+        maul_add_test(win32_system_facts WHITEBOX)
+        # What Windows tells of a monitor, read without one.
+        maul_add_test(win32_monitor_facts WHITEBOX)
+        # A composition shaped without an input method.
+        maul_add_test(win32_ime_text WHITEBOX)
         # One desktop: the focus, the pointer and the settings are not
         # shared.
         # The drop target driven as OLE would, and WM_DROPFILES.
         maul_add_test(win32_drop WHITEBOX)
-        target_link_libraries(test_win32_drop PRIVATE user32 ole32 shell32)
+        target_link_libraries(test_win32_drop PRIVATE user32 ole32 shell32 uuid)
         # The system clipboard, shared by the whole desktop.
         maul_add_test(win32_clipboard)
         target_link_libraries(test_win32_clipboard PRIVATE user32)
@@ -585,13 +602,20 @@ if(MAUL_WINDOW_BUILD_TESTS)
         target_link_libraries(test_win32_chrome PRIVATE user32)
         # The touch keyboard shown and hidden through the window's InputPane.
         maul_add_test(win32_touch_keyboard WHITEBOX)
-        target_link_libraries(test_win32_touch_keyboard PRIVATE user32)
+        target_link_libraries(test_win32_touch_keyboard PRIVATE user32 uuid)
+        # Styles, limits, ratio and opacity read back from Windows.
+        maul_add_test(win32_window_props)
+        target_link_libraries(test_win32_window_props PRIVATE user32)
+        # Message boxes answered from a second thread.
+        maul_add_test(win32_message_box)
+        target_link_libraries(test_win32_message_box PRIVATE user32)
         # The accessibility root handed to UI Automation.
         maul_add_test(win32_accessibility)
         target_link_libraries(test_win32_accessibility PRIVATE user32 ole32 oleaut32 uuid)
         set_tests_properties(win32 win32_input win32_pointer win32_ime win32_system
                              win32_clipboard win32_drop win32_services win32_dialog win32_owned
-                             win32_chrome win32_touch_keyboard
+                             win32_chrome win32_touch_keyboard win32_message_box
+                             win32_window_props
                              PROPERTIES RESOURCE_LOCK desktop)
     endif()
     maul_add_header_tests()

@@ -41,28 +41,48 @@ static void ReadLook(mwinSystemFacts* facts)
     BOOL animations = TRUE;
     facts->reducedMotion =
         SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0) && !animations;
-    // The text size setting, in percent.
     facts->textScale =
-        ReadDword(ACCESSIBILITY, L"TextScaleFactor", &value) && value >= 100 && value <= 500
-            ? (float)value / 100.0f
-            : 1.0f;
+        ReadDword(ACCESSIBILITY, L"TextScaleFactor", &value) ? mwinWin32TextScaleOf(value) : 1.0f;
+}
+
+float mwinWin32TextScaleOf(DWORD percent)
+{
+    // Windows' slider runs from 100% to 225%; anything outside 100 to
+    // 500 is taken as no setting.
+    return percent >= 100 && percent <= 500 ? (float)percent / 100.0f : 1.0f;
+}
+
+void mwinWin32PowerFacts(const SYSTEM_POWER_STATUS* power, mwinSystemFacts* facts)
+{
+    // Flag 128: no battery, so never on one; 255: the flag unknown.
+    bool noBattery = power->BatteryFlag != 255 && (power->BatteryFlag & 128) != 0;
+    facts->onBattery = noBattery                  ? mwin_no
+                       : power->ACLineStatus == 0 ? mwin_yes
+                       : power->ACLineStatus == 1 ? mwin_no
+                                                  : mwin_unknown;
+    // Battery saver.
+    facts->lowPower = power->SystemStatusFlag != 0 ? mwin_yes : mwin_no;
 }
 
 static void ReadPower(mwinSystemFacts* facts)
 {
     SYSTEM_POWER_STATUS power;
-    if (!GetSystemPowerStatus(&power))
+    if (GetSystemPowerStatus(&power))
     {
-        return;
+        mwinWin32PowerFacts(&power, facts);
     }
-    // Flag 128: no battery, so never on one.
-    bool noBattery = power.BatteryFlag != 255 && (power.BatteryFlag & 128) != 0;
-    facts->onBattery = noBattery                 ? mwin_no
-                       : power.ACLineStatus == 0 ? mwin_yes
-                       : power.ACLineStatus == 1 ? mwin_no
-                                                 : mwin_unknown;
-    // Battery saver.
-    facts->lowPower = power.SystemStatusFlag != 0 ? mwin_yes : mwin_no;
+}
+
+uint32_t mwinWin32JoinLocales(WCHAR* units, ULONG count)
+{
+    // The names end in nulls, the list in two: a comma for each but the
+    // last two.
+    uint32_t length = count >= 2 ? (uint32_t)count - 2 : 0;
+    for (uint32_t i = 0; i < length; i++)
+    {
+        units[i] = units[i] == 0 ? L',' : units[i];
+    }
+    return length;
 }
 
 // The preferred UI languages as a list with commas, in UTF-8.
@@ -75,13 +95,7 @@ static void ReadLocales(mwinWin32Platform* platform)
     {
         return;
     }
-    // The names end in nulls, the list in two: a comma for each but the
-    // last two.
-    uint32_t length = units >= 2 ? (uint32_t)units - 2 : 0;
-    for (uint32_t i = 0; i < length; i++)
-    {
-        platform->localeUnits[i] = platform->localeUnits[i] == 0 ? L',' : platform->localeUnits[i];
-    }
+    uint32_t length = mwinWin32JoinLocales(platform->localeUnits, units);
     size_t bytes = 0;
     muniTextResult converted =
         muniConvertUtf16ToUtf8((const uint16_t*)platform->localeUnits, length, platform->localeText,

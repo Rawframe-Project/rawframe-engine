@@ -241,7 +241,6 @@ void mwinWebHandleWindowRecord(mwinWebPlatform* platform, const mwinWebRecord* r
                  timeNs);
         break;
     case mwin_webFullscreen:
-        platform->windows[slot].fullscreen = record->code != 0;
         PostMode(platform, slot,
                  record->code != 0 ? mwin_modeBorderlessFullscreen : mwin_modeWindowed, timeNs);
         AnswerMode(platform, slot, mwin_outcomeDone);

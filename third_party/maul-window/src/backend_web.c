@@ -94,6 +94,7 @@ static void ReadFacts(mwinWebPlatform* platform)
     mwinSystemFacts facts = {.textScale = 1.0f};
     facts.theme = (mwinTheme)mwinWebTheme();
     facts.reducedMotion = mwinWebReducedMotion();
+    facts.onBattery = (mwinTristate)mwinWebOnBattery(context);
     mwinSetSystemFacts(context, &facts, NowNs());
     // A list past the limit is left as it was.
     char locales[MWIN_WEB_LOCALE_BYTES];

@@ -285,21 +285,25 @@ static void OnStop(ANativeActivity* activity)
     (void)Lifecycle(platform, false);
 }
 
-static void OnDestroy(ANativeActivity* activity)
+// The program's activity ends. The user or the program finished it: the
+// window can no longer show. An activity made anew is not asked about.
+static void End(mwinAndroidPlatform* platform, ANativeActivity* activity)
 {
-    mwinAndroidPlatform* platform = activity->instance;
-    if (platform == nullptr)
-    {
-        return;
-    }
-    // The user or the program finished it: the window can no longer show.
-    // An activity made anew is not asked about.
     if (platform->slot >= 0 && IsFinishing(platform, activity))
     {
         mwinEvent event = {.type = mwin_eventCloseRequested, .timeNs = mwinAndroidNow()};
         mwinPost(platform->context, (uint32_t)platform->slot, &event);
     }
     Detach(platform);
+}
+
+static void OnDestroy(ANativeActivity* activity)
+{
+    mwinAndroidPlatform* platform = activity->instance;
+    if (platform != nullptr)
+    {
+        End(platform, activity);
+    }
 }
 
 static void OnWindowFocusChanged(ANativeActivity* activity, int hasFocus)
@@ -410,6 +414,30 @@ static void OnConfigurationChanged(ANativeActivity* activity)
     }
 }
 
+// Android can make an activity before the one it follows ends, as when a
+// start comes at once after a finish: the old one ends as the new one
+// joins, as its own end would (its surface told gone first), so that its
+// later callbacks, its stop among them, find no program. False when the
+// program stopped meanwhile and has ended.
+static bool EndOld(mwinAndroidPlatform* platform)
+{
+    mwinContext* context = platform->context;
+    if (platform->nativeWindow != nullptr)
+    {
+        mwinAndroidSurfaceWent(platform);
+        mwinRunCriticalFrame(context);
+        ANativeWindow_release(platform->nativeWindow);
+        platform->nativeWindow = nullptr;
+        if (context->stopping)
+        {
+            Finish(platform);
+            return false;
+        }
+    }
+    End(platform, platform->activity);
+    return true;
+}
+
 // The program shows in the activity from now on.
 static void Attach(mwinAndroidPlatform* platform, ANativeActivity* activity)
 {
@@ -459,7 +487,14 @@ ANativeActivity_onCreate(ANativeActivity* activity, void* savedState, size_t sav
     (*env)->DeleteLocalRef(env, type);
     if (running != nullptr)
     {
-        Attach(running, activity);
+        if (running->activity == nullptr || EndOld(running))
+        {
+            Attach(running, activity);
+        }
+        else
+        {
+            ANativeActivity_finish(activity);
+        }
         return;
     }
     mwinAppDef def = mwinAndroidMain();

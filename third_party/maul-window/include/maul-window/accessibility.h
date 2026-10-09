@@ -54,8 +54,10 @@ extern "C"
     /// parent. The view gives it as its provider, and holds a global
     /// reference to it while it is the root; the view changes with the
     /// activity, the root staying. A root that also implements the
-    /// library's Java interface maul.window.Explorer is explored by
-    /// touch: Android sends touch exploration to the window's input
+    /// library's Java interface maul.window.Explorer, or that has a public
+    /// method `int virtualViewAt(float x, float y)` of the same meaning (a
+    /// library's provider that cannot name this one's interface), is
+    /// explored by touch: Android sends touch exploration to the window's input
     /// rather than to its view, so while there is a root the library
     /// takes those hovers, asks the root for the virtual view under the
     /// finger, and announces the one entered and the one left, as

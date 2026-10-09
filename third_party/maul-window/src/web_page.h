@@ -64,6 +64,9 @@ MWIN_WEB_IMPORT(mwinWebHighDynamicRange) bool mwinWebHighDynamicRange(void);
 // The preferred color scheme (an mwinTheme) and reduced motion.
 MWIN_WEB_IMPORT(mwinWebTheme) int mwinWebTheme(void);
 MWIN_WEB_IMPORT(mwinWebReducedMotion) bool mwinWebReducedMotion(void);
+// Whether the device runs on its battery (an mwinTristate), as the
+// Battery Status API last told; unknown where it does not.
+MWIN_WEB_IMPORT(mwinWebOnBattery) int mwinWebOnBattery(const mwinContext* context);
 // navigator.languages with commas, in UTF-8: the bytes it needs.
 MWIN_WEB_IMPORT(mwinWebLocales) uint32_t mwinWebLocales(char* out, uint32_t capacity);
 

@@ -39,32 +39,56 @@ static mwinPixelRect RectOf(RECT rect)
                            (uint32_t)(rect.bottom - rect.top)};
 }
 
-// The monitor's name: the display device's description, as UTF-8.
-static void ReadName(const WCHAR* device, mwinMonitorInfo* info)
+void mwinWin32NameMonitor(const WCHAR* description, size_t capacity, mwinMonitorInfo* info)
 {
-    DISPLAY_DEVICEW display = {.cb = sizeof(display)};
-    if (!EnumDisplayDevicesW(device, 0, &display, 0))
-    {
-        return;
-    }
     // A name too long is cut to the most whole characters that fit.
-    size_t units = wcsnlen(display.DeviceString, sizeof(display.DeviceString) / sizeof(WCHAR));
+    size_t units = wcsnlen(description, capacity);
     for (; units > 0; --units)
     {
         size_t needed = 0;
-        bool split = IS_HIGH_SURROGATE(display.DeviceString[units - 1]) &&
-                     units < sizeof(display.DeviceString) / sizeof(WCHAR) &&
-                     IS_LOW_SURROGATE(display.DeviceString[units]);
-        if (!split &&
-            muniConvertUtf16ToUtf8((const uint16_t*)display.DeviceString, units, info->name,
-                                   MWIN_MONITOR_NAME_BYTES, muni_convertReplace, &needed)
-                    .status == muni_success)
+        bool split = IS_HIGH_SURROGATE(description[units - 1]) && units < capacity &&
+                     IS_LOW_SURROGATE(description[units]);
+        if (!split && muniConvertUtf16ToUtf8((const uint16_t*)description, units, info->name,
+                                             MWIN_MONITOR_NAME_BYTES, muni_convertReplace, &needed)
+                              .status == muni_success)
         {
             info->nameLength = (uint32_t)needed;
             return;
         }
     }
     info->nameLength = 0;
+}
+
+// The monitor's name: the display device's description, as UTF-8.
+static void ReadName(const WCHAR* device, mwinMonitorInfo* info)
+{
+    DISPLAY_DEVICEW display = {.cb = sizeof(display)};
+    if (EnumDisplayDevicesW(device, 0, &display, 0))
+    {
+        mwinWin32NameMonitor(display.DeviceString, sizeof(display.DeviceString) / sizeof(WCHAR),
+                             info);
+    }
+}
+
+uint32_t mwinWin32RefreshOf(DISPLAYCONFIG_RATIONAL rate)
+{
+    return rate.Denominator != 0 && rate.Numerator != 0
+               ? (uint32_t)(((uint64_t)rate.Numerator * 1000 + rate.Denominator / 2) /
+                            rate.Denominator)
+               : 0;
+}
+
+void mwinWin32SettleHeadroom(mwinHdrFacts* hdr)
+{
+    if (!hdr->active)
+    {
+        hdr->headroom = hdr->known ? 1.0f : 0.0f;
+    }
+    else if (hdr->peakNits > 0.0f && hdr->sdrWhiteNits > 0.0f)
+    {
+        float headroom = hdr->peakNits / hdr->sdrWhiteNits;
+        hdr->headroom = headroom > 1.0f ? headroom : 1.0f;
+    }
 }
 
 // The path whose source is the GDI device (\\.\DISPLAY1), or none.
@@ -134,12 +158,8 @@ static DWORD ReadEdid(const WCHAR* monitorPath, uint8_t* bytes)
 // white level.
 static void ReadTarget(const DISPLAYCONFIG_PATH_INFO* path, mwinMonitorInfo* info)
 {
-    DISPLAYCONFIG_RATIONAL rate = path->targetInfo.refreshRate;
-    if (rate.Denominator != 0 && rate.Numerator != 0)
-    {
-        info->refreshMilliHz =
-            (uint32_t)(((uint64_t)rate.Numerator * 1000 + rate.Denominator / 2) / rate.Denominator);
-    }
+    uint32_t refresh = mwinWin32RefreshOf(path->targetInfo.refreshRate);
+    info->refreshMilliHz = refresh != 0 ? refresh : info->refreshMilliHz;
     mwinHdrFacts* hdr = &info->hdr;
     LUID adapter = path->targetInfo.adapterId;
     UINT32 target = path->targetInfo.id;
@@ -179,15 +199,7 @@ static void ReadTarget(const DISPLAYCONFIG_PATH_INFO* path, mwinMonitorInfo* inf
         hdr->fullFrameNits = found.frameAverageNits;
     }
     (void)mwinEdidSizeOf(edid, length, &info->widthMm, &info->heightMm);
-    if (!hdr->active)
-    {
-        hdr->headroom = hdr->known ? 1.0f : 0.0f;
-    }
-    else if (hdr->peakNits > 0.0f && hdr->sdrWhiteNits > 0.0f)
-    {
-        float headroom = hdr->peakNits / hdr->sdrWhiteNits;
-        hdr->headroom = headroom > 1.0f ? headroom : 1.0f;
-    }
+    mwinWin32SettleHeadroom(hdr);
 }
 
 static void ReadInfo(const Scan* scan, HMONITOR handle, const MONITORINFOEXW* monitor,
@@ -235,49 +247,35 @@ static int32_t OutputOf(mwinWin32Platform* platform, HMONITOR handle)
     return vacant;
 }
 
-static BOOL CALLBACK OnMonitor(HMONITOR handle, HDC context, LPRECT rect, LPARAM data)
-{
-    (void)context;
-    (void)rect;
-    const Scan* scan = mwinWin32Pointer(data);
-    mwinWin32Platform* platform = scan->platform;
-    MONITORINFOEXW monitor = {0};
-    monitor.cbSize = sizeof(monitor);
-    int32_t slot = OutputOf(platform, handle);
-    if (slot < 0 || !GetMonitorInfoW(handle, (MONITORINFO*)&monitor))
-    {
-        return TRUE;
-    }
-    mwinWin32Output* output = &platform->outputs[slot];
-    mwinMonitorInfo info = {0};
-    ReadInfo(scan, handle, &monitor, &info);
-    output->seen = true;
-    if (output->monitor < 0)
-    {
-        output->monitor = mwinAddMonitor(platform->context, &info, mwinWin32Now());
-    }
-    else if (!mwinSameMonitorInfo(&platform->context->monitors[output->monitor].info, &info))
-    {
-        mwinChangeMonitor(platform->context, (uint32_t)output->monitor, &info, mwinWin32Now());
-    }
-    return TRUE;
-}
-
-void mwinWin32RefreshMonitors(mwinWin32Platform* platform)
+void mwinWin32BeginMonitors(mwinWin32Platform* platform)
 {
     for (uint32_t i = 0; i < platform->context->limits.monitors; i++)
     {
         platform->outputs[i].seen = false;
     }
-    Scan scan = {.platform = platform, .pathCount = MOST_PATHS};
-    DISPLAYCONFIG_MODE_INFO modes[MOST_MODES];
-    UINT32 modeCount = MOST_MODES;
-    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &scan.pathCount, scan.paths, &modeCount, modes,
-                           nullptr) != ERROR_SUCCESS)
+}
+
+void mwinWin32SeeMonitor(mwinWin32Platform* platform, HMONITOR handle, const mwinMonitorInfo* info)
+{
+    int32_t slot = OutputOf(platform, handle);
+    if (slot < 0)
     {
-        scan.pathCount = 0;
+        return;
     }
-    EnumDisplayMonitors(nullptr, nullptr, OnMonitor, (LPARAM)&scan);
+    mwinWin32Output* output = &platform->outputs[slot];
+    output->seen = true;
+    if (output->monitor < 0)
+    {
+        output->monitor = mwinAddMonitor(platform->context, info, mwinWin32Now());
+    }
+    else if (!mwinSameMonitorInfo(&platform->context->monitors[output->monitor].info, info))
+    {
+        mwinChangeMonitor(platform->context, (uint32_t)output->monitor, info, mwinWin32Now());
+    }
+}
+
+void mwinWin32EndMonitors(mwinWin32Platform* platform)
+{
     for (uint32_t i = 0; i < platform->context->limits.monitors; i++)
     {
         mwinWin32Output* output = &platform->outputs[i];
@@ -290,6 +288,37 @@ void mwinWin32RefreshMonitors(mwinWin32Platform* platform)
             *output = (mwinWin32Output){.monitor = -1};
         }
     }
+}
+
+static BOOL CALLBACK OnMonitor(HMONITOR handle, HDC context, LPRECT rect, LPARAM data)
+{
+    (void)context;
+    (void)rect;
+    const Scan* scan = mwinWin32Pointer(data);
+    MONITORINFOEXW monitor = {0};
+    monitor.cbSize = sizeof(monitor);
+    if (GetMonitorInfoW(handle, (MONITORINFO*)&monitor))
+    {
+        mwinMonitorInfo info = {0};
+        ReadInfo(scan, handle, &monitor, &info);
+        mwinWin32SeeMonitor(scan->platform, handle, &info);
+    }
+    return TRUE;
+}
+
+void mwinWin32RefreshMonitors(mwinWin32Platform* platform)
+{
+    mwinWin32BeginMonitors(platform);
+    Scan scan = {.platform = platform, .pathCount = MOST_PATHS};
+    DISPLAYCONFIG_MODE_INFO modes[MOST_MODES];
+    UINT32 modeCount = MOST_MODES;
+    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &scan.pathCount, scan.paths, &modeCount, modes,
+                           nullptr) != ERROR_SUCCESS)
+    {
+        scan.pathCount = 0;
+    }
+    EnumDisplayMonitors(nullptr, nullptr, OnMonitor, (LPARAM)&scan);
+    mwinWin32EndMonitors(platform);
 }
 
 int32_t mwinWin32MonitorOf(const mwinWin32Platform* platform, HMONITOR handle)
