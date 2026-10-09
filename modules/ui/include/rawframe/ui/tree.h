@@ -474,6 +474,9 @@ struct Interaction {
     Hits hits = Hits::Itself;
     bool passThrough = false;
     Layer layer = Layer::None;
+    /// Whether the node may hold focus, as its owner's navigation gives it
+    /// (D573): told to assistive technology with `focus`.
+    bool focusable = false;
 };
 
 /// What a node is to assistive technology (SPEC-0030's role vocabulary,
@@ -631,6 +634,10 @@ public:
     /// none for a node its own text or children name (D571).
     [[nodiscard]] result::Status setRole(Node node, Role role);
     [[nodiscard]] result::Status setName(Node node, std::string_view name);
+    /// The node holding focus as its owner's navigation or a press gave it,
+    /// none for none (D573): what a screen reader follows. Refused for a
+    /// node that is not focusable.
+    [[nodiscard]] result::Status focus(std::optional<Node> node, bool navigated);
     /// What the point at `x`, `y` hits in `root`'s subtree as its last
     /// layout left it, the root at its own rectangle: layers from the top
     /// down, then the content they are not in, cut by every clip on the

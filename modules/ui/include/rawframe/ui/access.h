@@ -84,6 +84,10 @@ public:
     /// Maul UI writes it: what a screen reader reads.
     [[nodiscard]] std::string written() const;
 
+    /// The node the platform was last told holds focus, none for the root
+    /// (D573).
+    [[nodiscard]] std::optional<Node> focused() const;
+
     /// What screen readers asked since last taken, oldest first.
     [[nodiscard]] std::vector<AccessRequest> takeRequests();
     /// A request as a platform gives it: one of a node the tree holds is

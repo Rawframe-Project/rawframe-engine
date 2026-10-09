@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <maul-ui/access.h>
 #include <maul-ui/access_tree.h>
+#include <maul-ui/focus.h>
 #include <string>
 #include <utility>
 #include <vector>
@@ -64,6 +65,14 @@ bool readText(void* user, muiNodeId node, std::uint64_t /*key*/, const char** te
 }
 
 } // namespace
+
+result::Status Tree::focus(std::optional<Node> node, bool navigated) {
+    return checked(muiFocus_Set(state_->context,
+                                0,
+                                node.has_value() ? idOf(*node) : muiNodeId{},
+                                navigated ? mui_focusByNavigation : mui_focusByPointer),
+                   "a node could not take focus");
+}
 
 bool accessBuilt(AccessPlatform platform) noexcept {
     return platform == AccessPlatform::Copy || (platform == AccessPlatform::Atspi && RAWFRAME_UI_ATSPI);
@@ -274,6 +283,19 @@ void AccessSeat::setPlace(std::array<std::int32_t, 2> place) noexcept {
     if (access_ != nullptr) {
         access_->setPlace(place);
     }
+}
+
+std::optional<Node> Access::focused() const {
+    const muiAccessTree* kRead = state_->read();
+    if (kRead == nullptr) {
+        return std::nullopt;
+    }
+    const std::uint64_t kFocus = muiAccessTree_GetFocus(kRead);
+    if (kFocus == 0 || kFocus == muiAccessTree_GetRoot(kRead)) {
+        return std::nullopt;
+    }
+    const muiNodeId kId = muiNodeIdOfAccess(kFocus);
+    return Node{.index1 = kId.index1, .generation = kId.generation};
 }
 
 std::vector<AccessRequest> Access::takeRequests() {

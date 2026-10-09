@@ -142,3 +142,30 @@ RAWFRAME_TEST(AScreenReadersPressesAndFocusesAreKeptForTheOwner) {
     RAWFRAME_EXPECT(ui.remove(kQuit).has_value());
     RAWFRAME_EXPECT(!access->ask(AccessRequest::Kind::Press, kQuit) && seat.takeRequests().empty());
 }
+
+RAWFRAME_TEST(TheFocusItsOwnerGivesIsTheOneAScreenReaderFollows) {
+    auto made = Tree::create(8);
+    RAWFRAME_EXPECT(made.has_value());
+    if (!made.has_value()) {
+        return;
+    }
+    Tree& ui = **made;
+    const Node kRoot = *ui.add(1);
+    const Node kPlay = *ui.add(2);
+    const Node kLabel = *ui.add(3);
+    RAWFRAME_EXPECT(ui.attach(kRoot, kPlay).has_value() && ui.attach(kRoot, kLabel).has_value());
+    RAWFRAME_EXPECT(ui.setInteraction(kPlay, {.focusable = true}).has_value());
+    RAWFRAME_EXPECT(ui.setRole(kPlay, Role::Button).has_value() && ui.setName(kPlay, "Play").has_value());
+    auto access = Access::create(ui, kRoot, {});
+    RAWFRAME_EXPECT(access.has_value());
+    if (!access.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT((*access)->update().has_value() && !(*access)->focused().has_value());
+    RAWFRAME_EXPECT(ui.focus(kPlay, true).has_value() && (*access)->update().has_value());
+    RAWFRAME_EXPECT((*access)->focused() == kPlay);
+    // A node that may not hold focus is refused it; focus taken away.
+    RAWFRAME_EXPECT(!ui.focus(kLabel, true).has_value());
+    RAWFRAME_EXPECT(ui.focus(std::nullopt, false).has_value() && (*access)->update().has_value());
+    RAWFRAME_EXPECT(!(*access)->focused().has_value());
+}

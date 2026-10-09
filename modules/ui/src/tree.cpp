@@ -300,9 +300,13 @@ static_assert(static_cast<muiLayerKind>(Interaction::Layer::Modal) == mui_layerM
               static_cast<muiLayerKind>(Interaction::Layer::Overlay) == mui_layerOverlay);
 
 result::Status Tree::setInteraction(Node node, const Interaction& interaction) {
-    const muiInteractionStyle kStyle{.hitMode = static_cast<muiHitMode>(interaction.hits),
-                                     .passThrough = interaction.passThrough,
-                                     .layer = static_cast<muiLayerKind>(interaction.layer)};
+    const muiInteractionStyle kStyle{
+        .hitMode = static_cast<muiHitMode>(interaction.hits),
+        .passThrough = interaction.passThrough,
+        .layer = static_cast<muiLayerKind>(interaction.layer),
+        // Focus is given by its owner's code, never by Maul UI's own
+        // navigation, which the engine does not run (D430, D573).
+        .focusMode = static_cast<muiFocusMode>(interaction.focusable ? mui_focusPointer : mui_focusNone)};
     return checked(muiNode_SetInteractionValues(state_->context, idOf(node), &kStyle, MUI_INTERACTION_PROPERTIES),
                    "a UI node's interaction was refused");
 }
