@@ -91,7 +91,7 @@ jobs:
             -DCMAKE_CXX_COMPILER_TARGET=arm64-apple-ios16.3-simulator \
             -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi" -DLIBCXX_ENABLE_SHARED=OFF -DLIBCXXABI_ENABLE_SHARED=OFF \
             -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=ON -DLIBCXX_INCLUDE_BENCHMARKS=OFF -DLIBCXX_INCLUDE_TESTS=OFF \
-            -DLIBCXXABI_INCLUDE_TESTS=OFF -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/libcxx-ios" >"$RUNNER_TEMP/libcxx.log" 2>&1 &&
+            -DLIBCXXABI_INCLUDE_TESTS=OFF -DLIBCXXABI_USE_LLVM_UNWINDER=OFF -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/libcxx-ios" >"$RUNNER_TEMP/libcxx.log" 2>&1 &&
             cmake --build "$RUNNER_TEMP/libcxx" >>"$RUNNER_TEMP/libcxx.log" 2>&1 &&
             cmake --install "$RUNNER_TEMP/libcxx" >>"$RUNNER_TEMP/libcxx.log" 2>&1 || { tail -40 "$RUNNER_TEMP/libcxx.log"; exit 1; }
           echo "libc++ built in $(( $(date +%s) - start )) s"
