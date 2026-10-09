@@ -122,6 +122,21 @@ jobs:
         # The client's application, made with the runner's SDK (D551).
         run: tools/android_apk.sh "$RUNNER_TEMP/rawframe-client.apk"
           out/android-development/hosts/android_client/librawframe_client.so dev.rawframe.client "Rawframe client"
+      # And a release one under a publisher's key (D581): signed by that key,
+      # not debuggable, the keystore's password from the environment.
+      - name: Release application
+        env:
+          RAWFRAME_ANDROID_KEYSTORE_PASSWORD: release-check
+        run: |
+          keytool -genkeypair -keystore "$RUNNER_TEMP/studio.jks" -storepass "$RAWFRAME_ANDROID_KEYSTORE_PASSWORD" \
+            -keypass "$RAWFRAME_ANDROID_KEYSTORE_PASSWORD" -alias studio -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Release check" >/dev/null
+          tools/android_apk.sh "$RUNNER_TEMP/rawframe-release.apk" \
+            out/android-development/hosts/android_client/librawframe_client.so dev.rawframe.client "Rawframe client" "" \
+            "$RUNNER_TEMP/studio.jks" studio
+          build="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          "$build/apksigner" verify --print-certs "$RUNNER_TEMP/rawframe-release.apk" | grep "DN: CN=Release check"
+          ! "$build/aapt2" dump badging "$RUNNER_TEMP/rawframe-release.apk" | grep -q debuggable
       # The engine's test programs on an emulator (D561, D581): Android 15
       # on x86_64 with KVM, which runs the arm64 programs through its
       # translation, as the loop's own emulator does.
