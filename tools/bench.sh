@@ -55,7 +55,8 @@ quieter() {
         sleep 5
     done
 }
-for game in arena runners plaza crowd; do
+games=(arena runners plaza crowd)
+for game in "${games[@]}"; do
     {
         echo "host.maximum_iterations = 720"
         echo "host.iteration_rate = 120"
@@ -67,8 +68,22 @@ for game in arena runners plaza crowd; do
         echo "bots.endpoint = arena"
         if [ "$game" = plaza ]; then echo "content.root = $work/plaza"; fi
     } >"$work/$game.conf"
+done
+# The check plays the four at once, each a process of its own on a machine
+# of many processors: their ticks measured so were within the noise of
+# each alone (D528). A game past its bounds is measured again alone. A
+# recorded measurement plays each alone, as the records always have.
+if [ "$mode" = check ]; then
+    for game in "${games[@]}"; do
+        "$build/hosts/arena/rawframe-arena" --config "$work/$game.conf" >"$work/$game.log" 2>&1 &
+    done
+    wait
+fi
+for game in "${games[@]}"; do
     for attempt in 1 2; do
-        "$build/hosts/arena/rawframe-arena" --config "$work/$game.conf" >"$work/$game.log" 2>&1 || true
+        if [ "$mode" != check ] || [ "$attempt" = 2 ]; then
+            "$build/hosts/arena/rawframe-arena" --config "$work/$game.conf" >"$work/$game.log" 2>&1 || true
+        fi
         summary="$(grep '"code":"tick_summary"' "$work/$game.log" | tail -1 || true)"
         kest="$(grep '"code":"kest_summary"' "$work/$game.log" | tail -1 || true)"
         if [ -z "$summary" ]; then
