@@ -2,7 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <tuple>
+#include <vector>
 
 namespace rawframe::render_scene {
 
@@ -92,23 +92,44 @@ void packClusters(SceneFrame& frame, std::vector<ClusterName>& named, const Scen
     const std::uint32_t kCount = clusters.tilesX * clusters.tilesY * clusters.slices;
     clusters.ranges.assign(std::size_t{kCount} * 4, 0);
     clusters.indices.clear();
-    std::ranges::stable_sort(named, {}, [](const ClusterName& name) {
-        return std::tuple{name.cluster, name.item};
-    });
-    for (std::size_t at = 0; at < named.size();) {
-        const std::uint32_t kCluster = named[at].cluster;
-        clusters.ranges[std::size_t{kCluster} * 4] = static_cast<std::uint32_t>(clusters.indices.size());
-        for (; at < named.size() && named[at].cluster == kCluster; ++at) {
-            const auto kClass = static_cast<std::size_t>(named[at].item);
-            const std::array<std::size_t, 3> kLimits = {
-                limits.maximumLightsPerCluster, limits.maximumDecalsPerCluster, limits.maximumProbesPerCluster};
-            std::uint32_t& count = clusters.ranges[(std::size_t{kCluster} * 4) + 1 + kClass];
-            if (count == kLimits[kClass]) {
-                ++frame.clusterOverflow;
-                continue;
-            }
-            clusters.indices.push_back(named[at].index);
+    const std::array<std::size_t, 3> kLimits = {
+        limits.maximumLightsPerCluster, limits.maximumDecalsPerCluster, limits.maximumProbesPerCluster};
+    // Placed by counting rather than sorted (D537): each class of each
+    // cluster counted, the first named up to its limit, so each one's place
+    // is known, then each name put in its place in the order named. A
+    // stable sort of every name each frame was a tenth of a client's own
+    // time.
+    for (const ClusterName& name : named) {
+        std::uint32_t& count =
+            clusters.ranges[(std::size_t{name.cluster} * 4) + 1 + static_cast<std::size_t>(name.item)];
+        if (count == kLimits[static_cast<std::size_t>(name.item)]) {
+            ++frame.clusterOverflow;
+        } else {
             ++count;
+        }
+    }
+    std::vector<std::uint32_t> next(std::size_t{kCount} * 3);
+    std::uint32_t placed = 0;
+    for (std::size_t cluster = 0; cluster < kCount; ++cluster) {
+        clusters.ranges[cluster * 4] = placed;
+        for (std::size_t kind = 0; kind < 3; ++kind) {
+            next[(cluster * 3) + kind] = placed;
+            placed += clusters.ranges[(cluster * 4) + 1 + kind];
+        }
+    }
+    clusters.indices.resize(placed);
+    for (const ClusterName& name : named) {
+        const std::size_t kCluster = name.cluster;
+        const auto kKind = static_cast<std::size_t>(name.item);
+        std::uint32_t& at = next[(kCluster * 3) + kKind];
+        // Its class's end: past it, the name was one over the limit.
+        std::uint32_t end = clusters.ranges[kCluster * 4];
+        for (std::size_t kind = 0; kind <= kKind; ++kind) {
+            end += clusters.ranges[(kCluster * 4) + 1 + kind];
+        }
+        if (at < end) {
+            clusters.indices[at] = name.index;
+            ++at;
         }
     }
 }
