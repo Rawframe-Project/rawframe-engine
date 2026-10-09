@@ -5,6 +5,7 @@
 #include <array>
 #include <chrono>
 #include <openssl/err.h>
+#include <openssl/pem.h>
 #include <openssl/ssl.h>
 #include <openssl/x509v3.h>
 #include <string>
@@ -20,6 +21,7 @@
 #else
 #include <arpa/inet.h>
 #include <cerrno>
+#include <dirent.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -59,7 +61,14 @@ std::unexpected<result::Error> failed(HttpError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(kClass, kHttpDomain, code(error), why).error()};
 }
 
-#if !defined(_WIN32)
+#if defined(__ANDROID__)
+/// Where Android keeps the authorities it trusts, one PEM file each: the
+/// Conscrypt module's store from Android 14 on, then the system image's.
+constexpr std::array<const char*, 2> kAndroidAuthorities = {
+    "/apex/com.android.conscrypt/cacerts",
+    "/system/etc/security/cacerts",
+};
+#elif !defined(_WIN32)
 /// Where systems keep the authorities they trust, as one PEM file: Debian
 /// and Ubuntu, Fedora and RHEL, openSUSE, older RHEL, and Alpine and macOS.
 /// Windows keeps its own in a certificate store.
@@ -197,6 +206,34 @@ bool loadSystemAuthorities(SSL_CTX* context) {
     }
     ::CertCloseStore(store, 0);
     return added > 0;
+#elif defined(__ANDROID__)
+    // The store Android 14 updates outside the system image, then the
+    // system image's own (D562). Its file names hash each subject the way
+    // OpenSSL did before 1.0, which a lookup by directory no longer reads,
+    // so each file is added as it is.
+    X509_STORE* trusted = SSL_CTX_get_cert_store(context);
+    for (const char* kDirectory : kAndroidAuthorities) {
+        DIR* directory = ::opendir(kDirectory);
+        if (directory == nullptr) {
+            continue;
+        }
+        int added = 0;
+        while (const dirent* entry = ::readdir(directory)) {
+            const std::string kFile = std::string{kDirectory} + "/" + entry->d_name;
+            BIO* read = entry->d_name[0] == '.' ? nullptr : BIO_new_file(kFile.c_str(), "r");
+            X509* certificate = read == nullptr ? nullptr : PEM_read_bio_X509(read, nullptr, nullptr, nullptr);
+            if (certificate != nullptr) {
+                added += X509_STORE_add_cert(trusted, certificate) == 1 ? 1 : 0;
+                X509_free(certificate);
+            }
+            BIO_free(read);
+        }
+        ::closedir(directory);
+        if (added > 0) {
+            return true;
+        }
+    }
+    return false;
 #else
     for (const char* kFile : kSystemAuthorities) {
         if (::access(kFile, R_OK) == 0 && SSL_CTX_load_verify_locations(context, kFile, nullptr) == 1) {
