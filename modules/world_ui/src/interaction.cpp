@@ -56,6 +56,10 @@ void WorldUi::State::letGo(bool shown) {
     Entry* holding = focus.has_value() ? focus->entry : nullptr;
     focus.reset();
     caret.reset();
+    // A screen reader follows focus (D573).
+    if (holding != nullptr) {
+        static_cast<void>(tree->focus(std::nullopt, false));
+    }
     if (holding != nullptr && shown) {
         static_cast<void>(giveFocusLook(*holding));
     }
@@ -119,6 +123,7 @@ void WorldUi::State::focusOn(Entry& entry, bool keyboard, bool navigated) {
     if (!focus.has_value() || focus->entry != &entry) {
         letGo();
         focus = Focus{.entry = &entry, .navigated = navigated, .keyboard = false, .edit = nullptr};
+        static_cast<void>(tree->focus(*entry.node, navigated));
     }
     if (keyboard && entry.editable && !focus->keyboard) {
         focus->keyboard = true;

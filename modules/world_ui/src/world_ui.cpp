@@ -98,9 +98,12 @@ std::optional<ui::Interaction> interactionOf(const Node& node) noexcept {
     // nought says (D444).
     const bool kField = node.edit != 0 && node.hit != 2;
     const bool kScrolls = node.scroll != 0 && node.hit == 0;
+    // What navigation reaches, a field and a node that takes presses, holds
+    // focus as navigation gives it (D573).
     return ui::Interaction{.hits = kField || kScrolls ? ui::Interaction::Hits::Itself : kHits[node.hit],
                            .passThrough = node.hit == 0 && !kField,
-                           .layer = static_cast<ui::Interaction::Layer>(node.layer)};
+                           .layer = static_cast<ui::Interaction::Layer>(node.layer),
+                           .focusable = node.edit != 0 || node.press != 0};
 }
 
 /// What `node` is to assistive technology, from what it does (D571): a
