@@ -1,0 +1,24 @@
+{
+  "formatVersion": 1,
+  "kind": "text.translations",
+  "table": "db4ac0185da5018c5da8878b3c40a30f",
+  "locale": "tr",
+  "entries": {
+    "hud.coins": {
+      "message": "{$coins :integer} altın",
+      "sourceHash": "b0f62854edbdf746"
+    },
+    "hud.lost": {
+      "message": "{$round :integer}. tur başka bir sahibe gitti.",
+      "sourceHash": "7a97636f11aca256"
+    },
+    "hud.sign": {
+      "message": "Tabelanı yaz",
+      "sourceHash": "3511f0fa2ae796db"
+    },
+    "hud.won": {
+      "message": "{$round :integer}. turu kazandın!",
+      "sourceHash": "b3c52e859e3e7df1"
+    }
+  }
+}

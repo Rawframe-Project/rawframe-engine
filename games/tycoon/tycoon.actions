@@ -78,6 +78,18 @@
           "control": "start"
         }
       ]
+    },
+    {
+      "actionId": "8d2e61b74f0a93c5",
+      "name": "language",
+      "valueType": "bool",
+      "displayName": "Language",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "physicalKey": "key_l"
+        }
+      ]
     }
   ],
   "contexts": [
@@ -88,7 +100,8 @@
         "move",
         "build",
         "point",
-        "menu"
+        "menu",
+        "language"
       ]
     }
   ]

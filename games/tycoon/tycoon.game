@@ -95,6 +95,7 @@ sample sample.kest sample
 # view; a round's end in its middle for five seconds (D394). No server
 # carries any of it.
 text tycoon.strings
+text tycoon.tr.translations
 locale en
 font 8e12f827f47f7d51 Inter-Regular.ttf
 # The HUD's classes (D431).
