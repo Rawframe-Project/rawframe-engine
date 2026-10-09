@@ -29,8 +29,13 @@ trap 'rm -rf "$work"' EXIT
 llvm-strip-20 -o "$work/client.wasm" "$module"
 stripped=$(stat -c %s "$work/client.wasm")
 gzipped=$(gzip -9 -c "$work/client.wasm" | wc -c)
-brotlied=$(brotli -q 11 -c "$work/client.wasm" | wc -c)
+# Brotli's slowest setting, on one processor, while the module is loaded
+# and timed beside it (D526).
+brotli -q 11 -c "$work/client.wasm" >"$work/client.wasm.br" &
+squeezing=$!
 load="$(node --no-warnings tools/web_load.mjs "$work/client.wasm" "$PWD")"
+wait "$squeezing"
+brotlied=$(stat -c %s "$work/client.wasm.br")
 read -r compile instantiate start p50 p99 < <(python3 -c '
 import json, sys
 f = json.loads(sys.argv[1])
