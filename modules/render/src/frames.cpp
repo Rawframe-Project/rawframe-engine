@@ -25,6 +25,8 @@ namespace {
 constexpr diagnostics::EventIdentity kFrameSummary{"render", "frame_summary"};
 constexpr diagnostics::EventIdentity kFailed{"render", "frame_failed"};
 constexpr std::string_view kProvided[] = {kFrames.name};
+/// A frame's budget where `render.frame_rate` sets none (D533).
+constexpr execution::MonotonicDuration kSixtieth{1'000'000'000 / 60};
 constexpr std::string_view kMaybe[] = {kDevice.name, window::kSurfaces.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 /// How long stopping waits for the last frame: lavapipe draws a view in
@@ -126,6 +128,9 @@ public:
         if (devices_ == nullptr || failed_ || joined_.empty()) {
             return;
         }
+        // How the last frame keeps up with the device, seen in every
+        // iteration, the frame limit's too (D533).
+        watchPace();
         // Not sooner than the frame limit allows after the last (D495).
         if (framePeriod_.has_value() && madeAt_.has_value() && now_ - *madeAt_ < *framePeriod_) {
             ++framesLimited_;
@@ -292,6 +297,8 @@ public:
         if (*kMade) {
             ++submitted_;
             madeAt_ = now_;
+            submittedAt_ = clock_.now();
+            runningAt_.reset();
             lastWidth_ = target_.width;
             lastHeight_ = target_.height;
             if (target_.readBack) {
@@ -313,6 +320,33 @@ private:
                                                            code(composition::CompositionError::BadConfiguration),
                                                            why)
                                                   .error()};
+    }
+
+    FramePace pace() const noexcept override {
+        return pace_;
+    }
+
+    /// The last frame submitted, found running or done (D533): from its
+    /// submission on the clock, not the iteration's start, so what the
+    /// iteration did before it is not counted as the device's.
+    void watchPace() noexcept {
+        if (framer_ == nullptr || pace_.done == submitted_) {
+            return;
+        }
+        // A failure is told where the frame is planned.
+        const auto kDone = framer_->done();
+        if (!kDone.has_value()) {
+            return;
+        }
+        const execution::MonotonicInstant kNow = clock_.now();
+        if (!*kDone) {
+            runningAt_ = kNow;
+            return;
+        }
+        pace_.done = submitted_;
+        pace_.atLeast = runningAt_.has_value() ? *runningAt_ - submittedAt_ : execution::MonotonicDuration{};
+        pace_.atMost = kNow - submittedAt_;
+        pace_.budget = framePeriod_.value_or(kSixtieth);
     }
 
     void takePixels() {
@@ -376,6 +410,12 @@ private:
     std::uint32_t capturedWidth_ = 0;
     std::uint32_t capturedHeight_ = 0;
     std::uint64_t submitted_ = 0;
+    /// When the last frame was submitted and last found running, on the
+    /// process's clock (D533).
+    execution::SteadyClock clock_;
+    execution::MonotonicInstant submittedAt_;
+    std::optional<execution::MonotonicInstant> runningAt_;
+    FramePace pace_;
     std::uint64_t framesHidden_ = 0;
     std::uint64_t framesBusy_ = 0;
     std::uint64_t framesWithoutDevice_ = 0;

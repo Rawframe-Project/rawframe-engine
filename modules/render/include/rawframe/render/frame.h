@@ -134,6 +134,19 @@ private:
 /// The longest a window that nothing changes in goes undrawn (D494).
 inline constexpr execution::MonotonicDuration kLongestUnchanged = execution::MonotonicDuration::fromMilliseconds(250);
 
+/// How the last frame done kept up with the device (D533), as the frames
+/// saw it from Host iterations: from its submission, it certainly took
+/// until the last iteration that found it running, and at most until the
+/// first that found it done. Its budget is `render.frame_rate`'s period, a
+/// sixtieth of a second where there is no limit. `done` counts the frames
+/// found done, so a reader takes each once.
+struct FramePace {
+    std::uint64_t done = 0;
+    execution::MonotonicDuration atLeast{};
+    execution::MonotonicDuration atMost{};
+    execution::MonotonicDuration budget{};
+};
+
 class Frames {
 public:
     Frames() = default;
@@ -162,6 +175,8 @@ public:
     /// in is not drawn again; one is all the same at least every
     /// `kLongestUnchanged`, so what a window lost while covered is drawn.
     virtual void unchanged(FrameRecorder& recorder) noexcept = 0;
+    /// How the last frame done kept up with the device.
+    [[nodiscard]] virtual FramePace pace() const noexcept = 0;
 };
 
 inline constexpr composition::Capability<Frames> kFrames{"rawframe.render.frames"};
