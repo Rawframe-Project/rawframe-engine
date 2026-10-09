@@ -6,8 +6,10 @@
 // camera's tonemapper (D295, ADR-0047's closed set: AgX, the default;
 // Khronos PBR Neutral; linear), each keeping middle grey where AgX puts
 // it, in linear light for the sRGB picture to encode, dithered by under
-// one step of that encoding (D332). AgX as Troy Sobotka made it, fitted by
-// Benjamin Wrensch.
+// one step of that encoding (D332). AgX as Troy Sobotka made it, in
+// Blender's Rec.2020 formulation as Filament and three.js write it (D579):
+// Blender's inset, Filament's outset, Benjamin Wrensch's curve, and the
+// 2.4 power Blender's formation is encoded in.
 
 import screen;
 
@@ -144,14 +146,19 @@ Screen vs(uint vertex : SV_VulkanVertexID)
 [shader("fragment")]
 float4 fs(Screen screen) : SV_Target0
 {
-    // AgX's matrices, written a column to a row, as GLSL wrote them, so a
-    // vector multiplies them from the left.
-    const float3x3 inset = float3x3(0.842479062253094, 0.0423282422610123, 0.0423756549057051, 0.0784335999999992,
-                                    0.878468636469772, 0.0784336, 0.0792237451477643, 0.0791661274605434,
-                                    0.879142973793104);
-    const float3x3 outset = float3x3(1.19687900512017, -0.0528968517574562, -0.0529716355144438, -0.0980208811401368,
-                                     1.15190312990417, -0.0980434501171241, -0.0990297440797205, -0.0989611768448433,
-                                     1.15107367264116);
+    // AgX's matrices, written a column to a row, as GLSL writes them, so a
+    // vector multiplies them from the left: Rec.709 into Rec.2020 and back
+    // (ITU-R BT.2087's), Blender's inset, and Filament's outset.
+    const float3x3 toWide = float3x3(0.6274038959, 0.0690972894, 0.0163914389, 0.3292830384, 0.9195403951,
+                                     0.0880133079, 0.0433130657, 0.0113623156, 0.8955952532);
+    const float3x3 fromWide = float3x3(1.6604910021, -0.1245504745, -0.0181507634, -0.5876411388, 1.1328998971,
+                                       -0.100578898, -0.0728498633, -0.0083494226, 1.1187296614);
+    const float3x3 inset = float3x3(0.856627153315983, 0.137318972929847, 0.11189821299995, 0.0951212405381588,
+                                    0.761241990602591, 0.0767994186031903, 0.0482516061458583, 0.101439036467562,
+                                    0.811302368396859);
+    const float3x3 outset = float3x3(1.1271005818144368, -0.1413297634984383, -0.14132976349843826,
+                                     -0.11060664309660323, 1.157823702216272, -0.11060664309660294,
+                                     -0.016493938717834573, -0.016493938717834257, 1.2519364065950405);
     const float lowest = -12.47393;
     const float highest = 4.026069;
     uint width;
@@ -183,8 +190,8 @@ float4 fs(Screen screen) : SV_Target0
     {
         return shown(neutral(max(scaled, float3(0.0))), screen.position.xy);
     }
-    float3 color = mul(max(scaled, float3(1e-10)), inset);
+    float3 color = max(mul(mul(scaled, toWide), inset), float3(1e-10));
     color = (clamp(log2(color), lowest, highest) - lowest) / (highest - lowest);
     color = mul(contrast(color), outset);
-    return shown(pow(max(color, float3(0.0)), float3(2.2)), screen.position.xy);
+    return shown(mul(pow(max(color, float3(0.0)), float3(2.4)), fromWide), screen.position.xy);
 }

@@ -94,7 +94,7 @@ RAWFRAME_TEST(AMaterialShapesItsModelsSurface) {
                 kGlowing[2],
                 kSmooth,
                 kRough);
-    RAWFRAME_EXPECT(kDark[0] == 0 && kUnlit[1] > kUnlit[0] + 60 && std::abs(kGlowing[0] - 128) <= 3 &&
+    RAWFRAME_EXPECT(kDark[0] == 0 && kUnlit[1] > kUnlit[0] + 60 && std::abs(kGlowing[0] - 120) <= 3 &&
                     kSmooth > kRough + 30);
 }
 
@@ -391,7 +391,7 @@ RAWFRAME_TEST(PackedAndEmissionTexturesShapeTheSurface) {
     const auto [kSkyAbove, kSkyBelow] = kHalvesOf(sky, occluded);
     std::printf(
         "glowing %d above, %d below; under the sky %d above, %d below\n", kGlowAbove, kGlowBelow, kSkyAbove, kSkyBelow);
-    RAWFRAME_EXPECT(std::abs(kGlowAbove - 128) <= 3 && kGlowBelow == 0 && kSkyAbove > 60 && kSkyBelow < 5);
+    RAWFRAME_EXPECT(std::abs(kGlowAbove - 120) <= 3 && kGlowBelow == 0 && kSkyAbove > 60 && kSkyBelow < 5);
 }
 
 RAWFRAME_TEST(ANormalTextureBendsTheLight) {

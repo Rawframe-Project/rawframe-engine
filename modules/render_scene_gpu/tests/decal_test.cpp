@@ -88,10 +88,10 @@ RAWFRAME_TEST(ADecalLaysItsTextureOverTheSurfaceInItsBox) {
                 kBeside[0],
                 kBeside[1],
                 kBeside[2]);
-    RAWFRAME_EXPECT(kLeft[1] > kLeft[0] + 100 && kLeft[1] > kLeft[2] + 100);
-    RAWFRAME_EXPECT(kRight[2] > kRight[0] + 100 && kRight[2] > kRight[1] + 100);
-    RAWFRAME_EXPECT(kOutside[0] > 200 && kOutside[1] > 200 && kOutside[2] > 200 && kBeside[0] > 200 &&
-                    kBeside[1] > 200 && kBeside[2] > 200);
+    RAWFRAME_EXPECT(kLeft[1] > kLeft[0] + 60 && kLeft[1] > kLeft[2] + 60);
+    RAWFRAME_EXPECT(kRight[2] > kRight[0] + 60 && kRight[2] > kRight[1] + 60);
+    RAWFRAME_EXPECT(kOutside[0] > 190 && kOutside[1] > 190 && kOutside[2] > 190 && kBeside[0] > 190 &&
+                    kBeside[1] > 190 && kBeside[2] > 190);
 }
 
 RAWFRAME_TEST(ADecalBendsTheNormalsAndLaysTheRoughnessInItsBox) {

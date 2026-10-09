@@ -95,8 +95,8 @@ RAWFRAME_TEST(AMaterialsOwnProgramLightsItsModel) {
         for (std::uint32_t y = 16; y < 48; ++y) {
             for (std::uint32_t x = 16; x < 48; ++x) {
                 const std::array<int, 3> kAt = at(pixels, x, y);
-                counted[0] += kAt[0] > kAt[1] + 100 && kAt[0] > kAt[2] + 100 ? 1 : 0;
-                counted[1] += kAt[1] > kAt[0] + 100 && kAt[1] > kAt[2] + 100 ? 1 : 0;
+                counted[0] += kAt[0] > kAt[1] + 60 && kAt[0] > kAt[2] + 60 ? 1 : 0;
+                counted[1] += kAt[1] > kAt[0] + 60 && kAt[1] > kAt[2] + 60 ? 1 : 0;
             }
         }
         return counted;
@@ -175,8 +175,8 @@ RAWFRAME_TEST(AMaskedProgramMaterialIsCutWhereItsProgramSays) {
     for (std::uint32_t y = 16; y < 48; ++y) {
         for (std::uint32_t x = 16; x < 48; ++x) {
             const std::array<int, 3> kAt = at(*kCut, x, y);
-            counted[0] += kAt[0] > kAt[1] + 100 && kAt[0] > kAt[2] + 100 ? 1 : 0;
-            counted[1] += kAt[1] > kAt[0] + 100 && kAt[1] > kAt[2] + 100 ? 1 : 0;
+            counted[0] += kAt[0] > kAt[1] + 60 && kAt[0] > kAt[2] + 60 ? 1 : 0;
+            counted[1] += kAt[1] > kAt[0] + 60 && kAt[1] > kAt[2] + 60 ? 1 : 0;
             counted[2] += kAt[0] + kAt[1] + kAt[2] < 30 ? 1 : 0;
         }
     }

@@ -94,6 +94,6 @@ RAWFRAME_TEST(AGradingTableLooksUpTheGradedColor) {
                 kNotAVolume[0],
                 kNotAVolume[1],
                 kNotAVolume[2]);
-    RAWFRAME_EXPECT(kPlain[0] > kPlain[1] + 100 && kSwapped[1] > kSwapped[0] + 100 &&
-                    kNotAVolume[0] > kNotAVolume[1] + 100);
+    RAWFRAME_EXPECT(kPlain[0] > kPlain[1] + 60 && kSwapped[1] > kSwapped[0] + 60 &&
+                    kNotAVolume[0] > kNotAVolume[1] + 60);
 }

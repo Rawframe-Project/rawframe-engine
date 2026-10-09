@@ -32,16 +32,16 @@ PictureBlock pictureOf(const render_scene::SceneFrame& frame) noexcept {
     block.offset = {kGrade.offset[0], kGrade.offset[1], kGrade.offset[2], kGrade.contrast};
     block.power = {kGrade.power[0], kGrade.power[1], kGrade.power[2], kGrade.enabled ? 1.0F : 0.0F};
     // What middle grey (0.18) is scaled by for each operator to come out
-    // as AgX's 0.2145 (ADR-0047's normalization across operators).
+    // as AgX's 0.1865 (ADR-0047's normalization across operators; D579).
     switch (frame.tonemapper) {
     case render_scene::Tonemapper::Agx:
         block.tonemapper = {0, 1, 0, 0};
         break;
     case render_scene::Tonemapper::PbrNeutral:
-        block.tonemapper = {1, 1.41371F, 0, 0};
+        block.tonemapper = {1, 1.25836F, 0, 0};
         break;
     case render_scene::Tonemapper::Linear:
-        block.tonemapper = {2, 1.19149F, 0, 0};
+        block.tonemapper = {2, 1.03614F, 0, 0};
         break;
     }
     block.display = {frame.dither ? 1.0F : 0.0F, 0, 0, 0};

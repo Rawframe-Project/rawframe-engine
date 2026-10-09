@@ -8,7 +8,8 @@
 // both cast shadows through their squares of one atlas; a metered camera
 // finds the exposure the scene's light asks for; a camera's grade
 // brightens, warms, and greys the picture as asked; its tonemapper keeps
-// middle grey where AgX puts it; and,
+// middle grey where AgX puts it, and AgX stays within its distance of
+// Blender's (D579); and,
 // antialiased over time, an edge's texels blend what the jittered frames
 // saw of it, and a moving box leaves no ghost where it was. Skips where no
 // adapter answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
@@ -593,8 +594,8 @@ RAWFRAME_TEST(EveryTonemapperKeepsMiddleGrey) {
                 kLinear,
                 kBrightAgx,
                 kBrightLinear);
-    // 0.2145 linear is 127 in sRGB.
-    RAWFRAME_EXPECT(std::abs(kAgx - 127) <= 2 && std::abs(kNeutral - kAgx) <= 2 && std::abs(kLinear - kAgx) <= 2);
+    // 0.1865 linear is 120 in sRGB (D579).
+    RAWFRAME_EXPECT(std::abs(kAgx - 120) <= 2 && std::abs(kNeutral - kAgx) <= 2 && std::abs(kLinear - kAgx) <= 2);
     RAWFRAME_EXPECT(kBrightLinear == 255 && kBrightAgx < 250 && kBrightAgx > kAgx);
 }
 
@@ -675,14 +676,14 @@ RAWFRAME_TEST(PbrNeutralMeetsItsConformanceVectors) {
         return render_scene::engineMesh(id);
     };
     // A sky exposed so the operator is fed its light unchanged: the
-    // exposure's factor undoes the normalization's 1.41371 (ADR-0047,
+    // exposure's factor undoes the normalization's 1.25836 (ADR-0047,
     // D295).
     SceneFrame frame = looking();
     frame.lights.sun = {0, 0, 0};
     frame.lights.ground = {0, 0, 0};
     frame.shadows.count = 0;
     frame.tonemapper = render_scene::Tonemapper::PbrNeutral;
-    frame.exposure = std::log2(1.41371F / 1.2F);
+    frame.exposure = std::log2(1.25836F / 1.2F);
     // Khronos PBR Neutral's vectors, in sRGB: within its guarantee range
     // (every channel from 0.08, none past 0.76 once 0.04 is taken off)
     // each channel is its input less 0.04; below 0.08 the offset
@@ -719,6 +720,73 @@ RAWFRAME_TEST(PbrNeutralMeetsItsConformanceVectors) {
                     kVector.shown[2]);
         for (std::size_t channel = 0; channel < 3; ++channel) {
             RAWFRAME_EXPECT(std::abs(kShown[channel] - kVector.shown[channel]) <= 1);
+        }
+    }
+}
+
+RAWFRAME_TEST(AgxStaysWithinItsDistanceOfBlender) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A sky exposed so AgX is fed its light unchanged.
+    SceneFrame frame = looking();
+    frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
+    frame.shadows.count = 0;
+    frame.tonemapper = render_scene::Tonemapper::Agx;
+    frame.exposure = std::log2(1.0F / 1.2F);
+    // Blender's AgX view on its sRGB display, measured from its
+    // colour-management configuration through OpenColorIO (D566): each
+    // input in linear Rec.709, the 8-bit sRGB Blender shows, and how far
+    // this formulation is allowed from it (D579), its own distance and
+    // two for the device's rounding. Greys and natural colours are close;
+    // saturated ones are as far as the Rec.2020 formulation is from
+    // Blender's E-Gamut one.
+    struct Vector {
+        std::array<float, 3> light;
+        std::array<int, 3> blender;
+        int distance;
+    };
+    constexpr std::array<Vector, 10> kVectors = {{{{0.0225F, 0.0225F, 0.0225F}, {35, 35, 35}, 4},
+                                                  {{0.18F, 0.18F, 0.18F}, {118, 118, 118}, 4},
+                                                  {{1.44F, 1.44F, 1.44F}, {208, 208, 208}, 5},
+                                                  {{11.5F, 11.5F, 11.5F}, {250, 250, 250}, 3},
+                                                  {{0.5F, 0.3F, 0.2F}, {171, 144, 126}, 4},
+                                                  {{0.1F, 0.2F, 0.5F}, {94, 129, 173}, 7},
+                                                  {{0.08F, 0.25F, 0.05F}, {82, 131, 58}, 14},
+                                                  {{1, 0, 0}, {219, 57, 33}, 33},
+                                                  {{0.6F, 0.6F, 0}, {180, 173, 65}, 22},
+                                                  {{4, 2, 0.5F}, {237, 214, 190}, 9}}};
+    for (const Vector& kVector : kVectors) {
+        frame.lights.sky = kVector.light;
+        const auto kPixels = drawn(**framer, **made, frame, kMeshes);
+        RAWFRAME_EXPECT(kPixels.has_value());
+        if (!kPixels.has_value()) {
+            return;
+        }
+        const std::array<int, 3> kShown = at(*kPixels, 32, 32);
+        std::printf("agx %.4f %.4f %.4f: %d %d %d, blender %d %d %d\n",
+                    kVector.light[0],
+                    kVector.light[1],
+                    kVector.light[2],
+                    kShown[0],
+                    kShown[1],
+                    kShown[2],
+                    kVector.blender[0],
+                    kVector.blender[1],
+                    kVector.blender[2]);
+        for (std::size_t channel = 0; channel < 3; ++channel) {
+            RAWFRAME_EXPECT(std::abs(kShown[channel] - kVector.blender[channel]) <= kVector.distance);
         }
     }
 }
