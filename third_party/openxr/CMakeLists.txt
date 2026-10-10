@@ -34,7 +34,9 @@ target_include_directories(rawframe_openxr_loader PRIVATE
     ${rawframe_openxr}/src/external/jsoncpp/include)
 target_compile_definitions(rawframe_openxr_loader PRIVATE XRLOADER_DISABLE_EXCEPTION_HANDLING JSON_USE_EXCEPTION=0)
 if(WIN32)
-    target_compile_definitions(rawframe_openxr_loader PRIVATE XR_OS_WINDOWS)
+    # Win32 as upstream builds it: its utilities read windows.h through
+    # the platform switch.
+    target_compile_definitions(rawframe_openxr_loader PRIVATE XR_OS_WINDOWS XR_USE_PLATFORM_WIN32 NOMINMAX)
     target_link_libraries(rawframe_openxr_loader PRIVATE advapi32)
 else()
     # Where runtimes and layers are found when XDG's directories are unset,
