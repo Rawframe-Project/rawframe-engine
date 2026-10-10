@@ -25,3 +25,13 @@ set(MAUL_WINDOW_INSTALL OFF CACHE BOOL "" FORCE)
 # where the engine's tests are.
 set(MAUL_WINDOW_TEST_BACKEND ${RAWFRAME_BUILD_TESTS} CACHE BOOL "" FORCE)
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/maul-window" "${CMAKE_BINARY_DIR}/third_party/maul-window" EXCLUDE_FROM_ALL)
+# On Android Maul Window keeps NativeActivity's entry in every program that
+# links it; of the engine's programs only the client's library is entered
+# so, and keeps it itself (hosts/android_client). Kept in the others, the
+# entry reaches the window module's start, which only the client defines,
+# and their links fail.
+if(ANDROID)
+    get_target_property(rawframe_maul_window_links maul-window INTERFACE_LINK_OPTIONS)
+    list(REMOVE_ITEM rawframe_maul_window_links "LINKER:-u,ANativeActivity_onCreate")
+    set_target_properties(maul-window PROPERTIES INTERFACE_LINK_OPTIONS "${rawframe_maul_window_links}")
+endif()
