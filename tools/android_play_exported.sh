@@ -79,9 +79,10 @@ done
 
 if [ -n "$pattern" ]; then
     # The first dump only asks the client's view for its provider: asked
-    # again until the button is in it.
+    # again until the button is in it, up to five minutes, as an emulator
+    # in CI draws a frame in a second or two.
     bounds=""
-    for _ in $(seq 24); do
+    for _ in $(seq 60); do
         "${adb[@]}" shell uiautomator dump /sdcard/rawframe-play.xml >/dev/null 2>&1 || true
         bounds="$("${adb[@]}" shell cat /sdcard/rawframe-play.xml 2>/dev/null | sed 's/<node /\n<node /g' |
             grep "package=\"$package\"" | grep 'class="android.widget.Button"' |
@@ -97,7 +98,12 @@ if [ -n "$pattern" ]; then
         read -r left top right bottom label <<<"$bounds"
         "${adb[@]}" shell input tap $(((left + right) / 2)) $(((top + bottom) / 2))
         echo "touched $label at $(((left + right) / 2)) $(((top + bottom) / 2))"
-        # Its command on its way, a tick or two even on a slow emulator.
+        # The client has heard the touch once it says so (D559), up to a
+        # minute; then its command is on its way, a few frames more.
+        for _ in $(seq 60); do
+            client_log | grep -q '"code":"input_seen".*"device":"touch"' && break
+            sleep 1
+        done
         sleep 10
     fi
 fi
