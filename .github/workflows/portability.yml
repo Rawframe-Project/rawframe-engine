@@ -98,8 +98,8 @@ jobs:
   # Android, the first mobile target (ADR-0084, D549): the engine, its
   # programs, and its tests built for 64-bit ARM against NDK r29, whose libc++
   # parses floating-point numbers (r28's does not), and the client's
-  # application made (D551). Built, not run: no device or emulator plays them
-  # yet.
+  # application made (D551), the tests run on an emulator (D561), and a game
+  # exported and played there (D590).
   android:
     if: github.repository == 'Rawframe-Project/rawframe-engine'
     runs-on: ubuntu-24.04
@@ -166,6 +166,13 @@ jobs:
       - name: Test on the emulator
         timeout-minutes: 60
         run: ADB="$ANDROID_HOME/platform-tools/adb -s emulator-5554" tools/android_tests.sh out/android-development
+      # Stalls exported on the emulator and played from the package made of
+      # it, a touch on its purse the UI's press and the server's command
+      # (D590).
+      - name: Play exported Stalls on the emulator
+        timeout-minutes: 30
+        run: ADB="$ANDROID_HOME/platform-tools/adb -s emulator-5554" tools/android_play_exported.sh
+          out/android-development games/tycoon coins
 
   # A longer search than the check's fixed runs (D242): five minutes a fuzz
   # target from an empty corpus, each finding printed so it can be replayed.
