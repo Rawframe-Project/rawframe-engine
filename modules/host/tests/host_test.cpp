@@ -498,7 +498,10 @@ RAWFRAME_TEST(AHostIsDrivenAnIterationAtATime) {
         RAWFRAME_EXPECT(driven.stop() == host::HostExit::Stopped && driven.stop() == host::HostExit::Stopped);
         RAWFRAME_EXPECT(!driven.iterate() && counts.runWorlds == 3 && counts.stopped == 1);
     }
+    // Its caller ended it, not a bound, and the drain says so.
     RAWFRAME_EXPECT(mentions(log, "\"iterations\":3") && counts.stopped == 1);
+    RAWFRAME_EXPECT(mentions(log, "\"state\":\"draining\",\"from\":\"active\",\"reason\":\"stopped\"") &&
+                    !mentions(log, "iteration_bound"));
 
     // A refused start has ended before the first iteration.
     log.clear();

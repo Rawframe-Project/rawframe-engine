@@ -592,11 +592,13 @@ struct Host::State {
         }
     }
 
-    /// Drains if still active, then stops the composition, the executors,
-    /// and the log, in that order.
-    HostExit finish() noexcept {
+    /// Drains if still active, for `reason`, then stops the composition,
+    /// the executors, and the log, in that order: the iteration bound
+    /// reached, or the Host's owner stopping it (a window closed), which a
+    /// record once called the bound too.
+    HostExit finish(std::string_view reason) noexcept {
         if (lifecycle.state() == composition::HostState::Active) {
-            drainFrom("iteration_bound");
+            drainFrom(reason);
         }
         const std::size_t kConnections = composition->connections();
         logMemory();
@@ -767,7 +769,7 @@ bool Host::iterate() noexcept {
         return false;
     }
     if (!state_->iterate()) {
-        ended_ = state_->finish();
+        ended_ = state_->finish("iteration_bound");
         return false;
     }
     return true;
@@ -779,7 +781,7 @@ execution::MonotonicInstant Host::due() const noexcept {
 
 HostExit Host::stop() noexcept {
     if (!ended_.has_value()) {
-        ended_ = state_->finish();
+        ended_ = state_->finish("stopped");
     }
     return *ended_;
 }
