@@ -364,18 +364,6 @@ if(RAWFRAME_BUILD_TESTS)
                                  FIXTURES_REQUIRED plaza_content
                                  PASS_REGULAR_EXPRESSION
                                  "\"code\":\"xr_ready\".*\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"scene_eyes_summary\"[^\n]*\"eyes\":2,\"eyeFrames\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"width\":128,\"height\":128,[^\n]*\"headsetFrames\":[1-9][0-9]+.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":0,\"handsPointing\":0,\"hapticsFelt\":0,\"hapticsUnfelt\":0,\"failed\":false")
-        endif()
-        if(RAWFRAME_ARENA_HEADSET)
-            add_test(NAME plaza_headset_absent
-                     COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
-                             $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf
-                     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-            set_tests_properties(plaza_headset_absent PROPERTIES
-                                 FIXTURES_REQUIRED plaza_content
-                                 ENVIRONMENT "XR_RUNTIME_JSON=${CMAKE_CURRENT_BINARY_DIR}/no_runtime.json"
-                                 SKIP_REGULAR_EXPRESSION "skip: no device"
-                                 PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"xr_unavailable\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"frame_summary\"[^\n]*\"width\":320,\"height\":180,[^\n]*\"headsetFrames\":0")
             # Stalls on a headset with its UI on the panel (D597): the HUD
             # laid out at the panel's size and drawn on it, and the panel
             # submitted over the eyes.
@@ -390,6 +378,18 @@ if(RAWFRAME_BUILD_TESTS)
                                  FIXTURES_REQUIRED tycoon_content
                                  PASS_REGULAR_EXPRESSION
                                  "\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+.*\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"framesOnPanel\":[1-9][0-9]+,[^\n]*\"glyphRuns\":[1-9][0-9]+,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,\"framesPanelSubmitted\":[1-9][0-9]+,[^\n]*\"failed\":false")
+        endif()
+        if(RAWFRAME_ARENA_HEADSET)
+            add_test(NAME plaza_headset_absent
+                     COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
+                             $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf
+                     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+            set_tests_properties(plaza_headset_absent PROPERTIES
+                                 FIXTURES_REQUIRED plaza_content
+                                 ENVIRONMENT "XR_RUNTIME_JSON=${CMAKE_CURRENT_BINARY_DIR}/no_runtime.json"
+                                 SKIP_REGULAR_EXPRESSION "skip: no device"
+                                 PASS_REGULAR_EXPRESSION
+                                 "\"code\":\"xr_unavailable\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"frame_summary\"[^\n]*\"width\":320,\"height\":180,[^\n]*\"headsetFrames\":0")
         endif()
         # A view too large for its device drawn at a falling render scale
         # (D533): the scale changes to one lower than the whole, and the run
