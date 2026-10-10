@@ -7,7 +7,7 @@ endif()
 
 rawframe_host(NAME ios_client OUTPUT rawframe-client
     SOURCES src/main.cpp
-    DEPS window_host host game_content input_kest network_quic window world_animation world_audio render render_canvas
+    DEPS window_host host process game_content input_kest network_quic window world_animation world_audio render render_canvas
          render_canvas_gpu world_ui render_scene render_scene_gpu world_kest world_localization world_replication
          world_runtime composition diagnostics result base
 )

@@ -5,12 +5,15 @@
 // The program plays the process's own player as the desktop client does,
 // from the window's input and frames.
 //
-// Its files are the application's own: the configuration is `client.conf`
-// in its Documents directory (`$HOME/Documents`, HOME being the
-// application's container), whose relative paths are under it (D188), and
-// the run's NDJSON diagnostics go to `client.log` beside it, since an
-// application has no standard output anyone reads. Nothing is read from the
-// application's bundle yet.
+// Its configuration is the game's `client.conf` the application carries in
+// `game/` beside its executable, as `rawframe-export --target ios` packs it
+// (D587), its relative paths under that directory (D188): a bundle is read
+// as it lies, nothing unpacked. A `client.conf` in the application's
+// Documents directory (`$HOME/Documents`, HOME being the application's
+// container) is read instead where there is one, its paths under
+// Documents, as a developer's run gives it (D586). The run's NDJSON
+// diagnostics go to `client.log` in Documents, since an application has no
+// standard output anyone reads.
 
 #include "rawframe/composition/configuration.h"
 #include "rawframe/composition/registrar.h"
@@ -18,6 +21,7 @@
 #include "rawframe/host/host.h"
 #include "rawframe/input_kest/registrar.h"
 #include "rawframe/network_quic/registrar.h"
+#include "rawframe/process/self.h"
 #include "rawframe/render/registrar.h"
 #include "rawframe/render_canvas/registrar.h"
 #include "rawframe/render_canvas_gpu/registrar.h"
@@ -129,12 +133,17 @@ int main() {
     }
     const std::string kFiles = std::string{kHome} + "/Documents";
     std::FILE* const kLog = std::fopen((kFiles + "/client.log").c_str(), "wb");
-    const std::optional<std::string> kText = readText(kFiles + "/client.conf");
-    if (!kText.has_value()) {
+    std::string base = kFiles;
+    std::optional<std::string> text = readText(base + "/client.conf");
+    if (!text.has_value()) {
+        base = (process::ownExecutable().parent_path() / "game").string();
+        text = readText(base + "/client.conf");
+    }
+    if (!text.has_value()) {
         say(kLog, "cannot read the configuration file client.conf");
         return host::exitCode(host::HostExit::InvalidLaunchDescriptor);
     }
-    auto configuration = composition::Configuration::parse(*kText, kFiles);
+    auto configuration = composition::Configuration::parse(*text, base);
     if (!configuration.has_value()) {
         say(kLog, configuration.error().description());
         return host::exitCode(host::HostExit::InvalidLaunchDescriptor);
