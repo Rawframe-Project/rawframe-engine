@@ -89,3 +89,9 @@ jobs:
       - name: Play Runners in the simulator
         if: always() && env.RAWFRAME_IOS_DEVICE != ''
         run: tools/ios_play.sh out/ios-simulator
+      # Runners exported for iOS and its application played (D587): the
+      # export run in the simulator, the application reading the game and
+      # its configuration from its own bundle.
+      - name: Play exported Runners in the simulator
+        if: always() && env.RAWFRAME_IOS_DEVICE != ''
+        run: tools/ios_play_exported.sh out/ios-simulator
