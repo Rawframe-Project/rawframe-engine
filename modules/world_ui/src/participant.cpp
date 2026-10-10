@@ -197,6 +197,19 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
 
 /// Lays out each local player's UI in its view in `presentation_extract`
 /// and lends what it drew.
+/// Where a hand points on a headset's panel (D605): a light dot, 14 logical
+/// pixels across, ringed dark so it shows on any UI, linear and
+/// premultiplied as a list's colors are.
+ui::Box cursorAt(std::array<float, 2> at) noexcept {
+    constexpr float kSide = 14;
+    constexpr std::array<float, 4> kRing = {0.01F, 0.01F, 0.01F, 0.9F};
+    return ui::Box{.rect = {.x = at[0] - kSide / 2, .y = at[1] - kSide / 2, .width = kSide, .height = kSide},
+                   .radii = {kSide / 2, kSide / 2, kSide / 2, kSide / 2},
+                   .fill = {0.85F, 0.85F, 0.85F, 0.9F},
+                   .borderWidths = {2, 2, 2, 2},
+                   .borderColors = {kRing, kRing, kRing, kRing}};
+}
+
 class UiParticipant final : public composition::Participant, public ui::UiFrames, public world_kest::UiHover {
 public:
     result::Status load(composition::ParticipantContext& context) {
@@ -493,6 +506,19 @@ public:
             return;
         }
         drawn_ = &ui_->drawn();
+        // On a headset's panel, where a hand points is drawn over all of
+        // the UI (D605): no window's cursor shows there.
+        if (panel_ && pointing_ != nullptr) {
+            if (const std::optional<std::array<float, 2>> kAt = pointing_->pointer(); kAt.has_value()) {
+                cursored_ = *drawn_;
+                cursored_.boxes.push_back(cursorAt(*kAt));
+                cursored_.commands.push_back(
+                    ui::DrawCommand{.kind = ui::DrawCommand::Kind::Box,
+                                    .index = static_cast<std::uint32_t>(cursored_.boxes.size() - 1)});
+                drawn_ = &cursored_;
+                ++pointedFrames_;
+            }
+        }
         // What screen readers asked since the last frame, done as
         // navigation does it; a press waits for the players' input (D572).
         if (seat_ != nullptr) {
@@ -608,7 +634,8 @@ public:
                       diagnostics::field("stylesUnknown", kStatistics.stylesUnknown),
                       diagnostics::field("atlasRevisions",
                                          drawn_ != nullptr && drawn_->atlas != nullptr ? drawn_->atlas->revision : 0),
-                      diagnostics::field("pressesMissed", missed_)});
+                      diagnostics::field("pressesMissed", missed_),
+                      diagnostics::field("framesPointed", pointedFrames_)});
     }
 
     /// The host told where the caret of the field holding the keyboard is
@@ -721,8 +748,10 @@ private:
     const ui::DrawList* drawn_ = nullptr;
     std::uint32_t width_ = 1280;
     std::uint32_t height_ = 720;
-    /// Laid out on a headset's panel (D598).
+    /// Laid out on a headset's panel (D598), and what it drew with where a
+    /// hand points on it (D605).
     bool panel_ = false;
+    ui::DrawList cursored_;
     std::uint64_t boxes_ = 0;
     std::uint64_t imagesDrawn_ = 0;
     std::uint64_t shadows_ = 0;
@@ -737,6 +766,8 @@ private:
     /// Presses on no node: a player's, or a pointer's offered where the UI
     /// is not (D588).
     std::uint64_t missed_ = 0;
+    /// Frames drawn with a hand's cursor on a headset's panel (D605).
+    std::uint64_t pointedFrames_ = 0;
     std::uint64_t tick_ = 0;
     /// The most nodes navigation has reached (D476).
     std::size_t mostReachable_ = 0;
