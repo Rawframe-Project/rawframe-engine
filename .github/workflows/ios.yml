@@ -129,7 +129,8 @@ jobs:
           sleep 3
           kill "$uikit"
           wc -l <"$RUNNER_TEMP/uikit.log"
-          grep -i 'touch\|event\|hit\|gesture\|responder' "$RUNNER_TEMP/uikit.log" | cut -c1-240 | head -80
+          grep 'Deactivation reason\|HIDEvent\|UITouch\|sendEvent\|EventDispatch\|gestureEnvironment\|lifecycle' \
+            "$RUNNER_TEMP/uikit.log" | cut -c1-240 | tail -60
           wait "$play"
           played=$?
           cat "$RUNNER_TEMP/stalls.log"
