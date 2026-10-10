@@ -34,6 +34,7 @@ http: result base
 input: document result base
 window: composition result base
 render: texture window composition diagnostics result base
+xr: render result base
 input_window: input window result base
 window_host: host view input_kest input_window input window ui composition execution result base
 schema: result base

@@ -9,9 +9,19 @@
 #include <maul-rhi/frame.h>
 #include <maul-rhi/instance.h>
 #include <maul-rhi/surface.h>
+#include <maul-rhi/vulkan.h>
 #include <span>
 #include <string_view>
 #include <variant>
+#include <vulkan/vulkan_core.h>
+
+// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file (D237).
+#if defined(_WIN32)
+#include <windows.h>
+#elif defined(__unix__) || defined(__APPLE__)
+#include <dlfcn.h>
+#define RAWFRAME_RENDER_DLFCN 1
+#endif
 
 namespace rawframe::render {
 
@@ -38,6 +48,78 @@ enum class Phase : std::uint8_t {
     Opening,
     Ready,
     Failed,
+};
+
+/// The system's Vulkan loader, opened for a device whose Vulkan objects an
+/// OpenXR runtime makes (D591): its `vkGetInstanceProcAddr` is what the
+/// runtime makes them through, and what ends them.
+class VulkanLoader {
+public:
+    VulkanLoader() = default;
+    VulkanLoader(const VulkanLoader&) = delete;
+    VulkanLoader& operator=(const VulkanLoader&) = delete;
+    ~VulkanLoader() {
+        if (library_ != nullptr) {
+#if defined(_WIN32)
+            FreeLibrary(static_cast<HMODULE>(library_));
+#elif defined(RAWFRAME_RENDER_DLFCN)
+            dlclose(library_);
+#endif
+        }
+    }
+
+    /// Opened, its entry found: false when there is no Vulkan loader, as
+    /// where nothing is loaded at run time (the web).
+    [[nodiscard]] bool open() noexcept {
+#if defined(_WIN32)
+        HMODULE library = LoadLibraryA("vulkan-1.dll");
+        library_ = library;
+        entry_ = library != nullptr ? reinterpret_cast<PFN_vkGetInstanceProcAddr>(
+                                          reinterpret_cast<void*>(GetProcAddress(library, "vkGetInstanceProcAddr")))
+                                    : nullptr;
+#elif defined(RAWFRAME_RENDER_DLFCN)
+        library_ = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
+        entry_ = library_ != nullptr
+                     ? reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(library_, "vkGetInstanceProcAddr"))
+                     : nullptr;
+#endif
+        return entry_ != nullptr;
+    }
+
+    [[nodiscard]] PFN_vkGetInstanceProcAddr entry() const noexcept {
+        return entry_;
+    }
+
+private:
+    void* library_ = nullptr;
+    PFN_vkGetInstanceProcAddr entry_ = nullptr;
+};
+
+/// The Vulkan objects a runtime made, which Maul RHI adopts and never ends:
+/// ended here, after Maul RHI's device and instance.
+struct Adopted {
+    VulkanLoader loader;
+    VkInstance instance = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
+
+    Adopted() = default;
+    Adopted(const Adopted&) = delete;
+    Adopted& operator=(const Adopted&) = delete;
+    ~Adopted() {
+        if (instance == VK_NULL_HANDLE) {
+            return;
+        }
+        if (device != VK_NULL_HANDLE) {
+            const auto kDestroy = reinterpret_cast<PFN_vkDestroyDevice>(loader.entry()(instance, "vkDestroyDevice"));
+            if (kDestroy != nullptr) {
+                kDestroy(device, nullptr);
+            }
+        }
+        const auto kDestroy = reinterpret_cast<PFN_vkDestroyInstance>(loader.entry()(instance, "vkDestroyInstance"));
+        if (kDestroy != nullptr) {
+            kDestroy(instance, nullptr);
+        }
+    }
 };
 
 /// 8-bit sRGB in Rec. 709 of standard range: what a surface is configured
@@ -195,14 +277,71 @@ struct Device::State {
     /// device's own notification bound, since each asker takes its own.
     std::map<std::uint64_t, mrhiResult> answers;
     bool lost = false;
+    /// What a runtime made, when `settings.vulkan` makes it; ended last.
+    std::unique_ptr<Adopted> adopted;
 
     ~State() {
-        // Surfaces, then the device, then the instance that made both.
+        // Surfaces, then the device, then the instance that made both, then
+        // the Vulkan objects a runtime made for them.
         for (const auto& [key, surface] : surfaces) {
             static_cast<void>(mrhiDestroySurface(instance, surface.id));
         }
         mrhiDestroyDevice(device);
         mrhiDestroyInstance(instance);
+        adopted.reset();
+    }
+
+    /// The instance a runtime makes, adopted: Vulkan 1.3, which Maul RHI
+    /// needs, and no extension, as nothing is presented to a window.
+    result::Status adoptInstance() {
+        adopted = std::make_unique<Adopted>();
+        if (!adopted->loader.open()) {
+            return refuse(result::ErrorClass::Unavailable, RenderError::Device, "there is no Vulkan loader");
+        }
+        VkApplicationInfo application{};
+        application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        application.pApplicationName = "Rawframe";
+        application.pEngineName = "Rawframe";
+        application.apiVersion = VK_API_VERSION_1_3;
+        VkInstanceCreateInfo create{};
+        create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        create.pApplicationInfo = &application;
+        RAWFRAME_TRY_ASSIGN(void* made,
+                            settings.vulkan->instance(&create, reinterpret_cast<void*>(adopted->loader.entry())));
+        adopted->instance = static_cast<VkInstance>(made);
+        mrhiInstanceVulkanAdopt adopt{};
+        adopt.chain.type = mrhi_structInstanceVulkanAdopt;
+        adopt.instance = made;
+        adopt.getInstanceProcAddr = reinterpret_cast<void*>(adopted->loader.entry());
+        adopt.apiVersion = VK_API_VERSION_1_3;
+        mrhiInstanceDef def = mrhiDefaultInstanceDef();
+        def.next = &adopt.chain;
+        if (const mrhiResult kMade = mrhiCreateInstance(&def, &instance); kMade != mrhi_success) {
+            instance = nullptr;
+            return failed("the device layer could not adopt the runtime's instance", kMade);
+        }
+        return {};
+    }
+
+    /// The adapter the runtime presents from, among those found.
+    result::Status chooseTheRuntimes() {
+        RAWFRAME_TRY_ASSIGN(void* wanted, settings.vulkan->physicalDevice(adopted->instance));
+        std::array<mrhiAdapterId, 16> found{};
+        std::size_t count = 0;
+        if (mrhiGetAdapters(instance, found.data(), found.size(), &count) != mrhi_success) {
+            count = 0;
+        }
+        for (std::size_t at = 0; at < count; ++at) {
+            void* physical = nullptr;
+            if (mrhiGetVulkanPhysicalDevice(instance, found[at], &physical) == mrhi_success && physical == wanted) {
+                chosen = found[at];
+                return {};
+            }
+        }
+        return refuse(result::ErrorClass::NotFound,
+                      RenderError::NoAdapter,
+                      settings.allowSoftware ? "the runtime's adapter did not answer"
+                                             : "the runtime's adapter did not answer, or is a software rasterizer");
     }
 
     result::Status fail(result::Error error) {
@@ -218,7 +357,11 @@ struct Device::State {
             return fail(failed("the adapters could not be listed", record.outcome).error());
         }
         std::size_t count = 0;
-        if (mrhiGetAdapters(instance, &chosen, 1, &count) != mrhi_success || count == 0) {
+        if (settings.vulkan != nullptr) {
+            if (const result::Status kChosen = chooseTheRuntimes(); !kChosen.has_value()) {
+                return fail(kChosen.error().clone());
+            }
+        } else if (mrhiGetAdapters(instance, &chosen, 1, &count) != mrhi_success || count == 0) {
             return fail(refuse(result::ErrorClass::NotFound,
                                RenderError::NoAdapter,
                                settings.allowSoftware ? "no adapter answered"
@@ -244,6 +387,25 @@ struct Device::State {
         constexpr std::string_view kLabel = "rawframe.render";
         def.label = kLabel.data();
         def.labelLength = kLabel.size();
+        // A runtime makes the device from the one Maul RHI would make,
+        // which Maul RHI then adopts.
+        mrhiDeviceVulkanAdopt adopt{};
+        if (settings.vulkan != nullptr) {
+            void* create = nullptr;
+            void* physical = nullptr;
+            if (const mrhiResult kDescribed = mrhiDescribeVulkanDevice(instance, &def, &create, &physical);
+                kDescribed != mrhi_success) {
+                return fail(failed("the device could not be described for the runtime", kDescribed).error());
+            }
+            auto made = settings.vulkan->device(physical, create, reinterpret_cast<void*>(adopted->loader.entry()));
+            if (!made.has_value()) {
+                return fail(std::move(made.error()));
+            }
+            adopted->device = static_cast<VkDevice>(*made);
+            adopt.chain.type = mrhi_structDeviceVulkanAdopt;
+            adopt.device = *made;
+            def.next = &adopt.chain;
+        }
         mrhiRequestId request{};
         if (const mrhiResult kMade = mrhiCreateDevice(instance, &def, &device, &request); kMade != mrhi_success) {
             device = nullptr;
@@ -262,6 +424,10 @@ Device::~Device() = default;
 result::Result<std::unique_ptr<Device>> Device::request(const DeviceSettings& settings) {
     auto state = std::make_unique<State>();
     state->settings = settings;
+    if (settings.vulkan != nullptr) {
+        RAWFRAME_TRY(state->adoptInstance());
+        return std::unique_ptr<Device>{new Device{std::move(state)}};
+    }
     const mrhiInstanceDef kInstance = mrhiDefaultInstanceDef();
     if (const mrhiResult kMade = mrhiCreateInstance(&kInstance, &state->instance); kMade != mrhi_success) {
         state->instance = nullptr;
@@ -307,6 +473,25 @@ const std::optional<AdapterDescription>& Device::adapter() const noexcept {
 
 mrhiDevice* Device::native() const noexcept {
     return state_->phase == Phase::Ready ? state_->device : nullptr;
+}
+
+std::optional<VulkanObjects> Device::vulkan() const noexcept {
+    if (state_->phase != Phase::Ready) {
+        return std::nullopt;
+    }
+    VulkanObjects objects;
+    void* getInstanceProcAddr = nullptr;
+    void* getDeviceProcAddr = nullptr;
+    if (mrhiGetVulkanDevice(state_->device,
+                            &objects.instance,
+                            &objects.physicalDevice,
+                            &objects.device,
+                            &getInstanceProcAddr,
+                            &getDeviceProcAddr) != mrhi_success ||
+        mrhiGetVulkanQueue(state_->device, &objects.queueFamily, &objects.queueIndex) != mrhi_success) {
+        return std::nullopt;
+    }
+    return objects;
 }
 
 std::uint8_t Device::sampleCounts(std::uint32_t format) const noexcept {

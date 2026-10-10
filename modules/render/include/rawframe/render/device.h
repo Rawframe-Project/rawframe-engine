@@ -31,10 +31,49 @@ struct mrhiDevice;
 
 namespace rawframe::render {
 
+/// Where an OpenXR runtime makes the device's Vulkan objects
+/// (XR_KHR_vulkan_enable2; ADR-0081, D591): the runtime chooses the
+/// adapter and makes the instance and the device from what the device
+/// layer would make them with, and the device layer adopts both. Vulkan's
+/// own objects pass as opaque pointers, so the one who makes them (the XR
+/// module) and the one who uses them (this module, over Maul RHI) share no
+/// header but this one. Each is asked once, in this order, while the device
+/// opens.
+class VulkanMaker {
+public:
+    VulkanMaker() = default;
+    VulkanMaker(const VulkanMaker&) = delete;
+    VulkanMaker& operator=(const VulkanMaker&) = delete;
+    virtual ~VulkanMaker() = default;
+
+    /// A `VkInstance` made from `createInfo`, a `VkInstanceCreateInfo`,
+    /// through `getInstanceProcAddr`, the Vulkan loader's.
+    [[nodiscard]] virtual result::Result<void*> instance(const void* createInfo, void* getInstanceProcAddr) = 0;
+    /// The `VkPhysicalDevice` of `instance` the runtime presents from.
+    [[nodiscard]] virtual result::Result<void*> physicalDevice(void* instance) = 0;
+    /// A `VkDevice` made on `physicalDevice` from `createInfo`, a
+    /// `VkDeviceCreateInfo`.
+    [[nodiscard]] virtual result::Result<void*>
+    device(void* physicalDevice, const void* createInfo, void* getInstanceProcAddr) = 0;
+};
+
 struct DeviceSettings {
     /// Whether a rasterizer running on the CPU may serve: CI and tests
     /// (ADR-0029), never a product's first choice.
     bool allowSoftware = false;
+    /// Who makes the Vulkan objects, when an OpenXR runtime does; the
+    /// device layer makes its own when none. Outlives the device.
+    VulkanMaker* vulkan = nullptr;
+};
+
+/// The device's Vulkan objects, borrowed for its life: what an OpenXR
+/// session is bound to (`XrGraphicsBindingVulkan2KHR`).
+struct VulkanObjects {
+    void* instance = nullptr;
+    void* physicalDevice = nullptr;
+    void* device = nullptr;
+    std::uint32_t queueFamily = 0;
+    std::uint32_t queueIndex = 0;
 };
 
 /// What the device was opened on.
@@ -110,6 +149,8 @@ public:
 
     /// The device, once ready; for the rendering cluster only.
     [[nodiscard]] mrhiDevice* native() const noexcept;
+    /// Its Vulkan objects, once ready on a Vulkan adapter; none otherwise.
+    [[nodiscard]] std::optional<VulkanObjects> vulkan() const noexcept;
 
     /// The samples a pixel the adapter renders `format`, a Maul RHI format,
     /// with, as Maul RHI's mask: the bit worth n set when n samples are
