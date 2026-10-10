@@ -137,8 +137,8 @@ public:
     /// device has told no pointer. Empty (the default) takes nothing.
     using PointerTaker = std::function<bool(PlayerSlot player, float x, float y)>;
     void setPointerTaker(PointerTaker takes);
-    /// Focus lost: every control of every device is released through the
-    /// normal edge path.
+    /// Focus lost: the events submitted before it are applied, then every
+    /// control of every device is released through the normal edge path.
     void releaseAll();
 
     /// Queues one event for its device's player.

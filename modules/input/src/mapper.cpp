@@ -417,14 +417,20 @@ struct Mapper::State {
                 player.resetPending = false;
                 releasePlayer(kSlot);
             }
-            while (!player.queue.empty()) {
-                const ControlEvent kEvent = player.queue.front();
-                player.queue.pop_front();
-                // A device unpaired since the event was queued is ignored.
-                const Device* device = deviceOf(kEvent.device);
-                if (device != nullptr && device->player == kSlot && device->deviceClass == kEvent.control.device) {
-                    apply(kSlot, kEvent);
-                }
+            drain(kSlot);
+        }
+    }
+
+    /// The player's queued events, applied in order.
+    void drain(std::uint8_t slot) {
+        Player& player = players[slot];
+        while (!player.queue.empty()) {
+            const ControlEvent kEvent = player.queue.front();
+            player.queue.pop_front();
+            // A device unpaired since the event was queued is ignored.
+            const Device* device = deviceOf(kEvent.device);
+            if (device != nullptr && device->player == slot && device->deviceClass == kEvent.control.device) {
+                apply(slot, kEvent);
             }
         }
     }
@@ -587,8 +593,11 @@ void Mapper::setPointerTaker(PointerTaker takes) {
 
 void Mapper::releaseAll() {
     State& state = *state_;
+    // What came before the loss came while the window had focus: applied,
+    // then let go. Cleared instead, a touch down that the window told in
+    // the same records as the loss was never the UI's (D594).
     for (std::size_t slot = 0; slot < state.players.size(); ++slot) {
-        state.players[slot].queue.clear();
+        state.drain(static_cast<std::uint8_t>(slot));
         state.releasePlayer(static_cast<std::uint8_t>(slot));
     }
 }

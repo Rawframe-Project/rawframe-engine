@@ -141,3 +141,21 @@ RAWFRAME_TEST(ATouchOnTheUiIsTheUisAsAClickIs) {
     rig.touch.down(2, 300, 30);
     RAWFRAME_EXPECT(rig.now(kJump).on && asked.size() == 2);
 }
+
+RAWFRAME_TEST(ATouchToldWithTheFocusLossIsStillTheUis) {
+    // A slow client reads a touch and the loss of focus after it in one
+    // batch (D594): the touch came while the window had focus, so the UI
+    // is asked of it, and only then is everything let go.
+    Rig rig;
+    std::vector<std::pair<float, float>> asked;
+    rig.mapper->setPointerTaker([&asked](PlayerSlot /*player*/, float x, float y) {
+        asked.emplace_back(x, y);
+        return true;
+    });
+    rig.touch.resize(800);
+    rig.touch.down(1, 40, 30);
+    rig.feed.releaseAll();
+    rig.touch.forget();
+    RAWFRAME_EXPECT(!rig.now(kJump).on);
+    RAWFRAME_EXPECT(asked.size() == 1 && asked[0] == (std::pair{40.0F, 30.0F}));
+}
