@@ -68,7 +68,7 @@ done
 
 log="$documents/client.log"
 grep -o '"code":"server_summary"[^}]*}[^}]*}' "$work/server.log" 2>/dev/null || true
-grep -o '"code":"\(bots_admitted\|bots_summary\|surface_made\|device_ready\|device_unavailable\|accessibility_ready\|start_failed\|stopped\)"[^}]*}[^}]*}' \
+grep -o '"code":"\(bots_admitted\|bots_summary\|surface_made\|device_ready\|device_unavailable\|accessibility_ready\|input_summary\|start_failed\|stopped\)"[^}]*}[^}]*}' \
     "$log" 2>/dev/null || { echo "nothing of note:"; tail -20 "$log" 2>/dev/null || true; }
 if grep -q '"code":"surface_made"' "$log" && grep -q '"code":"bots_admitted"' "$log" &&
     grep -q '"admitted":1,.*"confirmed":[1-9][0-9]*,.*"stalled":0,' "$log" &&
