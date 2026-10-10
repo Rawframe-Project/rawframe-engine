@@ -749,3 +749,23 @@ RAWFRAME_TEST(ANodeThatScrollsMovesItsChildrenUnderTheWheel) {
     RAWFRAME_EXPECT(rig.frame(1, 3.0));
     RAWFRAME_EXPECT(rig.ui->statistics().leftOut > 0);
 }
+
+RAWFRAME_TEST(AViewIsLaidOutInsideWhatThePlatformLeavesClear) {
+    // A phone's notch and home indicator (D589): a view on the window's
+    // edges is drawn in by what covers them; an edge between two players'
+    // views stays; with no window told, nothing changes.
+    const view::ViewInsets kSafe{.top = 59, .right = 0, .bottom = 34, .left = 0};
+    const view::ViewSize kWindow{.width = 402, .height = 874};
+    const UiView kWhole = insideSafeArea(UiView{.width = 402, .height = 874}, kWindow, kSafe);
+    RAWFRAME_EXPECT(kWhole.x == 0 && kWhole.y == 59 && kWhole.width == 402 && kWhole.height == 874 - 59 - 34);
+    const UiView kUpper = insideSafeArea(UiView{.width = 402, .height = 437}, kWindow, kSafe);
+    RAWFRAME_EXPECT(kUpper.y == 59 && kUpper.height == 437 - 59);
+    const UiView kLower = insideSafeArea(UiView{.y = 437, .width = 402, .height = 437}, kWindow, kSafe);
+    RAWFRAME_EXPECT(kLower.y == 437 && kLower.height == 437 - 34);
+    // A landscape phone's notch on the left.
+    const UiView kSide = insideSafeArea(
+        UiView{.width = 874, .height = 402}, {.width = 874, .height = 402}, {.right = 0, .bottom = 21, .left = 59});
+    RAWFRAME_EXPECT(kSide.x == 59 && kSide.width == 874 - 59 && kSide.height == 402 - 21);
+    const UiView kUntold = insideSafeArea(UiView{.width = 640, .height = 360}, {}, kSafe);
+    RAWFRAME_EXPECT(kUntold.y == 0 && kUntold.width == 640 && kUntold.height == 360);
+}

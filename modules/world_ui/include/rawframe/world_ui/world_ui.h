@@ -14,6 +14,7 @@
 #include "rawframe/ui/tree.h"
 #include "rawframe/view/navigation.h"
 #include "rawframe/view/typing.h"
+#include "rawframe/view/view.h"
 #include "rawframe/world/entity.h"
 #include "rawframe/world/world.h"
 
@@ -133,6 +134,12 @@ struct UiView {
     float width = 0;
     float height = 0;
 };
+
+/// `view` drawn in from each edge it shares with a `window` the platform
+/// covers by `safe`, so the UI lays out where it is seen and touched
+/// (SPEC-0030's safe-area root input, D589); an edge inside the window,
+/// between two players' views, stays where it is.
+[[nodiscard]] UiView insideSafeArea(UiView view, view::ViewSize window, view::ViewInsets safe) noexcept;
 
 struct UiStatistics {
     /// Frames laid out and drawn.

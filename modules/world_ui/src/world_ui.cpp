@@ -642,4 +642,25 @@ const UiStatistics& WorldUi::statistics() const noexcept {
     return state_->statistics;
 }
 
+UiView insideSafeArea(UiView view, view::ViewSize window, view::ViewInsets safe) noexcept {
+    // No window told yet: nothing to be inside.
+    if (!(window.width > 0) || !(window.height > 0)) {
+        return view;
+    }
+    // Within a pixel's tenth of the window's edge is on it.
+    constexpr float kOnEdge = 0.1F;
+    const float kRight = view.x + view.width;
+    const float kBottom = view.y + view.height;
+    const float kLeft = view.x <= kOnEdge ? std::max(view.x, safe.left) : view.x;
+    const float kTop = view.y <= kOnEdge ? std::max(view.y, safe.top) : view.y;
+    const float kInRight = kRight >= window.width - kOnEdge ? std::min(kRight, window.width - safe.right) : kRight;
+    const float kInBottom =
+        kBottom >= window.height - kOnEdge ? std::min(kBottom, window.height - safe.bottom) : kBottom;
+    view.x = kLeft;
+    view.y = kTop;
+    view.width = std::max(kInRight - kLeft, 0.0F);
+    view.height = std::max(kInBottom - kTop, 0.0F);
+    return view;
+}
+
 } // namespace rawframe::world_ui

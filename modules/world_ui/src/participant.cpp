@@ -463,12 +463,15 @@ public:
                 aspect_.has_value() ? world_kest::constrainedTo(kWhole, *aspect_) : kWhole;
             const std::size_t kClient = at == 0 ? clients_->playerClient().value_or(0) : at;
             const world_replication::ClientView kView = clients_->client(kClient);
-            laidOut_.push_back(UiView{.world = kView.world,
-                                      .player = kView.owned,
-                                      .x = static_cast<float>(kPixels.x) / scale,
-                                      .y = static_cast<float>(kPixels.y) / scale,
-                                      .width = static_cast<float>(kPixels.width) / scale,
-                                      .height = static_cast<float>(kPixels.height) / scale});
+            const UiView kRegion = UiView{.world = kView.world,
+                                          .player = kView.owned,
+                                          .x = static_cast<float>(kPixels.x) / scale,
+                                          .y = static_cast<float>(kPixels.y) / scale,
+                                          .width = static_cast<float>(kPixels.width) / scale,
+                                          .height = static_cast<float>(kPixels.height) / scale};
+            // Inside what the platform leaves clear (D589).
+            laidOut_.push_back(views_ != nullptr ? insideSafeArea(kRegion, views_->window(), views_->safeArea())
+                                                 : kRegion);
         }
         // Words follow the locale a player chose (D539).
         if (text_ != nullptr && text_->revision() != reworded_) {
