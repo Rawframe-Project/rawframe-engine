@@ -21,8 +21,9 @@ set(MAUL_UI_TEXT_SYSTEM_LIBRARIES OFF CACHE BOOL "" FORCE)
 # updates to (D571), and the adapters the engine drives so far: AT-SPI's on
 # Linux, which opens libdbus at run time, Android's (D576), whose Java
 # provider (java/maul/ui) the application carries, and UI Automation's on
-# Windows and NSAccessibility's on macOS (D579), and UIAccessibility's on
-# iOS (D588).
+# Windows and NSAccessibility's on macOS (D579), UIAccessibility's on iOS
+# (D588), and ARIA's on the web (D612), whose page side is the maul-ui.mjs
+# this build writes (mui-0009).
 set(MAUL_UI_ACCESS_TREE ON CACHE BOOL "" FORCE)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(MAUL_UI_ATSPI ON CACHE BOOL "" FORCE)
@@ -49,7 +50,11 @@ if(ANDROID)
 else()
     set(MAUL_UI_ANDROID_ACCESSIBILITY OFF CACHE BOOL "" FORCE)
 endif()
-set(MAUL_UI_ARIA OFF CACHE BOOL "" FORCE)
+if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
+    set(MAUL_UI_ARIA ON CACHE BOOL "" FORCE)
+else()
+    set(MAUL_UI_ARIA OFF CACHE BOOL "" FORCE)
+endif()
 set(MAUL_UI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(MAUL_UI_BUILD_BENCH OFF CACHE BOOL "" FORCE)
 set(MAUL_UI_INSTALL OFF CACHE BOOL "" FORCE)

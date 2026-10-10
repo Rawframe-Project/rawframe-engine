@@ -7,7 +7,9 @@
 // maul-window.mjs, makes a window of a canvas, and the window's frames
 // drive the client until it ends. Its sound is the page's to take and play
 // (sound.mjs, D259). With Maul RHI's side too, maul-rhi.mjs, it draws in
-// the canvas through the browser's WebGPU (D282).
+// the canvas through the browser's WebGPU (D282). With Maul UI's,
+// maul-ui.mjs, its UI is read by screen readers through the page's elements
+// (D612).
 import { browserWasi } from './wasi.mjs';
 
 /** The window's imports where the page gives none: there is no page. */
@@ -24,9 +26,10 @@ export class WebClient {
      * downloads), with `transport`'s imports; `log` receives each line the
      * client writes. `windowImports`, the `maulWindowImports` of
      * maul-window.mjs, lets it play; `deviceImports`, the `maulRhiImports`
-     * of maul-rhi.mjs, lets it draw.
+     * of maul-rhi.mjs, lets it draw; `uiImports`, the `maulUiImports` of
+     * maul-ui.mjs, lets screen readers read its UI.
      */
-    static async load(module, { transport, log, windowImports, deviceImports }) {
+    static async load(module, { transport, log, windowImports, deviceImports, uiImports }) {
         let instance;
         const memory = () => instance.exports.memory;
         const exports = () => instance.exports;
@@ -34,7 +37,7 @@ export class WebClient {
         // holds what WebGPU reported.
         const gpu = {};
         // What the page does not give answers as where there is no page.
-        const given = Object.assign({}, windowImports?.(exports), deviceImports?.(exports, gpu));
+        const given = Object.assign({}, windowImports?.(exports), deviceImports?.(exports, gpu), uiImports?.(exports));
         const made = await WebAssembly.instantiate(module, {
             wasi_snapshot_preview1: browserWasi(memory, log),
             rawframe_web_transport: transport.importsFor(memory),

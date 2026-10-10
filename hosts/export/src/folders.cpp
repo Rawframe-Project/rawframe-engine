@@ -207,6 +207,7 @@ bool writeWeb(const Exported& exported, const WebFiles& from, std::vector<std::s
         !copyInto(from.client, exported, "web/client.wasm", written) ||
         !copyInto(from.window, exported, "web/maul-window.mjs", written) ||
         !copyInto(from.device, exported, "web/maul-rhi.mjs", written) ||
+        !copyInto(from.ui, exported, "web/maul-ui.mjs", written) ||
         !copyInto(from.server, exported, "server/rawframe-server" + exported.suffix, written)) {
         return false;
     }

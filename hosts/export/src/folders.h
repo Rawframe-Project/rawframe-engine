@@ -58,6 +58,8 @@ struct WebFiles {
     fs::path client;
     fs::path window;
     fs::path device;
+    /// Maul UI's page side, its ARIA adapter's (D612).
+    fs::path ui;
     /// The page's own files: `play.html` and its modules.
     fs::path page;
     fs::path server;

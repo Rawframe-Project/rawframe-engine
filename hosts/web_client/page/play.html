@@ -18,7 +18,8 @@
 // served, as any site's is (a server given a certificate for its name), and
 // it is reached on the host this page came from. The client plays from a canvas, drawn
 // through the browser's WebGPU, its sound played by the page once the
-// player has touched it. The page answers `rawframeStop()`,
+// player has touched it; its UI is read by screen readers through Maul UI's
+// page side (D612). The page answers `rawframeStop()`,
 // `rawframeGpuErrors()`, and `rawframeSound()` for whoever drives it, and
 // says `page: play <code>` and `page: ended <code>` on its console.
 import { WebClient } from './page/client.mjs';
@@ -26,13 +27,14 @@ import { PageTransport } from './page/transport.mjs';
 import { PageSound } from './page/sound.mjs';
 import { maulWindowImports } from './maul-window.mjs';
 import { maulRhiImports } from './maul-rhi.mjs';
+import { maulUiImports } from './maul-ui.mjs';
 
 const setup = await (await fetch('play.json', { cache: 'no-store' })).json();
 const pinned = await fetch('fingerprint', { cache: 'no-store' });
 const transport = new PageTransport({ certificateHashes: pinned.ok ? [(await pinned.text()).trim()] : [] });
 const client = await WebClient.load(await WebAssembly.compileStreaming(fetch('client.wasm')),
                                     { transport, log: (line) => console.log(line), windowImports: maulWindowImports,
-                                      deviceImports: maulRhiImports });
+                                      deviceImports: maulRhiImports, uiImports: maulUiImports });
 const hold = async (path) => {
     if (!client.hold(path, new Uint8Array(await (await fetch(path)).arrayBuffer()))) {
         throw new Error('a file was refused: ' + path);

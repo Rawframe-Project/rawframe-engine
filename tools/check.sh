@@ -192,7 +192,8 @@ web_plays() {
             out/clang-development/hosts/bots/rawframe-bots \
             out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
             out/wasm-development/third_party/maul-window/maul-window.mjs \
-            out/wasm-development/third_party/maul-rhi/maul-rhi.mjs "$PWD" \
+            out/wasm-development/third_party/maul-rhi/maul-rhi.mjs \
+            out/wasm-development/third_party/maul-ui/maul-ui.mjs "$PWD" \
             "$game" >"out/web-play-$game.log" 2>&1 ||
             play_status=$?
         if [ "$play_status" -eq 77 ]; then

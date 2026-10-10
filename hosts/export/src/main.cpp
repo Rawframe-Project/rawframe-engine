@@ -59,9 +59,9 @@
 // identity made as it starts, whose fingerprint it writes into `web/` for
 // the page to trust; the page reaches it on the host the page came from.
 // The web client and the page sides are found under `<tools>/web/`
-// (`rawframe-web-client.wasm`, `maul-window.mjs`, `maul-rhi.mjs`, and
-// `page/`, the page's own files) unless named (`--web-client`,
-// `--maul-window`, `--maul-rhi`, `--page`).
+// (`rawframe-web-client.wasm`, `maul-window.mjs`, `maul-rhi.mjs`,
+// `maul-ui.mjs`, and `page/`, the page's own files) unless named
+// (`--web-client`, `--maul-window`, `--maul-rhi`, `--maul-ui`, `--page`).
 //
 // With `--target android` (D555) the game is packed for Android and the
 // folder holds what its package carries and the server it plays on.
@@ -490,7 +490,8 @@ int main(int argc, char** argv) {
             title = kValue;
         } else if (kOption == "--cook" || kOption == "--build" || kOption == "--server" || kOption == "--client" ||
                    kOption == "--play" || kOption == "--install" || kOption == "--web-client" ||
-                   kOption == "--maul-window" || kOption == "--maul-rhi" || kOption == "--page") {
+                   kOption == "--maul-window" || kOption == "--maul-rhi" || kOption == "--maul-ui" ||
+                   kOption == "--page") {
             tools.emplace(kOption.substr(2), kValue);
         } else {
             return usage();
@@ -658,6 +659,7 @@ int main(int argc, char** argv) {
                           {.client = kWebFile("web-client", "rawframe-web-client.wasm"),
                            .window = kWebFile("maul-window", "maul-window.mjs"),
                            .device = kWebFile("maul-rhi", "maul-rhi.mjs"),
+                           .ui = kWebFile("maul-ui", "maul-ui.mjs"),
                            .page = kWebFile("page", "page"),
                            .server = kTool("server")},
                           written)

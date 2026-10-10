@@ -45,9 +45,11 @@ struct AppleHandles {
     void* layer = nullptr;
 };
 
-/// A web page's canvas, by its CSS selector.
+/// A web page's canvas, by its CSS selector, and the element over it that a
+/// program's accessibility elements are built in, by its (D612).
 struct CanvasHandles {
     std::string selector;
+    std::string accessibility;
 };
 
 /// The test platform's windows, which have nothing to draw into.

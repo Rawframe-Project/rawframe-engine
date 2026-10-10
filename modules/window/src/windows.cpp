@@ -302,8 +302,9 @@ result::Result<HandleBundle> Windows::handles(WindowId window) const {
         bundle.handles = AppleHandles{.view = native.handles.apple.view, .layer = native.handles.apple.layer};
         break;
     case mwin_platformWeb:
-        bundle.handles =
-            CanvasHandles{.selector = std::string{native.handles.web.selector, native.handles.web.selectorLength}};
+        bundle.handles = CanvasHandles{
+            .selector = std::string{native.handles.web.selector, native.handles.web.selectorLength},
+            .accessibility = std::string{native.handles.web.accessibility, native.handles.web.accessibilityLength}};
         break;
     default:
         bundle.handles = TestHandles{};

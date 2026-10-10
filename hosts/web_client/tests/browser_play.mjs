@@ -21,6 +21,10 @@
 // is drawn in the canvas through the browser's WebGPU with Maul RHI's page
 // side (D282): frames are shown, WebGPU reports no error, and a screenshot
 // of the canvas shows what was drawn.
+// Runners' HUD is read by a screen reader (D612): the elements Maul UI's
+// ARIA adapter keeps over the canvas wait behind its hidden button, which a
+// screen reader's user presses; then Chrome's accessibility tree, what a
+// screen reader reads, holds the HUD's frame, its picture, and its score.
 // The sample 3D game plays the same way when named (D287): plaza, its
 // walker walked by W and made to jump, its scene drawn in the canvas (its
 // models seen through the player's camera and drawn), no sprites asked of
@@ -31,7 +35,8 @@
 // skipped (77).
 //
 // usage: browser_play.mjs <rawframe-export> <rawframe-cook> <rawframe-build> <rawframe-server> <rawframe-bots>
-//                         <rawframe-web-client.wasm> <maul-window.mjs> <maul-rhi.mjs> <repository> [game]
+//                         <rawframe-web-client.wasm> <maul-window.mjs> <maul-rhi.mjs> <maul-ui.mjs> <repository>
+//                         [game]
 import { execFileSync, spawn } from 'node:child_process';
 import { createSocket } from 'node:dgram';
 import { existsSync } from 'node:fs';
@@ -44,8 +49,8 @@ import { argv, env } from 'node:process';
 import { inflateSync } from 'node:zlib';
 import { end } from './verdict.mjs';
 
-const [exportPath, cookPath, buildPath, serverPath, botsPath, wasmPath, windowPath, devicePath, repository, named] =
-    argv.slice(2);
+const [exportPath, cookPath, buildPath, serverPath, botsPath, wasmPath, windowPath, devicePath, uiPath, repository,
+       named] = argv.slice(2);
 // runners, or plaza.
 const name = named ?? 'runners';
 const plaza = name === 'plaza';
@@ -78,7 +83,7 @@ const exported = join(work, 'exported');
 const site = join(exported, 'web');
 execFileSync(exportPath, [join(repository, 'games', name), exported, '--target', 'web', '--port', String(port),
                           '--cook', cookPath, '--build', buildPath, '--server', serverPath, '--web-client', wasmPath,
-                          '--maul-window', windowPath, '--maul-rhi', devicePath, '--page',
+                          '--maul-window', windowPath, '--maul-rhi', devicePath, '--maul-ui', uiPath, '--page',
                           join(repository, 'hosts/web_client/page')],
              { stdio: ['ignore', 'inherit', 'inherit'] });
 const setup = JSON.parse(await readFile(join(site, 'play.json'), 'utf8'));
@@ -196,6 +201,46 @@ const litPixels = (png) => {
     }
     return lit;
 };
+// What Chrome's accessibility tree holds under an element, a node a line,
+// each its role and its name, as a screen reader reads them: ignored nodes,
+// unnamed generic ones, and text repeating its parent's name are passed
+// through, as Maul UI's own test reads them.
+const readUnder = async (tab, selector) => {
+    const session = await tab.createCDPSession();
+    try {
+        const { root } = await session.send('DOM.getDocument', { depth: 0 });
+        const { nodeId } = await session.send('DOM.querySelector', { nodeId: root.nodeId, selector });
+        if (!nodeId) {
+            return [];
+        }
+        const { node } = await session.send('DOM.describeNode', { nodeId });
+        const { nodes } = await session.send('Accessibility.getFullAXTree');
+        const byId = new Map(nodes.map((n) => [n.nodeId, n]));
+        const lines = [];
+        const visit = (ax, parentName, top) => {
+            const role = ax.role?.value ?? '';
+            const name = ax.name?.value ?? '';
+            const through = ax.ignored || (role === 'generic' && name === '') || role === 'InlineTextBox' ||
+                            (role === 'StaticText' && name === parentName);
+            if (!through && !top) {
+                lines.push(`${role} "${name}"`);
+            }
+            for (const id of ax.childIds ?? []) {
+                const child = byId.get(id);
+                if (child) {
+                    visit(child, through ? parentName : name, false);
+                }
+            }
+        };
+        const top = nodes.find((n) => n.backendDOMNodeId === node.backendNodeId);
+        if (top) {
+            visit(top, '', true);
+        }
+        return lines;
+    } finally {
+        await session.detach();
+    }
+};
 let clientLog = '';
 let verdict = 1;
 try {
@@ -228,6 +273,20 @@ try {
         });
     }
     await until(/"code":"bots_admitted"/, 30000);
+    // Runners' HUD read by a screen reader: nothing but the hidden button
+    // until it is pressed, then the HUD.
+    const host = 'canvas + [id$="-accessibility"]';
+    let unread = [];
+    let read = [];
+    if (!plaza) {
+        unread = await readUnder(tab, host);
+        await tab.evaluate((selector) => document.querySelector(`${selector} button`)?.click(), host);
+        for (let waited = 0; waited < 5000 && !read.some((line) => / points"$/.test(line)); waited += 100) {
+            await sleep(100);
+            read = await readUnder(tab, host);
+        }
+        console.log(`page: a screen reader read ${JSON.stringify(unread)}, then ${JSON.stringify(read)}`);
+    }
     // The canvas takes the focus, then D (W in the plaza) is held: the
     // player runs.
     // The plaza's page draws about eight frames a second on the software
@@ -322,6 +381,8 @@ try {
             viewed: viewed !== null && Number(viewed[1]) > 0,
             heard: heard.frames > 48000 && heard.peak > 0.05,
             worded: worded !== null && Number(worded[1]) > 0 && Number(worded[3]) === 0,
+            unread: unread.length === 1 && unread[0] === 'button "Enable accessibility"',
+            read: read.some((line) => /^image "/.test(line)) && read.some((line) => /^StaticText "\d+ points"$/.test(line)),
         });
     }
     const unmet = Object.keys(checks).filter((name) => !checks[name]);

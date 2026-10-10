@@ -26,6 +26,9 @@
 #if RAWFRAME_UI_UIKIT
 #include <maul-ui/access_uikit.h>
 #endif
+#if RAWFRAME_UI_ARIA
+#include <maul-ui/access_aria.h>
+#endif
 
 namespace rawframe::ui {
 
@@ -93,7 +96,8 @@ bool accessBuilt(AccessPlatform platform) noexcept {
            (platform == AccessPlatform::Android && RAWFRAME_UI_ANDROID) ||
            (platform == AccessPlatform::Uia && RAWFRAME_UI_UIA) ||
            (platform == AccessPlatform::AppKit && RAWFRAME_UI_APPKIT) ||
-           (platform == AccessPlatform::UiKit && RAWFRAME_UI_UIKIT);
+           (platform == AccessPlatform::UiKit && RAWFRAME_UI_UIKIT) ||
+           (platform == AccessPlatform::Aria && RAWFRAME_UI_ARIA);
 }
 
 struct Access::State {
@@ -119,6 +123,9 @@ struct Access::State {
 #endif
 #if RAWFRAME_UI_UIKIT
     muiUikitAdapter* uiKit = nullptr;
+#endif
+#if RAWFRAME_UI_ARIA
+    muiAriaAdapter* aria = nullptr;
 #endif
 
     [[nodiscard]] muiContext* context() const noexcept {
@@ -151,6 +158,11 @@ struct Access::State {
             return muiUikitAdapter_GetTree(uiKit);
         }
 #endif
+#if RAWFRAME_UI_ARIA
+        if (aria != nullptr) {
+            return muiAriaAdapter_GetTree(aria);
+        }
+#endif
         return copy;
     }
 
@@ -170,6 +182,9 @@ struct Access::State {
 #endif
 #if RAWFRAME_UI_UIKIT
         muiDestroyUikitAdapter(uiKit);
+#endif
+#if RAWFRAME_UI_ARIA
+        muiDestroyAriaAdapter(aria);
 #endif
         muiDestroyAccessTree(copy);
         if (tree != nullptr) {
@@ -199,7 +214,8 @@ bool act(Access::State& state, const muiAccessRequest& request) {
     return kScroll && muiPerformAccessAction(state.context(), &request, &handled) == mui_success && handled;
 }
 
-#if RAWFRAME_UI_ATSPI || RAWFRAME_UI_ANDROID || RAWFRAME_UI_UIA || RAWFRAME_UI_APPKIT || RAWFRAME_UI_UIKIT
+#if RAWFRAME_UI_ATSPI || RAWFRAME_UI_ANDROID || RAWFRAME_UI_UIA || RAWFRAME_UI_APPKIT || RAWFRAME_UI_UIKIT ||          \
+    RAWFRAME_UI_ARIA
 bool actFor(void* user, const muiAccessRequest* request) {
     return act(*static_cast<Access::State*>(user), *request);
 }
@@ -316,6 +332,24 @@ result::Result<std::unique_ptr<Access>> Access::create(Tree& tree, Node root, co
         return std::unique_ptr<Access>{new Access{std::move(state)}};
     }
 #endif
+#if RAWFRAME_UI_ARIA
+    if (settings.platform == AccessPlatform::Aria) {
+        if (settings.selector.empty()) {
+            return refuse(UiError::Invalid, "the page's accessibility needs the element over the canvas");
+        }
+        // Deferred, Maul UI's default: a page cannot tell whether a screen
+        // reader runs, so its user presses the hidden button first.
+        muiAriaAdapterDef adapter = muiDefaultAriaAdapterDef();
+        adapter.nodes = settings.nodes;
+        adapter.host = settings.selector.c_str();
+        adapter.scale = settings.scale;
+        adapter.action = &actFor;
+        adapter.user = state.get();
+        RAWFRAME_TRY(
+            checked(muiCreateAriaAdapter(&adapter, &state->aria), "the page's accessibility could not be made"));
+        return std::unique_ptr<Access>{new Access{std::move(state)}};
+    }
+#endif
     muiAccessTreeDef copy = muiDefaultAccessTreeDef();
     copy.nodes = settings.nodes;
     RAWFRAME_TRY(checked(muiCreateAccessTree(&copy, &state->copy), "an accessibility tree could not be made"));
@@ -367,6 +401,13 @@ result::Status Access::update() {
                    : checked(muiUikitAdapter_Apply(state_->uiKit, &update), "the platform refused the tree");
     }
 #endif
+#if RAWFRAME_UI_ARIA
+    if (state_->aria != nullptr) {
+        return kBuilt == mui_empty
+                   ? result::Status{}
+                   : checked(muiAriaAdapter_Apply(state_->aria, &update), "the platform refused the tree");
+    }
+#endif
     return kBuilt == mui_empty ? result::Status{}
                                : checked(muiAccessTree_Apply(state_->copy, &update, nullptr),
                                          "the accessibility tree refused an update");
@@ -399,6 +440,11 @@ result::Status Access::setScale(float scale) {
 #if RAWFRAME_UI_UIKIT
     if (state_->uiKit != nullptr) {
         return checked(muiUikitAdapter_SetScale(state_->uiKit, scale), "the platform refused a scale");
+    }
+#endif
+#if RAWFRAME_UI_ARIA
+    if (state_->aria != nullptr) {
+        return checked(muiAriaAdapter_SetScale(state_->aria, scale), "the platform refused a scale");
     }
 #endif
     return {};

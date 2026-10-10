@@ -41,7 +41,12 @@ enum class AccessPlatform : std::uint8_t {
     AppKit,
     /// UIAccessibility (iOS, D588): elements under the view
     /// `AccessSettings::host` names, the root its container.
-    UiKit
+    UiKit,
+    /// The page's elements (the web, D612): one per shown node in the
+    /// element over the canvas `AccessSettings::selector` names, which the
+    /// browser gives its clients. None are built until a screen reader's
+    /// user presses the hidden button the adapter puts there first.
+    Aria
 };
 
 struct AccessSettings {
@@ -49,7 +54,7 @@ struct AccessSettings {
     /// The application's name, as AT-SPI lists it.
     std::string application = "Rawframe";
     /// Device pixels a UI pixel; AppKit's and UIKit's points, which a UI
-    /// pixel is.
+    /// pixel is; the page's CSS pixels for ARIA.
     float scale = 1;
     /// Where the window's client area is on the screen, in device pixels,
     /// where the platform says (X11); none where it does not (Wayland).
@@ -64,6 +69,8 @@ struct AccessSettings {
     /// of its own where the
     /// platform counts them.
     void* host = nullptr;
+    /// ARIA's: the CSS selector of the element over the canvas.
+    std::string selector;
 };
 
 /// What a screen reader asked of a node (D572), for the UI's owner to do as

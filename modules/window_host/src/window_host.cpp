@@ -205,6 +205,17 @@ result::Status WindowHost::start(window::Windows& windows) {
         RAWFRAME_TRY(access_.open({.platform = ui::AccessPlatform::Atspi,
                                    .application = made.title.empty() ? std::string{"Rawframe"} : made.title}));
     }
+    // A page's elements over the canvas (D612), made now: they wait behind
+    // the adapter's hidden button until a screen reader's user presses it.
+    // A UI pixel is a CSS pixel, as it is AppKit's point.
+    if (accessible_ && ui::accessBuilt(ui::AccessPlatform::Aria)) {
+        const auto kHandles = windows.handles(kWindow);
+        const auto* kCanvas = kHandles.has_value() ? std::get_if<window::CanvasHandles>(&kHandles->handles) : nullptr;
+        if (kCanvas != nullptr && !kCanvas->accessibility.empty()) {
+            accessPlatform_ = ui::AccessPlatform::Aria;
+            RAWFRAME_TRY(access_.open({.platform = ui::AccessPlatform::Aria, .selector = kCanvas->accessibility}));
+        }
+    }
     bridge_.emplace(feed_);
     host_ = std::make_unique<host::Host>(request_);
     return {};
@@ -415,8 +426,8 @@ void WindowHost::followAccess(window::Windows& windows) {
         return;
     }
     if (const auto kState = windows.state(window_); kState.has_value() && kState->scale > 0) {
-        if (accessPlatform_ != kAppleAccess && kState->scale != accessScale_ &&
-            access_.setScale(kState->scale).has_value()) {
+        if (accessPlatform_ != kAppleAccess && accessPlatform_ != ui::AccessPlatform::Aria &&
+            kState->scale != accessScale_ && access_.setScale(kState->scale).has_value()) {
             accessScale_ = kState->scale;
         }
         // X11 says where a window is, in its pixels, and AT-SPI's screen is
