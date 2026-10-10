@@ -122,5 +122,5 @@ jobs:
           wait "$play"
           played=$?
           cat "$RUNNER_TEMP/stalls.log"
-          grep -o '"touchEvents":[0-9]*\|"commandsSent":[0-9]*\|"commandsTaken":[0-9]*' "$RUNNER_TEMP/stalls.log"
+          grep -o '"presses":[0-9]*\|"pressesMissed":[0-9]*\|"touchEvents":[0-9]*\|"commandsSent":[0-9]*\|"commandsTaken":[0-9]*' "$RUNNER_TEMP/stalls.log"
           [ "$read" = 0 ] && [ "$played" = 0 ] && grep -q '"code":"accessibility_ready"' "$RUNNER_TEMP/stalls.log"
