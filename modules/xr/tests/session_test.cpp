@@ -1,12 +1,14 @@
-// A runtime's head-mounted system and a session on it (D591): the render
-// module's device made by the runtime, the session begun when the runtime
-// says ready, frames ended and their views located while it runs, and the
+// A runtime's head-mounted system and a session on it (D591, D592): the
+// render module's device made by the runtime, the session begun when the
+// runtime says ready, and, while it runs, each frame's views located, the
+// frame's picture placed into their images, and the views submitted; the
 // session ended when asked. Run under tools/xr_run.sh, which starts
 // Monado's service headless (its null compositor and simulated headset)
 // on lavapipe; a machine with no runtime skips, unless RAWFRAME_REQUIRE_XR
 // is set, as the check sets it where Monado is installed.
 
 #include "rawframe/render/device.h"
+#include "rawframe/render/frame.h"
 #include "rawframe/test/test.h"
 #include "rawframe/xr/errors.h"
 #include "rawframe/xr/runtime.h"
@@ -81,7 +83,7 @@ RAWFRAME_TEST(TheRuntimesHeadMountedSystemHasStereoViews) {
     RAWFRAME_EXPECT(kSystem.orientationTracking);
 }
 
-RAWFRAME_TEST(ASessionRunsOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
+RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
     const auto kRuntime = opened();
     if (kRuntime == nullptr) {
         return;
@@ -98,37 +100,63 @@ RAWFRAME_TEST(ASessionRunsOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
         return;
     }
     xr::Session& session = **made;
-    // Until the session is focused and has shown frames whose views were
-    // located, then asked to end, until it is over: a bound keeps a broken
-    // runtime from holding the test.
+    RAWFRAME_EXPECT(session.images().size() == 2);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(framer.has_value());
+    if (!framer.has_value()) {
+        return;
+    }
+    // The picture, the left view's size, and nothing drawn in it but its
+    // black; placed into both views' images.
+    const xr::ViewSize kLeft = session.images().front();
+    // Until the session is focused and has submitted frames whose views
+    // were located, then asked to end, until it is over: a bound keeps a
+    // broken runtime from holding the test.
     bool askedToEnd = false;
     for (int frame = 0; frame < 3000 && !session.over(); ++frame) {
-        const auto kFrame = session.frame();
+        const auto kFrame = session.begin();
         RAWFRAME_EXPECT(kFrame.has_value());
         if (!kFrame.has_value()) {
             break;
         }
-        if (kFrame->shown) {
-            RAWFRAME_EXPECT(kFrame->views.size() == 2);
+        if (!kFrame->begun) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            continue;
         }
-        if (!askedToEnd && session.state() == xr::SessionState::Focused && session.statistics().framesLocated >= 30) {
+        bool drawn = false;
+        if (kFrame->shown) {
+            RAWFRAME_EXPECT(kFrame->views.size() == 2 && kFrame->images.size() == 2);
+            const auto kMade = (*framer)->make(
+                {}, render::FrameTarget{.width = kLeft.width, .height = kLeft.height, .images = kFrame->images});
+            RAWFRAME_EXPECT(kMade.has_value());
+            drawn = kMade.has_value() && *kMade;
+        }
+        RAWFRAME_EXPECT(session.end(drawn).has_value());
+        if (!askedToEnd && session.state() == xr::SessionState::Focused && session.statistics().framesSubmitted >= 30 &&
+            session.statistics().framesLocated >= 30) {
             RAWFRAME_EXPECT(session.requestExit().has_value());
             askedToEnd = true;
         }
-        if (!kFrame->ended) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
-        }
     }
+    RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
     const xr::SessionStatistics& kTotals = session.statistics();
-    std::printf("frames ended %llu, shown %llu, located %llu, tracked %llu\n",
+    const render::FramerStatistics& kDrawn = (*framer)->statistics();
+    std::printf("frames ended %llu, shown %llu, located %llu, tracked %llu, submitted %llu; images placed %llu, "
+                "not placed %llu\n",
                 static_cast<unsigned long long>(kTotals.framesEnded),
                 static_cast<unsigned long long>(kTotals.framesShown),
                 static_cast<unsigned long long>(kTotals.framesLocated),
-                static_cast<unsigned long long>(kTotals.framesTracked));
+                static_cast<unsigned long long>(kTotals.framesTracked),
+                static_cast<unsigned long long>(kTotals.framesSubmitted),
+                static_cast<unsigned long long>(kDrawn.imagesPlaced),
+                static_cast<unsigned long long>(kDrawn.imagesNotPlaced));
     RAWFRAME_EXPECT(askedToEnd);
     RAWFRAME_EXPECT(session.over());
     RAWFRAME_EXPECT(session.state() == xr::SessionState::Exiting);
     RAWFRAME_EXPECT(kTotals.framesLocated >= 30);
-    // The session goes before the device it is bound to.
+    RAWFRAME_EXPECT(kTotals.framesSubmitted >= 30);
+    RAWFRAME_EXPECT(kDrawn.imagesPlaced >= 2 * kTotals.framesSubmitted);
+    // The frames, then the session, go before the device they are made on.
+    framer->reset();
     made->reset();
 }

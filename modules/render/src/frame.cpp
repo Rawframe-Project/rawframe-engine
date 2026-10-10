@@ -89,7 +89,7 @@ struct Framer::State {
             ++statistics.framesBusy;
             return false;
         }
-        if (target.surface.has_value() && display == nullptr) {
+        if ((target.surface.has_value() || !target.images.empty()) && display == nullptr) {
             RAWFRAME_TRY_ASSIGN(display, Display::create(*device));
         }
         const mrhiFrameDef kFrameDef = mrhiDefaultFrameDef();
@@ -141,6 +141,30 @@ struct Framer::State {
             }
             displaying = *added;
         }
+        std::vector<std::uint64_t> placing;
+        for (const std::uint64_t kImage : target.images) {
+            const std::optional<window::PixelSize> kSize = device->adoptedSize(kImage);
+            mrhiResourceId into{};
+            if (!kSize.has_value() ||
+                mrhiImportTexture(native,
+                                  mrhiTextureId{.index1 = static_cast<std::uint32_t>(kImage >> 32U),
+                                                .generation = static_cast<std::uint32_t>(kImage)},
+                                  &into) != mrhi_success) {
+                return drop(recorders,
+                            refuse(result::ErrorClass::FailedPrecondition,
+                                   RenderError::State,
+                                   "an image the picture is placed into is not adopted")
+                                .error());
+            }
+            auto placed = display->place(
+                open.picture, requestKey(into.index1, into.generation), {0, 0, kSize->width, kSize->height});
+            if (!placed.has_value()) {
+                return drop(recorders, std::move(placed).error());
+            }
+            if (placed->has_value()) {
+                placing.push_back(**placed);
+            }
+        }
         const mrhiAccess kRead{
             .resource = picture,
             .kind = mrhi_accessCopySource,
@@ -175,6 +199,11 @@ struct Framer::State {
                 return drop(recorders, std::move(recorded).error());
             }
         }
+        for (const std::uint64_t kPass : placing) {
+            if (auto recorded = display->record(kPass); !recorded.has_value()) {
+                return drop(recorders, std::move(recorded).error());
+            }
+        }
         readback.reset();
         pixels.reset();
         if (reading.has_value()) {
@@ -205,6 +234,8 @@ struct Framer::State {
         if (target.surface.has_value()) {
             ++(displaying.has_value() ? statistics.framesShown : statistics.framesNotShown);
         }
+        statistics.imagesPlaced += placing.size();
+        statistics.imagesNotPlaced += target.images.size() - placing.size();
         return true;
     }
 

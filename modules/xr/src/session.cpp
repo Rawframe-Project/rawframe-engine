@@ -7,19 +7,53 @@
 
 namespace rawframe::xr {
 
+namespace {
+
+/// A view's swapchain and its images, adopted on the device.
+struct Chain {
+    XrSwapchain swapchain = XR_NULL_HANDLE;
+    ViewSize size;
+    std::vector<std::uint64_t> images;
+};
+
+/// How long acquiring a view's image may wait for the runtime: a second,
+/// far past any frame.
+constexpr XrDuration kImageWait = 1'000'000'000;
+
+} // namespace
+
 struct Session::State {
     Runtime::State* runtime = nullptr;
+    render::Device* device = nullptr;
     XrSession session = XR_NULL_HANDLE;
     XrSpace local = XR_NULL_HANDLE;
+    std::vector<Chain> chains;
+    std::vector<ViewSize> sizes;
     SessionState state = SessionState::Unknown;
     bool running = false;
     bool over = false;
     SessionStatistics statistics;
+    /// The frame begun and not yet ended: its display time, its views as
+    /// the runtime located them, and whether their images are acquired.
+    bool begun = false;
+    bool acquired = false;
+    XrTime displayTime = 0;
+    std::vector<XrView> located;
 
     State() = default;
     State(const State&) = delete;
     State& operator=(const State&) = delete;
     ~State() {
+        // The images' textures, then the swapchains whose images they
+        // were, then the space and the session.
+        for (Chain& chain : chains) {
+            for (const std::uint64_t kImage : chain.images) {
+                device->abandon(kImage);
+            }
+            if (chain.swapchain != XR_NULL_HANDLE) {
+                xrDestroySwapchain(chain.swapchain);
+            }
+        }
         if (local != XR_NULL_HANDLE) {
             xrDestroySpace(local);
         }
@@ -70,28 +104,85 @@ struct Session::State {
         return {};
     }
 
+    /// A swapchain for each view, in the first format the runtime offers
+    /// that the device adopts, its images adopted.
+    result::Status makeChains() {
+        std::uint32_t count = 0;
+        if (const XrResult kCounted = xrEnumerateSwapchainFormats(session, 0, &count, nullptr); XR_FAILED(kCounted)) {
+            return failed("the runtime's image formats could not be read", kCounted);
+        }
+        std::vector<std::int64_t> formats(count);
+        if (const XrResult kRead = xrEnumerateSwapchainFormats(session, count, &count, formats.data());
+            XR_FAILED(kRead)) {
+            return failed("the runtime's image formats could not be read", kRead);
+        }
+        // The runtime lists its formats in its order of preference.
+        const auto kFormat = std::ranges::find_if(formats, [](std::int64_t format) {
+            return render::Device::adoptable(static_cast<std::uint32_t>(format));
+        });
+        if (kFormat == formats.end()) {
+            return refused(XrError::Runtime, "the runtime offers no image format the device adopts");
+        }
+        for (const ViewSize& kView : runtime->description.views) {
+            Chain& chain = chains.emplace_back();
+            chain.size = {.width = kView.width, .height = kView.height, .samples = 1};
+            XrSwapchainCreateInfo create{XR_TYPE_SWAPCHAIN_CREATE_INFO};
+            create.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
+            create.format = *kFormat;
+            create.sampleCount = 1;
+            create.width = kView.width;
+            create.height = kView.height;
+            create.faceCount = 1;
+            create.arraySize = 1;
+            create.mipCount = 1;
+            if (const XrResult kMade = xrCreateSwapchain(session, &create, &chain.swapchain); XR_FAILED(kMade)) {
+                chain.swapchain = XR_NULL_HANDLE;
+                return failed("a view's swapchain could not be made", kMade);
+            }
+            std::uint32_t images = 0;
+            if (const XrResult kCounted = xrEnumerateSwapchainImages(chain.swapchain, 0, &images, nullptr);
+                XR_FAILED(kCounted)) {
+                return failed("a view's images could not be read", kCounted);
+            }
+            std::vector<XrSwapchainImageVulkan2KHR> made(images, {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
+            if (const XrResult kRead = xrEnumerateSwapchainImages(
+                    chain.swapchain, images, &images, reinterpret_cast<XrSwapchainImageBaseHeader*>(made.data()));
+                XR_FAILED(kRead)) {
+                return failed("a view's images could not be read", kRead);
+            }
+            for (const XrSwapchainImageVulkan2KHR& kImage : made) {
+                RAWFRAME_TRY_ASSIGN(
+                    const std::uint64_t kAdopted,
+                    device->adopt(kImage.image, static_cast<std::uint32_t>(*kFormat), kView.width, kView.height));
+                chain.images.push_back(kAdopted);
+            }
+            sizes.push_back(chain.size);
+        }
+        return {};
+    }
+
     /// The views at `time`, in the local space.
-    result::Result<std::vector<ViewPose>> located(XrTime time) {
-        XrViewLocateInfo locate{XR_TYPE_VIEW_LOCATE_INFO};
-        locate.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-        locate.displayTime = time;
-        locate.space = local;
+    result::Result<std::vector<ViewPose>> locate(XrTime time) {
+        XrViewLocateInfo info{XR_TYPE_VIEW_LOCATE_INFO};
+        info.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+        info.displayTime = time;
+        info.space = local;
         XrViewState viewState{XR_TYPE_VIEW_STATE};
-        std::vector<XrView> views(runtime->description.views.size(), {XR_TYPE_VIEW});
+        located.assign(chains.size(), {XR_TYPE_VIEW});
         std::uint32_t count = 0;
         if (const XrResult kLocated = xrLocateViews(
-                session, &locate, &viewState, static_cast<std::uint32_t>(views.size()), &count, views.data());
+                session, &info, &viewState, static_cast<std::uint32_t>(located.size()), &count, located.data());
             XR_FAILED(kLocated)) {
             return failed("the views could not be located", kLocated);
         }
+        located.resize(count);
         constexpr XrViewStateFlags kValid = XR_VIEW_STATE_POSITION_VALID_BIT | XR_VIEW_STATE_ORIENTATION_VALID_BIT;
         constexpr XrViewStateFlags kTracked =
             XR_VIEW_STATE_POSITION_TRACKED_BIT | XR_VIEW_STATE_ORIENTATION_TRACKED_BIT;
         const bool kAllValid = (viewState.viewStateFlags & kValid) == kValid;
         const bool kAllTracked = kAllValid && (viewState.viewStateFlags & kTracked) == kTracked;
         std::vector<ViewPose> poses;
-        for (std::uint32_t at = 0; at < count; ++at) {
-            const XrView& kView = views[at];
+        for (const XrView& kView : located) {
             poses.push_back({.position = {kView.pose.position.x, kView.pose.position.y, kView.pose.position.z},
                              .orientation = {kView.pose.orientation.x,
                                              kView.pose.orientation.y,
@@ -105,6 +196,25 @@ struct Session::State {
                              .tracked = kAllTracked});
         }
         return poses;
+    }
+
+    /// Each view's next image, acquired and waited for.
+    result::Result<std::vector<std::uint64_t>> acquire() {
+        std::vector<std::uint64_t> images;
+        for (const Chain& kChain : chains) {
+            std::uint32_t index = 0;
+            if (const XrResult kAcquired = xrAcquireSwapchainImage(kChain.swapchain, nullptr, &index);
+                XR_FAILED(kAcquired)) {
+                return failed("a view's image could not be acquired", kAcquired);
+            }
+            XrSwapchainImageWaitInfo wait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+            wait.timeout = kImageWait;
+            if (const XrResult kWaited = xrWaitSwapchainImage(kChain.swapchain, &wait); XR_FAILED(kWaited)) {
+                return failed("a view's image could not be waited for", kWaited);
+            }
+            images.push_back(kChain.images.at(index));
+        }
+        return images;
     }
 };
 
@@ -120,6 +230,7 @@ result::Result<std::unique_ptr<Session>> Session::create(Runtime& runtime, rende
     }
     auto state = std::make_unique<State>();
     state->runtime = runtime.state_.get();
+    state->device = &device;
     XrGraphicsBindingVulkan2KHR binding{XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR};
     binding.instance = static_cast<VkInstance>(kVulkan->instance);
     binding.physicalDevice = static_cast<VkPhysicalDevice>(kVulkan->physicalDevice);
@@ -140,11 +251,15 @@ result::Result<std::unique_ptr<Session>> Session::create(Runtime& runtime, rende
         state->local = XR_NULL_HANDLE;
         return failed("the session's local space could not be made", kMade);
     }
+    RAWFRAME_TRY(state->makeChains());
     return std::unique_ptr<Session>{new Session{std::move(state)}};
 }
 
-result::Result<SessionFrame> Session::frame() {
+result::Result<SessionFrame> Session::begin() {
     State& state = *state_;
+    if (state.begun) {
+        return refused(XrError::State, "a frame is already begun");
+    }
     RAWFRAME_TRY(state.take());
     SessionFrame made;
     if (!state.running || state.over) {
@@ -157,19 +272,14 @@ result::Result<SessionFrame> Session::frame() {
     if (const XrResult kBegun = xrBeginFrame(state.session, nullptr); XR_FAILED(kBegun)) {
         return failed("the frame could not begin", kBegun);
     }
+    state.begun = true;
+    state.displayTime = frame.predictedDisplayTime;
+    made.begun = true;
     made.shown = frame.shouldRender == XR_TRUE;
     if (made.shown) {
-        RAWFRAME_TRY_ASSIGN(made.views, state.located(frame.predictedDisplayTime));
-    }
-    XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};
-    end.displayTime = frame.predictedDisplayTime;
-    end.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
-    if (const XrResult kEnded = xrEndFrame(state.session, &end); XR_FAILED(kEnded)) {
-        return failed("the frame could not end", kEnded);
-    }
-    made.ended = true;
-    ++state.statistics.framesEnded;
-    if (made.shown) {
+        RAWFRAME_TRY_ASSIGN(made.views, state.locate(frame.predictedDisplayTime));
+        RAWFRAME_TRY_ASSIGN(made.images, state.acquire());
+        state.acquired = true;
         ++state.statistics.framesShown;
         if (!made.views.empty() && std::ranges::all_of(made.views, &ViewPose::located)) {
             ++state.statistics.framesLocated;
@@ -179,6 +289,59 @@ result::Result<SessionFrame> Session::frame() {
         }
     }
     return made;
+}
+
+result::Status Session::end(bool drawn) {
+    State& state = *state_;
+    if (!state.begun) {
+        return refused(XrError::State, "no frame is begun");
+    }
+    state.begun = false;
+    const bool kAcquired = std::exchange(state.acquired, false);
+    if (kAcquired) {
+        for (const Chain& kChain : state.chains) {
+            XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+            if (const XrResult kReleased = xrReleaseSwapchainImage(kChain.swapchain, &release); XR_FAILED(kReleased)) {
+                return failed("a view's image could not be given back", kReleased);
+            }
+        }
+    }
+    // Each view's image whole, where the runtime located it.
+    std::vector<XrCompositionLayerProjectionView> views;
+    const bool kSubmitted = kAcquired && drawn && state.located.size() == state.chains.size();
+    if (kSubmitted) {
+        for (std::size_t at = 0; at < state.chains.size(); ++at) {
+            XrCompositionLayerProjectionView& view = views.emplace_back();
+            view.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW;
+            view.pose = state.located[at].pose;
+            view.fov = state.located[at].fov;
+            view.subImage.swapchain = state.chains[at].swapchain;
+            view.subImage.imageRect.extent = {static_cast<std::int32_t>(state.chains[at].size.width),
+                                              static_cast<std::int32_t>(state.chains[at].size.height)};
+        }
+    }
+    XrCompositionLayerProjection projection{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+    projection.space = state.local;
+    projection.viewCount = static_cast<std::uint32_t>(views.size());
+    projection.views = views.data();
+    const auto* kLayer = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&projection);
+    XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};
+    end.displayTime = state.displayTime;
+    end.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+    end.layerCount = kSubmitted ? 1 : 0;
+    end.layers = kSubmitted ? &kLayer : nullptr;
+    if (const XrResult kEnded = xrEndFrame(state.session, &end); XR_FAILED(kEnded)) {
+        return failed("the frame could not end", kEnded);
+    }
+    ++state.statistics.framesEnded;
+    if (kSubmitted) {
+        ++state.statistics.framesSubmitted;
+    }
+    return {};
+}
+
+const std::vector<ViewSize>& Session::images() const noexcept {
+    return state_->sizes;
 }
 
 result::Status Session::requestExit() {

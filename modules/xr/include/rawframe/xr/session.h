@@ -4,12 +4,16 @@
 // module's one device (ADR-0081, D591). The runtime's session states are
 // SPEC-0025's surface lifecycle in the runtime's words (ADR-0081, section
 // 2): the session is begun when the runtime says it is ready and ended
-// when it says it is stopping. While it runs, each presentation frame is
-// waited for as the runtime paces it, begun, and ended; waiting blocks, so
-// a session is driven only from the presentation path, never from an
-// executor the simulation, replication, or the network depend on, and the
-// display time it predicts never enters the World or a record (ADR-0081,
-// section 3). Main thread only; the runtime and the device outlive it.
+// when it says it is stopping. Each view has a swapchain, whose images the
+// runtime owns and the device adopts as textures to draw into (D592).
+// While the session runs, each presentation frame is waited for as the
+// runtime paces it, begun, its views located and their images acquired;
+// the frame's picture is placed into them; and the frame is ended, its
+// views submitted as a projection layer. Waiting blocks, so a session is
+// driven only from the presentation path, never from an executor the
+// simulation, replication, or the network depend on, and the display time
+// it predicts never enters the World or a record (ADR-0081, section 3).
+// Main thread only; the runtime and the device outlive it.
 
 #include "rawframe/render/device.h"
 #include "rawframe/result/result.h"
@@ -55,15 +59,20 @@ struct ViewPose {
     bool tracked = false;
 };
 
-/// What one presentation frame did.
+/// A presentation frame, from `begin` to `end`.
 struct SessionFrame {
-    /// A frame was waited for, begun, and ended.
-    bool ended = false;
-    /// The runtime shows it: its views are located and drawn.
+    /// A frame was waited for and begun: `end` follows.
+    bool begun = false;
+    /// The runtime shows it: its views are located and their images
+    /// acquired.
     bool shown = false;
     /// The views at the frame's display time, the left eye's first, when
     /// shown.
     std::vector<ViewPose> views;
+    /// Each view's image this frame, adopted on the device: what the
+    /// frame's picture is placed into (`render::FrameTarget::images`)
+    /// between `begin` and `end`, when shown.
+    std::vector<std::uint64_t> images;
 };
 
 struct SessionStatistics {
@@ -72,6 +81,8 @@ struct SessionStatistics {
     /// Frames shown whose every view was located, and tracked.
     std::uint64_t framesLocated = 0;
     std::uint64_t framesTracked = 0;
+    /// Frames ended with their views drawn and submitted.
+    std::uint64_t framesSubmitted = 0;
 };
 
 class Session {
@@ -86,9 +97,15 @@ public:
 
     /// Once a presentation frame: the runtime's events taken, the session
     /// begun or ended as they say, and, while it runs, one frame waited
-    /// for, begun, its views located, and ended. Not running, it returns at
-    /// once with nothing ended.
-    [[nodiscard]] result::Result<SessionFrame> frame();
+    /// for, begun, its views located, and their images acquired. Not
+    /// running, it returns at once with nothing begun.
+    [[nodiscard]] result::Result<SessionFrame> begin();
+    /// The frame `begin` began, ended: its images given back, and its views
+    /// submitted when `drawn` says the picture was placed into them (else
+    /// nothing is shown this frame).
+    [[nodiscard]] result::Status end(bool drawn);
+    /// The format and size of each view's images.
+    [[nodiscard]] const std::vector<ViewSize>& images() const noexcept;
     /// Asks the runtime to end the session: it stops, then exits, through
     /// the frames that follow.
     [[nodiscard]] result::Status requestExit();

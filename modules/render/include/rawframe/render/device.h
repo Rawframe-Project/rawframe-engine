@@ -152,6 +152,23 @@ public:
     /// Its Vulkan objects, once ready on a Vulkan adapter; none otherwise.
     [[nodiscard]] std::optional<VulkanObjects> vulkan() const noexcept;
 
+    /// Whether an image made elsewhere in `vulkanFormat`, a `VkFormat`, may
+    /// be adopted: 8-bit RGBA sRGB (`VK_FORMAT_R8G8B8A8_SRGB`), what the
+    /// frame's picture is placed into (D592).
+    [[nodiscard]] static bool adoptable(std::uint32_t vulkanFormat) noexcept;
+    /// A `VkImage` made elsewhere, an OpenXR runtime's swapchain image,
+    /// adopted on a ready Vulkan device as a texture the frames draw into
+    /// (`FrameTarget::images`), never destroyed here: it rests in the color
+    /// attachment layout, owned by the device's queue, between the frames
+    /// that use it (Maul RHI's mrhi-0018). The key names it until
+    /// `abandon`.
+    [[nodiscard]] result::Result<std::uint64_t>
+    adopt(void* image, std::uint32_t vulkanFormat, std::uint32_t width, std::uint32_t height);
+    /// No longer drawn into: its texture ends, the image stays its maker's.
+    void abandon(std::uint64_t texture) noexcept;
+    /// An adopted texture's size, in pixels; none for a key not adopted.
+    [[nodiscard]] std::optional<window::PixelSize> adoptedSize(std::uint64_t texture) const noexcept;
+
     /// The samples a pixel the adapter renders `format`, a Maul RHI format,
     /// with, as Maul RHI's mask: the bit worth n set when n samples are
     /// (D343); nought before the device is ready. For the rendering cluster

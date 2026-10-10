@@ -81,6 +81,9 @@ struct FrameTarget {
     /// The prepared surface it is shown on; none for a picture nothing
     /// shows.
     std::optional<std::uint64_t> surface;
+    /// Adopted images (`Device::adopt`) the picture is placed into, each
+    /// whole, scaled to it: an OpenXR session's views (D592).
+    std::vector<std::uint64_t> images;
 };
 
 struct FramerStatistics {
@@ -91,6 +94,10 @@ struct FramerStatistics {
     std::uint64_t framesNotShown = 0;
     /// Frames asked for while the last was still on the GPU.
     std::uint64_t framesBusy = 0;
+    /// Pictures placed into adopted images, and those that were to be and
+    /// were not (their pipeline being made).
+    std::uint64_t imagesPlaced = 0;
+    std::uint64_t imagesNotPlaced = 0;
 };
 
 /// Makes the frames: the frame owner's machinery, apart from composition

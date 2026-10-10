@@ -8,6 +8,7 @@
 #include <maul-rhi/device.h>
 #include <maul-rhi/frame.h>
 #include <maul-rhi/instance.h>
+#include <maul-rhi/resources.h>
 #include <maul-rhi/surface.h>
 #include <maul-rhi/vulkan.h>
 #include <span>
@@ -279,12 +280,17 @@ struct Device::State {
     bool lost = false;
     /// What a runtime made, when `settings.vulkan` makes it; ended last.
     std::unique_ptr<Adopted> adopted;
+    /// Images adopted as textures, by key, with their sizes.
+    std::map<std::uint64_t, std::pair<mrhiTextureId, window::PixelSize>> images;
 
     ~State() {
         // Surfaces, then the device, then the instance that made both, then
         // the Vulkan objects a runtime made for them.
         for (const auto& [key, surface] : surfaces) {
             static_cast<void>(mrhiDestroySurface(instance, surface.id));
+        }
+        for (const auto& [key, image] : images) {
+            static_cast<void>(mrhiDestroyTexture(device, image.first));
         }
         mrhiDestroyDevice(device);
         mrhiDestroyInstance(instance);
@@ -492,6 +498,53 @@ std::optional<VulkanObjects> Device::vulkan() const noexcept {
         return std::nullopt;
     }
     return objects;
+}
+
+bool Device::adoptable(std::uint32_t vulkanFormat) noexcept {
+    return vulkanFormat == VK_FORMAT_R8G8B8A8_SRGB;
+}
+
+result::Result<std::uint64_t>
+Device::adopt(void* image, std::uint32_t vulkanFormat, std::uint32_t width, std::uint32_t height) {
+    State& state = *state_;
+    if (state.phase != Phase::Ready || !adoptable(vulkanFormat) || image == nullptr) {
+        return refuse(result::ErrorClass::FailedPrecondition,
+                      RenderError::State,
+                      "only an RGBA sRGB image is adopted, on a ready device");
+    }
+    mrhiTextureVulkanAdopt adopt{};
+    adopt.chain.type = mrhi_structTextureVulkanAdopt;
+    adopt.image = image;
+    mrhiTextureDef def = mrhiDefaultTextureDef();
+    def.next = &adopt.chain;
+    def.format = mrhi_formatRgba8UnormSrgb;
+    def.width = width;
+    def.height = height;
+    def.usage = mrhi_textureRenderTarget;
+    mrhiTextureId texture{};
+    if (const mrhiResult kMade = mrhiCreateTexture(state.device, &def, &texture); kMade != mrhi_success) {
+        return failed("the image could not be adopted", kMade);
+    }
+    const std::uint64_t kKey = requestKey(texture.index1, texture.generation);
+    state.images[kKey] = {texture, window::PixelSize{.width = width, .height = height}};
+    return kKey;
+}
+
+void Device::abandon(std::uint64_t texture) noexcept {
+    const auto kFound = state_->images.find(texture);
+    if (kFound == state_->images.end()) {
+        return;
+    }
+    static_cast<void>(mrhiDestroyTexture(state_->device, kFound->second.first));
+    state_->images.erase(kFound);
+}
+
+std::optional<window::PixelSize> Device::adoptedSize(std::uint64_t texture) const noexcept {
+    const auto kFound = state_->images.find(texture);
+    if (kFound == state_->images.end()) {
+        return std::nullopt;
+    }
+    return kFound->second.second;
 }
 
 std::uint8_t Device::sampleCounts(std::uint32_t format) const noexcept {
