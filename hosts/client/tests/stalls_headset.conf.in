@@ -1,0 +1,12 @@
+# The client's own player at Stalls, shown on a headset (D605): its HUD
+# laid out and drawn on the headset's panel, and where the simulated
+# controllers aim drawn over it as a cursor, the UI's pointer theirs.
+bots.player = true
+render.device = any
+content.root = @TYCOON_CONTENT@
+world.overload_ms = 0
+input.gamepads = false
+render.frame_rate = 30
+xr.headset = true
+xr.panel_width = 320
+xr.panel_height = 180

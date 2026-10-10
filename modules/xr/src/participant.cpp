@@ -4,6 +4,7 @@
 #include "rawframe/input_kest/sources.h"
 #include "rawframe/render/headset.h"
 #include "rawframe/view/headset.h"
+#include "rawframe/view/pointing.h"
 #include "rawframe/xr/registrar.h"
 #include "rawframe/xr/runtime.h"
 #include "rawframe/xr/session.h"
@@ -23,7 +24,7 @@ constexpr diagnostics::EventIdentity kState{"xr", "xr_session_state"};
 constexpr diagnostics::EventIdentity kFailed{"xr", "xr_failed"};
 constexpr diagnostics::EventIdentity kSummary{"xr", "xr_summary"};
 constexpr std::string_view kProvided[] = {render::kHeadset.name, view::kHeadsetEyes.name};
-constexpr std::string_view kMayUse[] = {input_kest::kFeed.name};
+constexpr std::string_view kMayUse[] = {input_kest::kFeed.name, view::kUiPointing.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 /// The headset's controllers, both hands one device of the controller
@@ -95,6 +96,9 @@ public:
         panel_ = {.width = static_cast<std::uint32_t>(kPanelWidth), .height = static_cast<std::uint32_t>(kPanelHeight)};
         if (context.has(input_kest::kFeed.name)) {
             RAWFRAME_TRY_ASSIGN(feed_, context.capability(input_kest::kFeed));
+        }
+        if (context.has(view::kUiPointing.name)) {
+            RAWFRAME_TRY_ASSIGN(pointing_, context.capability(view::kUiPointing));
         }
         auto runtime = Runtime::open({});
         if (!runtime.has_value()) {
@@ -324,6 +328,28 @@ private:
             button(kControls.select, hand.select, fed.select);
             button(kControls.menu, hand.menu, fed.menu);
         }
+        hover();
+    }
+
+    /// The UI's pointer, where a hand points on the panel (D605): the right
+    /// hand's, else the left's, and away once neither points at it. While a
+    /// headset shows the panel, the hands point; a mouse moved over the
+    /// window points too until a hand next moves.
+    void hover() noexcept {
+        if (pointing_ == nullptr) {
+            return;
+        }
+        const std::array<float, 2>& kAt = pointed_[1] != kAway ? pointed_[1] : pointed_[0];
+        if (kAt != kAway) {
+            if (!hovering_ || kAt != hovered_) {
+                pointing_->pointAt(kAt[0], kAt[1]);
+                hovered_ = kAt;
+                hovering_ = true;
+            }
+        } else if (hovering_) {
+            pointing_->left();
+            hovering_ = false;
+        }
     }
 
     /// What the game has the controllers feel (D600), taken from the feed
@@ -416,6 +442,11 @@ private:
     bool connected_ = false;
     std::array<Hand, 2> fed_{};
     std::array<std::array<float, 2>, 2> pointed_{kAway, kAway};
+    /// The UI's pointer, where the host lends it, and where a hand last
+    /// told it (D605).
+    view::UiPointing* pointing_ = nullptr;
+    bool hovering_ = false;
+    std::array<float, 2> hovered_{};
     /// Hands' frames pointing at the panel.
     std::uint64_t handsPointing_ = 0;
     std::vector<input::HapticCommand> felt_;
