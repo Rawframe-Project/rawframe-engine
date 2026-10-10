@@ -437,6 +437,30 @@ struct Session::State {
     }
 };
 
+std::optional<std::array<float, 2>> pointOnPanel(const SpacePose& aim, const PanelSettings& panel) noexcept {
+    if (!aim.located || panel.width == 0 || panel.height == 0 || panel.meters <= 0) {
+        return std::nullopt;
+    }
+    // The aim's -Z, turned by its quaternion.
+    const auto [kX, kY, kZ, kW] = aim.orientation;
+    const std::array<float, 3> kForward = {
+        -2 * (kX * kZ + kW * kY), -2 * (kY * kZ - kW * kX), -(1 - 2 * (kX * kX + kY * kY))};
+    // The panel's plane, `distance` ahead, faces +Z.
+    const float kAhead = -panel.distance - aim.position[2];
+    if (kForward[2] >= 0 || kAhead >= 0) {
+        return std::nullopt;
+    }
+    const float kAlong = kAhead / kForward[2];
+    const float kWide = panel.meters;
+    const float kTall = panel.meters * static_cast<float>(panel.height) / static_cast<float>(panel.width);
+    const float kU = (aim.position[0] + kAlong * kForward[0] + kWide / 2) / kWide;
+    const float kV = (kTall / 2 - (aim.position[1] + kAlong * kForward[1])) / kTall;
+    if (kU < 0 || kU >= 1 || kV < 0 || kV >= 1) {
+        return std::nullopt;
+    }
+    return std::array<float, 2>{kU * static_cast<float>(panel.width), kV * static_cast<float>(panel.height)};
+}
+
 Session::Session(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
 }
 

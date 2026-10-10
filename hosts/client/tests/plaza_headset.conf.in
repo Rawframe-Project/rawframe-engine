@@ -1,7 +1,7 @@
 # The client's own walker in the plaza, shown on a headset (D596): the
 # plaza drawn as `plaza_drawn.conf` draws it, for each of the headset's
 # eyes, and the headset's controllers fed to its player's mapper as the
-# window's devices are.
+# window's devices are. A small panel (D597), which both hands aim at.
 bots.player = true
 render.device = any
 content.root = @PLAZA_CONTENT@
@@ -9,3 +9,5 @@ scene.shadow_side = 256
 input.gamepads = false
 render.frame_rate = 30
 xr.headset = true
+xr.panel_width = 320
+xr.panel_height = 180

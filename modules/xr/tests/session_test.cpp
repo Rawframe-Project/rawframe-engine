@@ -4,7 +4,8 @@
 // frame's picture placed into their images, and the views submitted; the
 // session ended when asked. While it has the input focus, both hands'
 // controllers are read and located (D596), and a panel is shown over the
-// views, a quad layer (D597). Run under tools/xr_run.sh, which starts
+// views, a quad layer (D597); and an aim points at the panel where its
+// ray meets it (D598). Run under tools/xr_run.sh, which starts
 // Monado's service headless (its null compositor, simulated headset, and
 // simulated simple controllers) on lavapipe; a machine with no runtime
 // skips, unless RAWFRAME_REQUIRE_XR is set, as the check sets it where
@@ -18,7 +19,9 @@
 #include "rawframe/xr/session.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -185,4 +188,32 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
     // The frames, then the session, go before the device they are made on.
     framer->reset();
     made->reset();
+}
+
+RAWFRAME_TEST(AnAimPointsAtThePanelWhereItsRayMeetsIt) {
+    // A 1.6 m panel of 320 by 180 pixels, 1.5 m ahead (D598).
+    const xr::PanelSettings kPanel{.width = 320, .height = 180, .meters = 1.6F, .distance = 1.5F};
+    const auto kNear = [](std::optional<std::array<float, 2>> point, float x, float y) {
+        return point.has_value() && std::abs((*point)[0] - x) < 1e-2F && std::abs((*point)[1] - y) < 1e-2F;
+    };
+    // Straight ahead from the middle: the middle.
+    RAWFRAME_EXPECT(kNear(xr::pointOnPanel({.located = true}, kPanel), 160, 90));
+    // From 0.4 m right and 0.225 m up: a quarter in from the right, a
+    // quarter down, the panel being 0.9 m tall.
+    RAWFRAME_EXPECT(kNear(xr::pointOnPanel({.position = {0.4F, 0.225F, -0.3F}, .located = true}, kPanel), 240, 45));
+    // Turned 45 degrees left about +Y: 1.5 m along, 1.5 m left, past the
+    // panel's edge; at 20 degrees, tan 20 * 1.5 = 0.546 m left.
+    const float kHalf = 0.5F * 20 * 3.14159265F / 180;
+    RAWFRAME_EXPECT(
+        kNear(xr::pointOnPanel({.orientation = {0, std::sin(kHalf), 0, std::cos(kHalf)}, .located = true}, kPanel),
+              160 - 0.54596F / 1.6F * 320,
+              90));
+    const float kWide = 0.5F * 45 * 3.14159265F / 180;
+    RAWFRAME_EXPECT(
+        !xr::pointOnPanel({.orientation = {0, std::sin(kWide), 0, std::cos(kWide)}, .located = true}, kPanel));
+    // Turned back, beyond the panel, unlocated, or with no panel: nothing.
+    RAWFRAME_EXPECT(!xr::pointOnPanel({.orientation = {0, 1, 0, 0}, .located = true}, kPanel));
+    RAWFRAME_EXPECT(!xr::pointOnPanel({.position = {0, 0, -2}, .located = true}, kPanel));
+    RAWFRAME_EXPECT(!xr::pointOnPanel({}, kPanel));
+    RAWFRAME_EXPECT(!xr::pointOnPanel({.located = true}, {}));
 }

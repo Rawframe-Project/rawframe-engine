@@ -255,7 +255,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # The plaza shown on a headset (D596), under Monado's simulated one
         # (tools/xr_run.sh): drawn for both its eyes, its simulated
         # controllers read in both hands, located, and fed to the player's
-        # mapper as the client's controller device.
+        # mapper as the client's controller device, both aiming at the
+        # panel (D598).
         if(RAWFRAME_CLIENT_HEADSET AND RAWFRAME_MONADO_SERVICE AND NOT WIN32)
             configure_file(tests/plaza_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf @ONLY)
             add_test(NAME client_plaza_headset
@@ -269,7 +270,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                                  FIXTURES_REQUIRED plaza_content
                                  PROCESSORS 2
                                  PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+}.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":[1-9][0-9]+,\"failed\":false}.*\"code\":\"input_summary\"[^\n]*\"player\":0,[^\n]*\"controllerEvents\":[1-9][0-9]+,")
+                                 "\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+}.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":[1-9][0-9]+,\"handsPointing\":[1-9][0-9]+,\"failed\":false}.*\"code\":\"input_summary\"[^\n]*\"player\":0,[^\n]*\"controllerEvents\":[1-9][0-9]+,")
         endif()
         # Each draws a window on lavapipe beside a server, and bots or a
         # second client in some: two of a preset's processors each, so a full

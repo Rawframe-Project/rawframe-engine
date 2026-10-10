@@ -100,6 +100,13 @@ struct PanelSettings {
     float distance = 1.5F;
 };
 
+/// Where `aim` points on `panel` as a session shows it (D598): the panel's
+/// pixels from its top left, where the aim's forward ray (its -Z) meets the
+/// panel inside it; none where the aim is not located, points away, or
+/// misses it.
+[[nodiscard]] std::optional<std::array<float, 2>> pointOnPanel(const SpacePose& aim,
+                                                               const PanelSettings& panel) noexcept;
+
 /// A presentation frame, from `begin` to `end`.
 struct SessionFrame {
     /// A frame was waited for and begun: `end` follows.

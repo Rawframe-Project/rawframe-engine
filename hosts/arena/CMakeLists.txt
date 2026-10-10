@@ -362,7 +362,7 @@ if(RAWFRAME_BUILD_TESTS)
             set_tests_properties(plaza_headset PROPERTIES
                                  FIXTURES_REQUIRED plaza_content
                                  PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"xr_ready\".*\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"scene_eyes_summary\"[^\n]*\"eyes\":2,\"eyeFrames\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"width\":128,\"height\":128,[^\n]*\"headsetFrames\":[1-9][0-9]+.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":0,\"failed\":false")
+                                 "\"code\":\"xr_ready\".*\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"scene_eyes_summary\"[^\n]*\"eyes\":2,\"eyeFrames\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"width\":128,\"height\":128,[^\n]*\"headsetFrames\":[1-9][0-9]+.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":0,\"handsPointing\":0,\"failed\":false")
         endif()
         if(RAWFRAME_ARENA_HEADSET)
             add_test(NAME plaza_headset_absent

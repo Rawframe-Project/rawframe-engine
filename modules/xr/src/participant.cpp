@@ -37,13 +37,22 @@ struct HandControls {
     input::Control menu;
     input::Control grip;
     input::Control aim;
+    input::Control pointer;
 };
+
+/// A hand's pointer while its aim misses the panel: far outside it, where
+/// no UI is (D598).
+constexpr std::array<float, 2> kAway = {-1'000'000, -1'000'000};
 
 HandControls handControls(std::string_view side) noexcept {
     const auto kNamed = [side](std::string_view control) {
         return *input::controlNamed(input::DeviceClass::Controller, std::string{control} + "_" + std::string{side});
     };
-    return {.select = kNamed("select"), .menu = kNamed("menu"), .grip = kNamed("grip"), .aim = kNamed("aim")};
+    return {.select = kNamed("select"),
+            .menu = kNamed("menu"),
+            .grip = kNamed("grip"),
+            .aim = kNamed("aim"),
+            .pointer = kNamed("pointer")};
 }
 
 constexpr std::array<std::string_view, 9> kStateNames = {
@@ -136,6 +145,7 @@ public:
                       diagnostics::field("framesHandsRead", totals_.framesHandsRead),
                       diagnostics::field("framesHandLocated", totals_.framesHandLocated),
                       diagnostics::field("controllerEvents", controllerEvents_),
+                      diagnostics::field("handsPointing", handsPointing_),
                       diagnostics::field("failed", failed_)});
     }
 
@@ -299,11 +309,27 @@ private:
             }
             Hand& fed = fed_[at];
             const HandControls& kControls = controls_[at];
-            button(kControls.select, hand.select, fed.select);
-            button(kControls.menu, hand.menu, fed.menu);
             pose(kControls.grip, hand.grip, fed.grip);
             pose(kControls.aim, hand.aim, fed.aim);
+            // Where it points on the panel, told before its select, so a
+            // press there is the UI's (D598).
+            if (session_ != nullptr && session_->panel().has_value()) {
+                const std::array<float, 2> kPointed = pointOnPanel(hand.aim, panel_).value_or(kAway);
+                pointed(kControls.pointer, kPointed, pointed_[at]);
+                handsPointing_ += kPointed != kAway ? 1U : 0U;
+            }
+            button(kControls.select, hand.select, fed.select);
+            button(kControls.menu, hand.menu, fed.menu);
         }
+    }
+
+    void pointed(input::Control control, std::array<float, 2> at, std::array<float, 2>& fed) noexcept {
+        if (at == fed) {
+            return;
+        }
+        fed = at;
+        feed_->submit({.device = kHands, .control = control, .x = at[0], .y = at[1]});
+        ++controllerEvents_;
     }
 
     void button(input::Control control, bool held, bool& fed) noexcept {
@@ -338,6 +364,7 @@ private:
         feedHands({});
         feed_->disconnect(kHands);
         connected_ = false;
+        pointed_ = {kAway, kAway};
     }
 
     /// The session's state, said when it changed.
@@ -368,6 +395,9 @@ private:
     input::Feed* feed_ = nullptr;
     bool connected_ = false;
     std::array<Hand, 2> fed_{};
+    std::array<std::array<float, 2>, 2> pointed_{kAway, kAway};
+    /// Hands' frames pointing at the panel.
+    std::uint64_t handsPointing_ = 0;
     std::array<HandControls, 2> controls_{handControls("left"), handControls("right")};
     std::uint64_t controllerEvents_ = 0;
     /// This iteration's frame begun and not yet ended, and its images.
