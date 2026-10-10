@@ -245,6 +245,7 @@ mnavResult mnavCommitFlight(mnavFlightVolume* volume)
     volume->tiles = next;
     volume->tileCount = (int32_t)count;
     volume->stagedCount = 0;
+    volume->commits += 1;
     return mnav_success;
 }
 

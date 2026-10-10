@@ -123,9 +123,14 @@ mnavInputResult mnavCheckTriangleMesh(const mnavBakeDef* def, const mnavTriangle
 
 mnavInputResult mnavValidateTriangleMesh(const mnavBakeDef* def, const mnavTriangleMesh* mesh)
 {
-    if (def == nullptr || mesh == nullptr || mnavCheckBakeDef(def, nullptr).result != mnav_success)
+    if (def == nullptr || mesh == nullptr)
     {
         return Refuse(mnav_errorInvalid, mnav_elementNone, -1);
+    }
+    mnavResult checked = mnavCheckBakeDef(def, nullptr).result;
+    if (checked != mnav_success)
+    {
+        return Refuse(checked, mnav_elementNone, -1);
     }
     return mnavCheckTriangleMesh(def, mesh);
 }
@@ -158,10 +163,14 @@ mnavInputResult mnavCheckOutline(const mnavBakeDef* def, const mnavOutline* outl
 
 mnavInputResult mnavValidateOutline(const mnavBakeDef* def, const mnavOutline* outline)
 {
-    if (def == nullptr || outline == nullptr ||
-        mnavCheckBakeDef(def, nullptr).result != mnav_success)
+    if (def == nullptr || outline == nullptr)
     {
         return Refuse(mnav_errorInvalid, mnav_elementNone, -1);
+    }
+    mnavResult checked = mnavCheckBakeDef(def, nullptr).result;
+    if (checked != mnav_success)
+    {
+        return Refuse(checked, mnav_elementNone, -1);
     }
     return mnavCheckOutline(def, outline);
 }

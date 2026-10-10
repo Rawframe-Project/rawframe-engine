@@ -40,7 +40,9 @@ extern "C"
 #define MNAV_MAX_TILE_VERTICES   65535
 #define MNAV_MAX_TILE_LINKS      1048576
 #define MNAV_MAX_TILES           1048576
-#define MNAV_MAX_LINKS           1048576
+// The most tiles a tile cache may hold.
+#define MNAV_MAX_CACHED_TILES 1048576
+#define MNAV_MAX_LINKS        1048576
 
     // An area type, 0 to MNAV_AREA_TYPES - 1.
     typedef uint8_t mnavAreaType;
@@ -129,6 +131,8 @@ extern "C"
     typedef struct mnavBakeDef
     {
         uint32_t cookie;
+        // MNAV_ABI_VERSION, set by mnavDefaultBakeDef.
+        uint32_t version;
         // The allocator the bake uses; zeroed for the C library's.
         mnavAllocator allocator;
         // The world position the tile grid starts at. Input vertices are
@@ -403,14 +407,19 @@ extern "C"
     /// @param def     The bake def the outline is for.
     /// @param outline The outline.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, an
-    /// invalid def, fewer than 3 points, an area of MNAV_AREA_TYPES or more,
-    /// or a point that is not finite (the point); `mnav_errorRange` for a
-    /// point past the extent input may have (the point); `mnav_errorLimit`
-    /// for more points than the inputTriangles limit.
+    /// invalid def, fewer than 3 points, an area of MNAV_AREA_TYPES or more, or
+    /// a point that is not finite (the point); `mnav_errorVersion` for a def
+    /// built against another major or minor version; `mnav_errorRange` for a
+    /// point past the extent input may have (the point); `mnav_errorLimit` for
+    /// more points than the inputTriangles limit.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavInputResult mnavValidateOutline(const mnavBakeDef* def,
                                                                 const mnavOutline* outline);
+
+// The cookie mnavDefaultBakeDef sets and every function that takes a
+// bake def checks.
+#define MNAV_BAKE_DEF_COOKIE 0x4E415642u
 
     /// Returns the default bake def: cells of 0.25 m by 0.125 m, tiles of
     /// 128 cells, an agent 0.5 m in radius and 2 m tall that steps 0.75 m
@@ -418,11 +427,45 @@ extern "C"
     /// meters, walls within 0.3 m of the cells and at most 12 m long,
     /// detail samples every 1.5 m within 0.125 m, and limits sized for a
     /// large level.
+    /// Built in the program, so that it carries the version of the
+    /// headers the program includes.
     ///
     /// @return The def, with a valid cookie.
     /// @par Thread safety
     /// Safe from any thread.
-    MNAV_API mnavBakeDef mnavDefaultBakeDef(void);
+    static inline mnavBakeDef mnavDefaultBakeDef(void)
+    {
+#ifdef __cplusplus
+        mnavBakeDef def = {};
+#else
+    mnavBakeDef def = {0};
+#endif
+        def.cookie = MNAV_BAKE_DEF_COOKIE;
+        def.version = MNAV_ABI_VERSION;
+        // Powers of two, so the default agent converts to cells exactly.
+        def.cellSize = 0.25f;
+        def.cellHeight = 0.125f;
+        def.tileCells = 128;
+        def.agent.radius = 0.5f;
+        def.agent.height = 2.0f;
+        def.agent.stepHeight = 0.75f;
+        def.agent.maxSlopeDegrees = 45.0f;
+        def.minRegionArea = 2.0f;
+        def.maxEdgeError = 0.3f;
+        def.maxEdgeLength = 12.0f;
+        def.detailSampleDistance = 1.5f;
+        def.detailMaxError = 0.125f;
+        def.limits.inputTriangles = 4194304;
+        def.limits.tileTriangles = 1048576;
+        def.limits.tileSpans = 4194304;
+        def.limits.tilePolygons = 8192;
+        def.limits.tileVertices = 16384;
+        def.limits.tileLinks = 32768;
+        def.limits.tiles = 65536;
+        def.limits.links = 4096;
+        def.limits.memoryBytes = 268435456;
+        return def;
+    }
 
     /// Checks a bake def and converts its meters to cells.
     ///
@@ -433,7 +476,8 @@ extern "C"
     /// NULL def, a def without its cookie, an allocator with one function,
     /// a value that is not finite or lies outside its range, an agent
     /// radius whose border is wider than a tile, or an agent height or
-    /// step height past MNAV_MAX_HEIGHT_CELLS.
+    /// step height past MNAV_MAX_HEIGHT_CELLS; `mnav_errorVersion` with no
+    /// setting for a def built against another major or minor version.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavBakeDefResult mnavValidateBakeDef(const mnavBakeDef* def,
@@ -444,14 +488,14 @@ extern "C"
     /// @param def   The bake def the mesh is for.
     /// @param mesh  The mesh.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, an
-    /// invalid def, a negative count, a NULL array its count needs, a
-    /// vertex coordinate that is not finite, a vertex index outside the
-    /// vertices or an area type of MNAV_AREA_TYPES or more;
-    /// `mnav_errorLimit` for more triangles than the def's inputTriangles
-    /// limit; `mnav_errorRange` for a vertex more than MNAV_MAX_EXTENT_CELLS
-    /// cells from the origin on the ground or MNAV_MAX_HEIGHT_CELLS cell
-    /// heights above or below it. The element and index name the first
-    /// offending vertex or triangle.
+    /// invalid def, a negative count, a NULL array its count needs, a vertex
+    /// coordinate that is not finite, a vertex index outside the vertices or an
+    /// area type of MNAV_AREA_TYPES or more; `mnav_errorVersion` for a def
+    /// built against another major or minor version; `mnav_errorLimit` for more
+    /// triangles than the def's inputTriangles limit; `mnav_errorRange` for a
+    /// vertex more than MNAV_MAX_EXTENT_CELLS cells from the origin on the
+    /// ground or MNAV_MAX_HEIGHT_CELLS cell heights above or below it. The
+    /// element and index name the first offending vertex or triangle.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavInputResult mnavValidateTriangleMesh(const mnavBakeDef* def,
@@ -538,7 +582,8 @@ extern "C"
     /// @param def       The def.
     /// @param bakerOut  Receives the baker, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` with the setting for an
-    /// invalid def or a NULL argument; `mnav_errorLimit` when the baker
+    /// invalid def or a NULL argument; `mnav_errorVersion` for a def built
+    /// against another major or minor version; `mnav_errorLimit` when the baker
     /// does not fit the def's memory limit; `mnav_errorCapacity` when the
     /// allocator fails.
     /// @par Thread safety
@@ -601,12 +646,12 @@ extern "C"
     /// @param reportOut Receives the result, the first mesh refused and
     ///                  what its check found, and the memory peak; the
     ///                  other fields are 0. May be NULL.
-    /// @return `mnav_success`; `mnav_errorInvalid` for an invalid def, a
-    /// NULL indexOut, a negative count, NULL meshes with a positive count,
-    /// or a mesh its check refuses; `mnav_errorRange` for a mesh past the
-    /// extent; `mnav_errorLimit` past the def's memory limit or past
-    /// 2^31 - 1 listed triangles; `mnav_errorCapacity` when the allocator
-    /// fails.
+    /// @return `mnav_success`; `mnav_errorInvalid` for an invalid def, a NULL
+    /// indexOut, a negative count, NULL meshes with a positive count, or a mesh
+    /// its check refuses; `mnav_errorVersion` for a def built against another
+    /// major or minor version; `mnav_errorRange` for a mesh past the extent;
+    /// `mnav_errorLimit` past the def's memory limit or past 2^31 - 1 listed
+    /// triangles; `mnav_errorCapacity` when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread. An index is never changed after it is made,
     /// so any number of bakes on any threads may read it at once.
@@ -726,8 +771,8 @@ extern "C"
     /// Copies the last baked tile's bytes into caller memory.
     ///
     /// @param baker     The baker.
-    /// @param buffer    The memory, at least capacity bytes; may be NULL
-    ///                  when capacity is 0.
+    /// @param bufferOut Receives the bytes: at least capacity bytes; may be
+    ///                  NULL when capacity is 0.
     /// @param capacity  The buffer's size in bytes.
     /// @param sizeOut   Receives the tile's size in bytes. May be NULL.
     /// @return `mnav_success`; `mnav_errorCapacity` when the buffer is
@@ -736,8 +781,142 @@ extern "C"
     /// positive capacity, or a baker holding no tile.
     /// @par Thread safety
     /// Safe from any thread; the baker is used by one thread at a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavCopyBakedTile(const mnavBaker* baker, uint8_t* buffer,
+    MNAV_NODISCARD MNAV_API mnavResult mnavCopyBakedTile(const mnavBaker* baker, uint8_t* bufferOut,
                                                          size_t capacity, size_t* sizeOut);
+
+    // The limits of a tile cache.
+    typedef struct mnavTileCacheLimits
+    {
+        // Tiles held at once, 1 to MNAV_MAX_CACHED_TILES.
+        int32_t tiles;
+        // Bytes held at once, at least 1.
+        uint64_t memoryBytes;
+    } mnavTileCacheLimits;
+
+    // How a tile cache is made. Build it with mnavDefaultTileCacheDef.
+    typedef struct mnavTileCacheDef
+    {
+        uint32_t cookie;
+        // MNAV_ABI_VERSION, set by mnavDefaultTileCacheDef.
+        uint32_t version;
+        // The allocator the cache uses; zeroed for the C library's.
+        mnavAllocator allocator;
+        mnavTileCacheLimits limits;
+    } mnavTileCacheDef;
+
+    // What a baker keeps of baked tiles to rebuild them with obstacles
+    // (mnav-0016): each tile's open-space field as it stands before
+    // volumes apply, compressed, the volumes that reach the tile, and the
+    // hash of its triangles. Made by mnavCreateTileCache.
+    typedef struct mnavTileCache mnavTileCache;
+
+// The cookie mnavDefaultTileCacheDef sets and mnavCreateTileCache checks.
+#define MNAV_TILE_CACHE_DEF_COOKIE 0x4354564Du
+
+    /// Returns the default tile cache def: up to 4096 tiles in 64 MiB.
+    /// Built in the program, so that it carries the version of the
+    /// headers the program includes.
+    ///
+    /// @return The def.
+    /// @par Thread safety
+    /// Safe from any thread.
+    static inline mnavTileCacheDef mnavDefaultTileCacheDef(void)
+    {
+#ifdef __cplusplus
+        mnavTileCacheDef def = {};
+#else
+    mnavTileCacheDef def = {0};
+#endif
+        def.cookie = MNAV_TILE_CACHE_DEF_COOKIE;
+        def.version = MNAV_ABI_VERSION;
+        def.limits.tiles = 4096;
+        def.limits.memoryBytes = 67108864ull;
+        return def;
+    }
+
+    /// Makes an empty tile cache.
+    ///
+    /// @param def       The def, from mnavDefaultTileCacheDef.
+    /// @param cacheOut  Receives the cache, or NULL on failure.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
+    /// not from mnavDefaultTileCacheDef; `mnav_errorVersion` for one built
+    /// against another major or minor version; `mnav_errorRange` for a limit
+    /// out of its range; `mnav_errorCapacity` when the allocator fails.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MNAV_NODISCARD MNAV_API mnavResult mnavCreateTileCache(const mnavTileCacheDef* def,
+                                                           mnavTileCache** cacheOut);
+
+    /// Destroys a tile cache and everything it holds.
+    ///
+    /// @param cache The cache, or NULL.
+    /// @par Thread safety
+    /// Safe from any thread; the cache is used by one thread at a time.
+    MNAV_API void mnavDestroyTileCache(mnavTileCache* cache);
+
+    /// Bakes a tile as mnavBakeTileInput does and keeps what a rebuild
+    /// needs in the cache, replacing what it held for the tile.
+    ///
+    /// @param baker     The baker.
+    /// @param cache     The cache.
+    /// @param input     The input, as mnavBakeTileInput takes it.
+    /// @param tileX     The tile's column.
+    /// @param tileZ     The tile's row.
+    /// @param reportOut Receives the report. May be NULL.
+    /// @return As mnavBakeTileInput; `mnav_errorInvalid` for a NULL cache;
+    /// `mnav_errorLimit` when the cache holds its most tiles or bytes, with
+    /// no tile baked and the tile's old entry dropped.
+    /// @par Thread safety
+    /// Safe from any thread; the baker and the cache are used by one thread
+    /// at a time.
+    MNAV_NODISCARD MNAV_API mnavResult mnavBakeTileCached(mnavBaker* baker, mnavTileCache* cache,
+                                                          const mnavBakeInput* input, int32_t tileX,
+                                                          int32_t tileZ, mnavBakeReport* reportOut);
+
+    /// Rebuilds a cached tile with obstacles, without its triangles: the
+    /// cached field, the cached volumes and then the obstacles, run from
+    /// the volumes on. The bytes are those mnavBakeTileInput gives the same
+    /// input with the obstacles appended to its volumes. An exclude
+    /// obstacle carves, an area obstacle changes the area within it.
+    ///
+    /// @param baker         The baker, made from the def the tile was
+    ///                      cached with.
+    /// @param cache         The cache.
+    /// @param tileX         The tile's column.
+    /// @param tileZ         The tile's row.
+    /// @param obstacles     The obstacles, as bake volumes. May be NULL
+    ///                      when obstacleCount is 0.
+    /// @param obstacleCount How many, at least 0.
+    /// @param reportOut     Receives the report. May be NULL.
+    /// @return `mnav_success`; `mnav_errorNotLoaded` for a tile the cache
+    /// does not hold; `mnav_errorInvalid` for a NULL argument, a negative
+    /// count, a baker of another def, or an obstacle as a bake refuses a
+    /// volume, named in the report; otherwise as mnavBakeTileInput.
+    /// @par Thread safety
+    /// Safe from any thread; the baker and the cache are used by one thread
+    /// at a time.
+    MNAV_NODISCARD MNAV_API mnavResult mnavRebuildTile(mnavBaker* baker, mnavTileCache* cache,
+                                                       int32_t tileX, int32_t tileZ,
+                                                       const mnavBakeVolume* obstacles,
+                                                       int32_t obstacleCount,
+                                                       mnavBakeReport* reportOut);
+
+    /// Drops what the cache holds for a tile, if anything.
+    ///
+    /// @param cache The cache, or NULL.
+    /// @param tileX The tile's column.
+    /// @param tileZ The tile's row.
+    /// @par Thread safety
+    /// Safe from any thread; the cache is used by one thread at a time.
+    MNAV_API void mnavDropCachedTile(mnavTileCache* cache, int32_t tileX, int32_t tileZ);
+
+    /// Returns the bytes a tile cache holds, its tiles' and its own.
+    ///
+    /// @param cache The cache.
+    /// @return The bytes; 0 for NULL.
+    /// @par Thread safety
+    /// Safe from any thread; the cache is used by one thread at a time.
+    MNAV_API uint64_t mnavGetTileCacheBytes(const mnavTileCache* cache);
 
 #ifdef __cplusplus
 }

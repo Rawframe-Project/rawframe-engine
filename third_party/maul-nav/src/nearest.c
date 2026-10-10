@@ -78,26 +78,82 @@ static Flat NearestOnRing(const Flat* ring, int32_t count, Flat p, bool* inside)
     return best;
 }
 
+// The height at q of a triangle of nonzero area: its corners' heights
+// weighted by where q lies.
+static double TriangleHeight(const mnavDetailVertex* const v[3], const Flat ring[3], double area,
+                             Flat q)
+{
+    double wa = Cross(q, ring[1], ring[2]) / area;
+    double wb = Cross(ring[0], q, ring[2]) / area;
+    double wc = 1.0 - wa - wb;
+    return wa * v[0]->y + wb * v[1]->y + wc * v[2]->y;
+}
+
+static void Corners(const mnavTile* tile, const mnavDetailPart* part, int32_t t,
+                    const mnavDetailVertex* v[3], Flat ring[3])
+{
+    const mnavDetailVertex* vertices = &tile->detail.vertices[part->firstVertex];
+    const mnavDetailTriangle* triangle = &tile->detail.triangles[part->firstTriangle + t];
+    for (int32_t c = 0; c < 3; ++c)
+    {
+        v[c] = &vertices[triangle->corners[c]];
+        ring[c] = (Flat){v[c]->x, v[c]->z};
+    }
+}
+
+// The height of the first triangle holding q, as the full scan finds it
+// when no triangle before it comes within rounding of q: only such a one
+// could reach q at distance 0 first. False when the scan must decide.
+static bool HoldingHeight(const mnavTile* tile, const mnavDetailPart* part, Flat q,
+                          double* heightOut)
+{
+    for (int32_t t = 0; t < part->triangleCount; ++t)
+    {
+        const mnavDetailVertex* v[3];
+        Flat ring[3];
+        Corners(tile, part, t, v, ring);
+        double area = Cross(ring[0], ring[1], ring[2]);
+        bool inside = true;
+        bool near = false;
+        for (int32_t k = 0; k < 3; ++k)
+        {
+            Flat a = ring[k];
+            Flat b = ring[(k + 1) % 3];
+            double c = Cross(a, b, q);
+            inside = inside && c <= 0.0;
+            near = near || c * c <= 1e-12 * Distance2(a, b) * Distance2(a, b);
+        }
+        if (inside && area != 0.0)
+        {
+            *heightOut = TriangleHeight(v, ring, area, q);
+            return true;
+        }
+        if (near)
+        {
+            return false;
+        }
+    }
+    return false;
+}
+
 // The detail surface's height, in cell heights from the offset, at the
 // point of the polygon's detail nearest p (in cells): the triangle nearest
 // p, the first on ties, interpolated there.
 static double DetailHeight(const mnavTile* tile, int32_t p, Flat at)
 {
     const mnavDetailPart* part = &tile->detail.parts[p];
-    const mnavDetailVertex* vertices = &tile->detail.vertices[part->firstVertex];
     Flat q = {at.x * SUBCELLS, at.z * SUBCELLS};
+    double height = tile->detail.vertices[part->firstVertex].y;
+    if (HoldingHeight(tile, part, q, &height))
+    {
+        return height;
+    }
     double best = (double)INFINITY;
-    double height = vertices[0].y;
     for (int32_t t = 0; t < part->triangleCount; ++t)
     {
-        const mnavDetailTriangle* triangle = &tile->detail.triangles[part->firstTriangle + t];
         const mnavDetailVertex* v[3];
         Flat ring[3];
-        for (int32_t c = 0; c < 3; ++c)
-        {
-            v[c] = &vertices[triangle->corners[c]];
-            ring[c] = (Flat){v[c]->x, v[c]->z};
-        }
+        Corners(tile, part, t, v, ring);
         double area = Cross(ring[0], ring[1], ring[2]);
         bool inside = false;
         Flat on = NearestOnRing(ring, 3, q, &inside);
@@ -106,10 +162,7 @@ static double DetailHeight(const mnavTile* tile, int32_t p, Flat at)
         {
             continue;
         }
-        double wa = Cross(on, ring[1], ring[2]) / area;
-        double wb = Cross(ring[0], on, ring[2]) / area;
-        double wc = 1.0 - wa - wb;
-        height = wa * v[0]->y + wb * v[1]->y + wc * v[2]->y;
+        height = TriangleHeight(v, ring, area, on);
         best = d;
         if (best == 0.0)
         {
@@ -293,11 +346,11 @@ mnavCover mnavCoverOf(const mnavNavmesh* navmesh, mnavPos3 point, mnavPos3 half)
 }
 
 mnavResult mnavFindPolygons(const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
-                            mnavPos3 center, mnavVec3 halfExtents, mnavPolygonId* polygons,
+                            mnavPos3 center, mnavVec3 halfExtents, mnavPolygonId* polygonsOut,
                             int32_t capacity, mnavFound* foundOut)
 {
     if (navmesh == nullptr || foundOut == nullptr || capacity < 0 ||
-        (polygons == nullptr && capacity > 0) || !GoodBox(center, halfExtents))
+        (polygonsOut == nullptr && capacity > 0) || !GoodBox(center, halfExtents))
     {
         return mnav_errorInvalid;
     }
@@ -331,7 +384,7 @@ mnavResult mnavFindPolygons(const mnavNavmesh* navmesh, const mnavQueryFilter* f
             }
             if (count < capacity)
             {
-                polygons[count] = (mnavPolygonId){
+                polygonsOut[count] = (mnavPolygonId){
                     (uint32_t)place->slot + 1, navmesh->slots[place->slot].generation, (uint32_t)p};
             }
             count += 1;

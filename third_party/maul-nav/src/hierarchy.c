@@ -26,16 +26,8 @@
 #include <stdint.h>
 #include <string.h>
 
-// Marks a def built by mnavDefaultHierarchyDef.
-#define HIERARCHY_DEF_COOKIE 0x4E415648u
-
 // Coordinates are biased into 32 unsigned bits for sort keys.
 #define BIAS 0x80000000u
-
-mnavHierarchyDef mnavDefaultHierarchyDef(void)
-{
-    return (mnavHierarchyDef){HIERARCHY_DEF_COOKIE, {0}, {4096, 16384, 262144}, 4};
-}
 
 static bool GoodDef(const mnavHierarchyDef* def)
 {
@@ -113,8 +105,15 @@ mnavResult mnavCreateHierarchy(const mnavHierarchyDef* def, mnavHierarchy** hier
         return mnav_errorInvalid;
     }
     *hierarchyOut = nullptr;
-    if (def == nullptr || def->cookie != HIERARCHY_DEF_COOKIE ||
-        (def->allocator.alloc == nullptr) != (def->allocator.free == nullptr))
+    if (def == nullptr || def->cookie != MNAV_HIERARCHY_DEF_COOKIE)
+    {
+        return mnav_errorInvalid;
+    }
+    if (def->version != MNAV_ABI_VERSION)
+    {
+        return mnav_errorVersion;
+    }
+    if ((def->allocator.alloc == nullptr) != (def->allocator.free == nullptr))
     {
         return mnav_errorInvalid;
     }
@@ -489,6 +488,7 @@ mnavResult mnavSearchCluster(mnavHierarchy* h, mnavQuery* query, const mnavNavme
     mnavMarkCluster(h, cluster, 0);
     bool out = query->search.outOfNodes;
     query->search.active = false;
+    query->flight.active = false;
     return result != mnav_success ? result : (out ? mnav_errorLimit : mnav_success);
 }
 

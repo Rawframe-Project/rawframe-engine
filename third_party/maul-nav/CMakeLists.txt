@@ -65,6 +65,7 @@ add_library(maul-nav ${MAUL_LIBRARY_KIND}
     src/fingerprint.c
     src/flight.c
     src/flight_baker.c
+    src/flight_debug.c
     src/flight_def.c
     src/flight_frame.c
     src/flight_probe.c
@@ -104,9 +105,13 @@ add_library(maul-nav ${MAUL_LIBRARY_KIND}
     src/scalar.c
     src/shortest.c
     src/sort.c
+    src/steer.c
     src/spatial.c
     src/surface.c
     src/terrain.c
+    src/field_pack.c
+    src/lz.c
+    src/tile_cache.c
     src/tile_index.c
     src/tile.c
     src/volume.c
@@ -147,6 +152,7 @@ if(MAUL_NAV_BUILD_TESTS)
     maul_add_test(flight_query)
     maul_add_test(sliced WHITEBOX)
     maul_add_test(surface WHITEBOX)
+    maul_add_test(walls WHITEBOX)
     maul_add_test(corridor WHITEBOX)
     maul_add_test(tiers WHITEBOX)
     maul_add_test(resnap WHITEBOX)
@@ -155,6 +161,7 @@ if(MAUL_NAV_BUILD_TESTS)
     maul_add_test(flow)
     maul_add_test(hierarchy)
     maul_add_test(spatial)
+    maul_add_test(steer)
     maul_add_test(linkgen)
     maul_add_test(debug)
     maul_add_test(guide)
@@ -162,6 +169,8 @@ if(MAUL_NAV_BUILD_TESTS)
     maul_add_test(alloc_failures)
     maul_add_test(rings)
     maul_add_test(refusals)
+    maul_add_test(version)
+    maul_add_test(stored)
     # Bakes and queries on several threads; Emscripten builds have none.
     if(NOT EMSCRIPTEN)
         maul_add_test(workers POSIX)
@@ -170,11 +179,15 @@ if(MAUL_NAV_BUILD_TESTS)
     maul_add_test(edge_links)
     maul_add_test(scenarios)
     maul_add_test(terrain)
+    maul_add_test(funnel WHITEBOX)
+    maul_add_test(lz WHITEBOX)
+    maul_add_test(tile_cache)
     maul_add_test(tile_index)
     maul_add_test(volume WHITEBOX)
     maul_add_test(avoidance)
     maul_add_test(avoidance3)
     maul_add_test(crowd WHITEBOX)
+    maul_add_test(spheres WHITEBOX)
     maul_add_test(orca WHITEBOX)
     maul_add_test(orca3 WHITEBOX)
     maul_add_test(obstacle WHITEBOX)
@@ -196,7 +209,7 @@ if(MAUL_NAV_FUZZ)
     target_compile_options(maul-nav PRIVATE -fsanitize=fuzzer-no-link,address,undefined
                                             -fno-sanitize-recover=all)
     target_link_options(maul-nav PUBLIC -fsanitize=address,undefined)
-    foreach(area tile bake query avoid graph stream flow shortest flight)
+    foreach(area tile bake query avoid graph stream flow shortest flight lz)
         add_executable(fuzz_${area} test/fuzz_${area}.c)
         target_link_libraries(fuzz_${area} PRIVATE maul-nav)
         # The targets reach the library's own functions.

@@ -8,11 +8,13 @@
 
 #include "avoidance.h"
 #include "crowd.h"
+#include "draw.h"
 #include "obstacle.h"
 #include "orca3.h"
 
 #include "maul-nav/avoidance.h"
 #include "maul-nav/base.h"
+#include "maul-nav/draw.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -42,57 +44,76 @@ static bool GoodSphere(const mnavSphere* sphere)
            GoodVector(sphere->velocity);
 }
 
-// The spheres an avoidance call is given.
-typedef struct Spheres
+// A sphere's reach from an agent: the squared gap between them, or -1
+// when the agent cannot meet it within the horizon.
+static double SphereReach(const mnavAgent3D* agent, const mnavSphere* sphere, double horizon)
 {
-    const mnavSphere* items;
-    int32_t count;
-} Spheres;
-
-static bool NearBefore(const Spheres* spheres, mnavObstacleNear a, mnavObstacleNear b)
-{
-    if (a.distance != b.distance)
-    {
-        return a.distance < b.distance;
-    }
-    uint64_t ia = spheres->items[a.vertex].id;
-    uint64_t ib = spheres->items[b.vertex].id;
-    return ia != ib ? ia < ib : a.vertex < b.vertex;
+    double speed = sqrt(mnavDot3(sphere->velocity, sphere->velocity));
+    double range = horizon * (agent->maxSpeed + speed) + agent->radius;
+    mnavPos3 rel = mnavSub3(sphere->center, agent->position);
+    double gap = sqrt(mnavDot3(rel, rel)) - sphere->radius;
+    gap = gap > 0.0 ? gap : 0.0;
+    return gap < range ? gap * gap : -1.0;
 }
 
-// The spheres an agent may meet within the horizon, the nearest first,
-// up to the limit, into list; returns how many. Each is looked at: a
-// call's spheres are the few moving things among fliers.
-static int32_t NearSpheres(const mnavAgent3D* agent, const Spheres* spheres, double horizon,
-                           mnavObstacleNear* list, int32_t limit)
+void mnavBuildSphereGrid(mnavAvoidance* a, const mnavSphere* spheres, int32_t count)
 {
-    int32_t count = 0;
-    for (int32_t s = 0; s < spheres->count; ++s)
+    double fastest = 0.0;
+    for (int32_t s = 0; s < count; ++s)
     {
-        const mnavSphere* sphere = &spheres->items[s];
+        const mnavSphere* sphere = &spheres[s];
+        a->vertices[s] = (mnavObstacleVertex){
+            .point = {sphere->center.x, sphere->center.z},
+            .velocity = {sphere->velocity.x, sphere->velocity.z},
+            .radius = sphere->radius,
+            .id = sphere->id,
+            .index = s,
+            .next = s,
+            .previous = s,
+        };
         double speed = sqrt(mnavDot3(sphere->velocity, sphere->velocity));
-        double range = horizon * (agent->maxSpeed + speed) + agent->radius;
-        mnavPos3 rel = mnavSub3(sphere->center, agent->position);
-        double gap = sqrt(mnavDot3(rel, rel)) - sphere->radius;
-        gap = gap > 0.0 ? gap : 0.0;
-        if (gap >= range)
-        {
-            continue;
-        }
-        mnavObstacleNear candidate = {gap * gap, s};
-        if (count == limit && !NearBefore(spheres, candidate, list[count - 1]))
-        {
-            continue;
-        }
-        int32_t i = count < limit ? count++ : count - 1;
-        while (i > 0 && NearBefore(spheres, candidate, list[i - 1]))
-        {
-            list[i] = list[i - 1];
-            i -= 1;
-        }
-        list[i] = candidate;
+        fastest = speed > fastest ? speed : fastest;
     }
-    return count;
+    mnavBuildObstacleGrid(&a->grid, a->vertices, count, a->def.neighborDistance);
+    // A sphere's reach counts its speed in space, not on the ground.
+    a->grid.fastest = fastest;
+}
+
+// An agent's view of the spheres, for measuring them.
+typedef struct Seen
+{
+    const mnavAgent3D* agent;
+    const mnavSphere* spheres;
+    double horizon;
+} Seen;
+
+static double MeasureSphere(const void* context, int32_t s)
+{
+    const Seen* seen = context;
+    if ((seen->spheres[s].layers & seen->agent->ignores) != 0)
+    {
+        return -1.0;
+    }
+    return SphereReach(seen->agent, &seen->spheres[s], seen->horizon);
+}
+
+int32_t mnavNearSpheres(mnavAvoidance* a, const mnavAgent3D* agent, const mnavSphere* spheres,
+                        int32_t count, mnavObstacleNear* list)
+{
+    if (count == 0)
+    {
+        return 0;
+    }
+    // A sphere the agent may meet lies within its reach on the ground,
+    // for the fastest sphere's speed; the reach is padded so that
+    // rounding at a cell's side never drops one.
+    double horizon = a->def.obstacleTimeHorizon;
+    mnavPos2 p = {agent->position.x, agent->position.z};
+    double reach = horizon * (agent->maxSpeed + a->grid.fastest) + agent->radius;
+    reach += 0x1p-20 * (reach + fabs(p.x) + fabs(p.y));
+    Seen seen = {agent, spheres, horizon};
+    return mnavNearInGrid(&a->grid, a->vertices, p, reach, MeasureSphere, &seen, list,
+                          a->def.limits.obstacleNeighbors);
 }
 
 // The plane of a sphere: an agent that never gives way while apart. An
@@ -137,26 +158,28 @@ static mnavPos3 KeepRight(mnavPos3 preferred)
 
 // The new velocity of agent i: its sphere planes, then its neighbours',
 // the 3D program over them all and the 4D one when they leave nothing.
-static mnavPos3 Solve(mnavAvoidance* a, const mnavAgent3D* agents, const Spheres* spheres,
-                      double step, int32_t i)
+static mnavPos3 Solve(mnavAvoidance* a, const mnavAgent3D* agents, const mnavSphere* spheres,
+                      int32_t sphereCount, double step, int32_t i)
 {
     const mnavAgent3D* self = &agents[i];
-    int32_t near = NearSpheres(self, spheres, a->def.obstacleTimeHorizon, a->near,
-                               a->def.limits.obstacleNeighbors);
+    int32_t near = mnavNearSpheres(a, self, spheres, sphereCount, a->near);
     int32_t count = 0;
     for (int32_t k = 0; k < near; ++k)
     {
         a->planes[count++] =
-            SpherePlane(self, &spheres->items[a->near[k].vertex], a->def.obstacleTimeHorizon, step);
+            SpherePlane(self, &spheres[a->near[k].vertex], a->def.obstacleTimeHorizon, step);
     }
     int32_t fixed = count;
-    int32_t neighbors = mnavCrowdNeighbors(&a->crowd, self->position, i);
+    int32_t neighbors = mnavCrowdNeighbors(&a->crowd, self->position, i, self->ignores);
     for (int32_t n = 0; n < neighbors; ++n)
     {
         const mnavAgent3D* other = &agents[a->crowd.neighbors[n].index];
+        // An agent that ignores this one leaves it the whole avoidance.
+        double share = (other->ignores & self->layers) != 0
+                           ? 1.0
+                           : other->priority / (self->priority + other->priority);
         a->planes[count++] = mnavPairPlane(self->position, self->velocity, other->position,
-                                           other->velocity, self->radius + other->radius,
-                                           other->priority / (self->priority + other->priority),
+                                           other->velocity, self->radius + other->radius, share,
                                            a->def.timeHorizon, step, self->id < other->id);
     }
     mnavPos3 velocity = {0.0, 0.0, 0.0};
@@ -184,16 +207,12 @@ static mnavPos3 Solve(mnavAvoidance* a, const mnavAgent3D* agents, const Spheres
     return velocity;
 }
 
-mnavResult mnavAvoid3D(mnavAvoidance* avoidance, const mnavAgent3D* agents, int32_t agentCount,
-                       const mnavSphere* spheres, int32_t sphereCount, double step,
-                       mnavPos3* velocitiesOut)
+// Checks a call's limits and its agents and spheres as hostile input,
+// then fills and sorts the grid in cubes; the arguments' presence is the
+// caller's to check.
+static mnavResult Prepare(mnavAvoidance* avoidance, const mnavAgent3D* agents, int32_t agentCount,
+                          const mnavSphere* spheres, int32_t sphereCount)
 {
-    if (avoidance == nullptr || agentCount < 0 || sphereCount < 0 ||
-        (agentCount > 0 && (agents == nullptr || velocitiesOut == nullptr)) ||
-        (sphereCount > 0 && spheres == nullptr) || !mnavAvoidTime(step))
-    {
-        return mnav_errorInvalid;
-    }
     if (agentCount > avoidance->def.limits.agents ||
         sphereCount > avoidance->def.limits.obstacleVertices)
     {
@@ -207,7 +226,7 @@ mnavResult mnavAvoid3D(mnavAvoidance* avoidance, const mnavAgent3D* agents, int3
         }
     }
     mnavCrowd* crowd = &avoidance->crowd;
-    crowd->space = true;
+    mnavBeginCrowd(crowd, true);
     for (int32_t i = 0; i < agentCount; ++i)
     {
         if (!GoodAgent(&agents[i]))
@@ -215,12 +234,82 @@ mnavResult mnavAvoid3D(mnavAvoidance* avoidance, const mnavAgent3D* agents, int3
             return mnav_errorInvalid;
         }
         crowd->keys[i] = mnavCrowdKeyOf(crowd, agents[i].position, agents[i].id, i);
+        crowd->keys[i].layers = agents[i].layers;
     }
     mnavSortCrowd(crowd, agentCount);
-    Spheres given = {spheres, sphereCount};
+    return mnav_success;
+}
+
+mnavResult mnavAvoid3D(mnavAvoidance* avoidance, const mnavAgent3D* agents, int32_t agentCount,
+                       const mnavSphere* spheres, int32_t sphereCount, double step,
+                       mnavPos3* velocitiesOut)
+{
+    if (avoidance == nullptr || agentCount < 0 || sphereCount < 0 ||
+        (agentCount > 0 && (agents == nullptr || velocitiesOut == nullptr)) ||
+        (sphereCount > 0 && spheres == nullptr) || !mnavAvoidTime(step))
+    {
+        return mnav_errorInvalid;
+    }
+    mnavResult result = Prepare(avoidance, agents, agentCount, spheres, sphereCount);
+    if (result != mnav_success)
+    {
+        return result;
+    }
+    mnavBuildSphereGrid(avoidance, spheres, sphereCount);
     for (int32_t i = 0; i < agentCount; ++i)
     {
-        velocitiesOut[i] = Solve(avoidance, agents, &given, step, i);
+        velocitiesOut[i] = Solve(avoidance, agents, spheres, sphereCount, step, i);
     }
     return mnav_success;
+}
+
+// Draws three 16-gons of a radius round a center, one in each axis plane.
+static void Rings(mnavDebugBuffer* buffer, mnavPos3 c, double radius, mnavDebugKind kind)
+{
+    for (int32_t k = 0; k < 16; ++k)
+    {
+        double u0 = radius * mnavOutline[k][0];
+        double u1 = radius * mnavOutline[k][1];
+        double w0 = radius * mnavOutline[(k + 1) % 16][0];
+        double w1 = radius * mnavOutline[(k + 1) % 16][1];
+        mnavDrawLine(buffer, (mnavPos3){c.x + u0, c.y + u1, c.z},
+                     (mnavPos3){c.x + w0, c.y + w1, c.z}, kind, 0);
+        mnavDrawLine(buffer, (mnavPos3){c.x, c.y + u0, c.z + u1},
+                     (mnavPos3){c.x, c.y + w0, c.z + w1}, kind, 0);
+        mnavDrawLine(buffer, (mnavPos3){c.x + u0, c.y, c.z + u1},
+                     (mnavPos3){c.x + w0, c.y, c.z + w1}, kind, 0);
+    }
+}
+
+mnavResult mnavDebugAvoidance3D(mnavAvoidance* avoidance, const mnavAgent3D* agents,
+                                int32_t agentCount, const mnavSphere* spheres, int32_t sphereCount,
+                                mnavDebugBuffer* buffer)
+{
+    if (avoidance == nullptr || agentCount < 0 || sphereCount < 0 ||
+        (agentCount > 0 && agents == nullptr) || (sphereCount > 0 && spheres == nullptr) ||
+        !mnavGoodBuffer(buffer))
+    {
+        return mnav_errorInvalid;
+    }
+    mnavResult result = Prepare(avoidance, agents, agentCount, spheres, sphereCount);
+    if (result != mnav_success)
+    {
+        return result;
+    }
+    for (int32_t i = 0; i < agentCount; ++i)
+    {
+        const mnavAgent3D* a = &agents[i];
+        Rings(buffer, a->position, a->radius, mnav_debugAgent);
+        int32_t count = mnavCrowdNeighbors(&avoidance->crowd, a->position, i, a->ignores);
+        for (int32_t n = 0; n < count; ++n)
+        {
+            const mnavAgent3D* b = &agents[avoidance->crowd.neighbors[n].index];
+            mnavDrawLine(buffer, a->position, b->position, mnav_debugNeighbor, 0);
+        }
+    }
+    for (int32_t s = 0; s < sphereCount; ++s)
+    {
+        Rings(buffer, spheres[s].center, spheres[s].radius, mnav_debugObstacle);
+    }
+    return mnavDrawResult(buffer);
 }

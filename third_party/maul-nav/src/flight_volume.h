@@ -37,6 +37,8 @@ struct mnavFlightVolume
     mnavFlightEntry* staged;
     int32_t stagedCount;
     int32_t stagedCapacity;
+    // Commits so far, so that a search in slices knows the volume changed.
+    uint64_t commits;
 };
 
 // The tile committed at a place, or NULL.

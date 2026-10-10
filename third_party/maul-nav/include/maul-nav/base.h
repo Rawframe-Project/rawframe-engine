@@ -21,9 +21,17 @@ extern "C"
 #endif
 
 // The library version. CMake reads it from here.
-#define MNAV_VERSION_MAJOR 0
-#define MNAV_VERSION_MINOR 7
-#define MNAV_VERSION_PATCH 0
+#define MNAV_VERSION_MAJOR 1
+#define MNAV_VERSION_MINOR 0
+#define MNAV_VERSION_PATCH 1
+
+// The version every def and the query filter carry, stamped by their
+// defaults from the headers a program was built with: the ABI is promised
+// within a minor version only, and every function that takes a def or a
+// filter refuses one stamped for another major or minor with
+// mnav_errorVersion before it reads anything else of it. The cookie and
+// this stay the first two fields of every def in every version.
+#define MNAV_ABI_VERSION (((uint32_t)MNAV_VERSION_MAJOR << 16) | (uint32_t)MNAV_VERSION_MINOR)
 
 // MNAV_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_nav_EXPORTS is defined while building
@@ -76,7 +84,8 @@ extern "C"
         // represent in the frame it belongs to.
         mnav_errorRange = -4,
         // Data was written in a format version this library does not
-        // read.
+        // read, or a def was built against headers of another major or
+        // minor version (MNAV_ABI_VERSION).
         mnav_errorVersion = -5,
         // The place asked about has no tile loaded: not a wall, nothing
         // is known there.

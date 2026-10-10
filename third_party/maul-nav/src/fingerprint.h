@@ -25,4 +25,14 @@ uint64_t mnavFingerprintInput(const mnavTileFrame* frame, float cosMaxSlope,
                               const mnavBakeInput* input, int32_t tileX, int32_t tileZ,
                               uint64_t hash, int32_t* count);
 
+// The first part of mnavFingerprintInput: the triangles alone.
+uint64_t mnavFingerprintGeometry(const mnavTileFrame* frame, float cosMaxSlope,
+                                 const mnavBakeInput* input, int32_t tileX, int32_t tileZ,
+                                 uint64_t hash, int32_t* count);
+
+// The last part of mnavFingerprintInput: volumes, those reaching the frame
+// alone, after a word when any of them includes.
+uint64_t mnavFingerprintVolumes(const mnavTileFrame* frame, const mnavBakeVolume* volumes,
+                                int32_t count, uint64_t hash);
+
 #endif // MAUL_NAV_SRC_FINGERPRINT_H

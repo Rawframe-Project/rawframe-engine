@@ -12,6 +12,7 @@
 #include "contour.h"
 #include "detail.h"
 #include "erode.h"
+#include "field_pack.h"
 #include "filter.h"
 #include "fingerprint.h"
 #include "heightfield.h"
@@ -23,6 +24,7 @@
 #include "region.h"
 #include "terrain.h"
 #include "tile.h"
+#include "tile_cache.h"
 #include "tile_index.h"
 #include "volume.h"
 
@@ -30,6 +32,7 @@
 #include "maul-nav/base.h"
 
 #include <math.h>
+#include <stdckdint.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -307,9 +310,10 @@ static void Enter(mnavBaker* baker, mnavBakeReport* report, mnavBakeStage next)
     report->stage = next;
 }
 
-// Runs the stages in order, entering each in the report before it runs.
-static mnavResult RunStages(mnavBaker* baker, const Input* in, int32_t tileX, int32_t tileZ,
-                            Stages* s, mnavBakeReport* report)
+// Runs the stages up to the open-space field, entering each in the report
+// before it runs.
+static mnavResult RunToCompact(mnavBaker* baker, const Input* in, int32_t tileX, int32_t tileZ,
+                               Stages* s, mnavBakeReport* report)
 {
     mnavMemory* memory = &baker->memory;
     const mnavBakeDef* def = &baker->def;
@@ -332,12 +336,19 @@ static mnavResult RunStages(mnavBaker* baker, const Input* in, int32_t tileX, in
         mnavFilterWalkable(&s->heightfield, cells->agentHeight, cells->agentStep);
     }
     Enter(baker, report, mnav_stageCompact);
-    result = mnavBuildCompactField(memory, &s->heightfield, cells->agentHeight, cells->agentStep,
-                                   &s->compact);
-    if (result == mnav_success)
-    {
-        result = mnavCarveVolumes(memory, &s->compact, in->solid.volumes, in->solid.volumeCount);
-    }
+    return mnavBuildCompactField(memory, &s->heightfield, cells->agentHeight, cells->agentStep,
+                                 &s->compact);
+}
+
+// Runs the stages from the volumes on, over the open-space field, entering
+// each in the report before it runs.
+static mnavResult RunFromCompact(mnavBaker* baker, const mnavBakeVolume* volumes, int32_t count,
+                                 Stages* s, mnavBakeReport* report)
+{
+    mnavMemory* memory = &baker->memory;
+    const mnavBakeDef* def = &baker->def;
+    const mnavBakeCells* cells = &baker->cells;
+    mnavResult result = mnavCarveVolumes(memory, &s->compact, volumes, count);
     if (result == mnav_success)
     {
         Enter(baker, report, mnav_stageErode);
@@ -345,7 +356,7 @@ static mnavResult RunStages(mnavBaker* baker, const Input* in, int32_t tileX, in
     }
     if (result == mnav_success)
     {
-        result = mnavMarkVolumes(memory, &s->compact, in->solid.volumes, in->solid.volumeCount);
+        result = mnavMarkVolumes(memory, &s->compact, volumes, count);
     }
     if (result == mnav_success)
     {
@@ -430,25 +441,65 @@ static mnavResult Encode(mnavBaker* baker, int32_t tileX, int32_t tileZ, const S
                           &baker->tileSize);
 }
 
-static mnavResult Bake(mnavBaker* baker, const Input* in, int32_t tileX, int32_t tileZ,
-                       mnavBakeReport* reportOut)
+// Starts a bake or a rebuild: a fresh report, the last tile dropped and
+// the input stage begun. False, with the report given out, for a NULL
+// baker.
+static bool Start(mnavBaker* baker, mnavBakeReport* report, mnavBakeReport* reportOut)
 {
-    mnavBakeReport report = {0};
-    report.mesh = -1;
-    report.input = (mnavInputResult){mnav_success, mnav_elementNone, -1};
+    *report = (mnavBakeReport){0};
+    report->mesh = -1;
+    report->input = (mnavInputResult){mnav_success, mnav_elementNone, -1};
     if (baker == nullptr)
     {
-        report.result = mnav_errorInvalid;
+        report->result = mnav_errorInvalid;
         if (reportOut != nullptr)
         {
-            *reportOut = report;
+            *reportOut = *report;
         }
-        return mnav_errorInvalid;
+        return false;
     }
     DropTile(baker);
     baker->memory.peak = baker->memory.used;
     baker->stageStart = Now(baker);
-    report.stage = mnav_stageInput;
+    report->stage = mnav_stageInput;
+    return true;
+}
+
+// Ends a bake or a rebuild: on success the counts and the encoded tile;
+// then the stages released and the report given out.
+static mnavResult Finish(mnavBaker* baker, int32_t tileX, int32_t tileZ, Stages* s,
+                         mnavResult result, mnavBakeReport* report, mnavBakeReport* reportOut)
+{
+    if (result == mnav_success)
+    {
+        Count(s, report);
+        Enter(baker, report, mnav_stageEncode);
+        result = Encode(baker, tileX, tileZ, s, report->fingerprint);
+    }
+    // The last stage run ends here, where the bake ended or failed.
+    Enter(baker, report, result == mnav_success ? mnav_stageDone : report->stage);
+    ReleaseStages(&baker->memory, s);
+    if (result == mnav_success)
+    {
+        report->tileBytes = baker->tileSize;
+    }
+    report->result = result;
+    if (reportOut != nullptr)
+    {
+        *reportOut = *report;
+    }
+    return result;
+}
+
+// Bakes a tile; with a cache, keeps its field before the volumes apply.
+static mnavResult Bake(mnavBaker* baker, const Input* in, int32_t tileX, int32_t tileZ,
+                       mnavTileCache* cache, mnavBakeReport* reportOut)
+{
+    mnavBakeReport report;
+    if (!Start(baker, &report, reportOut))
+    {
+        return mnav_errorInvalid;
+    }
     mnavResult result = CheckInput(baker, in, tileX, tileZ, &report);
     mnavTileFrame frame = {0};
     if (result == mnav_success &&
@@ -457,32 +508,43 @@ static mnavResult Bake(mnavBaker* baker, const Input* in, int32_t tileX, int32_t
         result = mnav_errorRange;
     }
     Stages stages = {0};
+    uint64_t settings = HashSettings(&baker->def, tileX, tileZ);
+    uint64_t geometry = 0;
     if (result == mnav_success)
     {
-        uint64_t settings = HashSettings(&baker->def, tileX, tileZ);
-        report.fingerprint =
-            in->flat ? HashOutlines(&frame, in, tileX, tileZ, settings, &report.triangles)
-                     : mnavFingerprintInput(&frame, baker->cells.cosMaxSlope, &in->solid, tileX,
-                                            tileZ, settings, &report.triangles);
-        result = RunStages(baker, in, tileX, tileZ, &stages, &report);
+        if (in->flat)
+        {
+            report.fingerprint =
+                HashOutlines(&frame, in, tileX, tileZ, settings, &report.triangles);
+        }
+        else
+        {
+            geometry = mnavFingerprintGeometry(&frame, baker->cells.cosMaxSlope, &in->solid, tileX,
+                                               tileZ, settings, &report.triangles);
+            report.fingerprint =
+                mnavFingerprintVolumes(&frame, in->solid.volumes, in->solid.volumeCount, geometry);
+        }
+        result = RunToCompact(baker, in, tileX, tileZ, &stages, &report);
+    }
+    if (result == mnav_success && cache != nullptr)
+    {
+        const mnavCachedTile tile = {.tileX = tileX,
+                                     .tileZ = tileZ,
+                                     .settings = settings,
+                                     .geometry = geometry,
+                                     .triangles = report.triangles};
+        result = mnavCacheTile(cache, &baker->memory, &tile, &stages.compact, in->solid.volumes,
+                               in->solid.volumeCount);
     }
     if (result == mnav_success)
     {
-        Count(&stages, &report);
-        Enter(baker, &report, mnav_stageEncode);
-        result = Encode(baker, tileX, tileZ, &stages, report.fingerprint);
+        result = RunFromCompact(baker, in->solid.volumes, in->solid.volumeCount, &stages, &report);
     }
-    // The last stage run ends here, where the bake ended or failed.
-    Enter(baker, &report, result == mnav_success ? mnav_stageDone : report.stage);
-    ReleaseStages(&baker->memory, &stages);
-    if (result == mnav_success)
+    // A cache keeps tiles that baked, never what an earlier input left.
+    result = Finish(baker, tileX, tileZ, &stages, result, &report, reportOut);
+    if (result != mnav_success)
     {
-        report.tileBytes = baker->tileSize;
-    }
-    report.result = result;
-    if (reportOut != nullptr)
-    {
-        *reportOut = report;
+        mnavDropCachedTile(cache, tileX, tileZ);
     }
     return result;
 }
@@ -491,7 +553,7 @@ mnavResult mnavBakeTile(mnavBaker* baker, const mnavTriangleMesh* meshes, int32_
                         int32_t tileX, int32_t tileZ, mnavBakeReport* reportOut)
 {
     Input in = {{meshes, meshCount, nullptr, 0, nullptr, 0, nullptr}, nullptr, 0, nullptr, false};
-    return Bake(baker, &in, tileX, tileZ, reportOut);
+    return Bake(baker, &in, tileX, tileZ, nullptr, reportOut);
 }
 
 mnavResult mnavBakeTileInput(mnavBaker* baker, const mnavBakeInput* input, int32_t tileX,
@@ -500,10 +562,10 @@ mnavResult mnavBakeTileInput(mnavBaker* baker, const mnavBakeInput* input, int32
     if (input == nullptr)
     {
         Input none = {{nullptr, -1, nullptr, 0, nullptr, 0, nullptr}, nullptr, 0, nullptr, false};
-        return Bake(baker, &none, tileX, tileZ, reportOut);
+        return Bake(baker, &none, tileX, tileZ, nullptr, reportOut);
     }
     Input in = {*input, nullptr, 0, nullptr, false};
-    return Bake(baker, &in, tileX, tileZ, reportOut);
+    return Bake(baker, &in, tileX, tileZ, nullptr, reportOut);
 }
 
 mnavResult mnavBakeTile2D(mnavBaker* baker, const mnavOutline* outlines, int32_t outlineCount,
@@ -511,7 +573,7 @@ mnavResult mnavBakeTile2D(mnavBaker* baker, const mnavOutline* outlines, int32_t
 {
     Input in = {
         {nullptr, 0, nullptr, 0, nullptr, 0, nullptr}, outlines, outlineCount, nullptr, true};
-    return Bake(baker, &in, tileX, tileZ, reportOut);
+    return Bake(baker, &in, tileX, tileZ, nullptr, reportOut);
 }
 
 mnavResult mnavBakeTile2DInput(mnavBaker* baker, const mnavBake2DInput* input, int32_t tileX,
@@ -524,13 +586,105 @@ mnavResult mnavBakeTile2DInput(mnavBaker* baker, const mnavBake2DInput* input, i
                 in2->outlineCount,
                 in2->index,
                 true};
-    return Bake(baker, &in, tileX, tileZ, reportOut);
+    return Bake(baker, &in, tileX, tileZ, nullptr, reportOut);
 }
 
-mnavResult mnavCopyBakedTile(const mnavBaker* baker, uint8_t* buffer, size_t capacity,
+mnavResult mnavBakeTileCached(mnavBaker* baker, mnavTileCache* cache, const mnavBakeInput* input,
+                              int32_t tileX, int32_t tileZ, mnavBakeReport* reportOut)
+{
+    if (cache == nullptr || input == nullptr)
+    {
+        Input none = {{nullptr, -1, nullptr, 0, nullptr, 0, nullptr}, nullptr, 0, nullptr, false};
+        return Bake(baker, &none, tileX, tileZ, nullptr, reportOut);
+    }
+    Input in = {*input, nullptr, 0, nullptr, false};
+    return Bake(baker, &in, tileX, tileZ, cache, reportOut);
+}
+
+// Checks the obstacles as a bake checks volumes, naming a refused one by
+// its index; their points and the cached volumes' count against the input
+// limit.
+static mnavResult CheckObstacles(const mnavBaker* baker, const mnavCachedTile* tile,
+                                 const mnavBakeVolume* obstacles, int32_t obstacleCount,
+                                 mnavBakeReport* report)
+{
+    if (obstacleCount < 0 || (obstacleCount > 0 && obstacles == nullptr))
+    {
+        return mnav_errorInvalid;
+    }
+    int64_t total = (int64_t)tile->triangles + tile->pointCount;
+    for (int32_t i = 0; i < obstacleCount; ++i)
+    {
+        mnavInputResult input = mnavCheckVolume(&baker->def, &obstacles[i]);
+        if (input.result != mnav_success)
+        {
+            report->mesh = i;
+            report->input = input;
+            return input.result;
+        }
+        total += obstacles[i].pointCount;
+    }
+    return total > baker->def.limits.inputTriangles ? mnav_errorLimit : mnav_success;
+}
+
+mnavResult mnavRebuildTile(mnavBaker* baker, mnavTileCache* cache, int32_t tileX, int32_t tileZ,
+                           const mnavBakeVolume* obstacles, int32_t obstacleCount,
+                           mnavBakeReport* reportOut)
+{
+    mnavBakeReport report;
+    if (!Start(baker, &report, reportOut))
+    {
+        return mnav_errorInvalid;
+    }
+    Stages stages = {0};
+    const mnavCachedTile* tile =
+        cache != nullptr ? mnavFindCachedTile(cache, tileX, tileZ) : nullptr;
+    mnavResult result = cache == nullptr  ? mnav_errorInvalid
+                        : tile == nullptr ? mnav_errorNotLoaded
+                        : tile->settings != HashSettings(&baker->def, tileX, tileZ)
+                            ? mnav_errorInvalid
+                            : CheckObstacles(baker, tile, obstacles, obstacleCount, &report);
+    // The cached volumes, then the obstacles, in the baker's memory.
+    int32_t count = 0;
+    mnavBakeVolume* volumes = nullptr;
+    if (result == mnav_success)
+    {
+        result = ckd_add(&count, tile->volumeCount, obstacleCount)
+                     ? mnav_errorLimit
+                     : mnavAllocate(&baker->memory, (size_t)count, sizeof(mnavBakeVolume),
+                                    alignof(mnavBakeVolume), (void**)&volumes);
+    }
+    if (result == mnav_success)
+    {
+        if (tile->volumeCount > 0)
+        {
+            memcpy(volumes, tile->volumes, (size_t)tile->volumeCount * sizeof(mnavBakeVolume));
+        }
+        if (obstacleCount > 0)
+        {
+            memcpy(&volumes[tile->volumeCount], obstacles,
+                   (size_t)obstacleCount * sizeof(mnavBakeVolume));
+        }
+        report.triangles = tile->triangles;
+        report.fingerprint =
+            mnavFingerprintVolumes(&tile->field.frame, volumes, count, tile->geometry);
+        Enter(baker, &report, mnav_stageCompact);
+        result = mnavUnpackField(&baker->memory, &tile->field, baker->cells.agentHeight,
+                                 baker->cells.agentStep, &stages.compact);
+    }
+    if (result == mnav_success)
+    {
+        result = RunFromCompact(baker, volumes, count, &stages, &report);
+    }
+    mnavRelease(&baker->memory, volumes, (size_t)count, sizeof(mnavBakeVolume),
+                alignof(mnavBakeVolume));
+    return Finish(baker, tileX, tileZ, &stages, result, &report, reportOut);
+}
+
+mnavResult mnavCopyBakedTile(const mnavBaker* baker, uint8_t* bufferOut, size_t capacity,
                              size_t* sizeOut)
 {
-    if (baker == nullptr || (buffer == nullptr && capacity > 0) || baker->tile == nullptr)
+    if (baker == nullptr || (bufferOut == nullptr && capacity > 0) || baker->tile == nullptr)
     {
         return mnav_errorInvalid;
     }
@@ -542,9 +696,9 @@ mnavResult mnavCopyBakedTile(const mnavBaker* baker, uint8_t* buffer, size_t cap
     {
         return mnav_errorCapacity;
     }
-    if (buffer != nullptr)
+    if (bufferOut != nullptr)
     {
-        memcpy(buffer, baker->tile, baker->tileSize);
+        memcpy(bufferOut, baker->tile, baker->tileSize);
     }
     return mnav_success;
 }

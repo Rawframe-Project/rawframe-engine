@@ -60,6 +60,12 @@ extern "C"
         // The host's id for the agent, which orders neighbours at equal
         // distances; ids should differ, or the input's order counts.
         uint64_t id;
+        // The groups the agent belongs to, as bits; 0 for none.
+        uint32_t layers;
+        // The groups the agent passes through: it does not avoid an agent
+        // or obstacle whose layers share a bit with these, and takes the
+        // whole avoidance of an agent that ignores it. 0 avoids all.
+        uint32_t ignores;
     } mnavAgent;
 
     // An obstacle agents steer round, taking the whole avoidance: one point
@@ -80,6 +86,8 @@ extern "C"
         // The host's id for the obstacle, which orders obstacles at equal
         // distances; ids should differ, or the input's order counts.
         uint64_t id;
+        // The groups the obstacle belongs to, as an agent's layers.
+        uint32_t layers;
     } mnavObstacle;
 
     // An agent in space, for mnavAvoid3D, its values in the ranges above.
@@ -97,6 +105,10 @@ extern "C"
         double priority;
         // The host's id for the agent, as mnavAgent's.
         uint64_t id;
+        // The groups the agent belongs to and passes through, as
+        // mnavAgent's.
+        uint32_t layers;
+        uint32_t ignores;
     } mnavAgent3D;
 
     // A sphere fliers steer round, taking the whole avoidance, as a circle
@@ -111,6 +123,8 @@ extern "C"
         // The host's id for the sphere, which orders spheres at equal
         // distances; ids should differ, or the input's order counts.
         uint64_t id;
+        // The groups the sphere belongs to, as an agent's layers.
+        uint32_t layers;
     } mnavSphere;
 
     // The limits of an avoidance set.
@@ -133,6 +147,8 @@ extern "C"
     typedef struct mnavAvoidanceDef
     {
         uint32_t cookie;
+        // MNAV_ABI_VERSION, set by mnavDefaultAvoidanceDef.
+        uint32_t version;
         // The allocator the set uses; zeroed for the C library's.
         mnavAllocator allocator;
         mnavAvoidanceLimits limits;
@@ -150,22 +166,45 @@ extern "C"
     // An avoidance set: the memory its limits need.
     typedef struct mnavAvoidance mnavAvoidance;
 
+// The cookie mnavDefaultAvoidanceDef sets and mnavCreateAvoidance checks.
+#define MNAV_AVOIDANCE_DEF_COOKIE 0x4E415641u
+
     /// Returns the default avoidance def: up to 4096 agents, each avoiding
     /// its 10 nearest neighbours within 10 m, 2 s ahead, and up to 4096
     /// obstacle points, each agent avoiding its 16 nearest obstacle edges
     /// or circles, 2 s ahead.
+    /// Built in the program, so that it carries the version of the
+    /// headers the program includes.
     ///
     /// @return The def.
     /// @par Thread safety
     /// Safe from any thread.
-    MNAV_API mnavAvoidanceDef mnavDefaultAvoidanceDef(void);
+    static inline mnavAvoidanceDef mnavDefaultAvoidanceDef(void)
+    {
+#ifdef __cplusplus
+        mnavAvoidanceDef def = {};
+#else
+    mnavAvoidanceDef def = {0};
+#endif
+        def.cookie = MNAV_AVOIDANCE_DEF_COOKIE;
+        def.version = MNAV_ABI_VERSION;
+        def.limits.agents = 4096;
+        def.limits.neighbors = 10;
+        def.limits.obstacleVertices = 4096;
+        def.limits.obstacleNeighbors = 16;
+        def.neighborDistance = 10.0;
+        def.timeHorizon = 2.0;
+        def.obstacleTimeHorizon = 2.0;
+        return def;
+    }
 
     /// Makes an avoidance set with the memory its limits need.
     ///
     /// @param def         The def, from mnavDefaultAvoidanceDef.
     /// @param avoidanceOut Receives the set, or NULL on failure.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
-    /// def not from mnavDefaultAvoidanceDef; `mnav_errorRange` for a limit,
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
+    /// not from mnavDefaultAvoidanceDef; `mnav_errorVersion` for one built
+    /// against another major or minor version; `mnav_errorRange` for a limit,
     /// distance or horizon out of its range; `mnav_errorCapacity` when the
     /// allocator fails.
     /// @par Thread safety
@@ -274,6 +313,30 @@ extern "C"
                                                           const mnavAgent* agents,
                                                           int32_t agentCount, double height,
                                                           mnavDebugBuffer* buffer);
+
+    /// Appends each flier's outline, three 16-gons on its radius, one in
+    /// each axis plane (mnav_debugAgent), a line to each neighbour
+    /// mnavAvoid3D would give it (mnav_debugNeighbor), and each sphere's
+    /// three rings (mnav_debugObstacle).
+    ///
+    /// @param avoidance   The set; its scratch is used.
+    /// @param agents      The agents.
+    /// @param agentCount  How many, at least 0.
+    /// @param spheres     The spheres.
+    /// @param sphereCount How many, at least 0.
+    /// @param buffer      The buffer appended to.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with
+    /// agents or spheres, a negative count, an agent or sphere as
+    /// mnavAvoid3D refuses it, or a buffer with a count out of range, an
+    /// array missing or an origin not finite; `mnav_errorLimit` for more
+    /// agents or spheres than mnavAvoid3D takes; `mnav_errorCapacity` when
+    /// the buffer filled, its counts saying what the whole needs.
+    /// @par Thread safety
+    /// Safe from any thread; the set and the buffer are used by one thread
+    /// at a time.
+    MNAV_NODISCARD MNAV_API mnavResult
+    mnavDebugAvoidance3D(mnavAvoidance* avoidance, const mnavAgent3D* agents, int32_t agentCount,
+                         const mnavSphere* spheres, int32_t sphereCount, mnavDebugBuffer* buffer);
 
 #ifdef __cplusplus
 }

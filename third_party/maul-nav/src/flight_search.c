@@ -337,10 +337,11 @@ static bool Nearer(const Node* nodes, int32_t a, int32_t b)
     return b == MNAV_NO_NODE || nodes[a].remaining < nodes[b].remaining;
 }
 
-static void Run(Search* s)
+// Closes up to budget nodes; returns whether the search has ended.
+static bool Run(Search* s, int32_t budget)
 {
     mnavQuery* q = s->query;
-    while (q->heapCount > 0)
+    for (int32_t closed = 0; closed < budget && q->heapCount > 0; ++closed)
     {
         int32_t node = Pop(s);
         Settle(s, node);
@@ -348,12 +349,13 @@ static void Run(Search* s)
         if (SameBlock(s->nodes[node].block, s->endBlock))
         {
             s->found = node;
-            return;
+            return true;
         }
         s->current = node;
         s->from = s->nodes[node].parent != MNAV_NO_NODE ? s->nodes[node].parent : node;
         Around(s, node, Reach);
     }
+    return q->heapCount == 0;
 }
 
 // Writes the path to a node, in world coordinates, from the start.
@@ -401,7 +403,7 @@ static mnavPathEnd Refused(int32_t held)
 static void Begin(Search* s, const mnavFlightBlock* block, const double start[3])
 {
     mnavQuery* q = s->query;
-    memset(q->table, 0xFF, ((size_t)q->tableMask + 1) * sizeof(int32_t));
+    mnavClearTable(q);
     q->heapCount = 0;
     q->nodeCount = 0;
     const int32_t b[4] = {block->x, block->y, block->z, block->size};
@@ -413,10 +415,55 @@ static void Begin(Search* s, const mnavFlightBlock* block, const double start[3]
     Place(s, q->heapCount++, node);
 }
 
-mnavResult mnavFindFlightPath(mnavQuery* query, const mnavFlightVolume* volume, mnavPos3 start,
-                              mnavPos3 end, mnavFlightPath* pathOut)
+// The search kept in the context, ready to run another slice.
+static Search Load(mnavQuery* query)
 {
-    if (query == nullptr || volume == nullptr || pathOut == nullptr)
+    const mnavFlightSliced* f = &query->flight;
+    Search s = {.query = query,
+                .nodes = query->flightNodes,
+                .cursor = mnavMakeFlightCursor(f->volume),
+                .limit = f->limit,
+                .current = f->current,
+                .from = f->from,
+                .outOfNodes = f->outOfNodes,
+                .tooLong = f->tooLong,
+                .notLoaded = f->notLoaded,
+                .found = f->found,
+                .best = f->best};
+    memcpy(s.end, f->end, sizeof(s.end));
+    memcpy(s.endBlock, f->endBlock, sizeof(s.endBlock));
+    return s;
+}
+
+// Keeps what a slice changed in the context.
+static void Store(const Search* s)
+{
+    mnavFlightSliced* f = &s->query->flight;
+    f->current = s->current;
+    f->from = s->from;
+    f->outOfNodes = s->outOfNodes;
+    f->tooLong = s->tooLong;
+    f->notLoaded = s->notLoaded;
+    f->found = s->found;
+    f->best = s->best;
+}
+
+// Whether the context holds a search on this volume, unchanged since it
+// began: mnav_success, or the refusal.
+static mnavResult Holds(const mnavQuery* query, const mnavFlightVolume* volume)
+{
+    if (query == nullptr || volume == nullptr || !query->flight.active)
+    {
+        return mnav_errorInvalid;
+    }
+    const mnavFlightSliced* f = &query->flight;
+    return f->volume == volume && f->commits == volume->commits ? mnav_success : mnav_errorStale;
+}
+
+mnavResult mnavBeginFlightPath(mnavQuery* query, const mnavFlightVolume* volume, mnavPos3 start,
+                               mnavPos3 end)
+{
+    if (query == nullptr || volume == nullptr)
     {
         return mnav_errorInvalid;
     }
@@ -435,22 +482,29 @@ mnavResult mnavFindFlightPath(mnavQuery* query, const mnavFlightVolume* volume, 
         return mnav_errorRange;
     }
     query->search.active = false;
+    query->flight = (mnavFlightSliced){.volume = volume,
+                                       .commits = volume->commits,
+                                       .start = start,
+                                       .endPoint = end,
+                                       .found = MNAV_NO_NODE,
+                                       .best = MNAV_NO_NODE,
+                                       .ready = mnav_pathFound,
+                                       .active = true};
+    mnavFlightSliced* f = &query->flight;
     mnavFlightBlock first;
     mnavFlightBlock last;
     int32_t held = mnavFlightHolder(&s.cursor, at[0], at[1], at[2], &first);
     int32_t heldEnd = mnavFlightHolder(&s.cursor, to[0], to[1], to[2], &last);
     if (held != MNAV_SPACE_OPEN || heldEnd != MNAV_SPACE_OPEN)
     {
-        *pathOut = StartOnly(query, start, Refused(held != MNAV_SPACE_OPEN ? held : heldEnd));
+        f->ready = Refused(held != MNAV_SPACE_OPEN ? held : heldEnd);
         return mnav_success;
     }
     if (first.x == last.x && first.y == last.y && first.z == last.z && first.size == last.size)
     {
         // One open block holds both: the straight way.
-        query->points[0] = start;
-        query->points[1] = end;
-        *pathOut =
-            (mnavFlightPath){mnav_pathFound, Distance(a, s.end) * frame.voxel, query->points, 2};
+        f->straight = true;
+        f->straightLength = Distance(a, s.end) * frame.voxel;
         return mnav_success;
     }
     s.endBlock[0] = last.x;
@@ -458,13 +512,81 @@ mnavResult mnavFindFlightPath(mnavQuery* query, const mnavFlightVolume* volume, 
     s.endBlock[2] = last.z;
     s.endBlock[3] = last.size;
     s.limit = (double)query->limits.pathLength / frame.voxel;
+    memcpy(f->end, s.end, sizeof(f->end));
+    memcpy(f->endBlock, s.endBlock, sizeof(f->endBlock));
+    f->limit = s.limit;
     Begin(&s, &first, a);
-    Run(&s);
+    Store(&s);
+    return mnav_success;
+}
+
+mnavResult mnavContinueFlightPath(mnavQuery* query, const mnavFlightVolume* volume, int32_t nodes,
+                                  bool* endedOut)
+{
+    mnavResult held = Holds(query, volume);
+    if (held != mnav_success || endedOut == nullptr || nodes < 1)
+    {
+        return held != mnav_success ? held : mnav_errorInvalid;
+    }
+    const mnavFlightSliced* f = &query->flight;
+    if (f->ready != mnav_pathFound || f->straight || f->found != MNAV_NO_NODE)
+    {
+        *endedOut = true;
+        return mnav_success;
+    }
+    Search s = Load(query);
+    *endedOut = Run(&s, nodes);
+    Store(&s);
+    return mnav_success;
+}
+
+mnavResult mnavFinishFlightPath(mnavQuery* query, const mnavFlightVolume* volume,
+                                mnavFlightPath* pathOut)
+{
+    mnavResult held = Holds(query, volume);
+    if (held != mnav_success || pathOut == nullptr)
+    {
+        return held != mnav_success ? held : mnav_errorInvalid;
+    }
+    mnavFlightSliced* f = &query->flight;
+    f->active = false;
+    if (f->ready != mnav_pathFound)
+    {
+        *pathOut = StartOnly(query, f->start, f->ready);
+        return mnav_success;
+    }
+    if (f->straight)
+    {
+        query->points[0] = f->start;
+        query->points[1] = f->endPoint;
+        *pathOut = (mnavFlightPath){mnav_pathFound, f->straightLength, query->points, 2};
+        return mnav_success;
+    }
+    Search s = Load(query);
+    bool ended = s.found != MNAV_NO_NODE || query->heapCount == 0;
     mnavPathEnd ending = s.found != MNAV_NO_NODE ? mnav_pathFound
+                         : !ended                ? mnav_pathUnfinished
                          : s.outOfNodes          ? mnav_pathOutOfNodes
                          : s.tooLong             ? mnav_pathTooLong
                          : s.notLoaded           ? mnav_pathNotLoaded
                                                  : mnav_pathNone;
+    mnavFlightFrame frame = mnavMakeFlightFrame(volume);
     *pathOut = PathTo(&s, &frame, s.found != MNAV_NO_NODE ? s.found : s.best, ending);
     return mnav_success;
+}
+
+mnavResult mnavFindFlightPath(mnavQuery* query, const mnavFlightVolume* volume, mnavPos3 start,
+                              mnavPos3 end, mnavFlightPath* pathOut)
+{
+    if (pathOut == nullptr)
+    {
+        return mnav_errorInvalid;
+    }
+    mnavResult result = mnavBeginFlightPath(query, volume, start, end);
+    bool ended = false;
+    while (result == mnav_success && !ended)
+    {
+        result = mnavContinueFlightPath(query, volume, INT32_MAX, &ended);
+    }
+    return result == mnav_success ? mnavFinishFlightPath(query, volume, pathOut) : result;
 }

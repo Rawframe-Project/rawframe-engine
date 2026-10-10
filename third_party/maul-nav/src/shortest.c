@@ -811,13 +811,14 @@ static mnavResult Begin(Shortest* s, const mnavQueryFilter* filter, mnavPolygonI
     }
     // A sliced path search in this context ends here: its memory is reused.
     query->search.active = false;
+    query->flight.active = false;
     query->filter = *s->filter;
     s->filter = &query->filter;
     s->scale = mnavHeuristicScale(s->navmesh, s->filter);
     s->endSlot = (int32_t)endPolygon.slot - 1;
     s->endPolygon = (int32_t)endPolygon.polygon;
     s->limit = (double)query->limits.pathLength;
-    memset(query->table, 0xFF, ((size_t)query->tableMask + 1) * sizeof(int32_t));
+    mnavClearTable(query);
     s->made = query->madeTable;
     memset(s->made, 0xFF, ((size_t)query->tableMask + 1) * sizeof(int32_t));
     double ahead = Flat(start, s->end);

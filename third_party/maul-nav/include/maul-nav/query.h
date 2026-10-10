@@ -28,6 +28,8 @@ extern "C"
     typedef struct mnavQueryFilter
     {
         uint32_t cookie;
+        // MNAV_ABI_VERSION, set by mnavDefaultQueryFilter.
+        uint32_t version;
         // What a meter costs in each area type, MNAV_MIN_AREA_COST to
         // MNAV_MAX_AREA_COST; 1 by default.
         float costs[MNAV_AREA_TYPES];
@@ -40,13 +42,34 @@ extern "C"
         uint64_t kinds;
     } mnavQueryFilter;
 
+// The cookie mnavDefaultQueryFilter sets and every query checks.
+#define MNAV_QUERY_FILTER_COOKIE 0x4E415646u
+
     /// Returns the filter that uses every walkable area at a cost of 1 and
-    /// every kind of off-mesh link.
+    /// every kind of off-mesh link. Built in the program, so that it
+    /// carries the version of the headers the program includes.
     ///
     /// @return The filter.
     /// @par Thread safety
     /// Safe from any thread.
-    MNAV_API mnavQueryFilter mnavDefaultQueryFilter(void);
+    static inline mnavQueryFilter mnavDefaultQueryFilter(void)
+    {
+#ifdef __cplusplus
+        mnavQueryFilter filter = {};
+#else
+    mnavQueryFilter filter = {0};
+#endif
+        filter.cookie = MNAV_QUERY_FILTER_COOKIE;
+        filter.version = MNAV_ABI_VERSION;
+        for (int area = 0; area < MNAV_AREA_TYPES; ++area)
+        {
+            filter.costs[area] = 1.0f;
+        }
+        // Every walkable area type: all but area 0.
+        filter.areas = ~(uint64_t)1;
+        filter.kinds = ~(uint64_t)0;
+        return filter;
+    }
 
     // The nearest point on the navmesh to a query point.
     typedef struct mnavNearest
@@ -82,7 +105,8 @@ extern "C"
     ///                    one including mnav_areaNone finds blocked polygons.
     /// @param center      The box's center.
     /// @param halfExtents The box's half sizes, in meters, at least 0.
-    /// @param polygons    Room for capacity ids, or NULL when capacity is 0.
+    /// @param polygonsOut Receives up to capacity ids; NULL when capacity
+    ///                    is 0.
     /// @param capacity    The room, at least 0.
     /// @param foundOut    Receives the count and whether the box was all
     ///                    loaded.
@@ -98,8 +122,8 @@ extern "C"
     MNAV_NODISCARD MNAV_API mnavResult mnavFindPolygons(const mnavNavmesh* navmesh,
                                                         const mnavQueryFilter* filter,
                                                         mnavPos3 center, mnavVec3 halfExtents,
-                                                        mnavPolygonId* polygons, int32_t capacity,
-                                                        mnavFound* foundOut);
+                                                        mnavPolygonId* polygonsOut,
+                                                        int32_t capacity, mnavFound* foundOut);
 
     /// Finds the polygon, among those the filter includes, nearest a point
     /// whose nearest point lies within a box round it, and that point. A
@@ -153,6 +177,8 @@ extern "C"
     typedef struct mnavQueryDef
     {
         uint32_t cookie;
+        // MNAV_ABI_VERSION, set by mnavDefaultQueryDef.
+        uint32_t version;
         // The allocator the context uses; zeroed for the C library's.
         mnavAllocator allocator;
         // The limits on each search.
@@ -215,21 +241,38 @@ extern "C"
         int32_t linkCount;
     } mnavPath;
 
-    /// Returns a query def with 8,192 nodes per search and paths up to
-    /// 1,000 m.
+// The cookie mnavDefaultQueryDef sets and mnavCreateQuery checks.
+#define MNAV_QUERY_DEF_COOKIE 0x4E415651u
+
+    /// Returns a query def with 8,192 nodes per search, paths up to
+    /// 1,000 m and the C library's allocator. Built in the program, so
+    /// that it carries the version of the headers the program includes.
     ///
     /// @return The def.
     /// @par Thread safety
     /// Safe from any thread.
-    MNAV_API mnavQueryDef mnavDefaultQueryDef(void);
+    static inline mnavQueryDef mnavDefaultQueryDef(void)
+    {
+#ifdef __cplusplus
+        mnavQueryDef def = {};
+#else
+    mnavQueryDef def = {0};
+#endif
+        def.cookie = MNAV_QUERY_DEF_COOKIE;
+        def.version = MNAV_ABI_VERSION;
+        def.limits.nodes = 8192;
+        def.limits.pathLength = 1000.0f;
+        return def;
+    }
 
     /// Makes a query context with the memory its limits need.
     ///
     /// @param def      The def, from mnavDefaultQueryDef.
     /// @param queryOut Receives the context, or NULL on failure.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
-    /// def not from mnavDefaultQueryDef; `mnav_errorRange` for a limit out
-    /// of its range; `mnav_errorCapacity` when the allocator fails.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
+    /// not from mnavDefaultQueryDef; `mnav_errorVersion` for one built against
+    /// another major or minor version; `mnav_errorRange` for a limit out of its
+    /// range; `mnav_errorCapacity` when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavResult mnavCreateQuery(const mnavQueryDef* def,
@@ -462,6 +505,18 @@ extern "C"
         int32_t linkCount;
     } mnavCorners;
 
+    // A run of a straight path over one area (mnav-0005): from its start
+    // on, the path crosses polygons of that area until the next run's
+    // start.
+    typedef struct mnavAreaRun
+    {
+        mnavPos3 start;
+        // The straight path's point the run starts at or after: start lies
+        // between it and the next point.
+        int32_t corner;
+        mnavAreaType area;
+    } mnavAreaRun;
+
     /// Starts a corridor over a buffer: one polygon, the position and the
     /// target both at a point on it.
     ///
@@ -528,6 +583,130 @@ extern "C"
                                                            const mnavNavmesh* navmesh,
                                                            const mnavCorridor* corridor,
                                                            mnavCorners* cornersOut);
+
+    /// Finds the areas along a corridor's straight path: the corners
+    /// mnavCorridorCorners gives, which replace the context's last ones,
+    /// and a run where the path starts, one wherever it crosses into a
+    /// polygon of another area, and one where it lands from each off-mesh
+    /// link, in order. Hosts change gait or sound at a run's start; a
+    /// path's areas are its corridor's, once loaded with mnavSetCorridor.
+    ///
+    /// @param query      The context; its memory holds the corners.
+    /// @param navmesh    The navmesh.
+    /// @param corridor   The corridor.
+    /// @param cornersOut Receives the straight path, or NULL.
+    /// @param runsOut    Receives the runs, in order. May be NULL when
+    ///                   capacity is 0.
+    /// @param capacity   How many runs fit, at least 0.
+    /// @param countOut   Receives how many runs there are, also when they
+    ///                   do not all fit.
+    /// @return As mnavCorridorCorners; also `mnav_errorInvalid` for a NULL
+    /// countOut, a negative capacity or NULL runs with a positive one, and
+    /// `mnav_errorCapacity` when the runs do not fit, the first capacity
+    /// of them written.
+    /// @par Thread safety
+    /// Safe from any thread; the context is used by one thread at a time.
+    MNAV_NODISCARD MNAV_API mnavResult mnavCorridorAreas(
+        mnavQuery* query, const mnavNavmesh* navmesh, const mnavCorridor* corridor,
+        mnavCorners* cornersOut, mnavAreaRun* runsOut, int32_t capacity, int32_t* countOut);
+
+    // The fastest mnavSteer may steer, and the longest distance it slows
+    // or stops within, in meters per second and meters.
+#define MNAV_MAX_STEER_SPEED    1000.0f
+#define MNAV_MAX_STEER_DISTANCE 1000.0f
+
+    // How mnavSteer steers (mnav-0005). Build it with mnavDefaultSteerDef.
+    typedef struct mnavSteerDef
+    {
+        uint32_t cookie;
+        // MNAV_ABI_VERSION, set by mnavDefaultSteerDef.
+        uint32_t version;
+        // The speed on the way, 0 to MNAV_MAX_STEER_SPEED.
+        float maxSpeed;
+        // Within this distance of the target along the corners, the speed
+        // falls with the distance left; 0 to MNAV_MAX_STEER_DISTANCE.
+        float slowDistance;
+        // Within this distance of the target the agent has arrived, and
+        // of an off-mesh link's takeoff it is at the link; 0 to
+        // MNAV_MAX_STEER_DISTANCE.
+        float arriveDistance;
+        // Whether to swing wide of the next corner so as to meet the turn
+        // already heading out of it, as Detour's crowd does.
+        bool anticipateTurns;
+    } mnavSteerDef;
+
+    // What mnavSteer found.
+    typedef uint8_t mnavSteerState;
+
+    enum
+    {
+        mnav_steerMoving = 0,
+        // Within the arrival distance of the target; the velocity is 0.
+        mnav_steerArrived = 1,
+        // Within the arrival distance of the next off-mesh link's takeoff;
+        // the velocity is 0, and the host crosses the link.
+        mnav_steerAtLink = 2,
+    };
+
+    // A velocity mnavSteer gives.
+    typedef struct mnavSteering
+    {
+        // On the ground (y is 0), in meters per second: the agent's
+        // preferred velocity for avoidance, x and z.
+        mnavPos3 velocity;
+        mnavSteerState state;
+        // At a link: its index among the corners' links; otherwise -1.
+        int32_t link;
+    } mnavSteering;
+
+// The cookie mnavDefaultSteerDef sets and mnavSteer checks.
+#define MNAV_STEER_DEF_COOKIE 0x5354564Du
+
+    /// Returns a steering def of 3.5 m/s, slowing within 1 m of the
+    /// target, arriving within 0.1 m, anticipating turns. Built in the
+    /// program, so that it carries the version of the headers the program
+    /// includes.
+    ///
+    /// @return The def.
+    /// @par Thread safety
+    /// Safe from any thread.
+    static inline mnavSteerDef mnavDefaultSteerDef(void)
+    {
+#ifdef __cplusplus
+        mnavSteerDef def = {};
+#else
+    mnavSteerDef def = {0};
+#endif
+        def.cookie = MNAV_STEER_DEF_COOKIE;
+        def.version = MNAV_ABI_VERSION;
+        def.maxSpeed = 3.5f;
+        def.slowDistance = 1.0f;
+        def.arriveDistance = 0.1f;
+        def.anticipateTurns = true;
+        return def;
+    }
+
+    /// Steers along a corridor's corners (mnav-0005): toward the next
+    /// corner, or swinging wide of it, at the def's speed, slowing within
+    /// its slowing distance of the target by the distance left along the
+    /// corners over it; stopped within the arrival distance of the target
+    /// or of the next link's takeoff. Keeps no state: call it each step
+    /// with the corners mnavCorridorCorners gives, feed the velocity to
+    /// avoidance, and limit acceleration and move the agent yourself.
+    ///
+    /// @param corners     The corners, the agent's position first.
+    /// @param def         The def, from mnavDefaultSteerDef.
+    /// @param steeringOut Receives the velocity and state.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, corners
+    /// with no points or a def not from mnavDefaultSteerDef;
+    /// `mnav_errorVersion` for one built against another major or minor
+    /// version; `mnav_errorRange` for a def value out of its range or a corner
+    /// not finite.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MNAV_NODISCARD MNAV_API mnavResult mnavSteer(const mnavCorners* corners,
+                                                 const mnavSteerDef* def,
+                                                 mnavSteering* steeringOut);
 
     /// Moves a corridor's position along the surface toward a wanted point
     /// (mnavMoveAlongSurface from its first polygon) and merges the
@@ -727,9 +906,10 @@ extern "C"
 
     /// Finds the nearest wall to a point within a radius on the ground,
     /// searching from its polygon across the edges that come within the
-    /// radius, off-mesh links aside. An edge is a wall when no polygon the
-    /// filter includes lies across it, a tile side with no tile loaded
-    /// beyond included. A wall exactly the radius away lies within it; of
+    /// radius, off-mesh links aside. An edge is a wall where no polygon the
+    /// filter includes lies across it: a tile side with no tile loaded
+    /// beyond, and the parts of a side no polygon of the tile beyond
+    /// covers, are walls. A wall exactly the radius away lies within it; of
     /// walls at the same distance it gives one, the same on every
     /// platform, but which one is not promised.
     ///
@@ -752,6 +932,62 @@ extern "C"
                                                             const mnavQueryFilter* filter,
                                                             mnavPolygonId polygon, mnavPos3 center,
                                                             double radius, mnavWall* wallOut);
+
+    // A wall within a radius: an edge no polygon the filter includes lies
+    // across.
+    typedef struct mnavWallSegment
+    {
+        // Its ends, in the order of its polygon's corners.
+        mnavPos3 start;
+        mnavPos3 end;
+        // The unit direction on the ground from it toward its polygon, the
+        // walkable side; zero for an edge of no length on the ground.
+        mnavPos3 normal;
+        // The distance on the ground from the center to its nearest point.
+        double distance;
+    } mnavWallSegment;
+
+    // What a search for the walls within a radius found.
+    typedef struct mnavWallsFound
+    {
+        // The walls within the radius, also beyond the buffer's capacity.
+        int32_t count;
+        // Whether the context's node limit cut the search short, so that
+        // more walls may lie unseen.
+        bool limited;
+    } mnavWallsFound;
+
+    /// Lists the walls within a radius of a point on the ground, nearest
+    /// first, for avoidance's segment obstacles: the search and the walls
+    /// of mnavFindWallDistance, whose wall is the first listed. Walls at
+    /// the same distance keep the order the search meets them in, the same
+    /// on every platform.
+    ///
+    /// @param query    The context; its last search ends.
+    /// @param navmesh  The navmesh.
+    /// @param filter   The areas usable, or NULL.
+    /// @param polygon  The polygon the center lies in.
+    /// @param center   The point.
+    /// @param radius   How far to look, in meters, at least 0 and finite.
+    /// @param wallsOut Receives up to capacity walls, the nearest; NULL when
+    ///                 capacity is 0.
+    /// @param capacity The room, at least 0.
+    /// @param foundOut Receives the count and whether the node limit cut
+    ///                 the search short.
+    /// @return `mnav_success`; `mnav_errorCapacity` when more walls lie
+    /// within the radius than the buffer holds: it holds the nearest and
+    /// foundOut counts all; `mnav_errorInvalid` for a NULL argument, a
+    /// negative capacity, a point or radius not finite, a negative radius,
+    /// a polygon id never handed out, or a filter not built from
+    /// mnavDefaultQueryFilter; `mnav_errorStale` for a polygon whose tile
+    /// has gone; `mnav_errorRange` for a filter cost out of its range.
+    /// @par Thread safety
+    /// Safe from any thread; the context is used by one thread at a time.
+    MNAV_NODISCARD MNAV_API mnavResult mnavFindWalls(mnavQuery* query, const mnavNavmesh* navmesh,
+                                                     const mnavQueryFilter* filter,
+                                                     mnavPolygonId polygon, mnavPos3 center,
+                                                     double radius, mnavWallSegment* wallsOut,
+                                                     int32_t capacity, mnavWallsFound* foundOut);
 
     // A random point and the polygon it lies on; slot 0 when there was no
     // polygon to pick.

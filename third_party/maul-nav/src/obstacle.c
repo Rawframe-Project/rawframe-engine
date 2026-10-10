@@ -93,9 +93,9 @@ mnavResult mnavBuildObstacles(const mnavObstacle* obstacles, int32_t count,
             mnavPos2 direction =
                 c > 1 ? mnavNormalize2(mnavSub2(next, here)) : (mnavPos2){0.0, 0.0};
             bool convex = c < 3 || LeftOf(previous, here, next) >= 0.0;
-            vertices[n + i] =
-                (mnavObstacleVertex){here, direction,       o->velocity,         o->radius, o->id,
-                                     i,    n + (i + 1) % c, n + (i + c - 1) % c, convex};
+            vertices[n + i] = (mnavObstacleVertex){
+                here, direction,       o->velocity,         o->radius, o->id,
+                i,    n + (i + 1) % c, n + (i + c - 1) % c, convex,    o->layers};
         }
         n += c;
     }
@@ -288,13 +288,10 @@ static int32_t Keep(const mnavObstacleVertex* vertices, mnavObstacleNear* list, 
     return count;
 }
 
-int32_t mnavNearObstacles(const mnavAgent* agent, const mnavObstacleVertex* vertices,
-                          mnavObstacleGrid* grid, double horizon, mnavObstacleNear* list,
-                          int32_t limit)
+int32_t mnavNearInGrid(mnavObstacleGrid* grid, const mnavObstacleVertex* vertices, mnavPos2 p,
+                       double reach, mnavObstacleMeasure measure, const void* context,
+                       mnavObstacleNear* list, int32_t limit)
 {
-    // Every circle and edge within any vertex's reach lies in the box.
-    double reach = horizon * (agent->maxSpeed + grid->fastest) + agent->radius;
-    mnavPos2 p = agent->position;
     int64_t y0 = CellOf(p.y - reach, grid->size);
     int64_t y1 = CellOf(p.y + reach, grid->size);
     int32_t stamp = grid->stamp++;
@@ -323,7 +320,7 @@ int32_t mnavNearObstacles(const mnavAgent* agent, const mnavObstacleVertex* vert
                 continue;
             }
             grid->stamps[v] = stamp;
-            double distance = Reach(agent, vertices, v, horizon);
+            double distance = measure(context, v);
             if (distance >= 0.0)
             {
                 count = Keep(vertices, list, count, limit, (mnavObstacleNear){distance, v});
@@ -331,6 +328,34 @@ int32_t mnavNearObstacles(const mnavAgent* agent, const mnavObstacleVertex* vert
         }
     }
     return count;
+}
+
+// An agent's view of the obstacles, for measuring them.
+typedef struct Seen
+{
+    const mnavAgent* agent;
+    const mnavObstacleVertex* vertices;
+    double horizon;
+} Seen;
+
+static double MeasureSeen(const void* context, int32_t v)
+{
+    const Seen* seen = context;
+    if ((seen->vertices[v].layers & seen->agent->ignores) != 0)
+    {
+        return -1.0;
+    }
+    return Reach(seen->agent, seen->vertices, v, seen->horizon);
+}
+
+int32_t mnavNearObstacles(const mnavAgent* agent, const mnavObstacleVertex* vertices,
+                          mnavObstacleGrid* grid, double horizon, mnavObstacleNear* list,
+                          int32_t limit)
+{
+    // Every circle and edge within any vertex's reach lies in the box.
+    double reach = horizon * (agent->maxSpeed + grid->fastest) + agent->radius;
+    Seen seen = {agent, vertices, horizon};
+    return mnavNearInGrid(grid, vertices, agent->position, reach, MeasureSeen, &seen, list, limit);
 }
 
 // The agent seen from an edge's frame: positions relative to it, its

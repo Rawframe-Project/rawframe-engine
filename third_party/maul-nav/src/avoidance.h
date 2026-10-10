@@ -41,6 +41,10 @@ struct mnavAvoidance
     mnavPlane* projectedPlanes;
 };
 
+// The corners of a 16-gon on the unit circle, written out so that every
+// platform has the same: the outline debug drawing gives an agent.
+extern const double mnavOutline[16][2];
+
 static inline bool mnavAvoidPositive(double v)
 {
     return isfinite(v) && v > 0.0;
@@ -65,5 +69,16 @@ static inline bool mnavAvoidRadius(double v)
 {
     return mnavAvoidPositive(v) && v <= MNAV_MAX_AVOIDANCE_RADIUS;
 }
+
+// Fills the set's obstacle grid with spheres, by their bounds on the
+// ground (X and Z), its fastest speed their fastest in space; count is
+// within the set's obstacle points.
+void mnavBuildSphereGrid(mnavAvoidance* avoidance, const mnavSphere* spheres, int32_t count);
+
+// The spheres an agent may meet within the obstacle horizon, the nearest
+// first (ties by id, then index), at most the set's obstacle neighbours,
+// into list; the grid holds those spheres.
+int32_t mnavNearSpheres(mnavAvoidance* avoidance, const mnavAgent3D* agent,
+                        const mnavSphere* spheres, int32_t count, mnavObstacleNear* list);
 
 #endif // MAUL_NAV_SRC_AVOIDANCE_H

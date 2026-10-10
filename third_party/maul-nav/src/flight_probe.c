@@ -50,6 +50,56 @@ mnavResult mnavFlightRaycast(const mnavFlightVolume* volume, mnavPos3 from, mnav
     return mnav_success;
 }
 
+mnavResult mnavCheckFlightPath(const mnavFlightVolume* volume, const mnavPos3* points,
+                               int32_t pointCount, int32_t* stepOut, mnavFlightHit* hitOut)
+{
+    if (volume == nullptr || stepOut == nullptr || pointCount < 0 ||
+        (pointCount > 0 && points == nullptr))
+    {
+        return mnav_errorInvalid;
+    }
+    // Every point is checked first, so that a refusal changes nothing.
+    mnavFlightFrame frame = mnavMakeFlightFrame(volume);
+    double v[3];
+    int32_t cell[3];
+    for (int32_t i = 0; i < pointCount; ++i)
+    {
+        if (!mnavFlightToVoxels(&frame, points[i], v, cell))
+        {
+            return mnav_errorRange;
+        }
+    }
+    // One cursor serves every step, so that steps in one tile look it up
+    // once.
+    mnavFlightCursor cursor = mnavMakeFlightCursor(volume);
+    *stepOut = -1;
+    for (int32_t i = 0; i + 1 < pointCount; ++i)
+    {
+        double a[3];
+        double b[3];
+        (void)mnavFlightToVoxels(&frame, points[i], a, cell);
+        (void)mnavFlightToVoxels(&frame, points[i + 1], b, cell);
+        double t = 1.0;
+        int32_t held = mnavFlightWalk(&cursor, a, b, &t);
+        if (held == MNAV_SPACE_OPEN)
+        {
+            continue;
+        }
+        *stepOut = i;
+        if (hitOut != nullptr)
+        {
+            mnavPos3 from = points[i];
+            mnavPos3 to = points[i + 1];
+            hitOut->stop = held == MNAV_SPACE_SOLID ? mnav_flightBlocked : mnav_flightNotLoaded;
+            hitOut->t = t;
+            hitOut->point = (mnavPos3){from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t,
+                                       from.z + (to.z - from.z) * t};
+        }
+        return mnav_success;
+    }
+    return mnav_success;
+}
+
 // The nearest point search: the point, in voxels, the best distance so
 // far (the radius before any), and the point found.
 typedef struct Nearest

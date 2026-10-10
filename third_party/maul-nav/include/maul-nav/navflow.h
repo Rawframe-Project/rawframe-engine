@@ -46,6 +46,8 @@ extern "C"
     typedef struct mnavNavFlowDef
     {
         uint32_t cookie;
+        // MNAV_ABI_VERSION, set by mnavDefaultNavFlowDef.
+        uint32_t version;
         // The allocator the field uses; zeroed for the C library's.
         mnavAllocator allocator;
         mnavNavFlowLimits limits;
@@ -80,22 +82,40 @@ extern "C"
         mnavLinkId link;
     } mnavPolygonFlow;
 
+// The cookie mnavDefaultNavFlowDef sets and mnavCreateNavFlow checks.
+#define MNAV_NAV_FLOW_DEF_COOKIE 0x4E41564Eu
+
     /// Returns the default navmesh flow field def: up to 65,536 polygons,
     /// 4,096 tile slots and 4,096 off-mesh links.
+    /// Built in the program, so that it carries the version of the
+    /// headers the program includes.
     ///
     /// @return The def.
     /// @par Thread safety
     /// Safe from any thread.
-    MNAV_API mnavNavFlowDef mnavDefaultNavFlowDef(void);
+    static inline mnavNavFlowDef mnavDefaultNavFlowDef(void)
+    {
+#ifdef __cplusplus
+        mnavNavFlowDef def = {};
+#else
+    mnavNavFlowDef def = {0};
+#endif
+        def.cookie = MNAV_NAV_FLOW_DEF_COOKIE;
+        def.version = MNAV_ABI_VERSION;
+        def.limits.polygons = 65536;
+        def.limits.tiles = 4096;
+        def.limits.links = 4096;
+        return def;
+    }
 
     /// Makes a navmesh flow field with the memory its limits need.
     ///
     /// @param def      The def, from mnavDefaultNavFlowDef.
     /// @param fieldOut Receives the field, or NULL on failure.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
-    /// def not from mnavDefaultNavFlowDef; `mnav_errorRange` for a limit
-    /// out of its range; `mnav_errorCapacity` when the allocator
-    /// fails.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
+    /// not from mnavDefaultNavFlowDef; `mnav_errorVersion` for one built
+    /// against another major or minor version; `mnav_errorRange` for a limit
+    /// out of its range; `mnav_errorCapacity` when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavResult mnavCreateNavFlow(const mnavNavFlowDef* def,

@@ -25,16 +25,8 @@
 #include <stdint.h>
 #include <string.h>
 
-// Marks a def built by mnavDefaultAvoidanceDef.
-#define AVOIDANCE_DEF_COOKIE 0x4E415641u
-
 // Obstacle grid entries per obstacle vertex.
 #define ENTRIES_PER_VERTEX 8
-
-mnavAvoidanceDef mnavDefaultAvoidanceDef(void)
-{
-    return (mnavAvoidanceDef){AVOIDANCE_DEF_COOKIE, {0}, {4096, 10, 4096, 16}, 10.0, 2.0, 2.0};
-}
 
 // Whether a def's limits, distance and horizons lie in their ranges.
 static bool GoodLimits(const mnavAvoidanceDef* def)
@@ -147,8 +139,15 @@ mnavResult mnavCreateAvoidance(const mnavAvoidanceDef* def, mnavAvoidance** avoi
         return mnav_errorInvalid;
     }
     *avoidanceOut = nullptr;
-    if (def == nullptr || def->cookie != AVOIDANCE_DEF_COOKIE ||
-        (def->allocator.alloc == nullptr) != (def->allocator.free == nullptr))
+    if (def == nullptr || def->cookie != MNAV_AVOIDANCE_DEF_COOKIE)
+    {
+        return mnav_errorInvalid;
+    }
+    if (def->version != MNAV_ABI_VERSION)
+    {
+        return mnav_errorVersion;
+    }
+    if ((def->allocator.alloc == nullptr) != (def->allocator.free == nullptr))
     {
         return mnav_errorInvalid;
     }
@@ -234,7 +233,7 @@ static bool GoodAgent(const mnavAgent* agent)
 // Checks the agents as hostile input and fills the ground grid's keys.
 static mnavResult FillKeys(mnavAvoidance* a, const mnavAgent* agents, int32_t count)
 {
-    a->crowd.space = false;
+    mnavBeginCrowd(&a->crowd, false);
     for (int32_t i = 0; i < count; ++i)
     {
         if (!GoodAgent(&agents[i]))
@@ -243,6 +242,7 @@ static mnavResult FillKeys(mnavAvoidance* a, const mnavAgent* agents, int32_t co
         }
         mnavPos3 position = {agents[i].position.x, agents[i].position.y, 0.0};
         a->crowd.keys[i] = mnavCrowdKeyOf(&a->crowd, position, agents[i].id, i);
+        a->crowd.keys[i].layers = agents[i].layers;
     }
     return mnav_success;
 }
@@ -257,14 +257,17 @@ static mnavPos2 Solve(mnavAvoidance* a, const mnavAgent* agents, double step, in
     int32_t fixed = mnavObstacleLines(self, a->vertices, a->near, near, a->def.obstacleTimeHorizon,
                                       step, a->lines);
     int32_t count = fixed;
-    int32_t neighbors =
-        mnavCrowdNeighbors(&a->crowd, (mnavPos3){self->position.x, self->position.y, 0.0}, i);
+    int32_t neighbors = mnavCrowdNeighbors(
+        &a->crowd, (mnavPos3){self->position.x, self->position.y, 0.0}, i, self->ignores);
     for (int32_t n = 0; n < neighbors; ++n)
     {
         const mnavAgent* other = &agents[a->crowd.neighbors[n].index];
+        // An agent that ignores this one leaves it the whole avoidance.
+        double share = (other->ignores & self->layers) != 0
+                           ? 1.0
+                           : other->priority / (self->priority + other->priority);
         a->lines[count++] = mnavPairLine(self->position, self->velocity, other->position,
-                                         other->velocity, self->radius + other->radius,
-                                         other->priority / (self->priority + other->priority),
+                                         other->velocity, self->radius + other->radius, share,
                                          a->def.timeHorizon, step, self->id < other->id);
     }
     mnavPos2 velocity = {0.0, 0.0};
@@ -327,12 +330,11 @@ mnavResult mnavAvoid(mnavAvoidance* avoidance, const mnavAgent* agents, int32_t 
     {
         velocitiesOut[i] = Solve(avoidance, agents, step, i);
     }
+    mnavEndCrowd(&avoidance->crowd);
     return mnav_success;
 }
 
-// The corners of a 16-gon on the unit circle, written out so that every
-// platform has the same.
-static const double s_outline[16][2] = {
+const double mnavOutline[16][2] = {
     {1.0, 0.0},
     {0.9238795325112867, 0.3826834323650898},
     {0.7071067811865476, 0.7071067811865475},
@@ -374,14 +376,14 @@ mnavResult mnavDebugAvoidance(mnavAvoidance* avoidance, const mnavAgent* agents,
         const mnavAgent* a = &agents[i];
         for (int32_t k = 0; k < 16; ++k)
         {
-            mnavPos3 p = {a->position.x + a->radius * s_outline[k][0], height,
-                          a->position.y + a->radius * s_outline[k][1]};
-            mnavPos3 q = {a->position.x + a->radius * s_outline[(k + 1) % 16][0], height,
-                          a->position.y + a->radius * s_outline[(k + 1) % 16][1]};
+            mnavPos3 p = {a->position.x + a->radius * mnavOutline[k][0], height,
+                          a->position.y + a->radius * mnavOutline[k][1]};
+            mnavPos3 q = {a->position.x + a->radius * mnavOutline[(k + 1) % 16][0], height,
+                          a->position.y + a->radius * mnavOutline[(k + 1) % 16][1]};
             mnavDrawLine(buffer, p, q, mnav_debugAgent, 0);
         }
-        int32_t count =
-            mnavCrowdNeighbors(&avoidance->crowd, (mnavPos3){a->position.x, a->position.y, 0.0}, i);
+        int32_t count = mnavCrowdNeighbors(
+            &avoidance->crowd, (mnavPos3){a->position.x, a->position.y, 0.0}, i, a->ignores);
         for (int32_t n = 0; n < count; ++n)
         {
             const mnavAgent* b = &agents[avoidance->crowd.neighbors[n].index];

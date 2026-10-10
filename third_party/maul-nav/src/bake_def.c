@@ -12,42 +12,10 @@
 #include <math.h>
 #include <stdbool.h>
 
-// Marks a def built by mnavDefaultBakeDef.
-#define BAKE_DEF_COOKIE 0x4E415642u
-
 // The cells added to the agent's radius for a tile's border, so that the
 // erosion and the region filters near a tile's edge see the same cells as
 // the neighbor tile does.
 #define BORDER_MARGIN_CELLS 3
-
-mnavBakeDef mnavDefaultBakeDef(void)
-{
-    mnavBakeDef def = {0};
-    def.cookie = BAKE_DEF_COOKIE;
-    // Powers of two, so the default agent converts to cells exactly.
-    def.cellSize = 0.25f;
-    def.cellHeight = 0.125f;
-    def.tileCells = 128;
-    def.agent.radius = 0.5f;
-    def.agent.height = 2.0f;
-    def.agent.stepHeight = 0.75f;
-    def.agent.maxSlopeDegrees = 45.0f;
-    def.minRegionArea = 2.0f;
-    def.maxEdgeError = 0.3f;
-    def.maxEdgeLength = 12.0f;
-    def.detailSampleDistance = 1.5f;
-    def.detailMaxError = 0.125f;
-    def.limits.inputTriangles = 4194304;
-    def.limits.tileTriangles = 1048576;
-    def.limits.tileSpans = 4194304;
-    def.limits.tilePolygons = 8192;
-    def.limits.tileVertices = 16384;
-    def.limits.tileLinks = 32768;
-    def.limits.tiles = 65536;
-    def.limits.links = 4096;
-    def.limits.memoryBytes = 268435456;
-    return def;
-}
 
 mnavBakeDefResult mnavValidateBakeDef(const mnavBakeDef* def, mnavBakeCells* cellsOut)
 {
@@ -206,9 +174,13 @@ mnavBakeDefResult mnavCheckBakeDef(const mnavBakeDef* def, mnavBakeCells* cells)
     {
         return Refuse(mnav_settingNone);
     }
-    if (def->cookie != BAKE_DEF_COOKIE)
+    if (def->cookie != MNAV_BAKE_DEF_COOKIE)
     {
         return Refuse(mnav_settingCookie);
+    }
+    if (def->version != MNAV_ABI_VERSION)
+    {
+        return (mnavBakeDefResult){mnav_errorVersion, mnav_settingNone};
     }
     mnavBakeSetting setting = CheckGrid(def);
     if (setting != mnav_settingNone)

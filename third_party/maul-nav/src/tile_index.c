@@ -279,8 +279,12 @@ mnavResult mnavCreateTileIndex(const mnavBakeDef* def, const mnavTriangleMesh* m
     }
     *indexOut = nullptr;
     mnavBakeCells cells = {0};
-    if (def == nullptr || meshCount < 0 || (meshCount > 0 && meshes == nullptr) ||
-        mnavCheckBakeDef(def, &cells).result != mnav_success)
+    mnavResult checked = mnavCheckBakeDef(def, &cells).result;
+    if (checked != mnav_success)
+    {
+        return report->result = checked;
+    }
+    if (meshCount < 0 || (meshCount > 0 && meshes == nullptr))
     {
         return report->result = mnav_errorInvalid;
     }
@@ -310,8 +314,12 @@ mnavResult mnavCreateTileIndex2D(const mnavBakeDef* def, const mnavOutline* outl
     }
     *indexOut = nullptr;
     mnavBakeCells cells = {0};
-    if (def == nullptr || outlineCount < 0 || (outlineCount > 0 && outlines == nullptr) ||
-        mnavCheckBakeDef(def, &cells).result != mnav_success)
+    mnavResult checked = mnavCheckBakeDef(def, &cells).result;
+    if (checked != mnav_success)
+    {
+        return report->result = checked;
+    }
+    if (outlineCount < 0 || (outlineCount > 0 && outlines == nullptr))
     {
         return report->result = mnav_errorInvalid;
     }

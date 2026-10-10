@@ -176,10 +176,10 @@ mnavResult mnavBakeFlightTile(mnavFlightBaker* baker, const mnavBakeInput* input
     return result;
 }
 
-mnavResult mnavCopyFlightTile(const mnavFlightBaker* baker, uint8_t* buffer, size_t capacity,
+mnavResult mnavCopyFlightTile(const mnavFlightBaker* baker, uint8_t* bufferOut, size_t capacity,
                               size_t* sizeOut)
 {
-    if (baker == nullptr || (buffer == nullptr && capacity > 0) || baker->tile == nullptr)
+    if (baker == nullptr || (bufferOut == nullptr && capacity > 0) || baker->tile == nullptr)
     {
         return mnav_errorInvalid;
     }
@@ -191,9 +191,9 @@ mnavResult mnavCopyFlightTile(const mnavFlightBaker* baker, uint8_t* buffer, siz
     {
         return mnav_errorCapacity;
     }
-    if (buffer != nullptr)
+    if (bufferOut != nullptr)
     {
-        memcpy(buffer, baker->tile, baker->tileSize);
+        memcpy(bufferOut, baker->tile, baker->tileSize);
     }
     return mnav_success;
 }

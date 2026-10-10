@@ -31,6 +31,8 @@ extern "C"
     typedef struct mnavLinkGenDef
     {
         uint32_t cookie;
+        // MNAV_ABI_VERSION, set by mnavDefaultLinkGenDef.
+        uint32_t version;
         // The distance between samples along an edge, in meters, more than
         // 0 and at most MNAV_MAX_LINK_REACH.
         float spacing;
@@ -59,16 +61,42 @@ extern "C"
         void* context;
     } mnavLinkGenDef;
 
+// The cookie mnavDefaultLinkGenDef sets and mnavGenerateLinks checks.
+#define MNAV_LINK_GEN_DEF_COOKIE 0x4E41564Cu
+
     /// Returns the default generation def: samples every 1 m, drops up to
     /// 3 m going both ways up to 0.5 m, jumps up to 2 m, links dropped
     /// when walking is within 3 times as far or their ends within 1 m of
     /// another's, a snap radius of 0.5 m, costs 2 and 4, kinds
     /// mnav_linkDrop and mnav_linkJump, and no clearance test.
+    /// Built in the program, so that it carries the version of the
+    /// headers the program includes.
     ///
     /// @return The def.
     /// @par Thread safety
     /// Safe from any thread.
-    MNAV_API mnavLinkGenDef mnavDefaultLinkGenDef(void);
+    static inline mnavLinkGenDef mnavDefaultLinkGenDef(void)
+    {
+#ifdef __cplusplus
+        mnavLinkGenDef def = {};
+#else
+    mnavLinkGenDef def = {0};
+#endif
+        def.cookie = MNAV_LINK_GEN_DEF_COOKIE;
+        def.version = MNAV_ABI_VERSION;
+        def.spacing = 1.0f;
+        def.dropMax = 3.0f;
+        def.jumpMax = 2.0f;
+        def.climbMax = 0.5f;
+        def.detour = 3.0f;
+        def.filterDistance = 1.0f;
+        def.radius = 0.5f;
+        def.dropCost = 2.0f;
+        def.jumpCost = 4.0f;
+        def.dropKind = mnav_linkDrop;
+        def.jumpKind = mnav_linkJump;
+        return def;
+    }
 
     /// Generates links from the edges of the polygons on a range of tile
     /// places that have nothing across them and are not tile sides. Each
@@ -98,12 +126,13 @@ extern "C"
     /// @param capacity  The buffer's size in links, at least 0.
     /// @param countOut  Receives the number of links generated, also beyond
     ///                  the capacity.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a
-    /// def not from mnavDefaultLinkGenDef, a tile range backward, or a
-    /// filter not built from mnavDefaultQueryFilter; `mnav_errorRange` for
-    /// a def value or filter cost out of its range; `mnav_errorCapacity`
-    /// when more links were generated than the buffer holds, the first
-    /// capacity written.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a def
+    /// not from mnavDefaultLinkGenDef, a tile range backward, or a filter not
+    /// built from mnavDefaultQueryFilter; `mnav_errorVersion` for a def or
+    /// filter built against another major or minor version;
+    /// `mnav_errorRange` for a def value or filter cost out of its range;
+    /// `mnav_errorCapacity` when more links were generated than the buffer
+    /// holds, the first capacity written.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time,
     /// and no commit runs on the navmesh. The def's clearance test runs on

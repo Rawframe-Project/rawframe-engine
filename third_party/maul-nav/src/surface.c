@@ -297,7 +297,7 @@ mnavResult mnavMoveAlongSurface(mnavQuery* query, const mnavNavmesh* navmesh,
     double radius = sqrt(Distance2(from, to)) * 0.5 + (double)navmesh->def.cellSize;
     Mover m = {query, navmesh, usable, to, center, radius * radius, from, Distance2(from, to),
                0,     false,   false,  1};
-    memset(query->table, 0xFF, ((size_t)query->tableMask + 1) * sizeof(int32_t));
+    mnavClearTable(query);
     query->nodes[0] = (mnavSearchNode){0};
     query->nodes[0].slot = (int32_t)startPolygon.slot - 1;
     query->nodes[0].polygon = (int32_t)startPolygon.polygon;
@@ -324,5 +324,14 @@ mnavResult mnavMoveAlongSurface(mnavQuery* query, const mnavNavmesh* navmesh,
         {(uint32_t)node->slot + 1, navmesh->slots[node->slot].generation, (uint32_t)node->polygon},
         query->corridor,
         Polygons(query, navmesh, last)};
+    // A walk visits few polygons: its entries come out again, newest first
+    // so that each one's probe still finds it, and the next search clears
+    // nothing.
+    for (int32_t k = query->nodeCount - 1; k >= 0; --k)
+    {
+        const mnavSearchNode* visited = &query->nodes[k];
+        query->table[mnavFindNode(query, visited->slot, visited->polygon, 0, 0)] = MNAV_NO_NODE;
+    }
+    query->tableClean = true;
     return mnav_success;
 }

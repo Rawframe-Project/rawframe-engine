@@ -26,9 +26,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Marks a def built by mnavDefaultNavFlowDef.
-#define NAVFLOW_DEF_COOKIE 0x4E41564Eu
-
 // A polygon's place in the heap when it is not in it: never reached, or
 // done.
 #define NOT_OPEN (-1)
@@ -71,11 +68,6 @@ struct mnavNavFlow
     bool ended;
 };
 
-mnavNavFlowDef mnavDefaultNavFlowDef(void)
-{
-    return (mnavNavFlowDef){NAVFLOW_DEF_COOKIE, {0}, {65536, 4096, 4096}};
-}
-
 static bool GoodLimits(const mnavNavFlowLimits* l)
 {
     return l->polygons >= 1 && l->polygons <= MNAV_MAX_NAVFLOW_POLYGONS && l->tiles >= 1 &&
@@ -96,8 +88,15 @@ mnavResult mnavCreateNavFlow(const mnavNavFlowDef* def, mnavNavFlow** fieldOut)
         return mnav_errorInvalid;
     }
     *fieldOut = nullptr;
-    if (def == nullptr || def->cookie != NAVFLOW_DEF_COOKIE ||
-        (def->allocator.alloc == nullptr) != (def->allocator.free == nullptr))
+    if (def == nullptr || def->cookie != MNAV_NAV_FLOW_DEF_COOKIE)
+    {
+        return mnav_errorInvalid;
+    }
+    if (def->version != MNAV_ABI_VERSION)
+    {
+        return mnav_errorVersion;
+    }
+    if ((def->allocator.alloc == nullptr) != (def->allocator.free == nullptr))
     {
         return mnav_errorInvalid;
     }

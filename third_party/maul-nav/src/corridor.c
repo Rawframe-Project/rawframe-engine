@@ -241,6 +241,130 @@ mnavResult mnavCorridorCorners(mnavQuery* query, const mnavNavmesh* navmesh,
     return mnav_success;
 }
 
+static mnavAreaType AreaOf(const mnavNavmesh* navmesh, mnavPolygonId id)
+{
+    const mnavTile* tile = nullptr;
+    return mnavPolygonOf(navmesh, id, &tile)->area;
+}
+
+// Where the straight path crosses an edge portal, from point *corner on:
+// the first of its segments to meet the portal, or one that runs along
+// it from a point on it; *corner moves to that segment. The funnel
+// passes the path through every portal, so one does, but for rounding,
+// when the current corner stands for the crossing.
+static mnavPos3 Crossing(const mnavCorners* corners, const mnavPortal* portal, int32_t* corner)
+{
+    const double eps = 1e-9;
+    double rx = portal->right.x - portal->left.x;
+    double rz = portal->right.z - portal->left.z;
+    for (int32_t c = *corner; c + 1 < corners->pointCount; ++c)
+    {
+        mnavPos3 a = corners->points[c];
+        mnavPos3 b = corners->points[c + 1];
+        double sx = b.x - a.x;
+        double sz = b.z - a.z;
+        double qx = portal->left.x - a.x;
+        double qz = portal->left.z - a.z;
+        double denominator = sx * rz - sz * rx;
+        double reach = rx * rx + rz * rz;
+        if (fabs(denominator) <= eps * (sx * sx + sz * sz + reach))
+        {
+            // Along the portal's line: crossed where the segment starts,
+            // when that is on the portal, within its ends.
+            double side = qx * rz - qz * rx;
+            double w = reach > 0.0 ? -(qx * rx + qz * rz) / reach : 0.0;
+            if (side * side <= 1e-6 * reach && w >= -eps && w <= 1.0 + eps)
+            {
+                *corner = c;
+                return a;
+            }
+            continue;
+        }
+        double t = (qx * rz - qz * rx) / denominator;
+        double u = (qx * sz - qz * sx) / denominator;
+        if (t >= -eps && t <= 1.0 + eps && u >= -eps && u <= 1.0 + eps)
+        {
+            t = t < 0.0 ? 0.0 : (t > 1.0 ? 1.0 : t);
+            *corner = c;
+            return (mnavPos3){a.x + t * sx, a.y + t * (b.y - a.y), a.z + t * sz};
+        }
+    }
+    return corners->points[*corner];
+}
+
+// Writes a run when it fits; counts it either way.
+static void Run(mnavAreaRun* runs, int32_t capacity, int32_t* count, mnavAreaRun run)
+{
+    if (*count < capacity)
+    {
+        runs[*count] = run;
+    }
+    *count += 1;
+}
+
+// The index of a point among the corners from first on, or the last.
+static int32_t PointAt(const mnavCorners* corners, int32_t first, mnavPos3 p)
+{
+    for (int32_t c = first; c < corners->pointCount; ++c)
+    {
+        if (corners->points[c].x == p.x && corners->points[c].z == p.z)
+        {
+            return c;
+        }
+    }
+    return corners->pointCount - 1;
+}
+
+mnavResult mnavCorridorAreas(mnavQuery* query, const mnavNavmesh* navmesh,
+                             const mnavCorridor* corridor, mnavCorners* cornersOut,
+                             mnavAreaRun* runsOut, int32_t capacity, int32_t* countOut)
+{
+    if (countOut == nullptr || capacity < 0 || (capacity > 0 && runsOut == nullptr))
+    {
+        return mnav_errorInvalid;
+    }
+    mnavCorners corners;
+    mnavResult result = mnavCorridorCorners(query, navmesh, corridor, &corners);
+    if (result != mnav_success)
+    {
+        return result;
+    }
+    if (cornersOut != nullptr)
+    {
+        *cornersOut = corners;
+    }
+    const mnavQueryFilter* all = nullptr;
+    (void)mnavCheckFilter(nullptr, &all);
+    int32_t count = 0;
+    int32_t corner = 0;
+    mnavAreaType area = AreaOf(navmesh, corridor->polygons[0]);
+    Run(runsOut, capacity, &count, (mnavAreaRun){corridor->position, 0, area});
+    for (int32_t i = 1; i < corridor->count; ++i)
+    {
+        // Validated above: the polygons join, and the portals are written.
+        mnavPortal portals[2] = {0};
+        int32_t joined =
+            Join(navmesh, all, corridor->polygons[i - 1], corridor->polygons[i], portals);
+        mnavAreaType next = AreaOf(navmesh, corridor->polygons[i]);
+        if (joined == 2)
+        {
+            // Landed from an off-mesh link: a run from the landing point.
+            corner = PointAt(&corners, corner, portals[1].left);
+            Run(runsOut, capacity, &count, (mnavAreaRun){portals[1].left, corner, next});
+            area = next;
+            continue;
+        }
+        mnavPos3 at = Crossing(&corners, &portals[0], &corner);
+        if (next != area)
+        {
+            Run(runsOut, capacity, &count, (mnavAreaRun){at, corner, next});
+            area = next;
+        }
+    }
+    *countOut = count;
+    return count <= capacity ? mnav_success : mnav_errorCapacity;
+}
+
 // The index of a polygon among the first count of a list, or -1.
 static int32_t IndexOf(const mnavPolygonId* list, int32_t count, mnavPolygonId id)
 {

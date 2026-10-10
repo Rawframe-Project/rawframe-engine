@@ -455,6 +455,7 @@ mnavResult mnavFindGridPath(mnavQuery* query, const mnavGrid* grid, const mnavQu
     // The filter is copied: the caller's may change before the next query.
     query->filter = *usable;
     query->search.active = false;
+    query->flight.active = false;
     Grid g = {query,
               query->gridNodes,
               grid,
@@ -467,7 +468,7 @@ mnavResult mnavFindGridPath(mnavQuery* query, const mnavGrid* grid, const mnavQu
               false,
               MNAV_NO_NODE,
               0};
-    memset(query->table, 0xFF, ((size_t)query->tableMask + 1) * sizeof(int32_t));
+    mnavClearTable(query);
     query->heapCount = 0;
     query->nodeCount = 1;
     g.nodes[0] = (GridNode){start.x,

@@ -130,9 +130,9 @@ static uint64_t HashMeshTriangle(float cosMaxSlope, const mnavTileFrame* frame,
     return HashTriangle(cosMaxSlope, frame, corners, given, hash, count);
 }
 
-uint64_t mnavFingerprintInput(const mnavTileFrame* frame, float cosMaxSlope,
-                              const mnavBakeInput* input, int32_t tileX, int32_t tileZ,
-                              uint64_t hash, int32_t* count)
+uint64_t mnavFingerprintGeometry(const mnavTileFrame* frame, float cosMaxSlope,
+                                 const mnavBakeInput* input, int32_t tileX, int32_t tileZ,
+                                 uint64_t hash, int32_t* count)
 {
     *count = 0;
     if (input->index != nullptr)
@@ -157,5 +157,19 @@ uint64_t mnavFingerprintInput(const mnavTileFrame* frame, float cosMaxSlope,
     {
         hash = HashTerrain(cosMaxSlope, frame, &input->terrains[i], hash, count);
     }
+    return hash;
+}
+
+uint64_t mnavFingerprintVolumes(const mnavTileFrame* frame, const mnavBakeVolume* volumes,
+                                int32_t count, uint64_t hash)
+{
+    return HashVolumes(frame, volumes, count, hash);
+}
+
+uint64_t mnavFingerprintInput(const mnavTileFrame* frame, float cosMaxSlope,
+                              const mnavBakeInput* input, int32_t tileX, int32_t tileZ,
+                              uint64_t hash, int32_t* count)
+{
+    hash = mnavFingerprintGeometry(frame, cosMaxSlope, input, tileX, tileZ, hash, count);
     return HashVolumes(frame, input->volumes, input->volumeCount, hash);
 }

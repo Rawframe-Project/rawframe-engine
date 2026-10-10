@@ -252,6 +252,12 @@ typedef struct Ring
     double radius;
     bool limited;
     mnavWall wall;
+    // Whether the walls are listed into a buffer, the nearest kept, rather
+    // than the nearest noted.
+    bool listing;
+    mnavWallSegment* walls;
+    int32_t capacity;
+    int32_t count;
 } Ring;
 
 // The open list, by cost, then by node index.
@@ -336,6 +342,38 @@ static void NoteWall(Ring* r, mnavPos3 a, mnavPos3 b)
     r->wall = (mnavWall){true, r->wall.limited, distance, nearest, normal};
 }
 
+// Lists wall ab when within the radius among the nearest the buffer holds,
+// after those as near, so that ties keep the order the search meets them.
+static void ListWall(Ring* r, mnavPos3 a, mnavPos3 b)
+{
+    mnavPos3 nearest;
+    double distance = sqrt(SegmentDistance(r->center, a, b, &nearest));
+    if (distance > r->radius)
+    {
+        return;
+    }
+    int32_t held = r->count < r->capacity ? r->count : r->capacity;
+    r->count += 1;
+    int32_t at = held;
+    while (at > 0 && r->walls[at - 1].distance > distance)
+    {
+        --at;
+    }
+    if (at == r->capacity)
+    {
+        return;
+    }
+    int32_t last = held < r->capacity ? held : r->capacity - 1;
+    memmove(&r->walls[at + 1], &r->walls[at], (size_t)(last - at) * sizeof(mnavWallSegment));
+    double ex = b.x - a.x;
+    double ez = b.z - a.z;
+    double length = sqrt(ex * ex + ez * ez);
+    // A polygon lies to the negative side of its edges, which is this way.
+    mnavPos3 normal =
+        length > 0.0 ? (mnavPos3){ez / length, 0.0, -ex / length} : (mnavPos3){0.0, 0.0, 0.0};
+    r->walls[at] = (mnavWallSegment){a, b, normal, distance};
+}
+
 // Opens or lowers the node of polygon (slot, polygon) entered through
 // portal ab from node from, when the portal lies within the radius.
 static void Enter(Ring* r, int32_t from, int32_t slot, int32_t polygon, mnavPos3 a, mnavPos3 b)
@@ -387,34 +425,110 @@ static mnavPos3 AlongSide(mnavPos3 a, mnavPos3 b, double au, double bu, double u
     return (mnavPos3){a.x + t * (b.x - a.x), a.y + t * (b.y - a.y), a.z + t * (b.z - a.z)};
 }
 
+// Notes or lists wall ab, as the search asks.
+static void Wall(Ring* r, mnavPos3 a, mnavPos3 b)
+{
+    if (r->listing)
+    {
+        ListWall(r, a, b);
+    }
+    else
+    {
+        NoteWall(r, a, b);
+    }
+}
+
+// The point a fraction t of the way from a to b, a and b themselves at
+// the ends.
+static mnavPos3 Between(mnavPos3 a, mnavPos3 b, double t)
+{
+    if (t >= 1.0)
+    {
+        return b;
+    }
+    return (mnavPos3){a.x + t * (b.x - a.x), a.y + t * (b.y - a.y), a.z + t * (b.z - a.z)};
+}
+
+// Whether a link crosses edge j into a polygon the filter includes.
+static bool Crosses(const Ring* r, const mnavLink* link, int32_t j)
+{
+    const mnavTile* target = r->navmesh->slots[link->target.slot - 1].tile;
+    return link->edge == j &&
+           mnavIncludes(r->filter, target->mesh.polygons[link->target.polygon].area);
+}
+
+// How far the crossing links of edge j cover it on from a point, as
+// fractions of the edge from au to bu: the point itself when none covers
+// it, and then *next is where the next one starts (1 when none does).
+static double Reach(const Ring* r, const mnavTile* tile, int32_t polygon, int32_t j, double au,
+                    double bu, double from, double* next)
+{
+    double reach = from;
+    *next = 1.0;
+    for (int32_t l = tile->firstLink[polygon]; l < tile->firstLink[polygon + 1]; ++l)
+    {
+        const mnavLink* link = &tile->links[l];
+        if (!Crosses(r, link, j))
+        {
+            continue;
+        }
+        double t0 = ((double)link->low - au) / (bu - au);
+        double t1 = ((double)link->high - au) / (bu - au);
+        double low = t0 < t1 ? t0 : t1;
+        double high = t0 < t1 ? t1 : t0;
+        if (low <= from && high > reach)
+        {
+            reach = high;
+        }
+        else if (low > from && low < *next)
+        {
+            *next = low;
+        }
+    }
+    return reach;
+}
+
 // Crosses side edge j of node n's polygon through the tile links the
-// filter allows; whether any did.
-static bool CrossSide(Ring* r, int32_t n, int32_t j, mnavPos3 a, mnavPos3 b)
+// filter allows, and takes the parts of the edge no such link covers as
+// walls, from a toward b, as Detour's getPolyWallSegments does: a side
+// links only where the tile across has a polygon, which tiles baked from
+// different geometry may leave in part.
+static void CrossSide(Ring* r, int32_t n, int32_t j, mnavPos3 a, mnavPos3 b)
 {
     const mnavSearchNode* node = &r->query->nodes[n];
     const mnavSlot* slot = &r->navmesh->slots[node->slot];
     const mnavTile* tile = slot->tile;
-    const mnavPolygon* polygon = &tile->mesh.polygons[node->polygon];
+    int32_t p = node->polygon;
+    const mnavPolygon* polygon = &tile->mesh.polygons[p];
     const mnavMeshVertex* va = &tile->mesh.vertices[polygon->vertices[j]];
     const mnavMeshVertex* vb = &tile->mesh.vertices[polygon->vertices[(j + 1) % polygon->count]];
     bool alongZ = polygon->sides[j] == 1 || polygon->sides[j] == 3;
     double au = alongZ ? va->z : va->x;
     double bu = alongZ ? vb->z : vb->x;
-    bool crossed = false;
-    for (int32_t l = tile->firstLink[node->polygon]; l < tile->firstLink[node->polygon + 1]; ++l)
+    for (int32_t l = tile->firstLink[p]; l < tile->firstLink[p + 1]; ++l)
     {
         const mnavLink* link = &tile->links[l];
-        const mnavTile* target = r->navmesh->slots[link->target.slot - 1].tile;
-        if (link->edge != j ||
-            !mnavIncludes(r->filter, target->mesh.polygons[link->target.polygon].area))
+        if (Crosses(r, link, j))
         {
+            Enter(r, n, (int32_t)link->target.slot - 1, (int32_t)link->target.polygon,
+                  AlongSide(a, b, au, bu, link->low), AlongSide(a, b, au, bu, link->high));
+        }
+    }
+    // From a toward b: past each stretch the links cover, a wall up to the
+    // next one's start.
+    double from = 0.0;
+    while (from < 1.0)
+    {
+        double next = 1.0;
+        double reach = Reach(r, tile, p, j, au, bu, from, &next);
+        if (reach > from)
+        {
+            from = reach;
             continue;
         }
-        crossed = true;
-        Enter(r, n, (int32_t)link->target.slot - 1, (int32_t)link->target.polygon,
-              AlongSide(a, b, au, bu, link->low), AlongSide(a, b, au, bu, link->high));
+        Wall(r, Between(a, b, from), Between(a, b, next));
+        from = next;
     }
-    return crossed;
 }
 
 // Visits node n's polygon: its walls noted, the polygons across its other
@@ -432,22 +546,17 @@ static void Visit(Ring* r, int32_t n)
         mnavPos3 a = c[j];
         mnavPos3 b = c[(j + 1) % count];
         int32_t next = polygon->neighbors[j];
-        bool open = false;
-        if (next != MNAV_NO_INDEX)
+        if (next != MNAV_NO_INDEX && mnavIncludes(r->filter, tile->mesh.polygons[next].area))
         {
-            open = mnavIncludes(r->filter, tile->mesh.polygons[next].area);
-            if (open)
-            {
-                Enter(r, n, slot, next, a, b);
-            }
+            Enter(r, n, slot, next, a, b);
         }
-        else if (polygon->sides[j] != 0)
+        else if (next == MNAV_NO_INDEX && polygon->sides[j] != 0)
         {
-            open = CrossSide(r, n, j, a, b);
+            CrossSide(r, n, j, a, b);
         }
-        if (!open)
+        else
         {
-            NoteWall(r, a, b);
+            Wall(r, a, b);
         }
     }
 }
@@ -465,7 +574,8 @@ static mnavResult BeginRing(Ring* r, mnavPolygonId polygon)
     q->filter = *usable;
     r->filter = &q->filter;
     q->search.active = false;
-    memset(q->table, 0xFF, ((size_t)q->tableMask + 1) * sizeof(int32_t));
+    q->flight.active = false;
+    mnavClearTable(q);
     int32_t slot = (int32_t)polygon.slot - 1;
     q->nodes[0] = (mnavSearchNode){r->center, r->center, r->center,    0.0,
                                    0.0,       0.0,       slot,         (int32_t)polygon.polygon,
@@ -493,7 +603,7 @@ mnavResult mnavFindWallDistance(mnavQuery* query, const mnavNavmesh* navmesh,
     {
         return mnav_errorInvalid;
     }
-    Ring r = {query, navmesh, filter, center, radius, false, {0}};
+    Ring r = {query, navmesh, filter, center, radius, false, {0}, false, nullptr, 0, 0};
     mnavResult result = BeginRing(&r, polygon);
     if (result != mnav_success)
     {
@@ -506,6 +616,30 @@ mnavResult mnavFindWallDistance(mnavQuery* query, const mnavNavmesh* navmesh,
     r.wall.limited = r.limited;
     *wallOut = r.wall;
     return mnav_success;
+}
+
+mnavResult mnavFindWalls(mnavQuery* query, const mnavNavmesh* navmesh,
+                         const mnavQueryFilter* filter, mnavPolygonId polygon, mnavPos3 center,
+                         double radius, mnavWallSegment* wallsOut, int32_t capacity,
+                         mnavWallsFound* foundOut)
+{
+    if (foundOut == nullptr || capacity < 0 || (wallsOut == nullptr && capacity > 0) ||
+        !GoodRing(query, navmesh, center, radius))
+    {
+        return mnav_errorInvalid;
+    }
+    Ring r = {query, navmesh, filter, center, radius, false, {0}, true, wallsOut, capacity, 0};
+    mnavResult result = BeginRing(&r, polygon);
+    if (result != mnav_success)
+    {
+        return result;
+    }
+    while (query->heapCount > 0)
+    {
+        Visit(&r, Pop(query));
+    }
+    *foundOut = (mnavWallsFound){r.count, r.limited};
+    return r.count > capacity ? mnav_errorCapacity : mnav_success;
 }
 
 // Clips a convex polygon to the 32-gon of a circle on the ground,
@@ -579,7 +713,7 @@ mnavResult mnavFindRandomPointAround(mnavQuery* query, const mnavNavmesh* navmes
     {
         return mnav_errorInvalid;
     }
-    Ring r = {query, navmesh, filter, center, radius, false, {0}};
+    Ring r = {query, navmesh, filter, center, radius, false, {0}, false, nullptr, 0, 0};
     mnavResult result = BeginRing(&r, polygon);
     if (result != mnav_success)
     {

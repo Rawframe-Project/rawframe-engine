@@ -28,6 +28,8 @@ extern "C"
     typedef struct mnavFlowFieldDef
     {
         uint32_t cookie;
+        // MNAV_ABI_VERSION, set by mnavDefaultFlowFieldDef.
+        uint32_t version;
         // The allocator the field uses; zeroed for the C library's.
         mnavAllocator allocator;
         // The most cells a grid may have, 1 to MNAV_MAX_FLOW_CELLS.
@@ -46,21 +48,37 @@ extern "C"
         mnavCell next;
     } mnavFlow;
 
+// The cookie mnavDefaultFlowFieldDef sets and mnavCreateFlowField checks.
+#define MNAV_FLOW_FIELD_DEF_COOKIE 0x4E415646u
+
     /// Returns the default flow field def: up to 65536 cells.
+    /// Built in the program, so that it carries the version of the
+    /// headers the program includes.
     ///
     /// @return The def.
     /// @par Thread safety
     /// Safe from any thread.
-    MNAV_API mnavFlowFieldDef mnavDefaultFlowFieldDef(void);
+    static inline mnavFlowFieldDef mnavDefaultFlowFieldDef(void)
+    {
+#ifdef __cplusplus
+        mnavFlowFieldDef def = {};
+#else
+    mnavFlowFieldDef def = {0};
+#endif
+        def.cookie = MNAV_FLOW_FIELD_DEF_COOKIE;
+        def.version = MNAV_ABI_VERSION;
+        def.cells = 65536;
+        return def;
+    }
 
     /// Makes a flow field with the memory its cell limit needs.
     ///
     /// @param def      The def, from mnavDefaultFlowFieldDef.
     /// @param fieldOut Receives the field, or NULL on failure.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
-    /// def not from mnavDefaultFlowFieldDef; `mnav_errorRange` for a cell
-    /// limit out of its range; `mnav_errorCapacity` when the allocator
-    /// fails.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
+    /// not from mnavDefaultFlowFieldDef; `mnav_errorVersion` for one built
+    /// against another major or minor version; `mnav_errorRange` for a cell
+    /// limit out of its range; `mnav_errorCapacity` when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavResult mnavCreateFlowField(const mnavFlowFieldDef* def,

@@ -78,8 +78,9 @@ RAWFRAME_TEST(APathGoesAroundAWallAndStraightOnceItIsGone) {
 
     // The same geometry gives the same bytes, here and on every platform.
     // Maul Nav 0.6.0 and after record the version that baked a tile, which
-    // moved it from 0x1747c8991ba56575 (D532).
-    RAWFRAME_EXPECT(navmesh.fingerprint() == 0x48e453cbd71c3687ULL);
+    // moved it from 0x1747c8991ba56575 (D532), and 1.0.1 from
+    // 0x48e453cbd71c3687 (D608).
+    RAWFRAME_EXPECT(navmesh.fingerprint() == 0x211c7b39bb1f2e04ULL);
     auto again = Navmesh::create({});
     RAWFRAME_EXPECT(again.has_value() && (*again)->bake(kWalled, kLot).has_value());
     RAWFRAME_EXPECT(again.has_value() && (*again)->fingerprint() == navmesh.fingerprint());

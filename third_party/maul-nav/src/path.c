@@ -414,7 +414,8 @@ mnavResult mnavBeginPath(mnavQuery* query, const mnavNavmesh* navmesh,
     }
     // The search keeps its own copy: the caller's filter may change.
     query->filter = *usable;
-    memset(query->table, 0xFF, ((size_t)query->tableMask + 1) * sizeof(int32_t));
+    query->flight.active = false;
+    mnavClearTable(query);
     mnavSearch* s = &query->search;
     *s = (mnavSearch){query,
                       navmesh,
@@ -521,7 +522,7 @@ void mnavRestartSearch(mnavQuery* query, int32_t n)
     }
     // The k-th smallest index is at least k, so moving the nodes up in
     // that order never writes over one still to move.
-    memset(query->table, 0xFF, ((size_t)query->tableMask + 1) * sizeof(int32_t));
+    mnavClearTable(query);
     for (int32_t k = 0; k < count; ++k)
     {
         mnavSearchNode node = query->nodes[sorted[k]];

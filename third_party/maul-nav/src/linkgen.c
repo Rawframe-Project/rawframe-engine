@@ -21,18 +21,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Marks a def built by mnavDefaultLinkGenDef.
-#define LINKGEN_DEF_COOKIE 0x4E41564Cu
-
 // The most polygons a landing box is searched for.
 #define CANDIDATES 32
-
-mnavLinkGenDef mnavDefaultLinkGenDef(void)
-{
-    return (mnavLinkGenDef){
-        LINKGEN_DEF_COOKIE, 1.0f,          3.0f,    2.0f,   0.5f, 3.0f, 1.0f, 0.5f, 2.0f, 4.0f,
-        mnav_linkDrop,      mnav_linkJump, nullptr, nullptr};
-}
 
 static bool Within(float v, float low, float high)
 {
@@ -291,9 +281,13 @@ mnavResult mnavGenerateLinks(mnavQuery* query, const mnavNavmesh* navmesh,
 {
     if (query == nullptr || navmesh == nullptr || def == nullptr || countOut == nullptr ||
         capacity < 0 || (capacity > 0 && linksOut == nullptr) ||
-        def->cookie != LINKGEN_DEF_COOKIE || tileX1 < tileX0 || tileZ1 < tileZ0)
+        def->cookie != MNAV_LINK_GEN_DEF_COOKIE || tileX1 < tileX0 || tileZ1 < tileZ0)
     {
         return mnav_errorInvalid;
+    }
+    if (def->version != MNAV_ABI_VERSION)
+    {
+        return mnav_errorVersion;
     }
     const mnavQueryFilter* usable = nullptr;
     mnavResult result = mnavCheckFilter(filter, &usable);

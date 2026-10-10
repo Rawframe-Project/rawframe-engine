@@ -12,25 +12,21 @@
 #include <math.h>
 #include <stdint.h>
 
-// Marks a filter built by mnavDefaultQueryFilter.
-#define FILTER_COOKIE 0x4E415646u
-
 // Every walkable area type: all but area 0.
 #define WALKABLE_AREAS (~(uint64_t)1)
 
 #define ONES4  1.0f, 1.0f, 1.0f, 1.0f
 #define ONES16 ONES4, ONES4, ONES4, ONES4
 
-// The default filter: every walkable area at a cost of 1.
-static const mnavQueryFilter s_default = {
-    FILTER_COOKIE, {ONES16, ONES16, ONES16, ONES16}, WALKABLE_AREAS, ~(uint64_t)0};
+// The filter a NULL one stands for, mnavDefaultQueryFilter's: every
+// walkable area at a cost of 1.
+static const mnavQueryFilter s_default = {MNAV_QUERY_FILTER_COOKIE,
+                                          MNAV_ABI_VERSION,
+                                          {ONES16, ONES16, ONES16, ONES16},
+                                          WALKABLE_AREAS,
+                                          ~(uint64_t)0};
 
 static_assert(sizeof(s_default.costs) == 64 * sizeof(float), "the default lists 64 costs");
-
-mnavQueryFilter mnavDefaultQueryFilter(void)
-{
-    return s_default;
-}
 
 mnavResult mnavCheckFilter(const mnavQueryFilter* filter, const mnavQueryFilter** usable)
 {
@@ -39,9 +35,13 @@ mnavResult mnavCheckFilter(const mnavQueryFilter* filter, const mnavQueryFilter*
         *usable = &s_default;
         return mnav_success;
     }
-    if (filter->cookie != FILTER_COOKIE)
+    if (filter->cookie != MNAV_QUERY_FILTER_COOKIE)
     {
         return mnav_errorInvalid;
+    }
+    if (filter->version != MNAV_ABI_VERSION)
+    {
+        return mnav_errorVersion;
     }
     for (int32_t a = 0; a < MNAV_AREA_TYPES; ++a)
     {

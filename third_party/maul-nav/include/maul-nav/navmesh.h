@@ -73,9 +73,10 @@ extern "C"
     /// @param def          The def the tiles are baked with.
     /// @param navmeshOut   Receives the navmesh, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` with the setting for an
-    /// invalid def or a NULL argument; `mnav_errorLimit` when the navmesh
-    /// does not fit the def's memory limit; `mnav_errorCapacity` when the
-    /// allocator fails.
+    /// invalid def or a NULL argument; `mnav_errorVersion` for a def built
+    /// against another major or minor version; `mnav_errorLimit` when the
+    /// navmesh does not fit the def's memory limit; `mnav_errorCapacity` when
+    /// the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavBakeDefResult mnavCreateNavmesh(const mnavBakeDef* def,

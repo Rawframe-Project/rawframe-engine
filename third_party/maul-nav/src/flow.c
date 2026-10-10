@@ -24,16 +24,8 @@
 #include <stdint.h>
 #include <string.h>
 
-// Marks a def built by mnavDefaultFlowFieldDef.
-#define FLOW_DEF_COOKIE 0x4E415646u
-
 // The diagonal's length in cells, rounded once to binary64.
 #define DIAGONAL 1.4142135623730951
-
-mnavFlowFieldDef mnavDefaultFlowFieldDef(void)
-{
-    return (mnavFlowFieldDef){FLOW_DEF_COOKIE, {0}, 65536};
-}
 
 mnavResult mnavCreateFlowField(const mnavFlowFieldDef* def, mnavFlowField** fieldOut)
 {
@@ -42,8 +34,15 @@ mnavResult mnavCreateFlowField(const mnavFlowFieldDef* def, mnavFlowField** fiel
         return mnav_errorInvalid;
     }
     *fieldOut = nullptr;
-    if (def == nullptr || def->cookie != FLOW_DEF_COOKIE ||
-        (def->allocator.alloc == nullptr) != (def->allocator.free == nullptr))
+    if (def == nullptr || def->cookie != MNAV_FLOW_FIELD_DEF_COOKIE)
+    {
+        return mnav_errorInvalid;
+    }
+    if (def->version != MNAV_ABI_VERSION)
+    {
+        return mnav_errorVersion;
+    }
+    if ((def->allocator.alloc == nullptr) != (def->allocator.free == nullptr))
     {
         return mnav_errorInvalid;
     }

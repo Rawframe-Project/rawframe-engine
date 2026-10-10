@@ -13,31 +13,9 @@
 #include <math.h>
 #include <stdbool.h>
 
-// Marks a def built by mnavDefaultFlightDef.
-#define FLIGHT_DEF_COOKIE 0x464E564Du
-
 // The voxels the heightfield adds to the radius for a tile's border
 // (bake_def.c's margin), which must fit within the tile's side.
 #define FLIGHT_BORDER_MARGIN 3
-
-mnavFlightDef mnavDefaultFlightDef(void)
-{
-    mnavFlightDef def = {0};
-    def.cookie = FLIGHT_DEF_COOKIE;
-    def.voxelSize = 1.0f;
-    def.tileVoxels = 32;
-    def.floor = 0.0f;
-    def.ceiling = 64.0f;
-    def.radius = 0.5f;
-    def.groundBelow = true;
-    def.limits.inputTriangles = 4194304;
-    def.limits.tileSpans = 4194304;
-    def.limits.tileNodes = 1048576;
-    def.limits.tileLeaves = 1048576;
-    def.limits.tiles = 65536;
-    def.limits.memoryBytes = 268435456;
-    return def;
-}
 
 static mnavFlightDefResult Refuse(mnavFlightSetting setting)
 {
@@ -102,9 +80,13 @@ mnavFlightDefResult mnavCheckFlightDef(const mnavFlightDef* def, mnavFlightShape
     {
         return Refuse(mnav_flightSettingNone);
     }
-    if (def->cookie != FLIGHT_DEF_COOKIE)
+    if (def->cookie != MNAV_FLIGHT_DEF_COOKIE)
     {
         return Refuse(mnav_flightSettingCookie);
+    }
+    if (def->version != MNAV_ABI_VERSION)
+    {
+        return (mnavFlightDefResult){mnav_errorVersion, mnav_flightSettingNone};
     }
     if ((def->allocator.alloc == nullptr) != (def->allocator.free == nullptr))
     {

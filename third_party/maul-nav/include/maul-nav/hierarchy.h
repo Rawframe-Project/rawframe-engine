@@ -42,6 +42,8 @@ extern "C"
     typedef struct mnavHierarchyDef
     {
         uint32_t cookie;
+        // MNAV_ABI_VERSION, set by mnavDefaultHierarchyDef.
+        uint32_t version;
         // The allocator the hierarchy uses; zeroed for the C library's.
         mnavAllocator allocator;
         mnavHierarchyLimits limits;
@@ -62,22 +64,42 @@ extern "C"
         int32_t searches;
     } mnavHierarchyReport;
 
+// The cookie mnavDefaultHierarchyDef sets and mnavCreateHierarchy checks.
+#define MNAV_HIERARCHY_DEF_COOKIE 0x4E415648u
+
     /// Returns the default hierarchy def: clusters of 4 by 4 tiles, up to
     /// 4,096 tile slots, 16,384 transitions and 262,144 edges.
+    /// Built in the program, so that it carries the version of the
+    /// headers the program includes.
     ///
     /// @return The def.
     /// @par Thread safety
     /// Safe from any thread.
-    MNAV_API mnavHierarchyDef mnavDefaultHierarchyDef(void);
+    static inline mnavHierarchyDef mnavDefaultHierarchyDef(void)
+    {
+#ifdef __cplusplus
+        mnavHierarchyDef def = {};
+#else
+    mnavHierarchyDef def = {0};
+#endif
+        def.cookie = MNAV_HIERARCHY_DEF_COOKIE;
+        def.version = MNAV_ABI_VERSION;
+        def.limits.tiles = 4096;
+        def.limits.transitions = 16384;
+        def.limits.edges = 262144;
+        def.clusterTiles = 4;
+        return def;
+    }
 
     /// Makes a hierarchy with the memory its limits need.
     ///
     /// @param def          The def, from mnavDefaultHierarchyDef.
     /// @param hierarchyOut Receives the hierarchy, or NULL on failure.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
-    /// def not from mnavDefaultHierarchyDef; `mnav_errorRange` for a limit
-    /// or cluster side out of its range; `mnav_errorCapacity` when the
-    /// allocator fails.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
+    /// not from mnavDefaultHierarchyDef; `mnav_errorVersion` for one built
+    /// against another major or minor version; `mnav_errorRange` for a limit or
+    /// cluster side out of its range; `mnav_errorCapacity` when the allocator
+    /// fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavResult mnavCreateHierarchy(const mnavHierarchyDef* def,

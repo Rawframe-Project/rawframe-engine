@@ -30,6 +30,8 @@ typedef struct mnavObstacleVertex
     int32_t next;
     int32_t previous;
     bool convex;
+    // The obstacle's layers, which an agent ignoring them passes over.
+    uint32_t layers;
 } mnavObstacleVertex;
 
 // An obstacle near an agent: its squared distance, then its vertex.
@@ -74,6 +76,17 @@ typedef struct mnavObstacleGrid
 // of the side given, at least 4 entries of room per vertex.
 void mnavBuildObstacleGrid(mnavObstacleGrid* grid, const mnavObstacleVertex* vertices,
                            int32_t vertexCount, double size);
+
+// Measures a candidate vertex: its squared distance, or a negative value
+// when it is out of reach.
+typedef double (*mnavObstacleMeasure)(const void* context, int32_t vertex);
+
+// The vertices whose bounds the grid holds within reach of a point,
+// measured, the nearest first (ties by id, index and vertex), at most
+// limit; every vertex the measure keeps must lie in that reach.
+int32_t mnavNearInGrid(mnavObstacleGrid* grid, const mnavObstacleVertex* vertices, mnavPos2 point,
+                       double reach, mnavObstacleMeasure measure, const void* context,
+                       mnavObstacleNear* list, int32_t limit);
 
 // The circles and edges an agent sees within reach of the horizon, the
 // nearest first, at most limit; the grid narrows the candidates, the same
