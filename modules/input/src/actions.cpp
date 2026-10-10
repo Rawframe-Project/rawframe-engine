@@ -188,9 +188,13 @@ readBinding(const Value& value, const Action& action, const std::string& path, c
                                 : binding.composite == Composite::Quad ? ControlShape::Axis2
                                                                        : shapeOf(binding.controls[0]);
     const bool kComposite = binding.composite != Composite::None;
+    // A pose is made only of a pose control, and a pose control makes
+    // nothing else (D596).
     const bool kSuits =
         kComposite
             ? (kShape == ControlShape::Axis1 ? action.type == ValueType::Axis1D : action.type == ValueType::Axis2D)
+        : kShape == ControlShape::Pose || action.type == ValueType::Pose
+            ? kShape == ControlShape::Pose && action.type == ValueType::Pose
             : (kShape == ControlShape::Axis2 ? action.type != ValueType::Axis1D : action.type != ValueType::Axis2D);
     if (!kSuits) {
         return invalid(path, "the binding's controls do not make the action's value type");
@@ -235,7 +239,7 @@ readBinding(const Value& value, const Action& action, const std::string& path, c
     // Processing: deadzones on axis controls, inversion on axes, scale.
     RAWFRAME_TRY_ASSIGN(const double kLower, kRecord.real("deadzoneLower", 0.2));
     RAWFRAME_TRY_ASSIGN(const double kUpper, kRecord.real("deadzoneUpper", 1.0));
-    const bool kAxisControl = !kComposite && kShape != ControlShape::Digital;
+    const bool kAxisControl = !kComposite && kShape != ControlShape::Digital && kShape != ControlShape::Pose;
     if ((kLower != 0.2 || kUpper != 1.0) && !kAxisControl) {
         return invalid(path, "only an axis control has a deadzone");
     }
@@ -246,7 +250,7 @@ readBinding(const Value& value, const Action& action, const std::string& path, c
     binding.deadzoneUpper = static_cast<float>(kUpper);
     RAWFRAME_TRY_ASSIGN(binding.invertX, kRecord.truth("invertX", false));
     RAWFRAME_TRY_ASSIGN(binding.invertY, kRecord.truth("invertY", false));
-    if (binding.invertX && kShape == ControlShape::Digital) {
+    if (binding.invertX && (kShape == ControlShape::Digital || kShape == ControlShape::Pose)) {
         return invalid(kRecord.pathOf("invertX"), "only an axis is inverted");
     }
     if (binding.invertY && kShape != ControlShape::Axis2) {
@@ -361,8 +365,10 @@ result::Result<Action> readAction(const Value& value, const std::string& path, c
         action.type = ValueType::Axis1D;
     } else if (kType == "axis2d") {
         action.type = ValueType::Axis2D;
+    } else if (kType == "pose") {
+        action.type = ValueType::Pose;
     } else {
-        return invalid(kRecord.pathOf("valueType"), "a value type is bool, axis1d, or axis2d");
+        return invalid(kRecord.pathOf("valueType"), "a value type is bool, axis1d, axis2d, or pose");
     }
     RAWFRAME_TRY_ASSIGN(action.displayName, displayText(kRecord, "displayName", limits));
     RAWFRAME_TRY_ASSIGN(action.group, displayText(kRecord, "group", limits));

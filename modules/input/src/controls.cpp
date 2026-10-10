@@ -164,6 +164,17 @@ constexpr std::array<std::string_view, 5> kTouch = {
     "pointer",
 };
 
+constexpr std::array<std::string_view, 8> kController = {
+    "select_left",
+    "select_right",
+    "menu_left",
+    "menu_right",
+    "grip_left",
+    "grip_right",
+    "aim_left",
+    "aim_right",
+};
+
 std::span<const std::string_view> tableOf(DeviceClass device) noexcept {
     switch (device) {
     case DeviceClass::Keyboard:
@@ -174,6 +185,8 @@ std::span<const std::string_view> tableOf(DeviceClass device) noexcept {
         return kGamepad;
     case DeviceClass::Touch:
         return kTouch;
+    case DeviceClass::Controller:
+        return kController;
     }
     return {};
 }
@@ -206,6 +219,9 @@ std::string_view nameOf(Control control) noexcept {
 
 ControlShape shapeOf(Control control) noexcept {
     const std::string_view kName = nameOf(control);
+    if (control.device == DeviceClass::Controller && (kName.starts_with("grip_") || kName.starts_with("aim_"))) {
+        return ControlShape::Pose;
+    }
     if (kName == "wheel_x" || kName == "wheel_y" || kName == "trigger_left" || kName == "trigger_right") {
         return ControlShape::Axis1;
     }
@@ -226,8 +242,11 @@ bool positional(Control control) noexcept {
 }
 
 std::optional<DeviceClass> deviceClassNamed(std::string_view name) noexcept {
-    for (const DeviceClass kDevice :
-         {DeviceClass::Keyboard, DeviceClass::Mouse, DeviceClass::Gamepad, DeviceClass::Touch}) {
+    for (const DeviceClass kDevice : {DeviceClass::Keyboard,
+                                      DeviceClass::Mouse,
+                                      DeviceClass::Gamepad,
+                                      DeviceClass::Touch,
+                                      DeviceClass::Controller}) {
         if (nameOf(kDevice) == name) {
             return kDevice;
         }
@@ -245,6 +264,8 @@ std::string_view nameOf(DeviceClass device) noexcept {
         return "gamepad";
     case DeviceClass::Touch:
         return "touch";
+    case DeviceClass::Controller:
+        return "controller";
     }
     return {};
 }

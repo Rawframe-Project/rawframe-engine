@@ -4,7 +4,8 @@
 // player's effects felt on its gamepads (D251); the player's view read by
 // its sample through `rawframe.view` (D367); and a press the UI takes read
 // by the sample as its node's press code, never by an action (D421); and
-// each local player's own locale chosen by their sample (D548).
+// each local player's own locale chosen by their sample (D548), and a
+// controller's pose read by the sample (D596).
 
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/input_kest/sources.h"
@@ -513,4 +514,103 @@ RAWFRAME_TEST(EachLocalPlayerChoosesTheirOwnLocale) {
     RAWFRAME_EXPECT(play(**second, 1)[0][0] == 0.0F && text.chosen(1) == 1 && text.chosen(0) == 1);
     RAWFRAME_EXPECT(play(**first, 1)[0][0] == 1.0F && text.chosen(0) == 0 && text.chosen(1) == 1);
     RAWFRAME_EXPECT(text.revision() == 3);
+}
+
+RAWFRAME_TEST(TheSampleReadsAControllersPose) {
+    // A pose action (D596) on the right hand's grip: its place and turn,
+    // whether it is tracked, and whether it is on, each read by the sample
+    // into a field of the stick. The runner's jump is still felt, so its
+    // haptic stays.
+    const world_kest::GameFiles* game = &gameAt("runners/runners.game",
+                                                "actions runners.actions\nsample sample.kest sample",
+                                                "actions hand.actions\nsample hand.kest sample",
+                                                {{"hand.actions",
+                                                  R"({
+  "kind": "input.actions",
+  "formatVersion": 1,
+  "actions": [
+    {
+      "actionId": "41c9e2a85b7f3d06",
+      "name": "hand",
+      "valueType": "pose",
+      "bindings": [
+        {
+          "device": "controller",
+          "control": "grip_right"
+        }
+      ]
+    }
+  ],
+  "contexts": [
+    {
+      "contextId": "7d30b5e1c94a2f68",
+      "name": "holding",
+      "actions": [
+        "hand"
+      ]
+    }
+  ],
+  "haptics": [
+    {
+      "hapticId": "5e2b9d07c41a8f36",
+      "name": "thump",
+      "bindings": [
+        {
+          "device": "gamepad"
+        }
+      ]
+    }
+  ]
+}
+)"},
+                                                 {"hand.kest",
+                                                  "module hand\n"
+                                                  "import controls\n"
+                                                  "import rawframe.input\n"
+                                                  "fn sample(into: [controls.Stick]) {\n"
+                                                  "    let hand: u64 = 0x41c9e2a85b7f3d06\n"
+                                                  "    into[0].run = input.x(hand)\n"
+                                                  "    into[0].jump = input.y(hand)\n"
+                                                  "    into[0].aimX = input.z(hand)\n"
+                                                  "    into[0].aimY = input.turnX(hand)\n"
+                                                  "    into[0].fire = input.turnY(hand)\n"
+                                                  "    into[0].pointed = input.turnZ(hand)\n"
+                                                  "    into[0].targetX = input.turnW(hand)\n"
+                                                  "    into[0].targetY = 0.0\n"
+                                                  "    if input.on(hand) {\n"
+                                                  "        into[0].targetY = 1.0\n"
+                                                  "    }\n"
+                                                  "    if input.tracked(hand) {\n"
+                                                  "        into[0].targetY = into[0].targetY + 2.0\n"
+                                                  "    }\n"
+                                                  "}\n"}});
+    input::Feed feed;
+    auto sources = makeInputSources(SourceSettings{.game = game, .inputSize = sizeof(Stick), .feed = &feed});
+    RAWFRAME_EXPECT(sources.has_value());
+    if (!sources.has_value()) {
+        return;
+    }
+    auto source = (*sources)->playerSource(0);
+    RAWFRAME_EXPECT(source.has_value());
+    if (!source.has_value()) {
+        return;
+    }
+    constexpr input::DeviceId kHands{7};
+    const input::Control kGrip = *input::controlNamed(input::DeviceClass::Controller, "grip_right");
+    feed.connect(kHands, input::DeviceClass::Controller);
+    // Not yet located: off, at rest, its turn none.
+    RAWFRAME_EXPECT((play(**source, 1)[0] == Stick{0, 0, 0, 0, 0, 0, 1, 0}));
+    feed.submit(
+        {.device = kHands,
+         .control = kGrip,
+         .pose = {
+             .position = {0.25F, 1.5F, -0.5F}, .orientation = {0, 0.6F, 0, 0.8F}, .located = true, .tracked = true}});
+    RAWFRAME_EXPECT((play(**source, 1)[0] == Stick{0.25F, 1.5F, -0.5F, 0, 0.6F, 0, 0.8F, 3}));
+    // Located but no longer tracked, then lost.
+    feed.submit({.device = kHands,
+                 .control = kGrip,
+                 .pose = {.position = {0.5F, 1.5F, -0.5F}, .orientation = {0, 0, 0, 1}, .located = true}});
+    RAWFRAME_EXPECT((play(**source, 1)[0] == Stick{0.5F, 1.5F, -0.5F, 0, 0, 0, 1, 1}));
+    feed.submit({.device = kHands, .control = kGrip, .pose = {}});
+    RAWFRAME_EXPECT(play(**source, 1)[0][7] == 0);
 }

@@ -12,20 +12,26 @@
 
 namespace rawframe::input {
 
-/// SPEC-0029's closed generation-1 set, and a touch screen (D387), the
-/// class ADR-0037 left open.
+/// SPEC-0029's closed generation-1 set, a touch screen (D387), the class
+/// ADR-0037 left open, and a headset's hand controllers (ADR-0081, D596):
+/// both hands one device, as the XR runtime presents them through the
+/// interaction profile it chose, the simple controller's controls the
+/// floor every profile gives.
 enum class DeviceClass : std::uint8_t {
     Keyboard,
     Mouse,
     Gamepad,
-    Touch
+    Touch,
+    Controller
 };
 
-/// What a control reports: on or off, one axis, or two.
+/// What a control reports: on or off, one axis, two, or a pose (ADR-0081's
+/// fourth value, D596).
 enum class ControlShape : std::uint8_t {
     Digital,
     Axis1,
-    Axis2
+    Axis2,
+    Pose
 };
 
 /// One physical control of a device class, by its code in that class's
@@ -49,7 +55,11 @@ struct Control {
 /// controls are SPEC-0029's standard locations. Touch controls (D387):
 /// `stick_left` and `stick_right`, a stick under a touch that began in that
 /// half of the window, and `left` and `right`, held while that touch is;
-/// and `pointer`, the newest touch's place.
+/// and `pointer`, the newest touch's place. Controller controls (D596), the
+/// simple controller's, each hand's: `select_left`, `select_right`,
+/// `menu_left`, and `menu_right`, digital; and `grip_left`, `grip_right`,
+/// `aim_left`, and `aim_right`, poses: where the hand holds the controller,
+/// and where it points from.
 [[nodiscard]] std::optional<Control> controlNamed(DeviceClass device, std::string_view name) noexcept;
 [[nodiscard]] std::string_view nameOf(Control control) noexcept;
 /// The key at a USB HID keyboard usage (page 7), the number a window system

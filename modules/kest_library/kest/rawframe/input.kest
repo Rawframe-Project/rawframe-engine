@@ -38,6 +38,43 @@ fn y(action: u64) -> f32 {
     return Input.y(action)
 }
 
+extern fn Input.z(action: u64) -> f32
+extern fn Input.turnX(action: u64) -> f32
+extern fn Input.turnY(action: u64) -> f32
+extern fn Input.turnZ(action: u64) -> f32
+extern fn Input.turnW(action: u64) -> f32
+extern fn Input.tracked(action: u64) -> bool
+
+// A pose action (a controller's grip or aim, D596) is on while the runtime
+// knows where it is; `x` and `y` give its place's first two axes, and these
+// its third, in meters in the headset's play space (+Y up, the origin where
+// the head was when its session began).
+fn z(action: u64) -> f32 {
+    return Input.z(action)
+}
+
+// Its turn, a unit quaternion's parts.
+fn turnX(action: u64) -> f32 {
+    return Input.turnX(action)
+}
+
+fn turnY(action: u64) -> f32 {
+    return Input.turnY(action)
+}
+
+fn turnZ(action: u64) -> f32 {
+    return Input.turnZ(action)
+}
+
+fn turnW(action: u64) -> f32 {
+    return Input.turnW(action)
+}
+
+// Whether the runtime tracks it now, rather than inferring where it is.
+fn tracked(action: u64) -> bool {
+    return Input.tracked(action)
+}
+
 extern fn UI.pressed() -> i64
 
 // The `press` of the UI node the player's press landed on during the tick,

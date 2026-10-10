@@ -22,6 +22,8 @@ constexpr std::size_t kUnrouted = std::numeric_limits<std::size_t>::max();
 struct Held {
     float x = 0;
     float y = 0;
+    /// A pose control's last report; its `x` is one while located.
+    Pose pose;
     /// Held when a node claiming it was activated: it reads as rest until
     /// it comes to rest itself, so the node sees no press it did not see
     /// begin.
@@ -194,6 +196,9 @@ struct Mapper::State {
                 value = {std::copysign(kMagnitude, kHeld.x), 0};
                 break;
             }
+            case ControlShape::Pose:
+                value = {kHeld.resting() ? 0.0F : 1.0F, 0};
+                break;
             case ControlShape::Axis2: {
                 const float kLength = std::hypot(kHeld.x, kHeld.y);
                 if (relative(kControl) || positional(kControl) || kLength == 0) {
@@ -268,8 +273,31 @@ struct Mapper::State {
                 live.state.x = best[0];
                 live.state.y = best[1];
                 break;
+            case ValueType::Pose:
+                live.state.pose = poseOf(player, index, action, slot);
+                live.state.x = live.state.pose.position[0];
+                live.state.y = live.state.pose.position[1];
+                break;
             }
         }
+    }
+
+    /// A pose action's pose: its first binding's that is located, else none
+    /// located.
+    [[nodiscard]] Pose poseOf(const Player& player, std::size_t index, const Action& action, std::uint8_t slot) const {
+        for (const Binding& binding : action.bindings) {
+            for (const Device& device : devices) {
+                if (device.player != slot || device.deviceClass != binding.device ||
+                    shapeOf(binding.controls[0]) != ControlShape::Pose) {
+                    continue;
+                }
+                const Held kHeld = visible(player, index, device.id, binding.controls[0]);
+                if (kHeld.pose.located) {
+                    return kHeld.pose;
+                }
+            }
+        }
+        return {};
     }
 
     /// The player's routing after a change: ranks, claims, and what the
@@ -373,6 +401,11 @@ struct Mapper::State {
             break;
         case ControlShape::Axis1:
             state.x = relative(event.control) ? state.x + event.x : std::clamp(event.x, -1.0F, 1.0F);
+            state.y = 0;
+            break;
+        case ControlShape::Pose:
+            state.pose = event.pose;
+            state.x = event.pose.located ? 1.0F : 0.0F;
             state.y = 0;
             break;
         case ControlShape::Axis2:

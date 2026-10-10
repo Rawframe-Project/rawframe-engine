@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <cstdio>
 #include <optional>
 #include <string>
 #include <utility>
@@ -360,4 +359,75 @@ RAWFRAME_TEST(EveryKeyHasItsOwnHidUsage) {
     RAWFRAME_EXPECT(named(82) == "arrow_up" && named(98) == "numpad_0" && named(88) == "numpad_enter");
     RAWFRAME_EXPECT(named(100) == "intl_backslash" && named(229) == "shift_right" && named(72) == "pause");
     RAWFRAME_EXPECT(!keyOfUsage(0).has_value() && !keyOfUsage(0x68).has_value());
+}
+
+RAWFRAME_TEST(APoseIsMadeOfAPoseControlAlone) {
+    // A pose action (D596) is bound to a controller's grip or aim; neither a
+    // trigger makes a pose, nor a grip anything but one.
+    constexpr std::string_view kThrottle = R"("valueType": "axis1d",
+      "consume": false,
+      "bindings": [
+        {
+          "device": "gamepad",
+          "control": "trigger_right",
+          "scale": 2
+        },
+        {
+          "device": "keyboard",
+          "pair": {
+            "negative": "arrow_down",
+            "positive": "arrow_up"
+          }
+        }
+      ])";
+    const std::string kPose = with(kThrottle, R"("valueType": "pose",
+      "consume": false,
+      "bindings": [
+        {
+          "device": "controller",
+          "control": "grip_left"
+        },
+        {
+          "slot": 1,
+          "device": "controller",
+          "control": "aim_right"
+        }
+      ])");
+    const auto kRead = readActionSet(kPose);
+    RAWFRAME_EXPECT(kRead.has_value());
+    if (kRead.has_value()) {
+        const Action& kHand = kRead->actions[2];
+        RAWFRAME_EXPECT(kHand.type == ValueType::Pose && kHand.bindings.size() == 2 &&
+                        kHand.bindings[0].device == DeviceClass::Controller &&
+                        nameOf(kHand.bindings[0].controls[0]) == "grip_left" &&
+                        shapeOf(kHand.bindings[1].controls[0]) == ControlShape::Pose);
+    }
+    RAWFRAME_EXPECT(refusalOf(with(kThrottle, R"("valueType": "pose",
+      "consume": false,
+      "bindings": [
+        {
+          "device": "gamepad",
+          "control": "trigger_right"
+        }
+      ])"))
+                        .first != document::DocumentError{});
+    RAWFRAME_EXPECT(refusalOf(with(kThrottle, R"("valueType": "bool",
+      "consume": false,
+      "bindings": [
+        {
+          "device": "controller",
+          "control": "grip_left"
+        }
+      ])"))
+                        .first != document::DocumentError{});
+    // A controller's buttons make bools as any device's do.
+    RAWFRAME_EXPECT(refusalOf(with(kThrottle, R"("valueType": "bool",
+      "consume": false,
+      "bindings": [
+        {
+          "device": "controller",
+          "control": "select_right"
+        }
+      ])"))
+                        .first == document::DocumentError{});
 }

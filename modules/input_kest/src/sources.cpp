@@ -81,6 +81,32 @@ struct ReadY {
     }
 };
 
+/// A pose action's place's third axis, and its turn's parts (D596).
+struct ReadZ {
+    void operator()(kest::DoorCall& call,
+                    const input::Mapper& mapper,
+                    input::PlayerSlot player,
+                    std::size_t action) const noexcept {
+        call.answerReal(mapper.committed(player, action).pose.position[2]);
+    }
+};
+template <std::size_t Part> struct ReadTurn {
+    void operator()(kest::DoorCall& call,
+                    const input::Mapper& mapper,
+                    input::PlayerSlot player,
+                    std::size_t action) const noexcept {
+        call.answerReal(mapper.committed(player, action).pose.orientation[Part]);
+    }
+};
+struct ReadTracked {
+    void operator()(kest::DoorCall& call,
+                    const input::Mapper& mapper,
+                    input::PlayerSlot player,
+                    std::size_t action) const noexcept {
+        call.answerBoolean(mapper.committed(player, action).pose.tracked);
+    }
+};
+
 constexpr std::array<kest::Parameter, 1> kActionTakes = {kest::Slot::U64};
 constexpr std::array<kest::Parameter, 1> kTruthGives = {kest::Slot::Bool};
 constexpr std::array<kest::Parameter, 1> kAxisGives = {kest::Slot::F32};
@@ -90,6 +116,7 @@ constexpr input::DeviceId kKeyboard{1};
 constexpr input::DeviceId kMouse{2};
 constexpr input::DeviceId kGamepad{3};
 constexpr input::DeviceId kTouch{4};
+constexpr input::DeviceId kController{5};
 
 input::DeviceId deviceFor(input::DeviceClass device) noexcept {
     switch (device) {
@@ -101,6 +128,8 @@ input::DeviceId deviceFor(input::DeviceClass device) noexcept {
         return kGamepad;
     case input::DeviceClass::Touch:
         return kTouch;
+    case input::DeviceClass::Controller:
+        return kController;
     }
     return {};
 }
@@ -148,6 +177,18 @@ public:
         case input::ControlShape::Axis1:
             event.x = input::relative(kControl) ? std::copysign(1.0F, kSigned()) : random_.nextFloat();
             break;
+        case input::ControlShape::Pose: {
+            // A hand somewhere before the chest, turned a little, now and
+            // then not located (D596).
+            const float kTurn = kSigned() * 0.3F;
+            event.pose = input::Pose{.position = {kSigned() * 0.4F,
+                                                  1.0F + (random_.nextFloat() * 0.5F),
+                                                  -0.2F - (random_.nextFloat() * 0.4F)},
+                                     .orientation = {0, std::sin(kTurn), 0, std::cos(kTurn)},
+                                     .located = random_.nextU32() % 8 != 0,
+                                     .tracked = false};
+            break;
+        }
         case input::ControlShape::Axis2:
             if (input::relative(kControl)) {
                 event.x = kSigned() * 20.0F;
@@ -246,6 +287,7 @@ public:
                           diagnostics::field("mouseEvents", kMapped.events[1]),
                           diagnostics::field("gamepadEvents", kMapped.events[2]),
                           diagnostics::field("touchEvents", kMapped.events[3]),
+                          diagnostics::field("controllerEvents", kMapped.events[4]),
                           diagnostics::field("feedDropped", feed_ != nullptr ? feed_->dropped() : 0)});
         }
     }
@@ -270,6 +312,7 @@ public:
             RAWFRAME_TRY(mapper_->pair(kMouse, input::DeviceClass::Mouse, {}));
             RAWFRAME_TRY(mapper_->pair(kGamepad, input::DeviceClass::Gamepad, {}));
             RAWFRAME_TRY(mapper_->pair(kTouch, input::DeviceClass::Touch, {}));
+            RAWFRAME_TRY(mapper_->pair(kController, input::DeviceClass::Controller, {}));
             hand_.emplace(shared.actions, *seed);
         } else {
             routing_ = std::move(routing);
@@ -579,6 +622,45 @@ result::Status addInputDoors(kest::DoorTable& doors, const InputDoorContext* con
                                       .context = kContext,
                                       .takes = kActionTakes,
                                       .gives = kAxisGives,
+                                      .safeForUntrusted = true}));
+    // A pose action (D596): `Input.on` while located, `Input.x`, `Input.y`,
+    // and `Input.z` its place, `Input.turnX` to `Input.turnW` its turn, and
+    // `Input.tracked` whether the runtime tracks it now.
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Input.z",
+                                      .function = &actionDoor<ReadZ>,
+                                      .context = kContext,
+                                      .takes = kActionTakes,
+                                      .gives = kAxisGives,
+                                      .safeForUntrusted = true}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Input.turnX",
+                                      .function = &actionDoor<ReadTurn<0>>,
+                                      .context = kContext,
+                                      .takes = kActionTakes,
+                                      .gives = kAxisGives,
+                                      .safeForUntrusted = true}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Input.turnY",
+                                      .function = &actionDoor<ReadTurn<1>>,
+                                      .context = kContext,
+                                      .takes = kActionTakes,
+                                      .gives = kAxisGives,
+                                      .safeForUntrusted = true}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Input.turnZ",
+                                      .function = &actionDoor<ReadTurn<2>>,
+                                      .context = kContext,
+                                      .takes = kActionTakes,
+                                      .gives = kAxisGives,
+                                      .safeForUntrusted = true}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Input.turnW",
+                                      .function = &actionDoor<ReadTurn<3>>,
+                                      .context = kContext,
+                                      .takes = kActionTakes,
+                                      .gives = kAxisGives,
+                                      .safeForUntrusted = true}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Input.tracked",
+                                      .function = &actionDoor<ReadTracked>,
+                                      .context = kContext,
+                                      .takes = kActionTakes,
+                                      .gives = kTruthGives,
                                       .safeForUntrusted = true}));
     return {};
 }

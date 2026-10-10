@@ -36,19 +36,35 @@ struct PlayerSlot {
 /// released (nought), an axis at `x`, a stick at `x` and `y` (up and right
 /// positive, each within minus one and one), or relative motion by `x` and
 /// `y` since the last report.
+/// A pose (ADR-0081's fourth value, D596): a place in the headset's local
+/// space (meters, +Y up, its origin where the head was when its session
+/// began) and a turn, a unit quaternion (x, y, z, w); whether the runtime
+/// knows it (`located`), and whether it tracks it now rather than infers
+/// it (`tracked`).
+struct Pose {
+    std::array<float, 3> position{};
+    std::array<float, 4> orientation{0, 0, 0, 1};
+    bool located = false;
+    bool tracked = false;
+};
+
 struct ControlEvent {
     DeviceId device;
     Control control;
     float x = 0;
     float y = 0;
+    /// A pose control's report.
+    Pose pose;
 };
 
 /// An action's value: on or off by its thresholds, and its axes (a bool
-/// action's `x` is one when on).
+/// action's `x` is one when on). A pose action is on while its pose is
+/// located, its `x` and `y` its place's, and its pose as last located.
 struct ActionState {
     bool on = false;
     float x = 0;
     float y = 0;
+    Pose pose;
 };
 
 /// A press or release, in the order it happened within its tick or frame.
@@ -95,7 +111,7 @@ struct MapperStatistics {
     std::uint64_t actionPresses = 0;
     /// Events from paired devices, by device class (its value an index):
     /// which kinds of device a player has used (D559).
-    std::array<std::uint64_t, 4> events{};
+    std::array<std::uint64_t, 5> events{};
 };
 
 class Mapper {

@@ -6,7 +6,7 @@ rawframe_module(NAME input
     DEPS document result base
 )
 
-rawframe_module_tests(NAME input SOURCES tests/actions_test.cpp tests/mapper_test.cpp tests/overrides_test.cpp tests/pairing_test.cpp tests/touch_test.cpp tests/navigation_test.cpp)
+rawframe_module_tests(NAME input SOURCES tests/actions_test.cpp tests/mapper_test.cpp tests/overrides_test.cpp tests/pairing_test.cpp tests/touch_test.cpp tests/navigation_test.cpp tests/pose_test.cpp)
 rawframe_module_fuzz(NAME input TARGET actions RUNS 20000 SEEDS tests/seeds SOURCES tests/fuzz_actions.cpp)
 if(TARGET rawframe_input_fuzz_actions)
     # Overrides are read over the runners game's action set.

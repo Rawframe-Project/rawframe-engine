@@ -20,7 +20,10 @@ namespace rawframe::input {
 enum class ValueType : std::uint8_t {
     Bool,
     Axis1D,
-    Axis2D
+    Axis2D,
+    /// Where a tracked thing is and how it is turned (ADR-0081's fourth
+    /// value, D596): a controller's grip or aim.
+    Pose
 };
 
 /// How a binding's controls make a value: one control, two digital controls
