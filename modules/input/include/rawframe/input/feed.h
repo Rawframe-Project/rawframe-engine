@@ -54,9 +54,12 @@ public:
     /// device is replaced, as the device would replace it; past
     /// `kMostFelt` devices waiting, the command is dropped.
     void feel(const HapticCommand& command);
-    /// The haptic commands waiting, oldest first, into `into`, cleared
-    /// first; none wait after.
-    void takeFelt(std::vector<HapticCommand>& into);
+    /// The haptic commands waiting for `devices`, oldest first, into
+    /// `into`, cleared first; none of theirs wait after. Each output takes
+    /// its own devices' (a window's gamepads, a headset's controllers,
+    /// D600); those of a device no one takes are replaced as it is felt
+    /// again, and dropped past `kMostFelt` devices.
+    void takeFelt(std::vector<HapticCommand>& into, std::span<const DeviceId> devices);
 
     static constexpr std::size_t kMostFelt = 64;
 

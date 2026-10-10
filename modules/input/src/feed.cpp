@@ -122,9 +122,15 @@ void Feed::feel(const HapticCommand& command) {
     }
 }
 
-void Feed::takeFelt(std::vector<HapticCommand>& into) {
+void Feed::takeFelt(std::vector<HapticCommand>& into, std::span<const DeviceId> devices) {
     into.clear();
-    into.swap(felt_);
+    std::erase_if(felt_, [&into, devices](const HapticCommand& command) {
+        if (!std::ranges::contains(devices, command.device)) {
+            return false;
+        }
+        into.push_back(command);
+        return true;
+    });
 }
 
 } // namespace rawframe::input

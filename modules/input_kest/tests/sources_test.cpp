@@ -212,21 +212,22 @@ RAWFRAME_TEST(ThePlayerFeelsAnEffectOnItsGamepads) {
     // Runners' jump (its one effect, kind nought) is felt as a thump.
     RAWFRAME_EXPECT((*sources)->feelsEffects());
     std::vector<input::HapticCommand> felt;
+    constexpr input::DeviceId kKeyboard{1};
+    constexpr input::DeviceId kPad{2};
+    const std::array kDevices{kKeyboard, kPad};
     RAWFRAME_EXPECT(!(*sources)->feelEffect(0).has_value());
-    feed.takeFelt(felt);
+    feed.takeFelt(felt, kDevices);
     RAWFRAME_EXPECT(felt.empty());
     auto source = (*sources)->playerSource(0);
     RAWFRAME_EXPECT(source.has_value());
     if (!source.has_value()) {
         return;
     }
-    constexpr input::DeviceId kKeyboard{1};
-    constexpr input::DeviceId kPad{2};
     feed.connect(kKeyboard, input::DeviceClass::Keyboard);
     feed.connect(kPad, input::DeviceClass::Gamepad);
     play(**source, 1);
     RAWFRAME_EXPECT((*sources)->feelEffect(0) == 1 && !(*sources)->feelEffect(1).has_value());
-    feed.takeFelt(felt);
+    feed.takeFelt(felt, kDevices);
     RAWFRAME_EXPECT(felt.size() == 1 && felt[0].device == kPad && felt[0].haptic.amplitude == 0.4F &&
                     felt[0].haptic.frequency == 60 && felt[0].haptic.milliseconds == 90);
 }

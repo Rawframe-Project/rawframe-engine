@@ -431,3 +431,12 @@ RAWFRAME_TEST(APoseIsMadeOfAPoseControlAlone) {
       ])"))
                         .first == document::DocumentError{});
 }
+
+RAWFRAME_TEST(AHapticOutputIsFeltOnAController) {
+    // A headset's controllers feel what a gamepad's grips do (D600).
+    const auto kRead =
+        readActionSet(with("\"device\": \"gamepad\"\n        }\n      ]\n    },\n    {\n      \"hapticId\"",
+                           "\"device\": \"controller\"\n        }\n      ]\n    },\n    {\n      \"hapticId\""));
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->haptics[0].bindings.size() == 1 &&
+                    kRead->haptics[0].bindings[0].device == DeviceClass::Controller);
+}

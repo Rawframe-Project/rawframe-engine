@@ -408,11 +408,17 @@ RAWFRAME_TEST(AHapticIsFeltOnThePlayersGamepadsAndTheLatestWins) {
     feed.feel(commands[0]);
     feed.feel({.device = kPad, .haptic = {.amplitude = 1, .milliseconds = 40}});
     feed.feel({.device = kSecondPad, .haptic = kFelt});
+    // Each output takes its own devices' (D600): the second pad's waits
+    // for whoever takes it.
     std::vector<HapticCommand> taken;
-    feed.takeFelt(taken);
-    RAWFRAME_EXPECT(taken.size() == 2 && taken[0].device == kPad && taken[0].haptic.amplitude == 1 &&
-                    taken[0].haptic.milliseconds == 40 && taken[1].device == kSecondPad);
-    feed.takeFelt(taken);
+    const std::array kFirstPad{kPad};
+    const std::array kPads{kPad, kSecondPad};
+    feed.takeFelt(taken, kFirstPad);
+    RAWFRAME_EXPECT(taken.size() == 1 && taken[0].device == kPad && taken[0].haptic.amplitude == 1 &&
+                    taken[0].haptic.milliseconds == 40);
+    feed.takeFelt(taken, kPads);
+    RAWFRAME_EXPECT(taken.size() == 1 && taken[0].device == kSecondPad);
+    feed.takeFelt(taken, kPads);
     RAWFRAME_EXPECT(taken.empty() && feed.feltDropped() == 0);
     for (std::uint32_t each = 0; each <= Feed::kMostFelt; ++each) {
         feed.feel({.device = DeviceId{100 + each}, .haptic = kFelt});

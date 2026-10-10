@@ -11,6 +11,7 @@
 #include "rawframe/test/test.h"
 #include "rawframe/window/testing.h"
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <memory>
@@ -259,7 +260,10 @@ public:
         for (const HapticCommand& command : commands) {
             rig.feed.feel(command);
         }
-        // A command for a device the window system does not have.
+        // A command for a device of the bridge's that has no motors (the
+        // keyboard), and one for a device not its own, a headset's
+        // controllers, felt by their own output (D600).
+        rig.feed.feel({.device = DeviceId{1}, .haptic = {.milliseconds = 10}});
         rig.feed.feel({.device = DeviceId{99}, .haptic = {.milliseconds = 10}});
         rig.bridge.feel(windows);
         rumbles.push_back(window::testing::rumbleOf(windows, pad).value_or(window::testing::Rumble{}));
@@ -298,6 +302,10 @@ RAWFRAME_TEST(AHapticOutputRunsAGamepadsMotors) {
         RAWFRAME_EXPECT(kHigh.low == 0 && kHigh.high == 1.0F && kHigh.milliseconds == 40 && kHigh.count == 3);
     }
     RAWFRAME_EXPECT(program.rig.bridge.unfelt() == 3);
+    std::vector<HapticCommand> waiting;
+    constexpr std::array kTheirs{DeviceId{99}};
+    program.rig.feed.takeFelt(waiting, kTheirs);
+    RAWFRAME_EXPECT(waiting.size() == 1);
 }
 
 RAWFRAME_TEST(TouchesAreTheTouchScreensHalves) {

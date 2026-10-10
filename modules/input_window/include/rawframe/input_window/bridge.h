@@ -66,6 +66,7 @@ private:
     std::vector<Pad> pads_;
     std::uint32_t nextDevice_;
     std::vector<input::HapticCommand> felt_;
+    std::vector<input::DeviceId> numbered_;
     std::uint64_t unfelt_ = 0;
 };
 

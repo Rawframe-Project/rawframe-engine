@@ -422,8 +422,10 @@ result::Result<HapticOutput> readHaptic(const Value& value, const std::string& p
         HapticBinding binding;
         RAWFRAME_TRY_ASSIGN(binding.slot, readSlot(kBinding));
         RAWFRAME_TRY_ASSIGN(binding.device, readDeviceClass(kBinding));
-        if (binding.device != DeviceClass::Gamepad) {
-            return invalid(kBinding.pathOf("device"), "a haptic output is felt on a gamepad");
+        // Felt through a gamepad's grips' motors, or a headset's
+        // controllers, both hands (D600).
+        if (binding.device != DeviceClass::Gamepad && binding.device != DeviceClass::Controller) {
+            return invalid(kBinding.pathOf("device"), "a haptic output is felt on a gamepad or a controller");
         }
         if (std::ranges::any_of(haptic.bindings, [&binding](const HapticBinding& each) {
                 return each.device == binding.device && each.slot == binding.slot;

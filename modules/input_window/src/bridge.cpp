@@ -211,7 +211,13 @@ void Bridge::gamepadAxis(const window::Event& event) {
 }
 
 void Bridge::feel(window::Windows& windows) {
-    feed_->takeFelt(felt_);
+    // Every device it numbered, a pad gone among them, counted unfelt; a
+    // headset's controllers are felt by their own output (D600).
+    numbered_.clear();
+    for (std::uint32_t each = kKeyboard.value; each < nextDevice_; ++each) {
+        numbered_.push_back(input::DeviceId{each});
+    }
+    feed_->takeFelt(felt_, numbered_);
     for (const input::HapticCommand& command : felt_) {
         const auto kPad = std::ranges::find(pads_, command.device, &Pad::device);
         const float kAmplitude = std::clamp(command.haptic.amplitude, 0.0F, 1.0F);
