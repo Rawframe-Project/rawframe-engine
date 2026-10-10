@@ -326,4 +326,11 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     if(TEST client_turns_plaza)
         set_tests_properties(client_turns_plaza PROPERTIES LABELS "window;alone" RUN_SERIAL TRUE)
     endif()
+    # Stalls' headset panel is played where the headset tests are, by the
+    # fast check's clang-development: the plaza's headset client covers the
+    # client's headset path under the sanitizers (D602), and this one took
+    # 66 s in each instrumented tree, their longest (D616).
+    if(TEST client_stalls_headset)
+        set_tests_properties(client_stalls_headset PROPERTIES LABELS "window;headset")
+    endif()
 endif()
