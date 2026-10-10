@@ -119,19 +119,8 @@ jobs:
           set +e -uo pipefail
           tools/ios_play_exported.sh out/ios-simulator games/tycoon 7200 >"$RUNNER_TEMP/stalls.log" 2>&1 &
           play=$!
-          # UIKit's own account of where the touch went, for the touch that
-          # does not reach the client yet (D588).
-          xcrun simctl spawn "$RAWFRAME_IOS_DEVICE" defaults write com.apple.UIKit LogHIDEventIncoming -bool YES
-          xcrun simctl spawn "$RAWFRAME_IOS_DEVICE" log stream --level debug --style compact \
-            --predicate 'process == "rawframe-client"' >"$RUNNER_TEMP/uikit.log" 2>&1 &
-          uikit=$!
           tools/ios_read_aloud.sh "$RAWFRAME_IOS_DEVICE" ' coins$'
           read=$?
-          sleep 3
-          kill "$uikit"
-          wc -l <"$RUNNER_TEMP/uikit.log"
-          grep 'HIDEvent\|UITouch\|sendEvent\|EventDispatch\|Incoming\|digitizer\|Digitizer' \
-            "$RUNNER_TEMP/uikit.log" | cut -c1-240 | tail -60
           wait "$play"
           played=$?
           cat "$RUNNER_TEMP/stalls.log"
