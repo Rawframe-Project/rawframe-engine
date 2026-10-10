@@ -379,13 +379,23 @@ struct Mapper::State {
     }
 
     /// Whether the UI takes a press of `event`'s control at its device's
-    /// pointer: a mouse button or a touch control going down.
+    /// pointer: a mouse button or a touch control going down, or a
+    /// controller's select at its hand's pointer on the panel (D598).
     [[nodiscard]] bool takenByUi(std::uint8_t slot, const ControlEvent& event) const {
-        if (!pointerTaker || shapeOf(event.control) != ControlShape::Digital || event.x == 0 ||
-            (event.control.device != DeviceClass::Mouse && event.control.device != DeviceClass::Touch)) {
+        if (!pointerTaker || shapeOf(event.control) != ControlShape::Digital || event.x == 0) {
             return false;
         }
-        const std::optional<Control> kPointer = controlNamed(event.control.device, "pointer");
+        const std::string_view kName = nameOf(event.control);
+        const std::string_view kPointerName =
+            event.control.device == DeviceClass::Mouse || event.control.device == DeviceClass::Touch ? "pointer"
+            : event.control.device != DeviceClass::Controller                                        ? ""
+            : kName == "select_left"                                                                 ? "pointer_left"
+            : kName == "select_right"                                                                ? "pointer_right"
+                                                                                                     : "";
+        if (kPointerName.empty()) {
+            return false;
+        }
+        const std::optional<Control> kPointer = controlNamed(event.control.device, kPointerName);
         const Held* pointer = kPointer.has_value() ? heldOf(event.device, *kPointer) : nullptr;
         return pointer != nullptr && pointerTaker(PlayerSlot{slot}, pointer->x, pointer->y);
     }

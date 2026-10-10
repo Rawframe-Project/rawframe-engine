@@ -59,7 +59,9 @@ struct Control {
 /// simple controller's, each hand's: `select_left`, `select_right`,
 /// `menu_left`, and `menu_right`, digital; and `grip_left`, `grip_right`,
 /// `aim_left`, and `aim_right`, poses: where the hand holds the controller,
-/// and where it points from.
+/// and where it points from; and `pointer_left` and `pointer_right`, where
+/// each hand's aim meets the headset's panel, in its pixels, far outside
+/// it while the aim misses it (D598).
 [[nodiscard]] std::optional<Control> controlNamed(DeviceClass device, std::string_view name) noexcept;
 [[nodiscard]] std::string_view nameOf(Control control) noexcept;
 /// The key at a USB HID keyboard usage (page 7), the number a window system
@@ -72,8 +74,10 @@ struct Control {
 [[nodiscard]] bool relative(Control control) noexcept;
 /// Whether a control reports a place rather than a deflection: the mouse's
 /// and the touch screen's `pointer`, over the window in logical pixels from
-/// its top left, y down (ADR-0046's screen space, D367). Its value is the place,
-/// neither clamped nor dead-zoned, and it stays where it was last told.
+/// its top left, y down (ADR-0046's screen space, D367), and a controller's
+/// `pointer_left` and `pointer_right`, over a headset's panel (D598). Its
+/// value is the place, neither clamped nor dead-zoned, and it stays where it
+/// was last told.
 [[nodiscard]] bool positional(Control control) noexcept;
 
 [[nodiscard]] std::optional<DeviceClass> deviceClassNamed(std::string_view name) noexcept;

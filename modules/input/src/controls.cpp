@@ -164,7 +164,7 @@ constexpr std::array<std::string_view, 5> kTouch = {
     "pointer",
 };
 
-constexpr std::array<std::string_view, 8> kController = {
+constexpr std::array<std::string_view, 10> kController = {
     "select_left",
     "select_right",
     "menu_left",
@@ -173,6 +173,8 @@ constexpr std::array<std::string_view, 8> kController = {
     "grip_right",
     "aim_left",
     "aim_right",
+    "pointer_left",
+    "pointer_right",
 };
 
 std::span<const std::string_view> tableOf(DeviceClass device) noexcept {
@@ -226,7 +228,7 @@ ControlShape shapeOf(Control control) noexcept {
         return ControlShape::Axis1;
     }
     if (kName == "delta" || kName == "motion" || kName == "stick_left" || kName == "stick_right" ||
-        kName == "pointer") {
+        kName == "pointer" || kName == "pointer_left" || kName == "pointer_right") {
         return ControlShape::Axis2;
     }
     return ControlShape::Digital;
@@ -237,8 +239,9 @@ bool relative(Control control) noexcept {
 }
 
 bool positional(Control control) noexcept {
-    return (control.device == DeviceClass::Mouse || control.device == DeviceClass::Touch) &&
-           nameOf(control) == "pointer";
+    const std::string_view kName = nameOf(control);
+    return ((control.device == DeviceClass::Mouse || control.device == DeviceClass::Touch) && kName == "pointer") ||
+           (control.device == DeviceClass::Controller && (kName == "pointer_left" || kName == "pointer_right"));
 }
 
 std::optional<DeviceClass> deviceClassNamed(std::string_view name) noexcept {

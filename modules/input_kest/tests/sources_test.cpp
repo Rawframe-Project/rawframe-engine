@@ -5,7 +5,8 @@
 // its sample through `rawframe.view` (D367); and a press the UI takes read
 // by the sample as its node's press code, never by an action (D421); and
 // each local player's own locale chosen by their sample (D548), and a
-// controller's pose read by the sample (D596).
+// controller's pose read by the sample (D596), and its select the UI's at
+// its pointer on a headset's panel (D598).
 
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/input_kest/sources.h"
@@ -613,4 +614,58 @@ RAWFRAME_TEST(TheSampleReadsAControllersPose) {
     RAWFRAME_EXPECT((play(**source, 1)[0] == Stick{0.5F, 1.5F, -0.5F, 0, 0, 0, 1, 1}));
     feed.submit({.device = kHands, .control = kGrip, .pose = {}});
     RAWFRAME_EXPECT(play(**source, 1)[0][7] == 0);
+}
+
+RAWFRAME_TEST(AControllersSelectAtItsPointerIsTheUis) {
+    // The right hand pointing at a panel's button (D598): its select is the
+    // UI's press there, its code read by the sample; pointing past it, the
+    // select reaches the game, and the left hand's pointer is its own.
+    const world_kest::GameFiles* game = &gameAt("runners/runners.game",
+                                                "sample sample.kest sample",
+                                                "sample pressed.kest sample",
+                                                {{"pressed.kest",
+                                                  "module pressed\n"
+                                                  "import controls\n"
+                                                  "import rawframe.input\n"
+                                                  "fn sample(into: [controls.Stick]) {\n"
+                                                  "    into[0].targetX = f32(input.uiPressed())\n"
+                                                  "}\n"}});
+    input::Feed feed;
+    view::UiPointing pointing;
+    pointing.answer([](float x, float y, bool /*pressing*/) -> std::optional<std::int64_t> {
+        return x < 100 && y < 50 ? std::optional<std::int64_t>{7} : std::nullopt;
+    });
+    auto sources = makeInputSources(
+        SourceSettings{.game = game, .inputSize = sizeof(Stick), .feed = &feed, .pointing = &pointing});
+    RAWFRAME_EXPECT(sources.has_value());
+    if (!sources.has_value()) {
+        return;
+    }
+    auto source = (*sources)->playerSource(0);
+    RAWFRAME_EXPECT(source.has_value());
+    if (!source.has_value()) {
+        return;
+    }
+    constexpr input::DeviceId kHands{9};
+    const auto kControl = [](std::string_view name) {
+        return *input::controlNamed(input::DeviceClass::Controller, name);
+    };
+    feed.connect(kHands, input::DeviceClass::Controller);
+    const auto kSelect = [&](std::string_view hand, float x, float y, bool down) {
+        feed.submit(
+            {.device = kHands, .control = kControl(std::string{"pointer_"} + std::string{hand}), .x = x, .y = y});
+        feed.submit({.device = kHands,
+                     .control = kControl(std::string{"select_"} + std::string{hand}),
+                     .x = down ? 1.0F : 0.0F});
+        return play(**source, 1)[0][6];
+    };
+    RAWFRAME_EXPECT(kSelect("right", 40, 20, true) == 7.0F);
+    RAWFRAME_EXPECT(kSelect("right", 40, 20, false) == 0.0F);
+    RAWFRAME_EXPECT(kSelect("right", 300, 20, true) == 0.0F);
+    RAWFRAME_EXPECT(kSelect("right", 300, 20, false) == 0.0F);
+    // The left hand on the button, the right still away.
+    RAWFRAME_EXPECT(kSelect("left", 10, 10, true) == 7.0F);
+    // A menu press is never the UI's.
+    feed.submit({.device = kHands, .control = kControl("menu_right"), .x = 1});
+    RAWFRAME_EXPECT(play(**source, 1)[0][6] == 0.0F);
 }
