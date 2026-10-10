@@ -91,6 +91,18 @@
           "control": "stick_right"
         }
       ]
+    },
+    {
+      "actionId": "7e4c19a2d5b8f031",
+      "name": "hand",
+      "valueType": "pose",
+      "displayName": "Hold the lamp",
+      "bindings": [
+        {
+          "device": "controller",
+          "control": "grip_right"
+        }
+      ]
     }
   ],
   "contexts": [
@@ -102,7 +114,8 @@
         "jump",
         "look",
         "orbit",
-        "turn"
+        "turn",
+        "hand"
       ]
     }
   ]

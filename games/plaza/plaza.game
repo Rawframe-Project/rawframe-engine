@@ -73,6 +73,12 @@ component 9c9c4ade-0b73-4b76-ab31-90b52b98ff23 plaza.screen rawframe.model.Model
 component 05158b5b-4886-4c43-9384-9b9a9c0a3f4a plaza.lens rawframe.model.Camera
 component 9ef4a751-96de-4694-b07d-b3fccbd00a18 plaza.watch rawframe.model.View
 component da853e38-3ed1-4e7d-9ddb-4cf11b3834f2 plaza.shutter Shutter
+# A walker's lamp (D599), an entity following its walker, sent with the
+# walker it follows; its ball and its light.
+component 3db8ed2c-629a-4e0d-bf0f-b043f215b135 plaza.lamp Lamp
+entity plaza.lamp walker
+component a7caa955-a76e-4b6e-be95-46a502a4fdae plaza.lamp_look rawframe.model.Model
+component 133b107f-2ebe-4380-b84b-7d1f883af5b2 plaza.lamp_light rawframe.model.PointLight
 
 # The blade's swing: its skeleton and clip under blade/, played on the
 # server too, since the blade's body follows its bone.
@@ -86,10 +92,11 @@ animator 5c7e2a91f04b3d68 stroll.rfanim parameters plaza.stroller
 # alone, their root motion taken out: its body moves and turns it (D513).
 animator 2b9f6c04e7d1a835 walker.rfanim parameters plaza.gait
 
-system plaza.join simulation join write rawframe.physics3d.body write rawframe.physics3d.pose write rawframe.physics3d.character write rawframe.animation.animator with plaza.stick random spawn before rawframe.physics3d.step
+system plaza.join simulation join write rawframe.physics3d.body write rawframe.physics3d.pose write rawframe.physics3d.character write rawframe.animation.animator with plaza.stick entities random spawn before rawframe.physics3d.step
 system plaza.swing simulation swing read plaza.blade write rawframe.physics3d.target entities after rawframe.animation.step before rawframe.physics3d.step
 system plaza.stroll simulation stroll write plaza.stroller read rawframe.animation.root_motion write rawframe.physics3d.pose entities after rawframe.animation.step
 system plaza.walk simulation walk read plaza.stick read rawframe.physics3d.character read rawframe.physics3d.pose write rawframe.physics3d.velocity write plaza.gait before rawframe.physics3d.step predicted
+system plaza.carry simulation carry read plaza.lamp entities lookup plaza.stick lookup rawframe.physics3d.pose after rawframe.physics3d.step
 
 # The plaza, eighty meters square, and walls around it.
 spawn 1 rawframe.physics3d.body motion=0 shape=1 width=40 height=0.5 depth=40 rawframe.physics3d.pose rawframe.physics3d.velocity
@@ -151,7 +158,7 @@ spawn 1 plaza.stroller left=30 rawframe.physics3d.pose x=-2 y=1.4 z=-20 qw=1 raw
 # The animators replicate, so a client plays them where it draws (D258)
 # and poses the strollers' figures (D508); their root motion too, which
 # takes the walk out of a client's pose as it does out of the server's.
-replicate plaza.stroller plaza.hall plaza.spring plaza.monitor rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick rawframe.animation.animator rawframe.animation.root_motion plaza.gait
+replicate plaza.stroller plaza.hall plaza.spring plaza.monitor plaza.lamp rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick rawframe.animation.animator rawframe.animation.root_motion plaza.gait
 player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.gait rawframe.animation.animator rawframe.animation.root_motion
 input plaza.stick
 # A client makes its stick from its player's actions (plaza.actions) with
@@ -172,9 +179,10 @@ predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.veloc
 # under the sky's picture (D322), reflecting the plaza's probe (D325),
 # darkened where things meet (D327), warmed (D350), the spring's fountain
 # (D353), the strollers' traces (D354), and the monitor's screen showing
-# its lens's view (D361); no server carries a look, a figure, a lantern, a
-# view, a meter, an occlusion, a sky, a probe, a warmth, a fountain, a
-# trace, a screen, a lens, a shutter, or a watch.
+# its lens's view (D361), and the walkers' lamps (D599); no server carries
+# a look, a figure, a lantern, a view, a meter, an occlusion, a sky, a
+# probe, a warmth, a fountain, a trace, a screen, a lens, a shutter, a
+# watch, or a lamp's ball or light.
 presentation plaza.look on rawframe.physics3d.body
 present plaza.dress dress read rawframe.physics3d.body write plaza.look
 present plaza.dress_mesh dressMesh read rawframe.physics3d.mesh write plaza.look
@@ -184,6 +192,10 @@ presentation plaza.lantern on plaza.stroller
 present plaza.lantern lantern read plaza.stroller write plaza.lantern
 presentation plaza.trace on plaza.stroller
 present plaza.trace trace read plaza.stroller write plaza.trace
+presentation plaza.lamp_look on plaza.lamp
+present plaza.lamp_look lampLook read plaza.lamp write plaza.lamp_look
+presentation plaza.lamp_light on plaza.lamp
+present plaza.lamp_light lampLight read plaza.lamp write plaza.lamp_light
 presentation plaza.view on player
 present plaza.frame frame read plaza.stick write plaza.view
 presentation plaza.meter on player

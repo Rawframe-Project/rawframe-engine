@@ -5,10 +5,17 @@ module controls
 
 // What a player asks for, each -1 to 1: to run along x and z, and to jump
 // (above a half); and where it has turned its view, radians about +Y as a
-// camera's yaw, within half a turn either way (D521, D525).
+// camera's yaw, within half a turn either way (D521, D525). With a
+// headset's controller (D599), where its right hand holds the walker's
+// lamp: meters from where the head was as the headset began, turned with
+// the view, and `holding` above a half while the hand is located.
 struct Stick {
     runX: f32
     runZ: f32
     jump: f32
     heading: f32
+    handX: f32
+    handY: f32
+    handZ: f32
+    holding: f32
 }

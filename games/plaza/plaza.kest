@@ -41,20 +41,69 @@ const SKY: u64 = 0xa97797a3a58f6d7a
 // The plaza's picture from its middle, the `texture` line's (D326).
 const HALL: u64 = 0xac452b5e41f745bf
 
+// A walker's lamp (D599): an entity of its own, which follows its walker,
+// at its side, or in its player's right hand where a headset's controller
+// holds it.
+struct Lamp {
+    walker: world.Entity
+}
+
+extern fn Lamp.insert(entity: world.Entity, value: Lamp)
+extern fn Pose3D.insert(entity: world.Entity, value: physics3d.Pose3D)
+extern fn Stick.has(entity: world.Entity) -> bool
+extern fn Stick.get(entity: world.Entity) -> controls.Stick
+extern fn Pose3D.get(entity: world.Entity) -> physics3d.Pose3D
+
 // A player's entity arrives with its components zeroed: here it becomes a
 // walker standing somewhere on the plaza, free to turn toward where it
-// goes, its figure played where it is drawn (D513).
+// goes, its figure played where it is drawn (D513), and its lamp is lit
+// (D599).
 fn join(count: i32, bodies: [physics3d.Body3D], poses: [physics3d.Pose3D], characters: [physics3d.Character3D],
-        animators: [animation.Animator]) {
+        animators: [animation.Animator], entities: [world.Entity]) {
     let i = 0
     while i < count {
         if bodies[i].width == 0.0 {
+            let lamp = world.create()
+            Lamp.insert(lamp, Lamp(entities[i]))
+            Pose3D.insert(lamp, physics3d.Pose3D(0.0, -100.0, 0.0, 0.0, 0.0, 0.0, 1.0))
             bodies[i] = physics3d.Body3D(physics3d.KINEMATIC, physics3d.CAPSULE, false, false, false, WALKER, 0.3,
                                          0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
             animators[i] = animation.Animator(WALKER_GAIT, animation.PRESENTATION, u32(0), u64(0))
             poses[i] = physics3d.Pose3D(random.unit(0) * 30.0 - 15.0, 1.3, random.unit(0) * 30.0 - 15.0, 0.0, 0.0,
                                         0.0, 1.0)
             characters[i] = physics3d.Character3D(0.7, 0.3, physics3d.AIRBORNE, 0.0, 0.0, 0.0)
+        }
+        i = i + 1
+    }
+}
+
+// Where each lamp is (D599): in its player's right hand while a headset's
+// controller holds it, the hand's place from where the head began turned
+// with the view and set at the walker's head, 0.6 meters above its middle;
+// else hanging at its right side. A lamp whose walker is gone goes out.
+fn carry(count: i32, lamps: [Lamp], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let walker = lamps[i].walker
+        if !Stick.has(walker) {
+            world.destroy(entities[i])
+        } else {
+            let stick = Stick.get(walker)
+            let at = Pose3D.get(walker)
+            let heading = f64(stick.heading)
+            let x = f64(0.3)
+            let y = f64(-0.1)
+            let z = f64(0.0)
+            if stick.holding > 0.5 {
+                x = f64(stick.handX)
+                y = f64(0.6) + f64(stick.handY)
+                z = f64(stick.handZ)
+            }
+            // Turned about +Y by the heading, as the view is.
+            let c = math.cos(heading)
+            let s = math.sin(heading)
+            Pose3D.insert(entities[i], physics3d.Pose3D(at.x + x * c + z * s, at.y + y, at.z - x * s + z * c, 0.0,
+                                                        0.0, 0.0, 1.0))
         }
         i = i + 1
     }
@@ -366,6 +415,26 @@ fn figure(count: i32, strollers: [Stroller], figures: [model.Model]) {
     let i = 0
     while i < count {
         figures[i] = model.Model(FIGURE, 1.0, 1.0, 1.0, 0xFFFFFFFF, BRASS, 0.0)
+        i = i + 1
+    }
+}
+
+// What a client sees of a lamp (D599): a small warm glass ball, lit from
+// inside by 300 lumens at 2,700 K reaching five meters; it casts no
+// shadows, being in the ball.
+fn lampLook(count: i32, lamps: [Lamp], looks: [model.Model]) {
+    let i = 0
+    while i < count {
+        looks[i] = model.Model(model.SPHERE, 0.12, 0.12, 0.12, 0xFFD9A0FF, u64(0), 0.0)
+        i = i + 1
+    }
+}
+
+fn lampLight(count: i32, lamps: [Lamp], lights: [model.PointLight]) {
+    let warm = model.kelvin(2700.0)
+    let i = 0
+    while i < count {
+        lights[i] = model.PointLight(300.0, 5.0, warm, false)
         i = i + 1
     }
 }

@@ -5,7 +5,8 @@ module sample
 // with the mouse while its right button is held, and with the arrow keys
 // or the right stick (D521). Its heading is kept in the stick, which the
 // sample builds on tick to tick (D525), and the walker runs along it: up
-// runs the way the view looks along the ground.
+// runs the way the view looks along the ground. A headset's right hand
+// holds the walker's lamp (D599).
 
 import controls
 import rawframe.input
@@ -16,6 +17,7 @@ const JUMP: u64 = 0x2afb6c927e7f3e6f
 const LOOK: u64 = 0xe43978625b6e00b9
 const ORBIT: u64 = 0xdd9f99b9f2884926
 const TURN: u64 = 0x991a5a8c8fdb1a14
+const HAND: u64 = 0x7e4c19a2d5b8f031
 
 // Radians the view turns for each unit of the mouse's motion, and in a
 // tick at a full tilt of the arrow keys or the stick (about four tenths of
@@ -52,5 +54,14 @@ fn sample(into: [controls.Stick]) {
     into[0].jump = 0.0
     if input.on(JUMP) || input.pressed(JUMP) {
         into[0].jump = 1.0
+    }
+    // The right hand's place while a headset's controller is located
+    // (D599); the lamp hangs at the walker's side otherwise.
+    into[0].holding = 0.0
+    if input.on(HAND) {
+        into[0].holding = 1.0
+        into[0].handX = input.x(HAND)
+        into[0].handY = input.y(HAND)
+        into[0].handZ = input.z(HAND)
     }
 }
