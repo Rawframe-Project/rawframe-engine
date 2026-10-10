@@ -1,0 +1,27 @@
+# Two bots play Stalls while the first one's view is shown on a headset
+# (D597): the lot drawn for each eye, and the HUD, its coins in the game's
+# font, drawn on the headset's panel, a quad before the eyes, on clear.
+# Run under tools/xr_run.sh, a headless Monado of the test's own. A small
+# panel: a software rasterizer serves.
+host.maximum_iterations = 240
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = @PROJECT_SOURCE_DIR@/games/tycoon/tycoon.game
+content.root = @TYCOON_CONTENT@
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 2
+bots.endpoint = arena
+render.device = any
+render.offscreen = true
+render.width = 320
+render.height = 180
+scene.shadow_side = 256
+render.read_every = 8
+xr.headset = true
+xr.panel_width = 320
+xr.panel_height = 180
+# What is checked is what is drawn, not how fast a loaded machine ticks
+# (D212, D516).
+world.degraded_ms = 600000
+world.overload_ms = 0

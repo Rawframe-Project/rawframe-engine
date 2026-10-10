@@ -17,8 +17,10 @@
 // (D596): each hand's select and menu buttons and its grip and aim poses,
 // suggested for the simple controller every runtime binds
 // (`khr/simple_controller`, ADR-0081's floor) and bound to whatever
-// controller the runtime has, by its own binding. Main thread only; the
-// runtime and the device outlive it.
+// controller the runtime has, by its own binding. A session may show a
+// panel too, the UI apart from the world (D597): its own swapchain, its
+// image acquired with the views' and submitted as a quad layer over them.
+// Main thread only; the runtime and the device outlive it.
 
 #include "rawframe/render/device.h"
 #include "rawframe/result/result.h"
@@ -27,6 +29,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace rawframe::xr {
@@ -85,6 +88,18 @@ struct Hand {
     SpacePose aim;
 };
 
+/// A panel the session shows before the eyes, the UI apart from the
+/// world (D597): an image of `width` by `height` pixels, drawn with clear
+/// where nothing is, shown as a quad `meters` wide, upright, `distance`
+/// meters ahead of where the head was when the session began. A side of
+/// nought shows none.
+struct PanelSettings {
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    float meters = 1.6F;
+    float distance = 1.5F;
+};
+
 /// A presentation frame, from `begin` to `end`.
 struct SessionFrame {
     /// A frame was waited for and begun: `end` follows.
@@ -99,6 +114,8 @@ struct SessionFrame {
     /// frame's picture is placed into (`render::FrameTarget::images`)
     /// between `begin` and `end`, when shown.
     std::vector<std::uint64_t> images;
+    /// The panel's image this frame, when shown and the session has one.
+    std::optional<std::uint64_t> panel;
     /// The left hand's controller, then the right's, at the frame's
     /// display time; read while the session has the input focus, else
     /// neither active (the runtime keeps the input for itself).
@@ -111,8 +128,10 @@ struct SessionStatistics {
     /// Frames shown whose every view was located, and tracked.
     std::uint64_t framesLocated = 0;
     std::uint64_t framesTracked = 0;
-    /// Frames ended with their views drawn and submitted.
+    /// Frames ended with their views drawn and submitted, and those with
+    /// the panel submitted over them.
     std::uint64_t framesSubmitted = 0;
+    std::uint64_t framesPanelSubmitted = 0;
     /// Frames begun with the input focus, whose hands were read, and those
     /// in which a hand's grip was located.
     std::uint64_t framesHandsRead = 0;
@@ -122,8 +141,10 @@ struct SessionStatistics {
 class Session {
 public:
     /// A session on `runtime`'s system, bound to `device`, ready (`State`
-    /// otherwise), whose Vulkan objects `runtime` made.
-    [[nodiscard]] static result::Result<std::unique_ptr<Session>> create(Runtime& runtime, render::Device& device);
+    /// otherwise), whose Vulkan objects `runtime` made, with `panel`'s
+    /// panel.
+    [[nodiscard]] static result::Result<std::unique_ptr<Session>>
+    create(Runtime& runtime, render::Device& device, const PanelSettings& panel = {});
 
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
@@ -140,6 +161,8 @@ public:
     [[nodiscard]] result::Status end(bool drawn);
     /// The format and size of each view's images.
     [[nodiscard]] const std::vector<ViewSize>& images() const noexcept;
+    /// The size of the panel's images; none without a panel.
+    [[nodiscard]] std::optional<ViewSize> panel() const noexcept;
     /// Asks the runtime to end the session: it stops, then exits, through
     /// the frames that follow.
     [[nodiscard]] result::Status requestExit();

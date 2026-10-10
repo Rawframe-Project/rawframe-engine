@@ -70,6 +70,20 @@ public:
                                                       .error()};
         }
         asked_ = true;
+        // The UI's panel (D597): 1280 by 720 pixels unless configured; a
+        // side of nought shows none, the UI drawn over the eyes' mirror.
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kPanelWidth,
+                            context.configuration().unsignedInteger("xr.panel_width", 1280));
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kPanelHeight,
+                            context.configuration().unsignedInteger("xr.panel_height", 720));
+        if (kPanelWidth > 4096 || kPanelHeight > 4096) {
+            return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                               composition::kCompositionDomain,
+                                                               code(composition::CompositionError::BadConfiguration),
+                                                               "xr.panel_width and xr.panel_height are 0 to 4096")
+                                                      .error()};
+        }
+        panel_ = {.width = static_cast<std::uint32_t>(kPanelWidth), .height = static_cast<std::uint32_t>(kPanelHeight)};
         if (context.has(input_kest::kFeed.name)) {
             RAWFRAME_TRY_ASSIGN(feed_, context.capability(input_kest::kFeed));
         }
@@ -118,6 +132,7 @@ public:
                       diagnostics::field("framesLocated", totals_.framesLocated),
                       diagnostics::field("framesTracked", totals_.framesTracked),
                       diagnostics::field("framesSubmitted", totals_.framesSubmitted),
+                      diagnostics::field("framesPanelSubmitted", totals_.framesPanelSubmitted),
                       diagnostics::field("framesHandsRead", totals_.framesHandsRead),
                       diagnostics::field("framesHandLocated", totals_.framesHandLocated),
                       diagnostics::field("controllerEvents", controllerEvents_),
@@ -165,7 +180,7 @@ public:
             return std::nullopt;
         }
         if (session_ == nullptr) {
-            auto made = Session::create(*runtime_, device);
+            auto made = Session::create(*runtime_, device, panel_);
             if (!made.has_value()) {
                 fail(made.error());
                 return std::nullopt;
@@ -177,8 +192,10 @@ public:
         if (!open_ || session_->images().empty()) {
             return std::nullopt;
         }
-        return Views{
-            .images = images_, .width = session_->images().front().width, .height = session_->images().front().height};
+        return Views{.images = images_,
+                     .width = session_->images().front().width,
+                     .height = session_->images().front().height,
+                     .panel = session_->panel().has_value()};
     }
 
     void end(bool drawn) noexcept override {
@@ -205,6 +222,7 @@ public:
         totals_.framesLocated += kSession.framesLocated;
         totals_.framesTracked += kSession.framesTracked;
         totals_.framesSubmitted += kSession.framesSubmitted;
+        totals_.framesPanelSubmitted += kSession.framesPanelSubmitted;
         totals_.framesHandsRead += kSession.framesHandsRead;
         totals_.framesHandLocated += kSession.framesHandLocated;
         session_.reset();
@@ -243,6 +261,9 @@ private:
         }
         open_ = true;
         images_ = std::move(frame->images);
+        if (frame->panel.has_value()) {
+            images_.push_back(*frame->panel);
+        }
         std::vector<view::HeadsetEye> eyes;
         for (std::size_t at = 0; at < frame->views.size(); ++at) {
             const ViewPose& kPose = frame->views[at];
@@ -353,6 +374,7 @@ private:
     bool open_ = false;
     std::vector<std::uint64_t> images_;
     bool asked_ = false;
+    PanelSettings panel_;
     std::string unavailable_;
     std::unique_ptr<Runtime> runtime_;
     std::unique_ptr<Session> session_;

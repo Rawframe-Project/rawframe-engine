@@ -190,7 +190,7 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED runners_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"boxes\":[1-9][0-9]+,\"images\":[1-9][0-9]+,[^\n]*\"shadows\":[1-9][0-9]+,\"glyphRuns\":[1-9][0-9]+,\"glyphs\":[1-9][0-9]+,\"glyphRunsWaiting\":0.*\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,\"mostNodes\":12,[^\n]*\"fontsRead\":1,\"texts\":[1-9][0-9]*,\"textsUnknown\":0,\"glyphRuns\":[1-9][0-9]*,\"glyphsLeftOut\":0,.*\"code\":\"drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"draws\":[1-9][0-9]+,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]*,\"ribbonsDrawn\":[1-9][0-9]*,\"playerFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,[^\n]*\"captured\":true")
+                             "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+,\"images\":[1-9][0-9]+,[^\n]*\"shadows\":[1-9][0-9]+,\"glyphRuns\":[1-9][0-9]+,\"glyphs\":[1-9][0-9]+,\"glyphRunsWaiting\":0.*\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,\"mostNodes\":12,[^\n]*\"fontsRead\":1,\"texts\":[1-9][0-9]*,\"textsUnknown\":0,\"glyphRuns\":[1-9][0-9]*,\"glyphsLeftOut\":0,.*\"code\":\"drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"draws\":[1-9][0-9]+,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]*,\"ribbonsDrawn\":[1-9][0-9]*,\"playerFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,[^\n]*\"captured\":true")
     endif()
     # A picture too large to read back is drawn without (D534): frames are
     # made past the first asked to be read back.
@@ -375,6 +375,19 @@ if(RAWFRAME_BUILD_TESTS)
                                  SKIP_REGULAR_EXPRESSION "skip: no device"
                                  PASS_REGULAR_EXPRESSION
                                  "\"code\":\"xr_unavailable\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"frame_summary\"[^\n]*\"width\":320,\"height\":180,[^\n]*\"headsetFrames\":0")
+            # Stalls on a headset with its UI on the panel (D597): the HUD
+            # laid out at the panel's size and drawn on it, and the panel
+            # submitted over the eyes.
+            configure_file(tests/tycoon_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/tycoon_headset.conf @ONLY)
+            add_test(NAME tycoon_headset
+                     COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xr_run.sh ${RAWFRAME_SHELL}
+                             ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh $<TARGET_FILE:rawframe_host_arena>
+                             ${CMAKE_CURRENT_BINARY_DIR}/tycoon_headset.conf
+                     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+            set_tests_properties(tycoon_headset PROPERTIES
+                                 FIXTURES_REQUIRED tycoon_content
+                                 PASS_REGULAR_EXPRESSION
+                                 "\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+.*\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"framesOnPanel\":[1-9][0-9]+,[^\n]*\"glyphRuns\":[1-9][0-9]+,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,\"framesPanelSubmitted\":[1-9][0-9]+,[^\n]*\"failed\":false")
         endif()
         # A view too large for its device drawn at a falling render scale
         # (D533): the scale changes to one lower than the whole, and the run

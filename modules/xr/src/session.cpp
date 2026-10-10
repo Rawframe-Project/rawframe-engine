@@ -59,6 +59,10 @@ struct Session::State {
     XrSpace local = XR_NULL_HANDLE;
     std::vector<Chain> chains;
     std::vector<ViewSize> sizes;
+    /// The panel's swapchain, where the session has one (D597), and where
+    /// its quad is.
+    std::optional<Chain> panel;
+    PanelSettings panelSettings;
     SessionState state = SessionState::Unknown;
     bool running = false;
     bool over = false;
@@ -85,6 +89,9 @@ struct Session::State {
     ~State() {
         // The images' textures, then the swapchains whose images they
         // were, then the space and the session.
+        if (panel.has_value()) {
+            chains.push_back(std::move(*panel));
+        }
         for (Chain& chain : chains) {
             for (const std::uint64_t kImage : chain.images) {
                 device->abandon(kImage);
@@ -154,8 +161,8 @@ struct Session::State {
         return {};
     }
 
-    /// A swapchain for each view, in the first format the runtime offers
-    /// that the device adopts, its images adopted.
+    /// A swapchain for each view, and the panel's, in the first format the
+    /// runtime offers that the device adopts, their images adopted.
     result::Status makeChains() {
         std::uint32_t count = 0;
         if (const XrResult kCounted = xrEnumerateSwapchainFormats(session, 0, &count, nullptr); XR_FAILED(kCounted)) {
@@ -175,38 +182,48 @@ struct Session::State {
         }
         for (const ViewSize& kView : runtime->description.views) {
             Chain& chain = chains.emplace_back();
-            chain.size = {.width = kView.width, .height = kView.height, .samples = 1};
-            XrSwapchainCreateInfo create{XR_TYPE_SWAPCHAIN_CREATE_INFO};
-            create.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
-            create.format = *kFormat;
-            create.sampleCount = 1;
-            create.width = kView.width;
-            create.height = kView.height;
-            create.faceCount = 1;
-            create.arraySize = 1;
-            create.mipCount = 1;
-            if (const XrResult kMade = xrCreateSwapchain(session, &create, &chain.swapchain); XR_FAILED(kMade)) {
-                chain.swapchain = XR_NULL_HANDLE;
-                return failed("a view's swapchain could not be made", kMade);
-            }
-            std::uint32_t images = 0;
-            if (const XrResult kCounted = xrEnumerateSwapchainImages(chain.swapchain, 0, &images, nullptr);
-                XR_FAILED(kCounted)) {
-                return failed("a view's images could not be read", kCounted);
-            }
-            std::vector<XrSwapchainImageVulkan2KHR> made(images, {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
-            if (const XrResult kRead = xrEnumerateSwapchainImages(
-                    chain.swapchain, images, &images, reinterpret_cast<XrSwapchainImageBaseHeader*>(made.data()));
-                XR_FAILED(kRead)) {
-                return failed("a view's images could not be read", kRead);
-            }
-            for (const XrSwapchainImageVulkan2KHR& kImage : made) {
-                RAWFRAME_TRY_ASSIGN(
-                    const std::uint64_t kAdopted,
-                    device->adopt(kImage.image, static_cast<std::uint32_t>(*kFormat), kView.width, kView.height));
-                chain.images.push_back(kAdopted);
-            }
+            RAWFRAME_TRY(makeChain(chain, *kFormat, kView.width, kView.height));
             sizes.push_back(chain.size);
+        }
+        if (panelSettings.width != 0 && panelSettings.height != 0) {
+            panel.emplace();
+            RAWFRAME_TRY(makeChain(*panel, *kFormat, panelSettings.width, panelSettings.height));
+        }
+        return {};
+    }
+
+    /// `chain`'s swapchain, of `width` by `height` in `format`, its images
+    /// adopted.
+    result::Status makeChain(Chain& chain, std::int64_t format, std::uint32_t width, std::uint32_t height) {
+        chain.size = {.width = width, .height = height, .samples = 1};
+        XrSwapchainCreateInfo create{XR_TYPE_SWAPCHAIN_CREATE_INFO};
+        create.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
+        create.format = format;
+        create.sampleCount = 1;
+        create.width = width;
+        create.height = height;
+        create.faceCount = 1;
+        create.arraySize = 1;
+        create.mipCount = 1;
+        if (const XrResult kMade = xrCreateSwapchain(session, &create, &chain.swapchain); XR_FAILED(kMade)) {
+            chain.swapchain = XR_NULL_HANDLE;
+            return failed("a swapchain could not be made", kMade);
+        }
+        std::uint32_t images = 0;
+        if (const XrResult kCounted = xrEnumerateSwapchainImages(chain.swapchain, 0, &images, nullptr);
+            XR_FAILED(kCounted)) {
+            return failed("a swapchain's images could not be read", kCounted);
+        }
+        std::vector<XrSwapchainImageVulkan2KHR> made(images, {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
+        if (const XrResult kRead = xrEnumerateSwapchainImages(
+                chain.swapchain, images, &images, reinterpret_cast<XrSwapchainImageBaseHeader*>(made.data()));
+            XR_FAILED(kRead)) {
+            return failed("a swapchain's images could not be read", kRead);
+        }
+        for (const XrSwapchainImageVulkan2KHR& kImage : made) {
+            RAWFRAME_TRY_ASSIGN(const std::uint64_t kAdopted,
+                                device->adopt(kImage.image, static_cast<std::uint32_t>(format), width, height));
+            chain.images.push_back(kAdopted);
         }
         return {};
     }
@@ -372,23 +389,51 @@ struct Session::State {
         return poses;
     }
 
-    /// Each view's next image, acquired and waited for.
+    /// Each view's next image, then the panel's, acquired and waited for.
     result::Result<std::vector<std::uint64_t>> acquire() {
         std::vector<std::uint64_t> images;
         for (const Chain& kChain : chains) {
-            std::uint32_t index = 0;
-            if (const XrResult kAcquired = xrAcquireSwapchainImage(kChain.swapchain, nullptr, &index);
-                XR_FAILED(kAcquired)) {
-                return failed("a view's image could not be acquired", kAcquired);
-            }
-            XrSwapchainImageWaitInfo wait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
-            wait.timeout = kImageWait;
-            if (const XrResult kWaited = xrWaitSwapchainImage(kChain.swapchain, &wait); XR_FAILED(kWaited)) {
-                return failed("a view's image could not be waited for", kWaited);
-            }
-            images.push_back(kChain.images.at(index));
+            RAWFRAME_TRY_ASSIGN(const std::uint64_t kImage, acquire(kChain));
+            images.push_back(kImage);
+        }
+        if (panel.has_value()) {
+            RAWFRAME_TRY_ASSIGN(const std::uint64_t kImage, acquire(*panel));
+            images.push_back(kImage);
         }
         return images;
+    }
+
+    static result::Result<std::uint64_t> acquire(const Chain& chain) {
+        std::uint32_t index = 0;
+        if (const XrResult kAcquired = xrAcquireSwapchainImage(chain.swapchain, nullptr, &index);
+            XR_FAILED(kAcquired)) {
+            return failed("a swapchain's image could not be acquired", kAcquired);
+        }
+        XrSwapchainImageWaitInfo wait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+        wait.timeout = kImageWait;
+        if (const XrResult kWaited = xrWaitSwapchainImage(chain.swapchain, &wait); XR_FAILED(kWaited)) {
+            return failed("a swapchain's image could not be waited for", kWaited);
+        }
+        return chain.images.at(index);
+    }
+
+    /// Every image acquired, given back.
+    result::Status release() {
+        for (const Chain& kChain : chains) {
+            RAWFRAME_TRY(release(kChain));
+        }
+        if (panel.has_value()) {
+            RAWFRAME_TRY(release(*panel));
+        }
+        return {};
+    }
+
+    static result::Status release(const Chain& chain) {
+        XrSwapchainImageReleaseInfo info{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+        if (const XrResult kReleased = xrReleaseSwapchainImage(chain.swapchain, &info); XR_FAILED(kReleased)) {
+            return failed("a swapchain's image could not be given back", kReleased);
+        }
+        return {};
     }
 };
 
@@ -397,7 +442,8 @@ Session::Session(std::unique_ptr<State> state) noexcept : state_(std::move(state
 
 Session::~Session() = default;
 
-result::Result<std::unique_ptr<Session>> Session::create(Runtime& runtime, render::Device& device) {
+result::Result<std::unique_ptr<Session>>
+Session::create(Runtime& runtime, render::Device& device, const PanelSettings& panel) {
     const std::optional<render::VulkanObjects> kVulkan = device.vulkan();
     if (!kVulkan.has_value()) {
         return refused(XrError::State, "the device is not ready on Vulkan");
@@ -405,6 +451,7 @@ result::Result<std::unique_ptr<Session>> Session::create(Runtime& runtime, rende
     auto state = std::make_unique<State>();
     state->runtime = runtime.state_.get();
     state->device = &device;
+    state->panelSettings = panel;
     XrGraphicsBindingVulkan2KHR binding{XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR};
     binding.instance = static_cast<VkInstance>(kVulkan->instance);
     binding.physicalDevice = static_cast<VkPhysicalDevice>(kVulkan->physicalDevice);
@@ -464,6 +511,10 @@ result::Result<SessionFrame> Session::begin() {
         RAWFRAME_TRY_ASSIGN(made.views, state.locate(frame.predictedDisplayTime));
         RAWFRAME_TRY_ASSIGN(made.images, state.acquire());
         state.acquired = true;
+        if (state.panel.has_value()) {
+            made.panel = made.images.back();
+            made.images.pop_back();
+        }
         ++state.statistics.framesShown;
         if (!made.views.empty() && std::ranges::all_of(made.views, &ViewPose::located)) {
             ++state.statistics.framesLocated;
@@ -483,12 +534,7 @@ result::Status Session::end(bool drawn) {
     state.begun = false;
     const bool kAcquired = std::exchange(state.acquired, false);
     if (kAcquired) {
-        for (const Chain& kChain : state.chains) {
-            XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-            if (const XrResult kReleased = xrReleaseSwapchainImage(kChain.swapchain, &release); XR_FAILED(kReleased)) {
-                return failed("a view's image could not be given back", kReleased);
-            }
-        }
+        RAWFRAME_TRY(state.release());
     }
     // Each view's image whole, where the runtime located it.
     std::vector<XrCompositionLayerProjectionView> views;
@@ -508,18 +554,39 @@ result::Status Session::end(bool drawn) {
     projection.space = state.local;
     projection.viewCount = static_cast<std::uint32_t>(views.size());
     projection.views = views.data();
-    const auto* kLayer = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&projection);
+    // The panel over the world, upright before where the head began, its
+    // clear parts showing what is behind (D597).
+    XrCompositionLayerQuad quad{XR_TYPE_COMPOSITION_LAYER_QUAD};
+    quad.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+    quad.space = state.local;
+    quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+    std::vector<const XrCompositionLayerBaseHeader*> layers;
+    if (kSubmitted) {
+        layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(&projection));
+        if (state.panel.has_value()) {
+            const PanelSettings& kPanel = state.panelSettings;
+            quad.subImage.swapchain = state.panel->swapchain;
+            quad.subImage.imageRect.extent = {static_cast<std::int32_t>(kPanel.width),
+                                              static_cast<std::int32_t>(kPanel.height)};
+            quad.pose.orientation.w = 1;
+            quad.pose.position.z = -kPanel.distance;
+            quad.size = {kPanel.meters,
+                         kPanel.meters * static_cast<float>(kPanel.height) / static_cast<float>(kPanel.width)};
+            layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quad));
+        }
+    }
     XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};
     end.displayTime = state.displayTime;
     end.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
-    end.layerCount = kSubmitted ? 1 : 0;
-    end.layers = kSubmitted ? &kLayer : nullptr;
+    end.layerCount = static_cast<std::uint32_t>(layers.size());
+    end.layers = layers.empty() ? nullptr : layers.data();
     if (const XrResult kEnded = xrEndFrame(state.session, &end); XR_FAILED(kEnded)) {
         return failed("the frame could not end", kEnded);
     }
     ++state.statistics.framesEnded;
     if (kSubmitted) {
         ++state.statistics.framesSubmitted;
+        state.statistics.framesPanelSubmitted += layers.size() > 1 ? 1U : 0U;
     }
     return {};
 }
@@ -536,6 +603,10 @@ result::Status Session::requestExit() {
         return failed("the session's exit could not be asked for", kAsked);
     }
     return {};
+}
+
+std::optional<ViewSize> Session::panel() const noexcept {
+    return state_->panel.has_value() ? std::optional{state_->panel->size} : std::nullopt;
 }
 
 SessionState Session::state() const noexcept {
