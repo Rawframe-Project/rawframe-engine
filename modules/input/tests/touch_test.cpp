@@ -12,6 +12,8 @@
 
 #include <cmath>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 using namespace rawframe;
 using namespace rawframe::input;
@@ -117,4 +119,25 @@ RAWFRAME_TEST(UntilTheWidthIsToldEveryTouchIsTheLeftHalfs) {
                     shapeOf(*controlNamed(DeviceClass::Touch, "stick_right")) == ControlShape::Axis2 &&
                     shapeOf(*controlNamed(DeviceClass::Touch, "right")) == ControlShape::Digital &&
                     !relative(*controlNamed(DeviceClass::Touch, "stick_left")));
+}
+
+RAWFRAME_TEST(ATouchOnTheUiIsTheUisAsAClickIs) {
+    // The UI as the topmost routing node takes a touch as it takes a click
+    // (D421, D588): one beginning over it is asked of it at the touch's
+    // place, and the half's button it would hold is no action's.
+    Rig rig;
+    std::vector<std::pair<float, float>> asked;
+    rig.mapper->setPointerTaker([&asked](PlayerSlot /*player*/, float x, float y) {
+        asked.emplace_back(x, y);
+        return x < 100;
+    });
+    rig.touch.resize(800);
+    rig.touch.down(1, 40, 30);
+    RAWFRAME_EXPECT(!rig.now(kJump).on);
+    RAWFRAME_EXPECT(asked.size() == 1 && asked[0] == (std::pair{40.0F, 30.0F}));
+    rig.touch.up(1);
+    RAWFRAME_EXPECT(!rig.now(kJump).on);
+    // Past the UI, the game's.
+    rig.touch.down(2, 300, 30);
+    RAWFRAME_EXPECT(rig.now(kJump).on && asked.size() == 2);
 }
