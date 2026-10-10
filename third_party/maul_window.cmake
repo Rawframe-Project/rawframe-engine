@@ -5,11 +5,12 @@
 # (D405), drawn through Maul RHI's Metal driver (D406). On the web (the
 # engine's wasm32-wasi client) the build also writes maul-window.mjs, the
 # page's side of the backend (Maul Window's mwin-0022). On Android its
-# NativeActivity backend (mwin-0026) is built (D550). Maul Window finds
+# NativeActivity backend (mwin-0026) is built (D550), on iOS its UIKit
+# backend (mwin-0025, D586). Maul Window finds
 # Maul Unicode through FetchContent; the source directory below points it
 # at the vendored copy, and nothing is fetched.
 set(RAWFRAME_MAUL_WINDOW OFF)
-if(CMAKE_SYSTEM_NAME MATCHES "^(Linux|Darwin|WASI|Android)$" OR WIN32)
+if(CMAKE_SYSTEM_NAME MATCHES "^(Linux|Darwin|WASI|Android|iOS)$" OR WIN32)
     set(RAWFRAME_MAUL_WINDOW ON)
 endif()
 if(NOT RAWFRAME_MAUL_WINDOW)
