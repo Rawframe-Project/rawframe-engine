@@ -252,6 +252,25 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"id\":2,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":true}.*\"id\":3,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":4,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":5,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":false}.*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,")
+        # The plaza shown on a headset (D596), under Monado's simulated one
+        # (tools/xr_run.sh): drawn for both its eyes, its simulated
+        # controllers read in both hands, located, and fed to the player's
+        # mapper as the client's controller device.
+        if(RAWFRAME_CLIENT_HEADSET AND RAWFRAME_MONADO_SERVICE AND NOT WIN32)
+            configure_file(tests/plaza_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf @ONLY)
+            add_test(NAME client_plaza_headset
+                     COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                             ${PROJECT_SOURCE_DIR}/tools/xr_run.sh ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh
+                             $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                             ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf games/plaza/plaza.game
+                             ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+            set_tests_properties(client_plaza_headset PROPERTIES
+                                 FIXTURES_REQUIRED plaza_content
+                                 PROCESSORS 2
+                                 PASS_REGULAR_EXPRESSION
+                                 "\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+}.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":[1-9][0-9]+,\"failed\":false}.*\"code\":\"input_summary\"[^\n]*\"player\":0,[^\n]*\"controllerEvents\":[1-9][0-9]+,")
+        endif()
         # Each draws a window on lavapipe beside a server, and bots or a
         # second client in some: two of a preset's processors each, so a full
         # check, eight trees at once, starts fewer at once and none is starved

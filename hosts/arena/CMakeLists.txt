@@ -348,9 +348,10 @@ if(RAWFRAME_BUILD_TESTS)
                              "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":([3-9]|1[0-9]),[^\n]*\"framesOccluded\":[1-9][0-9]+,[^\n]*\"postProcessesRun\":[1-9][0-9]+,\"postProcessesLeftOut\":0,\"emittersDrawn\":[1-9][0-9]+,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]+,\"ribbonsDrawn\":[1-9][0-9]+,\"viewFrames\":[1-9][0-9]*,[^\n]*\"modelsSkinned\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"mostColors\":[1-9][0-9][0-9]+,[^\n]*\"captured\":true")
         # The plaza on a headset (D593): under a headless Monado of its own
         # (tools/xr_run.sh), the device made by the headset's runtime, the
-        # session focused, each eye's view drawn from its pose (D595), and
-        # the frames submitted to the headset; with no runtime, played flat
-        # and drawn offscreen all the same.
+        # session focused, each eye's view drawn from its pose (D595), the
+        # frames submitted to the headset, and its controllers located but
+        # fed to no one, the arena lending no client devices (D596); with no
+        # runtime, played flat and drawn offscreen all the same.
         configure_file(tests/plaza_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf @ONLY)
         if(RAWFRAME_ARENA_HEADSET AND RAWFRAME_MONADO_SERVICE AND NOT WIN32)
             add_test(NAME plaza_headset
@@ -361,7 +362,7 @@ if(RAWFRAME_BUILD_TESTS)
             set_tests_properties(plaza_headset PROPERTIES
                                  FIXTURES_REQUIRED plaza_content
                                  PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"xr_ready\".*\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"scene_eyes_summary\"[^\n]*\"eyes\":2,\"eyeFrames\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"width\":128,\"height\":128,[^\n]*\"headsetFrames\":[1-9][0-9]+.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,\"failed\":false")
+                                 "\"code\":\"xr_ready\".*\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"scene_eyes_summary\"[^\n]*\"eyes\":2,\"eyeFrames\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"width\":128,\"height\":128,[^\n]*\"headsetFrames\":[1-9][0-9]+.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":0,\"failed\":false")
         endif()
         if(RAWFRAME_ARENA_HEADSET)
             add_test(NAME plaza_headset_absent

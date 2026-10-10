@@ -2,9 +2,10 @@
 // render module's device made by the runtime, the session begun when the
 // runtime says ready, and, while it runs, each frame's views located, the
 // frame's picture placed into their images, and the views submitted; the
-// session ended when asked. Run under tools/xr_run.sh, which starts
-// Monado's service headless (its null compositor and simulated headset)
-// on lavapipe; a machine with no runtime skips, unless RAWFRAME_REQUIRE_XR
+// session ended when asked. While it has the input focus, both hands'
+// controllers are read and located (D596). Run under tools/xr_run.sh, which starts
+// Monado's service headless (its null compositor, simulated headset, and
+// simulated simple controllers) on lavapipe; a machine with no runtime skips, unless RAWFRAME_REQUIRE_XR
 // is set, as the check sets it where Monado is installed.
 
 #include "rawframe/render/device.h"
@@ -14,6 +15,7 @@
 #include "rawframe/xr/runtime.h"
 #include "rawframe/xr/session.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -113,6 +115,8 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
     // were located, then asked to end, until it is over: a bound keeps a
     // broken runtime from holding the test.
     bool askedToEnd = false;
+    // Frames whose both hands were active, their grips located.
+    int handsHeld = 0;
     for (int frame = 0; frame < 3000 && !session.over(); ++frame) {
         const auto kFrame = session.begin();
         RAWFRAME_EXPECT(kFrame.has_value());
@@ -122,6 +126,13 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
         if (!kFrame->begun) {
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
             continue;
+        }
+        if (std::ranges::all_of(kFrame->hands, [](const xr::Hand& hand) {
+                return hand.active && hand.grip.located;
+            })) {
+            ++handsHeld;
+            // The left hand is held left of the right.
+            RAWFRAME_EXPECT(kFrame->hands[0].grip.position[0] < kFrame->hands[1].grip.position[0]);
         }
         bool drawn = false;
         if (kFrame->shown) {
@@ -133,7 +144,7 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
         }
         RAWFRAME_EXPECT(session.end(drawn).has_value());
         if (!askedToEnd && session.state() == xr::SessionState::Focused && session.statistics().framesSubmitted >= 30 &&
-            session.statistics().framesLocated >= 30) {
+            session.statistics().framesLocated >= 30 && handsHeld >= 30) {
             RAWFRAME_EXPECT(session.requestExit().has_value());
             askedToEnd = true;
         }
@@ -141,13 +152,15 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
     RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
     const xr::SessionStatistics& kTotals = session.statistics();
     const render::FramerStatistics& kDrawn = (*framer)->statistics();
-    std::printf("frames ended %llu, shown %llu, located %llu, tracked %llu, submitted %llu; images placed %llu, "
-                "not placed %llu\n",
+    std::printf("frames ended %llu, shown %llu, located %llu, tracked %llu, submitted %llu, hands read %llu, "
+                "a hand located %llu; images placed %llu, not placed %llu\n",
                 static_cast<unsigned long long>(kTotals.framesEnded),
                 static_cast<unsigned long long>(kTotals.framesShown),
                 static_cast<unsigned long long>(kTotals.framesLocated),
                 static_cast<unsigned long long>(kTotals.framesTracked),
                 static_cast<unsigned long long>(kTotals.framesSubmitted),
+                static_cast<unsigned long long>(kTotals.framesHandsRead),
+                static_cast<unsigned long long>(kTotals.framesHandLocated),
                 static_cast<unsigned long long>(kDrawn.imagesPlaced),
                 static_cast<unsigned long long>(kDrawn.imagesNotPlaced));
     RAWFRAME_EXPECT(askedToEnd);
@@ -155,6 +168,7 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
     RAWFRAME_EXPECT(session.state() == xr::SessionState::Exiting);
     RAWFRAME_EXPECT(kTotals.framesLocated >= 30);
     RAWFRAME_EXPECT(kTotals.framesSubmitted >= 30);
+    RAWFRAME_EXPECT(handsHeld >= 30 && kTotals.framesHandLocated >= 30);
     RAWFRAME_EXPECT(kDrawn.imagesPlaced >= 2 * kTotals.framesSubmitted);
     // The frames, then the session, go before the device they are made on.
     framer->reset();

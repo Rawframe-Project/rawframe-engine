@@ -13,7 +13,12 @@
 // driven only from the presentation path, never from an executor the
 // simulation, replication, or the network depend on, and the display time
 // it predicts never enters the World or a record (ADR-0081, section 3).
-// Main thread only; the runtime and the device outlive it.
+// The session reads both hands' controllers through actions of its own
+// (D596): each hand's select and menu buttons and its grip and aim poses,
+// suggested for the simple controller every runtime binds
+// (`khr/simple_controller`, ADR-0081's floor) and bound to whatever
+// controller the runtime has, by its own binding. Main thread only; the
+// runtime and the device outlive it.
 
 #include "rawframe/render/device.h"
 #include "rawframe/result/result.h"
@@ -59,6 +64,27 @@ struct ViewPose {
     bool tracked = false;
 };
 
+/// Where a controller's grip or aim was at a frame's display time, in the
+/// session's local space, as its views are.
+struct SpacePose {
+    std::array<float, 3> position{};
+    /// A unit quaternion, x, y, z, w.
+    std::array<float, 4> orientation{0, 0, 0, 1};
+    bool located = false;
+    bool tracked = false;
+};
+
+/// A hand's controller as the runtime's binding read it at a frame.
+struct Hand {
+    /// The runtime binds a controller to the hand.
+    bool active = false;
+    bool select = false;
+    bool menu = false;
+    /// Where it is held, and where it points from (OpenXR's grip and aim).
+    SpacePose grip;
+    SpacePose aim;
+};
+
 /// A presentation frame, from `begin` to `end`.
 struct SessionFrame {
     /// A frame was waited for and begun: `end` follows.
@@ -73,6 +99,10 @@ struct SessionFrame {
     /// frame's picture is placed into (`render::FrameTarget::images`)
     /// between `begin` and `end`, when shown.
     std::vector<std::uint64_t> images;
+    /// The left hand's controller, then the right's, at the frame's
+    /// display time; read while the session has the input focus, else
+    /// neither active (the runtime keeps the input for itself).
+    std::array<Hand, 2> hands;
 };
 
 struct SessionStatistics {
@@ -83,6 +113,10 @@ struct SessionStatistics {
     std::uint64_t framesTracked = 0;
     /// Frames ended with their views drawn and submitted.
     std::uint64_t framesSubmitted = 0;
+    /// Frames begun with the input focus, whose hands were read, and those
+    /// in which a hand's grip was located.
+    std::uint64_t framesHandsRead = 0;
+    std::uint64_t framesHandLocated = 0;
 };
 
 class Session {

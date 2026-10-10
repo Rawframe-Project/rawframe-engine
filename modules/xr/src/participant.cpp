@@ -1,5 +1,7 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
+#include "rawframe/input/feed.h"
+#include "rawframe/input_kest/sources.h"
 #include "rawframe/render/headset.h"
 #include "rawframe/view/headset.h"
 #include "rawframe/xr/registrar.h"
@@ -21,7 +23,28 @@ constexpr diagnostics::EventIdentity kState{"xr", "xr_session_state"};
 constexpr diagnostics::EventIdentity kFailed{"xr", "xr_failed"};
 constexpr diagnostics::EventIdentity kSummary{"xr", "xr_summary"};
 constexpr std::string_view kProvided[] = {render::kHeadset.name, view::kHeadsetEyes.name};
+constexpr std::string_view kMayUse[] = {input_kest::kFeed.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
+
+/// The headset's controllers, both hands one device of the controller
+/// class (D596), numbered far past the window's devices (its keyboard,
+/// mouse, and touch screen, then its gamepads counted up from four).
+constexpr input::DeviceId kHands{0x7852'0000};
+
+/// Each hand's controls, the left hand's first.
+struct HandControls {
+    input::Control select;
+    input::Control menu;
+    input::Control grip;
+    input::Control aim;
+};
+
+HandControls handControls(std::string_view side) noexcept {
+    const auto kNamed = [side](std::string_view control) {
+        return *input::controlNamed(input::DeviceClass::Controller, std::string{control} + "_" + std::string{side});
+    };
+    return {.select = kNamed("select"), .menu = kNamed("menu"), .grip = kNamed("grip"), .aim = kNamed("aim")};
+}
 
 constexpr std::array<std::string_view, 9> kStateNames = {
     "unknown", "idle", "ready", "synchronized", "visible", "focused", "stopping", "loss_pending", "exiting"};
@@ -47,6 +70,9 @@ public:
                                                       .error()};
         }
         asked_ = true;
+        if (context.has(input_kest::kFeed.name)) {
+            RAWFRAME_TRY_ASSIGN(feed_, context.capability(input_kest::kFeed));
+        }
         auto runtime = Runtime::open({});
         if (!runtime.has_value()) {
             // Played flat: the headset is not present.
@@ -92,6 +118,9 @@ public:
                       diagnostics::field("framesLocated", totals_.framesLocated),
                       diagnostics::field("framesTracked", totals_.framesTracked),
                       diagnostics::field("framesSubmitted", totals_.framesSubmitted),
+                      diagnostics::field("framesHandsRead", totals_.framesHandsRead),
+                      diagnostics::field("framesHandLocated", totals_.framesHandLocated),
+                      diagnostics::field("controllerEvents", controllerEvents_),
                       diagnostics::field("failed", failed_)});
     }
 
@@ -165,6 +194,7 @@ public:
 
     void close() noexcept override {
         eyes_.tell({});
+        letGo();
         if (session_ == nullptr) {
             return;
         }
@@ -175,6 +205,8 @@ public:
         totals_.framesLocated += kSession.framesLocated;
         totals_.framesTracked += kSession.framesTracked;
         totals_.framesSubmitted += kSession.framesSubmitted;
+        totals_.framesHandsRead += kSession.framesHandsRead;
+        totals_.framesHandLocated += kSession.framesHandLocated;
         session_.reset();
         told_ = SessionState::Unknown;
     }
@@ -202,6 +234,7 @@ private:
         if (!frame->begun) {
             return;
         }
+        feedHands(frame->hands);
         if (!frame->shown || frame->views.size() != session_->images().size()) {
             if (const result::Status kEnded = session_->end(false); !kEnded.has_value()) {
                 fail(kEnded.error());
@@ -223,6 +256,67 @@ private:
                             .height = session_->images()[at].height});
         }
         eyes_.tell(eyes);
+    }
+
+    /// The hands, as the client's controller device (D596): connected to
+    /// the feed with the first frame, its buttons told as they change, its
+    /// poses each frame they are located and once as they are lost. Hands
+    /// the runtime does not bind, or a session without the input focus,
+    /// hold nothing.
+    void feedHands(const std::array<Hand, 2>& hands) noexcept {
+        if (feed_ == nullptr) {
+            return;
+        }
+        if (!connected_) {
+            feed_->connect(kHands, input::DeviceClass::Controller);
+            connected_ = true;
+        }
+        for (std::size_t at = 0; at < hands.size(); ++at) {
+            Hand hand = hands[at];
+            if (!hand.active) {
+                hand = {};
+            }
+            Hand& fed = fed_[at];
+            const HandControls& kControls = controls_[at];
+            button(kControls.select, hand.select, fed.select);
+            button(kControls.menu, hand.menu, fed.menu);
+            pose(kControls.grip, hand.grip, fed.grip);
+            pose(kControls.aim, hand.aim, fed.aim);
+        }
+    }
+
+    void button(input::Control control, bool held, bool& fed) noexcept {
+        if (held == fed) {
+            return;
+        }
+        fed = held;
+        feed_->submit({.device = kHands, .control = control, .x = held ? 1.0F : 0.0F});
+        ++controllerEvents_;
+    }
+
+    void pose(input::Control control, const SpacePose& at, SpacePose& fed) noexcept {
+        if (!at.located && !fed.located) {
+            return;
+        }
+        fed = at;
+        feed_->submit({.device = kHands,
+                       .control = control,
+                       .pose = {.position = at.position,
+                                .orientation = at.orientation,
+                                .located = at.located,
+                                .tracked = at.tracked}});
+        ++controllerEvents_;
+    }
+
+    /// The session's hands are gone: what they held is let go, and the
+    /// device leaves the feed.
+    void letGo() noexcept {
+        if (!connected_) {
+            return;
+        }
+        feedHands({});
+        feed_->disconnect(kHands);
+        connected_ = false;
     }
 
     /// The session's state, said when it changed.
@@ -248,6 +342,13 @@ private:
     }
 
     view::HeadsetEyes eyes_;
+    /// The client's devices, where its host lends them, and what the hands
+    /// last told them.
+    input::Feed* feed_ = nullptr;
+    bool connected_ = false;
+    std::array<Hand, 2> fed_{};
+    std::array<HandControls, 2> controls_{handControls("left"), handControls("right")};
+    std::uint64_t controllerEvents_ = 0;
     /// This iteration's frame begun and not yet ended, and its images.
     bool open_ = false;
     std::vector<std::uint64_t> images_;
@@ -277,6 +378,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .factory = &make,
         .scope = composition::LifetimeScope::Runtime,
         .providedCapabilities = kProvided,
+        .optionalCapabilities = kMayUse,
         .eligibility = {.roles = ~kServer},
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
         .observabilityIdentity = "xr.headset",

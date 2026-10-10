@@ -3,6 +3,8 @@
 #include "openxr.h"
 
 #include <algorithm>
+#include <string>
+#include <tuple>
 #include <utility>
 
 namespace rawframe::xr {
@@ -19,6 +21,34 @@ struct Chain {
 /// How long acquiring a view's image may wait for the runtime: a second,
 /// far past any frame.
 constexpr XrDuration kImageWait = 1'000'000'000;
+
+constexpr std::array<std::string_view, 2> kHandPaths = {"/user/hand/left", "/user/hand/right"};
+
+/// `name` into one of OpenXR's fixed name fields, which stay terminated.
+template <std::size_t N> void named(char (&into)[N], std::string_view name) {
+    std::ranges::copy(name.substr(0, N - 1), into);
+}
+
+/// Where `space` is in `base` at `time`.
+SpacePose where(XrSpace space, XrSpace base, XrTime time, XrResult& outcome) {
+    XrSpaceLocation location{XR_TYPE_SPACE_LOCATION};
+    outcome = xrLocateSpace(space, base, time, &location);
+    constexpr XrSpaceLocationFlags kValid =
+        XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+    constexpr XrSpaceLocationFlags kTracked =
+        XR_SPACE_LOCATION_POSITION_TRACKED_BIT | XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT;
+    const bool kLocated = XR_SUCCEEDED(outcome) && (location.locationFlags & kValid) == kValid;
+    if (!kLocated) {
+        return {};
+    }
+    return {.position = {location.pose.position.x, location.pose.position.y, location.pose.position.z},
+            .orientation = {location.pose.orientation.x,
+                            location.pose.orientation.y,
+                            location.pose.orientation.z,
+                            location.pose.orientation.w},
+            .located = true,
+            .tracked = (location.locationFlags & kTracked) == kTracked};
+}
 
 } // namespace
 
@@ -39,6 +69,15 @@ struct Session::State {
     bool acquired = false;
     XrTime displayTime = 0;
     std::vector<XrView> located;
+    /// The hands' actions (D596): their set, the hands' paths, and each
+    /// hand's grip and aim spaces.
+    XrActionSet actions = XR_NULL_HANDLE;
+    XrAction select = XR_NULL_HANDLE;
+    XrAction menu = XR_NULL_HANDLE;
+    XrAction grip = XR_NULL_HANDLE;
+    XrAction aim = XR_NULL_HANDLE;
+    std::array<XrPath, 2> hands{};
+    std::array<std::array<XrSpace, 2>, 2> spaces{};
 
     State() = default;
     State(const State&) = delete;
@@ -54,11 +93,22 @@ struct Session::State {
                 xrDestroySwapchain(chain.swapchain);
             }
         }
+        for (const auto& kHand : spaces) {
+            for (const XrSpace kSpace : kHand) {
+                if (kSpace != XR_NULL_HANDLE) {
+                    xrDestroySpace(kSpace);
+                }
+            }
+        }
         if (local != XR_NULL_HANDLE) {
             xrDestroySpace(local);
         }
         if (session != XR_NULL_HANDLE) {
             xrDestroySession(session);
+        }
+        // The set's actions go with it.
+        if (actions != XR_NULL_HANDLE) {
+            xrDestroyActionSet(actions);
         }
     }
 
@@ -161,6 +211,130 @@ struct Session::State {
         return {};
     }
 
+    /// The hands' actions, suggested for the simple controller, their
+    /// spaces made, and the set attached to the session.
+    result::Status makeActions() {
+        XrActionSetCreateInfo set{XR_TYPE_ACTION_SET_CREATE_INFO};
+        named(set.actionSetName, "rawframe");
+        named(set.localizedActionSetName, "Rawframe");
+        if (const XrResult kMade = xrCreateActionSet(runtime->instance, &set, &actions); XR_FAILED(kMade)) {
+            actions = XR_NULL_HANDLE;
+            return failed("the hands' action set could not be made", kMade);
+        }
+        for (std::size_t hand = 0; hand < hands.size(); ++hand) {
+            if (const XrResult kNamed = xrStringToPath(runtime->instance, kHandPaths[hand].data(), &hands[hand]);
+                XR_FAILED(kNamed)) {
+                return failed("a hand's path could not be named", kNamed);
+            }
+        }
+        for (const auto& [kAction, kName, kType] : {std::tuple{&select, "select", XR_ACTION_TYPE_BOOLEAN_INPUT},
+                                                    std::tuple{&menu, "menu", XR_ACTION_TYPE_BOOLEAN_INPUT},
+                                                    std::tuple{&grip, "grip", XR_ACTION_TYPE_POSE_INPUT},
+                                                    std::tuple{&aim, "aim", XR_ACTION_TYPE_POSE_INPUT}}) {
+            XrActionCreateInfo create{XR_TYPE_ACTION_CREATE_INFO};
+            named(create.actionName, kName);
+            named(create.localizedActionName, kName);
+            create.actionType = kType;
+            create.countSubactionPaths = static_cast<std::uint32_t>(hands.size());
+            create.subactionPaths = hands.data();
+            if (const XrResult kMade = xrCreateAction(actions, &create, kAction); XR_FAILED(kMade)) {
+                return failed("a hand's action could not be made", kMade);
+            }
+        }
+        std::vector<XrActionSuggestedBinding> bindings;
+        for (const std::string_view kHand : kHandPaths) {
+            for (const auto& [kAction, kInput] : {std::pair{select, "/input/select/click"},
+                                                  std::pair{menu, "/input/menu/click"},
+                                                  std::pair{grip, "/input/grip/pose"},
+                                                  std::pair{aim, "/input/aim/pose"}}) {
+                XrActionSuggestedBinding& binding =
+                    bindings.emplace_back(XrActionSuggestedBinding{kAction, XR_NULL_PATH});
+                const std::string kPath = std::string{kHand} + kInput;
+                if (const XrResult kNamed = xrStringToPath(runtime->instance, kPath.c_str(), &binding.binding);
+                    XR_FAILED(kNamed)) {
+                    return failed("a controller's input could not be named", kNamed);
+                }
+            }
+        }
+        XrInteractionProfileSuggestedBinding suggested{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
+        if (const XrResult kNamed = xrStringToPath(
+                runtime->instance, "/interaction_profiles/khr/simple_controller", &suggested.interactionProfile);
+            XR_FAILED(kNamed)) {
+            return failed("the simple controller could not be named", kNamed);
+        }
+        suggested.countSuggestedBindings = static_cast<std::uint32_t>(bindings.size());
+        suggested.suggestedBindings = bindings.data();
+        if (const XrResult kSuggested = xrSuggestInteractionProfileBindings(runtime->instance, &suggested);
+            XR_FAILED(kSuggested)) {
+            return failed("the simple controller's bindings were refused", kSuggested);
+        }
+        for (std::size_t hand = 0; hand < hands.size(); ++hand) {
+            for (const auto& [kAt, kAction] : {std::pair{0, grip}, std::pair{1, aim}}) {
+                XrActionSpaceCreateInfo space{XR_TYPE_ACTION_SPACE_CREATE_INFO};
+                space.action = kAction;
+                space.subactionPath = hands[hand];
+                space.poseInActionSpace.orientation.w = 1;
+                XrSpace& made = spaces[hand][static_cast<std::size_t>(kAt)];
+                if (const XrResult kMade = xrCreateActionSpace(session, &space, &made); XR_FAILED(kMade)) {
+                    made = XR_NULL_HANDLE;
+                    return failed("a hand's space could not be made", kMade);
+                }
+            }
+        }
+        XrSessionActionSetsAttachInfo attach{XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
+        attach.countActionSets = 1;
+        attach.actionSets = &actions;
+        if (const XrResult kAttached = xrAttachSessionActionSets(session, &attach); XR_FAILED(kAttached)) {
+            return failed("the hands' actions could not be attached", kAttached);
+        }
+        return {};
+    }
+
+    /// Both hands at `time`, their actions synchronized: neither active
+    /// unless the session has the input focus.
+    result::Result<std::array<Hand, 2>> readHands(XrTime time) {
+        std::array<Hand, 2> read;
+        const XrActiveActionSet kActive{actions, XR_NULL_PATH};
+        XrActionsSyncInfo sync{XR_TYPE_ACTIONS_SYNC_INFO};
+        sync.countActiveActionSets = 1;
+        sync.activeActionSets = &kActive;
+        const XrResult kSynced = xrSyncActions(session, &sync);
+        if (XR_FAILED(kSynced)) {
+            return failed("the hands' actions could not be read", kSynced);
+        }
+        if (kSynced == XR_SESSION_NOT_FOCUSED) {
+            return read;
+        }
+        for (std::size_t at = 0; at < read.size(); ++at) {
+            Hand& hand = read[at];
+            XrActionStateGetInfo get{XR_TYPE_ACTION_STATE_GET_INFO};
+            get.subactionPath = hands[at];
+            get.action = grip;
+            XrActionStatePose pose{XR_TYPE_ACTION_STATE_POSE};
+            if (const XrResult kRead = xrGetActionStatePose(session, &get, &pose); XR_FAILED(kRead)) {
+                return failed("a hand's pose could not be read", kRead);
+            }
+            hand.active = pose.isActive == XR_TRUE;
+            for (const auto& [kAction, kInto] : {std::pair{select, &hand.select}, std::pair{menu, &hand.menu}}) {
+                get.action = kAction;
+                XrActionStateBoolean button{XR_TYPE_ACTION_STATE_BOOLEAN};
+                if (const XrResult kRead = xrGetActionStateBoolean(session, &get, &button); XR_FAILED(kRead)) {
+                    return failed("a hand's button could not be read", kRead);
+                }
+                *kInto = button.isActive == XR_TRUE && button.currentState == XR_TRUE;
+            }
+            XrResult outcome = XR_SUCCESS;
+            hand.grip = where(spaces[at][0], local, time, outcome);
+            if (XR_SUCCEEDED(outcome)) {
+                hand.aim = where(spaces[at][1], local, time, outcome);
+            }
+            if (XR_FAILED(outcome)) {
+                return failed("a hand could not be located", outcome);
+            }
+        }
+        return read;
+    }
+
     /// The views at `time`, in the local space.
     result::Result<std::vector<ViewPose>> locate(XrTime time) {
         XrViewLocateInfo info{XR_TYPE_VIEW_LOCATE_INFO};
@@ -252,6 +426,7 @@ result::Result<std::unique_ptr<Session>> Session::create(Runtime& runtime, rende
         return failed("the session's local space could not be made", kMade);
     }
     RAWFRAME_TRY(state->makeChains());
+    RAWFRAME_TRY(state->makeActions());
     return std::unique_ptr<Session>{new Session{std::move(state)}};
 }
 
@@ -276,6 +451,15 @@ result::Result<SessionFrame> Session::begin() {
     state.displayTime = frame.predictedDisplayTime;
     made.begun = true;
     made.shown = frame.shouldRender == XR_TRUE;
+    if (state.state == SessionState::Focused) {
+        RAWFRAME_TRY_ASSIGN(made.hands, state.readHands(frame.predictedDisplayTime));
+        ++state.statistics.framesHandsRead;
+        if (std::ranges::any_of(made.hands, [](const Hand& hand) {
+                return hand.grip.located;
+            })) {
+            ++state.statistics.framesHandLocated;
+        }
+    }
     if (made.shown) {
         RAWFRAME_TRY_ASSIGN(made.views, state.locate(frame.predictedDisplayTime));
         RAWFRAME_TRY_ASSIGN(made.images, state.acquire());
