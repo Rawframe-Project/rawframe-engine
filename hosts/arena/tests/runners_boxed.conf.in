@@ -20,6 +20,10 @@ render.read_every = 8
 render.capture = @CAPTURE@
 # What is checked is what is drawn, not how fast a loaded machine ticks:
 # the World may fall behind without the server refusing the bots, as a
-# World a second behind refuses players (D212, D516).
+# World a second behind refuses players (D212, D516). Nor how fast it stops:
+# a software rasterizer starved by a full check took 5.2 s to finish its
+# frames as the device went, past the default budget, and the run ended as
+# a shutdown timeout before the picture was looked at (D615).
 world.degraded_ms = 600000
 world.overload_ms = 0
+host.shutdown_budget_ms = 30000
