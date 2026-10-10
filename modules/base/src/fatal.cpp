@@ -21,6 +21,15 @@
 #include <pthread.h>
 #endif
 #endif
+#if !defined(_WIN32) && !defined(__wasm__)
+#include <csignal>
+#include <unwind.h>
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#else
+#include <link.h>
+#endif
+#endif
 
 namespace rawframe::base {
 
@@ -70,6 +79,16 @@ struct BoundedText {
         const std::size_t kCount = kWanted < kSpace ? kWanted : kSpace;
         std::copy_n(text.begin(), kCount, storage.begin() + static_cast<std::ptrdiff_t>(used));
         used += kCount;
+    }
+
+    /// `value` as sixteen hexadecimal digits after "0x".
+    void appendHex(std::uint64_t value) noexcept {
+        std::array<char, 18> digits{'0', 'x'};
+        for (std::size_t at = 0; at < 16; ++at) {
+            const auto kNibble = static_cast<unsigned>((value >> ((15 - at) * 4)) & 0xFU);
+            digits.at(2 + at) = static_cast<char>(kNibble < 10 ? '0' + kNibble : 'a' + kNibble - 10);
+        }
+        append(std::string_view{digits.data(), digits.size()});
     }
 
     void appendDecimal(std::uint64_t value) noexcept {
@@ -194,7 +213,184 @@ void defaultFatalHandler(const FatalRecord& record) noexcept {
     writeStandardError(std::string_view{text.storage.data(), text.used});
 }
 
+/// The return addresses a crash record holds at most.
+constexpr std::size_t kCrashFrames = 32;
+
+/// A crash record's frames, gathered by the platform's unwinder or its stack
+/// walk, never by anything that allocates.
+struct CrashFrames {
+    std::array<std::uint64_t, kCrashFrames> addresses{};
+    std::size_t count = 0;
+};
+
+/// A crash's minimal bounded evidence (ADR-0017, D617), written before the
+/// process ends as it would have.
+void writeCrashRecord(std::string_view what,
+                      std::uint64_t code,
+                      std::uint64_t address,
+                      std::uint64_t program,
+                      const CrashFrames& frames) noexcept {
+    BoundedText text;
+    text.append("rawframe crash: ");
+    text.append(what, kMaximumFatalTextBytes);
+    text.append("\n  code: ");
+    text.appendDecimal(code);
+    text.append("\n  address: ");
+    text.appendHex(address);
+    text.append("\n  thread: ");
+    text.appendDecimal(readThreadIdentity());
+    text.append("\n  program: ");
+    text.appendHex(program);
+    text.append("\n  frames:");
+    for (std::size_t at = 0; at < frames.count; ++at) {
+        text.append(" ", 1);
+        text.appendHex(frames.addresses.at(at));
+    }
+    text.append("\n", 1);
+    writeStandardError(std::string_view{text.storage.data(), text.used});
+}
+
+#if !defined(_WIN32) && !defined(__wasm__)
+
+/// The faults a crash record is written for, the abort last.
+constexpr std::array<int, 5> kCrashSignals = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT};
+
+// The crash handler's state, which a signal handler can reach in no other
+// way, as the fatal path's (SPEC-0046): the handlers it replaced, the
+// program's load address, and the stack it runs on when the thread's own
+// overflowed. Each is set once, by `installCrashCapture`, before any crash.
+//
+// NOLINTBEGIN(cppcoreguidelines-avoid-non-const-global-variables)
+constinit std::array<struct sigaction, kCrashSignals.size()> crashPrevious{};
+constinit std::uint64_t crashProgram = 0;
+constinit std::atomic<bool> crashInstalled{false};
+alignas(16) constinit std::array<char, 64 * 1024> crashStack{};
+// NOLINTEND(cppcoreguidelines-avoid-non-const-global-variables)
+
+[[nodiscard]] std::string_view signalText(int signal) noexcept {
+    switch (signal) {
+    case SIGSEGV:
+        return "SIGSEGV";
+    case SIGBUS:
+        return "SIGBUS";
+    case SIGILL:
+        return "SIGILL";
+    case SIGFPE:
+        return "SIGFPE";
+    case SIGABRT:
+        return "SIGABRT";
+    default:
+        return "signal";
+    }
+}
+
+_Unwind_Reason_Code collectFrame(struct _Unwind_Context* context, void* into) {
+    auto& frames = *static_cast<CrashFrames*>(into);
+    if (frames.count >= frames.addresses.size()) {
+        return _URC_END_OF_STACK;
+    }
+    frames.addresses.at(frames.count) = static_cast<std::uint64_t>(_Unwind_GetIP(context));
+    ++frames.count;
+    return _URC_NO_REASON;
+}
+
+void crashed(int signal, siginfo_t* info, void*) {
+    const auto kSlot = static_cast<std::size_t>(std::ranges::find(kCrashSignals, signal) - kCrashSignals.begin());
+    // The fatal path's own abort has said everything already, and a fault in
+    // this handler says nothing more.
+    if (!fatalPathEntered.exchange(true, std::memory_order_acq_rel)) {
+        CrashFrames frames;
+        _Unwind_Backtrace(&collectFrame, &frames);
+        writeCrashRecord(signalText(signal),
+                         static_cast<std::uint64_t>(signal),
+                         info != nullptr ? reinterpret_cast<std::uint64_t>(info->si_addr) : 0,
+                         crashProgram,
+                         frames);
+    }
+    // The process ends as it would have: the fault runs again under the
+    // handler before this one, a sanitizer's or the default; an abort is
+    // raised again.
+    if (kSlot < crashPrevious.size()) {
+        sigaction(signal, &crashPrevious.at(kSlot), nullptr);
+    }
+    if (signal == SIGABRT || (info != nullptr && info->si_code <= 0)) {
+        static_cast<void>(raise(signal));
+    }
+}
+
+#if !defined(__APPLE__)
+int firstObject(struct dl_phdr_info* info, std::size_t, void* into) {
+    *static_cast<std::uint64_t*>(into) = static_cast<std::uint64_t>(info->dlpi_addr);
+    return 1;
+}
+#endif
+
+#endif
+
+#ifdef _WIN32
+LONG WINAPI crashedOnException(EXCEPTION_POINTERS* exception) {
+    if (!fatalPathEntered.exchange(true, std::memory_order_acq_rel) && exception != nullptr &&
+        exception->ExceptionRecord != nullptr) {
+        CrashFrames frames;
+        std::array<void*, kCrashFrames> captured{};
+        const USHORT kCaptured =
+            RtlCaptureStackBackTrace(0, static_cast<DWORD>(captured.size()), captured.data(), nullptr);
+        for (USHORT at = 0; at < kCaptured; ++at) {
+            frames.addresses.at(at) = reinterpret_cast<std::uint64_t>(captured.at(at));
+        }
+        frames.count = kCaptured;
+        writeCrashRecord("exception",
+                         static_cast<std::uint64_t>(exception->ExceptionRecord->ExceptionCode),
+                         reinterpret_cast<std::uint64_t>(exception->ExceptionRecord->ExceptionAddress),
+                         reinterpret_cast<std::uint64_t>(GetModuleHandleW(nullptr)),
+                         frames);
+    }
+    // Windows ends the process as it would have, its error reporting too.
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 } // namespace
+
+bool installCrashCapture() noexcept {
+#if defined(_WIN32)
+    static constinit std::atomic<bool> installed{false};
+    if (installed.exchange(true)) {
+        return false;
+    }
+    SetUnhandledExceptionFilter(&crashedOnException);
+    return true;
+#elif defined(__wasm__)
+    return false;
+#else
+    if (crashInstalled.exchange(true)) {
+        return false;
+    }
+#if defined(__APPLE__)
+    crashProgram = reinterpret_cast<std::uint64_t>(_dyld_get_image_header(0));
+#else
+    dl_iterate_phdr(&firstObject, &crashProgram);
+#endif
+    // The unwinder loads what it needs on its first walk, which a signal
+    // handler may not: it walks once here.
+    CrashFrames warm;
+    _Unwind_Backtrace(&collectFrame, &warm);
+    // A thread whose stack overflowed has none left for the handler; this
+    // one gets a stack of its own (other threads' overflows end unrecorded).
+    stack_t alternate{};
+    alternate.ss_sp = crashStack.data();
+    alternate.ss_size = crashStack.size();
+    static_cast<void>(sigaltstack(&alternate, nullptr));
+    struct sigaction action{};
+    action.sa_sigaction = &crashed;
+    action.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sigemptyset(&action.sa_mask);
+    for (std::size_t at = 0; at < kCrashSignals.size(); ++at) {
+        sigaction(kCrashSignals.at(at), &action, &crashPrevious.at(at));
+    }
+    return true;
+#endif
+}
 
 bool installFatalHandler(FatalHandler handler) noexcept {
     if (handler == nullptr) {

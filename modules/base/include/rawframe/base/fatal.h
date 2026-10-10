@@ -46,6 +46,18 @@ void freezeFatalHandler() noexcept;
 /// to it, not because ordinary code should call it.
 [[noreturn]] void raiseFatal(const FatalRecord& record) noexcept;
 
+/// Installs the platform crash handler ADR-0017 admits (D617): a fault that
+/// ends the process (a bad address, a bus error, an illegal instruction, an
+/// arithmetic fault, an abort the fatal path did not raise; on Windows an
+/// unhandled exception) first writes minimal bounded evidence to standard
+/// error: what it was, its address, the thread, the program's load address,
+/// and up to 32 return addresses, which the program's symbols name. The
+/// process then ends as it would have: through the handler before this one
+/// (a sanitizer's), else the platform's default, its core dump and exit status
+/// kept. A composition root calls it once; false where the platform has no
+/// such handler (WebAssembly) or one is already installed.
+[[nodiscard]] bool installCrashCapture() noexcept;
+
 /// The default handler's message and condition truncation limit, in bytes.
 inline constexpr std::size_t kMaximumFatalTextBytes = 256;
 

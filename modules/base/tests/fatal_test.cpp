@@ -1,5 +1,7 @@
 // The fatal path end to end: each scenario runs in a child process, because the
-// path never returns, and checks how the child ended and what it wrote.
+// path never returns, and checks how the child ended and what it wrote. The
+// crash handler too (D617): a fault leaves its bounded record, and the process
+// still ends as it would have.
 
 #include "rawframe/base/assert.h"
 #include "rawframe/base/fatal.h"
@@ -8,6 +10,10 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 using rawframe::base::FatalReason;
 using rawframe::base::FatalRecord;
@@ -96,3 +102,51 @@ RAWFRAME_TEST(AFailureInsideTheHandlerDoesNotRecurse) {
     RAWFRAME_EXPECT(kOutcome.signalled && kOutcome.signal == SIGABRT);
     RAWFRAME_EXPECT(contains(kOutcome.standardError, "FatalPathReentered"));
 }
+
+RAWFRAME_TEST(AFaultLeavesACrashRecordAndEndsTheProcessAsItWould) {
+    const auto kOutcome = runInChild([] {
+#ifdef _WIN32
+        // No error box for the child's fault: the run is a test's.
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+#endif
+        static_cast<void>(rawframe::base::installCrashCapture());
+        // A second installation is refused, and changes nothing.
+        if (rawframe::base::installCrashCapture()) {
+            std::_Exit(1);
+        }
+        volatile int* volatile nowhere = nullptr;
+        *nowhere = 7;
+    });
+#ifdef _WIN32
+    RAWFRAME_EXPECT(kOutcome.exitCode == static_cast<int>(0xC0000005U));
+    RAWFRAME_EXPECT(contains(kOutcome.standardError, "rawframe crash: exception\n  code: 3221225477\n"));
+#else
+    // Ended by the fault, or by a sanitizer's report of it, the handler
+    // before this one.
+    RAWFRAME_EXPECT((kOutcome.signalled && kOutcome.signal == SIGSEGV) ||
+                    (!kOutcome.signalled && kOutcome.exitCode != 0));
+    RAWFRAME_EXPECT(contains(kOutcome.standardError, "rawframe crash: SIGSEGV\n  code: "));
+    RAWFRAME_EXPECT(contains(kOutcome.standardError, "\n  address: 0x0000000000000000\n  thread: "));
+#endif
+    RAWFRAME_EXPECT(contains(kOutcome.standardError, "\n  program: 0x"));
+    RAWFRAME_EXPECT(contains(kOutcome.standardError, "\n  frames: 0x"));
+}
+
+#ifndef _WIN32
+RAWFRAME_TEST(AnAbortTheFatalPathDidNotRaiseLeavesACrashRecord) {
+    const auto kOutcome = runInChild([] {
+        static_cast<void>(rawframe::base::installCrashCapture());
+        std::abort();
+    });
+    RAWFRAME_EXPECT(kOutcome.signalled && kOutcome.signal == SIGABRT);
+    RAWFRAME_EXPECT(contains(kOutcome.standardError, "rawframe crash: SIGABRT\n"));
+    // The fatal path's own abort says what it says once.
+    const auto kPanicked = runInChild([] {
+        static_cast<void>(rawframe::base::installCrashCapture());
+        RAWFRAME_PANIC("said once");
+    });
+    RAWFRAME_EXPECT(kPanicked.signalled && kPanicked.signal == SIGABRT);
+    RAWFRAME_EXPECT(contains(kPanicked.standardError, "message: said once") &&
+                    !contains(kPanicked.standardError, "rawframe crash"));
+}
+#endif

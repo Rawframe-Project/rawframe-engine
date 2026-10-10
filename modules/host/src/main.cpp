@@ -2,6 +2,7 @@
 
 #if RAWFRAME_THREADS && RAWFRAME_FILE_SYSTEM
 
+#include "rawframe/base/fatal.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/host/host.h"
 
@@ -119,6 +120,9 @@ int hostMain(int argc, char** argv, const ProcessEntry& entry) {
         return exitCode(HostExit::InvalidLaunchDescriptor);
     }
     installStopBridge();
+    // A fault leaves its bounded record on standard error before the process
+    // ends as it would have (ADR-0017, D617).
+    static_cast<void>(base::installCrashCapture());
     const HostRequest kRequest{
         .role = entry.role,
         .registrars = entry.registrars,
