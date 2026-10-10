@@ -341,6 +341,7 @@ public:
                              "assistive technology cannot read the UI",
                              {diagnostics::field("reason", std::string{kSeated.error().description()})});
             } else if (seat_->access() != nullptr) {
+                readSaid_ = true;
                 emitter_.log(diagnostics::Severity::Info, kAccessible, "assistive technology reads the UI", {});
             }
         }
@@ -491,6 +492,13 @@ public:
         // What screen readers asked since the last frame, done as
         // navigation does it; a press waits for the players' input (D572).
         if (seat_ != nullptr) {
+            // An access made once a client asks, as Android's, UI
+            // Automation's, AppKit's, and UIKit's are, said as it comes
+            // (D588).
+            if (!readSaid_ && seat_->access() != nullptr) {
+                readSaid_ = true;
+                emitter_.log(diagnostics::Severity::Info, kAccessible, "assistive technology reads the UI", {});
+            }
             for (const ui::AccessRequest& kRequest : seat_->takeRequests()) {
                 if (const std::optional<std::int64_t> kPressed = ui_->ask(kRequest); kPressed.has_value()) {
                     spoken_ = kPressed;
@@ -697,6 +705,8 @@ private:
     /// the press code of a node a screen reader pressed, not yet taken by
     /// the players' input (D572).
     ui::AccessSeat* seat_ = nullptr;
+    /// That assistive technology reads the UI has been said.
+    bool readSaid_ = false;
     std::optional<std::int64_t> spoken_;
     std::unique_ptr<WorldUi> ui_;
     std::vector<world_kest::GameRegion> regions_;
