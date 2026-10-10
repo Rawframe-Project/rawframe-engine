@@ -103,7 +103,9 @@ jobs:
       # its configuration from its own bundle.
       - name: Play exported Runners in the simulator
         if: always() && env.RAWFRAME_IOS_DEVICE != ''
-        run: tools/ios_play_exported.sh out/ios-simulator
+        # Touched in the screen's right half, Runners' button there, for
+        # whether a touch reaches a client that no reader reads (D588).
+        run: RAWFRAME_IOS_TOUCH="300 500" tools/ios_play_exported.sh out/ios-simulator
       # Stalls exported and played, its UI read through UIAccessibility as
       # a screen reader reads it (D588): the purse a button named by its
       # coins, and the client saying assistive technology reads it. The

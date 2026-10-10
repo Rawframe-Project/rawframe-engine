@@ -13,6 +13,8 @@
 #   tools/ios_play_exported.sh <build tree> [<game directory>] [<client iterations>]
 #
 # RAWFRAME_IOS_DEVICE names the simulator, the booted one when unset.
+# RAWFRAME_IOS_TOUCH, "<x> <y>" in points, has idb touch there three times
+# once the client is admitted, for what its touches reach (D588).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -54,6 +56,17 @@ documents="$(xcrun simctl get_app_container "$device" "$id" data)/Documents"
 mkdir -p "$documents"
 rm -f "$documents/client.log" "$documents/client.conf"
 xcrun simctl launch "$device" "$id" >/dev/null
+if [ -n "${RAWFRAME_IOS_TOUCH:-}" ]; then
+    for _ in $(seq 120); do
+        grep -q '"code":"bots_admitted"' "$documents/client.log" 2>/dev/null && break
+        sleep 1
+    done
+    read -r touch_x touch_y <<<"$RAWFRAME_IOS_TOUCH"
+    for _ in 1 2 3; do
+        idb ui tap "$touch_x" "$touch_y" --udid "$device" && echo "touched $touch_x $touch_y"
+        sleep 1
+    done
+fi
 for _ in $(seq 180); do
     grep -q '"code":"stopped"' "$documents/client.log" 2>/dev/null && break
     sleep 1
