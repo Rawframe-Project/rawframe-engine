@@ -408,6 +408,7 @@ static void PlaceChild(const muiSolver* solver, const muiLayoutStyle* container,
     // A height neither given nor set by both insets is its content's,
     // unless its aspect ratio gives it.
     input.contentHeight = !fixedHeight && style->sizing.aspectRatio <= 0.0f;
+    input.ratioPercent = !fixedHeight && style->sizing.aspectRatio > 0.0f;
     (void)solver->solve(solver, child, &input, true);
 }
 

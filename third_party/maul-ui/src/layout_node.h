@@ -38,6 +38,12 @@ typedef struct muiSizingInput
     // automatic minimum for a ratio item reads its content's width
     // (section 4.5, as Chrome).
     bool contentOnly;
+    // Whether percentages below resolve against the height the node's
+    // aspect ratio gives from its exact width, before its content floor,
+    // not against its height: set for a ratio box whose container did not
+    // fix its height (a root, an absolute box, a flex row's item not
+    // stretched, a column stretched in a row), as browsers do.
+    bool ratioPercent;
 } muiSizingInput;
 
 typedef struct muiCacheEntry
@@ -74,6 +80,7 @@ typedef struct muiLayoutCache
     bool finalValid : 1;
     bool finalRtl : 1;
     bool finalContentHeight : 1;
+    bool finalRatioPercent : 1;
     muiSize finalSize;
 } muiLayoutCache;
 
@@ -103,14 +110,16 @@ typedef struct muiFlexItemState
     // The last clamp's effect: 1 raised to the minimum, -1 lowered to the
     // maximum, 0 neither.
     int8_t violation;
-    bool frozen;
+    bool frozen : 1;
     // The automatic minimum is not computed yet: it only matters when the
     // line shrinks, as a content-based base is never below it.
-    bool minimumPending;
+    bool minimumPending : 1;
+    // Stretching changed its cross size (section 9.4 step 11).
+    bool resized : 1;
     // Set on the first child of each line: whether any of its children
     // align by baseline, how many it holds, its cross size and its offset
     // from the container's cross start, in the direction lines follow.
-    bool lineBaselines;
+    bool lineBaselines : 1;
     uint32_t lineCount;
     float lineCross;
     float lineOffset;

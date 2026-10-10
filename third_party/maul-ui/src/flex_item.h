@@ -51,6 +51,9 @@ typedef struct muiFlexFrame
     uint32_t lineCount;
     float innerMain;
     float innerCross;
+    // Where a wrapping column with a ratio breaks its lines: the ratio's
+    // inner height, before its content floor; negative otherwise.
+    float ratioBreak;
 } muiFlexFrame;
 
 static inline muiSizingInput muiFlexChildInput(const muiFlexFrame* frame, muiMeasureAxis main,
@@ -64,6 +67,7 @@ static inline muiSizingInput muiFlexChildInput(const muiFlexFrame* frame, muiMea
     input.rtl = frame->rtl;
     input.contentHeight = false;
     input.contentOnly = false;
+    input.ratioPercent = false;
     return input;
 }
 

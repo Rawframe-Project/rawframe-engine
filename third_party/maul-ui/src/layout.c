@@ -146,6 +146,8 @@ static muiSize SolveRoot(muiContext* context, const muiSolver* solver, uint32_t 
     // unless its aspect ratio gives it.
     sizingInput.contentHeight = sizingInput.height.mode != mui_measureExact &&
                                 context->layout[root - 1].style.sizing.aspectRatio <= 0.0f;
+    sizingInput.ratioPercent = sizingInput.height.mode != mui_measureExact &&
+                               context->layout[root - 1].style.sizing.aspectRatio > 0.0f;
     sizingInput.width = (muiMeasureAxis){size.width, mui_measureExact};
     sizingInput.height = (muiMeasureAxis){size.height, mui_measureExact};
     (void)muiSolveNode(solver, root, &sizingInput, true);

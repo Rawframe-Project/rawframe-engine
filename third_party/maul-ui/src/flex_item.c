@@ -22,16 +22,26 @@ static float ContentMain(const muiFlexFrame* frame, uint32_t child, muiMeasureMo
 // The base an item with an aspect ratio and a `content` basis takes from
 // its cross size (section 9.2.3 B), its content left to its automatic
 // minimum: an exact cross size, or in a column the width it fits, as in
-// Chrome.
+// Chrome; with ownLeft, the width its content fits within its width
+// limits, the height its style gives left out as the basis says.
 static float RatioBase(const muiFlexFrame* frame, uint32_t child, muiMeasureMode mode,
-                       muiMeasureAxis cross)
+                       muiMeasureAxis cross, bool ownLeft)
 {
     float ratio = frame->solver->nodes[child - 1].style.sizing.aspectRatio;
     float size = cross.size;
     if (cross.mode != mui_measureExact)
     {
         muiSizingInput input = muiFlexChildInput(frame, (muiMeasureAxis){0.0f, mode}, cross);
+        input.contentOnly = ownLeft;
         size = muiFlexCrossOf(frame, frame->solver->solve(frame->solver, child, &input, false));
+    }
+    if (cross.mode != mui_measureExact && ownLeft)
+    {
+        const muiLayoutStyle* style = &frame->solver->nodes[child - 1].style;
+        const muiFlexItemState* item = &frame->solver->nodes[child - 1].item;
+        const muiEdges padding = muiFlexChildPadding(frame, style);
+        size = muiClampSize(size, item->minCross, item->maxCross,
+                            muiBoxSum(&padding, style, !frame->row));
     }
     return frame->row ? size * ratio : size / ratio;
 }
@@ -46,7 +56,12 @@ static float ContentBase(const muiFlexFrame* frame, uint32_t child, const muiAxi
     float ratio = frame->solver->nodes[child - 1].style.sizing.aspectRatio;
     if (ratio > 0.0f && !main->definite && (!frame->row || cross.mode == mui_measureExact))
     {
-        return RatioBase(frame, child, mode, cross);
+        return RatioBase(frame, child, mode, cross, false);
+    }
+    if (ratio > 0.0f && !frame->row)
+    {
+        // A column's `content` basis over a height its style gives.
+        return RatioBase(frame, child, mode, cross, true);
     }
     bool limited = !main->minimumAuto || main->maximum < INFINITY;
     return ContentMain(frame, child, mode, cross, limited && ratio <= 0.0f);

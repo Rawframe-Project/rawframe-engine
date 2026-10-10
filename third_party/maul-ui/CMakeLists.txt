@@ -50,7 +50,8 @@ if(ANDROID)
 else()
     set(MAUL_UI_ANDROID_ACCESSIBILITY OFF)
 endif()
-if(EMSCRIPTEN)
+# The web: Emscripten's, or a plain WebAssembly toolchain's (mui-0009).
+if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI")
     option(MAUL_UI_ARIA "Build the ARIA adapter (record mui-0008)" ON)
 else()
     set(MAUL_UI_ARIA OFF)
@@ -215,6 +216,9 @@ if(MAUL_UI_ARIA)
         message(FATAL_ERROR "The ARIA adapter reads the accessibility tree: set MAUL_UI_ACCESS_TREE")
     endif()
     target_sources(maul-ui PRIVATE src/aria_adapter.c src/aria_elements.c src/aria_page.c)
+    if(NOT EMSCRIPTEN)
+        include(cmake/Web.cmake)
+    endif()
 endif()
 if(MAUL_UI_ATSPI)
     if(NOT MAUL_UI_ACCESS_TREE)
@@ -392,11 +396,22 @@ if(MAUL_UI_BUILD_TESTS)
     endif()
     if(MAUL_UI_ARIA)
         # In headless Chrome through the runner, which waits on the test
-        # (Asyncify lets it sleep); skipped without Puppeteer.
+        # (Asyncify lets it sleep); skipped without Puppeteer. Without
+        # Emscripten the test is a reactor whose main the runner calls,
+        # sleeping through JavaScript promise integration, with its
+        # imports beside it (mui-0009).
         maul_add_test(aria WHITEBOX MANUAL)
-        target_link_options(test_aria PRIVATE -sASYNCIFY)
-        add_test(NAME aria COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR}
-                                   ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
+        if(EMSCRIPTEN)
+            target_link_options(test_aria PRIVATE -sASYNCIFY)
+            set(mui_web_node ${CMAKE_CROSSCOMPILING_EMULATOR})
+        else()
+            set(mui_web_node node)
+            target_link_options(test_aria PRIVATE -mexec-model=reactor -Wl,--stack-first -Wl,--export-table
+                                -Wl,--export=main)
+            mui_web_glue(test_aria_glue ${PROJECT_BINARY_DIR}/test_aria.mjs test/test_aria.c)
+            add_dependencies(test_aria test_aria_glue)
+        endif()
+        add_test(NAME aria COMMAND ${mui_web_node} ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
                                    $<TARGET_FILE:test_aria>)
         set_tests_properties(aria PROPERTIES SKIP_RETURN_CODE 77)
     endif()
@@ -461,7 +476,7 @@ if(MAUL_UI_BUILD_TESTS)
         target_include_directories(test_frame_memory PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
         # Contexts on threads at once (record mui-0001): POSIX threads,
         # so not on Windows or the web.
-        if(NOT EMSCRIPTEN)
+        if(NOT EMSCRIPTEN AND NOT CMAKE_SYSTEM_NAME STREQUAL "WASI")
             maul_add_test(threads POSIX)
             if(TARGET test_threads)
                 target_include_directories(test_threads PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)

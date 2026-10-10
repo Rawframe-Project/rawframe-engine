@@ -2,41 +2,41 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The ARIA adapter's calls into the page (record mui-0008), through
-// Emscripten's EM_JS. Each adapter's elements are kept in Module.muiAria
-// under a handle: the host element, the adapter's container in it, the
-// enabling button, and the elements by slot. The container is invisible
-// as Flutter makes its semantics (filter: opacity(0%), transparent
-// text): visibility or display would hide it from screen readers too.
+// Emscripten's EM_JS, or imports without Emscripten (mui-0009). Each
+// adapter's elements are kept in Module.muiAria under a handle: the host
+// element, the adapter's container in it, the enabling button, and the
+// elements by slot. The container is invisible as Flutter makes its
+// semantics (filter: opacity(0%), transparent text): visibility or
+// display would hide it from screen readers too.
 
 #include "allocator.h"
 #include "aria.h"
-
-#include <emscripten/em_js.h>
-#include <emscripten/emscripten.h>
+#include "web_js.h"
 
 // The enabling button was pressed.
-EMSCRIPTEN_KEEPALIVE void muiAriaEnableFromPage(muiAriaAdapter* adapter)
+MUI_WEB_EXPORT(muiAriaEnableFromPage) void muiAriaEnableFromPage(muiAriaAdapter* adapter)
 {
     muiAriaEnablePressed(adapter);
 }
 
 // An element was clicked, focused, or its range set.
-EMSCRIPTEN_KEEPALIVE void muiAriaEventFromPage(muiAriaAdapter* adapter, int kind, uint32_t slot,
-                                               double value)
+MUI_WEB_EXPORT(muiAriaEventFromPage)
+void muiAriaEventFromPage(muiAriaAdapter* adapter, int kind, uint32_t slot, double value)
 {
     muiAriaPerform(adapter, (muiAriaEvent)kind, slot, value);
 }
 
-EMSCRIPTEN_KEEPALIVE char* muiAriaTextRoomFromPage(muiAriaAdapter* adapter, uint32_t length)
+MUI_WEB_EXPORT(muiAriaTextRoomFromPage)
+char* muiAriaTextRoomFromPage(muiAriaAdapter* adapter, uint32_t length)
 {
     return length < UINT32_MAX ? muiAllocate(&adapter->allocator, (size_t)length + 1, 1) : nullptr;
 }
 
 // A client typed into a field, or selected in it; the text, if any, from
 // muiAriaTextRoomFromPage.
-EMSCRIPTEN_KEEPALIVE void muiAriaTextFromPage(muiAriaAdapter* adapter, uint32_t slot,
-                                              uint32_t start, uint32_t end, char* text,
-                                              uint32_t length)
+MUI_WEB_EXPORT(muiAriaTextFromPage)
+void muiAriaTextFromPage(muiAriaAdapter* adapter, uint32_t slot, uint32_t start, uint32_t end,
+                         char* text, uint32_t length)
 {
     muiAriaPerformText(adapter, slot, start, end, text, length);
     if (text != nullptr)
@@ -46,7 +46,7 @@ EMSCRIPTEN_KEEPALIVE void muiAriaTextFromPage(muiAriaAdapter* adapter, uint32_t 
 }
 
 // clang-format off
-EM_JS(int, OpenPage, (const char* host, int deferred, const char* label, void* adapter), {
+EM_JS(int, muiAriaJsOpenPage, (const char* host, int deferred, const char* label, void* adapter), {
     const element = typeof document === "undefined" ? null
                                                     : document.querySelector(UTF8ToString(host));
     if (!element) {
@@ -205,7 +205,7 @@ EM_JS(int, OpenPage, (const char* host, int deferred, const char* label, void* a
     return handle;
 });
 
-EM_JS(void, ClosePage, (int handle), {
+EM_JS(void, muiAriaJsClosePage, (int handle), {
     const page = Module.muiAria[handle];
     page.host.removeEventListener("scroll", page.unscroll);
     document.removeEventListener("selectionchange", page.selected);
@@ -219,7 +219,7 @@ EM_JS(void, ClosePage, (int handle), {
 });
 
 // Whether the button had the focus, which the program's focus then takes.
-EM_JS(int, DropButton, (int handle), {
+EM_JS(int, muiAriaJsDropButton, (int handle), {
     const page = Module.muiAria[handle];
     const focused = page.button !== null && document.activeElement === page.button;
     if (page.button) {
@@ -232,7 +232,7 @@ EM_JS(int, DropButton, (int handle), {
 // Moves the DOM focus to an element: only from within the adapter's
 // elements, or when asked, as the canvas keeps it for the keys
 // otherwise.
-EM_JS(void, Focus, (int handle, uint32_t slot, int always), {
+EM_JS(void, muiAriaJsFocus, (int handle, uint32_t slot, int always), {
     const page = Module.muiAria[handle];
     const element = page.elements[slot];
     const active = document.activeElement;
@@ -246,7 +246,7 @@ EM_JS(void, Focus, (int handle, uint32_t slot, int always), {
 // region: emptied first so that the same text is said again, and emptied
 // after 300 ms, as Flutter does, so that it is not read again as the
 // page's content.
-EM_JS(void, Announce, (int handle, const char* text, int assertive), {
+EM_JS(void, muiAriaJsAnnounce, (int handle, const char* text, int assertive), {
     const page = Module.muiAria[handle];
     const said = UTF8ToString(text);
     if (typeof page.root.ariaNotify === "function") {
@@ -266,7 +266,7 @@ EM_JS(void, Announce, (int handle, const char* text, int assertive), {
 // An element of a kind (muiAriaKind): a div, a range input, an input of a
 // type, or a textarea. A field's text is the program's, so the browser
 // fills and corrects none of it.
-EM_JS(void, Make, (int handle, uint32_t slot, int kind, const char* type, const char* id), {
+EM_JS(void, muiAriaJsMake, (int handle, uint32_t slot, int kind, const char* type, const char* id), {
     const element = document.createElement(kind === 0 ? "div" : kind === 3 ? "textarea" : "input");
     if (kind === 1) {
         element.type = "range";
@@ -289,7 +289,7 @@ EM_JS(void, Make, (int handle, uint32_t slot, int kind, const char* type, const 
     Module.muiAria[handle].elements[slot] = element;
 });
 
-EM_JS(void, Remove, (int handle, uint32_t slot), {
+EM_JS(void, muiAriaJsRemove, (int handle, uint32_t slot), {
     const elements = Module.muiAria[handle].elements;
     elements[slot].remove();
     elements[slot] = undefined;
@@ -298,7 +298,7 @@ EM_JS(void, Remove, (int handle, uint32_t slot), {
 // Puts an element at an index among its parent's: where it is, or before
 // the one there. Placed in rising index after the leaving ones are
 // gone, each parent's elements end in order.
-EM_JS(void, Place, (int handle, uint32_t slot, int parent, uint32_t index), {
+EM_JS(void, muiAriaJsPlace, (int handle, uint32_t slot, int parent, uint32_t index), {
     const page = Module.muiAria[handle];
     const element = page.elements[slot];
     const into = parent < 0 ? page.root : page.elements[parent];
@@ -308,7 +308,7 @@ EM_JS(void, Place, (int handle, uint32_t slot, int parent, uint32_t index), {
     }
 });
 
-EM_JS(void, Box, (int handle, uint32_t slot, double x, double y, double width, double height), {
+EM_JS(void, muiAriaJsBox, (int handle, uint32_t slot, double x, double y, double width, double height), {
     const style = Module.muiAria[handle].elements[slot].style;
     style.left = x + "px";
     style.top = y + "px";
@@ -319,7 +319,7 @@ EM_JS(void, Box, (int handle, uint32_t slot, double x, double y, double width, d
 // An attribute, or none for a NULL value. An input's or textarea's value
 // is its property, as the attribute only gives its first value; set only
 // when it changed, as setting it moves a field's caret.
-EM_JS(void, Attribute, (int handle, uint32_t slot, const char* name, const char* value), {
+EM_JS(void, muiAriaJsAttribute, (int handle, uint32_t slot, const char* name, const char* value), {
     const element = Module.muiAria[handle].elements[slot];
     const key = UTF8ToString(name);
     if (key === "value" && (element.tagName === "INPUT" || element.tagName === "TEXTAREA")) {
@@ -334,7 +334,7 @@ EM_JS(void, Attribute, (int handle, uint32_t slot, const char* name, const char*
     }
 });
 
-EM_JS(void, Select, (int handle, uint32_t slot, uint32_t start, uint32_t end, int backward), {
+EM_JS(void, muiAriaJsSelect, (int handle, uint32_t slot, uint32_t start, uint32_t end, int backward), {
     const page = Module.muiAria[handle];
     const field = page.elements[slot];
     field.muiAnchor = backward ? end : start;
@@ -342,68 +342,68 @@ EM_JS(void, Select, (int handle, uint32_t slot, uint32_t start, uint32_t end, in
     page.select(field);
 });
 
-EM_JS(void, Text, (int handle, uint32_t slot, const char* text), {
+EM_JS(void, muiAriaJsText, (int handle, uint32_t slot, const char* text), {
     Module.muiAria[handle].elements[slot].textContent = text ? UTF8ToString(text) : "";
 });
 // clang-format on
 
 int muiAriaPageOpen(const char* host, bool deferred, const char* label, muiAriaAdapter* adapter)
 {
-    return OpenPage(host, deferred ? 1 : 0, label, adapter);
+    return muiAriaJsOpenPage(host, deferred ? 1 : 0, label, adapter);
 }
 
 void muiAriaPageClose(int page)
 {
-    ClosePage(page);
+    muiAriaJsClosePage(page);
 }
 
 bool muiAriaPageDropButton(int page)
 {
-    return DropButton(page) != 0;
+    return muiAriaJsDropButton(page) != 0;
 }
 
 void muiAriaPageFocus(int page, uint32_t slot, bool always)
 {
-    Focus(page, slot, always ? 1 : 0);
+    muiAriaJsFocus(page, slot, always ? 1 : 0);
 }
 
 void muiAriaPageAnnounce(int page, const char* text, bool assertive)
 {
-    Announce(page, text, assertive ? 1 : 0);
+    muiAriaJsAnnounce(page, text, assertive ? 1 : 0);
 }
 
 void muiAriaPageMake(int page, uint32_t slot, muiAriaKind kind, const char* inputType,
                      const char* id)
 {
-    Make(page, slot, (int)kind, inputType, id);
+    muiAriaJsMake(page, slot, (int)kind, inputType, id);
 }
 
 void muiAriaPageSelect(int page, uint32_t slot, uint32_t start, uint32_t end, bool backward)
 {
-    Select(page, slot, start, end, backward ? 1 : 0);
+    muiAriaJsSelect(page, slot, start, end, backward ? 1 : 0);
 }
 
 void muiAriaPageRemove(int page, uint32_t slot)
 {
-    Remove(page, slot);
+    muiAriaJsRemove(page, slot);
 }
 
 void muiAriaPagePlace(int page, uint32_t slot, uint32_t parent, uint32_t index)
 {
-    Place(page, slot, parent == ARIA_NO_SLOT ? -1 : (int)parent, index);
+    muiAriaJsPlace(page, slot, parent == ARIA_NO_SLOT ? -1 : (int)parent, index);
 }
 
 void muiAriaPageBox(int page, uint32_t slot, float x, float y, float width, float height)
 {
-    Box(page, slot, (double)x, (double)y, (double)width, (double)height);
+    muiAriaJsBox(page, slot, (double)x, (double)y, (double)width, (double)height);
 }
 
 void muiAriaPageAttribute(int page, uint32_t slot, const char* name, const char* value)
 {
-    Attribute(page, slot, name, value);
+    muiAriaJsAttribute(page, slot, name, value);
 }
 
 void muiAriaPageText(int page, uint32_t slot, const char* text)
 {
-    Text(page, slot, text);
+    muiAriaJsText(page, slot, text);
 }

@@ -166,6 +166,7 @@ static void LayOutAlone(const muiSolver* solver, const Checked* checked)
         .height = {checked->old.finalSize.height, mui_measureExact},
         .rtl = checked->old.finalRtl,
         .contentHeight = checked->old.finalContentHeight,
+        .ratioPercent = checked->old.finalRatioPercent,
     };
     (void)solver->solve(solver, checked->node, &input, true);
 }
