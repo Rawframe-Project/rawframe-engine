@@ -98,24 +98,30 @@ build_and_test() {
     # A test labeled `alone` needs a player's frame rate, which the full
     # check's load takes away: a predicted game's input then never reaches
     # its server (D521). The fast check plays it with nothing beside it.
+    # A test labeled `headset` draws a game for a headless headset on the
+    # software rasterizer, each 60 to 80 s in the instrumented trees: the
+    # full check plays it in clang-development alone, as the fast check
+    # does, and the XR module's own test and the client's headset window
+    # test cover its code under the sanitizers (D602).
     local leave=()
-    if [ "$preset" = gcc-shipping ] || [ "$preset" = clang-shipping ] ||
-        { [ "$preset" = clang-development ] && [ "$tier" = full ]; }; then
+    if [ "$preset" = gcc-shipping ] || [ "$preset" = clang-shipping ]; then
+        leave=(-LE 'window|headset')
+    elif [ "$preset" = clang-development ] && [ "$tier" = full ]; then
         leave=(-LE window)
     elif [ "$preset" = clang-thread ] && [ "$tier" = full ]; then
         # Studio's window tests play under the address sanitizer and in the
         # debug tree, not here too: they were most of this tree's time, the
         # full check's longest (D527).
-        leave=(-LE 'alone|studio')
+        leave=(-LE 'alone|studio|headset')
     elif [ "$tier" = full ]; then
-        leave=(-LE alone)
+        leave=(-LE 'alone|headset')
     fi
     # The trees that play the window tests run twice the jobs (D507): those
     # tests mostly wait on frames, not processors, and the thread tree alone
     # took 169 s at twelve jobs where it took 319 s at six, the same 1,150 s
     # of tests.
     local run=$jobs
-    if [ "$tier" = full ] && [ "${leave[1]:-}" != window ] && [[ "$preset" != wasm-* ]]; then
+    if [ "$tier" = full ] && [[ "${leave[1]:-}" != window* ]] && [[ "$preset" != wasm-* ]]; then
         run=$((jobs * 2))
     fi
     if ! ctest --test-dir "out/$preset" "${leave[@]}" --output-on-failure -j "$run" >"out/$preset.test.log" 2>&1; then

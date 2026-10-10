@@ -360,6 +360,7 @@ if(RAWFRAME_BUILD_TESTS)
                              ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf
                      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
             set_tests_properties(plaza_headset PROPERTIES
+                                 LABELS headset
                                  FIXTURES_REQUIRED plaza_content
                                  PASS_REGULAR_EXPRESSION
                                  "\"code\":\"xr_ready\".*\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"scene_eyes_summary\"[^\n]*\"eyes\":2,\"eyeFrames\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"width\":128,\"height\":128,[^\n]*\"headsetFrames\":[1-9][0-9]+.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":0,\"handsPointing\":0,\"hapticsFelt\":0,\"hapticsUnfelt\":0,\"failed\":false")
@@ -385,6 +386,7 @@ if(RAWFRAME_BUILD_TESTS)
                              ${CMAKE_CURRENT_BINARY_DIR}/tycoon_headset.conf
                      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
             set_tests_properties(tycoon_headset PROPERTIES
+                                 LABELS headset
                                  FIXTURES_REQUIRED tycoon_content
                                  PASS_REGULAR_EXPRESSION
                                  "\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+.*\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"framesOnPanel\":[1-9][0-9]+,[^\n]*\"glyphRuns\":[1-9][0-9]+,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,\"framesPanelSubmitted\":[1-9][0-9]+,[^\n]*\"failed\":false")
