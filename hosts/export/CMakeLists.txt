@@ -2,7 +2,7 @@
 # through the cook and the build tool run as processes. Packaging tooling;
 # no runtime closure contains it.
 rawframe_host(NAME export_tool OUTPUT rawframe-export
-    SOURCES src/main.cpp
+    SOURCES src/main.cpp src/folders.cpp
     DEPS process release content document input network_quic composition result base
 )
 
