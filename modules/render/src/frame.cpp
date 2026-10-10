@@ -112,6 +112,36 @@ struct Framer::State {
                    .height = target.height,
                    .picture = requestKey(picture.index1, picture.generation)};
         open.covers.assign(target.images.size(), std::nullopt);
+        // The panel (D597): a texture of its image's size, covering it
+        // whole.
+        std::optional<mrhiResourceId> panel;
+        if (target.panel.has_value()) {
+            const std::optional<window::PixelSize> kSize =
+                *target.panel < target.images.size() ? device->adoptedSize(target.images[*target.panel]) : std::nullopt;
+            if (!kSize.has_value()) {
+                static_cast<void>(mrhiDropFrame(native));
+                return refuse(result::ErrorClass::FailedPrecondition,
+                              RenderError::State,
+                              "the panel is not an adopted image of the target");
+            }
+            mrhiTextureDef panelDef = pictureDef;
+            panelDef.viewFormats[0] = mrhi_formatNone;
+            panelDef.width = kSize->width;
+            panelDef.height = kSize->height;
+            mrhiResourceId declared{};
+            if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &panelDef, &declared);
+                kDeclared != mrhi_success) {
+                static_cast<void>(mrhiDropFrame(native));
+                return failed("the panel could not be declared", kDeclared);
+            }
+            panel = declared;
+            open.panel = requestKey(declared.index1, declared.generation);
+            open.panelWidth = kSize->width;
+            open.panelHeight = kSize->height;
+            open.covers[*target.panel] =
+                Frame::Cover{.picture = open.panel,
+                             .viewport = {0, 0, static_cast<float>(kSize->width), static_cast<float>(kSize->height)}};
+        }
         for (std::size_t at = 0; at < recorders.size(); ++at) {
             if (auto declared = recorders[at]->declare(open); !declared.has_value()) {
                 return drop(recorders.first(at + 1), std::move(declared).error());
@@ -133,6 +163,22 @@ struct Framer::State {
             clearing = cleared;
         } else {
             clearing.reset();
+        }
+        // A panel nothing drew on is clear.
+        panelClearing.reset();
+        if (panel.has_value() && !open.panelDrawn) {
+            mrhiPassDef def = mrhiDefaultPassDef();
+            def.colorTargets[0].resource = *panel;
+            def.colorTargets[0].load = mrhi_loadClear;
+            def.colorTargets[0].store = mrhi_storeKeep;
+            def.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 0};
+            def.colorTargetCount = 1;
+            def.neverCull = true;
+            mrhiPassId cleared{};
+            if (const mrhiResult kAdded = mrhiAddPass(native, &def, &cleared); kAdded != mrhi_success) {
+                return drop(recorders, failed("the panel's clearing pass could not be added", kAdded).error());
+            }
+            panelClearing = cleared;
         }
         std::optional<std::uint64_t> displaying;
         if (target.surface.has_value()) {
@@ -196,6 +242,10 @@ struct Framer::State {
             (mrhiBeginPass(native, *clearing) != mrhi_success || mrhiEndPass(native, *clearing) != mrhi_success)) {
             return drop(recorders, failed("the picture could not be cleared", mrhi_errorState).error());
         }
+        if (panelClearing.has_value() && (mrhiBeginPass(native, *panelClearing) != mrhi_success ||
+                                          mrhiEndPass(native, *panelClearing) != mrhi_success)) {
+            return drop(recorders, failed("the panel could not be cleared", mrhi_errorState).error());
+        }
         for (FrameRecorder* recorder : recorders) {
             if (auto recorded = recorder->record(open); !recorded.has_value()) {
                 return drop(recorders, std::move(recorded).error());
@@ -247,6 +297,7 @@ struct Framer::State {
     }
 
     std::optional<mrhiPassId> clearing;
+    std::optional<mrhiPassId> panelClearing;
 };
 
 Framer::Framer(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {

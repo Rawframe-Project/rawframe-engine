@@ -58,6 +58,18 @@ struct Frame {
         std::array<float, 4> viewport{};
     };
     std::vector<std::optional<Cover>> covers;
+    /// Where the target shows the UI apart (`FrameTarget::panel`, a
+    /// headset's panel, D597): a texture of the frame of the panel's size,
+    /// clear where nothing is drawn, which the UI draws into instead of
+    /// the picture and which is placed into the panel's image; 0 for none.
+    std::uint64_t panel = 0;
+    std::uint32_t panelWidth = 0;
+    std::uint32_t panelHeight = 0;
+    /// As `clearsPicture`, for the panel: to clear.
+    [[nodiscard]] bool clearsPanel() noexcept {
+        return !std::exchange(panelDrawn, true);
+    }
+    bool panelDrawn = false;
 };
 
 /// An 8-bit sRGB channel in linear light, what a pass clearing an sRGB
@@ -96,6 +108,9 @@ struct FrameTarget {
     /// Adopted images (`Device::adopt`) the picture is placed into, each
     /// whole, scaled to it: an OpenXR session's views (D592).
     std::vector<std::uint64_t> images;
+    /// Of `images`, the one the UI is shown in apart, at its own size
+    /// (`Frame::panel`): a headset's panel (D597).
+    std::optional<std::size_t> panel;
 };
 
 struct FramerStatistics {
@@ -179,6 +194,9 @@ public:
     /// none (no device, the last frame still running, a window showing
     /// nothing).
     [[nodiscard]] virtual std::optional<std::pair<std::uint32_t, std::uint32_t>> planned() const noexcept = 0;
+    /// The size of the planned frame's panel, where it shows the UI apart
+    /// (`Frame::panel`): the UI is laid out at it. None for none.
+    [[nodiscard]] virtual std::optional<std::pair<std::uint32_t, std::uint32_t>> plannedPanel() const noexcept = 0;
     /// Joins every frame from the next ready on, recorded in `order`'s
     /// order: the scene is 0, the canvas 1, and the scene's post processes
     /// over the composed picture 2 (D351).

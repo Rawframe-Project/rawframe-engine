@@ -143,6 +143,7 @@ public:
         }
         endHeadset(false);
         planned_.reset();
+        plannedPanel_.reset();
         made_ = false;
         ready_.clear();
         unchanged_.clear();
@@ -206,6 +207,15 @@ public:
             if (std::optional<Headset::Views> views = headset_->views(*device); views.has_value()) {
                 headsetOpen_ = true;
                 target_.images = std::move(views->images);
+                // Its panel, the last image, where it shows the UI apart
+                // (D597).
+                if (const std::optional<window::PixelSize> kPanel = views->panel && !target_.images.empty()
+                                                                        ? device->adoptedSize(target_.images.back())
+                                                                        : std::nullopt;
+                    kPanel.has_value()) {
+                    target_.panel = target_.images.size() - 1;
+                    plannedPanel_ = std::pair{kPanel->width, kPanel->height};
+                }
                 if (!target_.surface.has_value()) {
                     target_.width = views->width;
                     target_.height = views->height;
@@ -289,6 +299,10 @@ public:
 
     std::optional<std::pair<std::uint32_t, std::uint32_t>> planned() const noexcept override {
         return made_ ? std::nullopt : planned_;
+    }
+
+    std::optional<std::pair<std::uint32_t, std::uint32_t>> plannedPanel() const noexcept override {
+        return made_ || !planned_.has_value() ? std::nullopt : plannedPanel_;
     }
 
     void join(FrameRecorder& recorder, std::uint32_t order) override {
@@ -470,6 +484,7 @@ private:
     /// `render.frame_rate`'s period; none for no limit.
     std::optional<execution::MonotonicDuration> framePeriod_;
     std::optional<std::pair<std::uint32_t, std::uint32_t>> planned_;
+    std::optional<std::pair<std::uint32_t, std::uint32_t>> plannedPanel_;
     FrameTarget target_;
     bool made_ = false;
     bool failed_ = false;

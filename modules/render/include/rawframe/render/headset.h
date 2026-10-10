@@ -8,7 +8,9 @@
 // iteration is drawn into the images it gives (`FrameTarget::images`), and
 // the headset's frame ends once the frame is made, or at the iteration's
 // end undrawn. A process with a window and a headset draws both from the
-// one frame: what the headset shows is mirrored on the window.
+// one frame: what the headset shows is mirrored on the window. A headset
+// may show the UI apart, on a panel of its own (D597): the UI is then laid
+// out and drawn for it, and the window mirrors the eyes' world alone.
 
 #include "rawframe/composition/participant.h"
 #include "rawframe/render/device.h"
@@ -26,6 +28,10 @@ public:
         std::vector<std::uint64_t> images;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
+        /// Whether the last of `images` is a panel the UI is shown on
+        /// apart, at its own size, as the headset places it before the eyes
+        /// (D597).
+        bool panel = false;
     };
 
     /// Whether a runtime's headset answered: the device is made by it, and
