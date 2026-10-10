@@ -16,7 +16,7 @@ cd "$(dirname "$0")/.."
 
 tree="$1"
 game="$PWD/${2:-games/runners/runners.game}"
-iterations="${3:-600}"
+iterations="${3:-1200}"
 device="${RAWFRAME_IOS_DEVICE:-booted}"
 app="$tree/hosts/ios_client/rawframe-client.app"
 server="$tree/hosts/dedicated_server/rawframe-server.app/rawframe-server"
@@ -74,7 +74,7 @@ for side in server client; do
     log="$work/server.log"
     [ "$side" = client ] && log="$documents/client.log"
     echo "== $side"
-    grep -o '"code":"\(bots_admitted\|bots_summary\|frame_summary\|device_ready\|device_unavailable\|start_failed\|stopped\)"[^}]*}[^}]*}' \
+    grep -o '"code":"\(bots_admitted\|bots_summary\|frame_summary\|device_ready\|device_unavailable\|device_unasked\|start_failed\|stopped\)"[^}]*}[^}]*}' \
         "$log" 2>/dev/null || { echo "nothing of note:"; tail -20 "$log" 2>/dev/null || true; }
 done
 if grep -q '"code":"bots_admitted"' "$documents/client.log" && grep -q '"framesShown":[1-9]' "$documents/client.log"; then
