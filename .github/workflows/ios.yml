@@ -32,7 +32,10 @@ jobs:
           brew install llvm@20 ninja ccache >/dev/null
           python3 -m pip install --break-system-packages aioquic fb-idb
           # idb's companion, which reads a simulator's accessibility (D588).
-          brew tap facebook/fb >/dev/null && brew install idb-companion >/dev/null
+          # Homebrew loads a third party's formula only once it is trusted:
+          # this one alone is.
+          brew tap facebook/fb >/dev/null && brew trust --formula facebook/fb/idb-companion &&
+            brew install idb-companion >/dev/null
       # libc++, MsQuic, and OpenSSL are kept once configure has built them,
       # and the compilations once the build has run, whatever its outcome.
       - name: Restore libc++ and dependencies
