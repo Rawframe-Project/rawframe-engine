@@ -230,7 +230,8 @@ def build(work, shaders, name, material=None):
     # using no heap, beside what its own driver reads.
     for suffix, options in (("", ()), (".metal", ("--msl", metal)), (".d3d12", ("--dxil", dxil))):
         container = os.path.join(work, f"{name}{suffix}.mrsc")
-        run(sys.executable, WRITER, *options, linked, wgsl, reflection, container)
+        # -B: no bytecode cache written into the vendored tree.
+        run(sys.executable, "-B", WRITER, *options, linked, wgsl, reflection, container)
         with open(container, "rb") as file:
             made[suffix] = file.read()
     return made
