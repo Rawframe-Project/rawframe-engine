@@ -39,7 +39,9 @@ resource=$(sed -n 's/.*"resourceId": "\([0-9a-f]*\)".*/\1/p' games/runners/runne
 printf 'kest.game_resource = %s\n' "$resource" | tee -a "$work/agree.settings" >>"$work/differ.settings"
 
 game=games/runners/runners.game
-"$play" "$server" "$bots" 2 1 240 "$game" "$work/server.settings" "$work/agree.settings" "" |
+# Six seconds of bots: what is asked is whether they are admitted, and a
+# sanitized tree on a loaded machine admitted one of two in two.
+"$play" "$server" "$bots" 2 1 720 "$game" "$work/server.settings" "$work/agree.settings" "" |
     grep -o '"code":"bots_summary".*"admitted":[0-9]*'
-"$play" "$server" "$bots" 2 1 240 "$game" "$work/server.settings" "$work/differ.settings" "" |
+"$play" "$server" "$bots" 2 1 720 "$game" "$work/server.settings" "$work/differ.settings" "" |
     grep -o '"code":"bots_summary".*"admitted":[0-9]*'
