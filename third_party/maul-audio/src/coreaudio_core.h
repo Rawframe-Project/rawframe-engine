@@ -43,6 +43,23 @@ typedef struct maudCoreAudioWatch
 } maudCoreAudioWatch;
 
 // A stream's AUHAL unit, run by the HAL's IO thread while it plays.
+// The HAL's property calls the data source code makes, through a table
+// so that a test can stand in for devices the runners lack (a data
+// source, an HDMI transport), as Chromium injects its listener calls.
+typedef struct maudCoreAudioHal
+{
+    OSStatus (*getData)(AudioObjectID object, const AudioObjectPropertyAddress* address,
+                        UInt32 qualifierSize, const void* qualifier, UInt32* size, void* data);
+    Boolean (*has)(AudioObjectID object, const AudioObjectPropertyAddress* address);
+    OSStatus (*addListener)(AudioObjectID object, const AudioObjectPropertyAddress* address,
+                            dispatch_queue_t queue, AudioObjectPropertyListenerBlock listener);
+    OSStatus (*removeListener)(AudioObjectID object, const AudioObjectPropertyAddress* address,
+                               dispatch_queue_t queue, AudioObjectPropertyListenerBlock listener);
+} maudCoreAudioHal;
+
+// The system's HAL.
+extern const maudCoreAudioHal maudCoreAudioSystemHal;
+
 typedef struct maudCoreAudioStream
 {
     maudStreamCore* core;
@@ -78,6 +95,7 @@ typedef struct maudCoreAudioStream
 typedef struct maudCoreAudio
 {
     maudContext* context;
+    const maudCoreAudioHal* hal;
     // The queue the HAL's change blocks run on, and the blocks.
     dispatch_queue_t queue;
     AudioObjectPropertyListenerBlock listener;

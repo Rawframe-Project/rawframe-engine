@@ -58,18 +58,18 @@ static bool DefValid(const maudOfflineDeviceDef* def)
 }
 
 maudResult maudAddOfflineDevice(maudContext* context, const maudOfflineDeviceDef* def,
-                                maudDeviceId* deviceIdOut)
+                                maudDeviceId* deviceOut)
 {
-    if (deviceIdOut != nullptr)
+    if (deviceOut != nullptr)
     {
-        *deviceIdOut = (maudDeviceId){0, 0};
+        *deviceOut = (maudDeviceId){0, 0};
     }
     maudResult result = CheckOffline(context);
     if (result != maud_success)
     {
         return result;
     }
-    if (def == nullptr || deviceIdOut == nullptr || !DefValid(def))
+    if (def == nullptr || deviceOut == nullptr || !DefValid(def))
     {
         maudCountMisuse(context);
         return maud_errorInvalid;
@@ -88,7 +88,7 @@ maudResult maudAddOfflineDevice(maudContext* context, const maudOfflineDeviceDef
         .key = def->key,
         .keyLength = def->keyLength,
     };
-    return maudAddDevice(context, &spec, deviceIdOut);
+    return maudAddDevice(context, &spec, deviceOut);
 }
 
 maudResult maudRemoveOfflineDevice(maudContext* context, maudDeviceId device)

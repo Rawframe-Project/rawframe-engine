@@ -10,6 +10,7 @@
 #include "backend.h"
 #include "context.h"
 #include "notify.h"
+#include "retry.h"
 
 static bool SameDevice(maudDeviceId a, maudDeviceId b)
 {
@@ -43,12 +44,15 @@ static void Suspend(maudContext* context, maudStreamSlot* slot, maudSuspendReaso
     maudPostNotification(context, &(maudNotification){
                                       .kind = maud_notifyStreamSuspended,
                                       .reason = reason,
-                                      .streamId = maudStreamIdOf(context, slot),
+                                      .stream = maudStreamIdOf(context, slot),
                                   });
 }
 
 // Gives a native stream its device's rate, if that differs from the
-// rate it runs at; true when it did.
+// rate it runs at; true when it did. A duplex stream's halves keep the
+// one rate they opened at, as the ring between them and a voice unit
+// running both need: the half on a device at another rate is converted
+// by the platform from then on.
 static bool TakeDeviceRate(maudContext* context, maudStreamSlot* slot)
 {
     maudStreamCore* core = &slot->core;
@@ -58,11 +62,16 @@ static bool TakeDeviceRate(maudContext* context, maudStreamSlot* slot)
     {
         return false;
     }
+    if (core->duplexGroup != 0)
+    {
+        core->format.ratePolicy = maud_ratePlatformConverted;
+        return false;
+    }
     core->format.sampleRate = device->info.nativeSampleRate;
     atomic_store_explicit(&core->blockRate, core->format.sampleRate, memory_order_release);
     maudPostNotification(context, &(maudNotification){
                                       .kind = maud_notifyStreamFormatChanged,
-                                      .streamId = maudStreamIdOf(context, slot),
+                                      .stream = maudStreamIdOf(context, slot),
                                       .sampleRate = core->format.sampleRate,
                                   });
     return true;
@@ -100,7 +109,7 @@ static void Wait(maudContext* context, maudStreamSlot* slot, maudSuspendReason r
     maudPostNotification(context, &(maudNotification){
                                       .kind = maud_notifyStreamSuspended,
                                       .reason = reason,
-                                      .streamId = maudStreamIdOf(context, slot),
+                                      .stream = maudStreamIdOf(context, slot),
                                   });
 }
 
@@ -128,7 +137,7 @@ static void Resume(maudContext* context, maudStreamSlot* slot)
     Publish(context, slot);
     maudPostNotification(context, &(maudNotification){
                                       .kind = maud_notifyStreamResumed,
-                                      .streamId = maudStreamIdOf(context, slot),
+                                      .stream = maudStreamIdOf(context, slot),
                                   });
 }
 
@@ -139,8 +148,8 @@ static void Move(maudContext* context, maudStreamSlot* slot, maudDeviceId device
     core->binding.current = device;
     maudPostNotification(context, &(maudNotification){
                                       .kind = maud_notifyStreamMoved,
-                                      .deviceId = device,
-                                      .streamId = id,
+                                      .device = device,
+                                      .stream = id,
                                   });
     // A backend whose streams are bound to one endpoint reopens them on
     // every move; the others only when the rate changed.
@@ -293,5 +302,31 @@ void maudAwaitPermission(maudContext* context, maudStreamSlot* slot, bool waitin
     else if (!waiting && binding->suspension == maud_suspendPermission)
     {
         Resume(context, slot);
+    }
+}
+
+bool maudWantsReopen(const maudStreamSlot* slot)
+{
+    maudSuspendReason reason = slot->core.binding.suspension;
+    return slot->live && slot->core.binding.started &&
+           (reason == maud_suspendNone || reason == maud_suspendPlatform);
+}
+
+void maudReportReopen(maudContext* context, maudStreamSlot* slot, bool opened, int64_t now)
+{
+    maudStreamBinding* binding = &slot->core.binding;
+    if (opened)
+    {
+        maudRetrySucceeded(binding);
+        if (binding->suspension == maud_suspendPlatform)
+        {
+            Resume(context, slot);
+        }
+        return;
+    }
+    maudRetryFailed(binding, now);
+    if (binding->suspension == maud_suspendNone)
+    {
+        Wait(context, slot, maud_suspendPlatform);
     }
 }

@@ -108,6 +108,7 @@ typedef struct Layout
     size_t suppressor;
     size_t floats;
     size_t total;
+    maudLayout layout;
 } Layout;
 
 static Layout LayoutOf(uint32_t block, uint32_t partitions, double rate)
@@ -121,6 +122,7 @@ static Layout LayoutOf(uint32_t block, uint32_t partitions, double rate)
     l.suppressor = maudLayoutAdd(&layout, maudEchoSuppressorBytes(block, rate), 1, alignof(double));
     l.floats = maudLayoutAdd(&layout, 5 * (size_t)block, sizeof(float), alignof(float));
     l.total = layout.overflow ? 0 : layout.size;
+    l.layout = layout;
     return l;
 }
 
@@ -147,6 +149,7 @@ maudResult maudCreateEchoCanceller(const maudEchoCancellerDef* def,
     {
         return maud_errorCapacity;
     }
+    maudLayoutPoison(&l.layout, memory);
     maudEchoCanceller* c = (maudEchoCanceller*)memory;
     double radius = 1.0 - (1.0 - NOTCH_16K) * MEASURED_HZ / rate;
     *c = (maudEchoCanceller){

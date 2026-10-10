@@ -22,8 +22,7 @@ typedef struct maudDeviceSpec
 
 // Adds a device. If its direction had none, it becomes the default for
 // every role. maud_errorCapacity past the device or text limit.
-maudResult maudAddDevice(maudContext* context, const maudDeviceSpec* spec,
-                         maudDeviceId* deviceIdOut);
+maudResult maudAddDevice(maudContext* context, const maudDeviceSpec* spec, maudDeviceId* deviceOut);
 
 // Removes a live device. Every default it was passes to the first
 // remaining device of its direction, or to the null id.

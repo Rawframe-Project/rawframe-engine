@@ -37,16 +37,16 @@ static maudDeviceForm FormOfSource(UInt32 source)
     }
 }
 
-maudDeviceForm maudCoreAudioFormOf(AudioObjectID object, maudDirection direction)
+maudDeviceForm maudCoreAudioFormOf(const maudCoreAudioHal* hal, AudioObjectID object,
+                                   maudDirection direction)
 {
     AudioObjectPropertyAddress address =
         maudCoreAudioAddress(kAudioDevicePropertyDataSource, ScopeOf(direction));
     UInt32 value = 0;
     UInt32 size = sizeof(value);
-    maudDeviceForm form =
-        AudioObjectGetPropertyData(object, &address, 0, nullptr, &size, &value) == noErr
-            ? FormOfSource(value)
-            : maud_formUnknown;
+    maudDeviceForm form = hal->getData(object, &address, 0, nullptr, &size, &value) == noErr
+                              ? FormOfSource(value)
+                              : maud_formUnknown;
     if (form != maud_formUnknown)
     {
         return form;
@@ -54,7 +54,7 @@ maudDeviceForm maudCoreAudioFormOf(AudioObjectID object, maudDirection direction
     address =
         maudCoreAudioAddress(kAudioDevicePropertyTransportType, kAudioObjectPropertyScopeGlobal);
     size = sizeof(value);
-    if (AudioObjectGetPropertyData(object, &address, 0, nullptr, &size, &value) == noErr &&
+    if (hal->getData(object, &address, 0, nullptr, &size, &value) == noErr &&
         (value == kAudioDeviceTransportTypeHDMI || value == kAudioDeviceTransportTypeDisplayPort))
     {
         return maud_formDigital;
@@ -84,8 +84,8 @@ static bool Scanned(const maudCoreAudio* coreaudio, uint32_t count, const maudCo
 static void Unwatch(maudCoreAudio* coreaudio, uint32_t index)
 {
     AudioObjectPropertyAddress address = SourceOf(&coreaudio->watched[index]);
-    OSStatus status = AudioObjectRemovePropertyListenerBlock(
-        coreaudio->watched[index].object, &address, coreaudio->queue, coreaudio->listener);
+    OSStatus status = coreaudio->hal->removeListener(coreaudio->watched[index].object, &address,
+                                                     coreaudio->queue, coreaudio->listener);
     (void)status;
     coreaudio->watched[index] = coreaudio->watched[--coreaudio->watchedCount];
 }
@@ -114,9 +114,9 @@ void maudCoreAudioWatchSources(maudCoreAudio* coreaudio, uint32_t count)
                       coreaudio->watched[w].direction == watch.direction;
         }
         AudioObjectPropertyAddress address = SourceOf(&watch);
-        if (!watched && AudioObjectHasProperty(watch.object, &address) &&
-            AudioObjectAddPropertyListenerBlock(watch.object, &address, coreaudio->queue,
-                                                coreaudio->listener) == noErr)
+        if (!watched && coreaudio->hal->has(watch.object, &address) &&
+            coreaudio->hal->addListener(watch.object, &address, coreaudio->queue,
+                                        coreaudio->listener) == noErr)
         {
             coreaudio->watched[coreaudio->watchedCount++] = watch;
         }

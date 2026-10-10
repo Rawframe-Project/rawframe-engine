@@ -19,7 +19,9 @@
 #include "coreaudio_core.h"
 #include "coreaudio_hog.h"
 #include "device.h"
+#include "follow.h"
 #include "period.h"
+#include "retry.h"
 #include "thread.h"
 #include "voice.h"
 #include "xrun.h"
@@ -688,17 +690,25 @@ void maudCoreAudioSetStreamActive(maudContext* context, maudStreamSlot* slot, bo
     Start(entry);
 }
 
+// A started stream left without its unit is reopened, waiting longer
+// after each failure (retry.h): a voice-processing unit the HAL cannot
+// build makes and drops a device of its own each time, which would wake
+// the drain again at once. A failure suspends it with
+// maud_suspendPlatform until a reopen works.
 void maudCoreAudioResumeStreams(maudContext* context)
 {
+    int64_t now = maudNowNanoseconds();
     for (uint32_t i = 0; i < context->streams.capacity; ++i)
     {
         maudStreamSlot* slot = &context->streams.slots[i];
         // A voiced output half never has a unit of its own.
         bool ownsUnit = !(Voiced(&slot->core) && slot->core.def.direction == maud_directionOutput);
-        if (slot->live && ownsUnit && Running(slot) && slot->core.binding.current.index1 != 0 &&
-            EntryOf(context, slot)->unit == nullptr)
+        maudStreamBinding* binding = &slot->core.binding;
+        if (ownsUnit && maudWantsReopen(slot) && binding->current.index1 != 0 &&
+            EntryOf(context, slot)->unit == nullptr && maudRetryDue(binding, now))
         {
             maudCoreAudioRetargetStream(context, slot);
+            maudReportReopen(context, slot, EntryOf(context, slot)->unit != nullptr, now);
         }
     }
 }

@@ -39,6 +39,16 @@ void maudAwaitPermission(maudContext* context, maudStreamSlot* slot, bool waitin
 // Suspends every stream opened on a device that disappeared.
 void maudLoseDevice(maudContext* context, maudDeviceId device);
 
+// Whether a backend's drain should reopen a stream left without its
+// platform stream: the host started it, and nothing but a failed reopen
+// (maud_suspendPlatform) keeps it from running.
+bool maudWantsReopen(const maudStreamSlot* slot);
+
+// Records a backend's reopen of a stream at now: a failure waits longer
+// before the next try (retry.h) and suspends a running stream with
+// maud_suspendPlatform; a success resumes a stream it suspended.
+void maudReportReopen(maudContext* context, maudStreamSlot* slot, bool opened, int64_t now);
+
 // Starts or stops a stream as the host asks; it runs only when it is
 // also not suspended.
 void maudSetStreamStarted(maudContext* context, maudStreamSlot* slot, bool started);

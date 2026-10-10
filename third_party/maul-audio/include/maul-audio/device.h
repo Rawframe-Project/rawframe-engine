@@ -191,7 +191,7 @@ extern "C"
     /// @param context      The context.
     /// @param direction    Output or input.
     /// @param role         The role.
-    /// @param deviceIdOut  Receives the device; the null id when there is
+    /// @param deviceOut    Receives the device; the null id when there is
     ///                     none.
     /// @return `maud_success`; `maud_empty` when the direction has no
     ///         device; `maud_errorInvalid` for a NULL pointer or an unknown
@@ -201,7 +201,7 @@ extern "C"
     MAUD_NODISCARD MAUD_API maudResult maudGetDefaultDevice(const maudContext* context,
                                                             maudDirection direction,
                                                             maudDeviceRole role,
-                                                            maudDeviceId* deviceIdOut);
+                                                            maudDeviceId* deviceOut);
 
 #ifdef __cplusplus
 }

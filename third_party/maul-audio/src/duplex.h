@@ -12,8 +12,8 @@
 // Opens the halves of a duplex stream from a checked def whose
 // direction is maud_directionDuplex: the output on def's device, the
 // input on its inputDevice at the output's rate. On success the output
-// half is live and named by *streamIdOut.
+// half is live and named by *streamOut.
 maudResult maudCreateDuplex(maudContext* context, const maudStreamDef* def,
-                            maudStreamId* streamIdOut);
+                            maudStreamId* streamOut);
 
 #endif // MAUL_AUDIO_SRC_DUPLEX_H

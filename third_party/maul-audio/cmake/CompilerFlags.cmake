@@ -39,9 +39,13 @@ function(maul_apply_flags target)
     if(MSVC)
         # clang-cl: MSVC-style driver options, clang options through /clang:.
         # Clang's floating-point model is precise by default; turning
-        # contraction off is the only change the family needs.
-        target_compile_options(${target} PRIVATE /W4 /clang:-ffp-contract=off
-                                                 /clang:-Wshadow /clang:-Wmissing-prototypes)
+        # contraction off is the only change the family needs. C23 is asked
+        # of clang directly: Visual Studio's ClangCL toolset gave a target
+        # made after a fetched project's LanguageStandard_C stdclatest,
+        # which it compiled below C23, in place of -clang:-std=c23.
+        target_compile_options(${target} PRIVATE /W4 $<$<COMPILE_LANGUAGE:C>:/clang:-std=c23>
+                                                 /clang:-ffp-contract=off /clang:-Wshadow
+                                                 /clang:-Wmissing-prototypes)
         if(CMAKE_SIZEOF_VOID_P EQUAL 8)
             target_compile_options(${target} PRIVATE /clang:-Wshorten-64-to-32)
         endif()

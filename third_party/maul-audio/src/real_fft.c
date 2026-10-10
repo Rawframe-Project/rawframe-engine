@@ -11,26 +11,44 @@
 
 #include "real_fft.h"
 
+#include "allocator.h"
+
 #include <math.h>
 
 #define PI_D 3.14159265358979323846
 
+// The tables' places in the block, each a part of its own, so that
+// under AddressSanitizer a read past one lands in a poisoned gap.
+typedef struct Places
+{
+    maudLayout layout;
+    size_t twiddles, split, reverse;
+} Places;
+
+static Places PlacesOf(uint32_t m)
+{
+    Places p = {0};
+    p.twiddles = maudLayoutAdd(&p.layout, (size_t)(m / 2) * 2, sizeof(float), alignof(float));
+    p.split = maudLayoutAdd(&p.layout, (size_t)m * 2, sizeof(float), alignof(float));
+    p.reverse = maudLayoutAdd(&p.layout, m, sizeof(uint32_t), alignof(uint32_t));
+    return p;
+}
+
 size_t maudRealFftBytes(uint32_t size)
 {
-    uint32_t m = size / 2;
-    return (size_t)(m / 2) * 2 * sizeof(float) + (size_t)m * 2 * sizeof(float) +
-           (size_t)m * sizeof(uint32_t);
+    return PlacesOf(size / 2).layout.size;
 }
 
 void maudInitRealFft(maudRealFft* fft, uint32_t size, void* memory)
 {
     uint32_t m = size / 2;
+    Places p = PlacesOf(m);
+    unsigned char* block = memory;
+    maudLayoutPoison(&p.layout, block);
     fft->size = size;
-    fft->twiddles = memory;
-    fft->split = fft->twiddles + (size_t)(m / 2) * 2;
-    // The indices after the floats (both four bytes, alike aligned).
-    size_t floats = ((size_t)(m / 2) * 2 + (size_t)m * 2) * sizeof(float);
-    fft->reverse = (uint32_t*)((unsigned char*)memory + floats);
+    fft->twiddles = (float*)(block + p.twiddles);
+    fft->split = (float*)(block + p.split);
+    fft->reverse = (uint32_t*)(block + p.reverse);
     for (uint32_t k = 0; k < m / 2; ++k)
     {
         double a = -2.0 * PI_D * (double)k / (double)m;

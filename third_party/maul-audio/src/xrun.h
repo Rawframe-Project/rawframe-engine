@@ -18,4 +18,15 @@ static inline void maudCountXrun(maudStreamCore* core)
     atomic_fetch_add_explicit(counter, 1, memory_order_relaxed);
 }
 
+// Counts the xruns a platform's running total (AAudio's) shows past
+// *counted, the total already counted, and moves *counted up to it; a
+// total that has not grown counts none. Real-time safe.
+static inline void maudCountXrunsTo(maudStreamCore* core, int32_t* counted, int32_t total)
+{
+    for (; *counted < total; ++*counted)
+    {
+        maudCountXrun(core);
+    }
+}
+
 #endif // MAUL_AUDIO_SRC_XRUN_H

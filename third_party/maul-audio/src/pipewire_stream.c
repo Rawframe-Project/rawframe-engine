@@ -12,12 +12,11 @@
 #include "context.h"
 #include "period.h"
 #include "pipewire_core.h"
+#include "pipewire_parse.h"
 #include "thread.h"
 #include "xrun.h"
 
 #include <sched.h>
-#include <spa/param/audio/format-utils.h>
-#include <spa/pod/builder.h>
 #include <string.h>
 
 // Bytes of the pod that describes a stream's format.
@@ -27,46 +26,6 @@ static maudPipewireStream* EntryOf(maudContext* context, const maudStreamSlot* s
 {
     maudPipewire* pipewire = context->native;
     return &pipewire->streams[slot - context->streams.slots];
-}
-
-// The PipeWire channel position of each speaker.
-static uint32_t PositionOf(maudSpeaker speaker)
-{
-    static const uint32_t positions[] = {
-        [maud_speakerNone] = SPA_AUDIO_CHANNEL_UNKNOWN,
-        [maud_speakerFrontLeft] = SPA_AUDIO_CHANNEL_FL,
-        [maud_speakerFrontRight] = SPA_AUDIO_CHANNEL_FR,
-        [maud_speakerFrontCenter] = SPA_AUDIO_CHANNEL_FC,
-        [maud_speakerLowFrequency] = SPA_AUDIO_CHANNEL_LFE,
-        [maud_speakerBackLeft] = SPA_AUDIO_CHANNEL_RL,
-        [maud_speakerBackRight] = SPA_AUDIO_CHANNEL_RR,
-        [maud_speakerSideLeft] = SPA_AUDIO_CHANNEL_SL,
-        [maud_speakerSideRight] = SPA_AUDIO_CHANNEL_SR,
-        [maud_speakerTopFrontLeft] = SPA_AUDIO_CHANNEL_TFL,
-        [maud_speakerTopFrontRight] = SPA_AUDIO_CHANNEL_TFR,
-        [maud_speakerTopBackLeft] = SPA_AUDIO_CHANNEL_TRL,
-        [maud_speakerTopBackRight] = SPA_AUDIO_CHANNEL_TRR,
-    };
-    return positions[speaker];
-}
-
-// Builds the stream's format into buffer: interleaved 32-bit float at
-// its rate, with its layout's positions; a mono stream is MONO.
-static const struct spa_pod* BuildFormat(const maudStreamCore* core, uint8_t* buffer)
-{
-    struct spa_pod_builder builder = SPA_POD_BUILDER_INIT(buffer, FORMAT_POD_BYTES);
-    uint32_t channels = maudGetLayoutChannelCount(core->format.layout);
-    struct spa_audio_info_raw info = {
-        .format = SPA_AUDIO_FORMAT_F32,
-        .rate = core->format.sampleRate,
-        .channels = channels,
-    };
-    for (uint32_t c = 0; c < channels; ++c)
-    {
-        info.position[c] = channels == 1 ? SPA_AUDIO_CHANNEL_MONO
-                                         : PositionOf(maudGetLayoutSpeaker(core->format.layout, c));
-    }
-    return spa_format_audio_raw_build(&builder, SPA_PARAM_EnumFormat, &info);
 }
 
 static void OnStateChanged(void* data, enum pw_stream_state old, enum pw_stream_state state,
@@ -205,11 +164,10 @@ static struct pw_properties* StreamProperties(const maudContext* context,
                                               const maudStreamCore* core)
 {
     const maudPipewireApi* api = &((maudPipewire*)context->native)->api;
-    bool output = core->def.direction == maud_directionOutput;
-    struct pw_properties* props = api->propertiesNew(
-        PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, output ? "Playback" : "Capture",
-        PW_KEY_MEDIA_ROLE, core->def.role == maud_roleCommunications ? "Communication" : "Game",
-        nullptr);
+    struct pw_properties* props =
+        api->propertiesNew(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY,
+                           maudPipewireMediaCategory(core->def.direction), PW_KEY_MEDIA_ROLE,
+                           maudPipewireMediaRole(core->def.role), nullptr);
     if (props == nullptr)
     {
         return nullptr;
@@ -281,7 +239,8 @@ static maudResult ConnectStream(maudContext* context, maudStreamSlot* slot, bool
     entry->used = true;
     pipewire->api.streamAddListener(entry->stream, &entry->listener, &s_streamEvents, entry);
     uint8_t buffer[FORMAT_POD_BYTES];
-    const struct spa_pod* params[] = {BuildFormat(core, buffer)};
+    const struct spa_pod* params[] = {maudPipewireBuildFormat(
+        core->format.layout, core->format.sampleRate, buffer, sizeof(buffer))};
     enum pw_stream_flags flags = PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
                                  PW_STREAM_FLAG_RT_PROCESS | PW_STREAM_FLAG_INACTIVE;
     bool output = core->def.direction == maud_directionOutput;

@@ -31,13 +31,12 @@ static void SetDefault(maudContext* context, maudDirection direction, maudDevice
                                       .kind = maud_notifyDefaultChanged,
                                       .direction = direction,
                                       .role = role,
-                                      .deviceId = device,
+                                      .device = device,
                                   });
     maudFollowDefault(context, direction, role);
 }
 
-maudResult maudAddDevice(maudContext* context, const maudDeviceSpec* spec,
-                         maudDeviceId* deviceIdOut)
+maudResult maudAddDevice(maudContext* context, const maudDeviceSpec* spec, maudDeviceId* deviceOut)
 {
     uint32_t textBytes = context->def.limits.deviceTextBytes;
     maudDeviceSlot* slot = nullptr;
@@ -68,7 +67,7 @@ maudResult maudAddDevice(maudContext* context, const maudDeviceSpec* spec,
     maudPostNotification(context, &(maudNotification){
                                       .kind = maud_notifyDeviceAdded,
                                       .direction = direction,
-                                      .deviceId = id,
+                                      .device = id,
                                   });
     for (uint32_t role = maud_roleGeneral; role <= maud_roleCommunications; ++role)
     {
@@ -77,7 +76,7 @@ maudResult maudAddDevice(maudContext* context, const maudDeviceSpec* spec,
             SetDefault(context, direction, (maudDeviceRole)role, id);
         }
     }
-    *deviceIdOut = id;
+    *deviceOut = id;
     return maud_success;
 }
 
@@ -104,7 +103,7 @@ void maudRemoveDevice(maudContext* context, maudDeviceSlot* slot)
     maudPostNotification(context, &(maudNotification){
                                       .kind = maud_notifyDeviceRemoved,
                                       .direction = direction,
-                                      .deviceId = id,
+                                      .device = id,
                                   });
     maudLoseDevice(context, id);
     for (uint32_t role = maud_roleGeneral; role <= maud_roleCommunications; ++role)
@@ -208,15 +207,15 @@ maudResult maudGetDeviceKey(const maudContext* context, maudDeviceId device, cha
 }
 
 maudResult maudGetDefaultDevice(const maudContext* context, maudDirection direction,
-                                maudDeviceRole role, maudDeviceId* deviceIdOut)
+                                maudDeviceRole role, maudDeviceId* deviceOut)
 {
-    if (context == nullptr || deviceIdOut == nullptr || direction > maud_directionInput ||
+    if (context == nullptr || deviceOut == nullptr || direction > maud_directionInput ||
         role > maud_roleCommunications)
     {
         return maud_errorInvalid;
     }
-    *deviceIdOut = context->devices.defaults[direction][role];
-    return deviceIdOut->index1 != 0 ? maud_success : maud_empty;
+    *deviceOut = context->devices.defaults[direction][role];
+    return deviceOut->index1 != 0 ? maud_success : maud_empty;
 }
 
 static bool KeyIs(const maudDeviceSlot* slot, const char* key, size_t length)
@@ -249,7 +248,7 @@ void maudSetDeviceForm(maudContext* context, maudDeviceSlot* slot, maudDeviceFor
     maudPostNotification(context, &(maudNotification){
                                       .kind = maud_notifyRouteChanged,
                                       .direction = slot->info.direction,
-                                      .deviceId = IdOf(context, slot),
+                                      .device = IdOf(context, slot),
                                       .form = form,
                                   });
 }
@@ -269,7 +268,7 @@ void maudSetDeviceSpatializer(maudContext* context, maudDeviceSlot* slot,
     maudPostNotification(context, &(maudNotification){
                                       .kind = maud_notifySpatializerChanged,
                                       .direction = slot->info.direction,
-                                      .deviceId = IdOf(context, slot),
+                                      .device = IdOf(context, slot),
                                   });
 }
 

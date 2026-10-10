@@ -38,6 +38,10 @@ typedef struct maudStreamBinding
     maudSuspendReason suspension;
     // The platform has not granted access yet; the stream cannot run.
     bool awaitingPermission;
+    // When a stream the platform failed to reopen may be tried again, and
+    // the last wait, in nanoseconds (retry.h).
+    int64_t retryAt;
+    int64_t retryWait;
 } maudStreamBinding;
 
 // A stream: what it was asked for, what it runs at, where it stands, and

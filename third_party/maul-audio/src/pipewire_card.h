@@ -21,8 +21,13 @@ bool maudPipewireStoreRoute(maudPipewireCard* card, const maudPipewireRoute* rou
 // Binds the Device global id and follows its routes.
 void maudPipewireAddCard(maudPipewire* pipewire, uint32_t globalId);
 
-// Forgets the card of global id, if it is one; false otherwise.
-bool maudPipewireRemoveCard(maudPipewire* pipewire, uint32_t globalId);
+// Takes a param the card emits: a Route gives the nodes on its profile
+// device the form it names.
+void maudPipewireTakeRoute(maudPipewireCard* card, uint32_t id, const struct spa_pod* param);
+
+// Forgets the card of global id, if it is one, and gives its nodes back
+// their own form factors.
+void maudPipewireRemoveCard(maudPipewire* pipewire, uint32_t globalId);
 
 // Forgets every card, as when the daemon goes away.
 void maudPipewireDropCards(maudPipewire* pipewire);

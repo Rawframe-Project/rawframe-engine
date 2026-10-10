@@ -6,6 +6,7 @@
 #ifndef MAUL_AUDIO_SRC_ALSA_STREAM_H
 #define MAUL_AUDIO_SRC_ALSA_STREAM_H
 
+#include "alsa_api.h"
 #include "context_core.h"
 
 // Opens the stream's PCM and sets its parameters; a native stream takes
@@ -20,5 +21,11 @@ void maudAlsaDetachStream(maudContext* context, maudStreamSlot* slot);
 // Prepares the PCM and starts the stream's thread, or stops the thread
 // and drops what the PCM had queued.
 void maudAlsaSetStreamActive(maudContext* context, maudStreamSlot* slot, bool active);
+
+// After a transfer failed with result (negative, not -EAGAIN): counts an
+// xrun for -EPIPE, recovers the PCM, and starts a capture again. False
+// when the PCM failed past recovery, as when its card went away.
+bool maudAlsaRecover(const maudAlsaApi* api, snd_pcm_t* pcm, maudStreamCore* core,
+                     snd_pcm_sframes_t result);
 
 #endif // MAUL_AUDIO_SRC_ALSA_STREAM_H

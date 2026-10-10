@@ -90,6 +90,7 @@ maudResult maudCreateBinauralDecoder(const maudBinauralDecoderDef* def,
         return maud_errorCapacity;
     }
     memset(block, 0, layout.size);
+    maudLayoutPoison(&layout, block);
     maudBinauralDecoder* decoder = (maudBinauralDecoder*)block;
     *decoder = (maudBinauralDecoder){
         .allocator = def->allocator,

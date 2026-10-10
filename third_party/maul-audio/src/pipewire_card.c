@@ -127,19 +127,23 @@ static void Apply(maudPipewire* pipewire, uint32_t cardId)
     }
 }
 
-static void OnRoute(void* data, int seq, uint32_t id, uint32_t index, uint32_t next,
-                    const struct spa_pod* param)
+void maudPipewireTakeRoute(maudPipewireCard* card, uint32_t id, const struct spa_pod* param)
 {
-    (void)seq;
-    (void)index;
-    (void)next;
-    maudPipewireCard* card = data;
     maudPipewireRoute route;
     if (id == SPA_PARAM_Route && maudPipewireReadRoute(param, &route) &&
         maudPipewireStoreRoute(card, &route))
     {
         Apply(card->owner, card->globalId);
     }
+}
+
+static void OnRoute(void* data, int seq, uint32_t id, uint32_t index, uint32_t next,
+                    const struct spa_pod* param)
+{
+    (void)seq;
+    (void)index;
+    (void)next;
+    maudPipewireTakeRoute(data, id, param);
 }
 
 static const struct pw_device_events s_cardEvents = {
@@ -179,16 +183,14 @@ static void Forget(maudPipewire* pipewire, maudPipewireCard* card)
     *card = (maudPipewireCard){0};
 }
 
-bool maudPipewireRemoveCard(maudPipewire* pipewire, uint32_t globalId)
+void maudPipewireRemoveCard(maudPipewire* pipewire, uint32_t globalId)
 {
     maudPipewireCard* card = (maudPipewireCard*)CardOf(pipewire, globalId);
-    if (card == nullptr)
+    if (card != nullptr)
     {
-        return false;
+        Forget(pipewire, card);
+        Apply(pipewire, globalId);
     }
-    Forget(pipewire, card);
-    Apply(pipewire, globalId);
-    return true;
 }
 
 void maudPipewireDropCards(maudPipewire* pipewire)

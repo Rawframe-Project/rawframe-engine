@@ -8,6 +8,7 @@
 // defaults, and subscription events new queries. A server that goes
 // away is reconnected on later drains.
 
+#include "allocator.h"
 #include "backend.h"
 #include "context.h"
 #include "device.h"
@@ -453,21 +454,27 @@ static maudResult OpenContext(maudContext* context)
 {
     uint32_t capacity = context->def.limits.devices;
     uint32_t streams = context->def.limits.streams;
-    size_t bytes = sizeof(maudPulse) + (size_t)capacity * sizeof(maudPulseNode) +
-                   (size_t)streams * sizeof(maudPulseStream);
-    maudPulse* pulse = maudContextAllocate(context, bytes, alignof(maudPulse));
-    if (pulse == nullptr)
+    maudLayout layout = {0};
+    (void)maudLayoutAdd(&layout, 1, sizeof(maudPulse), alignof(maudPulse));
+    size_t nodes = maudLayoutAdd(&layout, capacity, sizeof(maudPulseNode), alignof(maudPulseNode));
+    size_t entries =
+        maudLayoutAdd(&layout, streams, sizeof(maudPulseStream), alignof(maudPulseStream));
+    unsigned char* block =
+        layout.overflow ? nullptr : maudContextAllocate(context, layout.size, alignof(maudPulse));
+    if (block == nullptr)
     {
         return maud_errorCapacity;
     }
+    maudLayoutPoison(&layout, block);
+    maudPulse* pulse = (maudPulse*)block;
     *pulse = (maudPulse){
         .context = context,
-        .nodes = (maudPulseNode*)(pulse + 1),
+        .nodes = (maudPulseNode*)(block + nodes),
+        .streams = (maudPulseStream*)(block + entries),
         .nodeCapacity = capacity,
-        .bytes = bytes,
+        .bytes = layout.size,
     };
     memset(pulse->nodes, 0, (size_t)capacity * sizeof(maudPulseNode));
-    pulse->streams = (maudPulseStream*)(pulse->nodes + capacity);
     memset(pulse->streams, 0, (size_t)streams * sizeof(maudPulseStream));
     context->native = pulse;
     if (!maudLoadPulse(&pulse->api))

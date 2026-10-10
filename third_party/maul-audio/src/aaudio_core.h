@@ -20,6 +20,9 @@ typedef struct maudAaudioStream
     maudStreamCore* core;
     AAudioStream* stream;
     bool playing;
+    // Whether the stream was ever started, so that callbacks of it may
+    // still be in flight when it is closed.
+    bool ran;
     // The stream's xrun count when the callback last read it.
     int32_t xruns;
     // Raised by the error callback when the stream's device went away or

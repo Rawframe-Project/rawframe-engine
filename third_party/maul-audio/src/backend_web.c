@@ -12,6 +12,7 @@
 // holds a context until a user gesture; the drain reads the
 // AudioContext's state and suspends or resumes the streams.
 
+#include "allocator.h"
 #include "backend.h"
 #include "clock.h"
 #include "context.h"
@@ -269,24 +270,31 @@ static maudResult OpenContext(maudContext* context)
 {
     uint32_t streams = context->def.limits.streams;
     uint32_t devices = context->def.limits.devices;
-    size_t bytes = sizeof(maudWeb) + (size_t)streams * sizeof(maudWebStream) +
-                   (size_t)devices * (sizeof(maudDeviceSpec) + sizeof(maudWebEndpoint));
-    maudWeb* web = maudContextAllocate(context, bytes, alignof(maudWeb));
-    if (web == nullptr)
+    maudLayout layout = {0};
+    (void)maudLayoutAdd(&layout, 1, sizeof(maudWeb), alignof(maudWeb));
+    size_t entries = maudLayoutAdd(&layout, streams, sizeof(maudWebStream), alignof(maudWebStream));
+    size_t specs = maudLayoutAdd(&layout, devices, sizeof(maudDeviceSpec), alignof(maudDeviceSpec));
+    size_t endpoints =
+        maudLayoutAdd(&layout, devices, sizeof(maudWebEndpoint), alignof(maudWebEndpoint));
+    unsigned char* block =
+        layout.overflow ? nullptr : maudContextAllocate(context, layout.size, alignof(maudWeb));
+    if (block == nullptr)
     {
         return maud_errorCapacity;
     }
+    maudLayoutPoison(&layout, block);
+    maudWeb* web = (maudWeb*)block;
     *web = (maudWeb){.handle = maudWebOpen(),
-                     .streams = (maudWebStream*)(web + 1),
+                     .streams = (maudWebStream*)(block + entries),
+                     .specs = (maudDeviceSpec*)(block + specs),
+                     .endpoints = (maudWebEndpoint*)(block + endpoints),
                      .endpointCapacity = devices,
-                     .bytes = bytes};
+                     .bytes = layout.size};
     memset(web->streams, 0, (size_t)streams * sizeof(maudWebStream));
-    web->specs = (maudDeviceSpec*)(web->streams + streams);
-    web->endpoints = (maudWebEndpoint*)(web->specs + devices);
     context->native = web;
     if (web->handle == 0)
     {
-        maudContextRelease(context, web, bytes, alignof(maudWeb));
+        maudContextRelease(context, web, layout.size, alignof(maudWeb));
         context->native = nullptr;
         return maud_errorUnsupported;
     }
@@ -323,7 +331,7 @@ static maudResult OpenContext(maudContext* context)
     else
     {
         maudWebClose(web->handle);
-        maudContextRelease(context, web, bytes, alignof(maudWeb));
+        maudContextRelease(context, web, web->bytes, alignof(maudWeb));
         context->native = nullptr;
     }
     return result;

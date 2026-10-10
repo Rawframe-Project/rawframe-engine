@@ -66,6 +66,10 @@ extern "C"
     typedef struct maudContextDef
     {
         uint32_t cookie;
+        // MAUD_ABI_VERSION of the headers the program was built with; the
+        // cookie and this stay the first two fields in every version, so
+        // that maudCreateContext can refuse a def of another layout.
+        uint32_t version;
         maudAllocator allocator;
         maudLimits limits;
         maudBackendKind backend;
@@ -88,15 +92,39 @@ extern "C"
         bool iosSilencedBySwitch;
     } maudContextDef;
 
+// The cookie of a context def, which its default sets and
+// maudCreateContext checks.
+#define MAUD_CONTEXT_DEF_COOKIE 0x6D616378u
+
     /// Returns the default context def: 8 streams, periods of at most
     /// 8,192 frames, 32 devices, 256 notifications, 256 bytes of device
     /// name and key, the C library's allocator, the native backend and an
     /// offline rate of 48,000.
     ///
-    /// @return The def, with a valid cookie.
+    /// The default is built in the program from the headers it includes,
+    /// so the version it stamps is the program's.
+    ///
+    /// @return The def, with a valid cookie and version.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API maudContextDef maudDefaultContextDef(void);
+    static inline maudContextDef maudDefaultContextDef(void)
+    {
+#ifdef __cplusplus
+        maudContextDef def = {};
+#else
+    maudContextDef def = {0};
+#endif
+        def.cookie = MAUD_CONTEXT_DEF_COOKIE;
+        def.version = MAUD_ABI_VERSION;
+        def.limits.streams = 8;
+        def.limits.periodFrames = 8192;
+        def.limits.devices = 32;
+        def.limits.notifications = 256;
+        def.limits.deviceTextBytes = 256;
+        def.backend = maud_backendNative;
+        def.offlineSampleRate = 48000;
+        return def;
+    }
 
     /// Creates a context. An offline context starts with one output and one
     /// input device at the offline rate, stereo, each the default of its
@@ -106,8 +134,10 @@ extern "C"
     ///
     /// @param def         The def, from maudDefaultContextDef.
     /// @param contextOut  Receives the context; set to NULL on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL argument, a def
-    ///         without its cookie, an allocator with one function, a limit
+    /// @return `maud_success`; `maud_errorVersion` for a def stamped with
+    ///         another major or minor version than the library's, checked
+    ///         before anything else of it; `maud_errorInvalid` for a NULL
+    ///         argument, a def without its cookie, an allocator with one function, a limit
     ///         of 0 or an offline rate out of range; `maud_errorUnsupported`
     ///         when this build or platform lacks the backend asked for, or
     ///         no audio service of it answers;

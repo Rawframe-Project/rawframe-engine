@@ -50,6 +50,7 @@ typedef struct Parts
     size_t buffer;
     size_t size;
     bool overflow;
+    maudLayout layout;
 } Parts;
 
 static Parts LayOut(uint32_t directions, uint32_t channels, uint32_t bins, uint32_t size)
@@ -66,6 +67,7 @@ static Parts LayOut(uint32_t directions, uint32_t channels, uint32_t bins, uint3
     parts.buffer = maudLayoutAdd(&layout, 2u * (size_t)size, d, alignof(double));
     parts.size = layout.size;
     parts.overflow = layout.overflow;
+    parts.layout = layout;
     return parts;
 }
 
@@ -269,6 +271,7 @@ maudResult maudBuildMagLs(const maudHrtf* hrtf, uint32_t order, uint32_t taps, d
     {
         return maud_errorCapacity;
     }
+    maudLayoutPoison(&parts.layout, block);
     Work work = {
         .order = order,
         .directions = hrtf->directionCount,

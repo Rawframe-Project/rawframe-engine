@@ -46,36 +46,60 @@ static uint32_t BandsOf(double sampleRate)
     return bands > SPEECH_BANDS ? bands : SPEECH_BANDS;
 }
 
+// The suppressor's sizes, and each array's place in its block: each
+// array a part of its own, so that under AddressSanitizer a read past
+// one lands in a poisoned gap.
 typedef struct Places
 {
     uint32_t bins;
     uint32_t bands;
-    size_t doubles;
-    size_t floats;
-    size_t words;
-    size_t halves;
+    maudLayout layout;
+    size_t residual, noise, lastSpeech, power, interference, posterior, prior, zeta, sum;
+    size_t window, lastOutput, lastEcho, tail, frame, spectrum, echoSpectrum;
+    size_t perBand, band;
 } Places;
+
+static size_t Doubles(maudLayout* layout, size_t count)
+{
+    return maudLayoutAdd(layout, count, sizeof(double), alignof(double));
+}
+
+static size_t Floats(maudLayout* layout, size_t count)
+{
+    return maudLayoutAdd(layout, count, sizeof(float), alignof(float));
+}
 
 static Places PlacesOf(uint32_t block, double sampleRate)
 {
     Places p = {.bins = block + 1, .bands = BandsOf(sampleRate)};
-    p.doubles = 7 * (size_t)p.bins + 2 * (size_t)p.bands;
+    maudLayout* l = &p.layout;
+    size_t n = block;
+    p.residual = Doubles(l, p.bins);
+    p.noise = Doubles(l, p.bins);
+    p.lastSpeech = Doubles(l, p.bins);
+    p.power = Doubles(l, p.bins);
+    p.interference = Doubles(l, p.bins);
+    p.posterior = Doubles(l, p.bins);
+    p.prior = Doubles(l, p.bins);
+    p.zeta = Doubles(l, p.bands);
+    p.sum = Doubles(l, p.bands);
     // The window, the last blocks, the tail, a frame and two spectra.
-    p.floats = 2 * (size_t)block + 3 * (size_t)block + 2 * (size_t)block + 4 * (size_t)p.bins;
-    p.words = p.bands;
-    p.halves = p.bins;
+    p.window = Floats(l, 2 * n);
+    p.lastOutput = Floats(l, n);
+    p.lastEcho = Floats(l, n);
+    p.tail = Floats(l, n);
+    p.frame = Floats(l, 2 * n);
+    p.spectrum = Floats(l, 2 * (size_t)p.bins);
+    p.echoSpectrum = Floats(l, 2 * (size_t)p.bins);
+    p.perBand = maudLayoutAdd(l, p.bands, sizeof(uint32_t), alignof(uint32_t));
+    p.band = maudLayoutAdd(l, p.bins, sizeof(uint16_t), alignof(uint16_t));
     return p;
 }
 
 size_t maudEchoSuppressorBytes(uint32_t block, double sampleRate)
 {
     Places p = PlacesOf(block, sampleRate);
-    maudLayout layout = {0};
-    (void)maudLayoutAdd(&layout, p.doubles, sizeof(double), alignof(double));
-    (void)maudLayoutAdd(&layout, p.floats, sizeof(float), alignof(float));
-    (void)maudLayoutAdd(&layout, p.words, sizeof(uint32_t), alignof(uint32_t));
-    (void)maudLayoutAdd(&layout, p.halves, sizeof(uint16_t), alignof(uint16_t));
-    return layout.overflow ? 0 : layout.size;
+    return p.layout.overflow ? 0 : p.layout.size;
 }
 
 // Each bin's band, and the bins per band.
@@ -97,9 +121,8 @@ void maudInitEchoSuppressor(maudEchoSuppressor* suppressor, uint32_t block, doub
                             double floorDb, const maudRealFft* fft, void* memory)
 {
     Places p = PlacesOf(block, sampleRate);
-    double* d = memory;
-    float* f = (float*)(d + p.doubles);
-    uint32_t* w = (uint32_t*)(f + p.floats);
+    unsigned char* m = memory;
+    maudLayoutPoison(&p.layout, m);
     double scale = ((double)block / sampleRate) / MEASURED_BLOCK;
     size_t n = block;
     *suppressor = (maudEchoSuppressor){
@@ -107,25 +130,25 @@ void maudInitEchoSuppressor(maudEchoSuppressor* suppressor, uint32_t block, doub
         .bins = p.bins,
         .bands = p.bands,
         .speechBands = SPEECH_BANDS,
-        .perBand = w,
-        .band = (uint16_t*)(w + p.words),
+        .perBand = (uint32_t*)(m + p.perBand),
+        .band = (uint16_t*)(m + p.band),
         .fft = fft,
-        .window = f,
-        .lastOutput = f + 2 * n,
-        .lastEcho = f + 3 * n,
-        .tail = f + 4 * n,
-        .frame = f + 5 * n,
-        .spectrum = f + 7 * n,
-        .echoSpectrum = f + 7 * n + 2 * (size_t)p.bins,
-        .residual = d,
-        .noise = d + p.bins,
-        .lastSpeech = d + 2 * (size_t)p.bins,
-        .power = d + 3 * (size_t)p.bins,
-        .interference = d + 4 * (size_t)p.bins,
-        .posterior = d + 5 * (size_t)p.bins,
-        .prior = d + 6 * (size_t)p.bins,
-        .zeta = d + 7 * (size_t)p.bins,
-        .sum = d + 7 * (size_t)p.bins + p.bands,
+        .window = (float*)(m + p.window),
+        .lastOutput = (float*)(m + p.lastOutput),
+        .lastEcho = (float*)(m + p.lastEcho),
+        .tail = (float*)(m + p.tail),
+        .frame = (float*)(m + p.frame),
+        .spectrum = (float*)(m + p.spectrum),
+        .echoSpectrum = (float*)(m + p.echoSpectrum),
+        .residual = (double*)(m + p.residual),
+        .noise = (double*)(m + p.noise),
+        .lastSpeech = (double*)(m + p.lastSpeech),
+        .power = (double*)(m + p.power),
+        .interference = (double*)(m + p.interference),
+        .posterior = (double*)(m + p.posterior),
+        .prior = (double*)(m + p.prior),
+        .zeta = (double*)(m + p.zeta),
+        .sum = (double*)(m + p.sum),
         .noiseFloor = pow(10.0, floorDb / 10.0),
         .echoFloorQuiet = pow(10.0, ECHO_FLOOR_QUIET / 10.0),
         .echoFloorSpeech = pow(10.0, ECHO_FLOOR_SPEECH / 10.0),
@@ -138,8 +161,18 @@ void maudInitEchoSuppressor(maudEchoSuppressor* suppressor, uint32_t block, doub
     {
         suppressor->window[i] = (float)sin(PI_D * ((double)i + 0.5) / (2.0 * block));
     }
-    memset(f + 2 * n, 0, 3 * n * sizeof(float));
-    memset(d, 0, p.doubles * sizeof(double));
+    memset(suppressor->lastOutput, 0, n * sizeof(float));
+    memset(suppressor->lastEcho, 0, n * sizeof(float));
+    memset(suppressor->tail, 0, n * sizeof(float));
+    double* zeroed[] = {suppressor->residual, suppressor->noise,        suppressor->lastSpeech,
+                        suppressor->power,    suppressor->interference, suppressor->posterior,
+                        suppressor->prior};
+    for (size_t i = 0; i < sizeof(zeroed) / sizeof(zeroed[0]); ++i)
+    {
+        memset(zeroed[i], 0, p.bins * sizeof(double));
+    }
+    memset(suppressor->zeta, 0, p.bands * sizeof(double));
+    memset(suppressor->sum, 0, p.bands * sizeof(double));
     Bands(suppressor, sampleRate);
 }
 

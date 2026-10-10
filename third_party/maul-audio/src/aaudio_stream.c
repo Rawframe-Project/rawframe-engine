@@ -19,10 +19,12 @@
 #include "device.h"
 #include "follow.h"
 #include "period.h"
+#include "retry.h"
 #include "thread.h"
 #include "voice.h"
 #include "xrun.h"
 
+#include <errno.h>
 #include <string.h>
 #include <time.h>
 
@@ -30,16 +32,6 @@ static maudAaudioStream* EntryOf(maudContext* context, const maudStreamSlot* slo
 {
     maudAaudio* aaudio = context->native;
     return &aaudio->streams[slot - context->streams.slots];
-}
-
-// Counts the xruns AAudio saw since the last callback.
-static void CountXruns(maudAaudioStream* entry, AAudioStream* stream)
-{
-    int32_t xruns = AAudioStream_getXRunCount(stream);
-    for (; entry->xruns < xruns; ++entry->xruns)
-    {
-        maudCountXrun(entry->core);
-    }
 }
 
 // Stamps the stream's clock. AAudio's timestamp gives the time a frame
@@ -84,7 +76,7 @@ static aaudio_data_callback_result_t Move(AAudioStream* stream, void* user, void
     maudAaudioStream* entry = user;
     maudStreamCore* core = entry->core;
     bool output = core->def.direction == maud_directionOutput;
-    CountXruns(entry, stream);
+    maudCountXrunsTo(core, &entry->xruns, AAudioStream_getXRunCount(stream));
     bool running = atomic_load_explicit(&core->state, memory_order_acquire) == maud_streamRunning;
     atomic_store_explicit(&core->renderingThread, maudCurrentThread(), memory_order_release);
     core->period.sampleRate = atomic_load_explicit(&core->blockRate, memory_order_acquire);
@@ -230,6 +222,7 @@ static void Start(maudAaudioStream* entry)
     if (entry->stream != nullptr && !entry->playing)
     {
         entry->playing = AAudioStream_requestStart(entry->stream) == AAUDIO_OK;
+        entry->ran = entry->ran || entry->playing;
     }
 }
 
@@ -256,16 +249,36 @@ static void Stop(maudAaudioStream* entry)
     }
 }
 
+// The wait before closing a stream that ran: AAudio's legacy path can
+// run a data callback just after a stop, and after a close that follows
+// at once, on the freed stream. Oboe waits one burst and a millisecond,
+// 10 to 100 ms.
+static void Settle(AAudioStream* stream)
+{
+    int32_t rate = AAudioStream_getSampleRate(stream);
+    int32_t burst = AAudioStream_getFramesPerBurst(stream);
+    int64_t milliseconds = rate > 0 && burst > 0 ? 1 + (int64_t)burst * 1000 / rate : 0;
+    milliseconds = milliseconds < 10 ? 10 : milliseconds > 100 ? 100 : milliseconds;
+    struct timespec wait = {.tv_sec = 0, .tv_nsec = (long)(milliseconds * 1000000)};
+    while (nanosleep(&wait, &wait) != 0 && errno == EINTR)
+    {
+    }
+}
+
 static void Close(maudAaudioStream* entry)
 {
     if (entry->stream != nullptr)
     {
-        // Closing stops the stream first and returns once its callbacks
-        // are done.
+        if (entry->ran)
+        {
+            Stop(entry);
+            Settle(entry->stream);
+        }
         aaudio_result_t closed = AAudioStream_close(entry->stream);
         (void)closed;
         entry->stream = nullptr;
         entry->playing = false;
+        entry->ran = false;
     }
 }
 
@@ -322,6 +335,7 @@ void maudAaudioSetStreamActive(maudContext* context, maudStreamSlot* slot, bool 
 
 void maudAaudioResumeStreams(maudContext* context)
 {
+    int64_t now = maudNowNanoseconds();
     for (uint32_t i = 0; i < context->streams.capacity; ++i)
     {
         maudStreamSlot* slot = &context->streams.slots[i];
@@ -341,16 +355,20 @@ void maudAaudioResumeStreams(maudContext* context)
         }
         bool lost = entry->stream != nullptr &&
                     atomic_exchange_explicit(&entry->lost, false, memory_order_acq_rel);
-        if (!lost && (entry->stream != nullptr || !Running(slot)))
+        if (!lost && (entry->stream != nullptr || !maudWantsReopen(slot) ||
+                      !maudRetryDue(&slot->core.binding, now)))
         {
             continue;
         }
         // A failure leaves the stream without an AAudio stream; the drain
-        // tries again while it runs.
+        // tries again while it runs, waiting longer after each failure,
+        // the stream suspended with maud_suspendPlatform meanwhile.
         Close(entry);
-        if (Open(context, slot) == maud_success && Running(slot))
+        bool opened = Open(context, slot) == maud_success;
+        if (opened && Running(slot))
         {
             Start(entry);
         }
+        maudReportReopen(context, slot, opened, now);
     }
 }

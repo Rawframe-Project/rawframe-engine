@@ -43,6 +43,7 @@ bool maudCreatePathSearch(const maudAllocator* allocator, uint32_t capacity, mau
     {
         return false;
     }
+    maudLayoutPoison(&layout, search->memory);
     unsigned char* base = search->memory;
     search->cost = (float*)(base + cost);
     search->parent = (uint32_t*)(base + parent);

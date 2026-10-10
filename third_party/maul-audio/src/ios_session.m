@@ -129,10 +129,8 @@ void maudIosSessionUnobserve(void* observer)
     [held release];
 }
 
-// The form a route's port leads to.
-static maudDeviceForm FormOf(AVAudioSessionPortDescription* port)
+maudDeviceForm maudIosPortForm(NSString* type)
 {
-    AVAudioSessionPort type = port.portType;
     if ([type isEqualToString:AVAudioSessionPortBuiltInSpeaker])
     {
         return maud_formSpeakers;
@@ -181,7 +179,7 @@ uint32_t maudIosSessionInputs(maudIosPort* ports, uint32_t capacity)
             maudIosPort* out = &ports[count];
             snprintf(out->key, sizeof(out->key), "port:%s", port.UID.UTF8String);
             snprintf(out->name, sizeof(out->name), "%s", port.portName.UTF8String);
-            out->form = FormOf(port);
+            out->form = maudIosPortForm(port.portType);
             count++;
         }
         return count;
@@ -214,8 +212,8 @@ void maudIosSessionRoute(maudDeviceForm* output, maudDeviceForm* input)
         AVAudioSessionRouteDescription* route = [AVAudioSession sharedInstance].currentRoute;
         AVAudioSessionPortDescription* played = route.outputs.firstObject;
         AVAudioSessionPortDescription* heard = route.inputs.firstObject;
-        *output = played != nil ? FormOf(played) : maud_formUnknown;
-        *input = heard != nil ? FormOf(heard) : maud_formUnknown;
+        *output = played != nil ? maudIosPortForm(played.portType) : maud_formUnknown;
+        *input = heard != nil ? maudIosPortForm(heard.portType) : maud_formUnknown;
     }
 }
 

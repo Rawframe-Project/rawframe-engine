@@ -12,7 +12,8 @@
 // The form of one direction of a device: its data source in that scope
 // (internal or external speaker, headphones, microphone, line, S/PDIF),
 // else digital for an HDMI or DisplayPort transport, else unknown.
-maudDeviceForm maudCoreAudioFormOf(AudioObjectID object, maudDirection direction);
+maudDeviceForm maudCoreAudioFormOf(const maudCoreAudioHal* hal, AudioObjectID object,
+                                   maudDirection direction);
 
 // Listens to the data source of each of the scan's count endpoints that
 // has one, and stops listening to those no longer scanned. A change

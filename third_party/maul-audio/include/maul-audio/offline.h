@@ -47,7 +47,7 @@ extern "C"
     ///
     /// @param context      An offline context.
     /// @param def          The def, from maudDefaultOfflineDeviceDef.
-    /// @param deviceIdOut  Receives the device's id; the null id on failure.
+    /// @param deviceOut    Receives the device's id; the null id on failure.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer where
     ///         one is required, a def without its cookie, or a value out of
     ///         range; `maud_errorCapacity` past the device limit or the
@@ -58,7 +58,7 @@ extern "C"
     /// Safe from any thread; the context is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudAddOfflineDevice(maudContext* context,
                                                             const maudOfflineDeviceDef* def,
-                                                            maudDeviceId* deviceIdOut);
+                                                            maudDeviceId* deviceOut);
 
     /// Removes a device from an offline context, as an unplug would. A
     /// default it was passes to the first remaining device of its direction.

@@ -17,6 +17,7 @@
 #include "aaudio_core.h"
 #include "aaudio_java.h"
 #include "aaudio_stream.h"
+#include "allocator.h"
 #include "backend.h"
 #include "context.h"
 #include "device.h"
@@ -104,16 +105,19 @@ static const Kind* KindOf(int32_t type)
     return nullptr;
 }
 
-// Adds a device to the scan; false when the context's device limit is
-// reached.
-static bool Add(maudAaudio* aaudio, maudDirection direction, int32_t id, maudDeviceInfo info)
+// Adds a device to the scan, keyed and named, unless the context's
+// device limit is reached.
+static void Add(maudAaudio* aaudio, maudDirection direction, int32_t id, maudDeviceInfo info,
+                const char* key, const char* name)
 {
     maudContext* context = aaudio->context;
     if (aaudio->endpointCount >= context->def.limits.devices)
     {
-        return false;
+        return;
     }
     maudAaudioEndpoint* endpoint = &aaudio->endpoints[aaudio->endpointCount];
+    snprintf(endpoint->key, sizeof(endpoint->key), "%s", key);
+    snprintf(endpoint->name, sizeof(endpoint->name), "%s", name);
     info.direction = direction;
     endpoint->direction = direction;
     endpoint->id = id;
@@ -125,7 +129,6 @@ static bool Add(maudAaudio* aaudio, maudDirection direction, int32_t id, maudDev
         .keyLength = strlen(endpoint->key),
     };
     aaudio->endpointCount++;
-    return true;
 }
 
 // Android's Spatializer works on the current route, which the default
@@ -151,15 +154,6 @@ static void DescribeSpatializer(maudAaudio* aaudio, maudDeviceInfo* info)
 static void AddDefault(maudAaudio* aaudio, maudDirection direction)
 {
     bool output = direction == maud_directionOutput;
-    uint32_t count = aaudio->endpointCount;
-    if (count >= aaudio->context->def.limits.devices)
-    {
-        return;
-    }
-    maudAaudioEndpoint* endpoint = &aaudio->endpoints[count];
-    snprintf(endpoint->key, sizeof(endpoint->key), "default");
-    snprintf(endpoint->name, sizeof(endpoint->name), "%s",
-             output ? "Default output" : "Default input");
     // The microphone, mono until a stream asks for more; AAudio converts.
     maudDeviceInfo info = {
         .nativeLayout = output ? maudLayoutWithChannels(aaudio->channels) : maud_layoutMono,
@@ -171,8 +165,7 @@ static void AddDefault(maudAaudio* aaudio, maudDirection direction)
     {
         DescribeSpatializer(aaudio, &info);
     }
-    bool added = Add(aaudio, direction, 0, info);
-    (void)added;
+    Add(aaudio, direction, 0, info, "default", output ? "Default output" : "Default input");
 }
 
 // Adds one device Java listed, keyed by its type and address (its
@@ -180,37 +173,40 @@ static void AddDefault(maudAaudio* aaudio, maudDirection direction)
 static void Listed(maudAaudio* aaudio, maudDirection direction, const maudAaudioListing* listing)
 {
     const Kind* kind = KindOf(listing->type);
-    uint32_t count = aaudio->endpointCount;
-    if (kind == nullptr || count >= aaudio->context->def.limits.devices)
+    if (kind == nullptr)
     {
         return;
     }
-    maudAaudioEndpoint* endpoint = &aaudio->endpoints[count];
+    char key[MAUD_AAUDIO_KEY_BYTES];
     const char* where = listing->address[0] != '\0' ? listing->address : listing->product;
-    snprintf(endpoint->key, sizeof(endpoint->key), "%d:%s", (int)listing->type, where);
+    snprintf(key, sizeof(key), "%d:%s", (int)listing->type, where);
     const char* name = kind->builtIn != nullptr ? kind->builtIn : listing->product;
-    snprintf(endpoint->name, sizeof(endpoint->name), "%s", name[0] != '\0' ? name : "Device");
     uint32_t low = listing->lowRate > 0 ? (uint32_t)listing->lowRate : aaudio->rate;
     uint32_t high = listing->highRate > 0 ? (uint32_t)listing->highRate : aaudio->rate;
     uint32_t native = aaudio->rate < low ? low : aaudio->rate > high ? high : aaudio->rate;
     uint32_t channels = listing->channels > 0               ? (uint32_t)listing->channels
                         : direction == maud_directionOutput ? aaudio->channels
                                                             : 1u;
-    bool added = Add(aaudio, direction, listing->id,
-                     (maudDeviceInfo){
-                         .nativeLayout = maudLayoutWithChannels(channels),
-                         .nativeSampleRate = native,
-                         .minSampleRate = low,
-                         .maxSampleRate = high,
-                         .form = kind->form,
-                     });
-    (void)added;
+    Add(aaudio, direction, listing->id,
+        (maudDeviceInfo){
+            .nativeLayout = maudLayoutWithChannels(channels),
+            .nativeSampleRate = native,
+            .minSampleRate = low,
+            .maxSampleRate = high,
+            .form = kind->form,
+        },
+        key, name[0] != '\0' ? name : "Device");
 }
 
-// Points both roles of a direction at its default device.
+// Points both roles of a direction at its default device, which a
+// context of too few devices may not hold.
 static void PointDefaults(maudContext* context, maudDirection direction)
 {
     maudDeviceId id = maudFindDeviceByKey(context, direction, "default", 7);
+    if (id.index1 == 0)
+    {
+        return;
+    }
     maudSetDefaultDevice(context, maud_roleGeneral, id);
     maudSetDefaultDevice(context, maud_roleCommunications, id);
 }
@@ -276,17 +272,28 @@ static maudAaudio* Allocate(maudContext* context)
 {
     uint32_t streams = context->def.limits.streams;
     uint32_t devices = context->def.limits.devices;
-    size_t bytes = sizeof(maudAaudio) + (size_t)streams * sizeof(maudAaudioStream) +
-                   (size_t)devices * (sizeof(maudDeviceSpec) + sizeof(maudAaudioEndpoint));
-    maudAaudio* aaudio = maudContextAllocate(context, bytes, alignof(maudAaudio));
-    if (aaudio == nullptr)
+    maudLayout layout = {0};
+    (void)maudLayoutAdd(&layout, 1, sizeof(maudAaudio), alignof(maudAaudio));
+    size_t entries =
+        maudLayoutAdd(&layout, streams, sizeof(maudAaudioStream), alignof(maudAaudioStream));
+    size_t specs = maudLayoutAdd(&layout, devices, sizeof(maudDeviceSpec), alignof(maudDeviceSpec));
+    size_t endpoints =
+        maudLayoutAdd(&layout, devices, sizeof(maudAaudioEndpoint), alignof(maudAaudioEndpoint));
+    unsigned char* block =
+        layout.overflow ? nullptr : maudContextAllocate(context, layout.size, alignof(maudAaudio));
+    if (block == nullptr)
     {
         return nullptr;
     }
-    *aaudio = (maudAaudio){.context = context, .bytes = bytes};
-    aaudio->streams = (maudAaudioStream*)(aaudio + 1);
-    aaudio->specs = (maudDeviceSpec*)(aaudio->streams + streams);
-    aaudio->endpoints = (maudAaudioEndpoint*)(aaudio->specs + devices);
+    maudLayoutPoison(&layout, block);
+    maudAaudio* aaudio = (maudAaudio*)block;
+    *aaudio = (maudAaudio){
+        .context = context,
+        .streams = (maudAaudioStream*)(block + entries),
+        .specs = (maudDeviceSpec*)(block + specs),
+        .endpoints = (maudAaudioEndpoint*)(block + endpoints),
+        .bytes = layout.size,
+    };
     memset(aaudio->streams, 0, (size_t)streams * sizeof(maudAaudioStream));
     atomic_init(&aaudio->signals.changed, false);
     atomic_init(&aaudio->signals.focus, 0);

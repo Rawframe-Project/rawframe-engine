@@ -7,6 +7,7 @@
 // defaults through a listener block on a queue the context owns; the
 // block raises a flag and the drain lists devices and defaults again.
 
+#include "allocator.h"
 #include "backend.h"
 #include "context.h"
 #include "coreaudio_core.h"
@@ -20,6 +21,13 @@
 
 // The properties whose changes the context listens to, on the system
 // object.
+const maudCoreAudioHal maudCoreAudioSystemHal = {
+    .getData = AudioObjectGetPropertyData,
+    .has = AudioObjectHasProperty,
+    .addListener = AudioObjectAddPropertyListenerBlock,
+    .removeListener = AudioObjectRemovePropertyListenerBlock,
+};
+
 static const AudioObjectPropertySelector s_watched[] = {
     kAudioHardwarePropertyDevices,
     kAudioHardwarePropertyDefaultOutputDevice,
@@ -149,7 +157,7 @@ static bool Describe(maudCoreAudio* coreaudio, AudioObjectID object, maudDirecti
         .keyLength = strlen(endpoint->key),
     };
     ReadRates(coreaudio, object, &spec->info);
-    spec->info.form = maudCoreAudioFormOf(object, direction);
+    spec->info.form = maudCoreAudioFormOf(coreaudio->hal, object, direction);
     // macOS never spatializes an AUHAL client's output, but an object
     // stream renders through the system's spatial mixer, which takes any
     // number of objects.
@@ -285,26 +293,39 @@ static maudCoreAudio* Allocate(maudContext* context)
     uint32_t devices = context->def.limits.devices;
     uint32_t streams = context->def.limits.streams;
     uint32_t objects = 2 * devices + 16;
-    size_t bytes = sizeof(maudCoreAudio) + (size_t)objects * sizeof(AudioObjectID) +
-                   (size_t)devices * (sizeof(maudCoreAudioEndpoint) + sizeof(maudDeviceSpec) +
-                                      sizeof(maudCoreAudioWatch)) +
-                   (size_t)streams * sizeof(maudCoreAudioStream) + MAUD_COREAUDIO_SCRATCH_BYTES +
-                   alignof(max_align_t);
-    maudCoreAudio* coreaudio = maudContextAllocate(context, bytes, alignof(maudCoreAudio));
-    if (coreaudio == nullptr)
+    maudLayout layout = {0};
+    (void)maudLayoutAdd(&layout, 1, sizeof(maudCoreAudio), alignof(maudCoreAudio));
+    size_t entries =
+        maudLayoutAdd(&layout, streams, sizeof(maudCoreAudioStream), alignof(maudCoreAudioStream));
+    size_t specs = maudLayoutAdd(&layout, devices, sizeof(maudDeviceSpec), alignof(maudDeviceSpec));
+    size_t endpoints = maudLayoutAdd(&layout, devices, sizeof(maudCoreAudioEndpoint),
+                                     alignof(maudCoreAudioEndpoint));
+    size_t watched =
+        maudLayoutAdd(&layout, devices, sizeof(maudCoreAudioWatch), alignof(maudCoreAudioWatch));
+    size_t ids = maudLayoutAdd(&layout, objects, sizeof(AudioObjectID), alignof(AudioObjectID));
+    size_t scratch = maudLayoutAdd(&layout, MAUD_COREAUDIO_SCRATCH_BYTES, 1, alignof(max_align_t));
+    unsigned char* block = layout.overflow
+                               ? nullptr
+                               : maudContextAllocate(context, layout.size, alignof(maudCoreAudio));
+    if (block == nullptr)
     {
         return nullptr;
     }
+    maudLayoutPoison(&layout, block);
+    maudCoreAudio* coreaudio = (maudCoreAudio*)block;
     *coreaudio = (maudCoreAudio){
-        .context = context, .objectCapacity = objects, .watchCapacity = devices, .bytes = bytes};
-    coreaudio->streams = (maudCoreAudioStream*)(coreaudio + 1);
-    coreaudio->specs = (maudDeviceSpec*)(coreaudio->streams + streams);
-    coreaudio->endpoints = (maudCoreAudioEndpoint*)(coreaudio->specs + devices);
-    coreaudio->watched = (maudCoreAudioWatch*)(coreaudio->endpoints + devices);
-    coreaudio->objects = (AudioObjectID*)(coreaudio->watched + devices);
-    uintptr_t scratch = (uintptr_t)(coreaudio->objects + objects);
-    scratch = (scratch + alignof(max_align_t) - 1) & ~(uintptr_t)(alignof(max_align_t) - 1);
-    coreaudio->scratch = (unsigned char*)scratch;
+        .context = context,
+        .hal = &maudCoreAudioSystemHal,
+        .streams = (maudCoreAudioStream*)(block + entries),
+        .specs = (maudDeviceSpec*)(block + specs),
+        .endpoints = (maudCoreAudioEndpoint*)(block + endpoints),
+        .watched = (maudCoreAudioWatch*)(block + watched),
+        .objects = (AudioObjectID*)(block + ids),
+        .scratch = block + scratch,
+        .objectCapacity = objects,
+        .watchCapacity = devices,
+        .bytes = layout.size,
+    };
     memset(coreaudio->streams, 0, (size_t)streams * sizeof(maudCoreAudioStream));
     return coreaudio;
 }

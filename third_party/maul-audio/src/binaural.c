@@ -115,6 +115,7 @@ typedef struct Parts
     size_t responses[4];
     size_t size;
     bool overflow;
+    maudLayout layout;
 } Parts;
 
 static Parts LayOut(uint32_t reach, uint32_t taps, uint32_t maxFrames)
@@ -134,6 +135,7 @@ static Parts LayOut(uint32_t reach, uint32_t taps, uint32_t maxFrames)
     }
     parts.size = layout.size;
     parts.overflow = layout.overflow;
+    parts.layout = layout;
     return parts;
 }
 
@@ -157,6 +159,7 @@ maudResult maudCreateBinaural(const maudBinauralDef* def, maudBinaural** effectO
         return maud_errorCapacity;
     }
     memset(block, 0, parts.size);
+    maudLayoutPoison(&parts.layout, block);
     maudBinaural* effect = (maudBinaural*)block;
     double fade = round(FADE_SECONDS * (double)hrtf->sampleRate);
     *effect = (maudBinaural){

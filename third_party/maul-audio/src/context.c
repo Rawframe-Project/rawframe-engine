@@ -11,28 +11,12 @@
 #include "invariant.h"
 #include "thread.h"
 
-#define CONTEXT_DEF_COOKIE 0x6D616378u
-#define MIN_RATE           8000u
-#define MAX_RATE           384000u
-
-maudContextDef maudDefaultContextDef(void)
-{
-    return (maudContextDef){
-        .cookie = CONTEXT_DEF_COOKIE,
-        .allocator = {0},
-        .limits = {.streams = 8,
-                   .periodFrames = 8192,
-                   .devices = 32,
-                   .notifications = 256,
-                   .deviceTextBytes = 256},
-        .backend = maud_backendNative,
-        .offlineSampleRate = 48000,
-    };
-}
+#define MIN_RATE 8000u
+#define MAX_RATE 384000u
 
 static bool DefValid(const maudContextDef* def)
 {
-    return def->cookie == CONTEXT_DEF_COOKIE && maudIsAllocatorValid(&def->allocator) &&
+    return def->cookie == MAUD_CONTEXT_DEF_COOKIE && maudIsAllocatorValid(&def->allocator) &&
            def->limits.streams != 0 && def->limits.periodFrames != 0 && def->limits.devices != 0 &&
            def->limits.notifications >= 2 && def->limits.deviceTextBytes != 0 &&
            def->offlineSampleRate >= MIN_RATE && def->offlineSampleRate <= MAX_RATE &&
@@ -187,6 +171,12 @@ maudResult maudCreateContext(const maudContextDef* def, maudContext** contextOut
         return maud_errorInvalid;
     }
     *contextOut = nullptr;
+    // The cookie and the version come first in every version's layout.
+    if (def != nullptr && def->cookie == MAUD_CONTEXT_DEF_COOKIE &&
+        def->version != MAUD_ABI_VERSION)
+    {
+        return maud_errorVersion;
+    }
     if (def == nullptr || !DefValid(def))
     {
         return maud_errorInvalid;
@@ -207,6 +197,7 @@ maudResult maudCreateContext(const maudContextDef* def, maudContext** contextOut
     {
         return maud_errorCapacity;
     }
+    maudLayoutPoison(&layout, block);
     maudContext* context = (maudContext*)(block + contextOffset);
     *context = (maudContext){
         .def = *def,

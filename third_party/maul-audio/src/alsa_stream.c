@@ -10,6 +10,7 @@
 
 #include "alsa_stream.h"
 
+#include "allocator.h"
 #include "alsa_core.h"
 #include "clock.h"
 #include "context.h"
@@ -78,29 +79,6 @@ static void Render(maudAlsaStream* entry, float* samples, uint32_t frames, bool 
     atomic_fetch_add_explicit(&core->position, frames, memory_order_release);
 }
 
-// Copies frames from one channel order to the other: to the PCM's for
-// playback, from it for capture.
-static void Reorder(const maudAlsaStream* entry, uint32_t frames, bool output)
-{
-    uint32_t channels = entry->core->period.channelCount;
-    for (uint32_t f = 0; f < frames; ++f)
-    {
-        float* stream = entry->samples + (size_t)f * channels;
-        float* pcm = entry->reordered + (size_t)f * channels;
-        for (uint32_t c = 0; c < channels; ++c)
-        {
-            if (output)
-            {
-                pcm[c] = stream[entry->order[c]];
-            }
-            else
-            {
-                stream[entry->order[c]] = pcm[c];
-            }
-        }
-    }
-}
-
 // Writes what the PCM can take: first what an earlier write left
 // pending, then newly rendered frames.
 static snd_pcm_sframes_t WriteOut(maudAlsaStream* entry, snd_pcm_sframes_t avail)
@@ -116,7 +94,8 @@ static snd_pcm_sframes_t WriteOut(maudAlsaStream* entry, snd_pcm_sframes_t avail
             Render(entry, entry->samples, frames, true);
             if (entry->reordered != nullptr)
             {
-                Reorder(entry, frames, true);
+                maudAlsaReorder(entry->order, entry->core->period.channelCount, frames,
+                                entry->samples, entry->reordered, true);
             }
             entry->pendingOffset = 0;
             entry->pendingFrames = frames;
@@ -149,7 +128,8 @@ static snd_pcm_sframes_t ReadIn(maudAlsaStream* entry, snd_pcm_sframes_t avail)
         }
         if (entry->reordered != nullptr)
         {
-            Reorder(entry, (uint32_t)moved, false);
+            maudAlsaReorder(entry->order, entry->core->period.channelCount, (uint32_t)moved,
+                            entry->samples, entry->reordered, false);
         }
         Render(entry, entry->samples, (uint32_t)moved, false);
         avail -= moved;
@@ -157,9 +137,8 @@ static snd_pcm_sframes_t ReadIn(maudAlsaStream* entry, snd_pcm_sframes_t avail)
     return 0;
 }
 
-// Moves what the PCM can take or has, recovering from an xrun; a
-// recovered capture is started again. False when the PCM failed past
-// recovery, as when its card went away.
+// Moves what the PCM can take or has, recovering from an xrun
+// (maudAlsaRecover). False when the PCM failed past recovery.
 static bool Transfer(maudAlsaStream* entry)
 {
     const maudAlsaApi* api = entry->api;
@@ -169,22 +148,25 @@ static bool Transfer(maudAlsaStream* entry)
     {
         result = output ? WriteOut(entry, result) : ReadIn(entry, result);
     }
-    if (result >= 0 || result == -EAGAIN)
-    {
-        return true;
-    }
+    return result >= 0 || result == -EAGAIN ||
+           maudAlsaRecover(api, entry->pcm, entry->core, result);
+}
+
+bool maudAlsaRecover(const maudAlsaApi* api, snd_pcm_t* pcm, maudStreamCore* core,
+                     snd_pcm_sframes_t result)
+{
     // -EPIPE is an xrun: the PCM ran dry, or overflowed.
     if (result == -EPIPE)
     {
-        maudCountXrun(entry->core);
+        maudCountXrun(core);
     }
-    if (api->pcmRecover(entry->pcm, (int)result, 1) < 0)
+    if (api->pcmRecover(pcm, (int)result, 1) < 0)
     {
         return false;
     }
-    if (!output)
+    if (core->def.direction == maud_directionInput)
     {
-        api->pcmStart(entry->pcm);
+        api->pcmStart(pcm);
     }
     return true;
 }
@@ -342,18 +324,23 @@ static maudResult Allocate(maudContext* context, maudAlsaStream* entry, bool reo
         return maud_errorPlatform;
     }
     size_t samples = (size_t)entry->bufferFrames * entry->core->period.channelCount;
-    size_t fdBytes = ((size_t)count + 1) * sizeof(struct pollfd);
-    fdBytes = (fdBytes + alignof(max_align_t) - 1) / alignof(max_align_t) * alignof(max_align_t);
-    entry->bytes = fdBytes + samples * sizeof(float) * (reorder ? 2 : 1);
-    unsigned char* block = maudContextAllocate(context, entry->bytes, alignof(max_align_t));
+    // The stream's own eventfd, then the PCM's descriptors; the samples,
+    // and their reordered copy for a PCM in another channel order.
+    maudLayout layout = {0};
+    (void)maudLayoutAdd(&layout, (size_t)count + 1, sizeof(struct pollfd), alignof(max_align_t));
+    size_t played = maudLayoutAdd(&layout, samples, sizeof(float), alignof(float));
+    size_t reordered = reorder ? maudLayoutAdd(&layout, samples, sizeof(float), alignof(float)) : 0;
+    unsigned char* block =
+        layout.overflow ? nullptr : maudContextAllocate(context, layout.size, alignof(max_align_t));
     if (block == nullptr)
     {
-        entry->bytes = 0;
         return maud_errorCapacity;
     }
+    maudLayoutPoison(&layout, block);
+    entry->bytes = layout.size;
     entry->fds = (struct pollfd*)block;
-    entry->samples = (float*)(block + fdBytes);
-    entry->reordered = reorder ? entry->samples + samples : nullptr;
+    entry->samples = (float*)(block + played);
+    entry->reordered = reorder ? (float*)(block + reordered) : nullptr;
     entry->fdCount = (uint32_t)count + 1;
     entry->fds[0] = (struct pollfd){.fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC), .events = POLLIN};
     if (entry->fds[0].fd < 0)

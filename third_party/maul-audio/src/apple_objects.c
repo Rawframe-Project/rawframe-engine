@@ -12,6 +12,7 @@
 
 #include "apple_objects.h"
 
+#include "allocator.h"
 #include "context.h"
 
 #include <math.h>
@@ -196,19 +197,27 @@ static bool Allocate(maudContext* context, maudAppleObjects* objects)
     uint32_t count = objects->core->period.objectCount;
     size_t channels = objects->core->period.channelCount;
     size_t floats = (size_t)MAUD_APPLE_OBJECT_SLICE * (2 * channels + count);
-    size_t records = (size_t)count * sizeof(maudStreamObject);
-    size_t buses = (size_t)(count + 1) * sizeof(maudAppleObjectBus);
-    objects->storageBytes = records + buses + MIXED_LIST_BYTES + floats * sizeof(float);
-    objects->storage =
-        maudContextAllocate(context, objects->storageBytes, alignof(maudStreamObject));
-    if (objects->storage == nullptr)
+    maudLayout layout = {0};
+    size_t records =
+        maudLayoutAdd(&layout, count, sizeof(maudStreamObject), alignof(maudStreamObject));
+    size_t buses = maudLayoutAdd(&layout, (size_t)count + 1, sizeof(maudAppleObjectBus),
+                                 alignof(maudAppleObjectBus));
+    size_t list = maudLayoutAdd(&layout, 1, MIXED_LIST_BYTES, alignof(AudioBufferList));
+    size_t slices = maudLayoutAdd(&layout, floats, sizeof(float), alignof(float));
+    unsigned char* block =
+        layout.overflow ? nullptr
+                        : maudContextAllocate(context, layout.size, alignof(maudStreamObject));
+    if (block == nullptr)
     {
         return false;
     }
-    objects->records = objects->storage;
-    objects->buses = (maudAppleObjectBus*)(objects->records + count);
-    objects->mixedList = (AudioBufferList*)(objects->buses + count + 1);
-    objects->bed = (float*)((char*)objects->mixedList + MIXED_LIST_BYTES);
+    maudLayoutPoison(&layout, block);
+    objects->storage = block;
+    objects->storageBytes = layout.size;
+    objects->records = (maudStreamObject*)(block + records);
+    objects->buses = (maudAppleObjectBus*)(block + buses);
+    objects->mixedList = (AudioBufferList*)(block + list);
+    objects->bed = (float*)(block + slices);
     objects->mixed = objects->bed + (size_t)MAUD_APPLE_OBJECT_SLICE * channels;
     float* frames = objects->mixed + (size_t)MAUD_APPLE_OBJECT_SLICE * channels;
     for (uint32_t i = 0; i < count; ++i)

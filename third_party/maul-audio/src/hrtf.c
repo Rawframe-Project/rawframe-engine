@@ -47,6 +47,7 @@ typedef struct Parts
     size_t license;
     size_t size;
     bool overflow;
+    maudLayout layout;
 } Parts;
 
 static Parts LayOut(const maudHrtfFile* file, uint32_t taps)
@@ -65,6 +66,7 @@ static Parts LayOut(const maudHrtfFile* file, uint32_t taps)
     parts.license = maudLayoutAdd(&layout, file->licenseLength, 1, 1);
     parts.size = layout.size;
     parts.overflow = layout.overflow;
+    parts.layout = layout;
     return parts;
 }
 
@@ -136,6 +138,7 @@ maudResult maudLoadHrtf(const maudHrtfDef* def, maudHrtf** hrtfOut)
         }
         return maud_errorCapacity;
     }
+    maudLayoutPoison(&parts.layout, block);
     maudHrtf* hrtf = (maudHrtf*)block;
     *hrtf = (maudHrtf){
         .allocator = def->allocator,

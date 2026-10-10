@@ -191,13 +191,13 @@ if(MAUL_AUDIO_PIPEWIRE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(MAUL_AUDIO_PW REQUIRED libpipewire-0.3)
     target_sources(maul-audio PRIVATE src/backend_pipewire.c src/pipewire_api.c
-        src/pipewire_card.c src/pipewire_stream.c)
+        src/pipewire_card.c src/pipewire_parse.c src/pipewire_stream.c)
     target_include_directories(maul-audio SYSTEM PRIVATE ${MAUL_AUDIO_PW_INCLUDE_DIRS})
     target_compile_definitions(maul-audio PRIVATE MAUD_HAVE_PIPEWIRE=1)
     # PipeWire's headers use POSIX and GNU declarations (ssize_t, locale_t)
     # that a strict C23 build hides.
     set_source_files_properties(src/backend_pipewire.c src/pipewire_api.c src/pipewire_card.c
-        src/pipewire_stream.c PROPERTIES COMPILE_DEFINITIONS _GNU_SOURCE)
+        src/pipewire_parse.c src/pipewire_stream.c PROPERTIES COMPILE_DEFINITIONS _GNU_SOURCE)
     # PipeWire's method macros compare a uint32_t version with an int
     # inside the code they expand to; the comparison is theirs.
     set_source_files_properties(src/backend_pipewire.c src/pipewire_card.c src/pipewire_stream.c
@@ -426,6 +426,8 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
     maul_add_test(lifecycle)
     if(NOT MAUL_AUDIO_BUILD_SHARED)
         maul_add_test(sample_convert WHITEBOX)
+        maul_add_test(xrun WHITEBOX)
+        maul_add_test(retry WHITEBOX)
     endif()
     # The stamp races a writer thread; Emscripten builds have none.
     if(NOT EMSCRIPTEN)
@@ -446,6 +448,10 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
             target_include_directories(test_pipewire_route SYSTEM PRIVATE
                 ${MAUL_AUDIO_PW_INCLUDE_DIRS})
             target_compile_definitions(test_pipewire_route PRIVATE _GNU_SOURCE)
+            maul_add_test(pipewire_parse WHITEBOX)
+            target_include_directories(test_pipewire_parse SYSTEM PRIVATE
+                ${MAUL_AUDIO_PW_INCLUDE_DIRS})
+            target_compile_definitions(test_pipewire_parse PRIVATE _GNU_SOURCE)
         endif()
         # Both use the one test daemon, and the second one restarts it.
         set_tests_properties(pipewire pipewire_restart PROPERTIES SKIP_RETURN_CODE 77
@@ -465,6 +471,10 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
             target_include_directories(test_alsa_chmap SYSTEM PRIVATE
                 ${MAUL_AUDIO_ASOUND_INCLUDE_DIRS})
             target_compile_definitions(test_alsa_chmap PRIVATE _GNU_SOURCE)
+            maul_add_test(alsa_recover WHITEBOX)
+            target_include_directories(test_alsa_recover SYSTEM PRIVATE
+                ${MAUL_AUDIO_ASOUND_INCLUDE_DIRS})
+            target_compile_definitions(test_alsa_recover PRIVATE _GNU_SOURCE)
             maul_add_test(alsa_hotplug WHITEBOX)
             target_include_directories(test_alsa_hotplug SYSTEM PRIVATE
                 ${MAUL_AUDIO_ASOUND_INCLUDE_DIRS})
@@ -486,16 +496,24 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
         maul_add_test(wasapi WHITEBOX)
         target_compile_definitions(test_wasapi PRIVATE _WIN32_WINNT=0x0A00)
         target_link_libraries(test_wasapi PRIVATE ole32)
-        set_tests_properties(wasapi PROPERTIES SKIP_RETURN_CODE 77)
+        # Both runs move streams between the system's endpoints and make
+        # them the default, so they never run at once.
+        set_tests_properties(wasapi PROPERTIES SKIP_RETURN_CODE 77 RESOURCE_LOCK wasapi-endpoints)
         # The same with the host's thread in a single-threaded apartment.
         add_test(NAME wasapi_sta COMMAND test_wasapi)
         set_tests_properties(wasapi_sta PROPERTIES SKIP_RETURN_CODE 77
-            ENVIRONMENT MAUD_WASAPI_STA=1)
+            ENVIRONMENT MAUD_WASAPI_STA=1 RESOURCE_LOCK wasapi-endpoints)
+        if(NOT MAUL_AUDIO_BUILD_SHARED)
+            maul_add_test(wasapi_voice WHITEBOX)
+            target_link_libraries(test_wasapi_voice PRIVATE ole32)
+        endif()
     endif()
     # The iOS backend in the simulator, in Objective-C to read the
     # session's category.
     if(MAUL_AUDIO_IOS)
         add_executable(test_ios test/test_ios.m)
+        # White box: it also reads the session's port forms.
+        target_include_directories(test_ios PRIVATE ${PROJECT_SOURCE_DIR}/src)
         target_link_libraries(test_ios PRIVATE maul-audio "-framework AVFAudio"
             "-framework Foundation")
         maul_apply_flags(test_ios)
@@ -556,6 +574,10 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
         target_link_libraries(test_coreaudio PRIVATE "-framework CoreAudio"
             "-framework CoreFoundation")
         set_tests_properties(coreaudio PROPERTIES SKIP_RETURN_CODE 77)
+        # Forms and data source listeners, against a fake HAL.
+        maul_add_test(coreaudio_form WHITEBOX)
+        target_link_libraries(test_coreaudio_form PRIVATE "-framework CoreAudio"
+            "-framework CoreFoundation")
     endif()
     # Speaker masks are plain integers, tested on every platform.
     if(NOT MAUL_AUDIO_BUILD_SHARED)

@@ -43,6 +43,7 @@ bool maudCreateProbeBake(const maudAllocator* allocator, uint32_t count, uint32_
         *bake = (maudProbeBake){0};
         return false;
     }
+    maudLayoutPoison(&layout, bake->memory);
     unsigned char* base = bake->memory;
     bake->times = (float*)(base + times);
     bake->levels = (float*)(base + levels);

@@ -30,6 +30,8 @@ const char* maudResultName(maudResult result)
         return "maud_errorPlatform";
     case maud_errorState:
         return "maud_errorState";
+    case maud_errorVersion:
+        return "maud_errorVersion";
     default:
         return "unknown result";
     }

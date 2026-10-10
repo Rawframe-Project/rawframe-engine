@@ -18,8 +18,13 @@ extern "C"
 
 // The library version. CMake reads it from here.
 #define MAUD_VERSION_MAJOR 0
-#define MAUD_VERSION_MINOR 1
-#define MAUD_VERSION_PATCH 1
+#define MAUD_VERSION_MINOR 3
+#define MAUD_VERSION_PATCH 0
+
+// The ABI a program is built for: major and minor, as the ABI holds within
+// a minor release. The context def carries it (maudDefaultContextDef), and
+// maudCreateContext refuses a def built for another.
+#define MAUD_ABI_VERSION ((MAUD_VERSION_MAJOR << 16) | MAUD_VERSION_MINOR)
 
 // MAUD_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_audio_EXPORTS is defined while building
@@ -76,6 +81,9 @@ extern "C"
         maud_errorPlatform = -5,
         // The call is not allowed in the object's current state.
         maud_errorState = -6,
+        // A def was built from headers of another major or minor version
+        // than the library's.
+        maud_errorVersion = -7,
     };
 
     // The allocator an owner object takes in its def and keeps for its

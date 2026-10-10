@@ -44,17 +44,30 @@ static float* Partition(float* spectra, uint32_t bins, uint32_t index)
     return spectra + (size_t)index * 2 * bins;
 }
 
-// Where each array starts, in floats from the block's start for the
-// floats and in doubles from the first double for the doubles.
+// The filter's sizes, and each array's place in its block: each array
+// a part of its own, so that under AddressSanitizer a read past one
+// lands in a poisoned gap.
 typedef struct Places
 {
     uint32_t bins;
     uint32_t perBand;
     uint32_t bands;
     size_t spectra;
-    size_t floats;
-    size_t doubles;
+    maudLayout layout;
+    size_t render, background, foreground, last, time, backgroundEcho, foregroundEcho,
+        backgroundError, spectrum, errorSpectrum, echoSpectrum, bandLeak;
+    size_t slowPower, errorRecent, echoRecent, bandNow, bandCovariance, bandVariance, shares;
 } Places;
+
+static size_t Floats(maudLayout* layout, size_t count)
+{
+    return maudLayoutAdd(layout, count, sizeof(float), alignof(double));
+}
+
+static size_t Doubles(maudLayout* layout, size_t count)
+{
+    return maudLayoutAdd(layout, count, sizeof(double), alignof(double));
+}
 
 static Places PlacesOf(uint32_t block, uint32_t partitions, double sampleRate)
 {
@@ -62,30 +75,44 @@ static Places PlacesOf(uint32_t block, uint32_t partitions, double sampleRate)
     p.perBand = (uint32_t)fmax(1.0, round(MAUD_ECHO_BAND_HZ * 2.0 * block / sampleRate));
     p.bands = (p.bins + p.perBand - 1) / p.perBand;
     p.spectra = (size_t)partitions * 2 * p.bins;
-    // Three filters' spectra; the last block, twice a block of time, three
-    // spectra of bins, two estimates of twice a block and an error; and
-    // the band leakages, as floats rounded up to a double.
-    p.floats = 3 * p.spectra + 8 * (size_t)block + 6 * (size_t)p.bins + 2 * ((p.bands + 1) / 2);
-    p.doubles = 3 * (size_t)p.bins + 4 * (size_t)p.bands + partitions;
+    maudLayout* l = &p.layout;
+    p.slowPower = Doubles(l, p.bins);
+    p.errorRecent = Doubles(l, p.bins);
+    p.echoRecent = Doubles(l, p.bins);
+    p.bandNow = Doubles(l, 2 * (size_t)p.bands);
+    p.bandCovariance = Doubles(l, p.bands);
+    p.bandVariance = Doubles(l, p.bands);
+    p.shares = Doubles(l, partitions);
+    // Three filters' spectra; the last block, twice a block of time, two
+    // estimates of twice a block and an error, three spectra of bins and
+    // the band leakages.
+    p.render = Floats(l, p.spectra);
+    p.background = Floats(l, p.spectra);
+    p.foreground = Floats(l, p.spectra);
+    p.last = Floats(l, block);
+    p.time = Floats(l, 2 * (size_t)block);
+    p.backgroundEcho = Floats(l, 2 * (size_t)block);
+    p.foregroundEcho = Floats(l, 2 * (size_t)block);
+    p.backgroundError = Floats(l, block);
+    p.spectrum = Floats(l, 2 * (size_t)p.bins);
+    p.errorSpectrum = Floats(l, 2 * (size_t)p.bins);
+    p.echoSpectrum = Floats(l, 2 * (size_t)p.bins);
+    p.bandLeak = Floats(l, p.bands);
     return p;
 }
 
 size_t maudEchoFilterBytes(uint32_t block, uint32_t partitions, double sampleRate)
 {
     Places p = PlacesOf(block, partitions, sampleRate);
-    maudLayout layout = {0};
-    (void)maudLayoutAdd(&layout, p.doubles, sizeof(double), alignof(double));
-    (void)maudLayoutAdd(&layout, p.floats, sizeof(float), alignof(double));
-    return layout.overflow ? 0 : layout.size;
+    return p.layout.overflow ? 0 : p.layout.size;
 }
 
 void maudInitEchoFilter(maudEchoFilter* filter, uint32_t block, uint32_t partitions,
                         double sampleRate, const maudRealFft* fft, void* memory)
 {
     Places p = PlacesOf(block, partitions, sampleRate);
-    double* d = memory;
-    float* f = (float*)(d + p.doubles);
-    float* scratch = f + 3 * p.spectra;
+    unsigned char* m = memory;
+    maudLayoutPoison(&p.layout, m);
     double scale = ((double)block / sampleRate) / MEASURED_BLOCK;
     *filter = (maudEchoFilter){
         .block = block,
@@ -94,25 +121,25 @@ void maudInitEchoFilter(maudEchoFilter* filter, uint32_t block, uint32_t partiti
         .bands = p.bands,
         .binsPerBand = p.perBand,
         .fft = fft,
-        .render = f,
-        .background = f + p.spectra,
-        .foreground = f + 2 * p.spectra,
-        .last = scratch,
-        .time = scratch + block,
-        .backgroundEcho = scratch + 3 * (size_t)block,
-        .foregroundEcho = scratch + 5 * (size_t)block,
-        .backgroundError = scratch + 7 * (size_t)block,
-        .spectrum = scratch + 8 * (size_t)block,
-        .errorSpectrum = scratch + 8 * (size_t)block + 2 * (size_t)p.bins,
-        .echoSpectrum = scratch + 8 * (size_t)block + 4 * (size_t)p.bins,
-        .bandLeak = scratch + 8 * (size_t)block + 6 * (size_t)p.bins,
-        .slowPower = d,
-        .errorRecent = d + p.bins,
-        .echoRecent = d + 2 * (size_t)p.bins,
-        .bandNow = d + 3 * (size_t)p.bins,
-        .bandCovariance = d + 3 * (size_t)p.bins + 2 * (size_t)p.bands,
-        .bandVariance = d + 3 * (size_t)p.bins + 3 * (size_t)p.bands,
-        .shares = d + 3 * (size_t)p.bins + 4 * (size_t)p.bands,
+        .render = (float*)(m + p.render),
+        .background = (float*)(m + p.background),
+        .foreground = (float*)(m + p.foreground),
+        .last = (float*)(m + p.last),
+        .time = (float*)(m + p.time),
+        .backgroundEcho = (float*)(m + p.backgroundEcho),
+        .foregroundEcho = (float*)(m + p.foregroundEcho),
+        .backgroundError = (float*)(m + p.backgroundError),
+        .spectrum = (float*)(m + p.spectrum),
+        .errorSpectrum = (float*)(m + p.errorSpectrum),
+        .echoSpectrum = (float*)(m + p.echoSpectrum),
+        .bandLeak = (float*)(m + p.bandLeak),
+        .slowPower = (double*)(m + p.slowPower),
+        .errorRecent = (double*)(m + p.errorRecent),
+        .echoRecent = (double*)(m + p.echoRecent),
+        .bandNow = (double*)(m + p.bandNow),
+        .bandCovariance = (double*)(m + p.bandCovariance),
+        .bandVariance = (double*)(m + p.bandVariance),
+        .shares = (double*)(m + p.shares),
         .recent = pow(0.65, scale),
         .window1 = pow(0.6, scale),
         .window2 = pow(0.85, scale),
@@ -123,9 +150,17 @@ void maudInitEchoFilter(maudEchoFilter* filter, uint32_t block, uint32_t partiti
 void maudResetEchoFilter(maudEchoFilter* f)
 {
     size_t spectra = (size_t)f->partitions * 2 * f->bins;
-    memset(f->render, 0, 3 * spectra * sizeof(float));
+    memset(f->render, 0, spectra * sizeof(float));
+    memset(f->background, 0, spectra * sizeof(float));
+    memset(f->foreground, 0, spectra * sizeof(float));
     memset(f->last, 0, f->block * sizeof(float));
-    memset(f->slowPower, 0, (3 * (size_t)f->bins + 4 * (size_t)f->bands) * sizeof(double));
+    size_t bins = f->bins * sizeof(double);
+    memset(f->slowPower, 0, bins);
+    memset(f->errorRecent, 0, bins);
+    memset(f->echoRecent, 0, bins);
+    memset(f->bandNow, 0, 2 * (size_t)f->bands * sizeof(double));
+    memset(f->bandCovariance, 0, f->bands * sizeof(double));
+    memset(f->bandVariance, 0, f->bands * sizeof(double));
     for (uint32_t q = 0; q < f->bands; ++q)
     {
         f->bandLeak[q] = (float)LEAK_START;

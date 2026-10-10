@@ -11,7 +11,9 @@
 
 #include "clock.h"
 #include "context.h"
+#include "follow.h"
 #include "period.h"
+#include "retry.h"
 #include "thread.h"
 #include "voice.h"
 #include "wasapi_core.h"
@@ -77,16 +79,6 @@ static void Render(maudWasapiStream* entry, float* out, const float* in, uint32_
     atomic_fetch_add_explicit(&core->position, frames, memory_order_release);
 }
 
-// A performance-counter time in 100-nanosecond units as host
-// nanoseconds, or fallback when it is 0 or more than a second from now
-// (wine's counter times overflow).
-static int64_t CounterTime(UINT64 counter, int64_t now, int64_t fallback)
-{
-    int64_t time = (int64_t)counter * 100;
-    bool plausible = counter != 0 && time > now - 1000000000 && time < now + 1000000000;
-    return plausible ? time : fallback;
-}
-
 // How far from now the next frame written is heard: the device's
 // position, at the performance-counter time it was read, is behind the
 // frames written by what is still to play. 0 when the clock cannot say.
@@ -103,7 +95,7 @@ static int64_t OutputLatency(const maudWasapiStream* entry)
     uint64_t heard = position * rate / entry->clockFrequency;
     int64_t ahead = entry->written > heard ? (int64_t)(entry->written - heard) : 0;
     int64_t now = maudNowNanoseconds();
-    return CounterTime(counter, now, now) - now + ahead * 1000000000 / rate;
+    return maudWasapiCounterTime(counter, now, now) - now + ahead * 1000000000 / rate;
 }
 
 // Fills the render buffer's free space.
@@ -209,7 +201,8 @@ static HRESULT Drain(maudWasapiStream* entry)
             // chunks were captured later by what came before them.
             uint32_t rate = entry->core->format.sampleRate;
             int64_t now = maudNowNanoseconds();
-            int64_t start = CounterTime(counter, now, now - (int64_t)frames * 1000000000 / rate);
+            int64_t start =
+                maudWasapiCounterTime(counter, now, now - (int64_t)frames * 1000000000 / rate);
             int64_t captured = start + (int64_t)done * 1000000000 / rate;
             Render(entry, nullptr, samples, chunk, now - captured);
             done += chunk;
@@ -590,20 +583,22 @@ void maudWasapiSetStreamActive(maudContext* context, maudStreamSlot* slot, bool 
     Start(entry);
 }
 
-// A live running stream whose thread ended on a failure, or that has
-// no client.
-static bool ToResume(maudContext* context, maudStreamSlot* slot)
+// A started stream whose thread ended on a failure, or that has no
+// client, once its retry is due (retry.h).
+static bool ToResume(maudContext* context, maudStreamSlot* slot, int64_t now)
 {
     const maudWasapiStream* entry = EntryOf(context, slot);
     bool ended = entry->threadRunning && atomic_load_explicit(&entry->failed, memory_order_acquire);
-    return slot->live && Running(slot) && (ended || !Connected(entry));
+    return maudWantsReopen(slot) && (ended || !Connected(entry)) &&
+           maudRetryDue(&slot->core.binding, now);
 }
 
 bool maudWasapiStreamsToResume(maudContext* context)
 {
+    int64_t now = maudNowNanoseconds();
     for (uint32_t i = 0; i < context->streams.capacity; ++i)
     {
-        if (ToResume(context, &context->streams.slots[i]))
+        if (ToResume(context, &context->streams.slots[i], now))
         {
             return true;
         }
@@ -611,14 +606,19 @@ bool maudWasapiStreamsToResume(maudContext* context)
     return false;
 }
 
+// A failed reopen waits longer each time, so that a drain the host
+// calls in a loop does not cross to the apartment's thread on every
+// call for an endpoint that stays unusable.
 void maudWasapiResumeStreams(maudContext* context)
 {
+    int64_t now = maudNowNanoseconds();
     for (uint32_t i = 0; i < context->streams.capacity; ++i)
     {
         maudStreamSlot* slot = &context->streams.slots[i];
-        if (ToResume(context, slot))
+        if (ToResume(context, slot, now))
         {
             maudWasapiRetargetStream(context, slot);
+            maudReportReopen(context, slot, Connected(EntryOf(context, slot)), now);
         }
     }
 }

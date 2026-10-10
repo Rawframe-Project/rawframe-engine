@@ -8,6 +8,7 @@
 #include "alsa_chmap.h"
 
 #include <alsa/asoundlib.h>
+#include <stddef.h>
 
 // The SND_CHMAP_* position of each speaker.
 static unsigned int PositionOf(maudSpeaker speaker)
@@ -131,4 +132,25 @@ bool maudAlsaOrderIsIdentity(const uint8_t* order, uint32_t count)
         }
     }
     return true;
+}
+
+void maudAlsaReorder(const uint8_t* order, uint32_t channels, uint32_t frames, float* stream,
+                     float* pcm, bool output)
+{
+    for (uint32_t f = 0; f < frames; ++f)
+    {
+        float* from = stream + (size_t)f * channels;
+        float* to = pcm + (size_t)f * channels;
+        for (uint32_t c = 0; c < channels; ++c)
+        {
+            if (output)
+            {
+                to[c] = from[order[c]];
+            }
+            else
+            {
+                from[order[c]] = to[c];
+            }
+        }
+    }
 }

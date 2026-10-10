@@ -6,6 +6,7 @@
 // interface lists, found without opening any of them, at creation and
 // again whenever the drain finds /dev/snd changed.
 
+#include "allocator.h"
 #include "alsa_core.h"
 #include "alsa_scan.h"
 #include "alsa_stream.h"
@@ -90,22 +91,30 @@ static maudResult OpenContext(maudContext* context)
 {
     uint32_t streams = context->def.limits.streams;
     uint32_t devices = context->def.limits.devices;
-    size_t bytes = sizeof(maudAlsa) + (size_t)streams * sizeof(maudAlsaStream) +
-                   (size_t)devices * (sizeof(maudAlsaEndpoint) + sizeof(maudDeviceSpec));
-    maudAlsa* alsa = maudContextAllocate(context, bytes, alignof(maudAlsa));
-    if (alsa == nullptr)
+    maudLayout layout = {0};
+    (void)maudLayoutAdd(&layout, 1, sizeof(maudAlsa), alignof(maudAlsa));
+    size_t entries =
+        maudLayoutAdd(&layout, streams, sizeof(maudAlsaStream), alignof(maudAlsaStream));
+    size_t endpoints =
+        maudLayoutAdd(&layout, devices, sizeof(maudAlsaEndpoint), alignof(maudAlsaEndpoint));
+    size_t specs = maudLayoutAdd(&layout, devices, sizeof(maudDeviceSpec), alignof(maudDeviceSpec));
+    unsigned char* block =
+        layout.overflow ? nullptr : maudContextAllocate(context, layout.size, alignof(maudAlsa));
+    if (block == nullptr)
     {
         return maud_errorCapacity;
     }
+    maudLayoutPoison(&layout, block);
+    maudAlsa* alsa = (maudAlsa*)block;
     *alsa = (maudAlsa){
         .context = context,
-        .streams = (maudAlsaStream*)(alsa + 1),
+        .streams = (maudAlsaStream*)(block + entries),
+        .endpoints = (maudAlsaEndpoint*)(block + endpoints),
+        .specs = (maudDeviceSpec*)(block + specs),
         .watch = -1,
-        .bytes = bytes,
+        .bytes = layout.size,
     };
     memset(alsa->streams, 0, (size_t)streams * sizeof(maudAlsaStream));
-    alsa->endpoints = (maudAlsaEndpoint*)(alsa->streams + streams);
-    alsa->specs = (maudDeviceSpec*)(alsa->endpoints + devices);
     context->native = alsa;
     if (!maudLoadAlsa(&alsa->api) || !StructsFit(&alsa->api))
     {

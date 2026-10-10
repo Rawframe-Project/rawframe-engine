@@ -7,6 +7,7 @@
 // property store without activating them; a notification raises a flag
 // and the drain lists endpoints and defaults again.
 
+#include "allocator.h"
 #include "backend.h"
 #include "context.h"
 #include "device.h"
@@ -273,18 +274,28 @@ static maudResult OpenContext(maudContext* context)
 {
     uint32_t devices = context->def.limits.devices;
     uint32_t streams = context->def.limits.streams;
-    size_t bytes = sizeof(maudWasapi) +
-                   (size_t)devices * (sizeof(maudWasapiEndpoint) + sizeof(maudDeviceSpec)) +
-                   (size_t)streams * sizeof(maudWasapiStream);
-    maudWasapi* wasapi = maudContextAllocate(context, bytes, alignof(maudWasapi));
-    if (wasapi == nullptr)
+    maudLayout layout = {0};
+    (void)maudLayoutAdd(&layout, 1, sizeof(maudWasapi), alignof(maudWasapi));
+    size_t endpoints =
+        maudLayoutAdd(&layout, devices, sizeof(maudWasapiEndpoint), alignof(maudWasapiEndpoint));
+    size_t specs = maudLayoutAdd(&layout, devices, sizeof(maudDeviceSpec), alignof(maudDeviceSpec));
+    size_t entries =
+        maudLayoutAdd(&layout, streams, sizeof(maudWasapiStream), alignof(maudWasapiStream));
+    unsigned char* block =
+        layout.overflow ? nullptr : maudContextAllocate(context, layout.size, alignof(maudWasapi));
+    if (block == nullptr)
     {
         return maud_errorCapacity;
     }
-    *wasapi = (maudWasapi){.context = context, .bytes = bytes};
-    wasapi->endpoints = (maudWasapiEndpoint*)(wasapi + 1);
-    wasapi->specs = (maudDeviceSpec*)(wasapi->endpoints + devices);
-    wasapi->streams = (maudWasapiStream*)(wasapi->specs + devices);
+    maudLayoutPoison(&layout, block);
+    maudWasapi* wasapi = (maudWasapi*)block;
+    *wasapi = (maudWasapi){
+        .context = context,
+        .endpoints = (maudWasapiEndpoint*)(block + endpoints),
+        .specs = (maudDeviceSpec*)(block + specs),
+        .streams = (maudWasapiStream*)(block + entries),
+        .bytes = layout.size,
+    };
     memset(wasapi->streams, 0, (size_t)streams * sizeof(maudWasapiStream));
     maudInitWasapiNotifier(&wasapi->notifier);
     context->native = wasapi;

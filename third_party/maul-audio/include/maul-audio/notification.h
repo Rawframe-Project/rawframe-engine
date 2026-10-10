@@ -20,31 +20,31 @@ extern "C"
 
     enum
     {
-        // A device appeared: deviceId and direction.
+        // A device appeared: device and direction.
         maud_notifyDeviceAdded = 1,
-        // A device disappeared: deviceId and direction. The id is stale.
+        // A device disappeared: device and direction. The id is stale.
         maud_notifyDeviceRemoved = 2,
-        // The default device of direction for role changed to deviceId,
+        // The default device of direction for role changed to device,
         // the null id when the direction has no device left.
         maud_notifyDefaultChanged = 3,
-        // streamId now runs on deviceId.
+        // stream now runs on device.
         maud_notifyStreamMoved = 4,
-        // streamId cannot run, for reason.
+        // stream cannot run, for reason.
         maud_notifyStreamSuspended = 5,
-        // streamId can run again.
+        // stream can run again.
         maud_notifyStreamResumed = 6,
-        // streamId now runs at sampleRate.
+        // stream now runs at sampleRate.
         maud_notifyStreamFormatChanged = 7,
         // droppedCount records did not fit in the queue and were lost.
         // Query the devices and stream statuses again.
         maud_notifyOverflow = 8,
-        // deviceId, of direction, now leads to form: its route changed,
+        // device, of direction, now leads to form: its route changed,
         // as when headphones are plugged into the jack its port serves.
         maud_notifyRouteChanged = 9,
         // The context's audio focus is now focus (maudRequestFocus).
         maud_notifyFocusChanged = 10,
-        // What the platform's spatializer does on the output device
-        // deviceId changed (maudDeviceInfo's spatializer, headTracking and
+        // What the platform's spatializer does on device, an output,
+        // changed (maudDeviceInfo's spatializer, headTracking and
         // spatialObjects).
         maud_notifySpatializerChanged = 11,
     };
@@ -56,8 +56,8 @@ extern "C"
         maudDirection direction;
         maudDeviceRole role;
         maudSuspendReason reason;
-        maudDeviceId deviceId;
-        maudStreamId streamId;
+        maudDeviceId device;
+        maudStreamId stream;
         uint32_t sampleRate;
         uint32_t droppedCount;
         maudDeviceForm form;

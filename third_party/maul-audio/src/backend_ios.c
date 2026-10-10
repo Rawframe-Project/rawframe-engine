@@ -11,6 +11,7 @@
 // hold the streams (maud_suspendPolicy) and are focus states; its route
 // changes give the default devices the forms the route leads to.
 
+#include "allocator.h"
 #include "backend.h"
 #include "context.h"
 #include "device.h"
@@ -88,17 +89,26 @@ static maudResult OpenContext(maudContext* context)
 {
     uint32_t streams = context->def.limits.streams;
     uint32_t devices = context->def.limits.devices;
-    size_t bytes = sizeof(maudIos) + (size_t)streams * sizeof(maudIosStream) +
-                   (size_t)devices * (sizeof(maudDeviceSpec) + sizeof(maudIosPort));
-    maudIos* ios = maudContextAllocate(context, bytes, alignof(maudIos));
-    if (ios == nullptr)
+    maudLayout layout = {0};
+    (void)maudLayoutAdd(&layout, 1, sizeof(maudIos), alignof(maudIos));
+    size_t entries = maudLayoutAdd(&layout, streams, sizeof(maudIosStream), alignof(maudIosStream));
+    size_t specs = maudLayoutAdd(&layout, devices, sizeof(maudDeviceSpec), alignof(maudDeviceSpec));
+    size_t ports = maudLayoutAdd(&layout, devices, sizeof(maudIosPort), alignof(maudIosPort));
+    unsigned char* block =
+        layout.overflow ? nullptr : maudContextAllocate(context, layout.size, alignof(maudIos));
+    if (block == nullptr)
     {
         return maud_errorCapacity;
     }
-    *ios = (maudIos){.context = context, .bytes = bytes};
-    ios->streams = (maudIosStream*)(ios + 1);
-    ios->specs = (maudDeviceSpec*)(ios->streams + streams);
-    ios->ports = (maudIosPort*)(ios->specs + devices);
+    maudLayoutPoison(&layout, block);
+    maudIos* ios = (maudIos*)block;
+    *ios = (maudIos){
+        .context = context,
+        .streams = (maudIosStream*)(block + entries),
+        .specs = (maudDeviceSpec*)(block + specs),
+        .ports = (maudIosPort*)(block + ports),
+        .bytes = layout.size,
+    };
     memset(ios->streams, 0, (size_t)streams * sizeof(maudIosStream));
     context->native = ios;
     mach_timebase_info_data_t timebase = {0};
@@ -117,7 +127,7 @@ static maudResult OpenContext(maudContext* context)
     if (result != maud_success)
     {
         maudIosSessionUnobserve(ios->observer);
-        maudContextRelease(context, ios, bytes, alignof(maudIos));
+        maudContextRelease(context, ios, ios->bytes, alignof(maudIos));
         context->native = nullptr;
     }
     return result;

@@ -7,6 +7,7 @@
 // deadline for the round trips of creation. Registry events become
 // device table changes; the default metadata names the defaults.
 
+#include "allocator.h"
 #include "backend.h"
 #include "context.h"
 #include "device.h"
@@ -15,6 +16,7 @@
 #include "layout.h"
 #include "pipewire_card.h"
 #include "pipewire_core.h"
+#include "pipewire_parse.h"
 #include "pipewire_stream.h"
 
 #include <errno.h>
@@ -73,28 +75,6 @@ static void ResolveDefaults(maudPipewire* pipewire)
 // Reads a rate or a channel count from a format param property: a
 // plain value, or a choice whose default is the first value and whose
 // other values bound it.
-static void ReadChoice(const struct spa_pod* value, uint32_t* defaultOut, uint32_t* minOut,
-                       uint32_t* maxOut)
-{
-    uint32_t count = 0;
-    uint32_t choice = 0;
-    const struct spa_pod* values = spa_pod_get_values(value, &count, &choice);
-    if (values->type != SPA_TYPE_Int || count == 0)
-    {
-        return;
-    }
-    const int32_t* numbers = SPA_POD_BODY_CONST(values);
-    *defaultOut = (uint32_t)numbers[0];
-    *minOut = *defaultOut;
-    *maxOut = *defaultOut;
-    for (uint32_t i = 1; i < count; ++i)
-    {
-        uint32_t number = (uint32_t)numbers[i];
-        *minOut = number < *minOut ? number : *minOut;
-        *maxOut = number > *maxOut ? number : *maxOut;
-    }
-}
-
 static void OnNodeParam(void* data, int seq, uint32_t id, uint32_t index, uint32_t next,
                         const struct spa_pod* param)
 {
@@ -111,11 +91,8 @@ static void OnNodeParam(void* data, int seq, uint32_t id, uint32_t index, uint32
         spa_pod_find_prop(param, nullptr, SPA_FORMAT_AUDIO_channels);
     if (channels != nullptr)
     {
-        uint32_t count = 0;
-        uint32_t least = 0;
-        uint32_t most = 0;
-        ReadChoice(&channels->value, &count, &least, &most);
-        slot->info.nativeLayout = maudLayoutWithChannels(count);
+        slot->info.nativeLayout =
+            maudLayoutWithChannels(maudPipewireChoiceDefault(&channels->value));
     }
 }
 
@@ -135,12 +112,7 @@ static void AddDeviceOf(maudPipewireNode* node, const struct spa_dict* props)
     // Its card's route, when it is on one, says more than its form factor.
     node->factorForm =
         maudFormOfName(spa_dict_lookup(props, PW_KEY_DEVICE_FORM_FACTOR), node->direction);
-    uint32_t cardId = 0;
-    const char* card = spa_dict_lookup(props, PW_KEY_DEVICE_ID);
-    const char* profileDevice = spa_dict_lookup(props, "card.profile.device");
-    node->hasCard = card != nullptr && profileDevice != nullptr && spa_atou32(card, &cardId, 10) &&
-                    spa_atoi32(profileDevice, &node->profileDevice, 10);
-    node->cardId = cardId;
+    node->hasCard = maudPipewireNodeCard(props, &node->cardId, &node->profileDevice);
     maudDeviceSpec spec = {
         .info = {.direction = node->direction,
                  .nativeLayout =
@@ -233,41 +205,6 @@ static void RemoveNode(maudPipewire* pipewire, maudPipewireNode* node)
     *node = (maudPipewireNode){0};
 }
 
-// Reads the node name out of a default metadata value,
-// {"name": "..."}, into name; empty when there is none.
-static void ParseDefaultName(const char* value, char* name)
-{
-    name[0] = '\0';
-    struct spa_json root;
-    struct spa_json object;
-    if (value == nullptr)
-    {
-        return;
-    }
-    spa_json_init(&root, value, strlen(value));
-    if (spa_json_enter_object(&root, &object) <= 0)
-    {
-        return;
-    }
-    char key[16];
-    while (spa_json_get_string(&object, key, sizeof(key)) > 0)
-    {
-        if (spa_streq(key, "name"))
-        {
-            if (spa_json_get_string(&object, name, MAUD_PIPEWIRE_NAME_BYTES) <= 0)
-            {
-                name[0] = '\0';
-            }
-            return;
-        }
-        const char* skipped;
-        if (spa_json_next(&object, &skipped) <= 0)
-        {
-            return;
-        }
-    }
-}
-
 static int OnMetadataProperty(void* data, uint32_t subject, const char* key, const char* type,
                               const char* value)
 {
@@ -279,11 +216,13 @@ static int OnMetadataProperty(void* data, uint32_t subject, const char* key, con
     }
     if (spa_streq(key, "default.audio.sink"))
     {
-        ParseDefaultName(value, pipewire->defaults.names[maud_directionOutput]);
+        maudPipewireParseDefaultName(value, pipewire->defaults.names[maud_directionOutput],
+                                     MAUD_PIPEWIRE_NAME_BYTES);
     }
     else if (spa_streq(key, "default.audio.source"))
     {
-        ParseDefaultName(value, pipewire->defaults.names[maud_directionInput]);
+        maudPipewireParseDefaultName(value, pipewire->defaults.names[maud_directionInput],
+                                     MAUD_PIPEWIRE_NAME_BYTES);
     }
     else
     {
@@ -303,9 +242,8 @@ static const struct pw_metadata_events s_metadataEvents = {
 static void UpdateGraphRate(maudPipewire* pipewire)
 {
     maudPipewireClock* clock = &pipewire->clock;
-    uint32_t rate = clock->forceRate != 0   ? clock->forceRate
-                    : clock->clockRate != 0 ? clock->clockRate
-                                            : MAUD_PIPEWIRE_FALLBACK_RATE;
+    uint32_t rate =
+        maudPipewireGraphRate(clock->forceRate, clock->clockRate, MAUD_PIPEWIRE_FALLBACK_RATE);
     if (rate == clock->graphRate)
     {
         return;
@@ -433,7 +371,7 @@ static void OnGlobalRemove(void* data, uint32_t id)
     }
     else
     {
-        (void)maudPipewireRemoveCard(pipewire, id);
+        maudPipewireRemoveCard(pipewire, id);
     }
 }
 
@@ -622,24 +560,33 @@ static maudResult OpenContext(maudContext* context)
 {
     uint32_t capacity = context->def.limits.devices;
     uint32_t streams = context->def.limits.streams;
-    size_t bytes = sizeof(maudPipewire) +
-                   (size_t)capacity * (sizeof(maudPipewireNode) + sizeof(maudPipewireCard)) +
-                   (size_t)streams * sizeof(maudPipewireStream);
-    maudPipewire* pipewire = maudContextAllocate(context, bytes, alignof(maudPipewire));
-    if (pipewire == nullptr)
+    maudLayout layout = {0};
+    (void)maudLayoutAdd(&layout, 1, sizeof(maudPipewire), alignof(maudPipewire));
+    size_t nodes =
+        maudLayoutAdd(&layout, capacity, sizeof(maudPipewireNode), alignof(maudPipewireNode));
+    size_t cards =
+        maudLayoutAdd(&layout, capacity, sizeof(maudPipewireCard), alignof(maudPipewireCard));
+    size_t entries =
+        maudLayoutAdd(&layout, streams, sizeof(maudPipewireStream), alignof(maudPipewireStream));
+    unsigned char* block = layout.overflow
+                               ? nullptr
+                               : maudContextAllocate(context, layout.size, alignof(maudPipewire));
+    if (block == nullptr)
     {
         return maud_errorCapacity;
     }
+    maudLayoutPoison(&layout, block);
+    maudPipewire* pipewire = (maudPipewire*)block;
     *pipewire = (maudPipewire){
         .context = context,
-        .nodes = (maudPipewireNode*)(pipewire + 1),
+        .nodes = (maudPipewireNode*)(block + nodes),
+        .cards = (maudPipewireCard*)(block + cards),
+        .streams = (maudPipewireStream*)(block + entries),
         .clock = {.graphRate = MAUD_PIPEWIRE_FALLBACK_RATE},
         .nodeCapacity = capacity,
         .cardCapacity = capacity,
-        .bytes = bytes,
+        .bytes = layout.size,
     };
-    pipewire->cards = (maudPipewireCard*)(pipewire->nodes + capacity);
-    pipewire->streams = (maudPipewireStream*)(pipewire->cards + capacity);
     memset(pipewire->nodes, 0, (size_t)capacity * sizeof(maudPipewireNode));
     memset(pipewire->cards, 0, (size_t)capacity * sizeof(maudPipewireCard));
     memset(pipewire->streams, 0, (size_t)streams * sizeof(maudPipewireStream));

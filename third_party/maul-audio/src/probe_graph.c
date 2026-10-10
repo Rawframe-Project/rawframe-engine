@@ -377,6 +377,7 @@ bool maudLayProbeGraph(const maudAllocator* allocator, maudProbeGraph* g, uint32
     {
         return false;
     }
+    maudLayoutPoison(&layout, g->memory);
     unsigned char* base = g->memory;
     g->points = (maudVector3*)(base + points);
     g->offsets = (uint32_t*)(base + offsets);

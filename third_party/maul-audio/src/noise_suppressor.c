@@ -125,33 +125,46 @@ static uint32_t PowerOfTwo(uint32_t atLeast)
     return n;
 }
 
-static size_t Up(size_t n)
-{
-    return (n + 15u) & ~(size_t)15u;
-}
-
 // Where each part of the object's one allocation starts: the object,
-// the transform's tables, the filters' states, the floats, the doubles.
+// the transform's tables, the filters' states, then each array a part
+// of its own, so that under AddressSanitizer a read past one lands in a
+// poisoned gap.
 typedef struct Layout
 {
+    maudLayout layout;
     size_t fft;
     size_t filters;
-    size_t floats;
-    size_t doubles;
-    size_t total;
+    size_t floats[8];
+    size_t doubles[5];
 } Layout;
 
 static Layout LayoutOf(uint32_t channels, uint32_t hop, uint32_t size)
 {
-    uint32_t bins = size / 2 + 1;
-    Layout l;
-    l.fft = Up(sizeof(struct maudNoiseSuppressor));
-    l.filters = l.fft + Up(maudRealFftBytes(size));
-    l.floats = l.filters + Up((size_t)channels * sizeof(BiquadState));
-    size_t floats =
-        2 * (size_t)hop + 4 * (size_t)channels * hop + size + 2 * (size_t)channels * bins + bins;
-    l.doubles = l.floats + Up(floats * sizeof(float));
-    l.total = l.doubles + 5 * (size_t)bins * sizeof(double);
+    size_t bins = size / 2 + 1;
+    size_t perChannel = (size_t)channels * hop;
+    Layout l = {0};
+    (void)maudLayoutAdd(&l.layout, 1, sizeof(struct maudNoiseSuppressor),
+                        alignof(struct maudNoiseSuppressor));
+    l.fft = maudLayoutAdd(&l.layout, maudRealFftBytes(size), 1, alignof(double));
+    l.filters = maudLayoutAdd(&l.layout, channels, sizeof(BiquadState), alignof(BiquadState));
+    // The window, the previous, pending, ready and tail hops, the frame,
+    // the spectra and the gain, as Place hands them out.
+    size_t counts[8] = {2 * (size_t)hop,
+                        perChannel,
+                        perChannel,
+                        perChannel,
+                        perChannel,
+                        size,
+                        2 * (size_t)channels * bins,
+                        bins};
+    for (int i = 0; i < 8; ++i)
+    {
+        l.floats[i] = maudLayoutAdd(&l.layout, counts[i], sizeof(float), alignof(float));
+    }
+    for (int i = 0; i < 5; ++i)
+    {
+        l.doubles[i] = maudLayoutAdd(&l.layout, bins, sizeof(double), alignof(double));
+    }
     return l;
 }
 
@@ -178,31 +191,18 @@ static bool DefValid(const maudNoiseSuppressorDef* def)
 
 static void Place(maudNoiseSuppressor* s, unsigned char* memory, const Layout* l)
 {
-    size_t perChannel = (size_t)s->channels * s->hop;
     maudInitRealFft(&s->fft, s->size, memory + l->fft);
     s->filterState = (BiquadState*)(memory + l->filters);
-    float* f = (float*)(memory + l->floats);
     float** floats[8] = {&s->window, &s->previous, &s->pending,  &s->ready,
                          &s->tail,   &s->frame,    &s->spectrum, &s->gain};
-    size_t counts[8] = {2 * (size_t)s->hop,
-                        perChannel,
-                        perChannel,
-                        perChannel,
-                        perChannel,
-                        s->size,
-                        2 * (size_t)s->channels * s->bins,
-                        s->bins};
     for (int i = 0; i < 8; ++i)
     {
-        *floats[i] = f;
-        f += counts[i];
+        *floats[i] = (float*)(memory + l->floats[i]);
     }
-    double* d = (double*)(memory + l->doubles);
     double** doubles[5] = {&s->power, &s->noise, &s->guard, &s->lastGain, &s->lastGamma};
     for (int i = 0; i < 5; ++i)
     {
-        *doubles[i] = d;
-        d += s->bins;
+        *doubles[i] = (double*)(memory + l->doubles[i]);
     }
 }
 
@@ -221,11 +221,13 @@ maudResult maudCreateNoiseSuppressor(const maudNoiseSuppressorDef* def,
     uint32_t hop = def->sampleRate / 100;
     uint32_t size = PowerOfTwo(2 * hop);
     Layout l = LayoutOf(channels, hop, size);
-    unsigned char* memory = maudAllocate(&def->allocator, l.total, alignof(double));
+    unsigned char* memory =
+        l.layout.overflow ? nullptr : maudAllocate(&def->allocator, l.layout.size, alignof(double));
     if (memory == nullptr)
     {
         return maud_errorCapacity;
     }
+    maudLayoutPoison(&l.layout, memory);
     maudNoiseSuppressor* s = (maudNoiseSuppressor*)memory;
     *s = (maudNoiseSuppressor){.allocator = def->allocator,
                                .channels = channels,
@@ -234,7 +236,7 @@ maudResult maudCreateNoiseSuppressor(const maudNoiseSuppressorDef* def,
                                .bins = size / 2 + 1,
                                .floor = pow(10.0, (double)def->floorDb / 20.0),
                                .highPass = def->highPassHz > 0.0f,
-                               .bytes = l.total,
+                               .bytes = l.layout.size,
                                .noiseDbfs = -120.0f};
     if (s->highPass)
     {
@@ -242,7 +244,11 @@ maudResult maudCreateNoiseSuppressor(const maudNoiseSuppressorDef* def,
     }
     Place(s, memory, &l);
     memset(s->filterState, 0, channels * sizeof(BiquadState));
-    memset(s->previous, 0, 4 * (size_t)channels * hop * sizeof(float));
+    size_t hops = (size_t)channels * hop * sizeof(float);
+    memset(s->previous, 0, hops);
+    memset(s->pending, 0, hops);
+    memset(s->ready, 0, hops);
+    memset(s->tail, 0, hops);
     // A periodic square-root Hann window: its squares at a hop's distance
     // add to one, so analysis and synthesis by it reconstruct exactly.
     for (uint32_t n = 0; n < 2 * hop; ++n)

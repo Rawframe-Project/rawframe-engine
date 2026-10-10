@@ -41,3 +41,10 @@ uint32_t maudWasapiMaskOfLayout(maudChannelLayout layout)
     }
     return mask;
 }
+
+int64_t maudWasapiCounterTime(uint64_t counter, int64_t now, int64_t fallback)
+{
+    int64_t time = (int64_t)counter * 100;
+    bool plausible = counter != 0 && time > now - 1000000000 && time < now + 1000000000;
+    return plausible ? time : fallback;
+}

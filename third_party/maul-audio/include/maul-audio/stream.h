@@ -47,7 +47,12 @@ extern "C"
 
     enum
     {
-        // The device's own rate. The def's sampleRate must be 0.
+        // The device's own rate. The def's sampleRate must be 0. A stream
+        // moved to a device at another rate takes it
+        // (maud_notifyStreamFormatChanged), except a duplex stream, whose
+        // halves keep the one rate they opened at: the half on the new
+        // device is converted by the platform, and its policy reads
+        // maud_ratePlatformConverted from then on.
         maud_rateNative = 0,
         // The def's sampleRate, which the device must run at without
         // conversion, or the stream is refused. On PipeWire that is the
@@ -217,6 +222,11 @@ extern "C"
         // The host suspended the context (maudSetContextSuspended): its
         // application is in the background, hidden, or asleep.
         maud_suspendHost = 5,
+        // The platform failed to open it on its device: the device
+        // refused its format, or the audio service is restarting. The
+        // library tries again after a wait that grows to a few seconds,
+        // and resumes it once it opens.
+        maud_suspendPlatform = 6,
     };
 
     // Where a stream stands.
@@ -287,7 +297,7 @@ extern "C"
     /// @param context      The context.
     /// @param def          The def, from maudDefaultStreamDef, with a
     ///                     callback.
-    /// @param streamIdOut  Receives the stream's id; the null id on failure.
+    /// @param streamOut    Receives the stream's id; the null id on failure.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL argument, a def
     ///         without its cookie or callback, or a value out of range;
     ///         `maud_errorUnsupported` for what the backend cannot do (the
@@ -299,7 +309,7 @@ extern "C"
     /// Safe from any thread; the context is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudCreateStream(maudContext* context,
                                                         const maudStreamDef* def,
-                                                        maudStreamId* streamIdOut);
+                                                        maudStreamId* streamOut);
 
     /// Destroys a stream. Its id becomes stale. On a platform backend its
     /// callback has returned for the last time when this returns.

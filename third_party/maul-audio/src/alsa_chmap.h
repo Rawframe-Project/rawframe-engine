@@ -25,4 +25,10 @@ bool maudAlsaChannelOrder(maudChannelLayout layout, const unsigned int* position
 // Whether order maps every channel to itself.
 bool maudAlsaOrderIsIdentity(const uint8_t* order, uint32_t count);
 
+// Copies frames interleaved frames of channels channels between the
+// stream's order and the PCM's, order[pcm] = stream: from stream to pcm
+// for playback, from pcm to stream for capture.
+void maudAlsaReorder(const uint8_t* order, uint32_t channels, uint32_t frames, float* stream,
+                     float* pcm, bool output);
+
 #endif // MAUL_AUDIO_SRC_ALSA_CHMAP_H

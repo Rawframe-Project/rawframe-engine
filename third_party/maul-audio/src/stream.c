@@ -79,12 +79,11 @@ static bool DefValid(const maudStreamDef* def)
     return def->sampleRate >= MIN_RATE && def->sampleRate <= MAX_RATE;
 }
 
-maudResult maudCreateStream(maudContext* context, const maudStreamDef* def,
-                            maudStreamId* streamIdOut)
+maudResult maudCreateStream(maudContext* context, const maudStreamDef* def, maudStreamId* streamOut)
 {
-    if (streamIdOut != nullptr)
+    if (streamOut != nullptr)
     {
-        *streamIdOut = (maudStreamId){0, 0};
+        *streamOut = (maudStreamId){0, 0};
     }
     if (context == nullptr)
     {
@@ -95,7 +94,7 @@ maudResult maudCreateStream(maudContext* context, const maudStreamDef* def,
         maudCountMisuse(context);
         return maud_errorState;
     }
-    if (def == nullptr || streamIdOut == nullptr || !DefValid(def))
+    if (def == nullptr || streamOut == nullptr || !DefValid(def))
     {
         maudCountMisuse(context);
         return maud_errorInvalid;
@@ -106,7 +105,7 @@ maudResult maudCreateStream(maudContext* context, const maudStreamDef* def,
     }
     if (def->direction == maud_directionDuplex)
     {
-        maudResult result = maudCreateDuplex(context, def, streamIdOut);
+        maudResult result = maudCreateDuplex(context, def, streamOut);
         if (result == maud_errorInvalid)
         {
             maudCountMisuse(context);
@@ -123,7 +122,7 @@ maudResult maudCreateStream(maudContext* context, const maudStreamDef* def,
     {
         return result;
     }
-    *streamIdOut = maudStreamIdOf(context, slot);
+    *streamOut = maudStreamIdOf(context, slot);
     return maud_success;
 }
 
@@ -217,7 +216,9 @@ maudResult maudGetStreamStatus(const maudContext* context, maudStreamId stream,
     const maudStreamCore* captured = duplex != nullptr ? &duplex->input->core : &slot->core;
     *statusOut = (maudStreamStatus){
         .started = binding->started,
-        .suspension = binding->suspension,
+        .suspension = duplex != nullptr && binding->suspension == maud_suspendNone
+                          ? duplex->input->core.binding.suspension
+                          : binding->suspension,
         .device = binding->current,
         .drift =
             duplex == nullptr || SharesClock(context, duplex) ? maud_driftNone : maud_driftSlip,

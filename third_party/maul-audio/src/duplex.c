@@ -142,8 +142,7 @@ static maudResult OpenInput(maudContext* context, const maudStreamDef* def,
     return result;
 }
 
-maudResult maudCreateDuplex(maudContext* context, const maudStreamDef* def,
-                            maudStreamId* streamIdOut)
+maudResult maudCreateDuplex(maudContext* context, const maudStreamDef* def, maudStreamId* streamOut)
 {
     // The output opens first, without its joint: nothing calls back
     // before the host starts the stream, and the ring's size follows the
@@ -181,6 +180,6 @@ maudResult maudCreateDuplex(maudContext* context, const maudStreamDef* def,
     played->duplex = duplex;
     captured->duplex = duplex;
     captured->hidden = true;
-    *streamIdOut = maudStreamIdOf(context, played);
+    *streamOut = maudStreamIdOf(context, played);
     return maud_success;
 }
