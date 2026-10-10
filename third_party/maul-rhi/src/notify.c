@@ -54,7 +54,7 @@ static void Answer(mrhiInstance* instance, uint32_t index, mrhiResult outcome)
     }
     mrhiPushInstanceNotification(instance, (mrhiInstanceNotification){
                                                .kind = kind,
-                                               .requestId = {pending.request, 1},
+                                               .request = {pending.request, 1},
                                                .outcome = outcome,
                                            });
 }

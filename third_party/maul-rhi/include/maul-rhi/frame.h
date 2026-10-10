@@ -59,7 +59,7 @@ extern "C"
         mrhiDeviceNotificationKind kind;
         // The request the record answers: a frame's token, a pipeline's request
         // or a readback's, unique on the device.
-        mrhiRequestId requestId;
+        mrhiRequestId request;
         // How the request ended.
         mrhiResult outcome;
     } mrhiDeviceNotification;

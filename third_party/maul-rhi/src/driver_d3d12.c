@@ -160,6 +160,16 @@ static mrhiFeatures FeaturesOf(ID3D12Device* device)
         features.shaderInt64 = options1.Int64ShaderOps;
         features.subgroups = options1.WaveOps;
     }
+    // 16-bit floats through native 16-bit operations, which shader model
+    // 6.2 brings.
+    D3D12_FEATURE_DATA_D3D12_OPTIONS4 options4 = {0};
+    D3D12_FEATURE_DATA_SHADER_MODEL model62 = {.HighestShaderModel = D3D_SHADER_MODEL_6_2};
+    features.shaderF16 = SUCCEEDED(ID3D12Device_CheckFeatureSupport(
+                             device, D3D12_FEATURE_D3D12_OPTIONS4, &options4, sizeof(options4))) &&
+                         options4.Native16BitShaderOpsSupported &&
+                         SUCCEEDED(ID3D12Device_CheckFeatureSupport(
+                             device, D3D12_FEATURE_SHADER_MODEL, &model62, sizeof(model62))) &&
+                         model62.HighestShaderModel >= D3D_SHADER_MODEL_6_2;
     // Multiview through view instancing, its shaders reading SV_ViewID
     // of shader model 6.1 (mrhi-0020).
     D3D12_FEATURE_DATA_D3D12_OPTIONS3 options3 = {0};

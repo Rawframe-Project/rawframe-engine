@@ -19,8 +19,9 @@
 # at set 4 binding 1 (DXC: -fvk-bind-resource-heap 0 4
 # -fvk-bind-sampler-heap 1 4). An entry reading the view index of a
 # multiview pass (record mrhi-0020) lists the builtin "view_index", in a
-# vertex entry too. WGSL reads no heaps yet and has no view index, so a
-# container whose entries use either has no WGSL: pass - for it.
+# vertex entry too. WGSL reads no heaps yet and has no view index or
+# 64-bit integers, so a container whose entries use any (its SPIR-V
+# declaring Int64) has no WGSL: pass - for it.
 #
 # The enum names are the contract's (docs/contract/mrhi.json) without
 # their prefixes. The reflection:
@@ -100,6 +101,9 @@ TABLES = 4
 # DescriptorSet; execution models by stage.
 OP_ENTRY_POINT = 15
 OP_DECORATE = 71
+OP_CAPABILITY = 17
+CAPABILITY_INT64 = 11
+CAPABILITY_FLOAT16 = 9
 DECORATION_BINDING = 33
 DECORATION_SET = 34
 EXECUTION_MODELS = {0: "vertex", 4: "fragment", 5: "compute"}
@@ -204,7 +208,7 @@ def unique(values, what):
 def pack_variable(item, role, enums, where):
     """An interface record: a vertex input, a color output or an
     inter-stage variable, whose interpolation defaults as WGSL's does."""
-    keys(item, ("location", "type", "components", "interpolation", "sampling"), where)
+    keys(item, ("location", "type", "components", "interpolation", "sampling", "blend_src"), where)
     high = COLOR_TARGETS - 1 if role == "output" else 0xFFFFFFFF
     location = number(item.get("location"), f"{where}: a location", 0, high)
     kind = item.get("type")
@@ -224,6 +228,13 @@ def pack_variable(item, role, enums, where):
     else:
         need("interpolation" not in item and "sampling" not in item,
              f"{where}: only inter-stage variables interpolate")
+    # A color output's byte 6 is its blend source (dual-source blending),
+    # the second at location 0 only.
+    source = item.get("blend_src", 0)
+    need("blend_src" not in item or role == "output", f"{where}: only color outputs blend")
+    need(source in (0, 1) and (source == 0 or location == 0),
+         f"{where}: a blend source is 0, or 1 at location 0")
+    interpolation = source if role == "output" else interpolation
     return location, struct.pack("<IBBBB", location, code, components, interpolation, sampling)
 
 
@@ -235,7 +246,14 @@ def pack_range(entry, key, role, enums, records, where, allowed):
     first = len(records)
     for item in items:
         records.append(pack_variable(item, role, enums, where))
-    unique([loc for loc, _ in records[first:]], f"{key} location in {where}")
+    packed = records[first:]
+    # Two color outputs share location 0 as the two blend sources, of one
+    # type and component count.
+    unique([(loc, record[6] if role == "output" else 0) for loc, record in packed],
+           f"{key} location in {where}")
+    sources = {record[6]: record[4:6] for loc, record in packed if role == "output" and loc == 0}
+    need(1 not in sources or sources.get(0) == sources[1],
+         f"{where}: a second blend source beside a first of its type and components")
     need(len(records) <= MAX_RECORDS, "too many records")
     return first, len(items)
 
@@ -589,6 +607,18 @@ def metal_sections(reflection, root, msl, metallib):
 
 # D3D12.
 
+def capabilities(code):
+    """The capabilities a SPIR-V module declares, which it lists before
+    any other instruction."""
+    words = struct.unpack(f"<{len(code) // 4}I", code)
+    found = set()
+    at = 5
+    while at + 1 < len(words) and words[at] == (2 << 16 | OP_CAPABILITY):
+        found.add(words[at + 1])
+        at += 2
+    return found
+
+
 def fixed_constants(code):
     """The ids of the specialization constants the SPIR-V sizes something
     with: a workgroup size or an array's length, directly or through
@@ -753,12 +783,14 @@ def build(spirv, wgsl, reflection, enums, msl=None, metallib=None, dxil=None):
     check_spirv(spirv, reflection, bindings)
     heaps = any(e.get("heap_uses") for e in reflection["entries"])
     views = any("view_index" in e.get("builtins", []) for e in reflection["entries"])
-    if heaps or views:
-        need(wgsl is None, "WGSL reads no heaps and has no view index: a container using "
-             "either has no WGSL")
+    int64 = CAPABILITY_INT64 in capabilities(spirv)
+    if heaps or views or int64:
+        need(wgsl is None, "WGSL reads no heaps, has no view index and no 64-bit integers: a "
+             "container using any has no WGSL")
         wgsl = b""
     else:
-        need(wgsl is not None, "a container using no heap and no view index needs WGSL")
+        need(wgsl is not None, "a container using no heap, view index or 64-bit integers needs "
+             "WGSL")
         try:
             text = wgsl.decode("utf-8")
         except UnicodeDecodeError as error:

@@ -6,7 +6,7 @@
   "guard": "MAUL_RHI",
   "version": {
     "major": 0,
-    "minor": 5,
+    "minor": 7,
     "patch": 0
   },
   "headers": [
@@ -1120,7 +1120,7 @@
               "type": "enum.instance_notification_kind"
             },
             {
-              "name": "request_id",
+              "name": "request",
               "type": "id.request_id",
               "doc": "The request the record answers."
             },
@@ -1226,9 +1226,15 @@
           }
         },
         {
+          "kind": "constant",
+          "name": "instance_def_cookie",
+          "value": 1836214638,
+          "doc": "The cookie of an instance def, which mrhiDefaultInstanceDef sets and the instance checks."
+        },
+        {
           "kind": "function",
           "name": "default_instance_def",
-          "doc": "Returns the default instance def: the contract version the program is built against, the C library's allocator and the default limits (8 chained structs per def, 64 notifications, 16 adapters).",
+          "doc": "Returns the default instance def, built in the program from the headers it includes: their contract version, the C library's allocator and the default limits (8 chained structs per def, 64 notifications, 16 adapters, 16 surfaces). Being the program's own, it lets the instance refuse a program built against another contract version rather than read a def of another layout.",
           "returns": {
             "type": "struct.instance_def",
             "doc": "The def, with a valid cookie."
@@ -1237,7 +1243,21 @@
           "thread_safety": {
             "class": "any"
           },
-          "library": "fills a def with the library's defaults"
+          "library": "fills a def in the program's build",
+          "inline_body": [
+            "#ifdef __cplusplus",
+            "mrhiInstanceDef def = {};",
+            "#else",
+            "mrhiInstanceDef def = {0};",
+            "#endif",
+            "def.cookie = MRHI_INSTANCE_DEF_COOKIE;",
+            "def.contractVersion = MRHI_CONTRACT_VERSION;",
+            "def.limits.chainDepth = 8;",
+            "def.limits.notifications = 64;",
+            "def.limits.adapters = 16;",
+            "def.limits.surfaces = 16;",
+            "return def;"
+          ]
         },
         {
           "kind": "function",
@@ -11600,7 +11620,7 @@
               "type": "enum.device_notification_kind"
             },
             {
-              "name": "request_id",
+              "name": "request",
               "type": "id.request_id",
               "doc": "The request the record answers: a frame's token, a pipeline's request or a readback's, unique on the device."
             },
@@ -17325,6 +17345,98 @@
                   "note": "one-minus-constant"
                 }
               }
+            },
+            {
+              "name": "blend_src1",
+              "value": 13,
+              "doc": "The fragment's second source (dual-source blending).",
+              "mapping": {
+                "vulkan": {
+                  "class": "restricted",
+                  "note": "SRC1_COLOR, with dualSrcBlend"
+                },
+                "d3d12": {
+                  "class": "direct",
+                  "note": "D3D12_BLEND_SRC1_COLOR"
+                },
+                "metal": {
+                  "class": "direct",
+                  "note": "MTLBlendFactorSource1Color"
+                },
+                "web_gpu": {
+                  "class": "restricted",
+                  "note": "src1, with dual-source-blending"
+                }
+              }
+            },
+            {
+              "name": "blend_one_minus_src1",
+              "value": 14,
+              "doc": "1 minus the second source.",
+              "mapping": {
+                "vulkan": {
+                  "class": "restricted",
+                  "note": "ONE_MINUS_SRC1_COLOR, with dualSrcBlend"
+                },
+                "d3d12": {
+                  "class": "direct",
+                  "note": "D3D12_BLEND_INV_SRC1_COLOR"
+                },
+                "metal": {
+                  "class": "direct",
+                  "note": "MTLBlendFactorOneMinusSource1Color"
+                },
+                "web_gpu": {
+                  "class": "restricted",
+                  "note": "one-minus-src1, with dual-source-blending"
+                }
+              }
+            },
+            {
+              "name": "blend_src1_alpha",
+              "value": 15,
+              "doc": "The second source's alpha.",
+              "mapping": {
+                "vulkan": {
+                  "class": "restricted",
+                  "note": "SRC1_ALPHA, with dualSrcBlend"
+                },
+                "d3d12": {
+                  "class": "direct",
+                  "note": "D3D12_BLEND_SRC1_ALPHA"
+                },
+                "metal": {
+                  "class": "direct",
+                  "note": "MTLBlendFactorSource1Alpha"
+                },
+                "web_gpu": {
+                  "class": "restricted",
+                  "note": "src1-alpha, with dual-source-blending"
+                }
+              }
+            },
+            {
+              "name": "blend_one_minus_src1_alpha",
+              "value": 16,
+              "doc": "1 minus the second source's alpha.",
+              "mapping": {
+                "vulkan": {
+                  "class": "restricted",
+                  "note": "ONE_MINUS_SRC1_ALPHA, with dualSrcBlend"
+                },
+                "d3d12": {
+                  "class": "direct",
+                  "note": "D3D12_BLEND_INV_SRC1_ALPHA"
+                },
+                "metal": {
+                  "class": "direct",
+                  "note": "MTLBlendFactorOneMinusSource1Alpha"
+                },
+                "web_gpu": {
+                  "class": "restricted",
+                  "note": "one-minus-src1-alpha, with dual-source-blending"
+                }
+              }
             }
           ]
         },
@@ -18281,7 +18393,7 @@
           "doc": "Writes the device's pipeline cache, for a later device's def: the driver's compiled pipelines in a checked envelope.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success` with the cache written, or only its size when bytesOut is NULL; `mrhi_errorInvalid` for a NULL device or sizeOut; `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity` when capacity is less than the size, which sizeOut receives; `mrhi_errorPlatform` when the driver fails to write it."
+            "doc": "`mrhi_success` with the cache written, or only its size when bytes is NULL; `mrhi_errorInvalid` for a NULL device or sizeOut; `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity` when capacity is less than the size, which sizeOut receives; `mrhi_errorPlatform` when the driver fails to write it."
           },
           "args": [
             {
@@ -18291,7 +18403,7 @@
               "doc": "The device."
             },
             {
-              "name": "bytes_out",
+              "name": "bytes",
               "type": "void",
               "pointer": "mutable",
               "doc": "Receives the cache, or NULL to learn its size."
@@ -18299,7 +18411,7 @@
             {
               "name": "capacity",
               "type": "size",
-              "doc": "The bytes bytesOut holds."
+              "doc": "The bytes it holds."
             },
             {
               "name": "size_out",
@@ -22029,5 +22141,5 @@
       ]
     }
   ],
-  "contract_version": 3
+  "contract_version": 5
 }

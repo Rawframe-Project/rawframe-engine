@@ -103,6 +103,8 @@ add_library(maul-rhi ${MAUL_LIBRARY_KIND}
     src/metal_external.c
     src/compile.c
     src/container.c
+    src/container_interface.c
+    src/spirv_caps.c
     src/device.c
     src/diagnostics.c
     src/binding.c
@@ -498,6 +500,7 @@ if(MAUL_RHI_INSTALL)
     include(cmake/Install.cmake)
     # The driver SPI, for drivers built outside the tree (mrhi-0024).
     install(FILES src/driver.h src/command.h src/reflection.h src/container.h
+                  src/container_interface.h
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}/spi)
     # Such a driver, built against an install of this build alone; not
     # under the sanitizers, whose flags the package does not carry.

@@ -246,6 +246,14 @@ extern "C"
         mrhi_blendConstant = 11,
         // 1 minus the blend constant.
         mrhi_blendOneMinusConstant = 12,
+        // The fragment's second source (dual-source blending).
+        mrhi_blendSrc1 = 13,
+        // 1 minus the second source.
+        mrhi_blendOneMinusSrc1 = 14,
+        // The second source's alpha.
+        mrhi_blendSrc1Alpha = 15,
+        // 1 minus the second source's alpha.
+        mrhi_blendOneMinusSrc1Alpha = 16,
     };
 
     // How blending combines its weighted source and destination.
@@ -584,17 +592,17 @@ extern "C"
     /// driver's compiled pipelines in a checked envelope.
     ///
     /// @param device    The device.
-    /// @param bytesOut  Receives the cache, or NULL to learn its size.
-    /// @param capacity  The bytes bytesOut holds.
+    /// @param bytes     Receives the cache, or NULL to learn its size.
+    /// @param capacity  The bytes it holds.
     /// @param sizeOut   Receives the cache's size.
     /// @return `mrhi_success` with the cache written, or only its size when
-    /// bytesOut is NULL; `mrhi_errorInvalid` for a NULL device or sizeOut;
+    /// bytes is NULL; `mrhi_errorInvalid` for a NULL device or sizeOut;
     /// `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity`
     /// when capacity is less than the size, which sizeOut receives;
     /// `mrhi_errorPlatform` when the driver fails to write it.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetPipelineCache(mrhiDevice* device, void* bytesOut,
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetPipelineCache(mrhiDevice* device, void* bytes,
                                                             size_t capacity, size_t* sizeOut);
 
     /// Reports what became of the pipeline cache the device's def gave. An

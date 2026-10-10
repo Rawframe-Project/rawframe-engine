@@ -31,8 +31,6 @@
 
 #include <stdalign.h>
 
-#define INSTANCE_DEF_COOKIE 0x6D72696Eu
-
 // The chained structs an instance def accepts.
 static const mrhiStructType s_instanceStructs[] = {
     mrhi_structExternalDriver,
@@ -73,22 +71,10 @@ static bool MixesDrivers(const mrhiInstanceDef* def)
     return (vulkan && test) || (external && (vulkan || test));
 }
 
-mrhiInstanceDef mrhiDefaultInstanceDef(void)
-{
-    mrhiInstanceDef def = {0};
-    def.cookie = INSTANCE_DEF_COOKIE;
-    def.contractVersion = MRHI_CONTRACT_VERSION;
-    def.limits.chainDepth = 8;
-    def.limits.notifications = 64;
-    def.limits.adapters = 16;
-    def.limits.surfaces = 16;
-    return def;
-}
-
 static mrhiResult CheckDef(const mrhiInstanceDef* def)
 {
     const mrhiInstanceLimits* limits = &def->limits;
-    if (def->cookie != INSTANCE_DEF_COOKIE || limits->chainDepth == 0 ||
+    if (def->cookie != MRHI_INSTANCE_DEF_COOKIE || limits->chainDepth == 0 ||
         limits->notifications == 0 || limits->adapters == 0 || limits->surfaces == 0 ||
         !mrhiIsAllocatorValid(&def->allocator))
     {

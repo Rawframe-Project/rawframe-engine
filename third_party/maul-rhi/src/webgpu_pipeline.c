@@ -51,7 +51,8 @@ EM_JS(void, mrhiJsDefineNames, (void), {
                    'increment-wrap', 'decrement-wrap'],
         factors: ['zero', 'one', 'src', 'one-minus-src', 'src-alpha', 'one-minus-src-alpha',
                   'dst', 'one-minus-dst', 'dst-alpha', 'one-minus-dst-alpha',
-                  'src-alpha-saturated', 'constant', 'one-minus-constant'],
+                  'src-alpha-saturated', 'constant', 'one-minus-constant', 'src1',
+                  'one-minus-src1', 'src1-alpha', 'one-minus-src1-alpha'],
         operations: ['add', 'subtract', 'reverse-subtract', 'min', 'max'],
         aspects: ['all', 'depth-only', 'stencil-only'],
     };

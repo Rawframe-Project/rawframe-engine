@@ -255,16 +255,24 @@ static mrhiResult CheckDepthStencil(const mrhiDevice* device, const mrhiGraphics
 static bool IsBlendValid(const mrhiBlendComponent* component)
 {
     bool ones = component->srcFactor == mrhi_blendOne && component->dstFactor == mrhi_blendOne;
-    return component->srcFactor <= mrhi_blendOneMinusConstant &&
-           component->dstFactor <= mrhi_blendOneMinusConstant &&
+    return component->srcFactor <= mrhi_blendOneMinusSrc1Alpha &&
+           component->dstFactor <= mrhi_blendOneMinusSrc1Alpha &&
            component->operation <= mrhi_blendMax && (component->operation < mrhi_blendMin || ones);
 }
 
-// Whether a blend factor reads the source's alpha.
+// Whether a blend factor reads a source's alpha; the second source has
+// the first's components.
 static bool ReadsSourceAlpha(mrhiBlendFactor factor)
 {
     return factor == mrhi_blendSrcAlpha || factor == mrhi_blendOneMinusSrcAlpha ||
-           factor == mrhi_blendSrcAlphaSaturated;
+           factor == mrhi_blendSrcAlphaSaturated || factor == mrhi_blendSrc1Alpha ||
+           factor == mrhi_blendOneMinusSrc1Alpha;
+}
+
+// Whether a blend component reads the second source.
+static bool ReadsSecondSource(const mrhiBlendComponent* component)
+{
+    return component->srcFactor >= mrhi_blendSrc1 || component->dstFactor >= mrhi_blendSrc1;
 }
 
 // The fragment entry's output at a location, or NULL.
@@ -274,12 +282,25 @@ static const mrhiShaderVariable* OutputAt(Stages stages, uint32_t location)
     {
         const mrhiShaderVariable* output =
             &stages.reflection->outputs[stages.fragment->firstOutput + i];
-        if (output->location == location)
+        if (output->location == location && output->blendSource == 0)
         {
             return output;
         }
     }
     return nullptr;
+}
+
+// Whether the fragment entry has a second blend source.
+static bool HasSecondSource(Stages stages)
+{
+    for (uint32_t i = 0; stages.fragment != nullptr && i < stages.fragment->outputCount; ++i)
+    {
+        if (stages.reflection->outputs[stages.fragment->firstOutput + i].blendSource == 1)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Whether an output's scalar type writes a target's.
@@ -340,6 +361,18 @@ static mrhiResult CheckTargets(const mrhiDevice* device, const mrhiGraphicsPipel
         }
     }
     status = Worse(status, Need(attached));
+    // Dual-source blending: the feature, one color target, and a second
+    // source at location 0.
+    bool second = false;
+    for (uint32_t i = 0; i < def->colorTargetCount; ++i)
+    {
+        const mrhiColorTargetState* target = &def->colorTargets[i];
+        second = second || (target->blend && (ReadsSecondSource(&target->color) ||
+                                              ReadsSecondSource(&target->alpha)));
+    }
+    status =
+        Worse(status, Within(!second || (device->features.dualSourceBlending &&
+                                         def->colorTargetCount == 1 && HasSecondSource(stages))));
     return Worse(status, Within(bytes <= device->limits.colorBytesPerSample));
 }
 

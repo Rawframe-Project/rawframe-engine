@@ -121,6 +121,8 @@ static bool IsWithin(const mrhiDevice* device, const mrhiContainer* container)
 {
     if (container->rootBlockBytes > device->limits.rootBlockBytes ||
         (container->float16 && !device->features.shaderF16) ||
+        (container->subgroups && !device->features.subgroups) ||
+        (container->int64 && !device->features.shaderInt64) ||
         (container->builtins & mrhi_builtinPrimitiveIndex) != 0 ||
         (container->heapUses != 0 && !device->features.bindlessSampling) ||
         ((container->builtins & mrhi_builtinViewIndex) != 0 && !device->features.multiview) ||

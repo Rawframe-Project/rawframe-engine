@@ -163,6 +163,9 @@ static mrhiFeatures FeaturesOf(id<MTLDevice> device)
 {
     bool apple7 = [device supportsFamily:MTLGPUFamilyApple7];
     bool mac2 = [device supportsFamily:MTLGPUFamilyMac2];
+    // The paravirtual device clips depth with the clamp mode set: the
+    // unclipped depth case draws nothing on it.
+    bool virtualDevice = KindOf(device) == mrhi_adapterVirtual;
     return (mrhiFeatures){
         .textureCompressionBc = HasBc(device),
         .textureCompressionEtc2 = [device supportsFamily:MTLGPUFamilyApple2],
@@ -170,7 +173,7 @@ static mrhiFeatures FeaturesOf(id<MTLDevice> device)
         .float32Filterable = device.supports32BitFloatFiltering,
         .rg11b10Renderable = true,
         .dualSourceBlending = true,
-        .unclippedDepth = true,
+        .unclippedDepth = !virtualDevice,
         .shaderF16 = true,
         .subgroups = apple7 || mac2,
         .shaderInt64 = apple7 || mac2,

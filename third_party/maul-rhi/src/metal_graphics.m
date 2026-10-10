@@ -76,8 +76,12 @@ static MTLBlendFactor FactorOf(mrhiBlendFactor factor, bool alpha)
         [mrhi_blendSrcAlphaSaturated] = MTLBlendFactorSourceAlphaSaturated,
         [mrhi_blendConstant] = MTLBlendFactorBlendColor,
         [mrhi_blendOneMinusConstant] = MTLBlendFactorOneMinusBlendColor,
+        [mrhi_blendSrc1] = MTLBlendFactorSource1Color,
+        [mrhi_blendOneMinusSrc1] = MTLBlendFactorOneMinusSource1Color,
+        [mrhi_blendSrc1Alpha] = MTLBlendFactorSource1Alpha,
+        [mrhi_blendOneMinusSrc1Alpha] = MTLBlendFactorOneMinusSource1Alpha,
     };
-    MRHI_ASSERT(factor <= mrhi_blendOneMinusConstant);
+    MRHI_ASSERT(factor <= mrhi_blendOneMinusSrc1Alpha);
     if (alpha && factor == mrhi_blendConstant)
     {
         return MTLBlendFactorBlendAlpha;

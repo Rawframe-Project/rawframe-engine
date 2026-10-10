@@ -443,10 +443,11 @@ static mrhiResult CreateShader(void* self, const mrhiShaderDef* def, const mrhiC
     TestDevice* device = self;
     Name(device, def->label, def->labelLength);
     // A container has WGSL exactly when no entry uses a heap or the view
-    // index.
+    // index and its code no 64-bit integers.
     MRHI_ASSERT(container->entryCount > 0 && container->spirvBytes >= 20 &&
-                (container->wgslBytes > 0) == (container->heapUses == 0 &&
-                                               (container->builtins & mrhi_builtinViewIndex) == 0));
+                (container->wgslBytes > 0) ==
+                    (container->heapUses == 0 &&
+                     (container->builtins & mrhi_builtinViewIndex) == 0 && !container->int64));
     mrhiResult status = MakeObject(device, handleOut);
     device->shaders += status == mrhi_success ? 1 : 0;
     return status;

@@ -17,7 +17,8 @@
 # constant the SPIR-V does not size anything with is defined as a read
 # of b1 of space 5, where the driver writes the pipeline's values; a
 # fixed one keeps its default. DXC compiles each entry for SHADER_MODEL,
-# 6.1 for one reading the view index (record mrhi-0020),
+# 6.1 for one reading the view index (record mrhi-0020), 6.2 with 16-bit
+# types for a module declaring Float16,
 # to DIR/NAME.dxil without reflection or debug data. spirv-cross and dxc
 # must be on the path.
 #
@@ -146,6 +147,7 @@ def main():
             reflection = json.load(f)
         entries = reflection["entries"]
         placed = place_heaps(writer, place_root(writer, code))
+        float16 = writer.CAPABILITY_FLOAT16 in writer.capabilities(code)
         declaration, defines = constant_defines(writer, reflection.get("constants", []),
                                                 writer.fixed_constants(code))
     except (OSError, ValueError, KeyError, TypeError, writer.ContainerError) as error:
@@ -159,10 +161,13 @@ def main():
         try:
             for entry in entries:
                 stage, profile = STAGES[entry["stage"]]
-                # SV_ViewID, the view index (record mrhi-0020), needs 6.1.
+                # SV_ViewID, the view index (record mrhi-0020), needs 6.1;
+                # 16-bit floats need 6.2 and dxc's 16-bit types.
                 model = "6_1" if "view_index" in entry.get("builtins", []) else SHADER_MODEL
+                model = "6_2" if float16 else model
                 hlsl = os.path.join(work, entry["name"] + ".hlsl")
                 run(["spirv-cross", module, "--hlsl", "--shader-model", model.replace("_", ""),
+                     *(["--hlsl-enable-16bit-types"] if float16 else []),
                      "--hlsl-support-nonzero-basevertex-baseinstance",
                      "--hlsl-basevertex-baseinstance-binding", str(writer.D3D12_VERTEX_INFO),
                      str(writer.D3D12_SPACE), "--entry", entry["name"], "--stage", stage,
@@ -172,7 +177,8 @@ def main():
                 with open(hlsl, "w", encoding="utf-8") as f:
                     f.write(declaration + source)
                 run(["dxc", "-T", f"{profile}_{model}", "-E", "main", "-Qstrip_reflect",
-                     "-Qstrip_debug", *defines, "-Fo",
+                     "-Qstrip_debug", *(["-enable-16bit-types"] if float16 else []), *defines,
+                     "-Fo",
                      os.path.join(folder, entry["name"] + ".dxil"), hlsl],
                     f"dxc on {entry['name']}")
         except RuntimeError as error:

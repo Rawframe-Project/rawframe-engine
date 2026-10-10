@@ -47,7 +47,7 @@ void mrhiQueueAnswer(mrhiDevice* device, mrhiDeviceNotificationKind kind, uint32
     device->queue[tail] = (mrhiDeviceNotification){
         .kind = kind,
         // Request 0, a loss notice's, is the null id.
-        .requestId = {request, request != 0},
+        .request = {request, request != 0},
         .outcome = outcome,
     };
     ++device->queueCount;

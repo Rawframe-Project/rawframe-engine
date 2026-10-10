@@ -566,7 +566,7 @@ void Device::pump() {
             state_->lost = true;
             continue;
         }
-        state_->answers[requestKey(record.requestId.index1, record.requestId.generation)] = record.outcome;
+        state_->answers[requestKey(record.request.index1, record.request.generation)] = record.outcome;
     }
 }
 

@@ -84,6 +84,10 @@ static const VkBlendFactor s_blendFactors[] = {
     [mrhi_blendSrcAlphaSaturated] = VK_BLEND_FACTOR_SRC_ALPHA_SATURATE,
     [mrhi_blendConstant] = VK_BLEND_FACTOR_CONSTANT_COLOR,
     [mrhi_blendOneMinusConstant] = VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,
+    [mrhi_blendSrc1] = VK_BLEND_FACTOR_SRC1_COLOR,
+    [mrhi_blendOneMinusSrc1] = VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,
+    [mrhi_blendSrc1Alpha] = VK_BLEND_FACTOR_SRC1_ALPHA,
+    [mrhi_blendOneMinusSrc1Alpha] = VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,
 };
 
 // Topologies, front faces, cull modes, blend operations and color

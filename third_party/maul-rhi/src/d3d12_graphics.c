@@ -85,6 +85,10 @@ static const D3D12_BLEND s_blendFactors[][2] = {
     [mrhi_blendSrcAlphaSaturated] = {D3D12_BLEND_SRC_ALPHA_SAT, D3D12_BLEND_SRC_ALPHA_SAT},
     [mrhi_blendConstant] = {D3D12_BLEND_BLEND_FACTOR, D3D12_BLEND_BLEND_FACTOR},
     [mrhi_blendOneMinusConstant] = {D3D12_BLEND_INV_BLEND_FACTOR, D3D12_BLEND_INV_BLEND_FACTOR},
+    [mrhi_blendSrc1] = {D3D12_BLEND_SRC1_COLOR, D3D12_BLEND_SRC1_ALPHA},
+    [mrhi_blendOneMinusSrc1] = {D3D12_BLEND_INV_SRC1_COLOR, D3D12_BLEND_INV_SRC1_ALPHA},
+    [mrhi_blendSrc1Alpha] = {D3D12_BLEND_SRC1_ALPHA, D3D12_BLEND_SRC1_ALPHA},
+    [mrhi_blendOneMinusSrc1Alpha] = {D3D12_BLEND_INV_SRC1_ALPHA, D3D12_BLEND_INV_SRC1_ALPHA},
 };
 
 static const D3D12_BLEND_OP s_blendOps[] = {

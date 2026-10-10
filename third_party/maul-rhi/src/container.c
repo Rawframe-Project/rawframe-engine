@@ -11,8 +11,10 @@
 
 #include "bytes.h"
 #include "capabilities_core.h"
+#include "container_interface.h"
 #include "label.h"
 #include "sha256.h"
+#include "spirv_caps.h"
 
 #include <stdckdint.h>
 #include <string.h>
@@ -21,7 +23,6 @@
 #define SECTION_BYTES     24
 #define ENTRY_BYTES       48
 #define BINDING_BYTES     24
-#define VARIABLE_BYTES    8
 #define CONSTANT_BYTES    16
 #define METAL_ENTRY_BYTES 16
 #define D3D12_HEAD_BYTES  32
@@ -212,31 +213,23 @@ mrhiShaderBinding mrhiContainerBinding(const mrhiContainer* container, uint32_t 
     };
 }
 
-static mrhiShaderVariable ReadVariable(const uint8_t* records, uint32_t index)
-{
-    const uint8_t* at = records + (size_t)index * VARIABLE_BYTES;
-    return (mrhiShaderVariable){
-        .location = mrhiRead32(at),
-        .type = at[4],
-        .components = at[5],
-        .interpolation = at[6],
-        .sampling = at[7],
-    };
-}
-
 mrhiShaderVariable mrhiContainerInput(const mrhiContainer* container, uint32_t index)
 {
-    return ReadVariable(container->inputs, index);
+    return mrhiReadInterfaceRecord(container->inputs, index);
 }
 
+// A color output's byte 6 is its blend source, not an interpolation.
 mrhiShaderVariable mrhiContainerOutput(const mrhiContainer* container, uint32_t index)
 {
-    return ReadVariable(container->outputs, index);
+    mrhiShaderVariable output = mrhiReadInterfaceRecord(container->outputs, index);
+    output.blendSource = (uint8_t)output.interpolation;
+    output.interpolation = 0;
+    return output;
 }
 
 mrhiShaderVariable mrhiContainerVariable(const mrhiContainer* container, uint32_t index)
 {
-    return ReadVariable(container->variables, index);
+    return mrhiReadInterfaceRecord(container->variables, index);
 }
 
 mrhiShaderConstant mrhiContainerConstant(const mrhiContainer* container, uint32_t index)
@@ -329,56 +322,6 @@ bool mrhiContainerD3d12Fixed(const mrhiContainer* container, uint32_t constant)
                           constant] != 0;
 }
 
-// What an interface record is.
-typedef enum Role
-{
-    ROLE_INPUT,
-    ROLE_OUTPUT,
-    ROLE_VARIABLE,
-} Role;
-
-// Whether an inter-stage variable is interpolated as WGSL allows:
-// integers flat, flat from the first or either vertex, and the others
-// sampled at the center, the centroid or per sample.
-static bool IsInterpolationValid(mrhiShaderVariable variable)
-{
-    bool integer = variable.type == mrhi_scalarSint32 || variable.type == mrhi_scalarUint32;
-    switch (variable.interpolation)
-    {
-    case mrhi_interpolationPerspective:
-    case mrhi_interpolationLinear:
-        return !integer && variable.sampling >= mrhi_samplingCenter &&
-               variable.sampling <= mrhi_samplingSample;
-    case mrhi_interpolationFlat:
-        return variable.sampling == mrhi_samplingFirst || variable.sampling == mrhi_samplingEither;
-    default:
-        return false;
-    }
-}
-
-// Whether every record of an interface section is well formed for its
-// role, whether or not an entry names it; notes 16-bit floats.
-static bool AreVariablesValid(const uint8_t* records, uint32_t count, Role role, bool* float16Out)
-{
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        mrhiShaderVariable variable = ReadVariable(records, i);
-        bool type = variable.type >= mrhi_scalarFloat32 && variable.type <= mrhi_scalarUint32 &&
-                    !(role == ROLE_INPUT && variable.type == mrhi_scalarFloat16);
-        bool interpolation = role == ROLE_VARIABLE
-                                 ? IsInterpolationValid(variable)
-                                 : variable.interpolation == 0 && variable.sampling == 0;
-        bool location = role != ROLE_OUTPUT || variable.location < MRHI_COLOR_TARGETS;
-        if (!type || variable.components < 1 || variable.components > 4 || !interpolation ||
-            !location)
-        {
-            return false;
-        }
-        *float16Out = *float16Out || variable.type == mrhi_scalarFloat16;
-    }
-    return true;
-}
-
 // Whether a range of records lies in an array of count.
 static bool InArray(uint32_t first, uint32_t length, uint32_t count)
 {
@@ -436,29 +379,16 @@ static bool IsEntryValid(const mrhiContainer* container, uint32_t index)
 }
 
 // Whether the locations of a range of interface records are unique.
-static bool AreLocationsUnique(const uint8_t* records, uint32_t first, uint32_t count)
-{
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        uint32_t location = ReadVariable(records, first + i).location;
-        for (uint32_t j = 0; j < i; ++j)
-        {
-            if (ReadVariable(records, first + j).location == location)
-            {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 // Whether an entry's inputs, outputs and variables each have unique
 // locations.
 static bool AreEntryLocationsUnique(const mrhiContainer* container, mrhiShaderEntry entry)
 {
-    return AreLocationsUnique(container->inputs, entry.firstInput, entry.inputCount) &&
-           AreLocationsUnique(container->outputs, entry.firstOutput, entry.outputCount) &&
-           AreLocationsUnique(container->variables, entry.firstVariable, entry.variableCount);
+    return mrhiAreInterfaceLocationsUnique(container->inputs, entry.firstInput, entry.inputCount,
+                                           false) &&
+           mrhiAreInterfaceLocationsUnique(container->outputs, entry.firstOutput, entry.outputCount,
+                                           true) &&
+           mrhiAreInterfaceLocationsUnique(container->variables, entry.firstVariable,
+                                           entry.variableCount, false);
 }
 
 // Whether a binding's details suit its kind.
@@ -862,12 +792,12 @@ static bool IsD3d12Valid(const mrhiContainer* container)
 static bool AreRecordsValid(mrhiContainer* container)
 {
     if (container->entryCount == 0 ||
-        !AreVariablesValid(container->inputs, container->inputCount, ROLE_INPUT,
-                           &container->float16) ||
-        !AreVariablesValid(container->outputs, container->outputCount, ROLE_OUTPUT,
-                           &container->float16) ||
-        !AreVariablesValid(container->variables, container->variableCount, ROLE_VARIABLE,
-                           &container->float16))
+        !mrhiAreInterfaceRecordsValid(container->inputs, container->inputCount, mrhi_interfaceInput,
+                                      &container->float16) ||
+        !mrhiAreInterfaceRecordsValid(container->outputs, container->outputCount,
+                                      mrhi_interfaceOutput, &container->float16) ||
+        !mrhiAreInterfaceRecordsValid(container->variables, container->variableCount,
+                                      mrhi_interfaceVariable, &container->float16))
     {
         return false;
     }
@@ -881,9 +811,10 @@ static bool AreRecordsValid(mrhiContainer* container)
         container->builtins |= entry.builtins;
         container->heapUses |= entry.heapUses;
     }
-    // WGSL reads no heaps yet and has no view index: a container using
-    // either has no WGSL, and one using neither needs it.
-    bool native = container->heapUses != 0 || (container->builtins & mrhi_builtinViewIndex) != 0;
+    // WGSL reads no heaps yet and has no view index or 64-bit integers: a
+    // container using any has no WGSL, and one using none needs it.
+    bool native = container->heapUses != 0 || (container->builtins & mrhi_builtinViewIndex) != 0 ||
+                  container->int64;
     if (native == (container->wgslBytes > 0))
     {
         return false;
@@ -926,6 +857,11 @@ static bool TakeParts(const uint8_t* bytes, const Section* sections, uint32_t co
     container->spirv = FindSection(bytes, sections, count, SECTION_SPIRV, &size);
     container->spirvBytes = size;
     bool spirv = size >= 20 && size % 4 == 0 && mrhiRead32(container->spirv) == SPIRV_MAGIC;
+    if (spirv)
+    {
+        mrhiReadSpirvCapabilities(container->spirv, size, &container->float16,
+                                  &container->subgroups, &container->int64);
+    }
     container->wgsl = FindSection(bytes, sections, count, SECTION_WGSL, &size);
     container->wgslBytes = size;
     bool wgsl = size == 0 || mrhiIsTextValid((const char*)container->wgsl, size);
@@ -969,13 +905,13 @@ mrhiResult mrhiParseContainer(const void* bytes, size_t size, mrhiContainer* con
                            &container.entryCount) &&
                  TakeArray(data, sections, count, SECTION_BINDINGS, BINDING_BYTES,
                            &container.bindings, &container.bindingCount) &&
-                 TakeArray(data, sections, count, SECTION_INPUTS, VARIABLE_BYTES, &container.inputs,
-                           &container.inputCount) &&
-                 TakeArray(data, sections, count, SECTION_OUTPUTS, VARIABLE_BYTES,
+                 TakeArray(data, sections, count, SECTION_INPUTS, MRHI_VARIABLE_BYTES,
+                           &container.inputs, &container.inputCount) &&
+                 TakeArray(data, sections, count, SECTION_OUTPUTS, MRHI_VARIABLE_BYTES,
                            &container.outputs, &container.outputCount) &&
                  TakeArray(data, sections, count, SECTION_CONSTANTS, CONSTANT_BYTES,
                            &container.constants, &container.constantCount) &&
-                 TakeArray(data, sections, count, SECTION_VARIABLES, VARIABLE_BYTES,
+                 TakeArray(data, sections, count, SECTION_VARIABLES, MRHI_VARIABLE_BYTES,
                            &container.variables, &container.variableCount) &&
                  AreRecordsValid(&container);
     if (!valid)

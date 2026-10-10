@@ -55,8 +55,7 @@ mrhiResult mrhiImportPipelineCache(mrhiDevice* device, const void* bytes, size_t
     return taken ? mrhi_success : mrhi_errorStale;
 }
 
-mrhiResult mrhiGetPipelineCache(mrhiDevice* device, void* bytesOut, size_t capacity,
-                                size_t* sizeOut)
+mrhiResult mrhiGetPipelineCache(mrhiDevice* device, void* bytes, size_t capacity, size_t* sizeOut)
 {
     if (device == nullptr)
     {
@@ -73,7 +72,7 @@ mrhiResult mrhiGetPipelineCache(mrhiDevice* device, void* bytesOut, size_t capac
     }
     size_t payload = device->driver.vtable->exportPipelineCache(device->driver.self, nullptr, 0);
     *sizeOut = HEADER_BYTES + payload;
-    if (bytesOut == nullptr)
+    if (bytes == nullptr)
     {
         return mrhi_success;
     }
@@ -81,7 +80,7 @@ mrhiResult mrhiGetPipelineCache(mrhiDevice* device, void* bytesOut, size_t capac
     {
         return mrhi_errorCapacity;
     }
-    uint8_t* data = bytesOut;
+    uint8_t* data = bytes;
     // The device is used by one thread at a time, so a driver whose cache
     // changed size between the two calls has failed.
     if (device->driver.vtable->exportPipelineCache(device->driver.self, data + HEADER_BYTES,

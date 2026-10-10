@@ -140,7 +140,7 @@ extern "C"
     {
         mrhiInstanceNotificationKind kind;
         // The request the record answers.
-        mrhiRequestId requestId;
+        mrhiRequestId request;
         // How the request ended.
         mrhiResult outcome;
     } mrhiInstanceNotification;
@@ -187,14 +187,35 @@ extern "C"
         mrhiInstanceLimits limits;
     } mrhiInstanceDef;
 
-    /// Returns the default instance def: the contract version the program is
-    /// built against, the C library's allocator and the default limits (8
-    /// chained structs per def, 64 notifications, 16 adapters).
+// The cookie of an instance def, which mrhiDefaultInstanceDef sets and the
+// instance checks.
+#define MRHI_INSTANCE_DEF_COOKIE 0x6D72696Eu
+
+    /// Returns the default instance def, built in the program from the headers
+    /// it includes: their contract version, the C library's allocator and the
+    /// default limits (8 chained structs per def, 64 notifications, 16
+    /// adapters, 16 surfaces). Being the program's own, it lets the instance
+    /// refuse a program built against another contract version rather than read
+    /// a def of another layout.
     ///
     /// @return The def, with a valid cookie.
     /// @par Thread safety
     /// Safe from any thread.
-    MRHI_API mrhiInstanceDef mrhiDefaultInstanceDef(void);
+    static inline mrhiInstanceDef mrhiDefaultInstanceDef(void)
+    {
+#ifdef __cplusplus
+        mrhiInstanceDef def = {};
+#else
+    mrhiInstanceDef def = {0};
+#endif
+        def.cookie = MRHI_INSTANCE_DEF_COOKIE;
+        def.contractVersion = MRHI_CONTRACT_VERSION;
+        def.limits.chainDepth = 8;
+        def.limits.notifications = 64;
+        def.limits.adapters = 16;
+        def.limits.surfaces = 16;
+        return def;
+    }
 
     /// Makes an instance.
     ///
