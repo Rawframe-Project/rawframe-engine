@@ -53,6 +53,7 @@ rm -f "$documents/client.log"
 cat >"$documents/client.conf" <<CONF
 host.maximum_iterations = $iterations
 host.iteration_rate = 120
+kest.plan_only = true
 kest.game = $game
 network.quic.pin_file = $work/fingerprint
 bots.count = 0
