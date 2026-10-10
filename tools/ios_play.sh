@@ -6,7 +6,11 @@
 # machine's files where they are, so both read the game from the source
 # tree, and the client's configuration is written into its application's
 # Documents directory. Prints both sides' records of note; passes when the
-# client was admitted and showed frames.
+# client's surface was made, it was admitted, and its predictions were
+# confirmed, unstalled, and it showed frames or said that no adapter
+# answered: Maul RHI's Metal floor asks for cube array textures, which the
+# simulator's Metal lacks, so a device draws there and the simulator does
+# not (D586).
 #
 #   tools/ios_play.sh <build tree> [<game>] [<client iterations>]
 #
@@ -76,10 +80,13 @@ for side in server client; do
     log="$work/server.log"
     [ "$side" = client ] && log="$documents/client.log"
     echo "== $side"
-    grep -o '"code":"\(bots_admitted\|bots_summary\|server_summary\|frame_summary\|device_ready\|device_unavailable\|device_unasked\|start_failed\|stopped\)"[^}]*}[^}]*}' \
+    grep -o '"code":"\(bots_admitted\|bots_summary\|server_summary\|frame_summary\|surface_made\|device_ready\|device_unavailable\|device_unasked\|start_failed\|stopped\)"[^}]*}[^}]*}' \
         "$log" 2>/dev/null || { echo "nothing of note:"; tail -20 "$log" 2>/dev/null || true; }
 done
-if grep -q '"code":"bots_admitted"' "$documents/client.log" && grep -q '"framesShown":[1-9]' "$documents/client.log"; then
+log="$documents/client.log"
+if grep -q '"code":"surface_made"' "$log" && grep -q '"code":"bots_admitted"' "$log" &&
+    grep -q '"admitted":1,.*"confirmed":[1-9][0-9]*,.*"stalled":0,' "$log" &&
+    { grep -q '"framesShown":[1-9]' "$log" || grep -q '"reason":"no adapter answered"' "$log"; }; then
     exit 0
 fi
 # What the client said besides its measures, for what kept it from playing

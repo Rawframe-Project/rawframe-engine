@@ -83,7 +83,9 @@ jobs:
         if: inputs.tests
         run: tools/ios_tests.sh out/ios-simulator
       # Runners played by the iOS client against a dedicated server, both
-      # in the simulator (D586): admitted, and its frames shown.
+      # in the simulator (D586): its surface made, admitted, and playing,
+      # with no device there, as Maul RHI's Metal floor is past the
+      # simulator's.
       - name: Play Runners in the simulator
         if: always() && env.RAWFRAME_IOS_DEVICE != ''
         run: tools/ios_play.sh out/ios-simulator
