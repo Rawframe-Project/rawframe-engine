@@ -2,6 +2,7 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/render/device.h"
+#include "rawframe/render/headset.h"
 #include "rawframe/render/registrar.h"
 
 #include <map>
@@ -36,7 +37,7 @@ std::string offeredText(const OutputRecord& record) {
     return text;
 }
 constexpr std::string_view kProvided[] = {kDevice.name};
-constexpr std::string_view kMaybe[] = {window::kSurfaces.name};
+constexpr std::string_view kMaybe[] = {window::kSurfaces.name, kHeadset.name};
 
 constexpr std::string_view kPolicyNames[] = {"vsync", "adaptive_vsync", "low_latency_vsync", "immediate"};
 
@@ -67,6 +68,13 @@ public:
                                                       .error()};
         }
         settings_ = DeviceSettings{.allowSoftware = *kWanted == "any"};
+        // A headset's runtime makes the device where one answered (D593).
+        if (context.has(kHeadset.name)) {
+            RAWFRAME_TRY_ASSIGN(Headset * headset, context.capability(kHeadset));
+            if (headset->present()) {
+                settings_->vulkan = headset;
+            }
+        }
         if (const auto kPolicy = context.configuration().text("render.present")) {
             bool known = false;
             for (std::size_t at = 0; at < std::size(kPolicyNames); ++at) {

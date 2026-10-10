@@ -29,6 +29,9 @@
 #include "rawframe/render_canvas_gpu/registrar.h"
 #include "rawframe/render_scene_gpu/registrar.h"
 #endif
+#if RAWFRAME_ARENA_HEADSET
+#include "rawframe/xr/registrar.h"
+#endif
 
 #include <array>
 
@@ -39,8 +42,14 @@ constexpr std::size_t kDrawing = 3;
 #else
 constexpr std::size_t kDrawing = 0;
 #endif
+// A headset, where OpenXR is built (D593).
+#if RAWFRAME_ARENA_HEADSET
+constexpr std::size_t kHeadset = 1;
+#else
+constexpr std::size_t kHeadset = 0;
+#endif
 
-constexpr std::array<rawframe::composition::RegistrarEntry, 15 + kDrawing> kRegistrars = {
+constexpr std::array<rawframe::composition::RegistrarEntry, 15 + kDrawing + kHeadset> kRegistrars = {
     rawframe::composition::RegistrarEntry{
         "game_content", &rawframe::game_content::registerParticipants, rawframe::game_content::kScopes},
     rawframe::composition::RegistrarEntry{
@@ -78,6 +87,9 @@ constexpr std::array<rawframe::composition::RegistrarEntry, 15 + kDrawing> kRegi
         "render_canvas_gpu", &rawframe::render_canvas_gpu::registerParticipants, rawframe::render_canvas_gpu::kScopes},
     rawframe::composition::RegistrarEntry{
         "render_scene_gpu", &rawframe::render_scene_gpu::registerParticipants, rawframe::render_scene_gpu::kScopes},
+#endif
+#if RAWFRAME_ARENA_HEADSET
+    rawframe::composition::RegistrarEntry{"xr", &rawframe::xr::registerParticipants, rawframe::xr::kScopes},
 #endif
 };
 

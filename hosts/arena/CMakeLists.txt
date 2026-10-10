@@ -12,7 +12,15 @@ if(TARGET rawframe_render_canvas_gpu)
     set(RAWFRAME_ARENA_DRAWS ON)
     target_link_libraries(rawframe_host_arena PRIVATE rawframe::render rawframe::render_canvas_gpu rawframe::render_scene_gpu)
 endif()
-target_compile_definitions(rawframe_host_arena PRIVATE RAWFRAME_ARENA_DRAWS=$<BOOL:${RAWFRAME_ARENA_DRAWS}>)
+# Where OpenXR is built, the arena's client can show its picture on a
+# headset (D593).
+set(RAWFRAME_ARENA_HEADSET OFF)
+if(TARGET rawframe_xr)
+    set(RAWFRAME_ARENA_HEADSET ON)
+    target_link_libraries(rawframe_host_arena PRIVATE rawframe::xr)
+endif()
+target_compile_definitions(rawframe_host_arena PRIVATE RAWFRAME_ARENA_DRAWS=$<BOOL:${RAWFRAME_ARENA_DRAWS}>
+                                                       RAWFRAME_ARENA_HEADSET=$<BOOL:${RAWFRAME_ARENA_HEADSET}>)
 
 if(RAWFRAME_BUILD_TESTS)
     # Sixteen bots join the sample arena game, play, and the run stops in
@@ -338,6 +346,34 @@ if(RAWFRAME_BUILD_TESTS)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":([3-9]|1[0-9]),[^\n]*\"framesOccluded\":[1-9][0-9]+,[^\n]*\"postProcessesRun\":[1-9][0-9]+,\"postProcessesLeftOut\":0,\"emittersDrawn\":[1-9][0-9]+,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]+,\"ribbonsDrawn\":[1-9][0-9]+,\"viewFrames\":[1-9][0-9]*,[^\n]*\"modelsSkinned\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"mostColors\":[1-9][0-9][0-9]+,[^\n]*\"captured\":true")
+        # The plaza on a headset (D593): under a headless Monado of its own
+        # (tools/xr_run.sh), the device made by the headset's runtime, the
+        # session focused, and the scene's frames submitted to the headset;
+        # with no runtime, played flat and drawn offscreen all the same.
+        configure_file(tests/plaza_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf @ONLY)
+        if(RAWFRAME_ARENA_HEADSET AND RAWFRAME_MONADO_SERVICE AND NOT WIN32)
+            add_test(NAME plaza_headset
+                     COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xr_run.sh ${RAWFRAME_SHELL}
+                             ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh $<TARGET_FILE:rawframe_host_arena>
+                             ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf
+                     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+            set_tests_properties(plaza_headset PROPERTIES
+                                 FIXTURES_REQUIRED plaza_content
+                                 PASS_REGULAR_EXPRESSION
+                                 "\"code\":\"xr_ready\".*\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"frame_summary\"[^\n]*\"width\":128,\"height\":128,[^\n]*\"headsetFrames\":[1-9][0-9]+.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,\"failed\":false")
+        endif()
+        if(RAWFRAME_ARENA_HEADSET)
+            add_test(NAME plaza_headset_absent
+                     COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
+                             $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf
+                     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+            set_tests_properties(plaza_headset_absent PROPERTIES
+                                 FIXTURES_REQUIRED plaza_content
+                                 ENVIRONMENT "XR_RUNTIME_JSON=${CMAKE_CURRENT_BINARY_DIR}/no_runtime.json"
+                                 SKIP_REGULAR_EXPRESSION "skip: no device"
+                                 PASS_REGULAR_EXPRESSION
+                                 "\"code\":\"xr_unavailable\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"frame_summary\"[^\n]*\"width\":320,\"height\":180,[^\n]*\"headsetFrames\":0")
+        endif()
         # A view too large for its device drawn at a falling render scale
         # (D533): the scale changes to one lower than the whole, and the run
         # stops once it has (D564).

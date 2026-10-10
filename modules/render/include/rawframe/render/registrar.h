@@ -10,7 +10,9 @@ namespace rawframe::render {
 /// (D279), which asks for the process's one device when it starts, moves
 /// its opening on in `platform_poll` until it is ready, and lends it as
 /// `rawframe.render.device` (`DeviceHolder`). Never in a dedicated server.
-/// Without `render.device` it asks for none, and lends none. Where the host
+/// Without `render.device` it asks for none, and lends none. Where a
+/// headset that answered is lent (`rawframe.render.headset`, D593), its
+/// runtime makes the device. Where the host
 /// lends its windows (`rawframe.window.surfaces`, D280), it waits for the
 /// first window's surface before asking, makes each window's surface
 /// generation a surface of the device, prepares a window's surface for a
@@ -29,7 +31,10 @@ namespace rawframe::render {
 /// `present` it plans one, at the first window's size where the host lends
 /// its windows, else offscreen when `render.offscreen` asks; the bridges
 /// that joined (the scene, the canvas) prepare their parts and say they are
-/// ready, and the last makes the frame, one on the GPU at a time. Every so
+/// ready, and the last makes the frame, one on the GPU at a time. Where a
+/// headset is lent and present, each planned frame begins the headset's,
+/// paced by its runtime, and the picture is placed into its views' images
+/// as well, at their size where no window shows it (D593). Every so
 /// often it reads the picture back and counts the pixels drawn over and
 /// its colors. It logs a summary when the World stops. Without a device,
 /// or without a window or `render.offscreen`, or with no bridge joined, it

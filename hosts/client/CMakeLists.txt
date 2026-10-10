@@ -16,7 +16,14 @@ if(TARGET rawframe_render_canvas_gpu)
     set(RAWFRAME_CLIENT_DRAWS ON)
     target_link_libraries(rawframe_host_client PRIVATE rawframe::render rawframe::render_canvas_gpu rawframe::render_scene_gpu)
 endif()
-target_compile_definitions(rawframe_host_client PRIVATE RAWFRAME_CLIENT_DRAWS=$<BOOL:${RAWFRAME_CLIENT_DRAWS}>)
+# Where OpenXR is built, a headset shows it too (D593).
+set(RAWFRAME_CLIENT_HEADSET OFF)
+if(TARGET rawframe_xr)
+    set(RAWFRAME_CLIENT_HEADSET ON)
+    target_link_libraries(rawframe_host_client PRIVATE rawframe::xr)
+endif()
+target_compile_definitions(rawframe_host_client PRIVATE RAWFRAME_CLIENT_DRAWS=$<BOOL:${RAWFRAME_CLIENT_DRAWS}>
+                                                        RAWFRAME_CLIENT_HEADSET=$<BOOL:${RAWFRAME_CLIENT_HEADSET}>)
 
 # A window needs a display: an X server of its own, where Xvfb can start
 # one (tools/xvfb_run.sh, D428).

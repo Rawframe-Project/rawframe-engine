@@ -1,0 +1,26 @@
+# Two bots play the sample 3D game while the first one's scene is drawn on
+# a headset (D593): a runtime's headset makes the one device, and each
+# frame's picture is placed into its views' images and submitted. Run
+# under tools/xr_run.sh, a headless Monado of the test's own; run with no
+# runtime, the game is played flat, drawn offscreen. A software rasterizer
+# may serve.
+host.maximum_iterations = 240
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = @PROJECT_SOURCE_DIR@/games/plaza/plaza.game
+content.root = @PLAZA_CONTENT@
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 2
+bots.endpoint = arena
+render.device = any
+render.offscreen = true
+render.width = 320
+render.height = 180
+scene.shadow_side = 256
+render.read_every = 8
+xr.headset = true
+# What is checked is what is drawn, not how fast a loaded machine ticks
+# (D212, D516).
+world.degraded_ms = 600000
+world.overload_ms = 0

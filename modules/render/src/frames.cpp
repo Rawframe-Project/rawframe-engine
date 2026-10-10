@@ -5,6 +5,7 @@
 #include "rawframe/composition/configuration.h"
 #include "rawframe/render/capture.h"
 #include "rawframe/render/frame.h"
+#include "rawframe/render/headset.h"
 #include "rawframe/render/registrar.h"
 
 #include <algorithm>
@@ -37,7 +38,7 @@ bool readable(std::uint32_t width, std::uint32_t height) noexcept {
 constexpr std::string_view kPresentationFailed = "presentation_failed";
 /// A frame's budget where `render.frame_rate` sets none (D533).
 constexpr execution::MonotonicDuration kSixtieth{1'000'000'000 / 60};
-constexpr std::string_view kMaybe[] = {kDevice.name, window::kSurfaces.name};
+constexpr std::string_view kMaybe[] = {kDevice.name, window::kSurfaces.name, kHeadset.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 /// How long stopping waits for the last frame: lavapipe draws a view in
 /// milliseconds.
@@ -111,9 +112,17 @@ public:
         if (!context.has(kDevice.name)) {
             return {};
         }
+        // A headset that answered is drawn for (D593), with or without a
+        // window.
+        if (context.has(kHeadset.name)) {
+            RAWFRAME_TRY_ASSIGN(headset_, context.capability(kHeadset));
+            if (!headset_->present()) {
+                headset_ = nullptr;
+            }
+        }
         if (context.has(window::kSurfaces.name)) {
             RAWFRAME_TRY_ASSIGN(windows_, context.capability(window::kSurfaces));
-        } else if (kOffscreen != "true") {
+        } else if (kOffscreen != "true" && headset_ == nullptr) {
             return {};
         }
         RAWFRAME_TRY_ASSIGN(devices_, context.capability(kDevice));
@@ -127,10 +136,12 @@ public:
     }
 
     void runHostPhase(composition::HostPhase /*phase*/, const composition::HostFrame& frame) noexcept override {
-        // The last iteration's plan, if a recorder never said it was ready.
+        // The last iteration's plan, if a recorder never said it was ready,
+        // and the headset's frame begun for it.
         if (planned_.has_value() && !made_) {
             ++framesIncomplete_;
         }
+        endHeadset(false);
         planned_.reset();
         made_ = false;
         ready_.clear();
@@ -176,16 +187,33 @@ public:
                               .surface = std::nullopt};
         if (windows_ != nullptr) {
             // Shown on the window, drawn at its size; a window that shows
-            // nothing this frame is not drawn for.
+            // nothing this frame is not drawn for, unless a headset is.
             const auto kPrepared =
                 windows_->states().empty() ? std::nullopt : devices_->prepare(windows_->states()[0].window);
-            if (!kPrepared.has_value() || !kPrepared->second.drawable) {
+            if (kPrepared.has_value() && kPrepared->second.drawable) {
+                target_.width = kPrepared->second.size.width;
+                target_.height = kPrepared->second.size.height;
+                target_.surface = kPrepared->first;
+            } else if (headset_ == nullptr) {
                 ++framesHidden_;
                 return;
             }
-            target_.width = kPrepared->second.size.width;
-            target_.height = kPrepared->second.size.height;
-            target_.surface = kPrepared->first;
+        }
+        // The headset's frame, waited for as its runtime paces it: the
+        // picture is placed into its images, drawn at their size where no
+        // window shows it.
+        if (headset_ != nullptr) {
+            if (std::optional<Headset::Views> views = headset_->begin(*device); views.has_value()) {
+                headsetOpen_ = true;
+                target_.images = std::move(views->images);
+                if (!target_.surface.has_value()) {
+                    target_.width = views->width;
+                    target_.height = views->height;
+                }
+            } else if (!target_.surface.has_value() && windows_ != nullptr) {
+                ++framesHidden_;
+                return;
+            }
         }
         // A picture past what the device keeps for readbacks is not read
         // back: asked anyway, it failed the frame, and no frame was made
@@ -209,6 +237,10 @@ public:
             statistics = framer_->statistics();
             // Before the device, which the Runtime holds past the World.
             framer_.reset();
+        }
+        endHeadset(false);
+        if (headset_ != nullptr) {
+            headset_->close();
         }
         bool captured = false;
         if (capture_.has_value() && last_.has_value()) {
@@ -240,7 +272,8 @@ public:
                       diagnostics::field("mostColors", mostColors_),
                       diagnostics::field("colors", lastColors_),
                       diagnostics::field("captured", captured),
-                      diagnostics::field("readBacksTooLarge", readBacksTooLarge_)});
+                      diagnostics::field("readBacksTooLarge", readBacksTooLarge_),
+                      diagnostics::field("headsetFrames", headsetFrames_)});
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -294,7 +327,8 @@ public:
         }
         made_ = true;
         // What the last frame made shows still, and it is not old (D494).
-        if (madeAt_.has_value() && now_ - *madeAt_ < kLongestUnchanged && !target_.readBack &&
+        // Never for a headset, whose images are others each frame.
+        if (madeAt_.has_value() && now_ - *madeAt_ < kLongestUnchanged && !target_.readBack && target_.images.empty() &&
             target_.width == lastWidth_ && target_.height == lastHeight_ &&
             std::ranges::all_of(
                 joined_,
@@ -309,6 +343,7 @@ public:
             recorders.push_back(joined.recorder);
         }
         const auto kMade = framer_->make(recorders, target_);
+        endHeadset(kMade.has_value() && *kMade);
         if (!kMade.has_value()) {
             fail(kMade.error());
             return;
@@ -343,6 +378,17 @@ private:
 
     FramePace pace() const noexcept override {
         return pace_;
+    }
+
+    /// The headset's frame begun for this iteration's plan, ended: `drawn`
+    /// when the picture was made into its images.
+    void endHeadset(bool drawn) noexcept {
+        if (!headsetOpen_) {
+            return;
+        }
+        headsetOpen_ = false;
+        headset_->end(drawn);
+        headsetFrames_ += drawn ? 1U : 0U;
     }
 
     /// The last frame submitted, found running or done (D533): from its
@@ -406,6 +452,11 @@ private:
 
     DeviceHolder* devices_ = nullptr;
     window::Surfaces* windows_ = nullptr;
+    /// The headset drawn for, where one answered (D593), and whether its
+    /// frame is begun for this iteration's plan.
+    Headset* headset_ = nullptr;
+    bool headsetOpen_ = false;
+    std::uint64_t headsetFrames_ = 0;
     std::unique_ptr<Framer> framer_;
     /// In order.
     std::vector<Joined> joined_;

@@ -6,7 +6,7 @@ if(NOT TARGET rawframe_openxr_loader OR NOT TARGET rawframe_render)
     return()
 endif()
 
-rawframe_module(NAME xr SOURCES src/runtime.cpp src/session.cpp DEPS render result base)
+rawframe_module(NAME xr SOURCES src/participant.cpp src/runtime.cpp src/session.cpp DEPS render composition diagnostics execution result base)
 target_link_libraries(rawframe_xr PRIVATE rawframe_openxr_loader)
 # Vulkan's headers as Maul RHI vendors them, for the runtime's binding.
 target_include_directories(rawframe_xr SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/third_party/maul-rhi/khronos)

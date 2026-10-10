@@ -38,6 +38,9 @@
 #include "rawframe/render_canvas_gpu/registrar.h"
 #include "rawframe/render_scene_gpu/registrar.h"
 #endif
+#if RAWFRAME_CLIENT_HEADSET
+#include "rawframe/xr/registrar.h"
+#endif
 
 #include <array>
 #include <cstdio>
@@ -53,8 +56,14 @@ constexpr std::size_t kDrawing = 3;
 #else
 constexpr std::size_t kDrawing = 0;
 #endif
+// A headset, where OpenXR is built (D593).
+#if RAWFRAME_CLIENT_HEADSET
+constexpr std::size_t kHeadset = 1;
+#else
+constexpr std::size_t kHeadset = 0;
+#endif
 
-constexpr std::array<composition::RegistrarEntry, 13 + kDrawing> kRegistrars = {
+constexpr std::array<composition::RegistrarEntry, 13 + kDrawing + kHeadset> kRegistrars = {
     composition::RegistrarEntry{"game_content", &game_content::registerParticipants, game_content::kScopes},
     composition::RegistrarEntry{"network_quic", &network_quic::registerParticipants, network_quic::kScopes},
     composition::RegistrarEntry{"input_kest", &input_kest::registerParticipants, input_kest::kScopes},
@@ -75,6 +84,9 @@ constexpr std::array<composition::RegistrarEntry, 13 + kDrawing> kRegistrars = {
     composition::RegistrarEntry{
         "render_canvas_gpu", &render_canvas_gpu::registerParticipants, render_canvas_gpu::kScopes},
     composition::RegistrarEntry{"render_scene_gpu", &render_scene_gpu::registerParticipants, render_scene_gpu::kScopes},
+#endif
+#if RAWFRAME_CLIENT_HEADSET
+    composition::RegistrarEntry{"xr", &xr::registerParticipants, xr::kScopes},
 #endif
 };
 
