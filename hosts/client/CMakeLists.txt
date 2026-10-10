@@ -256,7 +256,9 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # (tools/xr_run.sh): drawn for both its eyes, its simulated
         # controllers read in both hands, located, and fed to the player's
         # mapper as the client's controller device, both aiming at the
-        # panel (D598).
+        # panel (D598). A flat bot plays beside it in the client's process:
+        # ADR-0081's cross-play, one World and one admission path for both
+        # (D606).
         if(RAWFRAME_CLIENT_HEADSET AND RAWFRAME_MONADO_SERVICE AND NOT WIN32)
             configure_file(tests/plaza_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf @ONLY)
             add_test(NAME client_plaza_headset
@@ -264,13 +266,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              ${PROJECT_SOURCE_DIR}/tools/xr_run.sh ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh
                              $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                              ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf games/plaza/plaza.game
-                             ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                             ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf 1
                      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
             set_tests_properties(client_plaza_headset PROPERTIES
                                  FIXTURES_REQUIRED plaza_content
                                  PROCESSORS 2
                                  PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+}.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":[1-9][0-9]+,\"handsPointing\":[1-9][0-9]+,\"hapticsFelt\":0,\"hapticsUnfelt\":0,\"failed\":false}.*\"code\":\"input_summary\"[^\n]*\"player\":0,[^\n]*\"controllerEvents\":[1-9][0-9]+,")
+                                 "\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+}.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":[1-9][0-9]+,\"handsPointing\":[1-9][0-9]+,\"hapticsFelt\":0,\"hapticsUnfelt\":0,\"failed\":false}.*\"code\":\"input_summary\"[^\n]*\"player\":0,[^\n]*\"controllerEvents\":[1-9][0-9]+,")
         endif()
         # Stalls on a headset (D605): its HUD on the panel, the hands' aims
         # the UI's pointer, a cursor drawn where they point.
