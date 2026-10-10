@@ -20,6 +20,7 @@ constexpr diagnostics::EventIdentity kSurfaceMade{"render", "surface_made"};
 constexpr diagnostics::EventIdentity kSurfaceFailed{"render", "surface_failed"};
 constexpr diagnostics::EventIdentity kSubstituted{"render", "present_policy_substituted"};
 constexpr diagnostics::EventIdentity kSurfaceSummary{"render", "surface_summary"};
+constexpr diagnostics::EventIdentity kUnasked{"render", "device_unasked"};
 constexpr diagnostics::EventIdentity kOutputRecord{"render", "output_record"};
 constexpr diagnostics::EventIdentity kOutputSubstituted{"render", "output_substituted"};
 
@@ -112,6 +113,7 @@ public:
 
     void stop() noexcept override {
         if (device_ == nullptr) {
+            unasked();
             return;
         }
         // Surfaces before their windows, which the host ends after the
@@ -216,6 +218,23 @@ private:
         std::uint64_t key = 0;
         std::uint32_t generation = 0;
     };
+
+    /// A run with windows that never asked for the device, said with what
+    /// its first window had (D586): a client that showed nothing says why.
+    void unasked() noexcept {
+        if (windows_ == nullptr || requested_ || !settings_.has_value()) {
+            return;
+        }
+        const auto kStates = windows_->states();
+        const window::SurfaceState kFirst = kStates.empty() ? window::SurfaceState{} : kStates[0];
+        emitter_.log(diagnostics::Severity::Warning,
+                     kUnasked,
+                     "no device was asked for: no window had a surface to present to",
+                     {diagnostics::field("windows", kStates.size()),
+                      diagnostics::field("generation", kFirst.generation),
+                      diagnostics::field("width", kFirst.pixelSize.width),
+                      diagnostics::field("height", kFirst.pixelSize.height)});
+    }
 
     /// The device asked for, the opening moved on while it lasts, a loss
     /// noticed once after, and the windows' surfaces made as their handles
