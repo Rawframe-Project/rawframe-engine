@@ -3,7 +3,8 @@
 # simulator (D588): idb reads the screen's accessibility elements, which
 # asks the client's view for its elements; the first asking makes the
 # client's access, so the reading is asked again until a button the pattern
-# names is in it, up to a minute and a half. Prints one line an element,
+# names is in it, up to five minutes, as the client may still be on its way
+# (an export made in the simulator first takes a minute or two). Prints one line an element,
 # "a11y: <type> <label>"; then touches the first button whose label matches
 # at the middle of its frame, as a player's finger would: "a11y: touched
 # <label>".
@@ -18,7 +19,7 @@ pattern="$2"
 elements="$(mktemp)"
 trap 'rm -f "$elements"' EXIT
 
-for _ in $(seq 45); do
+for _ in $(seq 150); do
     if idb ui describe-all --udid "$device" --json >"$elements" 2>/dev/null &&
         python3 - "$elements" "$pattern" <<'PY'
 import json, re, sys
@@ -46,9 +47,11 @@ tap="$(grep '^tap ' "$elements.read")"
 rm -f "$elements.read"
 if [ -z "$tap" ]; then
     echo "a11y: no button matching $pattern; the last reading:"
-    python3 -c 'import json, sys
-for e in json.load(open(sys.argv[1])): print(f"a11y: {e.get(\"type\")} {e.get(\"AXLabel\") or \"\"}")' \
-        "$elements" 2>/dev/null || cat "$elements"
+    python3 - "$elements" <<'PY' 2>/dev/null || cat "$elements"
+import json, sys
+for e in json.load(open(sys.argv[1])):
+    print(f"a11y: {e.get('type')} {e.get('AXLabel') or ''} (pid {e.get('pid')})")
+PY
     exit 1
 fi
 read -r _ x y label <<<"$tap"
