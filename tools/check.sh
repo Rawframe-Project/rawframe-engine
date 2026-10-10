@@ -109,10 +109,14 @@ build_and_test() {
     elif [ "$preset" = clang-development ] && [ "$tier" = full ]; then
         leave=(-LE window)
     elif [ "$preset" = clang-thread ] && [ "$tier" = full ]; then
-        # Studio's window tests play under the address sanitizer and in the
-        # debug tree, not here too: they were most of this tree's time, the
-        # full check's longest (D527).
+        # Studio's window tests play under the address sanitizer, not here
+        # too: they were most of this tree's time, the full check's longest
+        # (D527).
         leave=(-LE 'alone|studio|headset')
+    elif [ "$preset" = gcc-debug ] && [ "$tier" = full ]; then
+        # Studio's window tests play under the address sanitizer alone:
+        # here as well they were half this tree's test time (D602).
+        leave=(-LE 'alone|headset|studio')
     elif [ "$tier" = full ]; then
         leave=(-LE 'alone|headset')
     fi
