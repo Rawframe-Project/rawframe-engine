@@ -22,6 +22,18 @@ if(RAWFRAME_BUILD_TESTS)
                          TIMEOUT 300
                          PASS_REGULAR_EXPRESSION
                          "android export: \"target\":\"android\", pinned to the server's identity: yes, admitted 1")
+    # Runners exported for iOS the same way (D587), the application made
+    # from a stand-in client bundle carrying the game and named by it.
+    add_test(NAME runners_exported_ios
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/exported_android.sh
+                     $<TARGET_FILE:rawframe_host_export_tool> $<TARGET_FILE:rawframe_host_cook_tool>
+                     $<TARGET_FILE:rawframe_host_build_tool> $<TARGET_FILE:rawframe_host_dedicated_server>
+                     $<TARGET_FILE:rawframe_host_bots> games/runners ${CMAKE_CURRENT_BINARY_DIR}/runners_ios ios
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(runners_exported_ios PROPERTIES
+                         TIMEOUT 300
+                         PASS_REGULAR_EXPRESSION
+                         "ios export: \"target\":\"ios\", pinned to the server's identity: yes, admitted 1, application <string>local.runners</string> carrying the game")
     # Stalls exported under a studio's key and played from its folder with
     # the real client in a window (D396): the key set pinned and the secret
     # left out, its font read from the folder's library, the player
