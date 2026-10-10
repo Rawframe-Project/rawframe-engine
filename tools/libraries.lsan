@@ -1,0 +1,16 @@
+# Leaks of other libraries, held for the process's life, which
+# LeakSanitizer reports in a sanitized test. Nothing of ours is in these
+# frames.
+#
+# ALSA's library keeps its parsed configuration for the process's life;
+# a test that opens a device on a machine with ALSA reports it as leaked
+# (D401). Maul Audio loads the library at run time and unloads it, so its
+# frames are often unnamed by the time LeakSanitizer reports; the calls
+# into it are named by Maul Audio's own ALSA files instead (D403).
+leak:libasound
+leak:maul-audio/src/alsa_
+# An OpenXR runtime keeps what it parsed of an application's suggested
+# bindings (Monado's client library, 1 byte, D596). The loader unloads the
+# runtime as the instance ends, so the runtime's frames are unnamed; the
+# loader's entry point into it is named instead.
+leak:xrSuggestInteractionProfileBindings

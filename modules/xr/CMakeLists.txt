@@ -18,6 +18,11 @@ if(RAWFRAME_MONADO_SERVICE AND NOT WIN32 AND RAWFRAME_BUILD_TESTS)
     add_executable(rawframe_xr_tests tests/session_test.cpp)
     target_link_libraries(rawframe_xr_tests PRIVATE rawframe::xr rawframe::test)
     add_test(NAME xr COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xr_run.sh $<TARGET_FILE:rawframe_xr_tests>)
+    # The runtime's leak, as every module test's (tools/libraries.lsan).
+    if(RAWFRAME_SANITIZE MATCHES "address")
+        set_tests_properties(xr PROPERTIES ENVIRONMENT
+                             "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/libraries.lsan")
+    endif()
 else()
     rawframe_module_tests(NAME xr SOURCES tests/session_test.cpp)
 endif()

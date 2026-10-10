@@ -230,9 +230,10 @@ function(rawframe_module_tests)
     # A thread build's suppressions are every test's (tools/thread.tsan,
     # the root CMakeLists.txt, D428).
     if(RAWFRAME_SANITIZE MATCHES "address")
-        # ALSA's configuration, held for the process's life (D401).
+        # Other libraries' leaks: ALSA's configuration (D401), an OpenXR
+        # runtime's bindings (D596).
         set_tests_properties(${arg_NAME} PROPERTIES ENVIRONMENT
-                             "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/alsa.lsan")
+                             "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/libraries.lsan")
     endif()
     # On the web, Maul RHI's page side for Node's run of a test that holds
     # the device (tools/wasi_run.mjs, D282).
