@@ -33,6 +33,9 @@ target_include_directories(rawframe_openxr_loader PRIVATE
     ${rawframe_openxr}/src ${rawframe_openxr}/src/common ${rawframe_openxr}/src/loader
     ${rawframe_openxr}/src/external/jsoncpp/include)
 target_compile_definitions(rawframe_openxr_loader PRIVATE XRLOADER_DISABLE_EXCEPTION_HANDLING JSON_USE_EXCEPTION=0)
+# C++17, as upstream builds it: clang-cl's default is C++14, which has no
+# std::scoped_lock.
+target_compile_features(rawframe_openxr_loader PRIVATE cxx_std_17)
 if(WIN32)
     # Win32 as upstream builds it: its utilities read windows.h through
     # the platform switch.
