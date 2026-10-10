@@ -77,4 +77,11 @@ for side in server client; do
     grep -o '"code":"\(bots_admitted\|bots_summary\|frame_summary\|device_ready\|device_unavailable\|start_failed\|stopped\)"[^}]*}[^}]*}' \
         "$log" 2>/dev/null || { echo "nothing of note:"; tail -20 "$log" 2>/dev/null || true; }
 done
-grep -q '"code":"bots_admitted"' "$documents/client.log" && grep -q '"framesShown":[1-9]' "$documents/client.log"
+if grep -q '"code":"bots_admitted"' "$documents/client.log" && grep -q '"framesShown":[1-9]' "$documents/client.log"; then
+    exit 0
+fi
+# What the client said besides its measures, for what kept it from playing
+# or showing.
+echo "== the client's records"
+grep -v '"kind":"metric"' "$documents/client.log" | cut -c1-600 | head -80
+exit 1

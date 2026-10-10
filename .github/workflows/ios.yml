@@ -7,6 +7,11 @@ name: ios
 
 on:
   workflow_dispatch:
+    inputs:
+      tests:
+        description: Run the test programs in the simulator before playing
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -67,12 +72,14 @@ jobs:
           path: ${{ github.workspace }}/../ccache
           key: ios-ccache-${{ github.sha }}
         continue-on-error: true
-      - name: Tests in a simulator
+      - name: Boot a simulator
         run: |
           device=$(xcrun simctl list devices available | grep -m1 -o 'iPhone [^(]*([0-9A-F-]*)' | grep -o '[0-9A-F-]\{36\}')
           xcrun simctl boot "$device"
           echo "RAWFRAME_IOS_DEVICE=$device" >>"$GITHUB_ENV"
-          RAWFRAME_IOS_DEVICE="$device" tools/ios_tests.sh out/ios-simulator
+      - name: Tests in the simulator
+        if: inputs.tests
+        run: tools/ios_tests.sh out/ios-simulator
       # Runners played by the iOS client against a dedicated server, both
       # in the simulator (D586): admitted, and its frames shown.
       - name: Play Runners in the simulator
