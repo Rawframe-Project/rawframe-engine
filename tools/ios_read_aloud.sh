@@ -19,9 +19,21 @@ pattern="$2"
 elements="$(mktemp)"
 trap 'rm -f "$elements"' EXIT
 
+# Each reading unlike the one before it, said in a line on standard error:
+# what was read while the client came, for when it is never found.
+said=""
 for _ in $(seq 150); do
-    if idb ui describe-all --udid "$device" --json >"$elements" 2>/dev/null &&
-        python3 - "$elements" "$pattern" <<'PY'
+    idb ui describe-all --udid "$device" --json >"$elements" 2>/dev/null || true
+    seen="$(python3 - "$elements" <<'PY' 2>/dev/null
+import json, sys
+elements = json.load(open(sys.argv[1]))
+print(f"read {len(elements)} elements of pid {elements[0].get('pid') if elements else None}:",
+      ", ".join(f"{e.get('type')} {e.get('AXLabel') or ''}".strip() for e in elements[:6]))
+PY
+)"
+    [ "$seen" = "$said" ] || echo "a11y: $seen" >&2
+    said="$seen"
+    if python3 - "$elements" "$pattern" <<'PY' 2>/dev/null
 import json, re, sys
 found = [e for e in json.load(open(sys.argv[1]))
          if e.get("type") == "Button" and re.search(sys.argv[2], e.get("AXLabel") or "")]
