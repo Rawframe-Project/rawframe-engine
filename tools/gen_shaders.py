@@ -220,9 +220,11 @@ def build(work, shaders, name, material=None):
     run("spirv-val", "--target-env", "vulkan1.3", linked)
     reflection = os.path.join(shaders, f"{name}.json")
     metal = os.path.join(work, f"{name}_metal")
-    run(sys.executable, METAL, linked, reflection, metal)
+    # -B, here and below: Maul RHI's tools import its container writer, and
+    # no bytecode cache is written into the vendored tree.
+    run(sys.executable, "-B", METAL, linked, reflection, metal)
     dxil = os.path.join(work, f"{name}_dxil")
-    run(sys.executable, DXIL, linked, reflection, dxil)
+    run(sys.executable, "-B", DXIL, linked, reflection, dxil)
     if name in DRAWN_WITH:
         checkDrawnWith(dxil, name)
     made = {}
@@ -230,7 +232,6 @@ def build(work, shaders, name, material=None):
     # using no heap, beside what its own driver reads.
     for suffix, options in (("", ()), (".metal", ("--msl", metal)), (".d3d12", ("--dxil", dxil))):
         container = os.path.join(work, f"{name}{suffix}.mrsc")
-        # -B: no bytecode cache written into the vendored tree.
         run(sys.executable, "-B", WRITER, *options, linked, wgsl, reflection, container)
         with open(container, "rb") as file:
             made[suffix] = file.read()
