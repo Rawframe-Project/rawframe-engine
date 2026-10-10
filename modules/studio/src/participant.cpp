@@ -166,12 +166,22 @@ result::Status ShellParticipant::start(composition::ParticipantContext& context)
 void ShellParticipant::runHostPhase(composition::HostPhase, const composition::HostFrame&) noexcept {
     drawn_ = nullptr;
     // A screen reader's press is a pointer's on the node it names (D575);
-    // Studio moves no focus of its own, so one it asks for is not taken.
+    // Studio moves no focus of its own, so one it asks for is not taken. Its
+    // edit of a field is typing into it, the field begun as a press begins
+    // it, and given by Enter as typing's is (D613).
     if (seat_ != nullptr) {
         for (const ui::AccessRequest& kRequest : seat_->takeRequests()) {
-            if (kRequest.kind == ui::AccessRequest::Kind::Press && tree_->contains(kRequest.node)) {
+            if (!tree_->contains(kRequest.node) || kRequest.kind == ui::AccessRequest::Kind::Focus) {
+                continue;
+            }
+            if (kRequest.kind == ui::AccessRequest::Kind::Press || edit_ == nullptr || edit_->node() != kRequest.node) {
                 const bool kMoving = beforePress();
                 pressOn(kRequest.node, kMoving);
+            }
+            if (kRequest.kind != ui::AccessRequest::Kind::Press && edit_ != nullptr && edit_->node() == kRequest.node &&
+                edit_->select(kRequest.anchor, kRequest.focus).has_value() &&
+                kRequest.kind == ui::AccessRequest::Kind::Replace) {
+                static_cast<void>(edit_->type(kRequest.text));
             }
         }
     }

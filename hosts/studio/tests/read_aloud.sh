@@ -5,12 +5,15 @@
 # reads it, its AT-SPI tree is walked from the application's root with
 # busctl, one line a node: "a11y: <depth> <role> <name>". Each name given
 # after the scene is then found among the push buttons and pressed through
-# AT-SPI's Action interface, a few seconds apart; a last argument `until=`
-# and a status waits, up to a minute, for Studio to say it. Then it is asked
-# to stop, and its log printed. Run under an X server, from the repository
-# root.
+# AT-SPI's Action interface, a few seconds apart; one given as
+# `type=<entry name>:<text>` instead has the text inserted into that entry
+# through AT-SPI's EditableText interface (D613), and the entry's text read
+# back. A last argument `until=` and a status waits, up to a minute, for
+# Studio to say it. Then it is asked to stop, and its log printed. Run under
+# an X server, from the repository root.
 #
-#   read_aloud.sh <rawframe-studio> <game description> <scene> [<button name>...] [until=<status>]
+#   read_aloud.sh <rawframe-studio> <game description> <scene> [<button name> | type=<entry>:<text>...]
+#                 [until=<status>]
 set -uo pipefail
 work="$(mktemp -d)"
 bus=""
@@ -43,8 +46,10 @@ sleep 2
 name="$(busctl --address="$address" list --no-legend 2>/dev/null | awk '$3 == "rawframe-studio" { print $1; exit }')"
 
 # One node's line, then its children's, at most eight deep, printed when
-# PRINT is set; the first push button named `wanted` kept in `found`.
+# PRINT is set; the first node of the role `role` named `wanted` kept in
+# `found`.
 wanted=""
+role_wanted="push button"
 found=""
 walk() {
     local path="$1" depth="$2"
@@ -54,7 +59,7 @@ walk() {
     label="$(busctl --address="$address" get-property "$name" "$path" org.a11y.atspi.Accessible Name 2>/dev/null |
         sed -n 's/^s "\(.*\)"$/\1/p')"
     [ -n "${PRINT:-}" ] && echo "a11y: $depth ${role:-none} ${label}"
-    if [ "$role" = "push button" ] && [ "$label" = "$wanted" ] && [ -z "$found" ]; then
+    if [ "$role" = "$role_wanted" ] && [ "$label" = "$wanted" ] && [ -z "$found" ]; then
         found="$path"
     fi
     [ "$depth" -ge 8 ] && return
@@ -78,6 +83,29 @@ for asked in "${@:4}"; do
         continue
     fi
     [ -z "$name" ] && break
+    if [[ "$asked" == type=* ]]; then
+        spec="${asked#type=}"
+        role_wanted="entry"
+        wanted="${spec%%:*}"
+        found=""
+        walk /org/a11y/atspi/accessible/root 0
+        role_wanted="push button"
+        if [ -z "$found" ]; then
+            echo "a11y: no entry $wanted"
+            continue
+        fi
+        text="${spec#*:}"
+        done="$(busctl --address="$address" call "$name" "$found" org.a11y.atspi.EditableText InsertText isi 0 \
+            "$text" "${#text}" 2>&1)"
+        echo "a11y: typed into $wanted: $done"
+        sleep 2
+        count="$(busctl --address="$address" get-property "$name" "$found" org.a11y.atspi.Text CharacterCount \
+            2>/dev/null | sed -n 's/^i \(.*\)$/\1/p')"
+        read="$(busctl --address="$address" call "$name" "$found" org.a11y.atspi.Text GetText ii 0 "${count:-0}" \
+            2>/dev/null | sed -n 's/^s "\(.*\)"$/\1/p')"
+        echo "a11y: $wanted reads $read"
+        continue
+    fi
     wanted="$asked"
     found=""
     walk /org/a11y/atspi/accessible/root 0

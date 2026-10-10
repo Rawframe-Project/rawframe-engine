@@ -39,6 +39,18 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no"
                          PASS_REGULAR_EXPRESSION
                          "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Scenes\n.*a11y: 3 push button level.scene\n.*a11y: 3 entry new scene or import\n.*a11y: 3 push button New\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+    # Studio typed into by a screen reader (D613): the new scene's entry
+    # takes a name inserted through AT-SPI's EditableText as typing, the
+    # field begun as a press begins it, and reads it back.
+    add_test(NAME studio_types_aloud
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_aloud.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene "type=new scene or import:arena.scene"
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_types_aloud PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no"
+                         PASS_REGULAR_EXPRESSION
+                         "a11y: 3 entry new scene or import\n.*a11y: typed into new scene or import: b true\na11y: new scene or import reads arena.scene\n.*\"exit\":\"clean_stop\"")
     # Studio clicked: runners' level chosen shows its entities, read from
     # the session, and its ground chosen shows its four components and is
     # chosen in the session; its body's width typed as 12 and given with
