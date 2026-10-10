@@ -372,7 +372,8 @@ extern "C"
     /// the result is the one mnavFindPath gives.
     ///
     /// @param query        The context; it holds the search until the next
-    ///                     begins.
+    ///                     search of any kind, or a move along the
+    ///                     surface, begins.
     /// @param navmesh      The navmesh.
     /// @param filter       The areas usable and their costs, or NULL for
     ///                     every walkable area at a cost of 1; copied.

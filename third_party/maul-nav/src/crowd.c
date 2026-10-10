@@ -27,9 +27,11 @@
 // with six), so a call whose probes held under two or over six agents
 // each sizes the next call's cells for three, and one between keeps
 // them; at most six per range, as eight took 10% more instructions than
-// six in the doorway scenario's jam. In space two, as a shell of cubes grows with the cube of its
-// cells: three take 14% fewer instructions in the benchmark's space step
-// but ran 0.4% to 1.5% slower on a quiet core.
+// six in the doorway scenario's jam. In space two, as a shell of cubes
+// grows with the cube of its cells: three take 14% fewer instructions in
+// the benchmark's space step but ran 0.4% to 1.5% slower on a quiet core,
+// and cubes sized from the last call made a dense swarm 4% faster but the
+// benchmark's gap 3% and a sparse formation 1% slower.
 #define GROUND_FIRST  4
 #define GROUND_FEWEST 2
 #define GROUND_MOST   6

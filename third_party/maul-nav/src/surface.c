@@ -297,6 +297,10 @@ mnavResult mnavMoveAlongSurface(mnavQuery* query, const mnavNavmesh* navmesh,
     double radius = sqrt(Distance2(from, to)) * 0.5 + (double)navmesh->def.cellSize;
     Mover m = {query, navmesh, usable, to, center, radius * radius, from, Distance2(from, to),
                0,     false,   false,  1};
+    // The move takes the node table a sliced search holds: that search
+    // ends here, as it does when any other search begins.
+    query->search.active = false;
+    query->flight.active = false;
     mnavClearTable(query);
     query->nodes[0] = (mnavSearchNode){0};
     query->nodes[0].slot = (int32_t)startPolygon.slot - 1;

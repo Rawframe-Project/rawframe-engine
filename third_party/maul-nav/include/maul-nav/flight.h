@@ -437,7 +437,8 @@ extern "C"
     /// mnavFindFlightPath gives.
     ///
     /// @param query   The query context; it holds the search until the next
-    ///                search of any kind begins.
+    ///                search of any kind, or a move along the surface,
+    ///                begins.
     /// @param volume  The flight volume.
     /// @param start   The start, in world coordinates.
     /// @param end     The end, in world coordinates.
