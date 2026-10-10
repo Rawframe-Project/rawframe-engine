@@ -1,6 +1,7 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/render/headset.h"
+#include "rawframe/view/headset.h"
 #include "rawframe/xr/registrar.h"
 #include "rawframe/xr/runtime.h"
 #include "rawframe/xr/session.h"
@@ -19,7 +20,7 @@ constexpr diagnostics::EventIdentity kUnavailable{"xr", "xr_unavailable"};
 constexpr diagnostics::EventIdentity kState{"xr", "xr_session_state"};
 constexpr diagnostics::EventIdentity kFailed{"xr", "xr_failed"};
 constexpr diagnostics::EventIdentity kSummary{"xr", "xr_summary"};
-constexpr std::string_view kProvided[] = {render::kHeadset.name};
+constexpr std::string_view kProvided[] = {render::kHeadset.name, view::kHeadsetEyes.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 constexpr std::array<std::string_view, 9> kStateNames = {
@@ -27,7 +28,10 @@ constexpr std::array<std::string_view, 9> kStateNames = {
 
 /// The headset, as the render module draws for it: the runtime's system,
 /// opened at load so the device is made by it, and a session made on the
-/// device the first time a frame is planned on it.
+/// device the first time a frame is planned on it. Each Host iteration it
+/// begins the session's frame in `presentation_extract`, before anything
+/// draws, and tells the eyes the frame shows (D595); the frame is ended
+/// once drawn, or undrawn in `frame_end`.
 class HeadsetParticipant final : public composition::Participant, public render::Headset {
 public:
     result::Status load(composition::ParticipantContext& context) {
@@ -95,7 +99,20 @@ public:
         if (capability == render::kHeadset.name) {
             return composition::provideAs<render::Headset>(*this);
         }
+        if (capability == view::kHeadsetEyes.name) {
+            return composition::provideAs(eyes_);
+        }
         return {};
+    }
+
+    void runHostPhase(composition::HostPhase phase, const composition::HostFrame& /*frame*/) noexcept override {
+        if (phase == composition::HostPhase::FrameEnd) {
+            end(false);
+            return;
+        }
+        if (phase == composition::HostPhase::PresentationExtract) {
+            begin();
+        }
     }
 
     bool present() const noexcept override {
@@ -114,7 +131,7 @@ public:
         return runtime_->device(physicalDevice, createInfo, getInstanceProcAddr);
     }
 
-    std::optional<Views> begin(render::Device& device) noexcept override {
+    std::optional<Views> views(render::Device& device) noexcept override {
         if (runtime_ == nullptr || failed_ || over_) {
             return std::nullopt;
         }
@@ -126,44 +143,32 @@ public:
             }
             session_ = std::move(*made);
             ++sessions_;
-        }
-        auto frame = session_->begin();
-        told();
-        if (!frame.has_value()) {
-            fail(frame.error());
             return std::nullopt;
         }
-        if (session_->over()) {
-            // The runtime ended it: shown no more, the window plays on.
-            close();
-            over_ = true;
+        if (!open_ || session_->images().empty()) {
             return std::nullopt;
         }
-        if (!frame->begun) {
-            return std::nullopt;
-        }
-        if (!frame->shown || session_->images().empty()) {
-            end(false);
-            return std::nullopt;
-        }
-        return Views{.images = std::move(frame->images),
-                     .width = session_->images().front().width,
-                     .height = session_->images().front().height};
+        return Views{
+            .images = images_, .width = session_->images().front().width, .height = session_->images().front().height};
     }
 
     void end(bool drawn) noexcept override {
-        if (session_ == nullptr) {
+        if (session_ == nullptr || !open_) {
             return;
         }
+        open_ = false;
+        images_.clear();
         if (const result::Status kEnded = session_->end(drawn); !kEnded.has_value()) {
             fail(kEnded.error());
         }
     }
 
     void close() noexcept override {
+        eyes_.tell({});
         if (session_ == nullptr) {
             return;
         }
+        end(false);
         const SessionStatistics& kSession = session_->statistics();
         totals_.framesEnded += kSession.framesEnded;
         totals_.framesShown += kSession.framesShown;
@@ -175,6 +180,51 @@ public:
     }
 
 private:
+    /// This iteration's frame begun, as the runtime paces it, its views'
+    /// images acquired and its eyes told; or none, and no eyes.
+    void begin() noexcept {
+        eyes_.tell({});
+        if (session_ == nullptr || failed_ || over_ || open_) {
+            return;
+        }
+        auto frame = session_->begin();
+        told();
+        if (!frame.has_value()) {
+            fail(frame.error());
+            return;
+        }
+        if (session_->over()) {
+            // The runtime ended it: shown no more, the window plays on.
+            close();
+            over_ = true;
+            return;
+        }
+        if (!frame->begun) {
+            return;
+        }
+        if (!frame->shown || frame->views.size() != session_->images().size()) {
+            if (const result::Status kEnded = session_->end(false); !kEnded.has_value()) {
+                fail(kEnded.error());
+            }
+            return;
+        }
+        open_ = true;
+        images_ = std::move(frame->images);
+        std::vector<view::HeadsetEye> eyes;
+        for (std::size_t at = 0; at < frame->views.size(); ++at) {
+            const ViewPose& kPose = frame->views[at];
+            eyes.push_back({.position = kPose.position,
+                            .orientation = kPose.orientation,
+                            .angleLeft = kPose.angleLeft,
+                            .angleRight = kPose.angleRight,
+                            .angleUp = kPose.angleUp,
+                            .angleDown = kPose.angleDown,
+                            .width = session_->images()[at].width,
+                            .height = session_->images()[at].height});
+        }
+        eyes_.tell(eyes);
+    }
+
     /// The session's state, said when it changed.
     void told() noexcept {
         if (session_ == nullptr || session_->state() == told_) {
@@ -197,6 +247,10 @@ private:
                      {diagnostics::field("reason", std::string{error.description()})});
     }
 
+    view::HeadsetEyes eyes_;
+    /// This iteration's frame begun and not yet ended, and its images.
+    bool open_ = false;
+    std::vector<std::uint64_t> images_;
     bool asked_ = false;
     std::string unavailable_;
     std::unique_ptr<Runtime> runtime_;
@@ -227,6 +281,9 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
         .observabilityIdentity = "xr.headset",
         .budgetOwner = "xr",
+        .hostPhases =
+            static_cast<std::uint16_t>(composition::hostPhaseBit(composition::HostPhase::PresentationExtract) |
+                                       composition::hostPhaseBit(composition::HostPhase::FrameEnd)),
     });
 }
 

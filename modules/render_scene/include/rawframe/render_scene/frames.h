@@ -38,6 +38,20 @@ struct RegionFrame {
     const SceneFrame* frame = nullptr;
 };
 
+/// A headset's eye's frame (D595): the first local player's view drawn
+/// from the eye, `width` by `height` pixels through a frustum as wide each
+/// way as the eye's widest angle, and where that picture lies over the
+/// eye's image (left, top, width, height in the image's pixels, past its
+/// edges where the eye's field is narrower on that side), so the image
+/// shows what its field of view sees; none while the headset shows
+/// nothing.
+struct EyeFrame {
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::array<float, 4> viewport{};
+    const SceneFrame* frame = nullptr;
+};
+
 class SceneFrames {
 public:
     SceneFrames() = default;
@@ -58,6 +72,10 @@ public:
     /// composed over those before; none while one player fills the window.
     /// Kept as `textureFrames` is.
     [[nodiscard]] virtual std::span<const RegionFrame> regionFrames() const noexcept = 0;
+    /// A headset's eyes' frames (D595), the left first, queued in this Host
+    /// iteration's `present` and kept as `textureFrames` is; none while no
+    /// headset shows the game.
+    [[nodiscard]] virtual std::span<const EyeFrame> eyeFrames() const noexcept = 0;
     /// The color around the regions, 8-bit sRGB: a constrained aspect's
     /// bars (D369), else black.
     [[nodiscard]] virtual std::array<std::uint8_t, 3> bars() const noexcept = 0;

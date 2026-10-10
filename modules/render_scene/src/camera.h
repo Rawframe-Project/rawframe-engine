@@ -24,5 +24,11 @@ namespace rawframe::render_scene {
 
 /// The eye's axes, by the view's geometry (D366): right, up, forward.
 [[nodiscard]] std::array<Vector, 3> axesOf(float yaw, float pitch) noexcept;
+/// The camera's axes: its orientation's where it has one (D595), else its
+/// yaw's and pitch's.
+[[nodiscard]] std::array<Vector, 3> axesOf(const SceneCamera& camera) noexcept;
+/// Whether the camera's orientation, if it has one, is a quaternion of
+/// finite parts and about unit length.
+[[nodiscard]] bool orientationSound(const SceneCamera& camera) noexcept;
 
 } // namespace rawframe::render_scene

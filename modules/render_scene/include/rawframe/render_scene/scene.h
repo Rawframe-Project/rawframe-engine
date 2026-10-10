@@ -20,6 +20,7 @@
 #include "rawframe/render_scene/components.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
+#include "rawframe/view/headset.h"
 #include "rawframe/view/view.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_animation/animation.h"
@@ -172,6 +173,10 @@ struct SceneCamera {
     /// The camera's post processes, in the game's order (D349).
     std::vector<PostProcess> postProcesses;
     float elapsed = 0;
+    /// The eye's own turn in the World's axes, a unit quaternion (x, y, z,
+    /// w), rolled as a head is: a headset's eye (D595), for which `yaw` and
+    /// `pitch` say nothing; none for the eye `yaw` and `pitch` aim.
+    std::optional<std::array<float, 4>> orientation;
 };
 
 /// Column-major, as shaders read them.
@@ -186,6 +191,25 @@ struct CameraMatrices {
     Matrix projection{};
 };
 [[nodiscard]] CameraMatrices matricesOf(const SceneCamera& camera) noexcept;
+
+/// A headset's eye's view of a player's camera (D595): the camera the eye
+/// sees through, the size its picture is drawn at, and where that picture
+/// lies over the eye's image (left, top, width, height in the image's
+/// pixels).
+struct EyeView {
+    SceneCamera camera;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::array<float, 4> viewport{};
+};
+
+/// `eye`'s view of `player`'s camera: the camera the play space's origin
+/// and heading (its yaw; its pitch is the head's, never the camera's), the
+/// eye placed and turned in it by the headset, seen through a frustum as
+/// wide each way as the eye's widest angle, at a size whose part over the
+/// image has the image's pixels (at most 4096 a side); none for an eye
+/// whose angles see nothing or whose image has no size.
+[[nodiscard]] std::optional<EyeView> eyeViewOf(const SceneCamera& player, const view::HeadsetEye& eye);
 
 /// A camera's view geometry for picking (ADR-0052, D366): its eye, aim,
 /// and lens; the view's size is the caller's.

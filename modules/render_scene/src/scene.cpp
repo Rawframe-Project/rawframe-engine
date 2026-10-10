@@ -269,16 +269,19 @@ struct Scene::State {
                                                }) &&
                            std::isfinite(camera.yaw) && std::isfinite(camera.pitch) && std::isfinite(camera.fovY) &&
                            std::isfinite(camera.near) && std::isfinite(camera.aspect) && camera.fovY > 0 &&
-                           camera.fovY < std::numbers::pi_v<float> && camera.near > 0 && camera.aspect > 0;
-        const auto [kRight, kUp, kForward] = axesOf(kSees ? camera.yaw : 0, kSees ? camera.pitch : 0);
+                           camera.fovY < std::numbers::pi_v<float> && camera.near > 0 && camera.aspect > 0 &&
+                           orientationSound(camera);
+        const auto [kRight, kUp, kForward] = kSees ? axesOf(camera) : axesOf(0, 0);
         const float kHalf = kSees ? camera.fovY / 2 : 0.5F;
         const float kAspect = kSees ? camera.aspect : 1.0F;
         const float kNear = kSees ? camera.near : 0.1F;
-        const CameraMatrices kMatrices = matricesOf(SceneCamera{.yaw = kSees ? camera.yaw : 0,
-                                                                .pitch = kSees ? camera.pitch : 0,
-                                                                .fovY = kHalf * 2,
-                                                                .near = kNear,
-                                                                .aspect = kAspect});
+        const CameraMatrices kMatrices =
+            matricesOf(SceneCamera{.yaw = kSees ? camera.yaw : 0,
+                                   .pitch = kSees ? camera.pitch : 0,
+                                   .fovY = kHalf * 2,
+                                   .near = kNear,
+                                   .aspect = kAspect,
+                                   .orientation = kSees ? camera.orientation : std::nullopt});
         frame.view = kMatrices.view;
         frame.projection = kMatrices.projection;
         frame.exposure = std::isfinite(camera.exposure) ? camera.exposure : 15.0F;

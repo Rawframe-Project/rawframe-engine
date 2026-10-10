@@ -211,6 +211,15 @@ struct Placement {
     std::array<std::uint8_t, 3> bars{};
 };
 
+/// Where a view drawn apart covers an image of the frame's target (D595):
+/// the image's place among the target's, and where its picture lies over
+/// it (left, top, width, height in the image's pixels, past its edges as
+/// far as it reaches).
+struct Covering {
+    std::size_t image = 0;
+    std::array<float, 4> viewport{};
+};
+
 /// A view drawn apart on the device (ADR-0052, D361, D362): its picture, a
 /// texture kept from frame to frame, `width` by `height`, 8-bit sRGB, that
 /// a scene renderer of its own draws its view's frame into as it would a
@@ -237,12 +246,14 @@ public:
     /// textures it names and `lent`'s pictures (other views', never its
     /// own); nothing for none. Placed, its picture is then copied into the
     /// frame's there, as far as the frame reaches, the frame's picture
-    /// cleared first if nothing drew into it before.
+    /// cleared first if nothing drew into it before. Covering, its picture
+    /// covers one of the target's images instead (a headset's eye, D595).
     void prepare(const render_scene::SceneFrame* frame,
                  MeshSource meshes,
                  TextureSource textures = {},
                  std::span<TextureView* const> lent = {},
-                 std::optional<Placement> placed = std::nullopt);
+                 std::optional<Placement> placed = std::nullopt,
+                 std::optional<Covering> covering = std::nullopt);
     /// Its picture made `width` by `height` from the next frame, nothing
     /// drawn in it yet, when it is not that already.
     [[nodiscard]] result::Status resize(std::uint32_t width, std::uint32_t height);

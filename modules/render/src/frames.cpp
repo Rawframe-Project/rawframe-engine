@@ -203,7 +203,7 @@ public:
         // picture is placed into its images, drawn at their size where no
         // window shows it.
         if (headset_ != nullptr) {
-            if (std::optional<Headset::Views> views = headset_->begin(*device); views.has_value()) {
+            if (std::optional<Headset::Views> views = headset_->views(*device); views.has_value()) {
                 headsetOpen_ = true;
                 target_.images = std::move(views->images);
                 if (!target_.surface.has_value()) {

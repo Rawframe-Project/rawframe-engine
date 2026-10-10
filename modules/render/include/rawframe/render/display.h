@@ -46,6 +46,16 @@ public:
     [[nodiscard]] result::Result<std::optional<std::uint64_t>>
     place(std::uint64_t from, std::uint64_t into, std::array<std::uint32_t, 4> rectangle);
 
+    /// Before the open frame compiles: a pass drawing `from`, a texture of
+    /// the frame (sRGB, sampled in linear light), over `viewport` (left,
+    /// top, width, height in pixels, as far past the edges of `into` as it
+    /// reaches) of `into`, another `size` pixels large, kept to it: a
+    /// headset's eye drawn wider than its image, the image showing the part
+    /// its field of view sees (D595). The pass's key given, recorded by
+    /// `record`; none while the pipeline is still being made.
+    [[nodiscard]] result::Result<std::optional<std::uint64_t>>
+    cover(std::uint64_t from, std::uint64_t into, std::array<float, 4> viewport, std::array<std::uint32_t, 2> size);
+
     /// After the frame compiled: the pass `add` gave, recorded.
     [[nodiscard]] result::Status record(std::uint64_t pass);
 

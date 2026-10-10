@@ -14,6 +14,7 @@
 #include "rawframe/render/device.h"
 #include "rawframe/result/result.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -46,6 +47,17 @@ struct Frame {
     /// local players learn from it whether theirs is the views' ground
     /// (D369).
     const void* ground = nullptr;
+    /// What covers each image the target names (`FrameTarget::images`), in
+    /// their order, as a recorder tells it while it declares: a texture of
+    /// the frame drawn over `viewport` (left, top, width, height in the
+    /// image's pixels, as far past its edges as it reaches), a headset's
+    /// eye drawn from its own pose (D595). An image nothing covers gets the
+    /// picture placed whole.
+    struct Cover {
+        std::uint64_t picture = 0;
+        std::array<float, 4> viewport{};
+    };
+    std::vector<std::optional<Cover>> covers;
 };
 
 /// An 8-bit sRGB channel in linear light, what a pass clearing an sRGB

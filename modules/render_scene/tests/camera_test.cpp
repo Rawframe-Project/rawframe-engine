@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <limits>
+#include <numbers>
 
 using namespace rawframe;
 using namespace rawframe::render_scene;
@@ -233,4 +234,77 @@ RAWFRAME_TEST(AFixedCameraStaysPutWhereverItsPlayerIs) {
     camera.anchor = kCameraFixed;
     RAWFRAME_EXPECT((eyeOf(camera, &kPose) == std::array<double, 3>{0, 42, 36}));
     RAWFRAME_EXPECT((eyeOf(camera, nullptr) == std::array<double, 3>{0, 42, 36}));
+}
+
+RAWFRAME_TEST(AHeadsetsEyeSeesFromItsPoseInThePlaySpace) {
+    // The player's camera is the play space's origin and heading (D595): a
+    // quarter turn, so the headset's forward (-Z) looks along -X, and its
+    // place is turned with it; the camera's pitch is not the head's.
+    const SceneCamera kPlayer{.eye = {10, 2, 5}, .yaw = std::numbers::pi_v<float> / 2, .pitch = -0.4F, .fovY = 1};
+    const view::HeadsetEye kEye{.position = {0.1F, 1.6F, -0.2F},
+                                .angleLeft = -0.5F,
+                                .angleRight = 0.5F,
+                                .angleUp = 0.6F,
+                                .angleDown = -0.6F,
+                                .width = 100,
+                                .height = 80};
+    const auto kView = eyeViewOf(kPlayer, kEye);
+    RAWFRAME_EXPECT(kView.has_value());
+    if (!kView.has_value()) {
+        return;
+    }
+    const auto kNear = [](double value, double expected) {
+        return std::abs(value - expected) < 1e-4;
+    };
+    RAWFRAME_EXPECT(kNear(kView->camera.eye[0], 9.8) && kNear(kView->camera.eye[1], 3.6) &&
+                    kNear(kView->camera.eye[2], 4.9));
+    // The view matrix's third row is the eye's backward: +X.
+    const CameraMatrices kMatrices = matricesOf(kView->camera);
+    RAWFRAME_EXPECT(kNear(kMatrices.view[2], 1) && kNear(kMatrices.view[6], 0) && kNear(kMatrices.view[10], 0));
+    // A field as wide each way: drawn at the image's size, over all of it.
+    RAWFRAME_EXPECT(kView->width == 100 && kView->height == 80);
+    RAWFRAME_EXPECT(kNear(kView->viewport[0], 0) && kNear(kView->viewport[1], 0) && kNear(kView->viewport[2], 100) &&
+                    kNear(kView->viewport[3], 80));
+    RAWFRAME_EXPECT(kNear(kView->camera.fovY, 1.2) && kNear(kView->camera.aspect, std::tan(0.5) / std::tan(0.6)));
+}
+
+RAWFRAME_TEST(AnEyesNarrowerSideOverhangsItsImage) {
+    // A lens that sees farther to the left than to the right (D595): the
+    // picture is drawn as wide to the right as to the left, its left edge
+    // on the image's and its right past it; the vertical as wide as the
+    // image.
+    const auto kNear = [](double value, double expected) {
+        return std::abs(value - expected) < 1e-3;
+    };
+    const SceneCamera kPlayer{.fovY = 1};
+    const view::HeadsetEye kWideLeft{
+        .angleLeft = -0.8F, .angleRight = 0.4F, .angleUp = 0.6F, .angleDown = -0.6F, .width = 200, .height = 100};
+    const auto kLeftward = eyeViewOf(kPlayer, kWideLeft);
+    RAWFRAME_EXPECT(kLeftward.has_value());
+    if (!kLeftward.has_value()) {
+        return;
+    }
+    const double kSpan = std::tan(0.8) + std::tan(0.4);
+    RAWFRAME_EXPECT(kNear(kLeftward->viewport[0], 0) && kNear(kLeftward->viewport[2], 2 * std::tan(0.8) / kSpan * 200));
+    RAWFRAME_EXPECT(kLeftward->width == static_cast<std::uint32_t>(std::ceil(2 * std::tan(0.8) / kSpan * 200)));
+    RAWFRAME_EXPECT(kNear(kLeftward->viewport[1], 0) && kNear(kLeftward->viewport[3], 100));
+    // Mirrored, the picture's left edge lies before the image's.
+    const view::HeadsetEye kWideRight{
+        .angleLeft = -0.4F, .angleRight = 0.8F, .angleUp = 0.6F, .angleDown = -0.6F, .width = 200, .height = 100};
+    const auto kRightward = eyeViewOf(kPlayer, kWideRight);
+    RAWFRAME_EXPECT(kRightward.has_value() && kRightward->viewport[0] < 0 &&
+                    kNear(kRightward->viewport[0] + kRightward->viewport[2], 200));
+    // A rolled head rolls the eye: a quarter turn about its forward puts
+    // its right where up was.
+    view::HeadsetEye rolled = kWideLeft;
+    rolled.orientation = {0, 0, std::sin(std::numbers::pi_v<float> / 4), std::cos(std::numbers::pi_v<float> / 4)};
+    const auto kRolled = eyeViewOf(kPlayer, rolled);
+    RAWFRAME_EXPECT(kRolled.has_value() && kNear(matricesOf(kRolled->camera).view[4], 1));
+    // An eye that sees nothing, or has no image, has no view.
+    view::HeadsetEye blind = kWideLeft;
+    blind.angleRight = -0.9F;
+    RAWFRAME_EXPECT(!eyeViewOf(kPlayer, blind).has_value());
+    view::HeadsetEye imageless = kWideLeft;
+    imageless.width = 0;
+    RAWFRAME_EXPECT(!eyeViewOf(kPlayer, imageless).has_value());
 }

@@ -20,6 +20,7 @@ namespace {
 
 constexpr diagnostics::EventIdentity kDrawingSummary{"scene", "scene_drawing_summary"};
 constexpr diagnostics::EventIdentity kFailed{"scene", "scene_drawing_failed"};
+constexpr diagnostics::EventIdentity kEyesDrawingSummary{"scene", "scene_eyes_drawing_summary"};
 constexpr std::string_view kMaybe[] = {render::kFrames.name, render_scene::kSceneFrames.name};
 constexpr std::string_view kProvided[] = {kSceneCaptures.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
@@ -176,8 +177,54 @@ public:
                                          : std::nullopt);
             frames_->ready(*regions_[at]);
         }
+        prepareEyes();
         frames_->ready(*renderer_);
         frames_->ready(renderer_->composed());
+    }
+
+    /// A headset's eyes (D595): each eye's view drawn apart, at its own
+    /// size, and laid over its image of the frame's target.
+    void prepareEyes() noexcept {
+        const std::span<const render_scene::EyeFrame> kEyes = scene_->eyeFrames();
+        while (eyes_.size() < kEyes.size()) {
+            render::Device* device = frames_->device();
+            if (device == nullptr) {
+                return;
+            }
+            auto view =
+                TextureView::create(*device, *renderer_, 0, kEyes[eyes_.size()].width, kEyes[eyes_.size()].height);
+            if (!view.has_value()) {
+                failed_ = true;
+                emitter_.log(diagnostics::Severity::Error,
+                             kFailed,
+                             "a headset's eye could not be drawn: nothing more is",
+                             {diagnostics::field("reason", std::string{view.error().description()})});
+                return;
+            }
+            frames_->join(**view, kOrder);
+            eyes_.push_back(std::move(*view));
+        }
+        for (std::size_t at = 0; at < eyes_.size(); ++at) {
+            const bool kShown = at < kEyes.size() && kEyes[at].frame != nullptr;
+            if (kShown) {
+                if (auto resized = eyes_[at]->resize(kEyes[at].width, kEyes[at].height); !resized.has_value()) {
+                    failed_ = true;
+                    emitter_.log(diagnostics::Severity::Error,
+                                 kFailed,
+                                 "a headset's eye could not be drawn: nothing more is",
+                                 {diagnostics::field("reason", std::string{resized.error().description()})});
+                    return;
+                }
+            }
+            eyes_[at]->prepare(kShown ? kEyes[at].frame : nullptr,
+                               meshes_,
+                               textures_,
+                               viewPointers_,
+                               std::nullopt,
+                               kShown ? std::optional{Covering{.image = at, .viewport = kEyes[at].viewport}}
+                                      : std::nullopt);
+            frames_->ready(*eyes_[at]);
+        }
     }
 
     /// A local player's region side in the pixels its view is drawn at
@@ -245,6 +292,21 @@ public:
             frames_->leave(*region);
         }
         regions_.clear();
+        // A headset's eyes' (D595), apart: the summary is at its fields'
+        // limit.
+        std::uint64_t eyeFrames = 0;
+        for (const std::unique_ptr<TextureView>& eye : eyes_) {
+            eyeFrames += eye->statistics().frames;
+            frames_->leave(*eye);
+        }
+        if (!eyes_.empty()) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kEyesDrawingSummary,
+                         "what the device drew of a headset's eyes",
+                         {diagnostics::field("eyes", static_cast<std::uint64_t>(eyes_.size())),
+                          diagnostics::field("frames", eyeFrames)});
+        }
+        eyes_.clear();
         if (renderer_ != nullptr) {
             if (!kSplit) {
                 statistics = renderer_->statistics();
@@ -307,6 +369,8 @@ private:
     std::vector<TextureView*> viewPointers_;
     /// In split-screen, the local players' views (D362), drawn after them.
     std::vector<std::unique_ptr<TextureView>> regions_;
+    /// A headset's eyes' views (D595).
+    std::vector<std::unique_ptr<TextureView>> eyes_;
     /// The frame a tool asked to capture, and whether the renderer was
     /// asked to read it.
     std::optional<render_scene::SceneFrame> capturing_;

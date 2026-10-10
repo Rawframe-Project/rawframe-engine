@@ -33,6 +33,7 @@ struct TextureView::State {
     /// Where the frame's picture takes it, and the passes clearing the
     /// frame's picture and copying it there.
     std::optional<Placement> placed;
+    std::optional<Covering> covering;
     std::optional<mrhiPassId> clearing;
     std::optional<mrhiPassId> copying;
     /// Placed at another size than its own, scaled there by a pass of its
@@ -91,11 +92,13 @@ void TextureView::prepare(const render_scene::SceneFrame* frame,
                           MeshSource meshes,
                           TextureSource textures,
                           std::span<TextureView* const> lent,
-                          std::optional<Placement> placed) {
+                          std::optional<Placement> placed,
+                          std::optional<Covering> covering) {
     state_->missed = state_->frame != nullptr && !state_->shown;
     state_->shown = false;
     state_->frame = frame;
     state_->placed = placed;
+    state_->covering = covering;
     state_->renderer->prepare(frame, std::move(meshes), std::move(textures), lent);
 }
 
@@ -167,6 +170,11 @@ result::Status TextureView::declare(render::Frame& frame) {
     // Lent only once drawn: before, its texels are none of the view's.
     if (state.drawn || state.drawing) {
         state.picture = kPicture;
+    }
+    // Covering an image of the target, once drawn this frame (D595).
+    if (state.covering.has_value() && state.drawing && state.covering->image < frame.covers.size()) {
+        frame.covers[state.covering->image] =
+            render::Frame::Cover{.picture = kPicture, .viewport = state.covering->viewport};
     }
     // Placed at another size, scaled into its region once drawn (D373).
     const bool kScaled = state.placed.has_value() && state.placed->width != 0 && state.placed->height != 0 &&

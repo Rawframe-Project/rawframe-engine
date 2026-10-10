@@ -9,6 +9,7 @@
 #include "rawframe/render_scene/registrar.h"
 #include "rawframe/render_scene/render_scale.h"
 #include "rawframe/render_scene/scene.h"
+#include "rawframe/view/headset.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/preview.h"
 #include "rawframe/world/column_query.h"
@@ -37,12 +38,14 @@ constexpr diagnostics::EventIdentity kMaterialUnread{"scene", "material_unread"}
 constexpr diagnostics::EventIdentity kViewRefused{"scene", "view_refused"};
 constexpr diagnostics::EventIdentity kViewsSummary{"scene", "scene_views_summary"};
 constexpr diagnostics::EventIdentity kRenderScaleChanged{"scene", "render_scale_changed"};
+constexpr diagnostics::EventIdentity kEyesSummary{"scene", "scene_eyes_summary"};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        game_content::kGameContent.name,
                                        view::kPlayerViews.name,
                                        view::kPreviewCamera.name,
-                                       world_animation::kPresentedPoses.name};
+                                       world_animation::kPresentedPoses.name,
+                                       view::kHeadsetEyes.name};
 
 /// A client's view without a camera of its own: behind its player and
 /// above, looking a little down, in a sunny day's exposure.
@@ -104,6 +107,10 @@ public:
         // A preview's camera, where an authoring client sets one (D432).
         if (!client.has_value() && context.has(view::kPreviewCamera.name)) {
             RAWFRAME_TRY_ASSIGN(preview_, context.capability(view::kPreviewCamera));
+        }
+        // A headset's eyes, the player's view drawn for each (D595).
+        if (!client.has_value() && context.has(view::kHeadsetEyes.name)) {
+            RAWFRAME_TRY_ASSIGN(eyes_, context.capability(view::kHeadsetEyes));
         }
         // The poses its skinned models are drawn in (D508).
         if (context.has(world_animation::kPresentedPoses.name)) {
@@ -210,6 +217,7 @@ public:
             for (RegionFrame& each : regionFrames_) {
                 each.frame = nullptr;
             }
+            eyeFrames_.clear();
             ++tick_;
             pictures_.update(tick_);
             extract();
@@ -231,6 +239,7 @@ public:
             if (!regionFrames_.empty() && regionFrames_[0].width != 0) {
                 regionFrames_[0].frame = &kFrame;
             }
+            presentEyes();
             tellViews();
             ++frames_;
             drawn_ += kFrame.drawn;
@@ -292,6 +301,15 @@ public:
             // Where the player's view last looked, about +Y (D521).
             diagnostics::field("yaw", camera_.yaw)};
         emitter_.log(diagnostics::Severity::Info, kSceneSummary, "what one client's scene drew", fields);
+        if (eyeFramesQueued_ != 0) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kEyesSummary,
+                         "what one client's scene queued for a headset's eyes",
+                         {diagnostics::field("eyes", static_cast<std::uint64_t>(eyeScenes_.size())),
+                          diagnostics::field("eyeFrames", eyeFramesQueued_),
+                          diagnostics::field("width", eyeWidth_),
+                          diagnostics::field("height", eyeHeight_)});
+        }
         if (!textureViews_.empty()) {
             emitter_.log(diagnostics::Severity::Info,
                          kViewsSummary,
@@ -324,6 +342,10 @@ public:
 
     std::span<const RegionFrame> regionFrames() const noexcept override {
         return regionFrames_;
+    }
+
+    std::span<const EyeFrame> eyeFrames() const noexcept override {
+        return eyeFrames_;
     }
 
     void missed(std::uint64_t id) noexcept override {
@@ -413,6 +435,7 @@ private:
         }
         scene_->extract(*kView.world, posesOf(*kView.world));
         extracted_ = true;
+        extractEyes(*kView.world);
         if (kView.owned.isNull() || !kView.world->alive(kView.owned)) {
             return;
         }
@@ -485,6 +508,46 @@ private:
         }
         extractViews(*kView.world);
         extractPlayers();
+    }
+
+    /// The first player's World extracted again into each headset eye's
+    /// scene (D595), each eye keeping its own frames' history.
+    void extractEyes(world::World& world) {
+        eyesSeen_ = eyes_ != nullptr ? eyes_->eyes().size() : 0;
+        for (std::size_t at = 0; at < eyesSeen_; ++at) {
+            if (at == eyeScenes_.size()) {
+                auto made = Scene::create(world.registry(), settings_);
+                if (!made.has_value()) {
+                    eyesSeen_ = at;
+                    return;
+                }
+                eyeScenes_.push_back(std::move(*made));
+                eyeScenes_.back()->show(lines_);
+            }
+            eyeScenes_[at]->extract(world, posesOf(world));
+        }
+    }
+
+    /// Each eye's frame queued (D595), as `eyeViewOf` sees it from the
+    /// first player's camera.
+    void presentEyes() {
+        if (eyes_ == nullptr || eyes_->eyes().size() != eyesSeen_) {
+            return;
+        }
+        for (const view::HeadsetEye& kEye : eyes_->eyes()) {
+            const std::optional<EyeView> kView = eyeViewOf(camera_, kEye);
+            if (!kView.has_value()) {
+                eyeFrames_.clear();
+                return;
+            }
+            const SceneFrame& kFrame = eyeScenes_[eyeFrames_.size()]->queue(kView->camera);
+            pictures_.askAll(kFrame);
+            eyeFrames_.push_back(EyeFrame{
+                .width = kView->width, .height = kView->height, .viewport = kView->viewport, .frame = &kFrame});
+            ++eyeFramesQueued_;
+            eyeWidth_ = kView->width;
+            eyeHeight_ = kView->height;
+        }
     }
 
     /// The other local players' Worlds (D362), each extracted into its own
@@ -775,6 +838,15 @@ private:
     std::optional<world_kest::GameAspect> aspect_;
     std::vector<LocalPlayer> localPlayers_;
     std::vector<RegionFrame> regionFrames_;
+    /// A headset's eyes (D595): where they are told, their scenes, the
+    /// eyes extracted for, and their frames.
+    view::HeadsetEyes* eyes_ = nullptr;
+    std::vector<std::unique_ptr<Scene>> eyeScenes_;
+    std::size_t eyesSeen_ = 0;
+    std::vector<EyeFrame> eyeFrames_;
+    std::uint64_t eyeFramesQueued_ = 0;
+    std::uint32_t eyeWidth_ = 0;
+    std::uint32_t eyeHeight_ = 0;
     std::uint64_t playerFrames_ = 0;
     /// The views into render textures (D361): the game's view component,
     /// its query, each render texture's view and scene, the frames they

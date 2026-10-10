@@ -111,6 +111,7 @@ struct Framer::State {
                    .width = target.width,
                    .height = target.height,
                    .picture = requestKey(picture.index1, picture.generation)};
+        open.covers.assign(target.images.size(), std::nullopt);
         for (std::size_t at = 0; at < recorders.size(); ++at) {
             if (auto declared = recorders[at]->declare(open); !declared.has_value()) {
                 return drop(recorders.first(at + 1), std::move(declared).error());
@@ -142,7 +143,8 @@ struct Framer::State {
             displaying = *added;
         }
         std::vector<std::uint64_t> placing;
-        for (const std::uint64_t kImage : target.images) {
+        for (std::size_t at = 0; at < target.images.size(); ++at) {
+            const std::uint64_t kImage = target.images[at];
             const std::optional<window::PixelSize> kSize = device->adoptedSize(kImage);
             mrhiResourceId into{};
             if (!kSize.has_value() ||
@@ -156,8 +158,13 @@ struct Framer::State {
                                    "an image the picture is placed into is not adopted")
                                 .error());
             }
-            auto placed = display->place(
-                open.picture, requestKey(into.index1, into.generation), {0, 0, kSize->width, kSize->height});
+            // Covered by what a recorder drew for it, else the picture
+            // placed whole.
+            const std::uint64_t kInto = requestKey(into.index1, into.generation);
+            const std::optional<Frame::Cover>& kCover = open.covers[at];
+            auto placed = kCover.has_value()
+                              ? display->cover(kCover->picture, kInto, kCover->viewport, {kSize->width, kSize->height})
+                              : display->place(open.picture, kInto, {0, 0, kSize->width, kSize->height});
             if (!placed.has_value()) {
                 return drop(recorders, std::move(placed).error());
             }
