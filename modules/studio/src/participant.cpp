@@ -278,7 +278,8 @@ const ui::DrawList* ShellParticipant::drawn() const noexcept {
     return drawn_;
 }
 
-void ShellParticipant::resize(std::uint32_t width, std::uint32_t height) noexcept {
+// Studio is shown in its window alone, never on a headset's panel.
+void ShellParticipant::resize(std::uint32_t width, std::uint32_t height, bool /*panel*/) noexcept {
     if (width != 0 && height != 0) {
         width_ = width;
         height_ = height;

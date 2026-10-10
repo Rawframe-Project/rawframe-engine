@@ -130,7 +130,7 @@ public:
 
     const ui::DrawList* drawn() const noexcept override;
 
-    void resize(std::uint32_t width, std::uint32_t height) noexcept override;
+    void resize(std::uint32_t width, std::uint32_t height, bool panel) noexcept override;
 
     std::shared_ptr<const texture::Texture> image(std::uint64_t) const override;
 

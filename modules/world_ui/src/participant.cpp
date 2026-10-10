@@ -452,7 +452,7 @@ public:
         const float kWidth = static_cast<float>(width_);
         const float kHeight = static_cast<float>(height_);
         float scale = 1;
-        if (views_ != nullptr && views_->window().width > 0) {
+        if (views_ != nullptr && views_->window().width > 0 && !panel_) {
             scale = kWidth / views_->window().width;
         }
         takeFonts();
@@ -470,8 +470,8 @@ public:
                                           .width = static_cast<float>(kPixels.width) / scale,
                                           .height = static_cast<float>(kPixels.height) / scale};
             // Inside what the platform leaves clear (D589).
-            laidOut_.push_back(views_ != nullptr ? insideSafeArea(kRegion, views_->window(), views_->safeArea())
-                                                 : kRegion);
+            laidOut_.push_back(
+                views_ != nullptr && !panel_ ? insideSafeArea(kRegion, views_->window(), views_->safeArea()) : kRegion);
         }
         // Words follow the locale a player chose (D539).
         if (text_ != nullptr && text_->revision() != reworded_) {
@@ -633,10 +633,11 @@ public:
         return drawn_;
     }
 
-    void resize(std::uint32_t width, std::uint32_t height) noexcept override {
+    void resize(std::uint32_t width, std::uint32_t height, bool panel) noexcept override {
         if (width != 0 && height != 0) {
             width_ = width;
             height_ = height;
+            panel_ = panel;
         }
     }
 
@@ -720,6 +721,8 @@ private:
     const ui::DrawList* drawn_ = nullptr;
     std::uint32_t width_ = 1280;
     std::uint32_t height_ = 720;
+    /// Laid out on a headset's panel (D598).
+    bool panel_ = false;
     std::uint64_t boxes_ = 0;
     std::uint64_t imagesDrawn_ = 0;
     std::uint64_t shadows_ = 0;

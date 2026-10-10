@@ -213,8 +213,9 @@ public:
         }
         // Laid out on the headset's panel where it shows the UI apart
         // (D597), else over the picture.
-        const auto kSize = frames_->plannedPanel().value_or(*kPlanned);
-        ui_->resize(kSize.first, kSize.second);
+        const auto kPanel = frames_->plannedPanel();
+        const auto kSize = kPanel.value_or(*kPlanned);
+        ui_->resize(kSize.first, kSize.second, kPanel.has_value());
         const ui::DrawList* drawn = ui_->drawn();
         renderer_->prepare(drawn != nullptr && !drawn->commands.empty() ? drawn : nullptr,
                            [ui = ui_](std::uint64_t id) {

@@ -26,8 +26,10 @@ public:
     [[nodiscard]] virtual const DrawList* drawn() const noexcept = 0;
     /// The frame's size in device pixels from the next one on, as the
     /// window it is shown in has it: the views' regions follow. Sides of
-    /// nought are ignored.
-    virtual void resize(std::uint32_t width, std::uint32_t height) noexcept = 0;
+    /// nought are ignored. On a headset's `panel` (D598), the UI's own
+    /// surface, a pixel is a logical pixel, and no window's safe area
+    /// applies.
+    virtual void resize(std::uint32_t width, std::uint32_t height, bool panel) noexcept = 0;
     /// The image the list names `id`, decoded and held, for the list drawn;
     /// none while it is not ready, and for one the UI does not declare.
     [[nodiscard]] virtual std::shared_ptr<const texture::Texture> image(std::uint64_t id) const = 0;
