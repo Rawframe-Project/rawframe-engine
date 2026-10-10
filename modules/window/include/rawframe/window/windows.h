@@ -65,6 +65,10 @@ struct WindowState {
     MonitorId monitor;
     /// One more at creation and at each SurfaceRestored.
     std::uint32_t surfaceGeneration = 0;
+    /// What the platform's own bars and the screen's cutouts cover of the
+    /// window, a phone's notch and home indicator: nought where nothing
+    /// does (D589).
+    Insets safeArea;
 };
 
 /// What the platform tells now of the monitor showing a window, for its

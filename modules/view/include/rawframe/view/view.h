@@ -56,6 +56,15 @@ struct ViewSize {
     float height = 0;
 };
 
+/// What of a window is covered from each edge, logical pixels: a phone's
+/// notch, its home indicator, the system's bars (D589).
+struct ViewInsets {
+    float top = 0;
+    float right = 0;
+    float bottom = 0;
+    float left = 0;
+};
+
 /// Why a conversion has no answer (ADR-0052's closed set): the view has no
 /// size; an input is not finite; the camera sees nothing (a field of view
 /// or height not above nought, a near plane not above nought); or the

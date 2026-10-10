@@ -339,6 +339,10 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     surfaces_.update(windows);
     if (const auto kState = windows.state(window_); kState.has_value()) {
         views_.window({.width = kState->size.width, .height = kState->size.height});
+        views_.safeArea({.top = kState->safeArea.top,
+                         .right = kState->safeArea.right,
+                         .bottom = kState->safeArea.bottom,
+                         .left = kState->safeArea.left});
     }
     // The platform's `suspending` comes in a frame of its own, after which
     // frames pause (Maul Window's mobile backends): the Host runs in it,

@@ -165,6 +165,10 @@ result::Result<WindowState> Windows::state(WindowId window) const {
     WindowState out;
     out.size = {.width = state.size.width, .height = state.size.height};
     out.pixelSize = {.width = state.pixelSize.width, .height = state.pixelSize.height};
+    out.safeArea = {.top = state.safeArea.top,
+                    .right = state.safeArea.right,
+                    .bottom = state.safeArea.bottom,
+                    .left = state.safeArea.left};
     out.scale = state.scale;
     out.position = {.x = state.position.x, .y = state.position.y};
     switch (state.mode) {

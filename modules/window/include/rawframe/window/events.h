@@ -49,6 +49,13 @@ struct LogicalSize {
     float width = 0;
     float height = 0;
 };
+/// Distances in logical pixels from each edge of a window.
+struct Insets {
+    float top = 0;
+    float right = 0;
+    float bottom = 0;
+    float left = 0;
+};
 struct PixelSize {
     std::uint32_t width = 0;
     std::uint32_t height = 0;

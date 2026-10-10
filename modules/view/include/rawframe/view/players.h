@@ -52,6 +52,15 @@ public:
     [[nodiscard]] ViewSize window() const noexcept {
         return window_;
     }
+    /// The program's side, once a frame: what of the window the platform
+    /// covers, which the UI lays out inside (SPEC-0030's root input, D589).
+    void safeArea(ViewInsets insets) noexcept {
+        safeArea_ = insets;
+    }
+    /// What of the window is covered, as last told; nothing before.
+    [[nodiscard]] ViewInsets safeArea() const noexcept {
+        return safeArea_;
+    }
 
     /// The presentation's side: `player`'s view through a camera of the
     /// kind as it is now, or none (its World or its entity is gone).
@@ -73,6 +82,7 @@ private:
     };
 
     ViewSize window_;
+    ViewInsets safeArea_;
     std::vector<std::optional<Told<Perspective>>> perspectives_;
     std::vector<std::optional<Told<Orthographic>>> orthographics_;
 };
