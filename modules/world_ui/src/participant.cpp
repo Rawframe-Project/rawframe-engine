@@ -354,6 +354,7 @@ public:
                 }
                 const std::optional<std::int64_t> kTaken = ui_->press(x, y);
                 presses_ += pressing && kTaken.has_value() ? 1 : 0;
+                missed_ += pressing && !kTaken.has_value() ? 1 : 0;
                 return kTaken;
             });
         }
@@ -603,7 +604,8 @@ public:
                       diagnostics::field("activated", kStatistics.activated),
                       diagnostics::field("stylesUnknown", kStatistics.stylesUnknown),
                       diagnostics::field("atlasRevisions",
-                                         drawn_ != nullptr && drawn_->atlas != nullptr ? drawn_->atlas->revision : 0)});
+                                         drawn_ != nullptr && drawn_->atlas != nullptr ? drawn_->atlas->revision : 0),
+                      diagnostics::field("pressesMissed", missed_)});
     }
 
     /// The host told where the caret of the field holding the keyboard is
@@ -726,6 +728,9 @@ private:
     std::uint64_t glyphsLeftOut_ = 0;
     /// Presses the UI took (D421).
     std::uint64_t presses_ = 0;
+    /// Presses on no node: a player's, or a pointer's offered where the UI
+    /// is not (D588).
+    std::uint64_t missed_ = 0;
     std::uint64_t tick_ = 0;
     /// The most nodes navigation has reached (D476).
     std::size_t mostReachable_ = 0;
