@@ -705,6 +705,14 @@ public:
     /// or after it moves, and one it overlaps ends. Refused for a range
     /// past the text.
     [[nodiscard]] result::Status replaceText(Node node, TextRange range, std::string_view text);
+    /// Where an editable node's text is selected, the caret at `focus`, bytes
+    /// into it, as assistive technology reads it (D613): its editor tells
+    /// it as the selection moves, so a screen reader may type into the
+    /// field where its user is.
+    [[nodiscard]] result::Status setSelection(Node node, std::uint32_t anchor, std::uint32_t focus);
+    /// Whether an editable node's text is a placeholder shown in place of
+    /// none, which assistive technology reads as no text (D613).
+    [[nodiscard]] result::Status setPlaceholder(Node node, bool placeholder);
     /// The input method's composition: `text` replaces the one there is, or
     /// goes in at `offset` when there is none, drawn underlined by `parts`
     /// (all of it thinly when there are none); empty text removes it.

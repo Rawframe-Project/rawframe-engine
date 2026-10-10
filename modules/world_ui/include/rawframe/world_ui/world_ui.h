@@ -208,7 +208,9 @@ public:
     /// What a screen reader asked of a node navigation reaches (D572):
     /// focus moved to it as navigation moves it; a press focuses and
     /// activates it as navigation's activation does, its press code, none
-    /// for a field, which takes the keyboard. Nothing for another node.
+    /// for a field, which takes the keyboard. A field's selection set or
+    /// its text replaced gives it the keyboard and edits it as typing does
+    /// (D613). Nothing for another node.
     std::optional<std::int64_t> ask(const ui::AccessRequest& request);
 
     /// What a press at `x`, `y`, logical pixels of the window, lands on as

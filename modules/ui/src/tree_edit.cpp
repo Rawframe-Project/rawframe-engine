@@ -6,7 +6,9 @@
 #include "rawframe/ui/tree.h"
 #include "tree_state.h"
 
+#include <array>
 #include <cmath>
+#include <maul-ui/access.h>
 #include <maul-ui/text_edit.h>
 
 namespace rawframe::ui {
@@ -147,6 +149,35 @@ result::Status Tree::replaceText(Node node, TextRange range, std::string_view te
         muiTextBlock_Replace(state_->text, kEditable.first->block, range.start, range.end, text.data(), text.size()),
         "a node's text could not be replaced"));
     return state_->setContent(idOf(node), mui_contentHost);
+}
+
+/// An editable node's text record, to change how assistive technology reads
+/// it; refused for none.
+static result::Result<Text*> readable(Tree::State& state, Node node) {
+    Text* text = state.textOf(idOf(node));
+    if (text == nullptr || !text->editable) {
+        return refuse(UiError::Stale, "a node's text is read as edited where the node was added editable");
+    }
+    return text;
+}
+
+result::Status Tree::setSelection(Node node, std::uint32_t anchor, std::uint32_t focus) {
+    RAWFRAME_TRY_ASSIGN(Text* const kText, readable(*state_, node));
+    const std::array<std::uint32_t, 2> kSelection = {anchor, focus};
+    if (kText->selection == kSelection) {
+        return {};
+    }
+    kText->selection = kSelection;
+    return checked(muiNode_MarkAccessChanged(state_->context, idOf(node)), "a node's selection could not be told");
+}
+
+result::Status Tree::setPlaceholder(Node node, bool placeholder) {
+    RAWFRAME_TRY_ASSIGN(Text* const kText, readable(*state_, node));
+    if (kText->placeholder == placeholder) {
+        return {};
+    }
+    kText->placeholder = placeholder;
+    return checked(muiNode_MarkAccessChanged(state_->context, idOf(node)), "a node's placeholder could not be told");
 }
 
 result::Status

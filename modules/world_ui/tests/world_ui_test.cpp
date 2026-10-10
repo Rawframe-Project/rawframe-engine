@@ -11,12 +11,13 @@
 // component of typed words in place of its label while it holds any
 // (D427); and an empty field without the keyboard shows its label as its
 // placeholder (D428); Tab moves the keyboard between a view's fields
-// (D429); navigation moves focus without a pointer (D430); a styled node
-// looks as its class says in each state it is in (D431); and a node that
-// scrolls moves its children under a wheel turned over it (D444).
+// (D429); a screen reader types into a field as typing does (D613); navigation moves focus without a pointer (D430); a
+// styled node looks as its class says in each state it is in (D431); and a node that scrolls moves its children under a
+// wheel turned over it (D444).
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
+#include "rawframe/ui/access.h"
 #include "rawframe/ui/styles.h"
 #include "rawframe/world_ui/errors.h"
 #include "rawframe/world_ui/world_ui.h"
@@ -425,6 +426,56 @@ RAWFRAME_TEST(ATextFieldTakesTheKeyboardAndGivesItsText) {
     RAWFRAME_EXPECT(rig.frame() && !rig.ui->caret().has_value());
     kType("x");
     RAWFRAME_EXPECT(rig.frame() && rig.ui->takeSubmitted().empty());
+}
+
+RAWFRAME_TEST(AScreenReaderTypesIntoAFieldAsTypingDoes) {
+    Rig rig;
+    rig.ui = *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId}, .parents = {std::nullopt, 0, 0}, .fonts = {0xF1}});
+    const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
+    RAWFRAME_EXPECT(rig.ui->addFont(0xF1, std::as_bytes(std::span{kAhem.data(), kAhem.size()})).has_value());
+    // The field of the test above, read by a screen reader.
+    rig.put(rig.player,
+            kHudId,
+            Node{.widthOffset = 200,
+                 .heightOffset = 20,
+                 .font = 0xF1,
+                 .textSize = 10,
+                 .textColor = 0xFFFFFFFF,
+                 .press = 7,
+                 .edit = 1});
+    ui::AccessSeat seat;
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->seatIn(seat).has_value() && seat.open({}).has_value());
+    RAWFRAME_EXPECT(rig.ui->enterNavigation() && rig.frame() && seat.update().has_value());
+    const std::optional<ui::Node> kField = seat.access() != nullptr ? seat.access()->focused() : std::nullopt;
+    RAWFRAME_EXPECT(kField.has_value() && !rig.ui->caret().has_value());
+    if (!kField.has_value()) {
+        return;
+    }
+    const auto kAsk = [&](ui::AccessRequest::Kind kind, std::uint32_t anchor, std::uint32_t focus, std::string text) {
+        return rig.ui->ask({.kind = kind, .node = *kField, .anchor = anchor, .focus = focus, .text = std::move(text)});
+    };
+    const auto kCaretAt = [&rig](float x) {
+        return rig.ui->caret().has_value() && (*rig.ui->caret())[0] == x && (*rig.ui->caret())[1] == 50;
+    };
+    // The page's field typed into: the field takes the keyboard, and the
+    // text is put where the page says, the caret after it.
+    RAWFRAME_EXPECT(!kAsk(ui::AccessRequest::Kind::Replace, 0, 0, "h\xC3\xA9").has_value());
+    RAWFRAME_EXPECT(rig.frame() && kCaretAt(120) && rig.ui->drawn().glyphs.size() == 2);
+    RAWFRAME_EXPECT(rig.ui->statistics().focused == 1 && rig.ui->statistics().typed == 1);
+    // A selection made backward, then the range replaced, either way round.
+    RAWFRAME_EXPECT(!kAsk(ui::AccessRequest::Kind::Select, 3, 1, {}).has_value() && rig.frame() && kCaretAt(110));
+    RAWFRAME_EXPECT(!kAsk(ui::AccessRequest::Kind::Replace, 3, 1, "o").has_value() && rig.frame() && kCaretAt(120));
+    RAWFRAME_EXPECT(!kAsk(ui::AccessRequest::Kind::Replace, 0, 0, "\xC3\xA9").has_value() && rig.frame() &&
+                    kCaretAt(110));
+    // A range past the text, or inside a code point, changes nothing.
+    RAWFRAME_EXPECT(!kAsk(ui::AccessRequest::Kind::Select, 4, 4, {}).has_value() && rig.frame() && kCaretAt(130));
+    RAWFRAME_EXPECT(!kAsk(ui::AccessRequest::Kind::Select, 0, 9, {}).has_value() && rig.frame() && kCaretAt(130));
+    RAWFRAME_EXPECT(!kAsk(ui::AccessRequest::Kind::Replace, 1, 1, "x").has_value() && rig.frame() && kCaretAt(130) &&
+                    rig.ui->statistics().typed == 3);
+    // Enter gives the text the screen reader typed.
+    rig.ui->type(view::Typing{.kind = view::Typing::Kind::Key, .key = view::TypingKey::Submit});
+    const auto kGiven = rig.ui->takeSubmitted();
+    RAWFRAME_EXPECT(kGiven.size() == 1 && kGiven[0].press == 7 && kGiven[0].text == "\xC3\xA9ho");
 }
 
 RAWFRAME_TEST(ANodeShowsTypedWordsInPlaceOfItsLabel) {

@@ -287,17 +287,21 @@ bool WorldUi::State::giveFieldLook(Entry& entry) {
     ui::TextLook look = textLookOf(kValue, kFont != fonts.end() ? kFont->second : ui::Font{});
     std::string text = entry.placeholder ? std::string{} : std::string{tree->textOf(*entry.node)};
     const bool kHeld = focus.has_value() && focus->entry == &entry && focus->keyboard;
-    std::optional<std::string> label;
-    if (!kHeld && text.empty() && kValue.text != 0 && settings.words) {
-        label = settings.words(entry.player, kValue.text, kValue.textValue);
+    std::optional<std::string> words;
+    if (kValue.text != 0 && settings.words) {
+        words = settings.words(entry.player, kValue.text, kValue.textValue);
     }
-    entry.placeholder = label.has_value();
-    if (label.has_value()) {
-        text = std::move(*label);
+    entry.placeholder = !kHeld && text.empty() && words.has_value();
+    if (entry.placeholder) {
+        text = *words;
         const std::uint32_t kAlpha = look.color & 0xFFU;
         look.color = (look.color & 0xFFFFFF00U) | (kAlpha / 2);
     }
-    return tree->setText(*entry.node, text, look).has_value();
+    // A screen reader reads the placeholder as no text and the label's
+    // words as the field's name, saying what it is for (D613).
+    return tree->setText(*entry.node, text, look).has_value() &&
+           tree->setPlaceholder(*entry.node, entry.placeholder).has_value() &&
+           tree->setName(*entry.node, words.value_or(std::string{})).has_value();
 }
 
 void WorldUi::State::giveWordsAgain(const std::function<bool(const Entry&)>& which) {

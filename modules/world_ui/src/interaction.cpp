@@ -329,6 +329,24 @@ std::optional<std::int64_t> WorldUi::ask(const ui::AccessRequest& request) {
         if (kFound.entry->node != request.node) {
             continue;
         }
+        if (request.kind == ui::AccessRequest::Kind::Select || request.kind == ui::AccessRequest::Kind::Replace) {
+            // A field's edit, the field given the keyboard first; what
+            // its own typing refuses, as text past its most, is left out.
+            if (!kFound.entry->editable) {
+                return std::nullopt;
+            }
+            state.focusOn(*kFound.entry, true, true);
+            ui::TextEdit& edit = *state.focus->edit;
+            if (!edit.select(request.anchor, request.focus).has_value()) {
+                return std::nullopt;
+            }
+            if (request.kind == ui::AccessRequest::Kind::Replace) {
+                ++state.statistics.typed;
+                static_cast<void>(edit.type(request.text));
+            }
+            state.placeCaret();
+            return std::nullopt;
+        }
         state.focusOn(*kFound.entry, false, true);
         ++state.statistics.navigated;
         return request.kind == ui::AccessRequest::Kind::Press ? activate() : std::nullopt;

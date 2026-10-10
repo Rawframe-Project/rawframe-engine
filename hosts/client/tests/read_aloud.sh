@@ -6,9 +6,11 @@
 # busctl, one line a node: "a11y: <depth> <role> <name>". Given `press`,
 # the first push button found is pressed as a screen reader presses it,
 # through AT-SPI's Action interface (D572), and the client plays on a
-# while. Then it is asked to stop.
+# while. Given `type <text>`, the text is inserted into the first entry
+# found as a screen reader types (D613), through AT-SPI's EditableText
+# interface, and the entry's text is read back. Then it is asked to stop.
 #
-# usage: read_aloud.sh <rawframe-server> <rawframe-client> <configuration> <game> [press]
+# usage: read_aloud.sh <rawframe-server> <rawframe-client> <configuration> <game> [press | type <text>]
 set -uo pipefail
 here="$(dirname "$0")"
 log="$(mktemp)"
@@ -38,8 +40,9 @@ sleep 2
 name="$(busctl --address="$address" list --no-legend 2>/dev/null | awk '$3 == "rawframe-client" { print $1; exit }')"
 
 # One node's line, then its children's, at most eight deep; the first push
-# button kept.
+# button and the first entry kept.
 button=""
+entry=""
 walk() {
     local path="$1" depth="$2"
     local role label
@@ -50,6 +53,9 @@ walk() {
     echo "a11y: $depth ${role:-none} ${label}"
     if [ "$role" = "push button" ] && [ -z "$button" ]; then
         button="$path"
+    fi
+    if [ "$role" = "entry" ] && [ -z "$entry" ]; then
+        entry="$path"
     fi
     [ "$depth" -ge 8 ] && return
     local child
@@ -67,6 +73,17 @@ if [ "${5:-}" = press ] && [ -n "$button" ]; then
     done="$(busctl --address="$address" call "$name" "$button" org.a11y.atspi.Action DoAction i 0 2>&1)"
     echo "a11y: pressed $button: $done"
     sleep 3
+fi
+if [ "${5:-}" = type ] && [ -n "$entry" ]; then
+    done="$(busctl --address="$address" call "$name" "$entry" org.a11y.atspi.EditableText InsertText isi 0 "$6" \
+        "${#6}" 2>&1)"
+    echo "a11y: typed into $entry: $done"
+    sleep 2
+    count="$(busctl --address="$address" get-property "$name" "$entry" org.a11y.atspi.Text CharacterCount 2>/dev/null |
+        sed -n 's/^i \(.*\)$/\1/p')"
+    read="$(busctl --address="$address" call "$name" "$entry" org.a11y.atspi.Text GetText ii 0 "${count:-0}" 2>/dev/null |
+        sed -n 's/^s "\(.*\)"$/\1/p')"
+    echo "a11y: the entry reads $read"
 fi
 
 kill -INT "$(cat "$work/bots-1.pid" 2>/dev/null)" 2>/dev/null

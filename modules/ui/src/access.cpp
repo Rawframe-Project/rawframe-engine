@@ -2,11 +2,14 @@
 
 #include "tree_state.h"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <maul-ui/access.h>
 #include <maul-ui/access_tree.h>
 #include <maul-ui/focus.h>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -72,13 +75,33 @@ result::Status Tree::setName(Node node, std::string_view name) {
 namespace {
 
 /// A node's text as assistive technology reads it, its text block's: a
-/// label's words, a field's typed text (D571), with the block's
-/// selection, lines, and words as Maul UI reads them.
+/// label's words, a field's typed text (D571), with the block's lines and
+/// words as Maul UI reads them. A field reads as being edited, its
+/// selection as its editor told it (else the caret at its end) and a
+/// placeholder as no text, so that a screen reader may type into it (D613).
 bool readText(void* user, muiNodeId node, std::uint64_t, const muiRect* shown, muiAccessContent* contentOut) {
     auto* state = static_cast<Tree::State*>(user);
     const Text* kText = state->textOf(node);
-    return kText != nullptr &&
-           muiAccessTextOf(&state->host, node, muiTextBlock_GetKey(kText->block), shown, contentOut);
+    if (kText == nullptr) {
+        return false;
+    }
+    if (kText->editable && kText->placeholder) {
+        *contentOut = muiAccessContent{};
+        contentOut->text = "";
+        contentOut->marks.selected = true;
+        return true;
+    }
+    if (!muiAccessTextOf(&state->host, node, muiTextBlock_GetKey(kText->block), shown, contentOut)) {
+        return false;
+    }
+    if (kText->editable) {
+        const auto kLength = static_cast<std::uint32_t>(contentOut->length);
+        const std::array<std::uint32_t, 2> kSelection = kText->selection.value_or(std::array{kLength, kLength});
+        contentOut->marks.anchor = std::min(kSelection[0], kLength);
+        contentOut->marks.focus = std::min(kSelection[1], kLength);
+        contentOut->marks.selected = true;
+    }
+    return true;
 }
 
 } // namespace
@@ -195,18 +218,37 @@ struct Access::State {
 
 namespace {
 
-/// What a client asked for (D572): a press or a focus kept for the UI's
-/// owner, whose input decides what they do; a scroll done by the tree.
+/// What a client asked for (D572): a press, a focus, or a field's edit
+/// (D613) kept for the UI's owner, whose input decides what they do; a
+/// scroll done by the tree.
 bool act(Access::State& state, const muiAccessRequest& request) {
     const muiNodeId kId = muiNodeIdOfAccess(request.target);
     const Node kNode{.index1 = kId.index1, .generation = kId.generation};
-    if (request.action == mui_actionClick || request.action == mui_actionFocus) {
+    const auto kKind = [&]() -> std::optional<AccessRequest::Kind> {
+        switch (request.action) {
+        case mui_actionClick:
+            return AccessRequest::Kind::Press;
+        case mui_actionFocus:
+            return AccessRequest::Kind::Focus;
+        case mui_actionSetSelection:
+            return AccessRequest::Kind::Select;
+        case mui_actionReplaceText:
+            return AccessRequest::Kind::Replace;
+        default:
+            return std::nullopt;
+        }
+    }();
+    if (kKind.has_value()) {
         if (!state.tree->contains(kNode)) {
             return false;
         }
-        state.requests.push_back(
-            {.kind = request.action == mui_actionClick ? AccessRequest::Kind::Press : AccessRequest::Kind::Focus,
-             .node = kNode});
+        state.requests.push_back({.kind = *kKind,
+                                  .node = kNode,
+                                  .anchor = request.anchor,
+                                  .focus = request.focus,
+                                  .text = *kKind == AccessRequest::Kind::Replace && request.text != nullptr
+                                              ? std::string{request.text, request.length}
+                                              : std::string{}});
         return true;
     }
     const bool kScroll = request.action >= mui_actionScrollIntoView && request.action <= mui_actionSetScrollOffset;
@@ -547,10 +589,16 @@ std::vector<AccessRequest> Access::takeRequests() {
     return std::exchange(state_->requests, {});
 }
 
-bool Access::ask(AccessRequest::Kind kind, Node node) {
+bool Access::ask(const AccessRequest& request) {
+    constexpr std::array<muiAccessAction, 4> kActions = {
+        mui_actionClick, mui_actionFocus, mui_actionSetSelection, mui_actionReplaceText};
     const muiAccessRequest kRequest{
-        .action = static_cast<muiAccessAction>(kind == AccessRequest::Kind::Press ? mui_actionClick : mui_actionFocus),
-        .target = muiAccessIdOf(idOf(node)),
+        .action = kActions[static_cast<std::size_t>(request.kind)],
+        .target = muiAccessIdOf(idOf(request.node)),
+        .anchor = request.anchor,
+        .focus = request.focus,
+        .text = request.text.data(),
+        .length = static_cast<std::uint32_t>(request.text.size()),
     };
     return act(*state_, kRequest);
 }

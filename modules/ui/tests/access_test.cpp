@@ -148,14 +148,21 @@ RAWFRAME_TEST(AScreenReadersPressesAndFocusesAreKeptForTheOwner) {
         return;
     }
     // Kept in their order, taken once.
-    RAWFRAME_EXPECT(access->ask(AccessRequest::Kind::Focus, kQuit) && access->ask(AccessRequest::Kind::Press, kPlay));
+    RAWFRAME_EXPECT(access->ask({.kind = AccessRequest::Kind::Focus, .node = kQuit}) &&
+                    access->ask({.kind = AccessRequest::Kind::Press, .node = kPlay}));
     const std::vector<AccessRequest> kTaken = seat.takeRequests();
     RAWFRAME_EXPECT((kTaken == std::vector<AccessRequest>{{.kind = AccessRequest::Kind::Focus, .node = kQuit},
                                                           {.kind = AccessRequest::Kind::Press, .node = kPlay}}));
     RAWFRAME_EXPECT(seat.takeRequests().empty());
+    // A field's edits keep their ranges and text (D613).
+    const AccessRequest kSelect{.kind = AccessRequest::Kind::Select, .node = kPlay, .anchor = 4, .focus = 1};
+    const AccessRequest kReplace{
+        .kind = AccessRequest::Kind::Replace, .node = kPlay, .anchor = 3, .focus = 1, .text = "\xC3\xA9t\xC3\xA9"};
+    RAWFRAME_EXPECT(access->ask(kSelect) && access->ask(kReplace));
+    RAWFRAME_EXPECT((seat.takeRequests() == std::vector<AccessRequest>{kSelect, kReplace}));
     // A node that is gone asks nothing.
     RAWFRAME_EXPECT(ui.remove(kQuit).has_value());
-    RAWFRAME_EXPECT(!access->ask(AccessRequest::Kind::Press, kQuit) && seat.takeRequests().empty());
+    RAWFRAME_EXPECT(!access->ask({.kind = AccessRequest::Kind::Press, .node = kQuit}) && seat.takeRequests().empty());
 }
 
 RAWFRAME_TEST(TheFocusItsOwnerGivesIsTheOneAScreenReaderFollows) {

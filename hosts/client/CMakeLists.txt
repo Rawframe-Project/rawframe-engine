@@ -100,7 +100,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED tycoon_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "a11y: 2 push button [0-9]+ coins\na11y: 2 entry *\na11y: pressed [^\n]*: b true.*\"commandsTaken\":1,.*\"commandsSent\":1,")
+                             "a11y: 2 push button [0-9]+ coins\na11y: 2 entry Write your sign\na11y: pressed [^\n]*: b true.*\"commandsTaken\":1,.*\"commandsSent\":1,")
+        # Stalls' sign typed by a screen reader (D613): its entry, named by
+        # its label's words and read as empty while it shows them, takes
+        # text inserted through AT-SPI's EditableText as the field's own
+        # typing, and reads it back.
+        add_test(NAME client_types_stalls_aloud
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_aloud.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
+                         games/tycoon/tycoon.game type ann
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_types_stalls_aloud PROPERTIES
+                             FIXTURES_REQUIRED tycoon_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "a11y: 2 entry [^\n]+\n.*a11y: typed into [^ ]+: b true\na11y: the entry reads ann\n.*\"code\":\"ui_summary\"[^\n]*\"typed\":[1-9]")
         # Stalls clicked on its HUD's purse, a panel that takes presses
         # (D421): lighter under the mouse once it is there (D422), the UI
         # takes the click, and the owner builds no stall under it, the World

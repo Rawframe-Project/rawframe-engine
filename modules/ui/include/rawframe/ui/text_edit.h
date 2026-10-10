@@ -73,6 +73,10 @@ public:
     /// The caret to the point in the node's border box, the selection
     /// collapsed there unless `extend`.
     [[nodiscard]] result::Status pointAt(float x, float y, bool extend);
+    /// The selection from `anchor` to `focus`, bytes into the text, the
+    /// caret at `focus`: a screen reader's (D613). Refused for an offset
+    /// past the text or inside a code point; a composition ends first.
+    [[nodiscard]] result::Status select(std::uint32_t anchor, std::uint32_t focus);
     /// The input method's composition at the caret, in place of the
     /// selection, `caret` bytes into it (-1 hides it); empty text cancels
     /// it.
@@ -95,6 +99,9 @@ public:
 private:
     /// The selection replaced by `text` as typed, the caret after it.
     [[nodiscard]] result::Status replaceSelection(std::string_view text);
+    /// The selection told to the tree, which assistive technology reads
+    /// (D613).
+    void tell() noexcept;
     [[nodiscard]] result::Status moveTo(TextPosition to, bool extend);
 
     Tree* tree_;

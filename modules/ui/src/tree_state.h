@@ -6,6 +6,7 @@
 #include "rawframe/ui/errors.h"
 #include "rawframe/ui/tree.h"
 
+#include <array>
 #include <cstring>
 #include <maul-ui/context.h>
 #include <maul-ui/glyph_atlas.h>
@@ -15,6 +16,7 @@
 #include <maul-ui/text.h>
 #include <maul-ui/text_block.h>
 #include <maul-ui/visual.h>
+#include <optional>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -63,6 +65,12 @@ struct Text {
     /// Made with the node, which Maul UI's editing finds by its key (D426):
     /// it lasts as long as the node.
     bool editable = false;
+    /// How assistive technology reads an editable node (D613): its
+    /// selection as its editor last told it, the caret at the second (none
+    /// told: the caret at the end), and whether its text is a placeholder,
+    /// read as none.
+    std::optional<std::array<std::uint32_t, 2>> selection;
+    bool placeholder = false;
 };
 
 /// The key an editable node's owner chose, which its host key, its block's,
@@ -95,6 +103,10 @@ struct Tree::State {
 
     /// The text `node` shows; null for none.
     [[nodiscard]] const Text* textOf(muiNodeId node) const noexcept {
+        const auto kFound = texts.find(node.index1);
+        return kFound == texts.end() || kFound->second.node.generation != node.generation ? nullptr : &kFound->second;
+    }
+    [[nodiscard]] Text* textOf(muiNodeId node) noexcept {
         const auto kFound = texts.find(node.index1);
         return kFound == texts.end() || kFound->second.node.generation != node.generation ? nullptr : &kFound->second;
     }

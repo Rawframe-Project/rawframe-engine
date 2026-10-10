@@ -1,5 +1,7 @@
 #include "rawframe/ui/text_edit.h"
 
+#include "tree_state.h"
+
 #include <algorithm>
 #include <array>
 #include <string>
@@ -53,6 +55,13 @@ TextEdit::TextEdit(Tree& tree, Node node, EditSettings settings) noexcept
     const auto kEnd = static_cast<std::uint32_t>(tree.textOf(node).size());
     caret_ = TextPosition{.offset = kEnd};
     anchor_ = kEnd;
+    tell();
+}
+
+void TextEdit::tell() noexcept {
+    // The tree refuses a node gone or not editable, for which there is
+    // nothing to tell.
+    static_cast<void>(tree_->setSelection(node_, anchor_, caret_.offset));
 }
 
 TextRange TextEdit::selection() const noexcept {
@@ -73,6 +82,7 @@ result::Status TextEdit::replaceSelection(std::string_view text) {
     caret_ = TextPosition{.offset = kSelected.start + static_cast<std::uint32_t>(kFits.size())};
     anchor_ = caret_.offset;
     preferredX_ = std::nanf("");
+    tell();
     return {};
 }
 
@@ -85,6 +95,7 @@ result::Status TextEdit::moveTo(TextPosition to, bool extend) {
     if (!extend) {
         anchor_ = to.offset;
     }
+    tell();
     return {};
 }
 
@@ -159,6 +170,26 @@ result::Status TextEdit::pointAt(float x, float y, bool extend) {
     preferredX_ = std::nanf("");
     RAWFRAME_TRY_ASSIGN(const TextPosition kTo, tree_->textAt(node_, x, y));
     return moveTo(kTo, extend);
+}
+
+result::Status TextEdit::select(std::uint32_t anchor, std::uint32_t focus) {
+    const std::string_view kText = tree_->textOf(node_);
+    const auto kBetween = [&](std::uint32_t offset) {
+        return offset == kText.size() ||
+               (offset < kText.size() && (static_cast<unsigned char>(kText[offset]) & 0xC0U) != 0x80U);
+    };
+    if (!kBetween(anchor) || !kBetween(focus)) {
+        return refuse(UiError::Invalid, "a selection is between code points of the text");
+    }
+    RAWFRAME_TRY_ASSIGN(const TextRange kComposed, tree_->composition(node_));
+    if (kComposed.end > kComposed.start) {
+        RAWFRAME_TRY(tree_->endComposition(node_));
+    }
+    preferredX_ = std::nanf("");
+    anchor_ = anchor;
+    caret_ = TextPosition{.offset = focus};
+    tell();
+    return {};
 }
 
 result::Status TextEdit::compose(std::string_view text, std::int32_t caret, std::span<const CompositionPart> parts) {

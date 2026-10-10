@@ -75,15 +75,25 @@ struct AccessSettings {
 
 /// What a screen reader asked of a node (D572), for the UI's owner to do as
 /// its own input would: a press, as a pointer's or navigation's, and focus,
-/// as navigation's. Scrolls the tree does itself.
+/// as navigation's; in a field, its selection set and a range of its text
+/// replaced, as typing does (D613): a browser's screen reader types into the
+/// page's own field, which hands each edit on. Scrolls the tree does itself.
 struct AccessRequest {
     enum class Kind : std::uint8_t {
         Press,
-        Focus
+        Focus,
+        Select,
+        Replace
     };
     Kind kind = Kind::Press;
     Node node;
-    friend constexpr bool operator==(const AccessRequest&, const AccessRequest&) noexcept = default;
+    /// Bytes into the field's text: Select's selection, the caret at
+    /// `focus`; Replace's range, either way round.
+    std::uint32_t anchor = 0;
+    std::uint32_t focus = 0;
+    /// What Replace puts there, UTF-8.
+    std::string text;
+    friend bool operator==(const AccessRequest&, const AccessRequest&) = default;
 };
 
 /// Whether this build has `platform`'s adapter.
@@ -130,7 +140,7 @@ public:
     /// kept for its owner, a scroll is done, anything else is refused.
     /// Whether it was taken. Platforms call it while they are updated;
     /// tests, to play a screen reader.
-    bool ask(AccessRequest::Kind kind, Node node);
+    bool ask(const AccessRequest& request);
 
     struct State;
 
