@@ -123,4 +123,9 @@ jobs:
           played=$?
           cat "$RUNNER_TEMP/stalls.log"
           grep -o '"presses":[0-9]*\|"pressesMissed":[0-9]*\|"touchEvents":[0-9]*\|"commandsSent":[0-9]*\|"commandsTaken":[0-9]*' "$RUNNER_TEMP/stalls.log"
+          # Whether idb's touches reach an application at all here: the
+          # home screen's icon of the game touched, and what is read after.
+          tools/ios_read_aloud.sh "$RAWFRAME_IOS_DEVICE" '^tycoon$' | tail -1
+          sleep 10
+          idb ui describe-all --udid "$RAWFRAME_IOS_DEVICE" --json | head -c 300; echo
           [ "$read" = 0 ] && [ "$played" = 0 ] && grep -q '"code":"accessibility_ready"' "$RUNNER_TEMP/stalls.log"

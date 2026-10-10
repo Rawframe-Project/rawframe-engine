@@ -7,7 +7,8 @@
 # launched, plays from the game and configuration in its own bundle,
 # reaching the server on the simulator's loopback. The application's run is
 # bounded by a line added to its bundle's configuration, as a simulator
-# asks no signature. Passes as tools/ios_play.sh does.
+# asks no signature. Passes as tools/ios_play.sh does, but for predictions
+# confirmed, which a game that predicts none (Stalls) has none of.
 #
 #   tools/ios_play_exported.sh <build tree> [<game directory>] [<client iterations>]
 #
@@ -71,7 +72,7 @@ grep -o '"code":"server_summary"[^}]*}[^}]*}' "$work/server.log" 2>/dev/null || 
 grep -o '"code":"\(bots_admitted\|bots_summary\|surface_made\|device_ready\|device_unavailable\|accessibility_ready\|input_summary\|ui_summary\|start_failed\|stopped\)"[^}]*}[^}]*}' \
     "$log" 2>/dev/null || { echo "nothing of note:"; tail -20 "$log" 2>/dev/null || true; }
 if grep -q '"code":"surface_made"' "$log" && grep -q '"code":"bots_admitted"' "$log" &&
-    grep -q '"admitted":1,.*"confirmed":[1-9][0-9]*,.*"stalled":0,' "$log" &&
+    grep -q '"admitted":1,.*"stalled":0,' "$log" &&
     { grep -q '"framesShown":[1-9]' "$log" || grep -q '"reason":"no adapter answered"' "$log"; }; then
     exit 0
 fi
