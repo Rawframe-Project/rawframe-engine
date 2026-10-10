@@ -107,6 +107,13 @@ struct ReadTracked {
     }
 };
 
+/// Whether the player sees the game on a headset now: its eyes told this
+/// frame (D603).
+void headsetDoor(kest::DoorCall& call, void* context) noexcept {
+    const auto& doors = *static_cast<const InputDoorContext*>(context);
+    call.answerBoolean(doors.headset != nullptr && !doors.headset->eyes().empty());
+}
+
 constexpr std::array<kest::Parameter, 1> kActionTakes = {kest::Slot::U64};
 constexpr std::array<kest::Parameter, 1> kTruthGives = {kest::Slot::Bool};
 constexpr std::array<kest::Parameter, 1> kAxisGives = {kest::Slot::F32};
@@ -227,6 +234,7 @@ struct Shared {
     /// The UI's navigation, and the first local player's actions with the
     /// engine's navigation actions added, where they are (D430).
     const view::UiNavigation* navigation = nullptr;
+    const view::HeadsetEyes* headset = nullptr;
     std::optional<input::ActionSet> navigable;
     world_localization::GameText* text = nullptr;
     input::Navigation navigationActions;
@@ -331,7 +339,9 @@ public:
             mapper_->setEnabled({}, navigationActions_.context, false);
             ui_.navigation = navigation_;
         }
-        doors_ = InputDoorContext{.mapper = mapper_.get(), .player = {}};
+        doors_ = InputDoorContext{.mapper = mapper_.get(),
+                                  .player = {},
+                                  .headset = !seed.has_value() && player == 0 ? shared.headset : nullptr};
         kest::DoorTable table;
         RAWFRAME_TRY(kest::addStandardMath(table));
         RAWFRAME_TRY(addInputDoors(table, &doors_));
@@ -662,6 +672,11 @@ result::Status addInputDoors(kest::DoorTable& doors, const InputDoorContext* con
                                       .takes = kActionTakes,
                                       .gives = kTruthGives,
                                       .safeForUntrusted = true}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Input.headset",
+                                      .function = &headsetDoor,
+                                      .context = kContext,
+                                      .gives = kTruthGives,
+                                      .safeForUntrusted = true}));
     return {};
 }
 
@@ -727,6 +742,7 @@ result::Result<std::unique_ptr<InputSources>> makeInputSources(const SourceSetti
     shared.pointing = settings.pointing;
     shared.typing = settings.typing;
     shared.text = settings.text;
+    shared.headset = settings.headset;
     if (settings.navigation != nullptr) {
         shared.navigation = settings.navigation;
         shared.navigable = shared.actions;

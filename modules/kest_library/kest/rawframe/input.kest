@@ -75,6 +75,15 @@ fn tracked(action: u64) -> bool {
     return Input.tracked(action)
 }
 
+extern fn Input.headset() -> bool
+
+// Whether the player sees the game on a headset now (D603): written into
+// the game's input, a server knows each tick who plays in XR, and takes its
+// own stance; the engine takes none (ADR-0081).
+fn headset() -> bool {
+    return Input.headset()
+}
+
 extern fn UI.pressed() -> i64
 
 // The `press` of the UI node the player's press landed on during the tick,

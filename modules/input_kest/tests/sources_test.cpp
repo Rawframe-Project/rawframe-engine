@@ -6,7 +6,8 @@
 // by the sample as its node's press code, never by an action (D421); and
 // each local player's own locale chosen by their sample (D548), and a
 // controller's pose read by the sample (D596), and its select the UI's at
-// its pointer on a headset's panel (D598).
+// its pointer on a headset's panel (D598); and whether its player wears
+// a headset (D603).
 
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/input_kest/sources.h"
@@ -669,4 +670,43 @@ RAWFRAME_TEST(AControllersSelectAtItsPointerIsTheUis) {
     // A menu press is never the UI's.
     feed.submit({.device = kHands, .control = kControl("menu_right"), .x = 1});
     RAWFRAME_EXPECT(play(**source, 1)[0][6] == 0.0F);
+}
+
+RAWFRAME_TEST(TheSampleKnowsItsPlayerWearsAHeadset) {
+    // ADR-0081's typed XR presence (D603): the first local player sees the
+    // game on the headset while its eyes are told; a bot never does.
+    const world_kest::GameFiles* game = &gameAt("runners/runners.game",
+                                                "sample sample.kest sample",
+                                                "sample worn.kest sample",
+                                                {{"worn.kest",
+                                                  "module worn\n"
+                                                  "import controls\n"
+                                                  "import rawframe.input\n"
+                                                  "fn sample(into: [controls.Stick]) {\n"
+                                                  "    into[0].fire = 0.0\n"
+                                                  "    if input.headset() {\n"
+                                                  "        into[0].fire = 1.0\n"
+                                                  "    }\n"
+                                                  "}\n"}});
+    input::Feed feed;
+    view::HeadsetEyes eyes;
+    auto sources =
+        makeInputSources(SourceSettings{.game = game, .inputSize = sizeof(Stick), .feed = &feed, .headset = &eyes});
+    RAWFRAME_EXPECT(sources.has_value());
+    if (!sources.has_value()) {
+        return;
+    }
+    auto source = (*sources)->playerSource(0);
+    auto bot = (*sources)->botSource(7);
+    RAWFRAME_EXPECT(source.has_value() && bot.has_value());
+    if (!source.has_value() || !bot.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(play(**source, 1)[0][4] == 0.0F);
+    const std::array<view::HeadsetEye, 2> kEyes{};
+    eyes.tell(kEyes);
+    RAWFRAME_EXPECT(play(**source, 1)[0][4] == 1.0F);
+    RAWFRAME_EXPECT(play(**bot, 1)[0][4] == 0.0F);
+    eyes.tell({});
+    RAWFRAME_EXPECT(play(**source, 1)[0][4] == 0.0F);
 }

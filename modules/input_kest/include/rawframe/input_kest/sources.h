@@ -11,6 +11,7 @@
 #include "rawframe/kest/machine.h"
 #include "rawframe/kest/program.h"
 #include "rawframe/result/result.h"
+#include "rawframe/view/headset.h"
 #include "rawframe/view/navigation.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
@@ -32,16 +33,22 @@
 
 namespace rawframe::input_kest {
 
-/// What the `Input.*` doors read: one player's committed actions.
+/// What the `Input.*` doors read: one player's committed actions, and the
+/// headset the player wears, if any (the first local player's, D603).
 struct InputDoorContext {
     const input::Mapper* mapper = nullptr;
     input::PlayerSlot player;
+    const view::HeadsetEyes* headset = nullptr;
 };
 
 /// Adds `Input.on`, `Input.pressed`, `Input.released`, `Input.x`, and
-/// `Input.y`. Each takes an action's identity and refuses one the set does
-/// not have. They read and change nothing else, so each is safe for
-/// untrusted code. `context` outlives every machine started with the table.
+/// `Input.y`, and a pose's reads (D596). Each takes an action's identity
+/// and refuses one the set does not have. And `Input.headset`, whether the
+/// player sees the game on a headset now (ADR-0081's typed XR presence,
+/// D603): a sample writes it into the game's input, so a server knows each
+/// tick who plays in XR and takes its own stance. They read and change
+/// nothing else, so each is safe for untrusted code. `context` outlives
+/// every machine started with the table.
 [[nodiscard]] result::Status addInputDoors(kest::DoorTable& doors, const InputDoorContext* context);
 
 /// What the `View.*` doors read: the local players' views, and whose.
@@ -172,6 +179,9 @@ struct SourceSettings {
     /// first local player's mapper has the engine's navigation actions,
     /// theirs while the UI holds focus; outlives the sources.
     const view::UiNavigation* navigation = nullptr;
+    /// The headset's eyes (D595), or null where no headset is drawn for:
+    /// the first local player wears it (D603); outlives the sources.
+    const view::HeadsetEyes* headset = nullptr;
     /// The game's text (D539), or null where the host lends none: the
     /// local players choose its locale; outlives the sources.
     world_localization::GameText* text = nullptr;
