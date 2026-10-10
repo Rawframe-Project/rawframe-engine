@@ -9,7 +9,8 @@ target_link_libraries(rawframe_ui PRIVATE maul-ui)
 target_compile_definitions(rawframe_ui PRIVATE RAWFRAME_UI_ATSPI=$<BOOL:${MAUL_UI_ATSPI}>
                                                RAWFRAME_UI_ANDROID=$<BOOL:${MAUL_UI_ANDROID_ACCESSIBILITY}>
                                                RAWFRAME_UI_UIA=$<BOOL:${MAUL_UI_UIA}>
-                                               RAWFRAME_UI_APPKIT=$<BOOL:${MAUL_UI_NSACCESSIBILITY}>)
+                                               RAWFRAME_UI_APPKIT=$<BOOL:${MAUL_UI_NSACCESSIBILITY}>
+                                               RAWFRAME_UI_UIKIT=$<BOOL:${MAUL_UI_UIACCESSIBILITY}>)
 
 rawframe_module_tests(NAME ui SOURCES tests/access_test.cpp tests/edit_test.cpp tests/text_test.cpp tests/tree_test.cpp tests/scroll_test.cpp tests/style_test.cpp tests/styles_test.cpp)
 if(TARGET rawframe_ui_tests)

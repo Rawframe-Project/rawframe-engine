@@ -23,6 +23,9 @@
 #if RAWFRAME_UI_APPKIT
 #include <maul-ui/access_ns.h>
 #endif
+#if RAWFRAME_UI_UIKIT
+#include <maul-ui/access_uikit.h>
+#endif
 
 namespace rawframe::ui {
 
@@ -87,7 +90,8 @@ bool accessBuilt(AccessPlatform platform) noexcept {
     return platform == AccessPlatform::Copy || (platform == AccessPlatform::Atspi && RAWFRAME_UI_ATSPI) ||
            (platform == AccessPlatform::Android && RAWFRAME_UI_ANDROID) ||
            (platform == AccessPlatform::Uia && RAWFRAME_UI_UIA) ||
-           (platform == AccessPlatform::AppKit && RAWFRAME_UI_APPKIT);
+           (platform == AccessPlatform::AppKit && RAWFRAME_UI_APPKIT) ||
+           (platform == AccessPlatform::UiKit && RAWFRAME_UI_UIKIT);
 }
 
 struct Access::State {
@@ -110,6 +114,9 @@ struct Access::State {
 #endif
 #if RAWFRAME_UI_APPKIT
     muiNsAdapter* appKit = nullptr;
+#endif
+#if RAWFRAME_UI_UIKIT
+    muiUikitAdapter* uiKit = nullptr;
 #endif
 
     [[nodiscard]] muiContext* context() const noexcept {
@@ -137,6 +144,11 @@ struct Access::State {
             return muiNsAdapter_GetTree(appKit);
         }
 #endif
+#if RAWFRAME_UI_UIKIT
+        if (uiKit != nullptr) {
+            return muiUikitAdapter_GetTree(uiKit);
+        }
+#endif
         return copy;
     }
 
@@ -153,6 +165,9 @@ struct Access::State {
 #endif
 #if RAWFRAME_UI_APPKIT
         muiDestroyNsAdapter(appKit);
+#endif
+#if RAWFRAME_UI_UIKIT
+        muiDestroyUikitAdapter(uiKit);
 #endif
         muiDestroyAccessTree(copy);
         if (tree != nullptr) {
@@ -182,7 +197,7 @@ bool act(Access::State& state, const muiAccessRequest& request) {
     return kScroll && muiPerformAccessAction(state.context(), &request, &handled) == mui_success && handled;
 }
 
-#if RAWFRAME_UI_ATSPI || RAWFRAME_UI_ANDROID || RAWFRAME_UI_UIA || RAWFRAME_UI_APPKIT
+#if RAWFRAME_UI_ATSPI || RAWFRAME_UI_ANDROID || RAWFRAME_UI_UIA || RAWFRAME_UI_APPKIT || RAWFRAME_UI_UIKIT
 bool actFor(void* user, const muiAccessRequest* request) {
     return act(*static_cast<Access::State*>(user), *request);
 }
@@ -283,6 +298,22 @@ result::Result<std::unique_ptr<Access>> Access::create(Tree& tree, Node root, co
         return std::unique_ptr<Access>{new Access{std::move(state)}};
     }
 #endif
+#if RAWFRAME_UI_UIKIT
+    if (settings.platform == AccessPlatform::UiKit) {
+        if (settings.host == nullptr) {
+            return refuse(UiError::Invalid, "UIKit's accessibility needs the view");
+        }
+        muiUikitAdapterDef adapter = muiDefaultUikitAdapterDef();
+        adapter.nodes = settings.nodes;
+        adapter.view = settings.host;
+        adapter.scale = settings.scale;
+        adapter.action = &actFor;
+        adapter.user = state.get();
+        RAWFRAME_TRY(
+            checked(muiCreateUikitAdapter(&adapter, &state->uiKit), "the window's accessibility could not be made"));
+        return std::unique_ptr<Access>{new Access{std::move(state)}};
+    }
+#endif
     muiAccessTreeDef copy = muiDefaultAccessTreeDef();
     copy.nodes = settings.nodes;
     RAWFRAME_TRY(checked(muiCreateAccessTree(&copy, &state->copy), "an accessibility tree could not be made"));
@@ -327,6 +358,13 @@ result::Status Access::update() {
                    : checked(muiNsAdapter_Apply(state_->appKit, &update), "the platform refused the tree");
     }
 #endif
+#if RAWFRAME_UI_UIKIT
+    if (state_->uiKit != nullptr) {
+        return kBuilt == mui_empty
+                   ? result::Status{}
+                   : checked(muiUikitAdapter_Apply(state_->uiKit, &update), "the platform refused the tree");
+    }
+#endif
     return kBuilt == mui_empty ? result::Status{}
                                : checked(muiAccessTree_Apply(state_->copy, &update, nullptr),
                                          "the accessibility tree refused an update");
@@ -356,6 +394,11 @@ result::Status Access::setScale(float scale) {
         return checked(muiNsAdapter_SetScale(state_->appKit, scale), "the platform refused a scale");
     }
 #endif
+#if RAWFRAME_UI_UIKIT
+    if (state_->uiKit != nullptr) {
+        return checked(muiUikitAdapter_SetScale(state_->uiKit, scale), "the platform refused a scale");
+    }
+#endif
     return {};
 }
 
@@ -373,6 +416,11 @@ void* Access::root() const noexcept {
 #if RAWFRAME_UI_APPKIT
     if (state_->appKit != nullptr) {
         return muiNsAdapter_GetRoot(state_->appKit);
+    }
+#endif
+#if RAWFRAME_UI_UIKIT
+    if (state_->uiKit != nullptr) {
+        return muiUikitAdapter_GetRoot(state_->uiKit);
     }
 #endif
     return nullptr;

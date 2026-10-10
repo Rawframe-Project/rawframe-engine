@@ -38,14 +38,18 @@ enum class AccessPlatform : std::uint8_t {
     Uia,
     /// NSAccessibility (macOS, D579): elements under the view
     /// `AccessSettings::host` names, the root its child.
-    AppKit
+    AppKit,
+    /// UIAccessibility (iOS, D588): elements under the view
+    /// `AccessSettings::host` names, the root its container.
+    UiKit
 };
 
 struct AccessSettings {
     AccessPlatform platform = AccessPlatform::Copy;
     /// The application's name, as AT-SPI lists it.
     std::string application = "Rawframe";
-    /// Device pixels a UI pixel; AppKit's points, which a UI pixel is.
+    /// Device pixels a UI pixel; AppKit's and UIKit's points, which a UI
+    /// pixel is.
     float scale = 1;
     /// Where the window's client area is on the screen, in device pixels,
     /// where the platform says (X11); none where it does not (Wayland).
@@ -55,8 +59,9 @@ struct AccessSettings {
     /// Android's: the main thread's `JNIEnv*`.
     void* env = nullptr;
     /// What the tree lies in, its origin the tree's: Android's
-    /// `android.view.View` (a `jobject`), the Win32 window (an `HWND`), or
-    /// AppKit's `NSView`; the access holds a reference of its own where the
+    /// `android.view.View` (a `jobject`), the Win32 window (an `HWND`),
+    /// AppKit's `NSView`, or UIKit's `UIView`; the access holds a reference
+    /// of its own where the
     /// platform counts them.
     void* host = nullptr;
 };

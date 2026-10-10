@@ -18,9 +18,21 @@
 #include <android/native_activity.h>
 #endif
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 namespace rawframe::window_host {
 
 namespace {
+
+/// The accessibility an Apple system's view takes: UIKit's on iOS (D588),
+/// AppKit's on macOS (D579).
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+constexpr ui::AccessPlatform kAppleAccess = ui::AccessPlatform::UiKit;
+#else
+constexpr ui::AccessPlatform kAppleAccess = ui::AccessPlatform::AppKit;
+#endif
 
 // The most iterations one frame runs to catch up: a window hidden for a
 // while is not replayed in one frame.
@@ -377,8 +389,8 @@ void WindowHost::followAccess(window::Windows& windows) {
                 settings = ui::AccessSettings{
                     .platform = ui::AccessPlatform::Uia, .scale = kState->scale, .host = kWin32->window};
             } else if (const auto* kApple = std::get_if<window::AppleHandles>(&kHandles->handles)) {
-                // AppKit measures in points, which a UI pixel is.
-                settings = ui::AccessSettings{.platform = ui::AccessPlatform::AppKit, .scale = 1, .host = kApple->view};
+                // AppKit and UIKit measure in points, which a UI pixel is.
+                settings = ui::AccessSettings{.platform = kAppleAccess, .scale = 1, .host = kApple->view};
             }
         }
         if (settings.has_value() && settings->host != nullptr && settings->host != accessView_ &&
@@ -399,7 +411,7 @@ void WindowHost::followAccess(window::Windows& windows) {
         return;
     }
     if (const auto kState = windows.state(window_); kState.has_value() && kState->scale > 0) {
-        if (accessPlatform_ != ui::AccessPlatform::AppKit && kState->scale != accessScale_ &&
+        if (accessPlatform_ != kAppleAccess && kState->scale != accessScale_ &&
             access_.setScale(kState->scale).has_value()) {
             accessScale_ = kState->scale;
         }

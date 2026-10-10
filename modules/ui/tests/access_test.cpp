@@ -88,10 +88,11 @@ RAWFRAME_TEST(AnAccessIsRefusedWhatItCannotTake) {
         const auto kRefused = Access::create(ui, kRoot, {.platform = AccessPlatform::Atspi});
         RAWFRAME_EXPECT(!kRefused.has_value() && kRefused.error().code() == code(UiError::Unavailable));
     }
-    // Android's, UI Automation's, and AppKit's need what the tree lies in
-    // (D576, D579), and are refused without it where they are built; a
-    // copy is no platform's root.
-    for (const AccessPlatform kPlatform : {AccessPlatform::Android, AccessPlatform::Uia, AccessPlatform::AppKit}) {
+    // Android's, UI Automation's, AppKit's, and UIKit's need what the tree
+    // lies in (D576, D579, D588), and are refused without it where they are
+    // built; a copy is no platform's root.
+    for (const AccessPlatform kPlatform :
+         {AccessPlatform::Android, AccessPlatform::Uia, AccessPlatform::AppKit, AccessPlatform::UiKit}) {
         const auto kHostless = Access::create(ui, kRoot, {.platform = kPlatform});
         RAWFRAME_EXPECT(!kHostless.has_value() &&
                         kHostless.error().code() ==
