@@ -4,8 +4,8 @@
 // frame's picture placed into their images, and the views submitted; the
 // session ended when asked. While it has the input focus, both hands'
 // controllers are read and located (D596), and a panel is shown over the
-// views, a quad layer (D597); and an aim points at the panel where its
-// ray meets it (D598). Run under tools/xr_run.sh, which starts
+// views, a quad layer (D597); an aim points at the panel where its ray
+// meets it (D598); and each hand's controller is felt (D600). Run under tools/xr_run.sh, which starts
 // Monado's service headless (its null compositor, simulated headset, and
 // simulated simple controllers) on lavapipe; a machine with no runtime
 // skips, unless RAWFRAME_REQUIRE_XR is set, as the check sets it where
@@ -155,6 +155,12 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
             drawn = kMade.has_value() && *kMade;
         }
         RAWFRAME_EXPECT(session.end(drawn).has_value());
+        // Both hands felt once while focused (D600); there is no third.
+        if (session.state() == xr::SessionState::Focused && session.statistics().hapticsApplied == 0) {
+            RAWFRAME_EXPECT(session.vibrate(0, 0.5F, 0, 100).has_value());
+            RAWFRAME_EXPECT(session.vibrate(1, 1, 160, 50).has_value());
+            RAWFRAME_EXPECT(!session.vibrate(2, 1, 0, 50).has_value());
+        }
         if (!askedToEnd && session.state() == xr::SessionState::Focused && session.statistics().framesSubmitted >= 30 &&
             session.statistics().framesLocated >= 30 && handsHeld >= 30) {
             RAWFRAME_EXPECT(session.requestExit().has_value());
@@ -183,6 +189,7 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
     RAWFRAME_EXPECT(kTotals.framesLocated >= 30);
     RAWFRAME_EXPECT(kTotals.framesSubmitted >= 30);
     RAWFRAME_EXPECT(handsHeld >= 30 && kTotals.framesHandLocated >= 30);
+    RAWFRAME_EXPECT(kTotals.hapticsApplied == 2);
     RAWFRAME_EXPECT(kTotals.framesPanelSubmitted == kTotals.framesSubmitted);
     RAWFRAME_EXPECT(kDrawn.imagesPlaced >= 3 * kTotals.framesSubmitted);
     // The frames, then the session, go before the device they are made on.

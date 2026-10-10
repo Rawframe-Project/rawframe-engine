@@ -80,6 +80,7 @@ struct Session::State {
     XrAction menu = XR_NULL_HANDLE;
     XrAction grip = XR_NULL_HANDLE;
     XrAction aim = XR_NULL_HANDLE;
+    XrAction haptic = XR_NULL_HANDLE;
     std::array<XrPath, 2> hands{};
     std::array<std::array<XrSpace, 2>, 2> spaces{};
 
@@ -247,7 +248,8 @@ struct Session::State {
         for (const auto& [kAction, kName, kType] : {std::tuple{&select, "select", XR_ACTION_TYPE_BOOLEAN_INPUT},
                                                     std::tuple{&menu, "menu", XR_ACTION_TYPE_BOOLEAN_INPUT},
                                                     std::tuple{&grip, "grip", XR_ACTION_TYPE_POSE_INPUT},
-                                                    std::tuple{&aim, "aim", XR_ACTION_TYPE_POSE_INPUT}}) {
+                                                    std::tuple{&aim, "aim", XR_ACTION_TYPE_POSE_INPUT},
+                                                    std::tuple{&haptic, "haptic", XR_ACTION_TYPE_VIBRATION_OUTPUT}}) {
             XrActionCreateInfo create{XR_TYPE_ACTION_CREATE_INFO};
             named(create.actionName, kName);
             named(create.localizedActionName, kName);
@@ -263,7 +265,8 @@ struct Session::State {
             for (const auto& [kAction, kInput] : {std::pair{select, "/input/select/click"},
                                                   std::pair{menu, "/input/menu/click"},
                                                   std::pair{grip, "/input/grip/pose"},
-                                                  std::pair{aim, "/input/aim/pose"}}) {
+                                                  std::pair{aim, "/input/aim/pose"},
+                                                  std::pair{haptic, "/output/haptic"}}) {
                 XrActionSuggestedBinding& binding =
                     bindings.emplace_back(XrActionSuggestedBinding{kAction, XR_NULL_PATH});
                 const std::string kPath = std::string{kHand} + kInput;
@@ -626,6 +629,30 @@ result::Status Session::requestExit() {
     if (const XrResult kAsked = xrRequestExitSession(state_->session); XR_FAILED(kAsked)) {
         return failed("the session's exit could not be asked for", kAsked);
     }
+    return {};
+}
+
+result::Status Session::vibrate(std::size_t hand, float amplitude, float frequency, std::uint32_t milliseconds) {
+    State& state = *state_;
+    if (hand >= state.hands.size()) {
+        return refused(XrError::State, "a session has two hands");
+    }
+    if (!state.running) {
+        return refused(XrError::State, "the session is not running");
+    }
+    XrHapticActionInfo info{XR_TYPE_HAPTIC_ACTION_INFO};
+    info.action = state.haptic;
+    info.subactionPath = state.hands[hand];
+    XrHapticVibration vibration{XR_TYPE_HAPTIC_VIBRATION};
+    vibration.amplitude = std::clamp(amplitude, 0.0F, 1.0F);
+    vibration.frequency = frequency > 0 ? frequency : XR_FREQUENCY_UNSPECIFIED;
+    vibration.duration = static_cast<XrDuration>(milliseconds) * 1'000'000;
+    if (const XrResult kApplied =
+            xrApplyHapticFeedback(state.session, &info, reinterpret_cast<const XrHapticBaseHeader*>(&vibration));
+        XR_FAILED(kApplied)) {
+        return failed("a hand's haptic could not be felt", kApplied);
+    }
+    ++state.statistics.hapticsApplied;
     return {};
 }
 

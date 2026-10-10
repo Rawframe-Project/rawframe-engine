@@ -15,9 +15,9 @@
 // it predicts never enters the World or a record (ADR-0081, section 3).
 // The session reads both hands' controllers through actions of its own
 // (D596): each hand's select and menu buttons and its grip and aim poses,
-// suggested for the simple controller every runtime binds
-// (`khr/simple_controller`, ADR-0081's floor) and bound to whatever
-// controller the runtime has, by its own binding. A session may show a
+// and its haptic output (D600), suggested for the simple controller every
+// runtime binds (`khr/simple_controller`, ADR-0081's floor) and bound to
+// whatever controller the runtime has, by its own binding. A session may show a
 // panel too, the UI apart from the world (D597): its own swapchain, its
 // image acquired with the views' and submitted as a quad layer over them.
 // Main thread only; the runtime and the device outlive it.
@@ -143,6 +143,8 @@ struct SessionStatistics {
     /// in which a hand's grip was located.
     std::uint64_t framesHandsRead = 0;
     std::uint64_t framesHandLocated = 0;
+    /// Vibrations the runtime took (D600).
+    std::uint64_t hapticsApplied = 0;
 };
 
 class Session {
@@ -168,6 +170,12 @@ public:
     [[nodiscard]] result::Status end(bool drawn);
     /// The format and size of each view's images.
     [[nodiscard]] const std::vector<ViewSize>& images() const noexcept;
+    /// Felt on hand `hand` (0 left, 1 right) while the session runs, through
+    /// its controller's haptic output as the runtime binds it (D600):
+    /// `amplitude` 0 to 1, `frequency` in hertz (0 the runtime's own), for
+    /// `milliseconds`; a later one replaces it.
+    [[nodiscard]] result::Status
+    vibrate(std::size_t hand, float amplitude, float frequency, std::uint32_t milliseconds);
     /// The size of the panel's images; none without a panel.
     [[nodiscard]] std::optional<ViewSize> panel() const noexcept;
     /// Asks the runtime to end the session: it stops, then exits, through

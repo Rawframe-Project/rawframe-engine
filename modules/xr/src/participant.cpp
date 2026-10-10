@@ -146,6 +146,8 @@ public:
                       diagnostics::field("framesHandLocated", totals_.framesHandLocated),
                       diagnostics::field("controllerEvents", controllerEvents_),
                       diagnostics::field("handsPointing", handsPointing_),
+                      diagnostics::field("hapticsFelt", hapticsFelt_),
+                      diagnostics::field("hapticsUnfelt", hapticsUnfelt_),
                       diagnostics::field("failed", failed_)});
     }
 
@@ -263,6 +265,7 @@ private:
             return;
         }
         feedHands(frame->hands);
+        feel();
         if (!frame->shown || frame->views.size() != session_->images().size()) {
             if (const result::Status kEnded = session_->end(false); !kEnded.has_value()) {
                 fail(kEnded.error());
@@ -320,6 +323,23 @@ private:
             }
             button(kControls.select, hand.select, fed.select);
             button(kControls.menu, hand.menu, fed.menu);
+        }
+    }
+
+    /// What the game has the controllers feel (D600), taken from the feed
+    /// each frame: felt in both hands, the one device being both.
+    void feel() noexcept {
+        if (feed_ == nullptr || !connected_) {
+            return;
+        }
+        constexpr std::array kMine{kHands};
+        feed_->takeFelt(felt_, kMine);
+        for (const input::HapticCommand& kCommand : felt_) {
+            for (std::size_t hand = 0; hand < 2; ++hand) {
+                const result::Status kFelt = session_->vibrate(
+                    hand, kCommand.haptic.amplitude, kCommand.haptic.frequency, kCommand.haptic.milliseconds);
+                ++(kFelt.has_value() ? hapticsFelt_ : hapticsUnfelt_);
+            }
         }
     }
 
@@ -398,6 +418,10 @@ private:
     std::array<std::array<float, 2>, 2> pointed_{kAway, kAway};
     /// Hands' frames pointing at the panel.
     std::uint64_t handsPointing_ = 0;
+    std::vector<input::HapticCommand> felt_;
+    /// Hands' vibrations the runtime took, and refused.
+    std::uint64_t hapticsFelt_ = 0;
+    std::uint64_t hapticsUnfelt_ = 0;
     std::array<HandControls, 2> controls_{handControls("left"), handControls("right")};
     std::uint64_t controllerEvents_ = 0;
     /// This iteration's frame begun and not yet ended, and its images.
