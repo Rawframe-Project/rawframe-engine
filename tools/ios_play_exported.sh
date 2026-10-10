@@ -58,7 +58,16 @@ for _ in $(seq 180); do
     sleep 1
 done
 
+# The server asked to stop as a supervisor asks, for its totals: the
+# simulator's processes are this machine's.
+pkill -TERM -f "$out/server/rawframe-server" || true
+for _ in $(seq 200); do
+    grep -q '"code":"stopped"' "$work/server.log" 2>/dev/null && break
+    sleep 0.1
+done
+
 log="$documents/client.log"
+grep -o '"code":"server_summary"[^}]*}[^}]*}' "$work/server.log" 2>/dev/null || true
 grep -o '"code":"\(bots_admitted\|bots_summary\|surface_made\|device_ready\|device_unavailable\|start_failed\|stopped\)"[^}]*}[^}]*}' \
     "$log" 2>/dev/null || { echo "nothing of note:"; tail -20 "$log" 2>/dev/null || true; }
 if grep -q '"code":"surface_made"' "$log" && grep -q '"code":"bots_admitted"' "$log" &&
