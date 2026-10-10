@@ -4,8 +4,11 @@
 # compiled and linked against there (cmake/ios-simulator.cmake). Xcode's own
 # libc++ has no std::from_chars of a double before iOS 26, and Homebrew's
 # LLVM links the SDK's library, so LLVM's is built from its released source,
-# checked by its SHA-256, on Apple's own unwinder. Runs on macOS with
-# Xcode; takes under a minute.
+# checked by its SHA-256, on Apple's own unwinder. It is hermetic: its
+# symbols, operator new and delete among them, stay inside the program
+# linking it, as iOS's own libraries keep the system's libc++ (from iOS 18
+# the system's typed operator new aborts when a program's replaces its
+# operator new). Runs on macOS with Xcode; takes under a minute.
 #
 #   tools/build_libcxx_ios.sh <prefix> [<llvm prefix>]
 #
@@ -39,6 +42,7 @@ cmake -S "$work/llvm-project-$version.src/runtimes" -B "$work/build" -G Ninja -D
     -DCMAKE_OSX_DEPLOYMENT_TARGET=16.3 -DCMAKE_C_COMPILER_TARGET="$target" -DCMAKE_CXX_COMPILER_TARGET="$target" \
     -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi" -DLIBCXX_ENABLE_SHARED=OFF -DLIBCXXABI_ENABLE_SHARED=OFF \
     -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=ON -DLIBCXXABI_USE_LLVM_UNWINDER=OFF -DLIBCXX_INCLUDE_BENCHMARKS=OFF \
+    -DLIBCXX_HERMETIC_STATIC_LIBRARY=ON -DLIBCXXABI_HERMETIC_STATIC_LIBRARY=ON \
     -DLIBCXX_INCLUDE_TESTS=OFF -DLIBCXXABI_INCLUDE_TESTS=OFF -DCMAKE_INSTALL_PREFIX="$prefix" >"$work/log" 2>&1 &&
     cmake --build "$work/build" >>"$work/log" 2>&1 &&
     cmake --install "$work/build" >>"$work/log" 2>&1 || { tail -40 "$work/log"; exit 1; }
