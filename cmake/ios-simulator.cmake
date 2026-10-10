@@ -27,7 +27,14 @@ set(CMAKE_CXX_FLAGS_INIT "-nostdinc++ -isystem ${rawframe_libcxx}/include/c++/v1
 set(CMAKE_EXE_LINKER_FLAGS_INIT "-nostdlib++")
 set(CMAKE_SHARED_LINKER_FLAGS_INIT "-nostdlib++")
 set(CMAKE_MODULE_LINKER_FLAGS_INIT "-nostdlib++")
-set(CMAKE_CXX_STANDARD_LIBRARIES "${rawframe_libcxx}/lib/libc++.a")
-set(CMAKE_C_STANDARD_LIBRARIES "${rawframe_libcxx}/lib/libc++.a")
+# Homebrew's LLVM carries no compiler runtime for the simulator, which
+# `@available` checks call into (`__isPlatformVersionAtLeast`): Xcode's is
+# linked, as Xcode's own clang links it.
+execute_process(COMMAND xcrun --sdk iphonesimulator clang -print-resource-dir
+                OUTPUT_VARIABLE rawframe_xcode_resources OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+set(rawframe_ios_runtime "${rawframe_xcode_resources}/lib/darwin/libclang_rt.iossim.a")
+set(CMAKE_CXX_STANDARD_LIBRARIES "${rawframe_libcxx}/lib/libc++.a ${rawframe_ios_runtime}")
+set(CMAKE_C_STANDARD_LIBRARIES "${rawframe_libcxx}/lib/libc++.a ${rawframe_ios_runtime}")
+set(CMAKE_OBJC_STANDARD_LIBRARIES "${rawframe_ios_runtime}")
 # Programs the build runs are this machine's, never the simulator's.
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
