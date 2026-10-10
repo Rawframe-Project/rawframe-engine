@@ -76,6 +76,8 @@ jobs:
         run: |
           device=$(xcrun simctl list devices available | grep -m1 -o 'iPhone [^(]*([0-9A-F-]*)' | grep -o '[0-9A-F-]\{36\}')
           xcrun simctl boot "$device"
+          # Until it has booted whole, not merely begun.
+          xcrun simctl bootstatus "$device" -b
           echo "RAWFRAME_IOS_DEVICE=$device" >>"$GITHUB_ENV"
       - name: Tests in the simulator
         if: inputs.tests

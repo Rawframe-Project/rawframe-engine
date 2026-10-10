@@ -28,9 +28,10 @@ trap '[ -z "$server_pid" ] || kill "$server_pid" 2>/dev/null || true
       rm -rf "$work"' EXIT
 
 port="$(python3 tools/free_port.py)"
-# A minute at most, the client's run well inside it.
+# Three minutes at most, the client's launch and run well inside it: a
+# simulator just booted takes most of a minute to install and start it.
 cat >"$work/server.conf" <<CONF
-host.maximum_iterations = 7200
+host.maximum_iterations = 21600
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = $game
@@ -60,6 +61,7 @@ bots.count = 0
 bots.player = true
 bots.endpoint = 127.0.0.1:$port
 input.gamepads = false
+render.device = any
 render.frame_rate = 30
 CONF
 xcrun simctl launch "$device" "$id" >/dev/null
@@ -74,7 +76,7 @@ for side in server client; do
     log="$work/server.log"
     [ "$side" = client ] && log="$documents/client.log"
     echo "== $side"
-    grep -o '"code":"\(bots_admitted\|bots_summary\|frame_summary\|device_ready\|device_unavailable\|device_unasked\|start_failed\|stopped\)"[^}]*}[^}]*}' \
+    grep -o '"code":"\(bots_admitted\|bots_summary\|server_summary\|frame_summary\|device_ready\|device_unavailable\|device_unasked\|start_failed\|stopped\)"[^}]*}[^}]*}' \
         "$log" 2>/dev/null || { echo "nothing of note:"; tail -20 "$log" 2>/dev/null || true; }
 done
 if grep -q '"code":"bots_admitted"' "$documents/client.log" && grep -q '"framesShown":[1-9]' "$documents/client.log"; then
