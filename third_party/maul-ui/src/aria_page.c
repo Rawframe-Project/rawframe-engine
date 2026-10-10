@@ -8,6 +8,7 @@
 // as Flutter makes its semantics (filter: opacity(0%), transparent
 // text): visibility or display would hide it from screen readers too.
 
+#include "allocator.h"
 #include "aria.h"
 
 #include <emscripten/em_js.h>
@@ -16,7 +17,7 @@
 // The enabling button was pressed.
 EMSCRIPTEN_KEEPALIVE void muiAriaEnableFromPage(muiAriaAdapter* adapter)
 {
-    muiAriaAdapter_Enable(adapter);
+    muiAriaEnablePressed(adapter);
 }
 
 // An element was clicked, focused, or its range set.
@@ -24,6 +25,24 @@ EMSCRIPTEN_KEEPALIVE void muiAriaEventFromPage(muiAriaAdapter* adapter, int kind
                                                double value)
 {
     muiAriaPerform(adapter, (muiAriaEvent)kind, slot, value);
+}
+
+EMSCRIPTEN_KEEPALIVE char* muiAriaTextRoomFromPage(muiAriaAdapter* adapter, uint32_t length)
+{
+    return length < UINT32_MAX ? muiAllocate(&adapter->allocator, (size_t)length + 1, 1) : nullptr;
+}
+
+// A client typed into a field, or selected in it; the text, if any, from
+// muiAriaTextRoomFromPage.
+EMSCRIPTEN_KEEPALIVE void muiAriaTextFromPage(muiAriaAdapter* adapter, uint32_t slot,
+                                              uint32_t start, uint32_t end, char* text,
+                                              uint32_t length)
+{
+    muiAriaPerformText(adapter, slot, start, end, text, length);
+    if (text != nullptr)
+    {
+        muiRelease(&adapter->allocator, text, (size_t)length + 1, 1);
+    }
 }
 
 // clang-format off
@@ -69,7 +88,38 @@ EM_JS(int, OpenPage, (const char* host, int deferred, const char* label, void* a
         }
     };
     root.addEventListener("click", e => send(0, e.target, 0));
+    // A text to the program, as UTF-8 in room it gives.
+    const sendText = (slot, start, end, data) => {
+        const bytes = new TextEncoder().encode(data);
+        const room = _muiAriaTextRoomFromPage(adapter, bytes.length);
+        if (room) {
+            HEAPU8.set(bytes, room);
+            _muiAriaTextFromPage(adapter, slot, start, end, room, bytes.length);
+        }
+    };
+    // A field's selection as a client left it, sent when it differs from
+    // the one last written or sent; none while a composition runs, its
+    // text not the program's yet.
+    page.selected = () => {
+        const field = document.activeElement;
+        if (!field || !field.muiField || !root.contains(field) || page.composing) {
+            return;
+        }
+        const backward = field.selectionDirection === "backward";
+        const anchor = backward ? field.selectionEnd : field.selectionStart;
+        const focus = backward ? field.selectionStart : field.selectionEnd;
+        if (anchor !== field.muiAnchor || focus !== field.muiFocus) {
+            field.muiAnchor = anchor;
+            field.muiFocus = focus;
+            _muiAriaTextFromPage(adapter, field.muiSlot, anchor, focus, 0, 0);
+        }
+    };
+    document.addEventListener("selectionchange", page.selected);
     root.addEventListener("focusin", e => {
+        // A field takes the program's selection before the client reads it.
+        if (e.target.muiField) {
+            page.select(e.target);
+        }
         // A focus the adapter gave is no client's asking.
         if (page.requested === e.target) {
             page.requested = null;
@@ -77,7 +127,62 @@ EM_JS(int, OpenPage, (const char* host, int deferred, const char* label, void* a
         }
         send(1, e.target, 0);
     });
-    root.addEventListener("input", e => send(2, e.target, parseFloat(e.target.value)));
+    root.addEventListener("input", e => {
+        if (e.target.type === "range") {
+            send(2, e.target, parseFloat(e.target.value));
+        }
+    });
+    // A field's text is the program's: what a client types is asked of
+    // it as a replacement of the selection, and every other edit is left
+    // to the program's keys. A composition shows in the field as it runs
+    // and is asked for whole at its end. A paste is the program's own
+    // Ctrl+V.
+    root.addEventListener("beforeinput", e => {
+        const field = e.target;
+        if (!field.muiField || e.inputType === "insertCompositionText") {
+            return;
+        }
+        e.preventDefault();
+        if ((e.inputType === "insertText" || e.inputType === "insertReplacementText") &&
+            !page.composing) {
+            const data = e.data !== null ? e.data
+                       : e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+            sendText(field.muiSlot, field.selectionStart, field.selectionEnd, data);
+        }
+    });
+    root.addEventListener("compositionstart", e => {
+        page.composing = [e.target.selectionStart, e.target.selectionEnd];
+    });
+    root.addEventListener("compositionend", e => {
+        const range = page.composing;
+        page.composing = null;
+        if (e.target.muiField && range && e.data) {
+            sendText(e.target.muiSlot, range[0], range[1], e.data);
+        }
+    });
+    // Tab moves the program's focus, which the elements follow; they are
+    // out of the page's tab order, so the browser's own move would take
+    // the focus out of them, to the canvas or the page's end. In a field
+    // the program moves the caret too, and writes it.
+    const moves = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End",
+                   "PageUp", "PageDown"];
+    root.addEventListener("keydown", e => {
+        if (e.key === "Tab" || (e.target.muiField && moves.includes(e.key))) {
+            e.preventDefault();
+        }
+    });
+    // Writes a field's selection, kept for when it has the focus.
+    page.select = field => {
+        const backward = field.muiFocus < field.muiAnchor;
+        const start = backward ? field.muiFocus : field.muiAnchor;
+        const end = backward ? field.muiAnchor : field.muiFocus;
+        const direction = backward ? "backward" : "forward";
+        if (document.activeElement === field &&
+            (field.selectionStart !== start || field.selectionEnd !== end ||
+             (start !== end && field.selectionDirection !== direction))) {
+            field.setSelectionRange(start, end, direction);
+        }
+    };
     // The program scrolls its own content: a scroll of the host, as a
     // screen reader brings an element into view, is put back.
     page.unscroll = () => {
@@ -103,6 +208,7 @@ EM_JS(int, OpenPage, (const char* host, int deferred, const char* label, void* a
 EM_JS(void, ClosePage, (int handle), {
     const page = Module.muiAria[handle];
     page.host.removeEventListener("scroll", page.unscroll);
+    document.removeEventListener("selectionchange", page.selected);
     page.polite.remove();
     page.assertive.remove();
     page.root.remove();
@@ -157,10 +263,24 @@ EM_JS(void, Announce, (int handle, const char* text, int assertive), {
     }, 300);
 });
 
-EM_JS(void, Make, (int handle, uint32_t slot, int range, const char* id), {
-    const element = document.createElement(range ? "input" : "div");
-    if (range) {
+// An element of a kind (muiAriaKind): a div, a range input, an input of a
+// type, or a textarea. A field's text is the program's, so the browser
+// fills and corrects none of it.
+EM_JS(void, Make, (int handle, uint32_t slot, int kind, const char* type, const char* id), {
+    const element = document.createElement(kind === 0 ? "div" : kind === 3 ? "textarea" : "input");
+    if (kind === 1) {
         element.type = "range";
+    } else if (kind >= 2) {
+        if (kind === 2) {
+            element.type = UTF8ToString(type);
+        }
+        element.autocomplete = "off";
+        element.spellcheck = false;
+        element.setAttribute("autocapitalize", "off");
+        element.setAttribute("autocorrect", "off");
+        element.muiField = true;
+        element.muiAnchor = 0;
+        element.muiFocus = 0;
     }
     element.id = UTF8ToString(id);
     element.muiSlot = slot;
@@ -196,18 +316,30 @@ EM_JS(void, Box, (int handle, uint32_t slot, double x, double y, double width, d
     style.height = height + "px";
 });
 
-// An attribute, or none for a NULL value. A range's value is its
-// property, as the attribute only gives its first value.
+// An attribute, or none for a NULL value. An input's or textarea's value
+// is its property, as the attribute only gives its first value; set only
+// when it changed, as setting it moves a field's caret.
 EM_JS(void, Attribute, (int handle, uint32_t slot, const char* name, const char* value), {
     const element = Module.muiAria[handle].elements[slot];
     const key = UTF8ToString(name);
-    if (key === "value" && element.tagName === "INPUT") {
-        element.value = value ? UTF8ToString(value) : "";
+    if (key === "value" && (element.tagName === "INPUT" || element.tagName === "TEXTAREA")) {
+        const text = value ? UTF8ToString(value) : "";
+        if (element.value !== text) {
+            element.value = text;
+        }
     } else if (value) {
         element.setAttribute(key, UTF8ToString(value));
     } else {
         element.removeAttribute(key);
     }
+});
+
+EM_JS(void, Select, (int handle, uint32_t slot, uint32_t start, uint32_t end, int backward), {
+    const page = Module.muiAria[handle];
+    const field = page.elements[slot];
+    field.muiAnchor = backward ? end : start;
+    field.muiFocus = backward ? start : end;
+    page.select(field);
 });
 
 EM_JS(void, Text, (int handle, uint32_t slot, const char* text), {
@@ -240,9 +372,15 @@ void muiAriaPageAnnounce(int page, const char* text, bool assertive)
     Announce(page, text, assertive ? 1 : 0);
 }
 
-void muiAriaPageMake(int page, uint32_t slot, bool range, const char* id)
+void muiAriaPageMake(int page, uint32_t slot, muiAriaKind kind, const char* inputType,
+                     const char* id)
 {
-    Make(page, slot, range ? 1 : 0, id);
+    Make(page, slot, (int)kind, inputType, id);
+}
+
+void muiAriaPageSelect(int page, uint32_t slot, uint32_t start, uint32_t end, bool backward)
+{
+    Select(page, slot, start, end, backward ? 1 : 0);
 }
 
 void muiAriaPageRemove(int page, uint32_t slot)

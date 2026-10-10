@@ -69,11 +69,13 @@ result::Status Tree::setName(Node node, std::string_view name) {
 namespace {
 
 /// A node's text as assistive technology reads it, its text block's: a
-/// label's words, a field's typed text (D571).
-bool readText(void* user, muiNodeId node, std::uint64_t /*key*/, const char** textOut, std::size_t* lengthOut) {
-    const Tree::State* kState = static_cast<const Tree::State*>(user);
-    const Text* kText = kState->textOf(node);
-    return kText != nullptr && muiTextBlock_GetText(kState->text, kText->block, textOut, lengthOut) == mui_success;
+/// label's words, a field's typed text (D571), with the block's
+/// selection, lines, and words as Maul UI reads them.
+bool readText(void* user, muiNodeId node, std::uint64_t, const muiRect* shown, muiAccessContent* contentOut) {
+    auto* state = static_cast<Tree::State*>(user);
+    const Text* kText = state->textOf(node);
+    return kText != nullptr &&
+           muiAccessTextOf(&state->host, node, muiTextBlock_GetKey(kText->block), shown, contentOut);
 }
 
 } // namespace

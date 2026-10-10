@@ -37,17 +37,17 @@ muiTokenDef muiDefaultTokenDef(void)
     return (muiTokenDef){.cookie = TOKEN_DEF_COOKIE, .value = {.type = mui_tokenNumber}};
 }
 
-muiResult muiCreateToken(muiContext* context, const muiTokenDef* def, muiTokenId* tokenIdOut)
+muiResult muiCreateToken(muiContext* context, const muiTokenDef* def, muiTokenId* tokenOut)
 {
-    if (tokenIdOut != nullptr)
+    if (tokenOut != nullptr)
     {
-        *tokenIdOut = (muiTokenId){0, 0};
+        *tokenOut = (muiTokenId){0, 0};
     }
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (def == nullptr || tokenIdOut == nullptr || def->cookie != TOKEN_DEF_COOKIE ||
+    if (def == nullptr || tokenOut == nullptr || def->cookie != TOKEN_DEF_COOKIE ||
         !muiIsTokenValueValid(&def->value) || muiIsInHostCall(context))
     {
         return muiRefuse(context);
@@ -59,7 +59,7 @@ muiResult muiCreateToken(muiContext* context, const muiTokenDef* def, muiTokenId
         return mui_errorCapacity;
     }
     store->tokens[slot - 1] = (muiToken){.value = def->value};
-    *tokenIdOut = (muiTokenId){slot, muiPoolGeneration(&store->pool, slot)};
+    *tokenOut = (muiTokenId){slot, muiPoolGeneration(&store->pool, slot)};
     // A new token is named by nothing yet, so no node restyles.
     return mui_success;
 }
@@ -281,9 +281,9 @@ muiResult muiStyle_SetToken(muiContext* context, muiStyleId styleId, muiVariant 
 }
 
 muiResult muiStyle_GetToken(const muiContext* context, muiStyleId styleId, muiVariant variant,
-                            muiProperty property, muiTokenId* tokenIdOut)
+                            muiProperty property, muiTokenId* tokenOut)
 {
-    if (context == nullptr || tokenIdOut == nullptr || styleId.index1 == 0 ||
+    if (context == nullptr || tokenOut == nullptr || styleId.index1 == 0 ||
         !muiIsPropertyKnown(property))
     {
         return mui_errorInvalid;
@@ -299,14 +299,14 @@ muiResult muiStyle_GetToken(const muiContext* context, muiStyleId styleId, muiVa
     {
         return mui_errorInvalid;
     }
-    *tokenIdOut = (muiTokenId){0, 0};
+    *tokenOut = (muiTokenId){0, 0};
     uint32_t set = class->sets[variant];
     for (uint32_t at = set != 0 ? store->sets[set - 1].firstTokenName : 0; at != 0;
          at = store->names[at - 1].next)
     {
         if (store->names[at - 1].property == property)
         {
-            *tokenIdOut = store->names[at - 1].token;
+            *tokenOut = store->names[at - 1].token;
         }
     }
     return mui_success;

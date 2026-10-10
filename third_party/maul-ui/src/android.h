@@ -31,8 +31,11 @@ enum
     MUI_ANDROID_MAXIMUM = 10,
     MUI_ANDROID_CURRENT = 11,
     MUI_ANDROID_LIVE = 12,
-    MUI_ANDROID_COUNT = 13,
-    MUI_ANDROID_CHILDREN = 14,
+    MUI_ANDROID_GRANULARITIES = 13,
+    MUI_ANDROID_SELECTION_START = 14,
+    MUI_ANDROID_SELECTION_END = 15,
+    MUI_ANDROID_COUNT = 16,
+    MUI_ANDROID_CHILDREN = 17,
 };
 
 // The record's flags.
@@ -62,6 +65,25 @@ enum
     MUI_ANDROID_SET_PROGRESS = 5,
     MUI_ANDROID_EXPAND = 6,
     MUI_ANDROID_COLLAPSE = 7,
+    MUI_ANDROID_SET_SELECTION = 8,
+    MUI_ANDROID_SET_TEXT = 9,
+};
+
+// android.view.accessibility.AccessibilityNodeInfo's movement
+// granularities.
+enum
+{
+    MUI_ANDROID_CHARACTER = 1,
+    MUI_ANDROID_WORD = 2,
+    MUI_ANDROID_LINE = 4,
+    MUI_ANDROID_PARAGRAPH = 8,
+};
+
+// android.view.accessibility.AccessibilityEvent's text event types.
+enum
+{
+    MUI_ANDROID_TEXT_CHANGED = 16,
+    MUI_ANDROID_SELECTION_CHANGED = 8192,
 };
 
 // A node's texts, by kind.
@@ -77,10 +99,22 @@ enum
 // android.view.View.NO_ID.
 #define MUI_ANDROID_NO_ID (-1)
 
+// AccessibilityNodeInfo's EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_MAX_LENGTH:
+// the most characters' locations asked for at once.
+#define MUI_ANDROID_MOST_LOCATIONS 20000
+
 // Tells clients of an event on a virtual view (muiAndroidTell, through
 // the provider, or a test's): its type, and content change types.
 typedef void (*muiAndroidTellFunction)(const muiAndroidAdapter* adapter, jint virtualId, jint type,
                                        jint changes);
+
+// Tells clients of a text event on a virtual view (muiAndroidTellText,
+// or a test's), in UTF-16: a text changed, from where, how much went
+// and how much came, with the text before; a selection changed, its
+// start, its end and the text's length.
+typedef void (*muiAndroidTellTextFunction)(const muiAndroidAdapter* adapter, jint virtualId,
+                                           jint type, const jint numbers[3], const char* before,
+                                           uint32_t length);
 
 struct muiAndroidAdapter
 {
@@ -94,6 +128,7 @@ struct muiAndroidAdapter
     jclass providerClass;
     jfieldID handle;
     jmethodID send;
+    jmethodID sendText;
     float scale;
     muiAndroidActionFunction action;
     void* user;
@@ -112,9 +147,12 @@ struct muiAndroidAdapter
     uint32_t freeHead;
     uint32_t freeCount;
     muiAndroidTellFunction tell;
+    muiAndroidTellTextFunction tellText;
     // What the update being applied changed: the shown tree, the focus.
     bool reshaped;
     bool focusMoved;
+    // The focus shown last: the tree's, or its active descendant.
+    uint64_t toldFocus;
 };
 
 // The JNIEnv of this thread.
@@ -125,8 +163,11 @@ JNIEnv* muiAndroidEnv(const muiAndroidAdapter* adapter);
 jint muiAndroidVirtualOf(muiAndroidAdapter* adapter, uint64_t id);
 uint64_t muiAndroidNodeOf(const muiAndroidAdapter* adapter, jint virtualId);
 
-// The provider's native methods (android_jni.c), bound to its class.
+// The provider's native methods (android_jni.c), bound to its class;
+// a UTF-8 text as a Java string, nullptr for an empty one.
 bool muiAndroidRegister(JNIEnv* env, jclass providerClass);
+jstring muiAndroidStringOf(JNIEnv* env, const muiAndroidAdapter* adapter, const char* text,
+                           size_t length);
 
 // A node's packed record into adapter->packed; how many places it
 // fills (android_node.c).
@@ -146,12 +187,35 @@ muiAndroidText muiAndroidTextOf(const muiAccessNode* node, int kind);
 bool muiAndroidAct(const muiAndroidAdapter* adapter, const muiAccessNode* node, int action,
                    float value);
 
+// The text a node's info gives and its granularities move through: an
+// edit text's value, a text view's when its name is its value text;
+// whether it has one (android_text.c). The granularities it is moved
+// by, 0 for none.
+bool muiAndroidIsTraversable(const muiAndroidAdapter* adapter, const muiAccessNode* node);
+jint muiAndroidGranularitiesOf(const muiAndroidAdapter* adapter, const muiAccessNode* node);
+
+// A move through a node's text by a granularity, from a cursor (a
+// UTF-16 offset, -1 for none) or the caret of text being edited, which
+// the host is asked to move: the segment passed and the selection
+// after, in UTF-16; false for no move.
+bool muiAndroidTraverse(const muiAndroidAdapter* adapter, const muiAccessNode* node,
+                        jint granularity, bool forward, bool extend, jint cursor, jint moved[4]);
+
+// A selection asked for in UTF-16 (start -1 for the caret where it is),
+// a whole new text in UTF-16; whether the host did it.
+bool muiAndroidSelect(const muiAndroidAdapter* adapter, const muiAccessNode* node, jint start,
+                      jint end);
+bool muiAndroidSetText(const muiAndroidAdapter* adapter, const muiAccessNode* node,
+                       const jchar* units, jsize count);
+
 // The events (android_events.c): an updated record, and what the update
 // changed once applied; muiAndroidTell sends one through the provider.
 void muiAndroidTellUpdated(muiAndroidAdapter* adapter, const muiAccessNode* old,
                            const muiAccessNode* node);
 void muiAndroidTellChanges(muiAndroidAdapter* adapter);
 void muiAndroidTell(const muiAndroidAdapter* adapter, jint virtualId, jint type, jint changes);
+void muiAndroidTellText(const muiAndroidAdapter* adapter, jint virtualId, jint type,
+                        const jint numbers[3], const char* before, uint32_t length);
 
 // The deepest shown node under a place in the view's pixels, 0 for none.
 uint64_t muiAndroidNodeAt(muiAndroidAdapter* adapter, float x, float y);

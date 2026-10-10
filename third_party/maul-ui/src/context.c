@@ -15,8 +15,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#define CONTEXT_DEF_COOKIE 0x6D756378u // "mucx"
-
 // Slots are 1-based uint32_t values with room for a parent link count.
 #define MAX_SLOTS 0x7FFFFFFFu
 static_assert(MAX_SLOTS < MUI_TRANSFORM_SCALE, "a transform's owner has its slot and a flag");
@@ -27,40 +25,6 @@ static_assert(MAX_SLOTS < MUI_TRANSFORM_SCALE, "a transform's owner has its slot
 #define CACHE_LINE ((size_t)64)
 
 static_assert(alignof(max_align_t) <= CACHE_LINE, "a cache line aligns every part");
-
-muiContextDef muiDefaultContextDef(void)
-{
-    return (muiContextDef){
-        .cookie = CONTEXT_DEF_COOKIE,
-        .limits = {.nodes = 4096,
-                   .styles = 256,
-                   .nodeTypes = 64,
-                   .propertySets = 1024,
-                   .notifications = 64,
-                   .transitions = 64,
-                   .animations = 256,
-                   .tokens = 256,
-                   .tokenNames = 1024,
-                   .themes = 16,
-                   .themeOverrides = 512,
-                   .drawCommands = 8192,
-                   .drawClips = 256,
-                   .drawGradients = 256,
-                   .drawGlyphs = 16384,
-                   .layers = 64,
-                   .pointers = 16,
-                   .pointerRecords = 64,
-                   .neighbors = 256,
-                   .drawTransforms = 64,
-                   .ranges = 64,
-                   .popups = 16,
-                   .exits = 64,
-                   .virtualLists = 8,
-                   .virtualItems = 16384,
-                   .accessNodes = 512,
-                   .accessRoots = 4},
-    };
-}
 
 static bool AreLimitsValid(const muiLimits* limits)
 {
@@ -329,8 +293,17 @@ muiResult muiCreateContext(const muiContextDef* def, muiContext** contextOut)
     {
         *contextOut = nullptr;
     }
-    if (def == nullptr || contextOut == nullptr || def->cookie != CONTEXT_DEF_COOKIE ||
-        !muiIsAllocatorValid(&def->allocator) || !AreLimitsValid(&def->limits))
+    if (def == nullptr || contextOut == nullptr || def->cookie != MUI_CONTEXT_DEF_COOKIE)
+    {
+        return mui_errorInvalid;
+    }
+    // Another version's def may be of another layout: nothing past the
+    // version is read.
+    if (def->version != MUI_DEF_VERSION)
+    {
+        return mui_errorVersion;
+    }
+    if (!muiIsAllocatorValid(&def->allocator) || !AreLimitsValid(&def->limits))
     {
         return mui_errorInvalid;
     }

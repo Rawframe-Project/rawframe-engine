@@ -8,8 +8,6 @@
 #include "text_mask.h"
 
 #include "maul-ui/text_edit.h"
-#include "maul-unicode/encoding.h"
-#include "maul-unicode/properties.h"
 #include "maul-unicode/segment.h"
 
 #include <math.h>
@@ -38,25 +36,6 @@ static uint32_t ClusterBoundary(const muiTextBlock* block, uint32_t offset, bool
     return before;
 }
 
-// Whether text from start up to end has a letter or a number.
-static bool IsWord(const char* text, size_t start, size_t end)
-{
-    for (size_t at = start; at < end;)
-    {
-        uint32_t point = 0;
-        size_t size = 1;
-        (void)muniDecodeUtf8(text + at, end - at, &point, &size);
-        muniGeneralCategory category = muniGetGeneralCategory(point);
-        if ((category >= muni_gcLu && category <= muni_gcLo) ||
-            (category >= muni_gcNd && category <= muni_gcNo))
-        {
-            return true;
-        }
-        at += size;
-    }
-    return false;
-}
-
 // Where a word movement from offset goes, through the word segments.
 static uint32_t WordBoundary(const muiTextBlock* block, uint32_t offset, muiTextMovement movement)
 {
@@ -69,7 +48,7 @@ static uint32_t WordBoundary(const muiTextBlock* block, uint32_t offset, muiText
     size_t end = 0;
     while ((!back || start < offset) && muniNextSegmentBreak(&iterator, &end) == muni_success)
     {
-        if (IsWord(text, start, end))
+        if (muiIsWordSegment(text, start, end))
         {
             if (back)
             {

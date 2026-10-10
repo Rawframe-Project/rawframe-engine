@@ -62,18 +62,17 @@ static muiCurve CurveOf(const muiTransitionDef* def)
 }
 
 muiResult muiCreateTransition(muiContext* context, const muiTransitionDef* def,
-                              muiTransitionId* transitionIdOut)
+                              muiTransitionId* transitionOut)
 {
-    if (transitionIdOut != nullptr)
+    if (transitionOut != nullptr)
     {
-        *transitionIdOut = (muiTransitionId){0, 0};
+        *transitionOut = (muiTransitionId){0, 0};
     }
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (def == nullptr || transitionIdOut == nullptr || !IsDefValid(def) ||
-        muiIsInHostCall(context))
+    if (def == nullptr || transitionOut == nullptr || !IsDefValid(def) || muiIsInHostCall(context))
     {
         return muiRefuse(context);
     }
@@ -84,7 +83,7 @@ muiResult muiCreateTransition(muiContext* context, const muiTransitionDef* def,
         return mui_errorCapacity;
     }
     store->specs[slot - 1] = (muiTransitionSpec){.def = *def, .curve = CurveOf(def)};
-    *transitionIdOut = (muiTransitionId){slot, muiPoolGeneration(&store->specPool, slot)};
+    *transitionOut = (muiTransitionId){slot, muiPoolGeneration(&store->specPool, slot)};
     return mui_success;
 }
 
@@ -213,9 +212,9 @@ muiResult muiStyle_SetTransition(muiContext* context, muiStyleId styleId, muiVar
 }
 
 muiResult muiStyle_GetTransition(const muiContext* context, muiStyleId styleId, muiVariant variant,
-                                 muiProperty property, muiTransitionId* transitionIdOut)
+                                 muiProperty property, muiTransitionId* transitionOut)
 {
-    if (context == nullptr || transitionIdOut == nullptr || styleId.index1 == 0 ||
+    if (context == nullptr || transitionOut == nullptr || styleId.index1 == 0 ||
         !muiIsPropertyKnown(property))
     {
         return mui_errorInvalid;
@@ -231,14 +230,14 @@ muiResult muiStyle_GetTransition(const muiContext* context, muiStyleId styleId, 
     {
         return mui_errorInvalid;
     }
-    *transitionIdOut = (muiTransitionId){0, 0};
+    *transitionOut = (muiTransitionId){0, 0};
     uint32_t set = class->sets[variant];
     for (uint32_t i = 0; set != 0 && i < store->sets[set - 1].bindingCount; i++)
     {
         const muiTransitionBinding* binding = &store->sets[set - 1].bindings[i];
         if (muiHasProperty(binding->properties, property))
         {
-            *transitionIdOut = binding->transition;
+            *transitionOut = binding->transition;
         }
     }
     return mui_success;

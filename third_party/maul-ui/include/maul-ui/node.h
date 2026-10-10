@@ -37,14 +37,14 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param def        The node: a valid cookie.
-    /// @param nodeIdOut  Receives the node's id; the null id on failure.
+    /// @param nodeOut  Receives the node's id; the null id on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a
     ///         bad cookie; `mui_errorCapacity` when the context's node limit
     ///         is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiCreateNode(muiContext* context, const muiNodeDef* def,
-                                                  muiNodeId* nodeIdOut);
+                                                  muiNodeId* nodeOut);
 
     /// Destroys a node and its whole subtree, detaching it from its parent
     /// first. The ids of every destroyed node become stale.

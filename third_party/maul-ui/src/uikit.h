@@ -36,6 +36,20 @@
 }
 @end
 
+// The element of a node being edited (muiAccessIsEdited), which adopts
+// UITextInput (src/uikit_text.m): VoiceOver reads and moves through its
+// text by the protocol. It holds its tokenizer, made when first asked
+// for, and the input delegate UIKit gives it.
+@class MUITextTokenizer;
+
+@interface MUIAccessibilityTextElement : MUIAccessibilityElement <UITextInput>
+{
+  @public
+    MUITextTokenizer* tokenizer;
+    id<UITextInputDelegate> inputDelegate;
+}
+@end
+
 // Posts a notification (UIAccessibilityPostNotification, or a test's).
 typedef void (*muiUikitPostFunction)(UIAccessibilityNotifications notification, id argument);
 
@@ -60,6 +74,8 @@ struct muiUikitAdapter
     bool reshaped;
     bool focusMoved;
     uint64_t screen;
+    // The focus shown last: the tree's, or its active descendant.
+    uint64_t toldFocus;
 };
 
 // The element or the container of a held node, made when first asked
@@ -78,7 +94,10 @@ id muiUikitParentOf(muiUikitAdapter* adapter, uint64_t node);
 // A node's shown children, into the adapter's scratch; how many.
 uint32_t muiUikitChildrenOf(const muiUikitAdapter* adapter, uint64_t id);
 
-// A node's box on the screen, in points.
+// A node's box in the view, a box where the root is placed in the view,
+// and a node's box on the screen, in points.
+CGRect muiUikitViewRectOf(const muiUikitAdapter* adapter, uint64_t id);
+CGRect muiUikitViewRectOfBox(const muiUikitAdapter* adapter, muiRect box);
 CGRect muiUikitScreenRectOf(const muiUikitAdapter* adapter, uint64_t id);
 
 // Asks the host for an action on a node; whether it did it.
@@ -94,6 +113,11 @@ void muiUikitTellAdded(muiUikitAdapter* adapter, uint64_t id);
 void muiUikitTellUpdated(muiUikitAdapter* adapter, const muiAccessNode* old,
                          const muiAccessNode* node);
 void muiUikitTellChanges(muiUikitAdapter* adapter, uint64_t oldRoot);
+
+// Tells a text element's input delegate, when it has one, that the
+// update changed its node's text or selection.
+void muiUikitTellText(MUIAccessibilityTextElement* element, const muiAccessNode* old,
+                      const muiAccessNode* node);
 
 // A node's traits (uikit_traits.m), whether it is an element, and its
 // container's type.

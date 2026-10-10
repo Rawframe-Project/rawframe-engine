@@ -9,6 +9,8 @@
 // and a text field's its value, the name then its hint; any other node's
 // name is its content description, its value text its state.
 
+#include "access_record.h"
+#include "access_text.h"
 #include "android.h"
 
 #include <math.h>
@@ -110,7 +112,7 @@ static jint FlagsOf(const muiAndroidAdapter* adapter, const muiAccessNode* node)
     bits |= (flags & mui_accessChecked) != 0 ? MUI_ANDROID_CHECKED : 0;
     bits |= (flags & mui_accessDisabled) == 0 ? MUI_ANDROID_ENABLED : 0;
     bits |= (flags & mui_accessFocusable) != 0 ? MUI_ANDROID_FOCUSABLE : 0;
-    bits |= muiAccessTree_GetFocus(adapter->tree) == node->id ? MUI_ANDROID_FOCUSED : 0;
+    bits |= muiRecordActiveFocus(adapter->tree) == node->id ? MUI_ANDROID_FOCUSED : 0;
     bits |= (flags & mui_accessSelected) != 0 ? MUI_ANDROID_SELECTED : 0;
     bits |= (flags & mui_accessScrolls) != 0 ? MUI_ANDROID_SCROLLABLE : 0;
     bits |= node->role == mui_rolePasswordInput ? MUI_ANDROID_PASSWORD : 0;
@@ -147,7 +149,7 @@ static bool HostActionOf(const muiAndroidAdapter* adapter, const muiAccessNode* 
                          muiAccessAction* actionOut)
 {
     uint32_t flags = node->flags;
-    bool focused = muiAccessTree_GetFocus(adapter->tree) == node->id;
+    bool focused = muiRecordActiveFocus(adapter->tree) == node->id;
     bool focusable = (flags & mui_accessFocusable) != 0;
     bool expanded = (flags & mui_accessExpanded) != 0;
     switch (action)
@@ -174,6 +176,12 @@ static bool HostActionOf(const muiAndroidAdapter* adapter, const muiAccessNode* 
     case MUI_ANDROID_COLLAPSE:
         *actionOut = mui_actionCollapse;
         return Has(node, mui_actionCollapse) && expanded;
+    case MUI_ANDROID_SET_SELECTION:
+        *actionOut = mui_actionSetSelection;
+        return Has(node, mui_actionSetSelection);
+    case MUI_ANDROID_SET_TEXT:
+        *actionOut = mui_actionReplaceText;
+        return Has(node, mui_actionReplaceText);
     default:
         return false;
     }
@@ -182,7 +190,7 @@ static bool HostActionOf(const muiAndroidAdapter* adapter, const muiAccessNode* 
 static jint ActionsOf(const muiAndroidAdapter* adapter, const muiAccessNode* node)
 {
     jint bits = 0;
-    for (int action = MUI_ANDROID_CLICK; action <= MUI_ANDROID_COLLAPSE; action++)
+    for (int action = MUI_ANDROID_CLICK; action <= MUI_ANDROID_SET_TEXT; action++)
     {
         muiAccessAction host = mui_actionClick;
         bits |= HostActionOf(adapter, node, action, &host) ? 1 << action : 0;
@@ -190,11 +198,13 @@ static jint ActionsOf(const muiAndroidAdapter* adapter, const muiAccessNode* nod
     return bits;
 }
 
+// The selection and the text carry more than a value: muiAndroidSelect
+// and muiAndroidSetText ask for them.
 bool muiAndroidAct(const muiAndroidAdapter* adapter, const muiAccessNode* node, int action,
                    float value)
 {
     muiAccessAction host = mui_actionClick;
-    if (!HostActionOf(adapter, node, action, &host))
+    if (action > MUI_ANDROID_COLLAPSE || !HostActionOf(adapter, node, action, &host))
     {
         return false;
     }
@@ -220,6 +230,23 @@ static void PackBox(const muiAndroidAdapter* adapter, uint64_t id, jint* packed)
     packed[MUI_ANDROID_BOTTOM] = (jint)ceilf((box.y + box.height) * scale);
 }
 
+// The granularities, and the selection of text being edited in UTF-16
+// (-1 for none).
+static void PackText(const muiAndroidAdapter* adapter, const muiAccessNode* node, jint* packed)
+{
+    packed[MUI_ANDROID_GRANULARITIES] = muiAndroidGranularitiesOf(adapter, node);
+    packed[MUI_ANDROID_SELECTION_START] = -1;
+    packed[MUI_ANDROID_SELECTION_END] = -1;
+    if (muiAccessIsEdited(node) && node->marks.selected)
+    {
+        muiAccessText text = muiAccessValueOf(node);
+        packed[MUI_ANDROID_SELECTION_START] =
+            (jint)muiAccessUtf16Before(text.bytes, node->marks.anchor);
+        packed[MUI_ANDROID_SELECTION_END] =
+            (jint)muiAccessUtf16Before(text.bytes, node->marks.focus);
+    }
+}
+
 uint32_t muiAndroidPack(muiAndroidAdapter* adapter, const muiAccessNode* node)
 {
     jint* packed = adapter->packed;
@@ -236,6 +263,7 @@ uint32_t muiAndroidPack(muiAndroidAdapter* adapter, const muiAccessNode* node)
     packed[MUI_ANDROID_MAXIMUM] = BitsOf(node->maximum);
     packed[MUI_ANDROID_CURRENT] = BitsOf(node->value);
     packed[MUI_ANDROID_LIVE] = (jint)node->values.live;
+    PackText(adapter, node, packed);
     uint32_t count = 0;
     if (muiAccessTree_GetShownChildren(adapter->tree, node->id, adapter->scratch, adapter->nodes,
                                        &count) != mui_success)

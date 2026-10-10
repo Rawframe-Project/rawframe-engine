@@ -12,8 +12,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// A node held: the record, its texts and links pointing at the tree's
-// copies, and its children; an id of 0 marks a free slot.
+// A node held: the record, its texts, marks and links pointing at the
+// tree's copies, and its children; an id of 0 marks a free slot.
 typedef struct muiHeldNode
 {
     muiAccessNode node;
@@ -31,6 +31,10 @@ typedef struct muiHeldNode
 typedef struct muiStagedNode
 {
     char* text[MUI_ACCESS_TEXTS];
+    uint32_t* lineStarts;
+    muiAccessWord* words;
+    muiAccessLineBox* lineBoxes;
+    muiAccessCluster* clusters;
     muiAccessLink* links;
     uint64_t* children;
 } muiStagedNode;

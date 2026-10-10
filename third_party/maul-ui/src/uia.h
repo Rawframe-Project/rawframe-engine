@@ -13,10 +13,12 @@
 
 #include "maul-ui/access_uia.h"
 
-// UI Automation's errors, as HRESULTs: UIA_E_ELEMENTNOTAVAILABLE and
-// UIA_E_NOTSUPPORTED.
-#define ELEMENT_GONE  ((HRESULT)0x80040201)
-#define NOT_SUPPORTED ((HRESULT)0x80040204)
+// UI Automation's errors, as HRESULTs: UIA_E_ELEMENTNOTAVAILABLE,
+// UIA_E_NOTSUPPORTED, UIA_E_ELEMENTNOTENABLED and UIA_E_INVALIDOPERATION.
+#define ELEMENT_GONE        ((HRESULT)0x80040201)
+#define NOT_SUPPORTED       ((HRESULT)0x80040204)
+#define ELEMENT_NOT_ENABLED ((HRESULT)0x80040200)
+#define INVALID_OPERATION   ((HRESULT)0x80131509)
 
 // The functions of uiautomationcore.dll the adapter calls, loaded when it
 // is made, as MinGW has no import library of them.
@@ -29,6 +31,9 @@ typedef struct muiUiaFunctions
     BOOL(WINAPI* clientsAreListening)(void);
     HRESULT(WINAPI* raiseEvent)(muiUiaSimple*, int);
     HRESULT(WINAPI* raisePropertyChanged)(muiUiaSimple*, int, VARIANT, VARIANT);
+    // UiaGetReservedNotSupportedValue, for a text attribute not given;
+    // NULL when the module lacks it.
+    HRESULT(WINAPI* reservedNotSupported)(IUnknown**);
 } muiUiaFunctions;
 
 // A provider object: one per node UI Automation asked for, and the root,
@@ -50,6 +55,7 @@ typedef struct muiUiaNode
     muiUiaScroll scroll;
     muiUiaScrollItem scrollItem;
     muiUiaSelectionItem selectionItem;
+    muiUiaText text;
     LONG references;
     // NULL once detached.
     muiUiaAdapter* adapter;
@@ -67,8 +73,10 @@ struct muiUiaAdapter
     muiUiaActionFunction action;
     void* user;
     muiUiaFunctions uia;
-    // Whether a client listened when the apply under way began.
+    // Whether a client listened when the apply under way began, and the
+    // focus last shown.
     bool listening;
+    uint64_t toldFocus;
     muiUiaNode* root;
     // Provider objects by node id, each holding a reference.
     muiIdMap objects;
@@ -93,6 +101,15 @@ HRESULT muiUiaQuery(muiUiaNode* node, REFIID id, void** out);
 void muiUiaInitPatterns(muiUiaNode* node);
 void muiUiaInitValuePatterns(muiUiaNode* node);
 
+// The Text pattern (src/uia_text.c), which a node being edited has
+// (muiAccessIsEdited): its table set on a new object; a new range of a node's text from one byte
+// offset to another (src/uia_range.c), holding a reference to the
+// object, with one of its own, or NULL when the heap is out of memory;
+// letting go of a reference to a range.
+void muiUiaInitTextPattern(muiUiaNode* node);
+muiUiaRange* muiUiaMakeRange(muiUiaNode* node, uint32_t start, uint32_t end);
+void muiUiaReleaseRange(muiUiaRange* range);
+
 // The interface of a pattern a node has, with a reference for the
 // caller, or NULL.
 IUnknown* muiUiaPatternOf(muiUiaNode* node, const muiAccessNode* held, int pattern);
@@ -112,8 +129,11 @@ const muiAccessNode* muiUiaNodeFor(const muiUiaNode* node);
 HRESULT muiUiaPropertyValue(muiUiaAdapter* adapter, const muiAccessNode* node, int property,
                             VARIANT* out);
 
-// A node's bounds in screen pixels.
+// A rectangle where the root is placed, and a node's bounds, in screen
+// pixels; a point in screen pixels where the root is placed.
+muiUiaRect muiUiaScreenRectOf(const muiUiaAdapter* adapter, muiRect bounds);
 muiUiaRect muiUiaScreenRect(const muiUiaAdapter* adapter, uint64_t id);
+void muiUiaRootPointOf(const muiUiaAdapter* adapter, double x, double y, float* xOut, float* yOut);
 
 // The top left of the window's client area on the screen, in pixels.
 POINT muiUiaClientOrigin(const muiUiaAdapter* adapter);
@@ -122,10 +142,11 @@ POINT muiUiaClientOrigin(const muiUiaAdapter* adapter);
 HRESULT muiUiaSetText(VARIANT* out, const char* text, size_t length);
 
 // What applying an update changed, raised as UI Automation's events
-// when a client listens.
+// when a client listens; the focus last, when the one shown moved (its
+// active descendant included).
 void muiUiaAdded(void* user, const muiAccessTree* tree, uint64_t id);
 void muiUiaUpdated(void* user, const muiAccessTree* tree, const muiAccessNode* old);
-void muiUiaFocusMoved(void* user, const muiAccessTree* tree, uint64_t old, uint64_t focus);
+void muiUiaTellFocus(muiUiaAdapter* adapter);
 
 // Asks the host to perform an action on a node.
 HRESULT muiUiaPerform(muiUiaAdapter* adapter, muiAccessAction action, uint64_t target);

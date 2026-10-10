@@ -7,10 +7,14 @@
 // children; names come from labels, the nodes that label, or contents;
 // bounds are carried into the root's placement through every transform.
 
+#include "access_text.h"
 #include "access_tree_store.h"
+#include "allocator.h"
 
 #include "maul-ui/access_tree.h"
 
+#include <math.h>
+#include <stdalign.h>
 #include <string.h>
 
 // How filtering treats a node: shown; left out with its subtree; or left
@@ -245,18 +249,10 @@ muiResult muiAccessTree_GetShownChildren(const muiAccessTree* tree, uint64_t id,
     return count <= capacity ? mui_success : mui_errorCapacity;
 }
 
-muiResult muiAccessTree_GetBounds(const muiAccessTree* tree, uint64_t id, muiRect* boundsOut)
+// A held node's transforms composed, its own innermost: from its own
+// space to where the root is placed.
+static muiDrawTransform TransformOf(const muiAccessTree* tree, uint32_t slot)
 {
-    if (tree == nullptr || boundsOut == nullptr)
-    {
-        return mui_errorInvalid;
-    }
-    uint32_t slot = muiHeldSlotOf(tree, id);
-    if (slot == 0)
-    {
-        return mui_empty;
-    }
-    // The transforms composed, the node's innermost.
     muiDrawTransform m = {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
     uint32_t steps = 0;
     for (uint32_t at = slot; at != 0 && steps <= tree->count;
@@ -268,7 +264,171 @@ muiResult muiAccessTree_GetBounds(const muiAccessTree* tree, uint64_t id, muiRec
             t->b * m.c + t->d * m.d, t->a * m.e + t->c * m.f + t->e, t->b * m.e + t->d * m.f + t->f,
         };
     }
+    return m;
+}
+
+muiResult muiAccessTree_GetBounds(const muiAccessTree* tree, uint64_t id, muiRect* boundsOut)
+{
+    if (tree == nullptr || boundsOut == nullptr)
+    {
+        return mui_errorInvalid;
+    }
+    uint32_t slot = muiHeldSlotOf(tree, id);
+    if (slot == 0)
+    {
+        return mui_empty;
+    }
+    muiDrawTransform m = TransformOf(tree, slot);
     *boundsOut = BoxOf(&m, tree->held[slot - 1].node.bounds);
+    return mui_success;
+}
+
+muiResult muiAccessTree_GetTextRects(const muiAccessTree* tree, uint64_t id, uint32_t start,
+                                     uint32_t end, muiRect* rectsOut, uint32_t capacity,
+                                     uint32_t* countOut)
+{
+    if (tree == nullptr || countOut == nullptr || (rectsOut == nullptr && capacity != 0))
+    {
+        return mui_errorInvalid;
+    }
+    *countOut = 0;
+    uint32_t slot = muiHeldSlotOf(tree, id);
+    const muiAccessTextMarks* marks = slot != 0 ? &tree->held[slot - 1].node.marks : nullptr;
+    if (marks == nullptr || marks->lineBoxes == nullptr)
+    {
+        return mui_empty;
+    }
+    uint32_t count = muiAccessRangeRects(marks, tree->held[slot - 1].node.bounds, start, end,
+                                         rectsOut, capacity);
+    muiDrawTransform m = TransformOf(tree, slot);
+    for (uint32_t i = 0; i < count && i < capacity; i++)
+    {
+        rectsOut[i] = BoxOf(&m, rectsOut[i]);
+    }
+    *countOut = count;
+    return count <= capacity ? mui_success : mui_errorCapacity;
+}
+
+// The line a cluster lies on: the last whose first cluster is not after
+// it.
+static uint32_t LineOfCluster(const muiAccessTextMarks* marks, uint32_t cluster)
+{
+    uint32_t low = 0;
+    uint32_t high = marks->lineCount;
+    while (high - low > 1)
+    {
+        uint32_t middle = low + (high - low) / 2;
+        if (marks->lineBoxes[middle].firstCluster <= cluster)
+        {
+            low = middle;
+        }
+        else
+        {
+            high = middle;
+        }
+    }
+    return low;
+}
+
+// For each byte of a span, the cluster holding it, plus 1; 0 for none.
+static void MapClusters(const muiAccessTextMarks* marks, uint32_t from, uint32_t to, uint32_t* map)
+{
+    memset(map, 0, (size_t)(to - from) * sizeof(uint32_t));
+    for (uint32_t i = 0; i < marks->clusterCount; i++)
+    {
+        const muiAccessCluster* cluster = &marks->clusters[i];
+        uint32_t start = cluster->start > from ? cluster->start : from;
+        uint32_t end = cluster->end < to ? cluster->end : to;
+        for (uint32_t b = start; b < end; b++)
+        {
+            map[b - from] = i + 1;
+        }
+    }
+}
+
+// A character's rectangle where the root is placed, a line high; none
+// when no cluster holds it.
+static muiRect CharacterRect(const muiAccessTextMarks* marks, const muiDrawTransform* m,
+                             uint32_t cluster)
+{
+    if (cluster == 0)
+    {
+        return (muiRect){0.0f, 0.0f, -1.0f, -1.0f};
+    }
+    const muiAccessCluster* c = &marks->clusters[cluster - 1];
+    const muiAccessLineBox* line = &marks->lineBoxes[LineOfCluster(marks, cluster - 1)];
+    return BoxOf(m, (muiRect){c->left, line->top, c->right - c->left, line->bottom - line->top});
+}
+
+bool muiAccessUnitRects(const muiAccessTree* tree, uint64_t id, uint32_t first, uint32_t count,
+                        const muiAllocator* allocator, muiRect* rectsOut)
+{
+    uint32_t slot = muiHeldSlotOf(tree, id);
+    const muiAccessNode* node = slot != 0 ? &tree->held[slot - 1].node : nullptr;
+    if (node == nullptr || node->marks.lineBoxes == nullptr)
+    {
+        return false;
+    }
+    const muiAccessTextMarks* marks = &node->marks;
+    muiAccessText text = muiAccessValueOf(node);
+    uint32_t last = count > UINT32_MAX - first ? UINT32_MAX : first + count;
+    uint32_t from = muiAccessByteOfUtf16(&text, first);
+    uint32_t to = muiAccessByteOfUtf16(&text, last);
+    // A last unit inside a surrogate pair takes the pair.
+    if (to < text.length && muiAccessUtf16Before(text.bytes, to) < last)
+    {
+        to = muiAccessBoundaryAfter(&text, mui_unitCharacter, to);
+    }
+    size_t size = (size_t)(to - from + 1) * sizeof(uint32_t);
+    uint32_t* map = muiAllocate(allocator, size, alignof(uint32_t));
+    if (map == nullptr)
+    {
+        return false;
+    }
+    MapClusters(marks, from, to, map);
+    muiDrawTransform m = TransformOf(tree, slot);
+    for (uint32_t i = 0; i < count; i++)
+    {
+        rectsOut[i] = (muiRect){0.0f, 0.0f, -1.0f, -1.0f};
+    }
+    uint32_t unit = muiAccessUtf16Before(text.bytes, from);
+    for (uint32_t at = from; at < to;)
+    {
+        uint32_t next = muiAccessBoundaryAfter(&text, mui_unitCharacter, at);
+        muiRect rect = CharacterRect(marks, &m, map[at - from]);
+        // Four bytes are two units, a surrogate pair.
+        for (uint32_t k = next - at == 4 ? 2 : 1; k > 0; k--, unit++)
+        {
+            if (unit >= first && unit - first < count)
+            {
+                rectsOut[unit - first] = rect;
+            }
+        }
+        at = next;
+    }
+    muiRelease(allocator, map, size, alignof(uint32_t));
+    return true;
+}
+
+muiResult muiAccessTree_GetTextOffsetAt(const muiAccessTree* tree, uint64_t id, float x, float y,
+                                        uint32_t* offsetOut)
+{
+    if (tree == nullptr || offsetOut == nullptr || !isfinite(x) || !isfinite(y))
+    {
+        return mui_errorInvalid;
+    }
+    uint32_t slot = muiHeldSlotOf(tree, id);
+    const muiAccessTextMarks* marks = slot != 0 ? &tree->held[slot - 1].node.marks : nullptr;
+    muiDrawTransform m = slot != 0 ? TransformOf(tree, slot) : (muiDrawTransform){0};
+    // The point taken back into the node's own space.
+    float det = m.a * m.d - m.b * m.c;
+    if (marks == nullptr || marks->lineBoxes == nullptr || det == 0.0f || !isfinite(det))
+    {
+        return mui_empty;
+    }
+    float dx = x - m.e;
+    float dy = y - m.f;
+    *offsetOut = muiAccessOffsetAt(marks, (m.d * dx - m.c * dy) / det, (m.a * dy - m.b * dx) / det);
     return mui_success;
 }
 
@@ -332,7 +492,9 @@ static void JoinLabellers(Name* name, const muiAccessTree* tree, const muiAccess
     }
 }
 
-// Whether a role takes its name from what is inside it.
+// Whether a role takes its name from what is inside it: ARIA 1.2's roles
+// supporting name from content (accname 1.2, step 2F). A list item's
+// name is its author's alone.
 static bool IsNamedByContents(muiRole role)
 {
     switch (role)
@@ -347,14 +509,24 @@ static bool IsNamedByContents(muiRole role)
     case mui_roleMenuItemCheckBox:
     case mui_roleMenuItemRadio:
     case mui_roleTab:
+    case mui_roleCell:
+    case mui_roleGridCell:
+    case mui_roleRowHeader:
+    case mui_roleColumnHeader:
+    case mui_roleRow:
+    case mui_roleListBoxOption:
+    case mui_roleTreeItem:
+    case mui_roleTooltip:
+    case mui_roleHeading:
         return true;
     default:
         return false;
     }
 }
 
-// The texts of the labels and images inside a node, in tree order;
-// hidden subtrees give none.
+// The texts of the labels and images inside a node, in tree order, of
+// what has a label of its own, which stands for all of it, and of what
+// is named by its content; hidden subtrees give none.
 static void JoinContents(Name* name, const muiAccessTree* tree, uint32_t slot)
 {
     uint32_t count = 0;
@@ -371,10 +543,16 @@ static void JoinContents(Name* name, const muiAccessTree* tree, uint32_t slot)
         {
             continue;
         }
-        if (node->role == mui_roleLabel || node->role == mui_roleImage)
+        if (node->role == mui_roleLabel || node->role == mui_roleImage ||
+            node->text[mui_accessLabel] != nullptr)
         {
             JoinTextOf(name, node);
             continue;
+        }
+        // One named by its content gives its own text, then its inside's.
+        if (IsNamedByContents(node->role))
+        {
+            Join(name, node->text[mui_accessValue], node->textLength[mui_accessValue]);
         }
         for (uint32_t k = node->childCount; k > 0 && count < tree->capacity; k--)
         {
@@ -400,8 +578,11 @@ muiResult muiAccessTree_GetName(const muiAccessTree* tree, uint64_t id, char* bu
         {
             JoinLabellers(&name, tree, node);
         }
+        // Named by contents: its own content's text (host content read
+        // into its value), then what is inside it.
         if (name.length == 0 && IsNamedByContents(node->role))
         {
+            Join(&name, node->text[mui_accessValue], node->textLength[mui_accessValue]);
             JoinContents(&name, tree, slot);
         }
     }

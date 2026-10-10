@@ -89,6 +89,22 @@ void muiAriaIdOf(int page, uint64_t id, char out[ARIA_ID_SIZE]);
 // sets.
 bool muiAriaIsRange(const muiAccessNode* node);
 
+// The element a node is shown by: a div; an input of type range, for a
+// range the host sets; an input, or a textarea, for a text being edited
+// (research 154, I138).
+typedef enum muiAriaKind
+{
+    mui_ariaDiv = 0,
+    mui_ariaRange = 1,
+    mui_ariaLine = 2,
+    mui_ariaLines = 3,
+} muiAriaKind;
+
+muiAriaKind muiAriaKindOf(const muiAccessNode* node);
+
+// An input's type for a text being edited ("text", "password", ...).
+const char* muiAriaInputTypeOf(const muiAccessNode* node);
+
 // What a client did to an element, as the page tells it.
 typedef enum muiAriaEvent
 {
@@ -97,13 +113,28 @@ typedef enum muiAriaEvent
     mui_ariaRangeSet = 2,
 } muiAriaEvent;
 
+// What a client did to a text field's text, in UTF-16 units of the
+// element's value: length bytes of UTF-8 text to put in place of start up
+// to end, asked of the host as a replacement; or, text NULL, a selection
+// from start (the anchor) to end (the focus).
+void muiAriaPerformText(muiAriaAdapter* adapter, uint32_t slot, uint32_t start, uint32_t end,
+                        const char* text, uint32_t length);
+
 // Asks the host for the action a client's event means.
 void muiAriaPerform(muiAriaAdapter* adapter, muiAriaEvent event, uint32_t slot, double value);
 
 // The enabling button was pressed, a client acted on an element: called
 // from the page.
 void muiAriaEnableFromPage(muiAriaAdapter* adapter);
+// The enabling button pressed: as muiAriaAdapter_Enable, the DOM focus
+// going on to the program's focused node whether or not the button had it.
+void muiAriaEnablePressed(muiAriaAdapter* adapter);
 void muiAriaEventFromPage(muiAriaAdapter* adapter, int kind, uint32_t slot, double value);
+// Room the page writes a text of length bytes into, which
+// muiAriaTextFromPage takes back; NULL when there is none.
+char* muiAriaTextRoomFromPage(muiAriaAdapter* adapter, uint32_t length);
+void muiAriaTextFromPage(muiAriaAdapter* adapter, uint32_t slot, uint32_t start, uint32_t end,
+                         char* text, uint32_t length);
 
 // The page's calls (aria_page.c). Strings are UTF-8, NUL-terminated.
 int muiAriaPageOpen(const char* host, bool deferred, const char* label, muiAriaAdapter* adapter);
@@ -111,7 +142,11 @@ void muiAriaPageClose(int page);
 bool muiAriaPageDropButton(int page);
 void muiAriaPageFocus(int page, uint32_t slot, bool always);
 void muiAriaPageAnnounce(int page, const char* text, bool assertive);
-void muiAriaPageMake(int page, uint32_t slot, bool range, const char* id);
+void muiAriaPageMake(int page, uint32_t slot, muiAriaKind kind, const char* inputType,
+                     const char* id);
+// A text field's selection, in UTF-16 units, written while it has the
+// DOM focus.
+void muiAriaPageSelect(int page, uint32_t slot, uint32_t start, uint32_t end, bool backward);
 void muiAriaPageRemove(int page, uint32_t slot);
 void muiAriaPagePlace(int page, uint32_t slot, uint32_t parent, uint32_t index);
 void muiAriaPageBox(int page, uint32_t slot, float x, float y, float width, float height);

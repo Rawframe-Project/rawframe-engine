@@ -502,9 +502,16 @@ static bool ReplaceRange(muiTextService* service, muiTextBlock* block, uint32_t 
         return false;
     }
     // Spans' run styles are found for the whole text again, so a block
-    // with spans is shaped whole.
+    // with spans is shaped whole. Words kept for the text before follow
+    // the edit; word breaks never cross a paragraph's.
     bool keep = block->shaped && block->spanCount == 0;
+    bool keepWords = block->accessWords.made && block->accessWords.revision == block->revision;
     Adopt(allocator, block, &analysis, total);
+    if (keepWords)
+    {
+        MarkStale(&block->accessWords.stale, start, end, length, from, to);
+        block->accessWords.revision = block->revision;
+    }
     if (keep)
     {
         block->shaped = true;

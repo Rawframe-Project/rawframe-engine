@@ -5,6 +5,7 @@
 // object with three interfaces, muiUiaSimple,
 // muiUiaFragment and, for the root, its FragmentRoot.
 
+#include "access_record.h"
 #include "uia.h"
 
 #include <stddef.h>
@@ -441,7 +442,7 @@ static HRESULT STDMETHODCALLTYPE RootFocus(muiUiaFragmentRoot* fragmentRoot, mui
         return ELEMENT_GONE;
     }
     const muiAccessTree* tree = node->adapter->tree;
-    uint64_t focus = muiAccessTree_GetFocus(tree);
+    uint64_t focus = muiRecordActiveFocus(tree);
     return GiveFragment(node->adapter, focus != muiAccessTree_GetRoot(tree) ? focus : 0, out);
 }
 

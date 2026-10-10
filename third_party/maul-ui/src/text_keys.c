@@ -296,10 +296,12 @@ muiResult muiTextEditEvent(const muiTextHost* host, muiNodeId nodeId, const muiE
     {
         return muiRefuseEdit(host != nullptr ? host->service : nullptr);
     }
-    muiTextEditOutcome outcome = {false, false, false};
+    muiTextEditOutcome outcome = {false, false, false, false};
     muiTextBlockId blockId = BlockOf(host, nodeId);
     muiTextBlock* block = nullptr;
     muiResult result = muiEditBlock(host->service, blockId, &block);
+    const muiTextSelection before =
+        result == mui_success ? block->editing.selection : (muiTextSelection){0};
     if (result == mui_success && event->kind == mui_eventText)
     {
         // Control characters are the keys' to act on.
@@ -324,6 +326,10 @@ muiResult muiTextEditEvent(const muiTextHost* host, muiNodeId nodeId, const muiE
     }
     if (result == mui_success)
     {
+        const muiTextSelection* after = &block->editing.selection;
+        outcome.selected = after->anchor != before.anchor ||
+                           after->caret.offset != before.caret.offset ||
+                           after->caret.affinity != before.caret.affinity;
         *outcomeOut = outcome;
     }
     return result;

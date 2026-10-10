@@ -8,6 +8,8 @@
 // apply is answered per node, as AccessKit does, so that clients offer
 // only what a node has.
 
+#include "access_record.h"
+#include "access_text.h"
 #include "allocator.h"
 #include "ns.h"
 
@@ -177,11 +179,17 @@ static bool Has(const muiAccessNode* node, muiAccessAction action)
     return StringOf(node->text[mui_accessValue]);
 }
 
+// A range's number, or an edited text's whole text, as the host takes it.
 - (void)setAccessibilityValue:(id)value
 {
     const muiAccessNode* node = NodeOf(self);
-    if (node != nullptr && Has(node, mui_actionSetValue) &&
-        [value respondsToSelector:@selector(floatValue)])
+    if (node != nullptr && Has(node, mui_actionReplaceText) &&
+        [value isKindOfClass:[NSString class]])
+    {
+        (void)muiNsReplaceAll(self, value);
+    }
+    else if (node != nullptr && Has(node, mui_actionSetValue) &&
+             [value respondsToSelector:@selector(floatValue)])
     {
         (void)muiNsAct(adapter, mui_actionSetValue, nodeId, [value floatValue]);
     }
@@ -225,7 +233,7 @@ static bool Has(const muiAccessNode* node, muiAccessAction action)
 
 - (BOOL)isAccessibilityFocused
 {
-    return NodeOf(self) != nullptr && muiAccessTree_GetFocus(adapter->tree) == nodeId;
+    return NodeOf(self) != nullptr && muiRecordActiveFocus(adapter->tree) == nodeId;
 }
 
 - (void)setAccessibilityFocused:(BOOL)focused
@@ -294,7 +302,7 @@ static bool Has(const muiAccessNode* node, muiAccessAction action)
 
 - (id)accessibilityFocusedUIElement
 {
-    return NodeOf(self) != nullptr ? muiNsObjectOf(adapter, muiAccessTree_GetFocus(adapter->tree))
+    return NodeOf(self) != nullptr ? muiNsObjectOf(adapter, muiRecordActiveFocus(adapter->tree))
                                    : nil;
 }
 
@@ -336,7 +344,11 @@ static bool Has(const muiAccessNode* node, muiAccessAction action)
     }
     if (selector == @selector(setAccessibilityValue:))
     {
-        return Has(node, mui_actionSetValue);
+        return Has(node, mui_actionSetValue) || Has(node, mui_actionReplaceText);
+    }
+    if (muiNsIsTextSelector(selector))
+    {
+        return muiAccessIsEdited(node) && muiNsAllowsText(node, selector);
     }
     if (selector == @selector(isAccessibilitySelected))
     {

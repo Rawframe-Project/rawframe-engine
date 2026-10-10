@@ -31,23 +31,45 @@ extern "C"
         uint32_t fontFamilies;
     } muiTextLimits;
 
-    // How a service is made. Build it with muiDefaultTextServiceDef.
+    // How a service is made. Build it with muiDefaultTextServiceDef. The
+    // cookie and the version come first, where every version keeps them.
     typedef struct muiTextServiceDef
     {
         uint32_t cookie;
+        uint32_t version;
         // Gives the service's memory and FreeType's. HarfBuzz allocates
         // from the C library (record mui-0006).
         muiAllocator allocator;
         muiTextLimits limits;
     } muiTextServiceDef;
 
+// The cookie of a service def, which muiDefaultTextServiceDef sets and the
+// service checks.
+#define MUI_TEXT_SERVICE_DEF_COOKIE 0x6D757478u
+
     /// Returns the default service def: 64 fonts, 1,024 text blocks, 16
     /// font families and the C library's allocator.
+    ///
+    /// Built in the program from the headers it includes, so it carries
+    /// their version (MUI_DEF_VERSION), which the service checks.
     ///
     /// @return The def, with a valid cookie.
     /// @par Thread safety
     /// Safe from any thread.
-    MUI_API muiTextServiceDef muiDefaultTextServiceDef(void);
+    static inline muiTextServiceDef muiDefaultTextServiceDef(void)
+    {
+#ifdef __cplusplus
+        muiTextServiceDef def = {};
+#else
+    muiTextServiceDef def = {0};
+#endif
+        def.cookie = MUI_TEXT_SERVICE_DEF_COOKIE;
+        def.version = MUI_DEF_VERSION;
+        def.limits.fonts = 64;
+        def.limits.textBlocks = 1024;
+        def.limits.fontFamilies = 16;
+        return def;
+    }
 
     /// Creates a text service.
     ///

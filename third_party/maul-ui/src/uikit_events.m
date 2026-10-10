@@ -7,7 +7,8 @@
 // new screen (the root changing, or a node turning modal) is told with
 // the element VoiceOver should move to; else a layout change, with the
 // focused element when the focus moved, or none. A live node's new name
-// is announced, queued behind current speech when polite.
+// is announced, queued behind current speech when polite. A text
+// element's input delegate is told of its text and selection changing.
 
 #include "access_record.h"
 #include "uikit.h"
@@ -55,12 +56,17 @@ void muiUikitTellUpdated(muiUikitAdapter* adapter, const muiAccessNode* old,
     {
         Announce(adapter, node);
     }
+    MUIAccessibilityElement* element = muiIdMapFind(&adapter->elementById, node->id);
+    if ([element isKindOfClass:[MUIAccessibilityTextElement class]])
+    {
+        muiUikitTellText((MUIAccessibilityTextElement*)element, old, node);
+    }
 }
 
 void muiUikitTellChanges(muiUikitAdapter* adapter, uint64_t oldRoot)
 {
     uint64_t root = muiAccessTree_GetRoot(adapter->tree);
-    uint64_t focus = muiAccessTree_GetFocus(adapter->tree);
+    uint64_t focus = muiRecordActiveFocus(adapter->tree);
     if (adapter->screen == 0 && root != oldRoot && root != 0)
     {
         adapter->screen = focus != 0 ? focus : root;

@@ -102,7 +102,9 @@ extern "C"
     ///         sent, a root, or focus, that is neither, or lists that do
     ///         not leave a tree: a child listed twice, or by a node sent
     ///         while a node not sent lists it, the root listed, or a node
-    ///         under itself.
+    ///         under itself; or a node whose marks do not fit its value
+    ///         text: offsets past it or inside a character, lines not
+    ///         ascending from 0, words out of order or empty.
     /// @par Thread safety
     /// Safe from any thread; the tree is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiAccessTree_Apply(muiAccessTree* tree,
@@ -248,9 +250,56 @@ extern "C"
     MUI_NODISCARD MUI_API muiResult muiAccessTree_GetBounds(const muiAccessTree* tree, uint64_t id,
                                                             muiRect* boundsOut);
 
+    /// The rectangles of a node's value text from one byte offset up to
+    /// another, where the root is placed (as muiAccessTree_GetBounds): for
+    /// each line, the box around its clusters with bytes in the range,
+    /// carried through the transforms. A range no cluster has bytes of
+    /// (empty, or a line break alone) has none.
+    ///
+    /// @param tree      The tree.
+    /// @param id        The node's id.
+    /// @param start     The range's first byte.
+    /// @param end       The byte after its last.
+    /// @param rectsOut  Receives the rectangles, as many as capacity; NULL
+    ///                  with a capacity of 0 to count them.
+    /// @param capacity  How many rectsOut holds.
+    /// @param countOut  Receives how many there are.
+    /// @return `mui_success`; `mui_empty` for a node not held or whose text
+    ///         has no clusters (none given), the count 0;
+    ///         `mui_errorCapacity` when there are more than capacity;
+    ///         `mui_errorInvalid` for a NULL tree or count, or NULL rectangles
+    ///         with a capacity.
+    /// @par Thread safety
+    /// Safe from any thread; the tree is used by one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiAccessTree_GetTextRects(const muiAccessTree* tree,
+                                                               uint64_t id, uint32_t start,
+                                                               uint32_t end, muiRect* rectsOut,
+                                                               uint32_t capacity,
+                                                               uint32_t* countOut);
+
+    /// The character of a node's value text at a point where the root is
+    /// placed: on the line whose box holds the point, or the nearest, the
+    /// cluster whose edges hold it, or the nearest; a line with no
+    /// clusters gives its start.
+    ///
+    /// @param tree       The tree.
+    /// @param id         The node's id.
+    /// @param x          The point's x.
+    /// @param y          The point's y.
+    /// @param offsetOut  Receives the character's first byte.
+    /// @return `mui_success`; `mui_empty` for a node not held, whose text
+    ///         has no clusters (none given), or whose transforms flatten it;
+    ///         `mui_errorInvalid` for a NULL argument or a point not finite.
+    /// @par Thread safety
+    /// Safe from any thread; the tree is used by one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiAccessTree_GetTextOffsetAt(const muiAccessTree* tree,
+                                                                  uint64_t id, float x, float y,
+                                                                  uint32_t* offsetOut);
+
     /// Writes the tree as text, a node a line in tree order, indented by
     /// depth: its role's name, its id's index, and its flags, actions,
-    /// size, place and texts where it has them. Tests compare it.
+    /// size, place, texts, selection and counts of lines and words where
+    /// it has them. Tests compare it.
     ///
     /// @param tree       The tree.
     /// @param buffer     Receives the text, NUL-terminated; may be NULL

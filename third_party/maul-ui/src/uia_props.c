@@ -5,6 +5,7 @@
 // types from roles, texts as BSTRs, and states, positions and landmarks
 // from a node's flags and values.
 
+#include "access_record.h"
 #include "allocator.h"
 #include "uia.h"
 
@@ -247,7 +248,7 @@ static bool StateProperty(VARIANT* out, const muiUiaAdapter* adapter, const muiA
         SetBool(out, (node->flags & mui_accessFocusable) != 0);
         return true;
     case PROPERTY_HAS_KEYBOARD_FOCUS:
-        SetBool(out, node->id == muiAccessTree_GetFocus(adapter->tree));
+        SetBool(out, node->id == muiRecordActiveFocus(adapter->tree));
         return true;
     case PROPERTY_IS_ENABLED:
         SetBool(out, (node->flags & mui_accessDisabled) == 0);

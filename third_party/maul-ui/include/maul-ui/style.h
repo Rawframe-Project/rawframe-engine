@@ -376,14 +376,14 @@ extern "C"
     ///
     /// @param context     The context.
     /// @param def         The class: a valid cookie.
-    /// @param styleIdOut  Receives the class; set to the null id on failure.
+    /// @param styleOut  Receives the class; set to the null id on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
     ///         cookie or a call from a measure or paint function;
     ///         `mui_errorCapacity` when the context's style limit is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiCreateStyle(muiContext* context, const muiStyleDef* def,
-                                                   muiStyleId* styleIdOut);
+                                                   muiStyleId* styleOut);
 
     /// Destroys a style class. Nodes and node types that list it skip it,
     /// and every node is styled again at the next muiComputeLayout.
@@ -549,7 +549,7 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param def        The type: a valid cookie and its classes.
-    /// @param typeIdOut  Receives the type; set to the null id on failure.
+    /// @param typeOut  Receives the type; set to the null id on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
     ///         cookie, classes NULL with a count, a count over the limit or a
     ///         call from a measure or paint function; `mui_errorCapacity`
@@ -558,7 +558,7 @@ extern "C"
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiCreateNodeType(muiContext* context,
                                                       const muiNodeTypeDef* def,
-                                                      muiNodeTypeId* typeIdOut);
+                                                      muiNodeTypeId* typeOut);
 
     /// Destroys a node type. Its nodes are left with no type, and every
     /// node is styled again at the next muiComputeLayout.

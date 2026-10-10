@@ -213,7 +213,7 @@ static void Watch(muiContext* context, uint32_t slot, const muiConditionRun* run
         layout->heldSizes[1] = (muiSize){history[0].width, history[0].height};
         const muiNotification record = {
             .kind = mui_notificationOscillation,
-            .nodeId = muiTreeIdOf(&context->tree, slot),
+            .node = muiTreeIdOf(&context->tree, slot),
         };
         muiNotifyPost(&context->notifications, &record);
         return;

@@ -3,8 +3,10 @@
 //
 // The UI Automation adapter's control patterns (record mui-0008): which
 // a node has, and Invoke, Toggle, ExpandCollapse, ScrollItem and
-// SelectionItem, each turned into the host's actions.
+// SelectionItem, each turned into the host's actions; Text's are in
+// src/uia_text.c.
 
+#include "access_text.h"
 #include "uia.h"
 
 #include <stddef.h>
@@ -26,6 +28,10 @@ static const IID s_scrollItem = {
     0x2360c714, 0x4bf1, 0x4b26, {0xba, 0x65, 0x9b, 0x21, 0x31, 0x61, 0x27, 0xeb}};
 static const IID s_selectionItem = {
     0x2acad808, 0xb2d4, 0x452d, {0xa4, 0x07, 0x91, 0xff, 0x1a, 0xd1, 0x67, 0xb2}};
+static const IID s_text = {
+    0x3589c92c, 0x63f3, 0x4367, {0x99, 0xbb, 0xad, 0xa6, 0x53, 0xb7, 0x7c, 0xf2}};
+static const IID s_text2 = {
+    0x0dc5e6ed, 0x3e16, 0x4bf1, {0x8f, 0x9a, 0xa9, 0x79, 0x87, 0x8b, 0xc1, 0x95}};
 
 // A pattern: its id, its interface's id, and where the interface sits.
 typedef struct Pattern
@@ -44,6 +50,8 @@ static const Pattern s_patterns[] = {
     {PATTERN_SCROLL, &s_scroll, offsetof(muiUiaNode, scroll)},
     {PATTERN_SCROLL_ITEM, &s_scrollItem, offsetof(muiUiaNode, scrollItem)},
     {PATTERN_SELECTION_ITEM, &s_selectionItem, offsetof(muiUiaNode, selectionItem)},
+    {PATTERN_TEXT, &s_text, offsetof(muiUiaNode, text)},
+    {PATTERN_TEXT2, &s_text2, offsetof(muiUiaNode, text)},
 };
 
 static bool Can(const muiAccessNode* node, muiAccessAction action)
@@ -76,6 +84,9 @@ static bool Has(const muiAccessNode* node, int pattern)
         return Can(node, mui_actionScrollIntoView);
     case PATTERN_SELECTION_ITEM:
         return (flags & mui_accessSelectable) != 0;
+    case PATTERN_TEXT:
+    case PATTERN_TEXT2:
+        return muiAccessIsEdited(node);
     default:
         return false;
     }
@@ -439,4 +450,5 @@ void muiUiaInitPatterns(muiUiaNode* node)
     node->scrollItem.lpVtbl = &s_scrollItemTable;
     node->selectionItem.lpVtbl = &s_selectionItemTable;
     muiUiaInitValuePatterns(node);
+    muiUiaInitTextPattern(node);
 }

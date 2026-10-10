@@ -17,8 +17,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#define TEXT_SERVICE_DEF_COOKIE 0x6D757478u // "mutx"
-
 enum
 {
     MAX_FONTS = 65536,
@@ -84,14 +82,6 @@ static void* FreeTypeRealloc(FT_Memory memory, long currentSize, long newSize, v
         FreeTypeFree(memory, block);
     }
     return moved;
-}
-
-muiTextServiceDef muiDefaultTextServiceDef(void)
-{
-    return (muiTextServiceDef){
-        .cookie = TEXT_SERVICE_DEF_COOKIE,
-        .limits = {.fonts = 64, .textBlocks = 1024, .fontFamilies = 16},
-    };
 }
 
 typedef struct Parts
@@ -187,8 +177,17 @@ muiResult muiCreateTextService(const muiTextServiceDef* def, muiTextService** se
     {
         *serviceOut = nullptr;
     }
-    if (def == nullptr || serviceOut == nullptr || def->cookie != TEXT_SERVICE_DEF_COOKIE ||
-        !muiIsAllocatorValid(&def->allocator) || def->limits.fonts == 0 ||
+    if (def == nullptr || serviceOut == nullptr || def->cookie != MUI_TEXT_SERVICE_DEF_COOKIE)
+    {
+        return mui_errorInvalid;
+    }
+    // Another version's def may be of another layout: nothing past the
+    // version is read.
+    if (def->version != MUI_DEF_VERSION)
+    {
+        return mui_errorVersion;
+    }
+    if (!muiIsAllocatorValid(&def->allocator) || def->limits.fonts == 0 ||
         def->limits.fonts > MAX_FONTS || def->limits.textBlocks > MAX_BLOCKS ||
         def->limits.fontFamilies > MAX_FAMILIES)
     {

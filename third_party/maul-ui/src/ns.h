@@ -47,13 +47,18 @@ struct muiNsAdapter
     // What the update being applied changed: the shown tree, the focus.
     bool reshaped;
     bool focusMoved;
+    // The focus shown last: the tree's, or its active descendant.
+    uint64_t toldFocus;
 };
 
 // The object of a held node, made when first asked for; nil for none.
 MUIAccessibilityNode* muiNsObjectOf(muiNsAdapter* adapter, uint64_t id);
 
-// A node's box on the screen, in points.
+// A box where the root is placed, and a node's box, on the screen in
+// points; a point on the screen where the root is placed.
+NSRect muiNsScreenRectOfBox(const muiNsAdapter* adapter, muiRect box);
 NSRect muiNsScreenRectOf(const muiNsAdapter* adapter, uint64_t id);
+void muiNsRootPointOf(const muiNsAdapter* adapter, NSPoint screen, float* xOut, float* yOut);
 
 // The deepest shown node under a point on the screen, 0 for none.
 uint64_t muiNsNodeAt(const muiNsAdapter* adapter, NSPoint screen);
@@ -70,6 +75,13 @@ void muiNsTellUpdated(muiNsAdapter* adapter, const muiAccessNode* old, const mui
 void muiNsTellDestroyed(const muiNsAdapter* adapter, MUIAccessibilityNode* object);
 void muiNsTellLayout(muiNsAdapter* adapter);
 void muiNsTellFocus(muiNsAdapter* adapter);
+
+// The text methods (ns_text.m): whether a selector is one of them;
+// whether a text node answers it (the setters while the host takes the
+// request); replacing all of a text through the host.
+bool muiNsIsTextSelector(SEL selector);
+bool muiNsAllowsText(const muiAccessNode* node, SEL selector);
+bool muiNsReplaceAll(const MUIAccessibilityNode* object, NSString* value);
 
 // A node's AppKit role and subrole (nil for none).
 NSAccessibilityRole muiNsRoleOf(const muiAccessNode* node);

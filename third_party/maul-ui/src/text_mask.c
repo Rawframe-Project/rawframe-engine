@@ -112,23 +112,3 @@ muiTextBlock* muiShownBlock(muiTextService* service, muiTextBlock* block)
     block->maskRevision = block->revision;
     return block->mask;
 }
-
-bool muiAccessTextOf(void* user, muiNodeId nodeId, uint64_t hostKey, const char** textOut,
-                     size_t* lengthOut)
-{
-    (void)nodeId;
-    const muiTextHost* host = user;
-    const muiTextBlockId blockId = {(uint32_t)hostKey, (uint32_t)(hostKey >> 32)};
-    muiTextBlock* block = host != nullptr && host->service != nullptr
-                              ? muiResolveTextBlock(host->service, blockId)
-                              : nullptr;
-    // A password reads as its mask.
-    const muiTextBlock* shown = block != nullptr ? muiShownBlock(host->service, block) : nullptr;
-    if (shown == nullptr)
-    {
-        return false;
-    }
-    *textOut = shown->text.data;
-    *lengthOut = shown->length;
-    return true;
-}

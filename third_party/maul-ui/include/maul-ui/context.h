@@ -80,13 +80,19 @@ extern "C"
         uint32_t accessRoots;
     } muiLimits;
 
-    // How a context is made. Build it with muiDefaultContextDef.
+    // How a context is made. Build it with muiDefaultContextDef. The cookie
+    // and the version come first, where every version keeps them.
     typedef struct muiContextDef
     {
         uint32_t cookie;
+        uint32_t version;
         muiAllocator allocator;
         muiLimits limits;
     } muiContextDef;
+
+// The cookie of a context def, which muiDefaultContextDef sets and the
+// context checks.
+#define MUI_CONTEXT_DEF_COOKIE 0x6D756378u
 
     /// Returns the default context def: 4,096 nodes, 256 styles, 64 node
     /// types, 1,024 property sets, 64 notifications, 64 transitions, 256
@@ -96,10 +102,50 @@ extern "C"
     /// 16,384 estimated items together, and the C library's
     /// allocator.
     ///
+    /// Built in the program from the headers it includes, so it carries
+    /// their version (MUI_DEF_VERSION), which the context checks.
+    ///
     /// @return The def, with a valid cookie.
     /// @par Thread safety
     /// Safe from any thread.
-    MUI_API muiContextDef muiDefaultContextDef(void);
+    static inline muiContextDef muiDefaultContextDef(void)
+    {
+#ifdef __cplusplus
+        muiContextDef def = {};
+#else
+    muiContextDef def = {0};
+#endif
+        def.cookie = MUI_CONTEXT_DEF_COOKIE;
+        def.version = MUI_DEF_VERSION;
+        def.limits.nodes = 4096;
+        def.limits.styles = 256;
+        def.limits.nodeTypes = 64;
+        def.limits.propertySets = 1024;
+        def.limits.notifications = 64;
+        def.limits.transitions = 64;
+        def.limits.animations = 256;
+        def.limits.tokens = 256;
+        def.limits.tokenNames = 1024;
+        def.limits.themes = 16;
+        def.limits.themeOverrides = 512;
+        def.limits.drawCommands = 8192;
+        def.limits.drawClips = 256;
+        def.limits.drawGradients = 256;
+        def.limits.drawGlyphs = 16384;
+        def.limits.layers = 64;
+        def.limits.pointers = 16;
+        def.limits.pointerRecords = 64;
+        def.limits.neighbors = 256;
+        def.limits.drawTransforms = 64;
+        def.limits.ranges = 64;
+        def.limits.popups = 16;
+        def.limits.exits = 64;
+        def.limits.virtualLists = 8;
+        def.limits.virtualItems = 16384;
+        def.limits.accessNodes = 512;
+        def.limits.accessRoots = 4;
+        return def;
+    }
 
     /// Creates a context and reserves the memory its limits name.
     ///
@@ -162,7 +208,7 @@ extern "C"
     {
         muiNotificationKind kind;
         // The node it is about; the null id for mui_notificationDropped.
-        muiNodeId nodeId;
+        muiNodeId node;
         // For mui_notificationDropped, how many were dropped; for focus,
         // the player; for a popup, the reason.
         uint32_t count;

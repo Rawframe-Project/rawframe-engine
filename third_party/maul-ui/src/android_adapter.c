@@ -7,6 +7,7 @@
 // node goes, the oldest freed given first, so that a client's stale id
 // is unlikely to name another node soon.
 
+#include "access_record.h"
 #include "allocator.h"
 #include "android.h"
 
@@ -131,8 +132,11 @@ static muiResult MakeProvider(muiAndroidAdapter* adapter, JNIEnv* env, jobject v
                          : nullptr;
     adapter->handle = found != nullptr ? (*env)->GetFieldID(env, found, "handle", "J") : nullptr;
     adapter->send = found != nullptr ? (*env)->GetMethodID(env, found, "send", "(III)V") : nullptr;
+    adapter->sendText =
+        found != nullptr ? (*env)->GetMethodID(env, found, "sendText", "(IIIIILjava/lang/String;)V")
+                         : nullptr;
     jobject provider = make != nullptr && adapter->handle != nullptr && adapter->send != nullptr &&
-                               muiAndroidRegister(env, found)
+                               adapter->sendText != nullptr && muiAndroidRegister(env, found)
                            ? (*env)->NewObject(env, found, make, view, (jlong)(intptr_t)adapter)
                            : nullptr;
     bool made = !Threw(env) && provider != nullptr;
@@ -191,6 +195,7 @@ muiResult muiCreateAndroidAdapter(const muiAndroidAdapterDef* def, muiAndroidAda
         .user = def->user,
         .nodes = def->nodes,
         .tell = muiAndroidTell,
+        .tellText = muiAndroidTellText,
     };
     Lay(adapter, block);
     JNIEnv* env = def->env;
@@ -306,6 +311,13 @@ muiResult muiAndroidAdapter_Apply(muiAndroidAdapter* adapter, const muiAccessUpd
     adapter->reshaped = false;
     adapter->focusMoved = false;
     muiResult status = muiAccessTree_Apply(adapter->tree, update, &changes);
+    if (status == mui_success)
+    {
+        // The focus shown moves with the active descendant too.
+        uint64_t shown = muiRecordActiveFocus(adapter->tree);
+        adapter->focusMoved = adapter->focusMoved || shown != adapter->toldFocus;
+        adapter->toldFocus = shown;
+    }
     if (status == mui_success)
     {
         muiAndroidTellChanges(adapter);

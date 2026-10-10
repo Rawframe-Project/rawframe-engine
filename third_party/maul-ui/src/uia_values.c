@@ -5,11 +5,15 @@
 // Value (a node's value text), RangeValue (a range's number) and Scroll
 // (a container's offsets, as percents of how far it scrolls).
 
+#include "access_text.h"
+#include "allocator.h"
 #include "uia.h"
 
 #include <stddef.h>
+#include <wchar.h>
 
-// Value: the text is read here; setting it comes with text editing.
+// Value: the text read; set, whole, through the host's text request,
+// while the node takes it (src/access_text.h).
 
 static muiUiaNode* FromValue(muiUiaValue* self)
 {
@@ -34,10 +38,50 @@ static ULONG STDMETHODCALLTYPE ValueRelease(muiUiaValue* self)
     return left;
 }
 
+// Read only, a disabled node not enabled; a field not being edited,
+// which takes no text until it is, an invalid operation.
 static HRESULT STDMETHODCALLTYPE SetText(muiUiaValue* self, LPCWSTR text)
 {
-    (void)text;
-    return muiUiaNodeFor(FromValue(self)) != nullptr ? NOT_SUPPORTED : ELEMENT_GONE;
+    muiUiaNode* node = FromValue(self);
+    const muiAccessNode* held = muiUiaNodeFor(node);
+    if (held == nullptr)
+    {
+        return ELEMENT_GONE;
+    }
+    if (text == nullptr)
+    {
+        return E_INVALIDARG;
+    }
+    if ((held->flags & mui_accessDisabled) != 0)
+    {
+        return ELEMENT_NOT_ENABLED;
+    }
+    if ((held->actions & (1u << mui_actionReplaceText)) == 0)
+    {
+        return INVALID_OPERATION;
+    }
+    int units = (int)wcslen(text);
+    int bytes =
+        units != 0 ? WideCharToMultiByte(CP_UTF8, 0, text, units, nullptr, 0, nullptr, nullptr) : 0;
+    muiUiaAdapter* adapter = node->adapter;
+    char* utf8 = muiAllocate(&adapter->allocator, (size_t)bytes + 1, 1);
+    if (utf8 == nullptr)
+    {
+        return E_OUTOFMEMORY;
+    }
+    if (bytes != 0)
+    {
+        (void)WideCharToMultiByte(CP_UTF8, 0, text, units, utf8, bytes, nullptr, nullptr);
+    }
+    const muiAccessRequest request = {.action = mui_actionReplaceText,
+                                      .target = held->id,
+                                      .anchor = 0,
+                                      .focus = muiAccessValueOf(held).length,
+                                      .text = utf8,
+                                      .length = (uint32_t)bytes};
+    HRESULT result = muiUiaPerformRequest(adapter, &request);
+    muiRelease(&adapter->allocator, utf8, (size_t)bytes + 1, 1);
+    return result;
 }
 
 static HRESULT STDMETHODCALLTYPE Text(muiUiaValue* self, BSTR* out)
@@ -80,7 +124,10 @@ static HRESULT STDMETHODCALLTYPE TextIsReadOnly(muiUiaValue* self, BOOL* out)
     {
         return ELEMENT_GONE;
     }
-    *out = (held->flags & mui_accessReadOnly) != 0;
+    // As Chromium answers: only a text input neither read only nor
+    // disabled takes text; any other value is read.
+    *out = !muiAccessIsTextInput(held) ||
+           (held->flags & (mui_accessReadOnly | mui_accessDisabled)) != 0;
     return S_OK;
 }
 

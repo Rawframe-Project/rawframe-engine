@@ -5,8 +5,9 @@
 // AccessKit posts them: a title or a value changed on the node's object,
 // the focused element changed on the one focused, an element destroyed
 // when its node goes, the layout changed when the shown tree may have,
-// and an announcement on the window for a live node's new name, with a
-// high priority when it is assertive.
+// an announcement on the window for a live node's new name, with a high
+// priority when it is assertive, and the selected text changed when an
+// edited text's selection or caret moves.
 
 #include "access_record.h"
 #include "ns.h"
@@ -38,11 +39,21 @@ static void Announce(const muiNsAdapter* adapter, const muiAccessNode* node)
     adapter->post(window, NSAccessibilityAnnouncementRequestedNotification, info);
 }
 
+// Whether an edited text's selection or caret moved.
+static bool SelectionMoved(const muiAccessNode* old, const muiAccessNode* node)
+{
+    return old->marks.selected != node->marks.selected ||
+           (node->marks.selected &&
+            (old->marks.anchor != node->marks.anchor || old->marks.focus != node->marks.focus));
+}
+
 void muiNsTellUpdated(muiNsAdapter* adapter, const muiAccessNode* old, const muiAccessNode* node)
 {
     bool named = muiRecordNameDiffers(old, node);
     bool valued = ValueChanged(old, node);
-    MUIAccessibilityNode* object = named || valued ? muiNsObjectOf(adapter, node->id) : nil;
+    bool selected = SelectionMoved(old, node);
+    MUIAccessibilityNode* object =
+        named || valued || selected ? muiNsObjectOf(adapter, node->id) : nil;
     if (object == nil)
     {
         return;
@@ -64,6 +75,11 @@ void muiNsTellUpdated(muiNsAdapter* adapter, const muiAccessNode* old, const mui
     {
         Announce(adapter, node);
     }
+    // After the value, so the selection is read in the new text.
+    if (selected)
+    {
+        adapter->post(object, NSAccessibilitySelectedTextChangedNotification, nil);
+    }
 }
 
 void muiNsTellDestroyed(const muiNsAdapter* adapter, MUIAccessibilityNode* object)
@@ -82,7 +98,7 @@ void muiNsTellLayout(muiNsAdapter* adapter)
 
 void muiNsTellFocus(muiNsAdapter* adapter)
 {
-    MUIAccessibilityNode* focus = muiNsObjectOf(adapter, muiAccessTree_GetFocus(adapter->tree));
+    MUIAccessibilityNode* focus = muiNsObjectOf(adapter, muiRecordActiveFocus(adapter->tree));
     if (focus != nil)
     {
         adapter->post(focus, NSAccessibilityFocusedUIElementChangedNotification, nil);

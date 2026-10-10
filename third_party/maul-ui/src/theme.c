@@ -25,17 +25,17 @@ muiThemeDef muiDefaultThemeDef(void)
     return (muiThemeDef){.cookie = THEME_DEF_COOKIE};
 }
 
-muiResult muiCreateTheme(muiContext* context, const muiThemeDef* def, muiThemeId* themeIdOut)
+muiResult muiCreateTheme(muiContext* context, const muiThemeDef* def, muiThemeId* themeOut)
 {
-    if (themeIdOut != nullptr)
+    if (themeOut != nullptr)
     {
-        *themeIdOut = (muiThemeId){0, 0};
+        *themeOut = (muiThemeId){0, 0};
     }
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (def == nullptr || themeIdOut == nullptr || def->cookie != THEME_DEF_COOKIE ||
+    if (def == nullptr || themeOut == nullptr || def->cookie != THEME_DEF_COOKIE ||
         muiIsInHostCall(context))
     {
         return muiRefuse(context);
@@ -46,7 +46,7 @@ muiResult muiCreateTheme(muiContext* context, const muiThemeDef* def, muiThemeId
     {
         return mui_errorCapacity;
     }
-    *themeIdOut = (muiThemeId){slot, muiPoolGeneration(&store->pool, slot)};
+    *themeOut = (muiThemeId){slot, muiPoolGeneration(&store->pool, slot)};
     // Set on no node yet, so no node restyles.
     return mui_success;
 }
@@ -298,9 +298,9 @@ muiResult muiNode_SetTheme(muiContext* context, muiNodeId nodeId, muiThemeId the
     return mui_success;
 }
 
-muiResult muiNode_GetTheme(const muiContext* context, muiNodeId nodeId, muiThemeId* themeIdOut)
+muiResult muiNode_GetTheme(const muiContext* context, muiNodeId nodeId, muiThemeId* themeOut)
 {
-    if (context == nullptr || themeIdOut == nullptr || nodeId.index1 == 0)
+    if (context == nullptr || themeOut == nullptr || nodeId.index1 == 0)
     {
         return mui_errorInvalid;
     }
@@ -309,7 +309,7 @@ muiResult muiNode_GetTheme(const muiContext* context, muiNodeId nodeId, muiTheme
     {
         return mui_errorStale;
     }
-    *themeIdOut = context->style.nodes[slot - 1].theme;
+    *themeOut = context->style.nodes[slot - 1].theme;
     return mui_success;
 }
 

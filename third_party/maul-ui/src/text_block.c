@@ -7,6 +7,9 @@
 
 #include "allocator.h"
 
+#include "maul-unicode/encoding.h"
+#include "maul-unicode/properties.h"
+
 #include <stdalign.h>
 #include <stddef.h>
 #include <string.h>
@@ -81,11 +84,26 @@ uint32_t muiParagraphEnd(const char* text, uint32_t length, uint32_t from)
 
 void muiReleaseTextBlock(const muiAllocator* allocator, muiTextBlock* block)
 {
-    muiBuffer* buffers[] = {
-        &block->text,      &block->breaks, &block->scripts,         &block->levels,
-        &block->items,     &block->glyphs, &block->advances,        &block->clusters,
-        &block->unsafe,    &block->faces,  &block->segments,        &block->spans,
-        &block->runStyles, &block->runs,   &block->editing.entries, &block->editing.bytes};
+    muiBuffer* buffers[] = {&block->text,
+                            &block->breaks,
+                            &block->scripts,
+                            &block->levels,
+                            &block->items,
+                            &block->glyphs,
+                            &block->advances,
+                            &block->clusters,
+                            &block->unsafe,
+                            &block->faces,
+                            &block->segments,
+                            &block->spans,
+                            &block->runStyles,
+                            &block->runs,
+                            &block->editing.entries,
+                            &block->editing.bytes,
+                            &block->accessLines,
+                            &block->accessWords.words,
+                            &block->accessLineBoxes,
+                            &block->accessClusters};
     for (size_t i = 0; i < sizeof buffers / sizeof buffers[0]; i++)
     {
         muiFreeBuffer(allocator, buffers[i]);
@@ -101,4 +119,22 @@ void muiReleaseTextBlock(const muiAllocator* allocator, muiTextBlock* block)
         muiRelease(allocator, block->mask, sizeof *block->mask, alignof(muiTextBlock));
     }
     *block = (muiTextBlock){0};
+}
+
+bool muiIsWordSegment(const char* text, size_t start, size_t end)
+{
+    for (size_t at = start; at < end;)
+    {
+        uint32_t point = 0;
+        size_t size = 1;
+        (void)muniDecodeUtf8(text + at, end - at, &point, &size);
+        muniGeneralCategory category = muniGetGeneralCategory(point);
+        if ((category >= muni_gcLu && category <= muni_gcLo) ||
+            (category >= muni_gcNd && category <= muni_gcNo))
+        {
+            return true;
+        }
+        at += size;
+    }
+    return false;
 }

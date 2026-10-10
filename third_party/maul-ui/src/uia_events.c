@@ -3,11 +3,15 @@
 //
 // The UI Automation adapter's events (record mui-0008): what applying an
 // update changed, raised while the tree holds all of it and only when a
-// client listens. Focus moving raises the focus event; a node updated
+// client listens. Focus moving raises the focus event, before the other
+// events of the update, as native controls raise it before the caret of
+// the field they focus; a node updated
 // raises a property change for each property whose value differs from
 // the record it replaced; a live region's text changing raises the live
 // region event.
 
+#include "access_record.h"
+#include "access_text.h"
 #include "uia.h"
 
 #include <string.h>
@@ -144,9 +148,18 @@ static void RaiseChange(muiUiaAdapter* adapter, const muiAccessNode* now, int pr
     }
 }
 
+// Whether a text's selection or caret moved.
+static bool SelectionMoved(const muiAccessNode* old, const muiAccessNode* now)
+{
+    return old->marks.selected != now->marks.selected ||
+           (now->marks.selected &&
+            (old->marks.anchor != now->marks.anchor || old->marks.focus != now->marks.focus));
+}
+
 void muiUiaUpdated(void* user, const muiAccessTree* tree, const muiAccessNode* old)
 {
     muiUiaAdapter* adapter = user;
+    muiUiaTellFocus(adapter);
     const muiAccessNode* now = muiAccessTree_Find(tree, old->id);
     if (!adapter->listening || now == nullptr || !muiAccessTree_IsShown(tree, now->id))
     {
@@ -170,11 +183,23 @@ void muiUiaUpdated(void* user, const muiAccessTree* tree, const muiAccessNode* o
     {
         Raise(adapter, now->id, EVENT_LIVE_REGION_CHANGED);
     }
+    // A text's edits, then its caret or selection moving, which Narrator
+    // reads the caret from.
+    if (muiAccessIsEdited(now) && muiRecordTextDiffers(old, now, mui_accessValue))
+    {
+        Raise(adapter, now->id, EVENT_TEXT_CHANGED);
+    }
+    if (muiAccessIsEdited(now) &&
+        (SelectionMoved(old, now) || muiRecordTextDiffers(old, now, mui_accessValue)))
+    {
+        Raise(adapter, now->id, EVENT_TEXT_SELECTION_CHANGED);
+    }
 }
 
 void muiUiaAdded(void* user, const muiAccessTree* tree, uint64_t id)
 {
     muiUiaAdapter* adapter = user;
+    muiUiaTellFocus(adapter);
     const muiAccessNode* node = muiAccessTree_Find(tree, id);
     if (adapter->listening && node != nullptr && node->values.live != mui_liveOff &&
         node->text[NameKindOf(node)] != nullptr && muiAccessTree_IsShown(tree, id))
@@ -183,11 +208,15 @@ void muiUiaAdded(void* user, const muiAccessTree* tree, uint64_t id)
     }
 }
 
-void muiUiaFocusMoved(void* user, const muiAccessTree* tree, uint64_t old, uint64_t focus)
+void muiUiaTellFocus(muiUiaAdapter* adapter)
 {
-    (void)old;
-    muiUiaAdapter* adapter = user;
-    if (adapter->listening && focus != 0 && muiAccessTree_IsShown(tree, focus))
+    uint64_t focus = muiRecordActiveFocus(adapter->tree);
+    if (focus == adapter->toldFocus)
+    {
+        return;
+    }
+    adapter->toldFocus = focus;
+    if (adapter->listening && focus != 0 && muiAccessTree_IsShown(adapter->tree, focus))
     {
         Raise(adapter, focus, EVENT_AUTOMATION_FOCUS_CHANGED);
     }

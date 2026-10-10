@@ -113,6 +113,7 @@ add_library(maul-ui ${MAUL_LIBRARY_KIND}
     src/virtual_edit.c
     src/access.c
     src/access_build.c
+    src/access_text.c
     src/access_action.c
     src/range.c
     src/scroll.c
@@ -166,7 +167,7 @@ if(MAUL_UI_NSACCESSIBILITY)
     # code.
     enable_language(OBJC)
     target_sources(maul-ui PRIVATE src/ns_adapter.m src/ns_events.m src/ns_node.m
-                                   src/ns_roles.m)
+                                   src/ns_roles.m src/ns_text.m)
     set_target_properties(maul-ui PROPERTIES
         OBJC_STANDARD 23
         OBJC_STANDARD_REQUIRED ON
@@ -185,7 +186,7 @@ if(MAUL_UI_UIACCESSIBILITY)
     # code.
     enable_language(OBJC)
     target_sources(maul-ui PRIVATE src/uikit_adapter.m src/uikit_events.m src/uikit_node.m
-                                   src/uikit_traits.m)
+                                   src/uikit_text.m src/uikit_traits.m)
     set_target_properties(maul-ui PROPERTIES
         OBJC_STANDARD 23
         OBJC_STANDARD_REQUIRED ON
@@ -207,7 +208,7 @@ if(MAUL_UI_ANDROID_ACCESSIBILITY)
     # The provider's Java is java/maul/ui/AccessProvider.java, which the
     # host builds into its application.
     target_sources(maul-ui PRIVATE src/android_adapter.c src/android_events.c src/android_jni.c
-                                   src/android_node.c)
+                                   src/android_node.c src/android_text.c)
 endif()
 if(MAUL_UI_ARIA)
     if(NOT MAUL_UI_ACCESS_TREE)
@@ -222,7 +223,8 @@ if(MAUL_UI_ATSPI)
     # libdbus-1 is opened at run time; dlopen is in libdl before glibc 2.34.
     target_sources(maul-ui PRIVATE src/atspi_actions.c src/atspi_app.c src/atspi_component.c
                                    src/atspi_events.c src/atspi_objects.c
-                                   src/atspi_properties.c src/atspi_roles.c src/dbus_api.c)
+                                   src/atspi_properties.c src/atspi_roles.c src/atspi_text.c
+                                   src/dbus_api.c)
     target_link_libraries(maul-ui PUBLIC ${CMAKE_DL_LIBS})
     if(CMAKE_DL_LIBS)
         string(APPEND MAUL_PKG_LIBS_PRIVATE " -l${CMAKE_DL_LIBS}")
@@ -235,7 +237,8 @@ if(MAUL_UI_UIA)
     # UI Automation's own functions are loaded at run time, as MinGW has
     # no import library of them; COM's come from ole32 and oleaut32.
     target_sources(maul-ui PRIVATE src/uia_adapter.c src/uia_events.c src/uia_node.c
-                                   src/uia_patterns.c src/uia_props.c src/uia_values.c)
+                                   src/uia_patterns.c src/uia_props.c src/uia_range.c
+                                   src/uia_text.c src/uia_values.c)
     target_link_libraries(maul-ui PUBLIC ole32 oleaut32)
     set(MAUL_PKG_LIBS_PRIVATE "-lole32 -loleaut32")
 endif()
@@ -322,6 +325,7 @@ if(MAUL_UI_BUILD_TESTS)
     maul_add_test(access)
     if(MAUL_UI_ACCESS_TREE)
         maul_add_test(access_tree)
+        maul_add_test(access_text WHITEBOX)
         maul_add_test(access_wrap WHITEBOX)
         maul_add_test(id_map WHITEBOX)
     endif()
@@ -360,7 +364,7 @@ if(MAUL_UI_BUILD_TESTS)
     endif()
     if(MAUL_UI_ANDROID_ACCESSIBILITY AND NOT MAUL_UI_BUILD_SHARED AND DEFINED ENV{ANDROID_HOME})
         # An application in the emulator, built by tools/build_android_app.sh
-        # without Gradle and run by tools/run_android_app.sh; its Java asks
+        # without Gradle, shrunk by R8 with the library's keep rules, and run by tools/run_android_app.sh; its Java asks
         # the provider as clients do; whitebox.
         set(package maul.ui.tests.android_access)
         add_library(test_android_access SHARED test/test_android_access.c)
@@ -376,6 +380,8 @@ if(MAUL_UI_BUILD_TESTS)
                     $<TARGET_FILE:test_android_access> ${package} ${ANDROID_ABI}
             DEPENDS test_android_access ${MUI_JAVA_SOURCES}
                     ${PROJECT_SOURCE_DIR}/test/android/AndroidManifest.xml
+                    ${PROJECT_SOURCE_DIR}/java/proguard-rules.pro
+                    ${PROJECT_SOURCE_DIR}/test/android/proguard-rules.pro
                     ${PROJECT_SOURCE_DIR}/tools/build_android_app.sh
             VERBATIM)
         add_custom_target(test_android_access_apk ALL

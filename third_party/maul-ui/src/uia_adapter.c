@@ -38,6 +38,9 @@ static bool Load(muiUiaFunctions* uia)
     memcpy((void*)&uia->clientsAreListening, (const void*)&listening, sizeof(listening));
     memcpy((void*)&uia->raiseEvent, (const void*)&raise, sizeof(raise));
     memcpy((void*)&uia->raisePropertyChanged, (const void*)&changed, sizeof(changed));
+    // Optional: without it, a text attribute not given reads as empty.
+    FARPROC none = GetProcAddress(uia->module, "UiaGetReservedNotSupportedValue");
+    memcpy((void*)&uia->reservedNotSupported, (const void*)&none, sizeof(none));
     if (host == nullptr || give == nullptr || disconnect == nullptr || listening == nullptr ||
         raise == nullptr || changed == nullptr)
     {
@@ -190,9 +193,14 @@ muiResult muiUiaAdapter_Apply(muiUiaAdapter* adapter, const muiAccessUpdate* upd
         return mui_errorInvalid;
     }
     adapter->listening = adapter->uia.clientsAreListening() != FALSE;
-    const muiAccessChanges changes = {adapter, muiUiaAdded,      muiUiaUpdated,
-                                      Removed, muiUiaFocusMoved, nullptr};
-    return muiAccessTree_Apply(adapter->tree, update, &changes);
+    const muiAccessChanges changes = {adapter, muiUiaAdded, muiUiaUpdated,
+                                      Removed, nullptr,     nullptr};
+    muiResult status = muiAccessTree_Apply(adapter->tree, update, &changes);
+    if (status == mui_success)
+    {
+        muiUiaTellFocus(adapter);
+    }
+    return status;
 }
 
 const muiAccessTree* muiUiaAdapter_GetTree(const muiUiaAdapter* adapter)
@@ -259,6 +267,15 @@ POINT muiUiaClientOrigin(const muiUiaAdapter* adapter)
     return origin;
 }
 
+muiUiaRect muiUiaScreenRectOf(const muiUiaAdapter* adapter, muiRect bounds)
+{
+    POINT origin = muiUiaClientOrigin(adapter);
+    double scale = (double)adapter->scale;
+    return (muiUiaRect){(double)origin.x + (double)bounds.x * scale,
+                        (double)origin.y + (double)bounds.y * scale, (double)bounds.width * scale,
+                        (double)bounds.height * scale};
+}
+
 muiUiaRect muiUiaScreenRect(const muiUiaAdapter* adapter, uint64_t id)
 {
     muiRect bounds = {0};
@@ -266,11 +283,15 @@ muiUiaRect muiUiaScreenRect(const muiUiaAdapter* adapter, uint64_t id)
     {
         return (muiUiaRect){0};
     }
+    return muiUiaScreenRectOf(adapter, bounds);
+}
+
+void muiUiaRootPointOf(const muiUiaAdapter* adapter, double x, double y, float* xOut, float* yOut)
+{
     POINT origin = muiUiaClientOrigin(adapter);
     double scale = (double)adapter->scale;
-    return (muiUiaRect){(double)origin.x + (double)bounds.x * scale,
-                        (double)origin.y + (double)bounds.y * scale, (double)bounds.width * scale,
-                        (double)bounds.height * scale};
+    *xOut = (float)((x - (double)origin.x) / scale);
+    *yOut = (float)((y - (double)origin.y) / scale);
 }
 
 HRESULT muiUiaPerformRequest(muiUiaAdapter* adapter, const muiAccessRequest* request)

@@ -81,7 +81,7 @@ extern "C"
     ///
     /// @param context     The context.
     /// @param def         The token: a valid cookie and its value.
-    /// @param tokenIdOut  Receives the token; set to the null id on failure.
+    /// @param tokenOut  Receives the token; set to the null id on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
     ///         cookie, a value outside the def's or a call from a measure or
     ///         paint function; `mui_errorCapacity` when the context's token
@@ -89,7 +89,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiCreateToken(muiContext* context, const muiTokenDef* def,
-                                                   muiTokenId* tokenIdOut);
+                                                   muiTokenId* tokenOut);
 
     /// Destroys a token. Variants that name it, and tokens that alias it,
     /// then give no value through it, and every node is restyled.
@@ -185,7 +185,7 @@ extern "C"
     /// @param styleId     The class.
     /// @param variant     The variant.
     /// @param property    The property.
-    /// @param tokenIdOut  Receives the token; the null id for none.
+    /// @param tokenOut  Receives the token; the null id for none.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id, an unknown variant or property; `mui_errorStale`
     ///         for an id whose class is gone.
@@ -193,7 +193,7 @@ extern "C"
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiStyle_GetToken(const muiContext* context, muiStyleId styleId,
                                                       muiVariant variant, muiProperty property,
-                                                      muiTokenId* tokenIdOut);
+                                                      muiTokenId* tokenOut);
 
 #ifdef __cplusplus
 }

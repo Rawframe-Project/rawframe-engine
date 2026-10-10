@@ -102,7 +102,7 @@ extern "C"
     ///                         easing, bezier x from 0 to 1 and finite y,
     ///                         and a finite frequency and damping ratio
     ///                         above 0.
-    /// @param transitionIdOut  Receives the spec; set to the null id on
+    /// @param transitionOut  Receives the spec; set to the null id on
     ///                         failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a def
     ///         outside the above or a call from a measure or paint function;
@@ -112,7 +112,7 @@ extern "C"
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiCreateTransition(muiContext* context,
                                                         const muiTransitionDef* def,
-                                                        muiTransitionId* transitionIdOut);
+                                                        muiTransitionId* transitionOut);
 
     /// Destroys a transition spec. Variants that name it name none, and
     /// transitions it started run to their end.
@@ -157,7 +157,7 @@ extern "C"
     /// @param styleId          The class.
     /// @param variant          The variant.
     /// @param property         The property.
-    /// @param transitionIdOut  Receives the spec; the null id for none.
+    /// @param transitionOut  Receives the spec; the null id for none.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id, an unknown variant or property; `mui_errorStale`
     ///         for an id whose class is gone.
@@ -166,7 +166,7 @@ extern "C"
     MUI_NODISCARD MUI_API muiResult muiStyle_GetTransition(const muiContext* context,
                                                            muiStyleId styleId, muiVariant variant,
                                                            muiProperty property,
-                                                           muiTransitionId* transitionIdOut);
+                                                           muiTransitionId* transitionOut);
 
     /// Returns whether a property of a node is moving.
     ///

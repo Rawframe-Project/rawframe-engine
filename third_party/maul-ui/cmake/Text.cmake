@@ -43,6 +43,7 @@ target_sources(maul-ui PRIVATE
     src/text_editor.c
     src/text_history.c
     src/text_keys.c
+    src/text_access.c
     src/text_mask.c
     src/text_rules.c
     src/text_runs.c

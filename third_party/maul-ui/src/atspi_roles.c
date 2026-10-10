@@ -5,6 +5,7 @@
 // role's AT-SPI role, the names AT-SPI gives its roles, and a node's
 // state set from its flags. The values are atspi-constants.h's.
 
+#include "access_record.h"
 #include "atspi.h"
 
 // The AT-SPI roles the adapter gives, with their names.
@@ -395,10 +396,12 @@ void muiAtspiRecordStatesOf(const muiAccessNode* node, uint32_t statesOut[2])
     Set(statesOut, STATE_INVALID_ENTRY, values->invalid != mui_invalidNone);
 }
 
-bool muiAtspiShowsFocus(const muiAccessTree* tree, const muiAccessNode* node)
+uint64_t muiAtspiShownFocus(const muiAccessTree* tree)
 {
-    return node->id == muiAccessTree_GetFocus(tree) &&
-           (node->id != muiAccessTree_GetRoot(tree) || (node->flags & mui_accessFocusable) != 0);
+    uint64_t shown = muiRecordActiveFocus(tree);
+    const muiAccessNode* node = muiAccessTree_Find(tree, shown);
+    bool window = shown == muiAccessTree_GetRoot(tree);
+    return node == nullptr || (window && (node->flags & mui_accessFocusable) == 0) ? 0 : shown;
 }
 
 void muiAtspiStatesOf(const muiAtspiAdapter* adapter, const muiAccessNode* node,
@@ -409,7 +412,7 @@ void muiAtspiStatesOf(const muiAtspiAdapter* adapter, const muiAccessNode* node,
     muiAtspiRecordStatesOf(node, statesOut);
     Set(statesOut, STATE_VISIBLE, shown);
     Set(statesOut, STATE_SHOWING, shown && !IsClipped(tree, node->id, adapter->nodes));
-    Set(statesOut, STATE_FOCUSED, muiAtspiShowsFocus(tree, node));
+    Set(statesOut, STATE_FOCUSED, node->id == muiAtspiShownFocus(tree));
     // A window's root is active: the host does not yet say when its
     // window loses the system's focus.
     Set(statesOut, STATE_ACTIVE, node->id == muiAccessTree_GetRoot(tree));

@@ -278,4 +278,85 @@ struct muiUiaSelectionItem
     const muiUiaSelectionItemTable* lpVtbl;
 };
 
+// TextUnit, TextPatternRangeEndpoint and SupportedTextSelection.
+enum
+{
+    UNIT_CHARACTER = 0,
+    UNIT_FORMAT = 1,
+    UNIT_WORD = 2,
+    UNIT_LINE = 3,
+    UNIT_PARAGRAPH = 4,
+    UNIT_PAGE = 5,
+    UNIT_DOCUMENT = 6,
+    ENDPOINT_START = 0,
+    ENDPOINT_END = 1,
+    TEXT_SELECTION_SINGLE = 1,
+};
+
+// UiaPoint.
+typedef struct muiUiaPoint
+{
+    double x;
+    double y;
+} muiUiaPoint;
+
+typedef struct muiUiaRange muiUiaRange;
+
+// ITextRangeProvider.
+typedef struct muiUiaRangeTable
+{
+    HRESULT(STDMETHODCALLTYPE* QueryInterface)(muiUiaRange* self, REFIID id, void** out);
+    ULONG(STDMETHODCALLTYPE* AddRef)(muiUiaRange* self);
+    ULONG(STDMETHODCALLTYPE* Release)(muiUiaRange* self);
+    HRESULT(STDMETHODCALLTYPE* Clone)(muiUiaRange* self, muiUiaRange** out);
+    HRESULT(STDMETHODCALLTYPE* Compare)(muiUiaRange* self, muiUiaRange* range, BOOL* out);
+    HRESULT(STDMETHODCALLTYPE* CompareEndpoints)(muiUiaRange* self, int endpoint,
+                                                 muiUiaRange* target, int targetEndpoint, int* out);
+    HRESULT(STDMETHODCALLTYPE* ExpandToEnclosingUnit)(muiUiaRange* self, int unit);
+    HRESULT(STDMETHODCALLTYPE* FindAttribute)(muiUiaRange* self, int attribute, VARIANT value,
+                                              BOOL backward, muiUiaRange** out);
+    HRESULT(STDMETHODCALLTYPE* FindText)(muiUiaRange* self, BSTR text, BOOL backward,
+                                         BOOL ignoreCase, muiUiaRange** out);
+    HRESULT(STDMETHODCALLTYPE* GetAttributeValue)(muiUiaRange* self, int attribute, VARIANT* out);
+    HRESULT(STDMETHODCALLTYPE* GetBoundingRectangles)(muiUiaRange* self, SAFEARRAY** out);
+    HRESULT(STDMETHODCALLTYPE* GetEnclosingElement)(muiUiaRange* self, muiUiaSimple** out);
+    HRESULT(STDMETHODCALLTYPE* GetText)(muiUiaRange* self, int maxLength, BSTR* out);
+    HRESULT(STDMETHODCALLTYPE* Move)(muiUiaRange* self, int unit, int count, int* out);
+    HRESULT(STDMETHODCALLTYPE* MoveEndpointByUnit)(muiUiaRange* self, int endpoint, int unit,
+                                                   int count, int* out);
+    HRESULT(STDMETHODCALLTYPE* MoveEndpointByRange)(muiUiaRange* self, int endpoint,
+                                                    muiUiaRange* target, int targetEndpoint);
+    HRESULT(STDMETHODCALLTYPE* Select)(muiUiaRange* self);
+    HRESULT(STDMETHODCALLTYPE* AddToSelection)(muiUiaRange* self);
+    HRESULT(STDMETHODCALLTYPE* RemoveFromSelection)(muiUiaRange* self);
+    HRESULT(STDMETHODCALLTYPE* ScrollIntoView)(muiUiaRange* self, BOOL alignToTop);
+    HRESULT(STDMETHODCALLTYPE* GetChildren)(muiUiaRange* self, SAFEARRAY** out);
+} muiUiaRangeTable;
+
+typedef struct muiUiaText muiUiaText;
+
+// ITextProvider2, which begins as ITextProvider does.
+typedef struct muiUiaTextTable
+{
+    HRESULT(STDMETHODCALLTYPE* QueryInterface)(muiUiaText* self, REFIID id, void** out);
+    ULONG(STDMETHODCALLTYPE* AddRef)(muiUiaText* self);
+    ULONG(STDMETHODCALLTYPE* Release)(muiUiaText* self);
+    HRESULT(STDMETHODCALLTYPE* GetSelection)(muiUiaText* self, SAFEARRAY** out);
+    HRESULT(STDMETHODCALLTYPE* GetVisibleRanges)(muiUiaText* self, SAFEARRAY** out);
+    HRESULT(STDMETHODCALLTYPE* RangeFromChild)(muiUiaText* self, muiUiaSimple* child,
+                                               muiUiaRange** out);
+    HRESULT(STDMETHODCALLTYPE* RangeFromPoint)(muiUiaText* self, muiUiaPoint point,
+                                               muiUiaRange** out);
+    HRESULT(STDMETHODCALLTYPE* get_DocumentRange)(muiUiaText* self, muiUiaRange** out);
+    HRESULT(STDMETHODCALLTYPE* get_SupportedTextSelection)(muiUiaText* self, int* out);
+    HRESULT(STDMETHODCALLTYPE* RangeFromAnnotation)(muiUiaText* self, muiUiaSimple* annotation,
+                                                    muiUiaRange** out);
+    HRESULT(STDMETHODCALLTYPE* GetCaretRange)(muiUiaText* self, BOOL* active, muiUiaRange** out);
+} muiUiaTextTable;
+
+struct muiUiaText
+{
+    const muiUiaTextTable* lpVtbl;
+};
+
 #endif // MAUL_UI_SRC_UIA_COM_H

@@ -3,7 +3,7 @@
 # found installed or fetched at its release tag as Maul RHI is. The core
 # and the text component never depend on it.
 
-set(MAUL_UI_WINDOW_VERSION 0.10.0)
+set(MAUL_UI_WINDOW_VERSION 0.13.0)
 find_package(maul-window ${MAUL_UI_WINDOW_VERSION} QUIET)
 if(NOT maul-window_FOUND)
     set(MAUL_WINDOW_BUILD_TESTS OFF)

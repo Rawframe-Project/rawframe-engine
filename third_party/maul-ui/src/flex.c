@@ -73,6 +73,19 @@ static void ResolvePendingMinimums(const muiFlexFrame* frame, uint32_t first, ui
     }
 }
 
+// Whether a column item's height after flexing is its content's (I87):
+// in a column of no definite height, without a definite basis, nor a
+// ratio giving it from the width it fits, its height given counting only
+// under an automatic basis, which a given one replaces (as in Chrome).
+static bool ColumnContentHeight(const muiFlexFrame* frame, const muiLayoutStyle* style)
+{
+    float base = 0.0f;
+    return frame->extentMain < 0.0f && style->sizing.aspectRatio <= 0.0f &&
+           !muiResolveDimension(style->item.basis, frame->extentMain, &base) &&
+           (style->item.basis.kind != mui_dimensionAuto ||
+            !muiResolveAxis(&style->sizing, false, frame->extentMain).definite);
+}
+
 static muiFlexFrame Setup(const muiSolver* solver, uint32_t node, const muiSizingInput* input)
 {
     const muiLayoutStyle* style = &solver->nodes[node - 1].style;
@@ -199,6 +212,9 @@ static float HypotheticalCross(const muiFlexFrame* frame, uint32_t first, uint32
         muiAxisSizing cross = muiResolveAxis(&style->sizing, !frame->row, frame->extentCross);
         muiMeasureAxis constraint = muiFlexCrossConstraint(frame, style, &cross, false);
         muiSizingInput input = muiFlexChildInput(frame, muiExact(item->target), constraint);
+        // A column item's height is laid out as it will be, its content's
+        // when the final pass takes it so.
+        input.contentHeight = !frame->row && ColumnContentHeight(frame, style);
         float size = muiFlexCrossOf(frame, frame->solver->solve(frame->solver, c, &input, false));
         const muiEdges padding = muiFlexChildPadding(frame, style);
         item->cross = muiClampSize(size, item->minCross, item->maxCross,
@@ -445,7 +461,6 @@ static muiSizingInput FinalInput(const muiFlexFrame* frame, uint32_t child)
     // definite, or its ratio gives it from the width it fits, its height
     // given counting only under an automatic basis, which a given one
     // replaces (both as in Chrome). Otherwise it is its content's.
-    float base = 0.0f;
     if (frame->row)
     {
         input.contentHeight = !muiFlexIsStretched(frame, style) &&
@@ -454,10 +469,7 @@ static muiSizingInput FinalInput(const muiFlexFrame* frame, uint32_t child)
     }
     else
     {
-        input.contentHeight = frame->extentMain < 0.0f && style->sizing.aspectRatio <= 0.0f &&
-                              !muiResolveDimension(style->item.basis, frame->extentMain, &base) &&
-                              (style->item.basis.kind != mui_dimensionAuto ||
-                               !muiResolveAxis(&style->sizing, false, frame->extentMain).definite);
+        input.contentHeight = ColumnContentHeight(frame, style);
     }
     return input;
 }

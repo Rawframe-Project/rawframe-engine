@@ -106,7 +106,7 @@ muiResult muiPerformAccessAction(muiContext* context, const muiAccessRequest* re
     {
         *handledOut = false;
     }
-    if (request == nullptr || request->action > mui_actionSetScrollOffset ||
+    if (request == nullptr || request->action > mui_actionReplaceText ||
         !isfinite(request->value) || !isfinite(request->x) || !isfinite(request->y) ||
         !muiMayFeed(context))
     {
@@ -118,10 +118,12 @@ muiResult muiPerformAccessAction(muiContext* context, const muiAccessRequest* re
     {
         return status;
     }
-    // The node takes the action now, as an update would send it.
+    // The node takes the action now, as an update would send it; text
+    // is the host's.
     muiAccessNode node;
     (void)muiAccessDerive(context, slot, &node, nullptr);
-    if ((node.actions & (1u << request->action)) == 0)
+    if ((node.actions & (1u << request->action)) == 0 ||
+        request->action == mui_actionSetSelection || request->action == mui_actionReplaceText)
     {
         return mui_empty;
     }

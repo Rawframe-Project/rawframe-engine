@@ -28,6 +28,8 @@ const char* muiResultName(muiResult result)
         return "mui_errorFormat";
     case mui_errorPlatform:
         return "mui_errorPlatform";
+    case mui_errorVersion:
+        return "mui_errorVersion";
     default:
         return "unknown result";
     }

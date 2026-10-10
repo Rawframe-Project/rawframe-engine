@@ -97,11 +97,10 @@ struct muiAtspiAdapter
     uint32_t freeCount;
     muiIdMap toldById;
     uint32_t pass;
-    // The focus's move in the update being applied, told last; whether
-    // the update may have changed what is shown, so the tree is walked.
-    uint64_t focusFrom;
-    uint64_t focusTo;
-    bool focusMoved;
+    // The object clients were last told focused (0 for none); whether
+    // the update being applied may have changed what is shown, so the
+    // tree is walked.
+    uint64_t toldFocus;
     bool reshaped;
 };
 
@@ -156,11 +155,25 @@ bool muiAtspiSetValue(const muiAtspiObject* object, double value);
 void muiAtspiRecordStatesOf(const muiAccessNode* node, uint32_t statesOut[2]);
 const char* muiAtspiStateName(uint32_t state);
 
+// The Text interface (src/atspi_text.c): whether a node has it, the
+// methods, and the CharacterCount and CaretOffset properties; the
+// EditableText interface's methods, on a node whose text may be
+// replaced.
+bool muiAtspiHasText(const muiAccessNode* node);
+bool muiAtspiAnswerText(muiAtspiApp* app, DBusMessage* call, const muiAtspiObject* object,
+                        const char* member);
+bool muiAtspiAppendTextProperty(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject* object,
+                                const char* name, bool* ok);
+bool muiAtspiAnswerEditableText(muiAtspiApp* app, DBusMessage* call, const muiAtspiObject* object,
+                                const char* member);
+
 // An object's path.
 void muiAtspiPathOf(const muiAtspiObject* object, char pathOut[ATSPI_PATH_SIZE]);
 
-// The interfaces an object has, at most four; how many.
-uint32_t muiAtspiInterfacesOf(const muiAtspiObject* object, const char* interfacesOut[4]);
+// The interfaces an object has, at most MUI_ATSPI_INTERFACES; how many.
+#define MUI_ATSPI_INTERFACES 6
+uint32_t muiAtspiInterfacesOf(const muiAtspiObject* object,
+                              const char* interfacesOut[MUI_ATSPI_INTERFACES]);
 
 // Answers the Properties interface's methods.
 void muiAtspiAnswerProperties(muiAtspiApp* app, DBusMessage* call, const muiAtspiObject* object,
@@ -186,17 +199,30 @@ uint32_t muiAtspiChildrenOf(const muiAtspiObject* object, const uint64_t** idsOu
 uint32_t muiAtspiRoleOf(const muiAccessTree* tree, const muiAccessNode* node);
 const char* muiAtspiRoleName(uint32_t role);
 
-// Whether a node is shown focused: the tree's focus, unless that is a
-// root that cannot take focus (the window, active instead).
-bool muiAtspiShowsFocus(const muiAccessTree* tree, const muiAccessNode* node);
+// The node shown focused, 0 for none: the tree's focus, or the active
+// descendant it names, held in the tree; none for a root that cannot
+// take focus (the window, active instead).
+uint64_t muiAtspiShownFocus(const muiAccessTree* tree);
 
 // AT-SPI's state set of a node, as two words of bits.
 void muiAtspiStatesOf(const muiAtspiAdapter* adapter, const muiAccessNode* node,
                       uint32_t statesOut[2]);
 
-// A node's extents in pixels: in the window, with the window's place
-// on the screen added for screen coordinates.
+// A rectangle where the root is placed, and a node's, as extents in
+// pixels: in the window, with the window's place on the screen added for
+// screen coordinates.
+void muiAtspiExtentsOfRect(const muiAtspiAdapter* adapter, muiRect bounds, bool screen,
+                           int32_t extentsOut[4]);
 void muiAtspiExtentsOf(const muiAtspiAdapter* adapter, uint64_t id, bool screen,
                        int32_t extentsOut[4]);
+
+// A rectangle where the root is placed as extents in an AT-SPI
+// coordinate type, for an object (src/atspi_component.c); a point in a
+// coordinate type taken to where the root is placed, and whether the
+// object's extents hold it.
+void muiAtspiRectIn(const muiAtspiObject* object, muiRect bounds, uint32_t coordinates,
+                    int32_t extentsOut[4]);
+bool muiAtspiPointIn(const muiAtspiObject* object, uint32_t coordinates, int32_t x, int32_t y,
+                     float* xOut, float* yOut);
 
 #endif // MAUL_UI_SRC_ATSPI_H

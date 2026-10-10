@@ -39,6 +39,12 @@ void muiAtspiExtentsOf(const muiAtspiAdapter* adapter, uint64_t id, bool screen,
 {
     muiRect bounds = {0};
     (void)muiAccessTree_GetBounds(adapter->tree, id, &bounds);
+    muiAtspiExtentsOfRect(adapter, bounds, screen, extentsOut);
+}
+
+void muiAtspiExtentsOfRect(const muiAtspiAdapter* adapter, muiRect bounds, bool screen,
+                           int32_t extentsOut[4])
+{
     float scale = adapter->scale;
     // Edges rounded outward, so the extents hold the whole box.
     float left = floorf(bounds.x * scale);
@@ -51,11 +57,10 @@ void muiAtspiExtentsOf(const muiAtspiAdapter* adapter, uint64_t id, bool screen,
     extentsOut[3] = Whole(bottom - top);
 }
 
-// An object's extents in a coordinate type; the parent's are those of
-// the shown parent, the application's root having none.
-static void Extents(const muiAtspiObject* object, uint32_t coordinates, int32_t extentsOut[4])
+void muiAtspiRectIn(const muiAtspiObject* object, muiRect bounds, uint32_t coordinates,
+                    int32_t extentsOut[4])
 {
-    muiAtspiExtentsOf(object->adapter, object->node->id, coordinates == COORD_SCREEN, extentsOut);
+    muiAtspiExtentsOfRect(object->adapter, bounds, coordinates == COORD_SCREEN, extentsOut);
     muiAtspiObject parent = muiAtspiParentOf(object);
     if (coordinates == COORD_PARENT && parent.node != nullptr)
     {
@@ -64,6 +69,15 @@ static void Extents(const muiAtspiObject* object, uint32_t coordinates, int32_t 
         extentsOut[0] = Saturated((int64_t)extentsOut[0] - origin[0]);
         extentsOut[1] = Saturated((int64_t)extentsOut[1] - origin[1]);
     }
+}
+
+// An object's extents in a coordinate type; the parent's are those of
+// the shown parent, the application's root having none.
+static void Extents(const muiAtspiObject* object, uint32_t coordinates, int32_t extentsOut[4])
+{
+    muiRect bounds = {0};
+    (void)muiAccessTree_GetBounds(object->adapter->tree, object->node->id, &bounds);
+    muiAtspiRectIn(object, bounds, coordinates, extentsOut);
 }
 
 // A point in a coordinate type, in the window's pixels.
@@ -85,6 +99,19 @@ static void ToWindow(const muiAtspiObject* object, uint32_t coordinates, int32_t
         *x = Saturated((int64_t)*x + origin[0]);
         *y = Saturated((int64_t)*y + origin[1]);
     }
+}
+
+bool muiAtspiPointIn(const muiAtspiObject* object, uint32_t coordinates, int32_t x, int32_t y,
+                     float* xOut, float* yOut)
+{
+    int32_t extents[4];
+    muiAtspiExtentsOf(object->adapter, object->node->id, false, extents);
+    ToWindow(object, coordinates, &x, &y);
+    float scale = object->adapter->scale;
+    *xOut = (float)x / scale;
+    *yOut = (float)y / scale;
+    return x >= extents[0] && (int64_t)x < (int64_t)extents[0] + extents[2] && y >= extents[1] &&
+           (int64_t)y < (int64_t)extents[1] + extents[3];
 }
 
 static bool Holds(const int32_t extents[4], int32_t x, int32_t y)

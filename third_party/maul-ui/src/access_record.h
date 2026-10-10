@@ -8,6 +8,7 @@
 #define MAUL_UI_SRC_ACCESS_RECORD_H
 
 #include "maul-ui/access.h"
+#include "maul-ui/access_tree.h"
 
 #include <stdbool.h>
 
@@ -21,5 +22,10 @@ muiAccessTextKind muiRecordNameKindOf(const muiAccessNode* node);
 
 // Whether the record's own name changed: its text, or which text it is.
 bool muiRecordNameDiffers(const muiAccessNode* old, const muiAccessNode* now);
+
+// The focus a platform is shown: the tree's focus, or the active
+// descendant it names (mui_relationActiveDescendant) when the tree holds
+// it, as browsers show aria-activedescendant; 0 for none.
+uint64_t muiRecordActiveFocus(const muiAccessTree* tree);
 
 #endif // MAUL_UI_SRC_ACCESS_RECORD_H

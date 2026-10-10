@@ -7,6 +7,7 @@
 
 #include "access.h"
 #include "access_store.h"
+#include "access_text.h"
 #include "context.h"
 #include "focus.h"
 #include "layer.h"
@@ -19,6 +20,8 @@
 #include "virtual_store.h"
 
 #include "maul-ui/access.h"
+
+#include <math.h>
 
 // Roles that take a click without saying so.
 static bool IsClicked(muiRole role)
@@ -263,36 +266,157 @@ static uint64_t Fingerprint(uint64_t print, const unsigned char* bytes, size_t l
     return print;
 }
 
+// FNV-1a over a word's bytes, low first, on from print.
+static uint64_t FoldWord(uint64_t print, uint64_t word)
+{
+    for (uint32_t b = 0; b < 8; b++)
+    {
+        print = (print ^ ((word >> (8 * b)) & 0xFF)) * 1099511628211ULL;
+    }
+    return print;
+}
+
+// The marks the host gave that fit its text (src/access_text.h): the
+// selection, and the lines, words and clusters when they were asked for.
+static muiAccessTextMarks MarksOf(const muiAccessContent* content, bool boundaries)
+{
+    const muiAccessTextMarks* given = &content->marks;
+    uint32_t length = (uint32_t)content->length;
+    muiAccessTextMarks marks = {0};
+    if (given->selected && muiAccessSelectionFits(given, content->text, length))
+    {
+        marks.anchor = given->anchor;
+        marks.focus = given->focus;
+        marks.selected = true;
+    }
+    if (boundaries && muiAccessLinesFit(given, content->text, length))
+    {
+        marks.lineStarts = given->lineCount != 0 ? given->lineStarts : nullptr;
+        marks.lineCount = given->lineCount;
+    }
+    if (boundaries && muiAccessWordsFit(given, content->text, length))
+    {
+        marks.words = given->wordCount != 0 ? given->words : nullptr;
+        marks.wordCount = given->wordCount;
+    }
+    // Where the text is shown goes with its lines.
+    if (marks.lineCount != 0 && given->lineBoxes != nullptr &&
+        muiAccessGeometryFits(given, content->text, length))
+    {
+        marks.lineBoxes = given->lineBoxes;
+        marks.clusters = given->clusterCount != 0 ? given->clusters : nullptr;
+        marks.clusterCount = given->clusterCount;
+    }
+    return marks;
+}
+
+// The part of a node its scrolling ancestors leave shown, in its own
+// space: its box cut by each ancestor that scrolls, and by the root's,
+// carried back through the places and scrolls between, as painting
+// carries them forward.
+static muiRect ShownOf(const muiContext* context, uint32_t slot)
+{
+    const muiLayoutNode* own = &context->layout[slot - 1];
+    double left = 0.0;
+    double top = 0.0;
+    double right = (double)own->rect.width;
+    double bottom = (double)own->rect.height;
+    // From the node's space to the current ancestor's: x * scale + offset.
+    double scaleX = 1.0;
+    double scaleY = 1.0;
+    double offsetX = 0.0;
+    double offsetY = 0.0;
+    uint32_t steps = 0;
+    for (uint32_t at = slot; at != 0 && steps <= context->tree.used; steps++)
+    {
+        uint32_t parent = muiTreeAt(&context->tree, at)->links.parent;
+        const muiPlace step = muiPlaceStep(context, at);
+        double shiftX = step.offsetX;
+        double shiftY = step.offsetY;
+        if (parent != 0)
+        {
+            shiftX += (double)muiScrollShiftX(&context->layout[parent - 1],
+                                              &context->scrolls[parent - 1]);
+            shiftY += (double)muiScrollShiftY(&context->layout[parent - 1],
+                                              &context->scrolls[parent - 1]);
+        }
+        scaleX *= step.scaleX;
+        scaleY *= step.scaleY;
+        offsetX = offsetX * step.scaleX + shiftX;
+        offsetY = offsetY * step.scaleY + shiftY;
+        at = parent;
+        const muiLayoutNode* layout = at != 0 ? &context->layout[at - 1] : nullptr;
+        bool root = at != 0 && muiTreeAt(&context->tree, at)->links.parent == 0;
+        if (layout == nullptr || scaleX == 0.0 || scaleY == 0.0 ||
+            (layout->style.scrollAxes == mui_scrollNone && !root))
+        {
+            continue;
+        }
+        // The ancestor's box, back in the node's space.
+        double x0 = (0.0 - offsetX) / scaleX;
+        double x1 = ((double)layout->rect.width - offsetX) / scaleX;
+        double y0 = (0.0 - offsetY) / scaleY;
+        double y1 = ((double)layout->rect.height - offsetY) / scaleY;
+        left = fmax(left, fmin(x0, x1));
+        right = fmin(right, fmax(x0, x1));
+        top = fmax(top, fmin(y0, y1));
+        bottom = fmin(bottom, fmax(y0, y1));
+    }
+    right = right > left ? right : left;
+    bottom = bottom > top ? bottom : top;
+    return (muiRect){(float)left, (float)top, (float)(right - left), (float)(bottom - top)};
+}
+
 // Reads host content's text from the host's text function into a node
 // whose value the host did not set, labelling a node the host gave no
-// role; a fingerprint of the text, 0 for none.
-static uint64_t ReadContent(muiContext* context, uint32_t slot, muiAccessNode* node)
+// role, with its selection, and its lines, words and clusters when
+// boundaries are asked for, of a node a first read gave its value, told
+// the part of it shown; a fingerprint of the text and the selection, 0
+// for none.
+static uint64_t ReadContent(muiContext* context, uint32_t slot, bool boundaries,
+                            muiAccessNode* node)
 {
     const muiAccessStore* store = &context->access;
     if (store->textFunction == nullptr ||
         context->layout[slot - 1].style.content != mui_contentHost ||
-        node->text[mui_accessValue] != nullptr)
+        (node->text[mui_accessValue] != nullptr && !boundaries))
     {
         return 0;
     }
-    const char* text = nullptr;
-    size_t length = 0;
+    muiAccessContent content = {0};
     // As the measure function, it may not edit the context.
     context->inHostCall = true;
+    const muiRect shown = boundaries ? ShownOf(context, slot) : (muiRect){0};
     bool read = store->textFunction(store->textUser, muiTreeIdOf(&context->tree, slot),
-                                    muiTreeAt(&context->tree, slot)->hostKey, &text, &length);
+                                    muiTreeAt(&context->tree, slot)->hostKey,
+                                    boundaries ? &shown : nullptr, &content);
     context->inHostCall = false;
-    if (!read || text == nullptr || length == 0 || length > INT32_MAX ||
-        !muiAccessIsUtf8((const unsigned char*)text, length))
+    // Empty text is none, unless it is being edited: an empty field.
+    bool edited = content.marks.selected && content.length == 0;
+    if (!read || content.text == nullptr || (content.length == 0 && !edited) ||
+        content.length > INT32_MAX ||
+        !muiAccessIsUtf8((const unsigned char*)content.text, content.length))
     {
         return 0;
     }
-    node->text[mui_accessValue] = text;
-    node->textLength[mui_accessValue] = (uint32_t)length;
+    node->text[mui_accessValue] = content.text;
+    node->textLength[mui_accessValue] = (uint32_t)content.length;
+    node->marks = MarksOf(&content, boundaries);
     node->role = node->role == mui_roleGeneric ? mui_roleLabel : node->role;
+    // Text being edited takes its selection set and, unless read only,
+    // its text replaced, as the host applies them.
+    if (node->marks.selected && (node->flags & mui_accessDisabled) == 0)
+    {
+        node->actions |= Bit(mui_actionSetSelection);
+        node->actions |= (node->flags & mui_accessReadOnly) == 0 ? Bit(mui_actionReplaceText) : 0;
+    }
     // A changed text whose fingerprint matches the last, one in 2^64, is
     // not sent again.
-    return Fingerprint(14695981039346656037ULL, (const unsigned char*)text, length);
+    uint64_t print =
+        Fingerprint(14695981039346656037ULL, (const unsigned char*)content.text, content.length);
+    return node->marks.selected
+               ? FoldWord(print, (uint64_t)node->marks.anchor << 32 | node->marks.focus)
+               : print;
 }
 
 // A build under way.
@@ -351,7 +475,7 @@ static void Visit(Build* build, uint32_t slot)
     uint32_t* children = store->order;
     muiAccessNode node;
     uint32_t count = muiAccessDerive(context, slot, &node, children);
-    uint64_t content = ReadContent(context, slot, &node);
+    uint64_t content = ReadContent(context, slot, false, &node);
     const muiAccessEntry* entry = muiAccessEntryOf(context, slot);
     uint32_t version = entry != nullptr ? entry->version : 0;
     muiAccessNode* copy = &store->copies[slot - 1];
@@ -361,6 +485,11 @@ static void Visit(Build* build, uint32_t slot)
         store->sent[slot - 1].content == content && IsSame(copy, &node))
     {
         return;
+    }
+    // Sent: its lines and words too.
+    if (content != 0)
+    {
+        content = ReadContent(context, slot, true, &node);
     }
     node.firstChild = build->childCount;
     node.childCount = count;
@@ -418,10 +547,7 @@ static uint64_t LayersOf(const muiContext* context, uint32_t root)
         uint64_t word = muiAccessIdOf(muiTreeIdOf(tree, layer)) ^
                         (uint64_t)context->interaction[layer - 1].layer << 56 ^
                         (uint64_t)muiTreeIsExiting(tree, layer) << 60;
-        for (uint32_t b = 0; b < 8; b++)
-        {
-            print = (print ^ ((word >> (8 * b)) & 0xFF)) * 1099511628211ULL;
-        }
+        print = FoldWord(print, word);
     }
     return print;
 }

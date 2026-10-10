@@ -18,8 +18,15 @@ extern "C"
 
 // The library version. CMake reads it from here.
 #define MUI_VERSION_MAJOR 0
-#define MUI_VERSION_MINOR 1
+#define MUI_VERSION_MINOR 3
 #define MUI_VERSION_PATCH 0
+
+// The version a root def (muiContextDef, muiTextServiceDef) carries, set
+// by its default as the program is built: the headers' major and minor.
+// The creation refuses a def of another with mui_errorVersion before it
+// reads the rest, whose layout that version may not share (family
+// record 0044).
+#define MUI_DEF_VERSION ((uint32_t)(MUI_VERSION_MAJOR << 16 | MUI_VERSION_MINOR))
 
 // MUI_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_ui_EXPORTS is defined while building
@@ -75,6 +82,9 @@ extern "C"
         // not allow the call, such as a thread outside the apartment the
         // platform requires.
         mui_errorPlatform = -5,
+        // A root def was built against headers of another major or minor
+        // version than the library's (MUI_DEF_VERSION).
+        mui_errorVersion = -6,
     };
 
     // The allocator an owner object takes in its def and keeps for its

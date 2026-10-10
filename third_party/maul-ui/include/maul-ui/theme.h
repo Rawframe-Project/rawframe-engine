@@ -52,14 +52,14 @@ extern "C"
     ///
     /// @param context     The context.
     /// @param def         The theme: a valid cookie.
-    /// @param themeIdOut  Receives the theme; set to the null id on failure.
+    /// @param themeOut  Receives the theme; set to the null id on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
     ///         cookie or a call from a measure or paint function;
     ///         `mui_errorCapacity` when the context's theme limit is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiCreateTheme(muiContext* context, const muiThemeDef* def,
-                                                   muiThemeId* themeIdOut);
+                                                   muiThemeId* themeOut);
 
     /// Destroys a theme and its overrides. Nodes it was set on read
     /// through no theme of their own, and every node is restyled.
@@ -160,13 +160,13 @@ extern "C"
     ///
     /// @param context     The context.
     /// @param nodeId      The node.
-    /// @param themeIdOut  Receives the theme set, or the null id.
+    /// @param themeOut  Receives the theme set, or the null id.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or the
     ///         null id; `mui_errorStale` for an id whose node is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_GetTheme(const muiContext* context, muiNodeId nodeId,
-                                                     muiThemeId* themeIdOut);
+                                                     muiThemeId* themeOut);
 
     /// Reads a token's value as a node reads it, through the themes above
     /// it as of the last muiComputeLayout that styled it.

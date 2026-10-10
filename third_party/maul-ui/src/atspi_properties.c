@@ -14,6 +14,7 @@
 #define INTERFACE_ACCESSIBLE   "org.a11y.atspi.Accessible"
 #define INTERFACE_ACTION       "org.a11y.atspi.Action"
 #define INTERFACE_APPLICATION  "org.a11y.atspi.Application"
+#define INTERFACE_TEXT         "org.a11y.atspi.Text"
 #define INTERFACE_VALUE        "org.a11y.atspi.Value"
 #define ERROR_INVALID_ARGS     "org.freedesktop.DBus.Error.InvalidArgs"
 #define ERROR_UNKNOWN_PROPERTY "org.freedesktop.DBus.Error.UnknownProperty"
@@ -21,6 +22,7 @@
 static const char* const s_accessible[] = {"Name",   "Description",  "Parent",  "ChildCount",
                                            "Locale", "AccessibleId", "HelpText"};
 static const char* const s_action[] = {"NActions"};
+static const char* const s_text[] = {"CharacterCount", "CaretOffset"};
 static const char* const s_value[] = {"MinimumValue", "MaximumValue", "MinimumIncrement",
                                       "CurrentValue", "Text"};
 static const char* const s_application[] = {"ToolkitName",  "Version",          "ToolkitVersion",
@@ -148,7 +150,7 @@ static bool AppendApplication(muiAtspiApp* app, muiDBusIter* iter, const char* n
 // Whether an object has an interface.
 static bool Has(const muiAtspiObject* object, const char* interface)
 {
-    const char* interfaces[4];
+    const char* interfaces[MUI_ATSPI_INTERFACES];
     uint32_t count = muiAtspiInterfacesOf(object, interfaces);
     for (uint32_t i = 0; i < count; i++)
     {
@@ -174,6 +176,10 @@ static bool AppendProperty(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiOb
     if (strcmp(interface, INTERFACE_VALUE) == 0 && Has(object, INTERFACE_VALUE))
     {
         return muiAtspiAppendValueProperty(app, iter, object, name, ok);
+    }
+    if (strcmp(interface, INTERFACE_TEXT) == 0 && Has(object, INTERFACE_TEXT))
+    {
+        return muiAtspiAppendTextProperty(app, iter, object, name, ok);
     }
     return object->node == nullptr && strcmp(interface, INTERFACE_APPLICATION) == 0 &&
            AppendApplication(app, iter, name, ok);
@@ -258,6 +264,11 @@ static bool AppendAll(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject*
     {
         names = s_value;
         count = sizeof(s_value) / sizeof(s_value[0]);
+    }
+    else if (Has(object, interface) && strcmp(interface, INTERFACE_TEXT) == 0)
+    {
+        names = s_text;
+        count = sizeof(s_text) / sizeof(s_text[0]);
     }
     muiDBusIter array;
     bool ok = dbus->openContainer(iter, mui_dbusTypeArray, "{sv}", &array);

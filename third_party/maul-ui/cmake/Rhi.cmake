@@ -3,7 +3,7 @@
 # or fetched at its release tag as Maul Unicode is. The core and the text
 # component never depend on it.
 
-set(MAUL_UI_RHI_VERSION 0.5.0)
+set(MAUL_UI_RHI_VERSION 0.7.0)
 find_package(maul-rhi ${MAUL_UI_RHI_VERSION} QUIET)
 if(NOT maul-rhi_FOUND)
     set(MAUL_RHI_BUILD_TESTS OFF)
@@ -27,6 +27,9 @@ target_include_directories(maul-ui-rhi PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/rhi/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(maul-ui-rhi PUBLIC maul-ui maul-rhi::maul-rhi)
+# Linked with maul-ui, which holds HarfBuzz's C++ objects, it would link
+# as C++, and Visual Studio's project would drop its C standard.
+set_target_properties(maul-ui-rhi PROPERTIES LINKER_LANGUAGE C)
 maul_apply_flags(maul-ui-rhi)
 # Glyph runs are drawn with Maul UI's glyph atlas, which its text
 # component has.

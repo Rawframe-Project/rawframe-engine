@@ -124,7 +124,8 @@ extern "C"
     MUI_NODISCARD MUI_API muiResult muiAriaAdapter_SetScale(muiAriaAdapter* adapter, float scale);
 
     /// Builds the elements, if building was deferred and has not begun,
-    /// and takes the enabling button away. The button does the same.
+    /// and takes the enabling button away. The button does the same, and
+    /// gives the program's focused node the DOM focus.
     ///
     /// @param adapter  The adapter; NULL is ignored.
     /// @par Thread safety

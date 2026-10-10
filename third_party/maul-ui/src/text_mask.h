@@ -5,8 +5,7 @@
 // rule is laid out, painted, hit and read by accessibility as a bullet
 // (U+2022, as Chrome and AppKit draw one) per grapheme cluster, its mask
 // made again whenever its text changes. Offsets of the text and of the
-// mask match by cluster. muiAccessTextOf (maul-ui/text_block.h) lives
-// here, reading a node's text as it is shown.
+// mask match by cluster.
 
 #ifndef MAUL_UI_SRC_TEXT_MASK_H
 #define MAUL_UI_SRC_TEXT_MASK_H

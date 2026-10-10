@@ -7,6 +7,7 @@
 // let go, its adapter cleared, so that a client still holding it gets
 // nothing.
 
+#include "access_record.h"
 #include "allocator.h"
 #include "ns.h"
 
@@ -193,6 +194,13 @@ muiResult muiNsAdapter_Apply(muiNsAdapter* adapter, const muiAccessUpdate* updat
     adapter->reshaped = false;
     adapter->focusMoved = false;
     muiResult status = muiAccessTree_Apply(adapter->tree, update, &changes);
+    if (status == mui_success)
+    {
+        // The focus shown moves with the active descendant too.
+        uint64_t shown = muiRecordActiveFocus(adapter->tree);
+        adapter->focusMoved = adapter->focusMoved || shown != adapter->toldFocus;
+        adapter->toldFocus = shown;
+    }
     if (status == mui_success && adapter->reshaped)
     {
         muiNsTellLayout(adapter);
@@ -242,14 +250,31 @@ static NSRect InView(const muiNsAdapter* adapter, muiRect box)
     return NSMakeRect((CGFloat)box.x * scale, y, (CGFloat)box.width * scale, height);
 }
 
-NSRect muiNsScreenRectOf(const muiNsAdapter* adapter, uint64_t id)
+NSRect muiNsScreenRectOfBox(const muiNsAdapter* adapter, muiRect box)
 {
-    muiRect box = {0};
-    (void)muiAccessTree_GetBounds(adapter->tree, id, &box);
     NSView* view = adapter->view;
     NSRect inWindow = [view convertRect:InView(adapter, box) toView:nil];
     NSWindow* window = [view window];
     return window != nil ? [window convertRectToScreen:inWindow] : inWindow;
+}
+
+NSRect muiNsScreenRectOf(const muiNsAdapter* adapter, uint64_t id)
+{
+    muiRect box = {0};
+    (void)muiAccessTree_GetBounds(adapter->tree, id, &box);
+    return muiNsScreenRectOfBox(adapter, box);
+}
+
+void muiNsRootPointOf(const muiNsAdapter* adapter, NSPoint screen, float* xOut, float* yOut)
+{
+    NSView* view = adapter->view;
+    NSWindow* window = [view window];
+    NSPoint inWindow = window != nil ? [window convertPointFromScreen:screen] : screen;
+    NSPoint inView = [view convertPoint:inWindow fromView:nil];
+    CGFloat scale = (CGFloat)adapter->scale;
+    CGFloat top = [view isFlipped] ? inView.y : NSHeight([view bounds]) - inView.y;
+    *xOut = (float)(inView.x / scale);
+    *yOut = (float)(top / scale);
 }
 
 static bool Holds(const muiNsAdapter* adapter, uint64_t id, NSPoint point)

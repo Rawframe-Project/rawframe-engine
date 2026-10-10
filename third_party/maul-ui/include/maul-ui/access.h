@@ -240,6 +240,12 @@ extern "C"
         mui_actionScrollLeft = 11,
         mui_actionScrollRight = 12,
         mui_actionSetScrollOffset = 13,
+        // A value text's selection set, or a range of it replaced with
+        // text: offered while the host's text function gives a selection,
+        // and applied by the host, not muiPerformAccessAction (the text
+        // component's muiTextPerformAccessAction, maul-ui/text_editor.h).
+        mui_actionSetSelection = 14,
+        mui_actionReplaceText = 15,
     };
 
     // How one node names others.
@@ -366,6 +372,63 @@ extern "C"
         muiAccessCurrent current;
     } muiAccessValues;
 
+    // A word of a value text: its bytes from start up to end, a UAX #29
+    // word segment with a letter or a number in it.
+    typedef struct muiAccessWord
+    {
+        uint32_t start;
+        uint32_t end;
+    } muiAccessWord;
+
+    // A grapheme cluster of a value text as shown: its bytes from start up
+    // to end, and its left and right edges in the node's own space (where
+    // its bounds are, before its transform).
+    typedef struct muiAccessCluster
+    {
+        uint32_t start;
+        uint32_t end;
+        float left;
+        float right;
+    } muiAccessCluster;
+
+    // A line of a value text as shown: its top and bottom in the node's
+    // own space, and its first cluster; its clusters run up to the next
+    // line's first. A line too far from what is shown may have its
+    // clusters left out (omitted): its characters are then placed only
+    // by the line, across the node.
+    typedef struct muiAccessLineBox
+    {
+        float top;
+        float bottom;
+        uint32_t firstCluster;
+        bool omitted;
+    } muiAccessLineBox;
+
+    // Where a value text is selected, and where its lines and words are:
+    // byte offsets into the text, at the starts of characters; and where
+    // it is shown.
+    typedef struct muiAccessTextMarks
+    {
+        // The selection, the caret at its focus, when selected says so:
+        // the text is being edited.
+        uint32_t anchor;
+        uint32_t focus;
+        bool selected;
+        // Where each line starts, ascending from 0, as the text is shown;
+        // NULL for none given.
+        const uint32_t* lineStarts;
+        uint32_t lineCount;
+        // Its words, in order, none overlapping; NULL for none.
+        const muiAccessWord* words;
+        uint32_t wordCount;
+        // Where it is shown, with its lines: a box each line (lineCount of
+        // them), and its clusters line after line, each line's left to
+        // right; NULL for none given.
+        const muiAccessLineBox* lineBoxes;
+        const muiAccessCluster* clusters;
+        uint32_t clusterCount;
+    } muiAccessTextMarks;
+
     // A node as an update sends it: everything it is, whole.
     typedef struct muiAccessNode
     {
@@ -397,6 +460,9 @@ extern "C"
         // none: the host's end in a NUL, the text function's need not.
         const char* text[MUI_ACCESS_TEXTS];
         uint32_t textLength[MUI_ACCESS_TEXTS];
+        // Its value text's selection, lines and words, as the host's text
+        // function gives them; none for a value the host set.
+        muiAccessTextMarks marks;
         // The nodes it names, in order of kind, then as the host gave
         // them; NULL for none.
         const muiAccessLink* links;
@@ -430,15 +496,38 @@ extern "C"
         // For mui_actionSetScrollOffset.
         float x;
         float y;
+        // For mui_actionSetSelection, the selection, the caret at the
+        // focus; for mui_actionReplaceText, the range replaced, either
+        // way round, and the UTF-8 text put there, valid while the
+        // request is applied. Byte offsets into the value text.
+        uint32_t anchor;
+        uint32_t focus;
+        const char* text;
+        uint32_t length;
     } muiAccessRequest;
 
+    // What host content reads as: its text, and where it is selected and
+    // where its lines and words are.
+    typedef struct muiAccessContent
+    {
+        const char* text;
+        size_t length;
+        muiAccessTextMarks marks;
+    } muiAccessContent;
+
     /// The host's function for what host content reads as: a node's text,
-    /// such as a text block's, valid until the host edits it. It runs
+    /// such as a text block's, with its selection, valid until the host
+    /// edits it. Given shown, the part of the node not clipped away by
+    /// its scrolling ancestors, in its own space, its lines, words and
+    /// clusters too, valid as long; clusters may be left out of lines far
+    /// from shown, so a long text costs what is near the screen. It runs
     /// inside muiBuildAccessUpdate, as the measure function runs inside
-    /// layout, and may not change the context. The text must be
-    /// well-formed UTF-8 below 2^31 bytes; other text is left out.
+    /// layout, and may not change the context; shown is given only for a
+    /// node the update sends, NULL otherwise. The text must be well-formed
+    /// UTF-8 below 2^31 bytes; other text is left out, and marks out of
+    /// order or past it are.
     typedef bool (*muiAccessTextFunction)(void* user, muiNodeId nodeId, uint64_t hostKey,
-                                          const char** textOut, size_t* lengthOut);
+                                          const muiRect* shown, muiAccessContent* contentOut);
 
     /// The accessibility id of a node.
     ///
@@ -471,6 +560,22 @@ extern "C"
     MUI_NODISCARD MUI_API muiResult muiSetAccessTextFunction(muiContext* context,
                                                              muiAccessTextFunction function,
                                                              void* user);
+
+    /// Tells the accessibility tree what the host's text function gives
+    /// for a node changed while its content did not: its selection
+    /// moved. muiNode_MarkContentChanged tells it too; the text editor's
+    /// functions that take a node (maul-ui/text_editor.h) tell it
+    /// themselves.
+    ///
+    /// @param context  The context.
+    /// @param nodeId   The node.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
+    ///         null id or a call from a measure or paint function;
+    ///         `mui_errorStale` for a node that is gone.
+    /// @par Thread safety
+    /// Safe from any thread; the context is used by one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiNode_MarkAccessChanged(muiContext* context,
+                                                              muiNodeId nodeId);
 
     /// Builds updates for a root's tree from now on, the next one whole.
     /// Enabling an enabled root makes its next update whole again, as
@@ -524,7 +629,8 @@ extern "C"
     ///                    widget handled, a focus or value or offset that
     ///                    moved, a request posted. May be NULL.
     /// @return `mui_success`; `mui_empty` for a node that does not take
-    ///         the action; `mui_errorInvalid` for a NULL context or
+    ///         the action, and for the text actions, which the host
+    ///         applies; `mui_errorInvalid` for a NULL context or
     ///         request, an unknown action, a value that is not finite, or
     ///         a call from a measure, paint or event function;
     ///         `mui_errorStale` for a node that is gone.

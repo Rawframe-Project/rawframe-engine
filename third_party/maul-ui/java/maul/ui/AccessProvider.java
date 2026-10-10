@@ -5,6 +5,7 @@ package maul.ui;
 
 import android.content.Context;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewParent;
@@ -13,6 +14,7 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.accessibility.AccessibilityNodeProvider;
+import java.util.Collections;
 
 /**
  * Maul UI's accessibility tree shown to Android (record mui-0008): the
@@ -37,8 +39,11 @@ public class AccessProvider extends AccessibilityNodeProvider {
     private static final int MAXIMUM = 10;
     private static final int CURRENT = 11;
     private static final int LIVE = 12;
-    private static final int COUNT = 13;
-    private static final int CHILDREN = 14;
+    private static final int GRANULARITIES = 13;
+    private static final int SELECTION_START = 14;
+    private static final int SELECTION_END = 15;
+    private static final int COUNT = 16;
+    private static final int CHILDREN = 17;
 
     private static final int CHECKABLE = 1;
     private static final int CHECKED = 1 << 1;
@@ -62,6 +67,8 @@ public class AccessProvider extends AccessibilityNodeProvider {
     private static final int SET_PROGRESS = 5;
     private static final int EXPAND = 6;
     private static final int COLLAPSE = 7;
+    private static final int SET_SELECTION = 8;
+    private static final int SET_TEXT = 9;
     private static final AccessibilityAction[] OFFERED = {
         AccessibilityAction.ACTION_CLICK,
         AccessibilityAction.ACTION_FOCUS,
@@ -71,6 +78,8 @@ public class AccessProvider extends AccessibilityNodeProvider {
         AccessibilityAction.ACTION_SET_PROGRESS,
         AccessibilityAction.ACTION_EXPAND,
         AccessibilityAction.ACTION_COLLAPSE,
+        AccessibilityAction.ACTION_SET_SELECTION,
+        AccessibilityAction.ACTION_SET_TEXT,
     };
 
     // A node's texts, by kind.
@@ -101,12 +110,31 @@ public class AccessProvider extends AccessibilityNodeProvider {
     };
 
     private static final String ROLE_KEY = "AccessibilityNodeInfo.roleDescription";
+    private static final String GRANULARITY_ARGUMENT =
+            AccessibilityNodeInfo.ACTION_ARGUMENT_MOVEMENT_GRANULARITY_INT;
+    private static final String EXTEND_ARGUMENT =
+            AccessibilityNodeInfo.ACTION_ARGUMENT_EXTEND_SELECTION_BOOLEAN;
+    private static final String LOCATION_KEY =
+            AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY;
+    private static final String LOCATION_START_ARGUMENT =
+            AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_START_INDEX;
+    private static final String LOCATION_LENGTH_ARGUMENT =
+            AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_LENGTH;
+    private static final String SELECTION_START_ARGUMENT =
+            AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT;
+    private static final String SELECTION_END_ARGUMENT =
+            AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT;
+    private static final String SET_TEXT_ARGUMENT =
+            AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE;
 
     private final View host;
     // The native adapter, 0 once it is gone.
     private long handle;
-    // The virtual view the screen reader's cursor is on.
+    // The virtual view the screen reader's cursor is on, and where in its
+    // text the cursor moving by granularity is (UTF-16, -1 for nowhere)
+    // when it is not text being edited, whose caret it is.
     private int accessibilityFocus = View.NO_ID;
+    private int traversed = -1;
 
     private AccessProvider(View host, long handle) {
         this.host = host;
@@ -124,6 +152,15 @@ public class AccessProvider extends AccessibilityNodeProvider {
     private static native int focusOf(long handle);
 
     private static native int nodeAt(long handle, float x, float y);
+
+    private static native int[] traverse(long handle, int id, int granularity, boolean forward,
+            boolean extend, int cursor);
+
+    private static native boolean select(long handle, int id, int start, int end);
+
+    private static native boolean setText(long handle, int id, String text);
+
+    private static native float[] characterBoxes(long handle, int id, int start, int length);
 
     @Override
     public AccessibilityNodeInfo createAccessibilityNodeInfo(int id) {
@@ -160,6 +197,17 @@ public class AccessProvider extends AccessibilityNodeProvider {
                     Float.intBitsToFloat(node[CURRENT])));
         }
         info.setLiveRegion(node[LIVE]);
+        if (node[GRANULARITIES] != 0) {
+            info.setMovementGranularities(node[GRANULARITIES]);
+            info.addAction(AccessibilityAction.ACTION_NEXT_AT_MOVEMENT_GRANULARITY);
+            info.addAction(AccessibilityAction.ACTION_PREVIOUS_AT_MOVEMENT_GRANULARITY);
+        }
+        if (node[SELECTION_START] >= 0) {
+            info.setTextSelection(node[SELECTION_START], node[SELECTION_END]);
+        }
+        if (node[GRANULARITIES] != 0) {
+            info.setAvailableExtraData(Collections.singletonList(LOCATION_KEY));
+        }
         for (int i = 0; i < OFFERED.length; i++) {
             if ((node[ACTIONS] & (1 << i)) != 0) {
                 info.addAction(OFFERED[i]);
@@ -210,6 +258,35 @@ public class AccessProvider extends AccessibilityNodeProvider {
         }
     }
 
+    /**
+     * Where a node's text's characters are on the screen, for
+     * EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY: a RectF for each UTF-16 unit
+     * of the start and length asked for, null for one with none.
+     */
+    @Override
+    public void addExtraDataToAccessibilityNodeInfo(int id, AccessibilityNodeInfo info,
+            String key, Bundle arguments) {
+        if (handle == 0 || !LOCATION_KEY.equals(key) || arguments == null) {
+            return;
+        }
+        int start = arguments.getInt(LOCATION_START_ARGUMENT, -1);
+        int length = arguments.getInt(LOCATION_LENGTH_ARGUMENT, -1);
+        float[] boxes = characterBoxes(handle, id, start, length);
+        if (boxes == null) {
+            return;
+        }
+        int[] at = new int[2];
+        host.getLocationOnScreen(at);
+        RectF[] places = new RectF[length];
+        for (int i = 0; i < length; i++) {
+            if (!Float.isNaN(boxes[4 * i])) {
+                places[i] = new RectF(boxes[4 * i] + at[0], boxes[4 * i + 1] + at[1],
+                        boxes[4 * i + 2] + at[0], boxes[4 * i + 3] + at[1]);
+            }
+        }
+        info.getExtras().putParcelableArray(key, places);
+    }
+
     @Override
     public boolean performAction(int id, int action, Bundle arguments) {
         if (id == View.NO_ID) {
@@ -223,6 +300,17 @@ public class AccessProvider extends AccessibilityNodeProvider {
                 return moveCursor(id);
             case AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS:
                 return id == accessibilityFocus && moveCursor(View.NO_ID);
+            case AccessibilityNodeInfo.ACTION_NEXT_AT_MOVEMENT_GRANULARITY:
+                return moveThrough(id, action, arguments, true);
+            case AccessibilityNodeInfo.ACTION_PREVIOUS_AT_MOVEMENT_GRANULARITY:
+                return moveThrough(id, action, arguments, false);
+            case AccessibilityNodeInfo.ACTION_SET_SELECTION:
+                return selectAsked(id, arguments);
+            case AccessibilityNodeInfo.ACTION_SET_TEXT: {
+                CharSequence text =
+                        arguments != null ? arguments.getCharSequence(SET_TEXT_ARGUMENT) : null;
+                return setText(handle, id, text != null ? text.toString() : "");
+            }
             default:
                 break;
         }
@@ -238,14 +326,54 @@ public class AccessProvider extends AccessibilityNodeProvider {
         return false;
     }
 
+    // A selection asked for, or the caret where it is without one.
+    private boolean selectAsked(int id, Bundle arguments) {
+        boolean given = arguments != null && arguments.containsKey(SELECTION_START_ARGUMENT)
+                && arguments.containsKey(SELECTION_END_ARGUMENT);
+        return given
+                ? select(handle, id, arguments.getInt(SELECTION_START_ARGUMENT),
+                        arguments.getInt(SELECTION_END_ARGUMENT))
+                : select(handle, id, -1, -1);
+    }
+
+    // A move through a node's text by a granularity, told as a view's
+    // traversal is: the segment passed, the action and the granularity.
+    private boolean moveThrough(int id, int action, Bundle arguments, boolean forward) {
+        if (arguments == null) {
+            return false;
+        }
+        int granularity = arguments.getInt(GRANULARITY_ARGUMENT);
+        boolean extend = arguments.getBoolean(EXTEND_ARGUMENT);
+        int cursor = id == accessibilityFocus ? traversed : -1;
+        int[] moved = traverse(handle, id, granularity, forward, extend, cursor);
+        if (moved == null) {
+            return false;
+        }
+        if (id == accessibilityFocus) {
+            traversed = moved[3];
+        }
+        AccessibilityEvent event =
+                event(id, AccessibilityEvent.TYPE_VIEW_TEXT_TRAVERSED_AT_MOVEMENT_GRANULARITY);
+        if (event != null) {
+            event.getText().add(textOf(handle, id, TEXT));
+            event.setFromIndex(moved[0]);
+            event.setToIndex(moved[1]);
+            event.setAction(action);
+            event.setMovementGranularity(granularity);
+            host.getParent().requestSendAccessibilityEvent(host, event);
+        }
+        return true;
+    }
+
     // The screen reader's cursor to a virtual view or off, told as the
-    // views' own moves are.
+    // views' own moves are; where it is in a text is forgotten.
     private boolean moveCursor(int id) {
         int old = accessibilityFocus;
         if (old == id) {
             return false;
         }
         accessibilityFocus = id;
+        traversed = -1;
         if (old != View.NO_ID) {
             send(old, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED, 0);
         }
@@ -281,19 +409,52 @@ public class AccessProvider extends AccessibilityNodeProvider {
      * content change.
      */
     void send(int id, int type, int changes) {
+        AccessibilityEvent event = event(id, type);
+        if (event == null) {
+            return;
+        }
+        if (type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+            event.setContentChangeTypes(changes);
+        }
+        host.getParent().requestSendAccessibilityEvent(host, event);
+    }
+
+    /**
+     * Tells clients of a text event on a virtual view, in UTF-16: a text
+     * changed from an index, how much went and how much came, with the
+     * text before; or a selection changed, its start, its end and the
+     * text's length.
+     */
+    void sendText(int id, int type, int a, int b, int c, String before) {
+        AccessibilityEvent event = event(id, type);
+        if (event == null || handle == 0) {
+            return;
+        }
+        event.getText().add(textOf(handle, id, TEXT));
+        event.setFromIndex(a);
+        if (type == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+            event.setRemovedCount(b);
+            event.setAddedCount(c);
+            event.setBeforeText(before != null ? before : "");
+        } else {
+            event.setToIndex(b);
+            event.setItemCount(c);
+        }
+        host.getParent().requestSendAccessibilityEvent(host, event);
+    }
+
+    // A new event of a type from a virtual view; null while accessibility
+    // is off, when Android throws for one sent, or with no parent.
+    private AccessibilityEvent event(int id, int type) {
         ViewParent parent = host.getParent();
         AccessibilityManager manager =
                 (AccessibilityManager) host.getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
-        // Android throws for an event sent while accessibility is off.
         if (parent == null || manager == null || !manager.isEnabled()) {
-            return;
+            return null;
         }
         AccessibilityEvent event = new AccessibilityEvent(type);
         event.setPackageName(host.getContext().getPackageName());
         event.setSource(host, id);
-        if (type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            event.setContentChangeTypes(changes);
-        }
-        parent.requestSendAccessibilityEvent(host, event);
+        return event;
     }
 }

@@ -35,6 +35,10 @@ bool muiReserve(const muiAllocator* allocator, muiBuffer* buffer, size_t bytes);
 
 void muiFreeBuffer(const muiAllocator* allocator, muiBuffer* buffer);
 
+// Whether a word segment (UAX #29), text from start up to end, is a word:
+// it has a letter or a number.
+bool muiIsWordSegment(const char* text, size_t start, size_t end);
+
 // A line break opportunity before the byte at offset.
 typedef struct muiTextBreak
 {
@@ -163,6 +167,20 @@ enum
     MUI_LINE_CACHES = 3
 };
 
+// A block's words as accessibility reads them (src/text_access.c), kept
+// between sends: count muiAccessWord in words, made for the text of
+// revision revision, length bytes long, but for the paragraphs stale
+// names; none made until made is true.
+typedef struct muiWordCache
+{
+    muiBuffer words;
+    uint32_t count;
+    uint32_t length;
+    uint64_t revision;
+    bool made;
+    muiStale stale;
+} muiWordCache;
+
 typedef struct muiTextBlock muiTextBlock;
 
 struct muiTextBlock
@@ -234,6 +252,13 @@ struct muiTextBlock
     // (src/text_mask.h); NULL until made.
     muiTextBlock* mask;
     uint64_t maskRevision;
+    // What accessibility last read of it (src/text_access.c): where its
+    // lines start (uint32_t), its lines' boxes (muiAccessLineBox) and its
+    // clusters (muiAccessCluster); and its words, which edits follow.
+    muiBuffer accessLines;
+    muiWordCache accessWords;
+    muiBuffer accessLineBoxes;
+    muiBuffer accessClusters;
 };
 
 typedef struct muiTextBlockStore

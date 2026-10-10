@@ -7,6 +7,8 @@
 // whose node goes are let go, their adapter cleared, so that a client
 // still holding one gets nothing.
 
+#include "access_record.h"
+#include "access_text.h"
 #include "allocator.h"
 #include "uikit.h"
 
@@ -148,7 +150,11 @@ MUIAccessibilityElement* muiUikitElementOf(muiUikitAdapter* adapter, uint64_t id
     MUIAccessibilityElement* element = muiIdMapFind(&adapter->elementById, id);
     if (element == nil)
     {
-        element = [[MUIAccessibilityElement alloc] initWithAccessibilityContainer:adapter->view];
+        // A node being edited has a text element.
+        Class kind = muiAccessIsEdited(muiAccessTree_Find(adapter->tree, id))
+                         ? [MUIAccessibilityTextElement class]
+                         : [MUIAccessibilityElement class];
+        element = [[kind alloc] initWithAccessibilityContainer:adapter->view];
         element->adapter = adapter;
         element->nodeId = id;
         if (!muiIdMapInsert(&adapter->elementById, id, element))
@@ -218,9 +224,22 @@ static void Added(void* user, const muiAccessTree* tree, uint64_t id)
     muiUikitTellAdded(user, id);
 }
 
+// A node starting or ending being edited needs the other class of
+// element: the one it has goes, and the next is made when asked for;
+// the layout is told, with the new one when it is the focus.
 static void Updated(void* user, const muiAccessTree* tree, const muiAccessNode* old)
 {
-    muiUikitTellUpdated(user, old, muiAccessTree_Find(tree, old->id));
+    muiUikitAdapter* adapter = user;
+    const muiAccessNode* node = muiAccessTree_Find(tree, old->id);
+    MUIAccessibilityElement* element = muiIdMapFind(&adapter->elementById, old->id);
+    if (element != nil && muiAccessIsEdited(old) != muiAccessIsEdited(node))
+    {
+        (void)muiIdMapRemove(&adapter->elementById, old->id);
+        ForgetElement(element);
+        adapter->reshaped = true;
+        adapter->focusMoved = adapter->focusMoved || muiRecordActiveFocus(tree) == old->id;
+    }
+    muiUikitTellUpdated(adapter, old, node);
 }
 
 static void Removed(void* user, const muiAccessTree* tree, const muiAccessNode* old)
@@ -272,6 +291,13 @@ muiResult muiUikitAdapter_Apply(muiUikitAdapter* adapter, const muiAccessUpdate*
     muiResult status = muiAccessTree_Apply(adapter->tree, update, &changes);
     if (status == mui_success)
     {
+        // The focus shown moves with the active descendant too.
+        uint64_t shown = muiRecordActiveFocus(adapter->tree);
+        adapter->focusMoved = adapter->focusMoved || shown != adapter->toldFocus;
+        adapter->toldFocus = shown;
+    }
+    if (status == mui_success)
+    {
         muiUikitTellChanges(adapter, oldRoot);
     }
     return status;
@@ -304,14 +330,24 @@ bool muiUikitAct(const muiUikitAdapter* adapter, muiAccessAction action, uint64_
     return adapter->action(adapter->user, &request);
 }
 
-CGRect muiUikitScreenRectOf(const muiUikitAdapter* adapter, uint64_t id)
+CGRect muiUikitViewRectOf(const muiUikitAdapter* adapter, uint64_t id)
 {
     muiRect box = {0};
     (void)muiAccessTree_GetBounds(adapter->tree, id, &box);
+    return muiUikitViewRectOfBox(adapter, box);
+}
+
+CGRect muiUikitViewRectOfBox(const muiUikitAdapter* adapter, muiRect box)
+{
     CGFloat scale = (CGFloat)adapter->scale;
-    CGRect inView = CGRectMake((CGFloat)box.x * scale, (CGFloat)box.y * scale,
-                               (CGFloat)box.width * scale, (CGFloat)box.height * scale);
-    return UIAccessibilityConvertFrameToScreenCoordinates(inView, adapter->view);
+    return CGRectMake((CGFloat)box.x * scale, (CGFloat)box.y * scale, (CGFloat)box.width * scale,
+                      (CGFloat)box.height * scale);
+}
+
+CGRect muiUikitScreenRectOf(const muiUikitAdapter* adapter, uint64_t id)
+{
+    return UIAccessibilityConvertFrameToScreenCoordinates(muiUikitViewRectOf(adapter, id),
+                                                          adapter->view);
 }
 
 NSString* muiUikitNameOf(const muiUikitAdapter* adapter, uint64_t id)

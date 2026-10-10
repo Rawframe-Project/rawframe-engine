@@ -6,6 +6,7 @@
 // place; nodes no node lists any more leave with their subtrees; then
 // the changes are reported and what was replaced is freed.
 
+#include "access_text.h"
 #include "access_tree.h"
 #include "access_tree_store.h"
 #include "allocator.h"
@@ -153,8 +154,20 @@ static bool Ends(muiAccessTree* tree, const muiAccessUpdate* update, uint64_t id
     return true;
 }
 
+// Whether a node's marks fit its value text (src/access_text.h).
+static bool MarksFit(const muiAccessNode* node)
+{
+    const char* text = node->text[mui_accessValue];
+    uint32_t length = text != nullptr ? node->textLength[mui_accessValue] : 0;
+    return muiAccessSelectionFits(&node->marks, text, length) &&
+           muiAccessLinesFit(&node->marks, text, length) &&
+           muiAccessWordsFit(&node->marks, text, length) &&
+           muiAccessGeometryFits(&node->marks, text, length);
+}
+
 // Checks the lists sent leave a tree: every child known and listed once,
-// the root listed by none, no node above itself; counts the nodes new.
+// the root listed by none, no node above itself; and that marks fit
+// their texts; counts the nodes new.
 static muiResult CheckLists(muiAccessTree* tree, const muiAccessUpdate* update, uint64_t root,
                             uint32_t* addedOut)
 {
@@ -163,7 +176,7 @@ static muiResult CheckLists(muiAccessTree* tree, const muiAccessUpdate* update, 
     {
         const muiAccessNode* node = update->nodes[i];
         added += muiHeldSlotOf(tree, node->id) == 0 ? 1 : 0;
-        if (node->childCount != 0 && update->children == nullptr)
+        if ((node->childCount != 0 && update->children == nullptr) || !MarksFit(node))
         {
             return mui_errorInvalid;
         }
@@ -228,8 +241,33 @@ static void FreeStaged(const muiAccessTree* tree, const muiAccessNode* node,
         owned.node.text[kind] = staged->text[kind];
         owned.node.textLength[kind] = node->textLength[kind];
     }
+    owned.node.marks.lineStarts = staged->lineStarts;
+    owned.node.marks.lineCount = node->marks.lineCount;
+    owned.node.marks.words = staged->words;
+    owned.node.marks.wordCount = node->marks.wordCount;
+    owned.node.marks.lineBoxes = staged->lineBoxes;
+    owned.node.marks.clusters = staged->clusters;
+    owned.node.marks.clusterCount = node->marks.clusterCount;
     owned.node.links = staged->links;
     muiFreeHeld(tree, &owned);
+}
+
+// A copy of size bytes, NULL for none; when memory runs out, NULL and
+// fits made false. Nothing is copied once fits is false.
+static void* Copy(const muiAccessTree* tree, const void* from, size_t size, size_t align,
+                  bool* fits)
+{
+    if (!*fits || size == 0)
+    {
+        return nullptr;
+    }
+    void* copy = muiAllocate(&tree->allocator, size, align);
+    *fits = copy != nullptr;
+    if (copy != nullptr)
+    {
+        memcpy(copy, from, size);
+    }
+    return copy;
 }
 
 // Copies what a node sent points at; false when memory runs out, with
@@ -253,26 +291,21 @@ static bool Stage(const muiAccessTree* tree, const muiAccessNode* node, const ui
             }
         }
     }
-    if (fits && node->linkCount != 0)
-    {
-        size_t size = node->linkCount * sizeof(muiAccessLink);
-        staged->links = muiAllocate(&tree->allocator, size, alignof(muiAccessLink));
-        fits = staged->links != nullptr;
-        if (fits)
-        {
-            memcpy(staged->links, node->links, size);
-        }
-    }
-    if (fits && node->childCount != 0)
-    {
-        size_t size = node->childCount * sizeof(uint64_t);
-        staged->children = muiAllocate(&tree->allocator, size, alignof(uint64_t));
-        fits = staged->children != nullptr;
-        if (fits)
-        {
-            memcpy(staged->children, children + node->firstChild, size);
-        }
-    }
+    const muiAccessTextMarks* marks = &node->marks;
+    staged->lineStarts = Copy(tree, marks->lineStarts, marks->lineCount * sizeof(uint32_t),
+                              alignof(uint32_t), &fits);
+    staged->words = Copy(tree, marks->words, marks->wordCount * sizeof(muiAccessWord),
+                         alignof(muiAccessWord), &fits);
+    staged->lineBoxes =
+        Copy(tree, marks->lineBoxes,
+             marks->lineBoxes != nullptr ? marks->lineCount * sizeof(muiAccessLineBox) : 0,
+             alignof(muiAccessLineBox), &fits);
+    staged->clusters = Copy(tree, marks->clusters, marks->clusterCount * sizeof(muiAccessCluster),
+                            alignof(muiAccessCluster), &fits);
+    staged->links = Copy(tree, node->links, node->linkCount * sizeof(muiAccessLink),
+                         alignof(muiAccessLink), &fits);
+    staged->children = Copy(tree, node->childCount != 0 ? children + node->firstChild : nullptr,
+                            node->childCount * sizeof(uint64_t), alignof(uint64_t), &fits);
     if (!fits)
     {
         FreeStaged(tree, node, staged);
@@ -289,6 +322,13 @@ static muiHeldNode HeldOf(const muiAccessNode* node, const muiStagedNode* staged
         held.node.text[kind] = staged->text[kind];
         held.node.textLength[kind] = staged->text[kind] != nullptr ? node->textLength[kind] : 0;
     }
+    held.node.marks.lineStarts = staged->lineStarts;
+    held.node.marks.lineCount = staged->lineStarts != nullptr ? node->marks.lineCount : 0;
+    held.node.marks.words = staged->words;
+    held.node.marks.wordCount = staged->words != nullptr ? node->marks.wordCount : 0;
+    held.node.marks.lineBoxes = staged->lineBoxes;
+    held.node.marks.clusters = staged->clusters;
+    held.node.marks.clusterCount = staged->clusters != nullptr ? node->marks.clusterCount : 0;
     held.node.links = staged->links;
     held.node.linkCount = staged->links != nullptr ? node->linkCount : 0;
     held.node.firstChild = 0;

@@ -26,3 +26,19 @@ bool muiRecordNameDiffers(const muiAccessNode* old, const muiAccessNode* now)
     muiAccessTextKind kind = muiRecordNameKindOf(now);
     return muiRecordNameKindOf(old) != kind || muiRecordTextDiffers(old, now, kind);
 }
+
+uint64_t muiRecordActiveFocus(const muiAccessTree* tree)
+{
+    uint64_t focus = muiAccessTree_GetFocus(tree);
+    const muiAccessNode* node = muiAccessTree_Find(tree, focus);
+    for (uint32_t i = 0; node != nullptr && i < node->linkCount; i++)
+    {
+        const muiAccessLink* link = &node->links[i];
+        if (link->kind == mui_relationActiveDescendant &&
+            muiAccessTree_Find(tree, link->target) != nullptr)
+        {
+            return link->target;
+        }
+    }
+    return focus;
+}

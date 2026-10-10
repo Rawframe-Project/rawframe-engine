@@ -142,22 +142,35 @@ static muiSize SizeLeaf(const muiSolver* solver, uint32_t node, const muiSizingI
     // Both sizes exact decide the size, as the final pass always gives
     // them: the host is not asked.
     bool decided = input->width.mode == mui_measureExact && input->height.mode == mui_measureExact;
-    if (style->content == mui_contentHost && solver->measure != nullptr && !decided)
-    {
-        muiNodeId id = muiTreeIdOf(solver->tree, node);
-        uint64_t hostKey = muiTreeAt(solver->tree, node)->hostKey;
-        solver->work->measured++;
-        content =
-            solver->measure(solver->measureUser, id, hostKey, ContentAxis(input->width, boxWidth),
-                            ContentAxis(input->height, boxHeight));
-        content.width = SaneLength(content.width);
-        content.height = SaneLength(content.height);
-    }
     muiAxisSizing width = muiResolveAxis(&style->sizing, true, input->parentWidth);
     muiAxisSizing height = muiResolveAxis(&style->sizing, false, input->parentHeight);
     if (input->contentOnly)
     {
         width = height = (muiAxisSizing){.maximum = INFINITY};
+    }
+    if (style->content == mui_contentHost && solver->measure != nullptr && !decided)
+    {
+        // The content is laid out within the width the node ends at, which
+        // its minimum floors and its maximum caps: text measured in other
+        // space would keep the height of other lines than it shows.
+        muiMeasureAxis across = input->width;
+        float floor = fmaxf(width.minimum, boxWidth);
+        float cap = fmaxf(width.maximum, floor);
+        if (across.mode == mui_measureAtMost)
+        {
+            across.size = fminf(fmaxf(across.size, floor), cap);
+        }
+        else if (across.mode == mui_measureMaxContent && cap < INFINITY)
+        {
+            across = (muiMeasureAxis){cap, mui_measureAtMost};
+        }
+        muiNodeId id = muiTreeIdOf(solver->tree, node);
+        uint64_t hostKey = muiTreeAt(solver->tree, node)->hostKey;
+        solver->work->measured++;
+        content = solver->measure(solver->measureUser, id, hostKey, ContentAxis(across, boxWidth),
+                                  ContentAxis(input->height, boxHeight));
+        content.width = SaneLength(content.width);
+        content.height = SaneLength(content.height);
     }
     muiSize size;
     size.width =

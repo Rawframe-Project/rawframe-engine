@@ -110,13 +110,16 @@ extern "C"
     } muiTextEditInput;
 
     // What an event did: whether the editor took it, whether the text
-    // changed, and whether it asks for a paste, which the host answers
-    // with muiTextBlock_Paste once its clipboard is read.
+    // changed, whether it asks for a paste, which the host answers with
+    // muiTextBlock_Paste once its clipboard is read, and whether the
+    // selection moved, which the host tells the accessibility tree
+    // (muiNode_MarkAccessChanged) when the text did not change.
     typedef struct muiTextEditOutcome
     {
         bool handled;
         bool changed;
         bool paste;
+        bool selected;
     } muiTextEditOutcome;
 
     // A selection: from the anchor to the caret, empty where they meet.
@@ -436,6 +439,33 @@ extern "C"
     /// one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextEditDrag(const muiTextHost* host, muiNodeId nodeId,
                                                     float x, float y);
+
+    /// Applies what assistive technology asks of a node's editing block:
+    /// its selection set (mui_actionSetSelection) or a range of its text
+    /// replaced (mui_actionReplaceText, maul-ui/access.h), in offsets of
+    /// the text as accessibility reads it (a password's mask), at the
+    /// starts of characters. Text replaced goes in as a paste does, under
+    /// the block's rules, the caret after it; a read-only block keeps its
+    /// text. The host tells the accessibility tree what changed, as after
+    /// muiTextEditEvent.
+    ///
+    /// @param host        The text host.
+    /// @param request     The request; its target a node whose host key is
+    ///                    a block's.
+    /// @param outcomeOut  Receives whether the request was taken, the text
+    ///                    changed and the selection moved, whatever the
+    ///                    result.
+    /// @return `mui_success`; `mui_empty` for another action;
+    ///         `mui_errorInvalid` for a NULL argument, a block not editing,
+    ///         an offset past the text or inside a character, or a NULL
+    ///         text with a length; `mui_errorStale` for a node or block
+    ///         that is gone; `mui_errorCapacity` when memory runs out.
+    /// @par Thread safety
+    /// Safe from any thread; the host's context and service are used by
+    /// one thread at a time.
+    MUI_NODISCARD MUI_API muiResult muiTextPerformAccessAction(const muiTextHost* host,
+                                                               const muiAccessRequest* request,
+                                                               muiTextEditOutcome* outcomeOut);
 
 #ifdef __cplusplus
 }

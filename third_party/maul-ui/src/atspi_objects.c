@@ -16,13 +16,15 @@
 #define ERROR_INVALID_ARGS   "org.freedesktop.DBus.Error.InvalidArgs"
 #define ERROR_NO_MEMORY      "org.freedesktop.DBus.Error.NoMemory"
 
-#define INTERFACE_ACCESSIBLE  "org.a11y.atspi.Accessible"
-#define INTERFACE_ACTION      "org.a11y.atspi.Action"
-#define INTERFACE_APPLICATION "org.a11y.atspi.Application"
-#define INTERFACE_COMPONENT   "org.a11y.atspi.Component"
-#define INTERFACE_VALUE       "org.a11y.atspi.Value"
-#define INTERFACE_PROPERTIES  "org.freedesktop.DBus.Properties"
-#define INTERFACE_INTROSPECT  "org.freedesktop.DBus.Introspectable"
+#define INTERFACE_ACCESSIBLE    "org.a11y.atspi.Accessible"
+#define INTERFACE_ACTION        "org.a11y.atspi.Action"
+#define INTERFACE_APPLICATION   "org.a11y.atspi.Application"
+#define INTERFACE_COMPONENT     "org.a11y.atspi.Component"
+#define INTERFACE_TEXT          "org.a11y.atspi.Text"
+#define INTERFACE_EDITABLE_TEXT "org.a11y.atspi.EditableText"
+#define INTERFACE_VALUE         "org.a11y.atspi.Value"
+#define INTERFACE_PROPERTIES    "org.freedesktop.DBus.Properties"
+#define INTERFACE_INTROSPECT    "org.freedesktop.DBus.Introspectable"
 
 // AT-SPI's application role.
 #define ROLE_APPLICATION 75
@@ -261,7 +263,8 @@ bool muiAtspiAppendParent(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObj
     return muiAtspiAppendReference(app, iter, &parent);
 }
 
-uint32_t muiAtspiInterfacesOf(const muiAtspiObject* object, const char* interfacesOut[4])
+uint32_t muiAtspiInterfacesOf(const muiAtspiObject* object,
+                              const char* interfacesOut[MUI_ATSPI_INTERFACES])
 {
     uint32_t count = 0;
     interfacesOut[count++] = INTERFACE_ACCESSIBLE;
@@ -279,6 +282,15 @@ uint32_t muiAtspiInterfacesOf(const muiAtspiObject* object, const char* interfac
     {
         interfacesOut[count++] = INTERFACE_VALUE;
     }
+    if (muiAtspiHasText(object->node))
+    {
+        interfacesOut[count++] = INTERFACE_TEXT;
+    }
+    if (muiAtspiHasText(object->node) &&
+        (object->node->actions & (1u << mui_actionReplaceText)) != 0)
+    {
+        interfacesOut[count++] = INTERFACE_EDITABLE_TEXT;
+    }
     return count;
 }
 
@@ -291,7 +303,7 @@ static void Introspect(muiAtspiApp* app, DBusMessage* call, const muiAtspiObject
                "\"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n<node>\n"
                "  <interface name=\"" INTERFACE_INTROSPECT "\"/>\n"
                "  <interface name=\"" INTERFACE_PROPERTIES "\"/>\n");
-    const char* interfaces[4];
+    const char* interfaces[MUI_ATSPI_INTERFACES];
     uint32_t count = muiAtspiInterfacesOf(object, interfaces);
     for (uint32_t i = 0; i < count; i++)
     {
@@ -344,7 +356,7 @@ static bool AppendInterfaces(muiAtspiApp* app, muiDBusIter* iter, const muiAtspi
 {
     const muiDBusApi* dbus = &app->dbus;
     muiDBusIter array;
-    const char* interfaces[4];
+    const char* interfaces[MUI_ATSPI_INTERFACES];
     uint32_t count = muiAtspiInterfacesOf(object, interfaces);
     bool ok = dbus->openContainer(iter, mui_dbusTypeArray, "s", &array);
     for (uint32_t i = 0; i < count && ok; i++)
@@ -573,6 +585,16 @@ bool muiAtspiAnswer(muiAtspiApp* app, DBusMessage* call)
     else if (strcmp(interface, INTERFACE_ACTION) == 0 && object.node != nullptr &&
              muiAtspiActionCount(object.node) != 0 &&
              muiAtspiAnswerAction(app, call, &object, member))
+    {
+    }
+    else if (strcmp(interface, INTERFACE_TEXT) == 0 && object.node != nullptr &&
+             muiAtspiHasText(object.node) && muiAtspiAnswerText(app, call, &object, member))
+    {
+    }
+    else if (strcmp(interface, INTERFACE_EDITABLE_TEXT) == 0 && object.node != nullptr &&
+             muiAtspiHasText(object.node) &&
+             (object.node->actions & (1u << mui_actionReplaceText)) != 0 &&
+             muiAtspiAnswerEditableText(app, call, &object, member))
     {
     }
     else if (strcmp(interface, INTERFACE_COMPONENT) != 0 || object.node == nullptr ||

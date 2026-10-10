@@ -36,17 +36,17 @@ muiNodeDef muiDefaultNodeDef(void)
     return (muiNodeDef){.cookie = NODE_DEF_COOKIE};
 }
 
-muiResult muiCreateNode(muiContext* context, const muiNodeDef* def, muiNodeId* nodeIdOut)
+muiResult muiCreateNode(muiContext* context, const muiNodeDef* def, muiNodeId* nodeOut)
 {
-    if (nodeIdOut != nullptr)
+    if (nodeOut != nullptr)
     {
-        *nodeIdOut = (muiNodeId){0, 0};
+        *nodeOut = (muiNodeId){0, 0};
     }
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (def == nullptr || nodeIdOut == nullptr || def->cookie != NODE_DEF_COOKIE ||
+    if (def == nullptr || nodeOut == nullptr || def->cookie != NODE_DEF_COOKIE ||
         muiIsInHostCall(context))
     {
         return muiRefuse(context);
@@ -65,7 +65,7 @@ muiResult muiCreateNode(muiContext* context, const muiNodeDef* def, muiNodeId* n
     context->interaction[slot - 1] = (muiInteractionStyle){.hitMode = mui_hitAuto};
     context->scrolls[slot - 1] = (muiScrollState){0};
     context->lists.items[slot - 1] = 0;
-    *nodeIdOut = muiTreeIdOf(&context->tree, slot);
+    *nodeOut = muiTreeIdOf(&context->tree, slot);
     return mui_success;
 }
 

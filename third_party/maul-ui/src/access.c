@@ -675,3 +675,18 @@ muiResult muiSetAccessTextFunction(muiContext* context, muiAccessTextFunction fu
     }
     return mui_success;
 }
+
+muiResult muiNode_MarkAccessChanged(muiContext* context, muiNodeId nodeId)
+{
+    if (context == nullptr)
+    {
+        return mui_errorInvalid;
+    }
+    muiResult status = mui_success;
+    uint32_t slot = muiResolveEdit(context, nodeId, &status);
+    if (slot != 0)
+    {
+        muiNoteAccess(context, slot);
+    }
+    return status;
+}
