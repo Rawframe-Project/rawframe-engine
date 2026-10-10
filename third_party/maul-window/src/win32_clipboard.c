@@ -33,8 +33,8 @@ static bool Open(HWND hwnd)
 static HGLOBAL Wide(const mwinContext* context)
 {
     size_t needed = 0;
-    (void)muniConvertUtf8ToUtf16(context->clipboardOffer, context->clipboardOfferLength, nullptr, 0,
-                                 muni_convertStrict, &needed);
+    (void)muniConvertUtf8ToUtf16(context->clipboardOffer, context->clipboardOfferLength,
+                                 muni_convertStrict, nullptr, 0, &needed);
     size_t bytes = 0;
     if (ckd_add(&bytes, needed, 1) || ckd_mul(&bytes, bytes, sizeof(uint16_t)))
     {
@@ -46,8 +46,8 @@ static HGLOBAL Wide(const mwinContext* context)
     {
         return memory != nullptr ? GlobalFree(memory) : nullptr;
     }
-    (void)muniConvertUtf8ToUtf16(context->clipboardOffer, context->clipboardOfferLength, units,
-                                 needed, muni_convertStrict, &needed);
+    (void)muniConvertUtf8ToUtf16(context->clipboardOffer, context->clipboardOfferLength,
+                                 muni_convertStrict, units, needed, &needed);
     units[needed] = 0;
     GlobalUnlock(memory);
     return memory;

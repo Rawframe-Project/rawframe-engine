@@ -71,8 +71,8 @@ static uint32_t ReadString(mwinWin32Window* window, HIMC context, DWORD which, u
         sizeof(WCHAR);
     size_t length = 0;
     muniTextResult converted =
-        muniConvertUtf16ToUtf8((const uint16_t*)platform->imeUnits, units, platform->imeBytes,
-                               capacity, muni_convertReplace, &length);
+        muniConvertUtf16ToUtf8((const uint16_t*)platform->imeUnits, units, muni_convertReplace,
+                               platform->imeBytes, capacity, &length);
     if (converted.status != muni_success)
     {
         PostType(window, mwin_eventInputStateReset);

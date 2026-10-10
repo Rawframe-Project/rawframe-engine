@@ -16,9 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CONTEXT_DEF_COOKIE 0x6D776378u
-#define APP_DEF_COOKIE     0x6D776170u
-
 // The notification classes of a window that coalesce, plus created and
 // destroyed: with its completions, the most notifications that can wait
 // for it.
@@ -32,45 +29,15 @@
 // addition, a change, a reset and its removal.
 #define GAMEPAD_RECORDS 4
 
-mwinContextDef mwinDefaultContextDef(void)
-{
-    mwinContextDef def = {0};
-    def.cookie = CONTEXT_DEF_COOKIE;
-    def.limits.windows = 8;
-    def.limits.requestsPerWindow = 32;
-    def.limits.notificationsPerWindow = 256;
-    def.limits.titleBytes = 1024;
-    def.limits.inputPerWindow = 256;
-    def.limits.textBytesPerWindow = 4096;
-    def.limits.monitors = 16;
-    def.limits.localeBytes = 256;
-    def.limits.gamepads = 8;
-    def.limits.clipboardBytes = 1u << 20;
-    def.limits.dropBytes = 1u << 20;
-    def.limits.droppedFiles = 256;
-    def.limits.dialogFiles = 256;
-    def.limits.dialogBytes = 1u << 20;
-    def.limits.cursors = 16;
-    def.backend = mwin_backendNative;
-    return def;
-}
-
-mwinAppDef mwinDefaultAppDef(void)
-{
-    mwinAppDef def = {0};
-    def.cookie = APP_DEF_COOKIE;
-    def.context = mwinDefaultContextDef();
-    return def;
-}
-
 static bool IsDefValid(const mwinAppDef* def)
 {
     const mwinContextDef* context = &def->context;
     const mwinLimits* limits = &context->limits;
-    return def->cookie == APP_DEF_COOKIE && def->init != nullptr && def->frame != nullptr &&
-           context->cookie == CONTEXT_DEF_COOKIE && mwinIsAllocatorValid(&context->allocator) &&
-           limits->windows > 0 && limits->requestsPerWindow > 0 && limits->titleBytes > 0 &&
-           limits->inputPerWindow > 0 && limits->textBytesPerWindow > 0 && limits->monitors > 0 &&
+    return def->cookie == MWIN_APP_DEF_COOKIE && def->init != nullptr && def->frame != nullptr &&
+           context->cookie == MWIN_CONTEXT_DEF_COOKIE &&
+           mwinIsAllocatorValid(&context->allocator) && limits->windows > 0 &&
+           limits->requestsPerWindow > 0 && limits->titleBytes > 0 && limits->inputPerWindow > 0 &&
+           limits->textBytesPerWindow > 0 && limits->monitors > 0 &&
            limits->notificationsPerWindow >=
                3 * limits->monitors + GAMEPAD_RECORDS * limits->gamepads + GLOBAL_CLASSES &&
            limits->notificationsPerWindow >= limits->requestsPerWindow + FIXED_RECORDS &&
@@ -292,6 +259,11 @@ mwinResult mwinRun(const mwinAppDef* def)
 
 mwinResult mwinRunLaunched(const mwinAppDef* def, void* launch)
 {
+    // The cookie and the version come first in every version's layout.
+    if (def != nullptr && def->cookie == MWIN_APP_DEF_COOKIE && def->version != MWIN_ABI_VERSION)
+    {
+        return mwin_errorVersion;
+    }
     if (def == nullptr || !IsDefValid(def))
     {
         return mwin_errorInvalid;

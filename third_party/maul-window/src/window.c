@@ -101,6 +101,23 @@ void mwinReleaseRequestData(const mwinContext* context, mwinRequest* request)
     mwinReleaseIconCopy(context, request);
 }
 
+// The payload kind a read of a kind finds, or mwin_foundKinds for a
+// request that is no read.
+static uint32_t FoundKindOf(mwinRequestKind kind)
+{
+    switch (kind)
+    {
+    case mwin_requestClipboardRead:
+        return mwin_foundText;
+    case mwin_requestClipboardReadData:
+        return mwin_foundData;
+    case mwin_requestPrimaryRead:
+        return mwin_foundPrimary;
+    default:
+        return mwin_foundKinds;
+    }
+}
+
 void mwinComplete(mwinContext* context, uint32_t slot, uint32_t request, mwinOutcome outcome)
 {
     mwinRequest* entry = &context->windows[slot].requests[request];
@@ -109,6 +126,13 @@ void mwinComplete(mwinContext* context, uint32_t slot, uint32_t request, mwinOut
         return;
     }
     entry->status = mwin_requestAnswered;
+    uint32_t found = FoundKindOf(entry->kind);
+    if (outcome == mwin_outcomeDone && found < mwin_foundKinds)
+    {
+        // The read is answered by the payload its bytes just made.
+        context->windows[slot].foundReads[found] =
+            (mwinFoundRead){mwinRequestIdOf(context, slot, request), context->foundPayloads[found]};
+    }
     if (outcome == mwin_outcomeDone)
     {
         Carried(&context->windows[slot], entry);

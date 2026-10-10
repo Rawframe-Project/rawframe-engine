@@ -17,7 +17,7 @@
 static void Wide(const char* text, size_t length, WCHAR* out, size_t capacity)
 {
     size_t units = 0;
-    (void)muniConvertUtf8ToUtf16(text, length, (uint16_t*)out, capacity - 1, muni_convertReplace,
+    (void)muniConvertUtf8ToUtf16(text, length, muni_convertReplace, (uint16_t*)out, capacity - 1,
                                  &units);
     out[units < capacity ? units : capacity - 1] = L'\0';
 }

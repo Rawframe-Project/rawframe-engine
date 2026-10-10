@@ -9,8 +9,11 @@
 // frame paste once unless the program counts the superseded read.
 //
 // A read that completes with mwin_outcomeDone leaves the text it found
-// in the context, where mwinGetClipboardText copies it out until the
-// next read is done; a read refused or too large leaves it. Text another program put there is
+// in the context, where mwinGetClipboardText copies it out under the
+// read's request until another read finds text; a read refused or too
+// large leaves it. Asked with any other request, the getter answers
+// mwin_errorStale, so a completion is never answered with another
+// read's text (mwin-0040). Text another program put there is
 // checked before the program sees it: ill-formed UTF-8 has each maximal ill-formed subpart replaced
 // with U+FFFD, and text past the clipboardBytes limit, after that, completes the read with
 // mwin_outcomeTooLarge. An empty clipboard, or one without text, reads as empty text.
@@ -74,22 +77,26 @@ extern "C"
                                                                 mwinWindowId window,
                                                                 mwinRequestId* requestOut);
 
-    /// Copies out the text found by the last clipboard read that completed
-    /// with mwin_outcomeDone; empty before any.
+    /// Copies out the text a clipboard read found, while it is the text
+    /// the last read found: the read completed with mwin_outcomeDone, and
+    /// no read since (of any window) found other text.
     ///
     /// @param context    The context.
+    /// @param request    The read, from its completion record.
     /// @param buffer     Receives the text in UTF-8, not NUL-terminated.
     ///                   May be NULL when capacity is 0.
     /// @param capacity   The bytes buffer holds.
     /// @param lengthOut  Receives the text's length in bytes.
     /// @return `mwin_success`; `mwin_errorCapacity` when the text does not
-    ///         fit (the bytes that fit are written); `mwin_errorInvalid`
-    ///         for a NULL argument.
+    ///         fit (the bytes that fit are written); `mwin_errorStale` for
+    ///         a request that is no read answered done, or whose text a
+    ///         later read replaced; `mwin_errorInvalid` for a NULL
+    ///         argument.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinGetClipboardText(const mwinContext* context,
-                                                            char* buffer, size_t capacity,
-                                                            size_t* lengthOut);
+                                                            mwinRequestId request, char* buffer,
+                                                            size_t capacity, size_t* lengthOut);
 
 #define MWIN_CLIPBOARD_ITEMS 4
 #define MWIN_CLIPBOARD_MIME  63
@@ -127,7 +134,7 @@ extern "C"
     MWIN_NODISCARD MWIN_API mwinResult mwinRequestClipboardWriteData(mwinContext* context,
                                                                      mwinWindowId window,
                                                                      const mwinClipboardItem* items,
-                                                                     size_t count,
+                                                                     uint32_t count,
                                                                      mwinRequestId* requestOut);
 
     /// Asks for the clipboard's data of a MIME type; when the request
@@ -151,10 +158,11 @@ extern "C"
                                                                     size_t mimeLength,
                                                                     mwinRequestId* requestOut);
 
-    /// Copies out the data found by the last data read that completed with
-    /// mwin_outcomeDone; empty before any.
+    /// Copies out the data a data read found, as mwinGetClipboardText does
+    /// the text.
     ///
     /// @param context    The context.
+    /// @param request    The read, from its completion record.
     /// @param buffer     Receives the bytes. May be NULL when capacity is 0.
     /// @param capacity   The bytes buffer holds.
     /// @param lengthOut  Receives the data's length in bytes.
@@ -162,8 +170,8 @@ extern "C"
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinGetClipboardData(const mwinContext* context,
-                                                            void* buffer, size_t capacity,
-                                                            size_t* lengthOut);
+                                                            mwinRequestId request, void* buffer,
+                                                            size_t capacity, size_t* lengthOut);
 
     /// Asks to make text the primary selection, where the platform has one
     /// (X11, Wayland); others answer mwin_outcomeUnsupported.
@@ -196,10 +204,11 @@ extern "C"
                                                               mwinWindowId window,
                                                               mwinRequestId* requestOut);
 
-    /// Copies out the text found by the last primary selection read that
-    /// completed with mwin_outcomeDone; empty before any.
+    /// Copies out the text a primary selection read found, as
+    /// mwinGetClipboardText does the clipboard's.
     ///
     /// @param context    The context.
+    /// @param request    The read, from its completion record.
     /// @param buffer     Receives the text in UTF-8, not NUL-terminated.
     ///                   May be NULL when capacity is 0.
     /// @param capacity   The bytes buffer holds.
@@ -207,7 +216,8 @@ extern "C"
     /// @return As mwinGetClipboardText.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinGetPrimaryText(const mwinContext* context, char* buffer,
+    MWIN_NODISCARD MWIN_API mwinResult mwinGetPrimaryText(const mwinContext* context,
+                                                          mwinRequestId request, char* buffer,
                                                           size_t capacity, size_t* lengthOut);
 
 #ifdef __cplusplus

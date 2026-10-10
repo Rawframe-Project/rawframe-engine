@@ -486,8 +486,8 @@ static const WCHAR* WideTitle(mwinWin32Platform* platform, const char* title, si
 {
     size_t units = 0;
     muniTextResult result =
-        muniConvertUtf8ToUtf16(title, length, (uint16_t*)platform->title,
-                               platform->context->limits.titleBytes, muni_convertReplace, &units);
+        muniConvertUtf8ToUtf16(title, length, muni_convertReplace, (uint16_t*)platform->title,
+                               platform->context->limits.titleBytes, &units);
     platform->title[result.status == muni_success ? units : 0] = L'\0';
     return platform->title;
 }

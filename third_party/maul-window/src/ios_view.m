@@ -93,6 +93,15 @@ static void Touches(MwinIOSView* view, NSSet<UITouch*>* touches, UIEvent* event,
     }
 }
 
+// A container, whose element is the program's root, never an element
+// itself: UIKit's accessibility takes a view that adopts UITextInput,
+// as this one does, for a text area, and asks a text area for no
+// elements, so no client ever reached the root.
+- (BOOL)isAccessibilityElement
+{
+    return NO;
+}
+
 // The accessibility client's way in: the program's root is the view's
 // element. The first question tells the program that a client came,
 // root or none.

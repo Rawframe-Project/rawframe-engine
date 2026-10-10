@@ -84,22 +84,22 @@ extern "C"
     /// Encodes one code point as UTF-8.
     ///
     /// @param codePoint  A Unicode scalar value.
-    /// @param bytesOut   Receives 1 to 4 bytes; must hold 4.
+    /// @param bytes      Receives 1 to 4 bytes; must hold 4.
     /// @param sizeOut    Receives the number of bytes written.
     /// @return `muni_success`, or `muni_errorInvalid` for a surrogate, a
     ///         value past U+10FFFF or a NULL out-parameter.
     /// @par Thread safety
     /// Safe from any thread.
-    MUNI_NODISCARD MUNI_API muniResult muniEncodeUtf8(uint32_t codePoint, char* bytesOut,
+    MUNI_NODISCARD MUNI_API muniResult muniEncodeUtf8(uint32_t codePoint, char* bytes,
                                                       size_t* sizeOut);
 
     /// Converts UTF-8 to UTF-16.
     ///
     /// @param bytes        The text. May be NULL when length is 0.
     /// @param length       The number of bytes.
+    /// @param mode         What to do with ill-formed input.
     /// @param units        The output. May be NULL when capacity is 0.
     /// @param capacity     The number of 16-bit units units can hold.
-    /// @param mode         What to do with ill-formed input.
     /// @param neededOut    Receives the number of units the whole
     ///                     conversion needs, which may exceed capacity. In
     ///                     strict mode, on an error, the units before it.
@@ -110,17 +110,17 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertUtf8ToUtf16(const char* bytes, size_t length,
-                                                                  uint16_t* units, size_t capacity,
                                                                   muniConvertMode mode,
+                                                                  uint16_t* units, size_t capacity,
                                                                   size_t* neededOut);
 
     /// Converts UTF-16 to UTF-8.
     ///
     /// @param units        The text. May be NULL when length is 0.
     /// @param length       The number of 16-bit units.
+    /// @param mode         What to do with unpaired surrogates.
     /// @param bytes        The output. May be NULL when capacity is 0.
     /// @param capacity     The number of bytes bytes can hold.
-    /// @param mode         What to do with unpaired surrogates.
     /// @param neededOut    Receives the number of bytes the whole
     ///                     conversion needs, which may exceed capacity. In
     ///                     strict mode, on an error, the bytes before it.
@@ -132,18 +132,18 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertUtf16ToUtf8(const uint16_t* units,
-                                                                  size_t length, char* bytes,
+                                                                  size_t length,
+                                                                  muniConvertMode mode, char* bytes,
                                                                   size_t capacity,
-                                                                  muniConvertMode mode,
                                                                   size_t* neededOut);
 
     /// Converts UTF-8 to UTF-32.
     ///
     /// @param bytes        The text. May be NULL when length is 0.
     /// @param length       The number of bytes.
+    /// @param mode         What to do with ill-formed input.
     /// @param codePoints   The output. May be NULL when capacity is 0.
     /// @param capacity     The number of code points codePoints can hold.
-    /// @param mode         What to do with ill-formed input.
     /// @param neededOut    Receives the number of code points the whole
     ///                     conversion needs, which may exceed capacity. In
     ///                     strict mode, on an error, the ones before it.
@@ -155,19 +155,19 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertUtf8ToUtf32(const char* bytes, size_t length,
+                                                                  muniConvertMode mode,
                                                                   uint32_t* codePoints,
                                                                   size_t capacity,
-                                                                  muniConvertMode mode,
                                                                   size_t* neededOut);
 
     /// Converts UTF-32 to UTF-8.
     ///
     /// @param codePoints   The text. May be NULL when length is 0.
     /// @param length       The number of code points.
-    /// @param bytes        The output. May be NULL when capacity is 0.
-    /// @param capacity     The number of bytes bytes can hold.
     /// @param mode         What to do with values that are no scalar
     ///                     value: surrogates and those past U+10FFFF.
+    /// @param bytes        The output. May be NULL when capacity is 0.
+    /// @param capacity     The number of bytes bytes can hold.
     /// @param neededOut    Receives the number of bytes the whole
     ///                     conversion needs, which may exceed capacity. In
     ///                     strict mode, on an error, the bytes before it.
@@ -178,9 +178,9 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertUtf32ToUtf8(const uint32_t* codePoints,
-                                                                  size_t length, char* bytes,
+                                                                  size_t length,
+                                                                  muniConvertMode mode, char* bytes,
                                                                   size_t capacity,
-                                                                  muniConvertMode mode,
                                                                   size_t* neededOut);
 
 #ifdef __cplusplus

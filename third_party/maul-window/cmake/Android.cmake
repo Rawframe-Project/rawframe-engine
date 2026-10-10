@@ -27,3 +27,7 @@ if(MAUL_WINDOW_GAMEPAD)
     target_sources(maul-window PRIVATE src/android_pad.c src/android_pad_map.c)
 endif()
 target_link_libraries(maul-window PRIVATE android)
+# NativeActivity enters the program through ANativeActivity_onCreate,
+# which no code of the program calls, so a static link would leave it
+# out: every program that links the library keeps it.
+target_link_options(maul-window INTERFACE "LINKER:-u,ANativeActivity_onCreate")

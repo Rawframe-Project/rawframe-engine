@@ -18,8 +18,13 @@ extern "C"
 
 // The library version. CMake reads it from here.
 #define MWIN_VERSION_MAJOR 0
-#define MWIN_VERSION_MINOR 11
+#define MWIN_VERSION_MINOR 13
 #define MWIN_VERSION_PATCH 0
+
+// The ABI a program is built for: major and minor, as the ABI holds within
+// a minor release. The application def carries it (mwinDefaultAppDef), and
+// mwinRun refuses a def built for another.
+#define MWIN_ABI_VERSION ((MWIN_VERSION_MAJOR << 16) | MWIN_VERSION_MINOR)
 
 // MWIN_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_window_EXPORTS is defined while building
@@ -76,6 +81,9 @@ extern "C"
         // The call is not allowed now: before the context exists, or from
         // inside a function the library itself is running.
         mwin_errorState = -6,
+        // A def was built from headers of another major or minor version
+        // than the library's.
+        mwin_errorVersion = -7,
     };
 
     // The allocator an owner object takes in its def and keeps for its

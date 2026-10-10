@@ -49,11 +49,11 @@ char* mwinAndroidBytesOf(const mwinAndroidPlatform* platform, JNIEnv* env, jstri
         return nullptr;
     }
     size_t size = 0;
-    (void)muniConvertUtf16ToUtf8(units, (size_t)count, nullptr, 0, muni_convertReplace, &size);
+    (void)muniConvertUtf16ToUtf8(units, (size_t)count, muni_convertReplace, nullptr, 0, &size);
     char* bytes = size > 0 && size <= UINT32_MAX ? mwinAllocate(allocator, size, 1) : nullptr;
     if (bytes != nullptr)
     {
-        (void)muniConvertUtf16ToUtf8(units, (size_t)count, bytes, size, muni_convertReplace,
+        (void)muniConvertUtf16ToUtf8(units, (size_t)count, muni_convertReplace, bytes, size,
                                      sizeOut);
         for (size_t i = 0; i < offsetCount; i++)
         {
@@ -61,7 +61,7 @@ char* mwinAndroidBytesOf(const mwinAndroidPlatform* platform, JNIEnv* env, jstri
             size_t taken = offsets[i] < 0       ? 0
                            : offsets[i] > count ? (size_t)count
                                                 : (size_t)offsets[i];
-            (void)muniConvertUtf16ToUtf8(units, taken, nullptr, 0, muni_convertReplace, &before);
+            (void)muniConvertUtf16ToUtf8(units, taken, muni_convertReplace, nullptr, 0, &before);
             offsets[i] = (int32_t)before;
         }
     }

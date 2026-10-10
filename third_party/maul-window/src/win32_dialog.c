@@ -42,7 +42,7 @@ static WCHAR* Widen(WCHAR** at, const char* text, size_t length, bool path)
 {
     WCHAR* start = *at;
     size_t count = 0;
-    (void)muniConvertUtf8ToUtf16(text, length, (uint16_t*)start, length, muni_convertReplace,
+    (void)muniConvertUtf8ToUtf16(text, length, muni_convertReplace, (uint16_t*)start, length,
                                  &count);
     for (size_t i = 0; path && i < count; i++)
     {

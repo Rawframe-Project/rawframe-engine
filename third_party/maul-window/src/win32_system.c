@@ -98,8 +98,8 @@ static void ReadLocales(mwinWin32Platform* platform)
     uint32_t length = mwinWin32JoinLocales(platform->localeUnits, units);
     size_t bytes = 0;
     muniTextResult converted =
-        muniConvertUtf16ToUtf8((const uint16_t*)platform->localeUnits, length, platform->localeText,
-                               context->limits.localeBytes, muni_convertReplace, &bytes);
+        muniConvertUtf16ToUtf8((const uint16_t*)platform->localeUnits, length, muni_convertReplace,
+                               platform->localeText, context->limits.localeBytes, &bytes);
     if (converted.status == muni_success)
     {
         (void)mwinSetLocales(context, platform->localeText, bytes, mwinWin32Now());

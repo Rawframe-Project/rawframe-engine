@@ -535,8 +535,8 @@ mwinResult mwinWin32KeyboardLayout(char* buffer, size_t capacity, size_t* length
     if (units > 1)
     {
         muniTextResult result =
-            muniConvertUtf16ToUtf8((const uint16_t*)name, (size_t)units - 1, buffer, capacity,
-                                   muni_convertReplace, &length);
+            muniConvertUtf16ToUtf8((const uint16_t*)name, (size_t)units - 1, muni_convertReplace,
+                                   buffer, capacity, &length);
         if (result.status != muni_success && result.status != muni_errorCapacity)
         {
             length = 0;

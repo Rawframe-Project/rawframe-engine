@@ -205,8 +205,8 @@ static void NameOf(const mwinWin32Hid* hid, const wchar_t* path, mwinGamepadInfo
     }
     size_t bytes = 0;
     if (!named || name[0] == L'\0' ||
-        muniConvertUtf16ToUtf8((const uint16_t*)name, wcslen(name), info->name, sizeof(info->name),
-                               muni_convertReplace, &bytes)
+        muniConvertUtf16ToUtf8((const uint16_t*)name, wcslen(name), muni_convertReplace, info->name,
+                               sizeof(info->name), &bytes)
                 .status != muni_success)
     {
         static const char plain[] = "HID gamepad";

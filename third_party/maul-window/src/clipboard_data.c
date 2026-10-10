@@ -123,7 +123,8 @@ void mwinReleaseClipboardExtras(mwinContext* context)
 // Checks a write's items: their types, each once, a text one UTF-8; the
 // bytes of the others in all, and the text's, into totalOut and textOut
 // (the text item's index, or -1). False for a misuse.
-static bool CheckItems(const mwinClipboardItem* items, size_t count, size_t* totalOut, int* textOut)
+static bool CheckItems(const mwinClipboardItem* items, uint32_t count, size_t* totalOut,
+                       int* textOut)
 {
     *totalOut = 0;
     *textOut = -1;
@@ -131,7 +132,7 @@ static bool CheckItems(const mwinClipboardItem* items, size_t count, size_t* tot
     {
         return false;
     }
-    for (size_t i = 0; i < count; i++)
+    for (uint32_t i = 0; i < count; i++)
     {
         const mwinClipboardItem* item = &items[i];
         if (!IsMime(item->mime, item->mimeLength) || (item->bytes == nullptr && item->length != 0))
@@ -160,10 +161,10 @@ static bool CheckItems(const mwinClipboardItem* items, size_t count, size_t* tot
 // Copies a write's items but the text into one block: NULL when the
 // allocator has no room. None at all for a write of text alone.
 static mwinClipboardCopy* CopyItems(const mwinContext* context, const mwinClipboardItem* items,
-                                    size_t count, int text, bool* failedOut)
+                                    uint32_t count, int text, bool* failedOut)
 {
     size_t bytes = sizeof(mwinClipboardCopy);
-    for (size_t i = 0; i < count; i++)
+    for (uint32_t i = 0; i < count; i++)
     {
         bytes += (int)i == text ? 0 : items[i].length;
     }
@@ -180,7 +181,7 @@ static mwinClipboardCopy* CopyItems(const mwinContext* context, const mwinClipbo
     }
     *copy = (mwinClipboardCopy){.size = bytes};
     uint32_t offset = 0;
-    for (size_t i = 0; i < count; i++)
+    for (uint32_t i = 0; i < count; i++)
     {
         if ((int)i == text)
         {
@@ -202,7 +203,7 @@ static mwinClipboardCopy* CopyItems(const mwinContext* context, const mwinClipbo
 }
 
 mwinResult mwinRequestClipboardWriteData(mwinContext* context, mwinWindowId window,
-                                         const mwinClipboardItem* items, size_t count,
+                                         const mwinClipboardItem* items, uint32_t count,
                                          mwinRequestId* requestOut)
 {
     size_t total = 0;
@@ -277,13 +278,31 @@ mwinResult mwinRequestClipboardReadData(mwinContext* context, mwinWindowId windo
     return mwin_success;
 }
 
-// Copies out a found buffer, as the text calls do.
-static mwinResult CopyOut(const mwinContext* context, const void* found, size_t length,
-                          void* buffer, size_t capacity, size_t* lengthOut)
+bool mwinIsFoundBy(const mwinContext* context, mwinRequestId request, uint32_t kind)
+{
+    uint32_t perWindow = context->limits.requestsPerWindow;
+    if (request.index1 == 0 || (request.index1 - 1) / perWindow >= context->limits.windows)
+    {
+        return false;
+    }
+    const mwinFoundRead* read =
+        &context->windows[(request.index1 - 1) / perWindow].foundReads[kind];
+    return read->request.index1 == request.index1 &&
+           read->request.generation == request.generation &&
+           read->payload == context->foundPayloads[kind];
+}
+
+mwinResult mwinCopyFound(const mwinContext* context, mwinRequestId request, uint32_t kind,
+                         const void* found, size_t length, void* buffer, size_t capacity,
+                         size_t* lengthOut)
 {
     if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity > 0))
     {
         return mwinMisuse(context);
+    }
+    if (!mwinIsFoundBy(context, request, kind))
+    {
+        return mwin_errorStale;
     }
     if (length > 0 && capacity > 0)
     {
@@ -293,20 +312,21 @@ static mwinResult CopyOut(const mwinContext* context, const void* found, size_t 
     return length > capacity ? mwin_errorCapacity : mwin_success;
 }
 
-mwinResult mwinGetClipboardData(const mwinContext* context, void* buffer, size_t capacity,
-                                size_t* lengthOut)
+mwinResult mwinGetClipboardData(const mwinContext* context, mwinRequestId request, void* buffer,
+                                size_t capacity, size_t* lengthOut)
 {
-    return CopyOut(context, context != nullptr ? context->clipboardDataFound : nullptr,
-                   context != nullptr ? context->clipboardDataFoundLength : 0, buffer, capacity,
-                   lengthOut);
+    return mwinCopyFound(context, request, mwin_foundData,
+                         context != nullptr ? context->clipboardDataFound : nullptr,
+                         context != nullptr ? context->clipboardDataFoundLength : 0, buffer,
+                         capacity, lengthOut);
 }
 
-mwinResult mwinGetPrimaryText(const mwinContext* context, char* buffer, size_t capacity,
-                              size_t* lengthOut)
+mwinResult mwinGetPrimaryText(const mwinContext* context, mwinRequestId request, char* buffer,
+                              size_t capacity, size_t* lengthOut)
 {
-    return CopyOut(context, context != nullptr ? context->primaryFound : nullptr,
-                   context != nullptr ? context->primaryFoundLength : 0, buffer, capacity,
-                   lengthOut);
+    return mwinCopyFound(
+        context, request, mwin_foundPrimary, context != nullptr ? context->primaryFound : nullptr,
+        context != nullptr ? context->primaryFoundLength : 0, buffer, capacity, lengthOut);
 }
 
 mwinResult mwinRequestPrimaryWrite(mwinContext* context, mwinWindowId window, const char* text,
@@ -388,6 +408,10 @@ mwinOutcome mwinTakeClipboardData(mwinContext* context, const void* bytes, size_
     void* found = context->clipboardDataFound;
     mwinOutcome outcome = Hold(context, &found, &context->clipboardDataFoundLength, bytes, length);
     context->clipboardDataFound = found;
+    if (outcome == mwin_outcomeDone)
+    {
+        context->foundPayloads[mwin_foundData] += 1;
+    }
     return outcome;
 }
 
@@ -409,5 +433,6 @@ mwinOutcome mwinTakePrimaryText(mwinContext* context, const char* bytes, size_t 
     ReleaseBytes(context, context->primaryFound, context->primaryFoundLength);
     context->primaryFound = text;
     context->primaryFoundLength = (uint32_t)needed;
+    context->foundPayloads[mwin_foundPrimary] += 1;
     return mwin_outcomeDone;
 }

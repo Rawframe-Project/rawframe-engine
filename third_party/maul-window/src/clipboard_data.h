@@ -52,6 +52,17 @@ bool mwinSameMime(const char* a, size_t aLength, const char* b, size_t bLength);
 // data. An empty text beside data is not offered.
 bool mwinOffersClipboardText(const mwinContext* context);
 
+// Whether a request is a window's last read of a kind (mwin_foundText
+// and kin) answered done, and the payload that answered it is still the
+// last of its kind.
+bool mwinIsFoundBy(const mwinContext* context, mwinRequestId request, uint32_t kind);
+
+// Copies out a read's payload for the getters: mwin_errorStale unless
+// mwinIsFoundBy, as the text calls document.
+mwinResult mwinCopyFound(const mwinContext* context, mwinRequestId request, uint32_t kind,
+                         const void* found, size_t length, void* buffer, size_t capacity,
+                         size_t* lengthOut);
+
 // Frees the data written, as a text write replaces it.
 void mwinReleaseClipboardData(mwinContext* context);
 

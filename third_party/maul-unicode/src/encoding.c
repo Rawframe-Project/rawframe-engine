@@ -222,14 +222,14 @@ static size_t EncodeUtf8Unchecked(uint32_t codePoint, uint8_t* bytes)
     return 4;
 }
 
-muniResult muniEncodeUtf8(uint32_t codePoint, char* bytesOut, size_t* sizeOut)
+muniResult muniEncodeUtf8(uint32_t codePoint, char* bytes, size_t* sizeOut)
 {
-    if (bytesOut == nullptr || sizeOut == nullptr || codePoint > 0x10FFFF ||
+    if (bytes == nullptr || sizeOut == nullptr || codePoint > 0x10FFFF ||
         (codePoint >= 0xD800 && codePoint <= 0xDFFF))
     {
         return muni_errorInvalid;
     }
-    *sizeOut = EncodeUtf8Unchecked(codePoint, (uint8_t*)bytesOut);
+    *sizeOut = EncodeUtf8Unchecked(codePoint, (uint8_t*)bytes);
     return muni_success;
 }
 
@@ -255,8 +255,8 @@ static bool BadArguments(const void* input, size_t length, const void* output, s
            neededOut == nullptr || mode > muni_convertReplace;
 }
 
-muniTextResult muniConvertUtf8ToUtf16(const char* bytes, size_t length, uint16_t* units,
-                                      size_t capacity, muniConvertMode mode, size_t* neededOut)
+muniTextResult muniConvertUtf8ToUtf16(const char* bytes, size_t length, muniConvertMode mode,
+                                      uint16_t* units, size_t capacity, size_t* neededOut)
 {
     if (BadArguments(bytes, length, units, capacity, mode, neededOut))
     {
@@ -297,8 +297,8 @@ muniTextResult muniConvertUtf8ToUtf16(const char* bytes, size_t length, uint16_t
     return Finish(needed, capacity, length, neededOut);
 }
 
-muniTextResult muniConvertUtf16ToUtf8(const uint16_t* units, size_t length, char* bytes,
-                                      size_t capacity, muniConvertMode mode, size_t* neededOut)
+muniTextResult muniConvertUtf16ToUtf8(const uint16_t* units, size_t length, muniConvertMode mode,
+                                      char* bytes, size_t capacity, size_t* neededOut)
 {
     if (BadArguments(units, length, bytes, capacity, mode, neededOut))
     {
@@ -336,8 +336,8 @@ muniTextResult muniConvertUtf16ToUtf8(const uint16_t* units, size_t length, char
     return Finish(needed, capacity, length, neededOut);
 }
 
-muniTextResult muniConvertUtf8ToUtf32(const char* bytes, size_t length, uint32_t* codePoints,
-                                      size_t capacity, muniConvertMode mode, size_t* neededOut)
+muniTextResult muniConvertUtf8ToUtf32(const char* bytes, size_t length, muniConvertMode mode,
+                                      uint32_t* codePoints, size_t capacity, size_t* neededOut)
 {
     if (BadArguments(bytes, length, codePoints, capacity, mode, neededOut))
     {
@@ -366,8 +366,9 @@ muniTextResult muniConvertUtf8ToUtf32(const char* bytes, size_t length, uint32_t
     return Finish(needed, capacity, length, neededOut);
 }
 
-muniTextResult muniConvertUtf32ToUtf8(const uint32_t* codePoints, size_t length, char* bytes,
-                                      size_t capacity, muniConvertMode mode, size_t* neededOut)
+muniTextResult muniConvertUtf32ToUtf8(const uint32_t* codePoints, size_t length,
+                                      muniConvertMode mode, char* bytes, size_t capacity,
+                                      size_t* neededOut)
 {
     if (BadArguments(codePoints, length, bytes, capacity, mode, neededOut))
     {

@@ -18,7 +18,7 @@ static bool Wide(const mwinRequest* request, WCHAR* units, bool path)
     size_t count = 0;
     muniTextResult result =
         muniConvertUtf8ToUtf16(request->value.text.bytes, request->value.text.length,
-                               (uint16_t*)units, MWIN_ADDRESS_BYTES, muni_convertStrict, &count);
+                               muni_convertStrict, (uint16_t*)units, MWIN_ADDRESS_BYTES, &count);
     if (result.status != muni_success)
     {
         return false;

@@ -79,7 +79,7 @@ mwinListResult mwinListAddUtf16(mwinFileList* list, mwinListBounds bounds, const
 {
     size_t needed = 0;
     muniTextResult converted =
-        muniConvertUtf16ToUtf8(path, length, nullptr, 0, muni_convertStrict, &needed);
+        muniConvertUtf16ToUtf8(path, length, muni_convertStrict, nullptr, 0, &needed);
     bool nul = false;
     for (size_t i = 0; i < length && !nul; i++)
     {
@@ -94,7 +94,7 @@ mwinListResult mwinListAddUtf16(mwinFileList* list, mwinListBounds bounds, const
     {
         return mwin_listFull;
     }
-    (void)muniConvertUtf16ToUtf8(path, length, room, needed, muni_convertStrict, &needed);
+    (void)muniConvertUtf16ToUtf8(path, length, muni_convertStrict, room, needed, &needed);
     Count(list, needed);
     return mwin_listAdded;
 }

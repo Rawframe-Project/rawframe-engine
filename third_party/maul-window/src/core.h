@@ -127,6 +127,24 @@ enum
     mwin_slotDestroyed = 2,
 };
 
+// The payloads clipboard reads find, by kind: the clipboard's text, its
+// data of a type, the primary selection's text.
+enum
+{
+    mwin_foundText = 0,
+    mwin_foundData = 1,
+    mwin_foundPrimary = 2,
+    mwin_foundKinds = 3,
+};
+
+// A window's last read of a kind that completed done: its request and
+// the number of the payload that answered it.
+typedef struct mwinFoundRead
+{
+    mwinRequestId request;
+    uint32_t payload;
+} mwinFoundRead;
+
 typedef struct mwinWindow
 {
     uint32_t generation;
@@ -151,6 +169,8 @@ typedef struct mwinWindow
     // asked for the tree (accessibility.c).
     void* accessibilityRoot;
     bool accessibilityAsked;
+    // Its reads answered done, by kind (clipboard_data.c).
+    mwinFoundRead foundReads[mwin_foundKinds];
     // The backend's own data for the window.
     void* platform;
 } mwinWindow;
@@ -238,6 +258,10 @@ struct mwinContext
     uint32_t primaryOfferLength;
     char* primaryFound;
     uint32_t primaryFoundLength;
+    // How many payloads reads of each kind have found; a payload is known
+    // by the count it made, and a read's getter answers only while its
+    // payload is the last.
+    uint32_t foundPayloads[mwin_foundKinds];
     // The drop being gathered, and the last one delivered with its
     // number.
     mwinDropPayload dropping;

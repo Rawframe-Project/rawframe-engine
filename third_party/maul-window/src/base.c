@@ -30,6 +30,8 @@ const char* mwinResultName(mwinResult result)
         return "mwin_errorPlatform";
     case mwin_errorState:
         return "mwin_errorState";
+    case mwin_errorVersion:
+        return "mwin_errorVersion";
     default:
         return "unknown result";
     }

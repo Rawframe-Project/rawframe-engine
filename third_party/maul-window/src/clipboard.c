@@ -39,6 +39,7 @@ static char* Found(mwinContext* context, size_t length, bool* failedOut)
         Release(context, context->clipboardFound, context->clipboardFoundLength);
         context->clipboardFound = text;
         context->clipboardFoundLength = (uint32_t)length;
+        context->foundPayloads[mwin_foundText] += 1;
     }
     return text;
 }
@@ -73,7 +74,7 @@ mwinOutcome mwinTakeClipboardUtf16(mwinContext* context, const uint16_t* units, 
         return mwin_outcomeTooLarge;
     }
     size_t needed = 0;
-    (void)muniConvertUtf16ToUtf8(units, length, nullptr, 0, muni_convertReplace, &needed);
+    (void)muniConvertUtf16ToUtf8(units, length, muni_convertReplace, nullptr, 0, &needed);
     if (needed > context->limits.clipboardBytes)
     {
         return mwin_outcomeTooLarge;
@@ -84,7 +85,7 @@ mwinOutcome mwinTakeClipboardUtf16(mwinContext* context, const uint16_t* units, 
     {
         return mwin_outcomeFailed;
     }
-    (void)muniConvertUtf16ToUtf8(units, length, text, needed, muni_convertReplace, &needed);
+    (void)muniConvertUtf16ToUtf8(units, length, muni_convertReplace, text, needed, &needed);
     return mwin_outcomeDone;
 }
 
@@ -152,18 +153,10 @@ mwinResult mwinRequestClipboardRead(mwinContext* context, mwinWindowId window,
     return status;
 }
 
-mwinResult mwinGetClipboardText(const mwinContext* context, char* buffer, size_t capacity,
-                                size_t* lengthOut)
+mwinResult mwinGetClipboardText(const mwinContext* context, mwinRequestId request, char* buffer,
+                                size_t capacity, size_t* lengthOut)
 {
-    if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity > 0))
-    {
-        return mwinMisuse(context);
-    }
-    size_t length = context->clipboardFoundLength;
-    if (length > 0 && capacity > 0)
-    {
-        memcpy(buffer, context->clipboardFound, length < capacity ? length : capacity);
-    }
-    *lengthOut = length;
-    return length > capacity ? mwin_errorCapacity : mwin_success;
+    return mwinCopyFound(
+        context, request, mwin_foundText, context != nullptr ? context->clipboardFound : nullptr,
+        context != nullptr ? context->clipboardFoundLength : 0, buffer, capacity, lengthOut);
 }

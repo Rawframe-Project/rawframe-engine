@@ -48,9 +48,10 @@ void mwinWin32NameMonitor(const WCHAR* description, size_t capacity, mwinMonitor
         size_t needed = 0;
         bool split = IS_HIGH_SURROGATE(description[units - 1]) && units < capacity &&
                      IS_LOW_SURROGATE(description[units]);
-        if (!split && muniConvertUtf16ToUtf8((const uint16_t*)description, units, info->name,
-                                             MWIN_MONITOR_NAME_BYTES, muni_convertReplace, &needed)
-                              .status == muni_success)
+        if (!split &&
+            muniConvertUtf16ToUtf8((const uint16_t*)description, units, muni_convertReplace,
+                                   info->name, MWIN_MONITOR_NAME_BYTES, &needed)
+                    .status == muni_success)
         {
             info->nameLength = (uint32_t)needed;
             return;

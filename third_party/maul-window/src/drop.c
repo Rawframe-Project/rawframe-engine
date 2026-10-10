@@ -95,11 +95,11 @@ void mwinSetDroppedText(mwinContext* context, const char* bytes, size_t length)
 void mwinSetDroppedTextUtf16(mwinContext* context, const uint16_t* units, size_t length)
 {
     size_t needed = 0;
-    (void)muniConvertUtf16ToUtf8(units, length, nullptr, 0, muni_convertReplace, &needed);
+    (void)muniConvertUtf16ToUtf8(units, length, muni_convertReplace, nullptr, 0, &needed);
     char* text = TextRoom(context, needed);
     if (text != nullptr)
     {
-        (void)muniConvertUtf16ToUtf8(units, length, text, needed, muni_convertReplace, &needed);
+        (void)muniConvertUtf16ToUtf8(units, length, muni_convertReplace, text, needed, &needed);
     }
 }
 

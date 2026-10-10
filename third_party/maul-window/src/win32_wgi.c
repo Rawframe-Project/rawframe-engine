@@ -404,8 +404,8 @@ static bool NameOf(const mwinWgi* wgi, RawController* raw, mwinGamepadInfo* info
             length -= 1;
         }
         muniTextResult converted =
-            muniConvertUtf16ToUtf8((const uint16_t*)text, length, info->name, sizeof(info->name),
-                                   muni_convertReplace, &bytes);
+            muniConvertUtf16ToUtf8((const uint16_t*)text, length, muni_convertReplace, info->name,
+                                   sizeof(info->name), &bytes);
         bytes = converted.status == muni_success ? bytes : 0;
         (void)wgi->deleteString(string);
     }

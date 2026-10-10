@@ -62,6 +62,8 @@ extern "C"
     /// takes those hovers, asks the root for the virtual view under the
     /// finger, and announces the one entered and the one left, as
     /// ExploreByTouchHelper does. The program sees no touch for them.
+    /// An application that shrinks its code keeps that method with
+    /// java/proguard-rules.pro (mwin-0041).
     ///
     /// X11, Wayland and the web take no root and answer
     /// mwin_outcomeUnsupported.

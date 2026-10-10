@@ -77,7 +77,7 @@ option(MAUL_WINDOW_GAMEPAD "Build the gamepad component" ON)
 # installed package when there is one, otherwise the pinned release,
 # built and installed along. It comes before the family modules below,
 # whose copies then serve this project.
-set(MAUL_WINDOW_UNICODE_VERSION 0.2.0)
+set(MAUL_WINDOW_UNICODE_VERSION 0.3.0)
 find_package(maul-unicode ${MAUL_WINDOW_UNICODE_VERSION} CONFIG QUIET)
 if(NOT maul-unicode_FOUND)
     include(FetchContent)
@@ -506,6 +506,8 @@ if(MAUL_WINDOW_BUILD_TESTS)
                         ${package} ${ANDROID_ABI}
                 DEPENDS test_${name} ${MWIN_JAVA_SOURCES}
                         ${PROJECT_SOURCE_DIR}/test/android/AndroidManifest.xml
+                        ${PROJECT_SOURCE_DIR}/java/proguard-rules.pro
+                        ${PROJECT_SOURCE_DIR}/test/android/proguard-rules.pro
                         ${PROJECT_SOURCE_DIR}/tools/build_android_app.sh
                 VERBATIM)
             add_custom_target(test_${name}_apk ALL DEPENDS ${PROJECT_BINARY_DIR}/test_${name}.apk)

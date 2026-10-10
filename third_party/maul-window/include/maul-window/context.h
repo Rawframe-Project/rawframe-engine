@@ -99,6 +99,10 @@ extern "C"
     typedef struct mwinAppDef
     {
         uint32_t cookie;
+        // MWIN_ABI_VERSION of the headers the program was built with; the
+        // cookie and this stay the first two fields in every version, so
+        // that mwinRun can refuse a def of another layout.
+        uint32_t version;
         mwinContextDef context;
         // Called once, when the platform allows windows. A status other
         // than mwin_success skips the frames and goes to quit.
@@ -111,25 +115,71 @@ extern "C"
         void* user;
     } mwinAppDef;
 
+// The cookies of a context def and an application def, which their
+// defaults set and mwinRun checks.
+#define MWIN_CONTEXT_DEF_COOKIE 0x6D776378u
+#define MWIN_APP_DEF_COOKIE     0x6D776170u
+
     /// Returns the default context def: the default limits (8 windows; per
     /// window 32 requests, 256 notifications, 256 input records per class
     /// and 4,096 bytes of text; 1,024 title bytes; 16 monitors; 256 bytes
     /// of locales; 8 gamepads; 1 MiB of clipboard text; 256 files and
-    /// 1 MiB of paths or text per drop), the C library's allocator and the
-    /// native backend.
+    /// 1 MiB of paths or text per drop; 256 files and 1 MiB of paths per
+    /// dialog; 16 cursors), the C library's allocator and the native
+    /// backend. Built in the program from the headers it includes, so that
+    /// the library never writes a def of its own layout into the program's.
     ///
     /// @return The def, with a valid cookie.
     /// @par Thread safety
     /// Safe from any thread.
-    MWIN_API mwinContextDef mwinDefaultContextDef(void);
+    static inline mwinContextDef mwinDefaultContextDef(void)
+    {
+#ifdef __cplusplus
+        mwinContextDef def = {};
+#else
+    mwinContextDef def = {0};
+#endif
+        def.cookie = MWIN_CONTEXT_DEF_COOKIE;
+        def.limits.windows = 8;
+        def.limits.requestsPerWindow = 32;
+        def.limits.notificationsPerWindow = 256;
+        def.limits.titleBytes = 1024;
+        def.limits.inputPerWindow = 256;
+        def.limits.textBytesPerWindow = 4096;
+        def.limits.monitors = 16;
+        def.limits.localeBytes = 256;
+        def.limits.gamepads = 8;
+        def.limits.clipboardBytes = 1u << 20;
+        def.limits.dropBytes = 1u << 20;
+        def.limits.droppedFiles = 256;
+        def.limits.dialogFiles = 256;
+        def.limits.dialogBytes = 1u << 20;
+        def.limits.cursors = 16;
+        def.backend = mwin_backendNative;
+        return def;
+    }
 
-    /// Returns the default application def: the default context def and no
-    /// functions.
+    /// Returns the default application def: the default context def, the
+    /// ABI version of the headers the program is built with, and no
+    /// functions. Built in the program, so that the version is the
+    /// program's: mwinRun refuses a def built for another major or minor
+    /// version rather than read it in another layout.
     ///
     /// @return The def, with a valid cookie.
     /// @par Thread safety
     /// Safe from any thread.
-    MWIN_API mwinAppDef mwinDefaultAppDef(void);
+    static inline mwinAppDef mwinDefaultAppDef(void)
+    {
+#ifdef __cplusplus
+        mwinAppDef def = {};
+#else
+    mwinAppDef def = {0};
+#endif
+        def.cookie = MWIN_APP_DEF_COOKIE;
+        def.version = MWIN_ABI_VERSION;
+        def.context = mwinDefaultContextDef();
+        return def;
+    }
 
     /// Runs a program: creates the context, calls init, then frame until a
     /// frame returns mwin_frameStop, then quit, and destroys the context.
