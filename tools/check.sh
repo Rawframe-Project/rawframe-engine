@@ -178,9 +178,10 @@ web_plays() {
     # browser are installed: RAWFRAME_NODE_MODULES and
     # PUPPETEER_CACHE_DIR, or under /opt/webtest, which any user
     # (the CI runner's too) can read.
-    # Runners, then the plaza, the sample 3D game (D287), each exported
-    # for the web and played from its site (D397).
-    for game in runners plaza; do
+    # Runners, then the plaza, the sample 3D game (D287), then Stalls,
+    # typed into by a screen reader (D613), each exported for the web and
+    # played from its site (D397).
+    for game in runners plaza tycoon; do
         step "web play $game"
         play_status=0
         RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \

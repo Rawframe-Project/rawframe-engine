@@ -25,6 +25,11 @@
 // ARIA adapter keeps over the canvas wait behind its hidden button, which a
 // screen reader's user presses; then Chrome's accessibility tree, what a
 // screen reader reads, holds the HUD's frame, its picture, and its score.
+// Stalls plays when named too, read and typed into by a screen reader alone
+// (D613): its HUD's purse and its sign's field, named by its label's words,
+// are read once the button is pressed; the sign is typed into the page's own
+// field, which hands each edit to the game as typing, and Enter gives it to
+// the game, which sends it to the server as the owner's sign.
 // The sample 3D game plays the same way when named (D287): plaza, its
 // walker walked by W and made to jump, its scene drawn in the canvas (its
 // models seen through the player's camera and drawn), no sprites asked of
@@ -51,9 +56,10 @@ import { end } from './verdict.mjs';
 
 const [exportPath, cookPath, buildPath, serverPath, botsPath, wasmPath, windowPath, devicePath, uiPath, repository,
        named] = argv.slice(2);
-// runners, or plaza.
+// runners, plaza, or tycoon (Stalls).
 const name = named ?? 'runners';
 const plaza = name === 'plaza';
+const stalls = name === 'tycoon';
 let puppeteer;
 try {
     puppeteer = createRequire(join(env.RAWFRAME_NODE_MODULES ?? '', 'x.js'))('puppeteer');
@@ -273,19 +279,28 @@ try {
         });
     }
     await until(/"code":"bots_admitted"/, 30000);
-    // Runners' HUD read by a screen reader: nothing but the hidden button
-    // until it is pressed, then the HUD.
+    // Runners' HUD, or Stalls', read by a screen reader: nothing but the
+    // hidden button until it is pressed, then the HUD.
     const host = 'canvas + [id$="-accessibility"]';
     let unread = [];
     let read = [];
     if (!plaza) {
+        const ready = stalls ? /^textbox "/ : / points"$/;
         unread = await readUnder(tab, host);
         await tab.evaluate((selector) => document.querySelector(`${selector} button`)?.click(), host);
-        for (let waited = 0; waited < 5000 && !read.some((line) => / points"$/.test(line)); waited += 100) {
+        for (let waited = 0; waited < 5000 && !read.some((line) => ready.test(line)); waited += 100) {
             await sleep(100);
             read = await readUnder(tab, host);
         }
         console.log(`page: a screen reader read ${JSON.stringify(unread)}, then ${JSON.stringify(read)}`);
+    }
+    // Stalls' sign typed into the page's field, then given by Enter.
+    if (stalls) {
+        await tab.focus(`${host} input`);
+        await tab.keyboard.type('ann', { delay: 50 });
+        await tab.keyboard.press('Enter');
+        await until(/"code":"ui_submitted"/, 10000);
+        await sleep(1000);
     }
     // The canvas takes the focus, then D (W in the plaza) is held: the
     // player runs.
@@ -303,15 +318,17 @@ try {
     if (plaza) {
         await sleep(1500);
     }
-    await tab.click('canvas');
-    await tab.keyboard.down(forward);
-    await sleep(plaza ? 6000 : 1000);
-    await tab.keyboard.down('Space');
-    await sleep(200);
-    await tab.keyboard.up('Space');
-    await sleep(800);
-    await tab.keyboard.up(forward);
-    await sleep(500);
+    if (!stalls) {
+        await tab.click('canvas');
+        await tab.keyboard.down(forward);
+        await sleep(plaza ? 6000 : 1000);
+        await tab.keyboard.down('Space');
+        await sleep(200);
+        await tab.keyboard.up('Space');
+        await sleep(800);
+        await tab.keyboard.up(forward);
+        await sleep(500);
+    }
     // What the canvas shows before the stop.
     const shown = litPixels(await (await tab.$('canvas')).screenshot({ type: 'png' }));
     await tab.evaluate(() => window.rawframeStop());
@@ -363,12 +380,25 @@ try {
         admitted: field('admitted') === 1,
         handed: field('handed') === 1,
         notStalled: field('stalled') === 0,
-        confirmed: field('confirmed') > 100,
         framesShown: drawing !== null && Number(drawing[1]) > 0,
         lit: shown > 1000,
         noGpuErrors: gpuErrors.length === 0,
     };
-    if (plaza) {
+    if (!stalls) {
+        // Stalls predicts nothing, so confirms nothing.
+        checks.confirmed = field('confirmed') > 100;
+    }
+    if (stalls) {
+        const typing = /"code":"ui_summary"[^\n]*"focused":(\d+),"typed":(\d+),"submitted":(\d+)/.exec(clientLog);
+        console.log(`page: the field took the keyboard ${typing?.[1] ?? 'no'} times, ${typing?.[2] ?? 'no'} edits, ` +
+                    `${typing?.[3] ?? 'no'} given; the client sent ${field('commandsSent')} commands`);
+        Object.assign(checks, {
+            unread: unread.length === 1 && unread[0] === 'button "Enable accessibility"',
+            read: read.some((line) => /^button "\d+ coins"$/.test(line)) && read.includes('textbox "Write your sign"'),
+            typed: typing !== null && Number(typing[2]) >= 3 && Number(typing[3]) === 1,
+            sent: field('commandsSent') === 1,
+        });
+    } else if (plaza) {
         Object.assign(checks, {
             seen3d: seen3d !== null && Number(seen3d[1]) > 0 && Number(seen3d[2]) > 0,
             drawn3d: drawn3d !== null && Number(drawn3d[1]) > 0,
@@ -412,7 +442,8 @@ const nativeField = (name) => Number(new RegExp(`"${name}":(\\d+)`).exec(native?
 const most = Number(/"mostConnections":(\d+)/.exec(serverLog)?.[1] ?? -1);
 console.log(`page: native bots admitted ${nativeField('admitted')}, confirmed ${nativeField('confirmed')}; ` +
             `the server held ${most} players at once`);
-if (nativeField('admitted') !== 2 || nativeField('confirmed') <= 100 || nativeField('stalled') !== 0 || most < 3) {
+if (nativeField('admitted') !== 2 || (!stalls && nativeField('confirmed') <= 100) || nativeField('stalled') !== 0 ||
+    most < 3) {
     console.log('page: unmet: the native bots or the players held at once');
     verdict = 1;
 }
