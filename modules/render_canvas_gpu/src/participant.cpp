@@ -211,7 +211,10 @@ public:
         if (!kPlanned.has_value()) {
             return;
         }
-        ui_->resize(kPlanned->first, kPlanned->second);
+        // Laid out on the headset's panel where it shows the UI apart
+        // (D597), else over the picture.
+        const auto kSize = frames_->plannedPanel().value_or(*kPlanned);
+        ui_->resize(kSize.first, kSize.second);
         const ui::DrawList* drawn = ui_->drawn();
         renderer_->prepare(drawn != nullptr && !drawn->commands.empty() ? drawn : nullptr,
                            [ui = ui_](std::uint64_t id) {
@@ -238,6 +241,7 @@ public:
                      kUiDrawingSummary,
                      "what the device drew of the local players' UI",
                      {diagnostics::field("frames", statistics.frames),
+                      diagnostics::field("framesOnPanel", statistics.framesOnPanel),
                       diagnostics::field("boxes", statistics.boxes),
                       diagnostics::field("images", statistics.images),
                       diagnostics::field("imagesWaiting", statistics.imagesWaiting),

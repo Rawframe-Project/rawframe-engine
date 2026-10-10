@@ -11,7 +11,8 @@
 // boxes' gradients over their fills, moving through premultiplied Oklab
 // (D382); and its glyph runs, each glyph's coverage read from the tree's
 // glyph atlas, held on the device as a texture made again when the atlas
-// changes (D398).
+// changes (D398). A target that shows the UI apart, a headset's panel,
+// has it drawn there, on clear, instead of over the picture (D597).
 
 #include "rawframe/render/device.h"
 #include "rawframe/render/frame.h"
@@ -29,8 +30,10 @@ namespace rawframe::render_canvas_gpu {
 using ImageSource = std::function<std::shared_ptr<const texture::Texture>(std::uint64_t id)>;
 
 struct UiStatistics {
-    /// Frames the list was drawn in, and its boxes drawn in all.
+    /// Frames the list was drawn in, those on a headset's panel (D597),
+    /// and its boxes drawn in all.
     std::uint64_t frames = 0;
+    std::uint64_t framesOnPanel = 0;
     std::uint64_t boxes = 0;
     /// Images drawn in all, and those left out while their texture was not
     /// ready or past the textures held (D378).

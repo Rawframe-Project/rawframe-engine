@@ -256,6 +256,8 @@ struct UiRenderer::State {
     ImageSource images;
     /// What the open frame declared, until it is recorded and ends.
     bool declared = false;
+    /// Whether the frame declared draws on the target's panel (D597).
+    bool onPanel = false;
     std::vector<float> blocks;
     std::vector<float> clips;
     std::vector<float> imageBlocks;
@@ -452,7 +454,13 @@ struct UiRenderer::State {
         if (glyphBlocks.empty()) {
             glyphBlocks.assign(kGlyphFloats, 0);
         }
-        view = {static_cast<float>(open.width), static_cast<float>(open.height), 0, 0};
+        // On the target's panel where it shows the UI apart (D597), else
+        // over the picture.
+        const bool kOnPanel = open.panel != 0;
+        view =
+            kOnPanel
+                ? std::array<float, 4>{static_cast<float>(open.panelWidth), static_cast<float>(open.panelHeight), 0, 0}
+                : std::array<float, 4>{static_cast<float>(open.width), static_cast<float>(open.height), 0, 0};
         mrhiBufferDef viewDef = mrhiDefaultBufferDef();
         viewDef.size = sizeof(view);
         mrhiBufferDef boxesDef = mrhiDefaultBufferDef();
@@ -504,10 +512,12 @@ struct UiRenderer::State {
             reads.push_back(wholeOf(resourceOf(kTexture), mrhi_accessSampled));
         }
         mrhiPassDef drawDef = mrhiDefaultPassDef();
-        drawDef.colorTargets[0].resource = resourceOf(open.picture);
-        drawDef.colorTargets[0].load = open.clearsPicture() ? mrhi_loadClear : mrhi_loadKeep;
+        drawDef.colorTargets[0].resource = resourceOf(kOnPanel ? open.panel : open.picture);
+        drawDef.colorTargets[0].load =
+            (kOnPanel ? open.clearsPanel() : open.clearsPicture()) ? mrhi_loadClear : mrhi_loadKeep;
         drawDef.colorTargets[0].store = mrhi_storeKeep;
-        drawDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
+        drawDef.colorTargets[0].clear =
+            mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = kOnPanel ? 0.0F : 1.0F};
         drawDef.colorTargetCount = 1;
         drawDef.accesses = reads.data();
         drawDef.accessCount = static_cast<std::uint32_t>(reads.size());
@@ -516,6 +526,7 @@ struct UiRenderer::State {
             return failed("the UI's drawing could not be added", kAdded);
         }
         declared = true;
+        onPanel = kOnPanel;
         return {};
     }
 
@@ -620,6 +631,7 @@ struct UiRenderer::State {
             return failed("the UI could not be drawn", mrhi_errorState);
         }
         ++statistics.frames;
+        statistics.framesOnPanel += onPanel ? 1U : 0U;
         statistics.boxes += boxes;
         return {};
     }
