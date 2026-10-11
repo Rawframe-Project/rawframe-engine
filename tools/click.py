@@ -77,8 +77,9 @@ class XImage(ctypes.Structure):
 
 # Characters typed whose X key names are words.
 KEYS = {".": "period", ",": "comma", "-": "minus", " ": "space", "/": "slash"}
-# Characters typed with Shift held, by the key that types them (D473).
-SHIFTED = {":": "semicolon", "_": "underscore"}
+# Characters typed with Shift held, by the key that types them (D473), a
+# color's # among them (D637).
+SHIFTED = {":": "semicolon", "_": "underscore", "#": "3"}
 # Capitals typed with Shift held, as a path may hold them (D505).
 SHIFTED.update({letter: letter.lower() for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"})
 
