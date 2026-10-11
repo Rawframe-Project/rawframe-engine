@@ -144,7 +144,6 @@ constexpr std::array<std::string_view, kFieldForms.size() + 3> kNodeMembers = []
     members.back() = "children";
     return members;
 }();
-constexpr std::array<std::string_view, 3> kDocumentFields = {"kind", "formatVersion", "nodes"};
 constexpr double kMostMagnitude = 4096;
 constexpr double kMostValue = 1'000'000;
 constexpr std::int64_t kMostEditBytes = 252;
@@ -317,7 +316,7 @@ result::Result<UiDocument> readDocument(std::string_view text, const DocumentLim
     if (version == nullptr || version->integer() != 1) {
         return invalid("formatVersion", "the format version is 1");
     }
-    RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(kRoot, kDocumentFields, "$"));
+    RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(kRoot, kUiDocumentFields, "$"));
     RAWFRAME_TRY_ASSIGN(const std::string_view kKind, kRecord.text("kind"));
     if (kKind != "ui.document") {
         return invalid(kRecord.pathOf("kind"), "the kind is ui.document");
@@ -328,6 +327,10 @@ result::Result<UiDocument> readDocument(std::string_view text, const DocumentLim
         RAWFRAME_TRY(reading.node(nodes->items()[index], indexed(kRecord.pathOf("nodes"), index), std::nullopt, 1));
     }
     return std::move(reading.document);
+}
+
+std::span<const std::string_view> nodeMembers() noexcept {
+    return kNodeMembers;
 }
 
 } // namespace rawframe::ui

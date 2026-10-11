@@ -48,9 +48,11 @@
 
 #include "rawframe/result/result.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -146,6 +148,13 @@ struct DocumentLimits {
     std::size_t maximumDepth = 24;
     std::size_t maximumNameLength = 128;
 };
+
+/// A UI document's fields in its order (D641).
+inline constexpr std::array<std::string_view, 3> kUiDocumentFields = {"kind", "formatVersion", "nodes"};
+
+/// A node's members in the order a document writes them: `component`,
+/// `shows`, `rawframe.ui.Node`'s fields, and last `children` (D641).
+[[nodiscard]] std::span<const std::string_view> nodeMembers() noexcept;
 
 /// Reads a `ui.document` of format version 1: canonical bytes, the version,
 /// each node's fields in order and at no default, components named once,
