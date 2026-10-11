@@ -201,7 +201,10 @@ result::Status Play::launch() {
                                      {"kest.plan_only", "true"},
                                      {"bots.count", "1"},
                                      {"bots.player", "true"},
-                                     {"render.device", "any"}},
+                                     {"render.device", "any"},
+                                     // Its styles followed twice a second, an edited
+                                     // sheet given to the UI as it plays (D634).
+                                     {"ui.reload_every", "60"}},
                                     {{"kest.game", kGame},
                                      {"network.quic.pin_file", (kAt / "server.fingerprint").string()},
                                      {"bots.endpoint", "127.0.0.1:" + kPort},
