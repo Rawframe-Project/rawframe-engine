@@ -77,7 +77,15 @@ result::Result<Style> Tree::addStyle() {
 }
 
 result::Status Tree::removeStyle(Style style) {
-    return checked(muiDestroyStyle(state_->context, styleIdOf(style)), "a style class could not be removed");
+    RAWFRAME_TRY(checked(muiDestroyStyle(state_->context, styleIdOf(style)), "a style class could not be removed"));
+    const auto kMade = state_->transitions.find(style.key);
+    if (kMade != state_->transitions.end()) {
+        for (const muiTransitionId kTransition : kMade->second) {
+            static_cast<void>(muiDestroyTransition(state_->context, kTransition));
+        }
+        state_->transitions.erase(kMade);
+    }
+    return {};
 }
 
 result::Status Tree::setStyleLook(Style style, Variant variant, const Look& look, LookParts parts) {
@@ -106,7 +114,8 @@ result::Status Tree::setStyleTransition(Style style, Variant variant, LookParts 
     def.dampingRatio = transition.dampingRatio;
     muiTransitionId made{};
     RAWFRAME_TRY(checked(muiCreateTransition(state_->context, &def, &made), "a transition was refused"));
-    // The spec lives as long as the tree: a class names it.
+    // The spec lives as long as the class that names it.
+    state_->transitions[style.key].push_back(made);
     return checked(
         muiStyle_SetTransition(state_->context, styleIdOf(style), variantOf(variant), made, kVisual, maskOf(parts)),
         "a style class's transition was refused");

@@ -15,6 +15,7 @@
 #include <maul-ui/style.h>
 #include <maul-ui/text.h>
 #include <maul-ui/text_block.h>
+#include <maul-ui/transition.h>
 #include <maul-ui/visual.h>
 #include <optional>
 #include <string_view>
@@ -89,6 +90,9 @@ struct Tree::State {
     std::unordered_map<std::uint32_t, Text> texts;
     /// By the editable node's slot.
     std::unordered_map<std::uint32_t, Owner> owners;
+    /// The transition specs each style class made, by its key: gone with
+    /// it, so a sheet made again does not fill the context's (D634).
+    std::unordered_map<std::uint64_t, std::vector<muiTransitionId>> transitions;
     /// The atlas's coverage as the draw list hands it over: the one page
     /// of Maul UI's atlas, copied where it changed (D404).
     GlyphAtlas atlas;

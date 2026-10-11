@@ -1,7 +1,7 @@
 // Style classes over Maul UI's (D431): a class's base look, the variants a
 // node's states pick, the later class winning, the parts a node sets
 // itself winning over every class, and a timed transition moving a fill
-// between two frames' times.
+// between two frames' times, its spec gone with its class (D634).
 
 #include "rawframe/test/test.h"
 #include "rawframe/ui/tree.h"
@@ -92,4 +92,11 @@ RAWFRAME_TEST(ATransitionMovesAPartOverTime) {
     RAWFRAME_EXPECT(near(fillAt(ui, kButton, 11.5), 0, 1) && !ui.transitioning(kButton));
     // A time below nought, refused.
     RAWFRAME_EXPECT(!ui.setStyleTransition(kButtons, Variant::Base, kEveryLookPart, {.seconds = -1}).has_value());
+    // A class's specs go with it: made and removed more times than the
+    // context holds specs at once, as a sheet reloaded is.
+    for (int again = 0; again < 100; ++again) {
+        const Style kMade = *ui.addStyle();
+        RAWFRAME_EXPECT(ui.setStyleTransition(kMade, Variant::Base, kEveryLookPart, kSecond).has_value());
+        RAWFRAME_EXPECT(ui.removeStyle(kMade).has_value());
+    }
 }
