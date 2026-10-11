@@ -11,6 +11,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <vector>
 
@@ -113,6 +114,36 @@ RAWFRAME_TEST(LevelsPansAndFadersAreAsDeclared) {
     static_cast<void>(render(*mixer, 512));
     RAWFRAME_EXPECT(near(mixer->meter(kMusic).peakLeft, gainOf(-6) * 0.5F / std::numbers::sqrt2_v<float>) &&
                     near(mixer->meter(kMusic).rmsLeft, mixer->meter(kMusic).peakLeft));
+}
+
+RAWFRAME_TEST(ARolesVolumeIsThePlayersOnTopOfItsBus) {
+    auto mixer = *Mixer::create(layout(), {});
+    RAWFRAME_EXPECT(mixer->play(constant(0.5F, 48'000), {.bus = kMusic}).has_value());
+    const float kCentre = 0.5F / std::numbers::sqrt2_v<float>;
+    static_cast<void>(render(*mixer, 256));
+    // The music's own fader down 6, the player's music down 6 more: 12, a
+    // block to ramp to it.
+    mixer->setBusVolume(kMusic, -6);
+    mixer->setRoleVolume(Role::Music, -6);
+    static_cast<void>(render(*mixer, 256));
+    RAWFRAME_EXPECT(near(render(*mixer, 256)[0], gainOf(-12) * kCentre));
+    // The bus's own set again keeps the player's.
+    mixer->setBusVolume(kMusic, 0);
+    static_cast<void>(render(*mixer, 256));
+    RAWFRAME_EXPECT(near(render(*mixer, 256)[0], gainOf(-6) * kCentre));
+    // Past its range, held at -80; nought again, as declared.
+    mixer->setRoleVolume(Role::Music, -500);
+    static_cast<void>(render(*mixer, 256));
+    RAWFRAME_EXPECT(near(render(*mixer, 256)[0], gainOf(-80) * kCentre));
+    mixer->setRoleVolume(Role::Music, 0);
+    static_cast<void>(render(*mixer, 256));
+    RAWFRAME_EXPECT(near(render(*mixer, 256)[0], kCentre));
+    // Another role's, none's, and one not finite leave the music alone.
+    mixer->setRoleVolume(Role::Sfx, -20);
+    mixer->setRoleVolume(Role::None, -20);
+    mixer->setRoleVolume(Role::Music, std::numeric_limits<float>::quiet_NaN());
+    static_cast<void>(render(*mixer, 256));
+    RAWFRAME_EXPECT(near(render(*mixer, 256)[0], kCentre));
 }
 
 RAWFRAME_TEST(PitchResamplesAndPlaybacksFinish) {

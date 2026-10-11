@@ -118,6 +118,11 @@ public:
     /// From hard left (minus one) to hard right (one).
     void setPan(Playback playback, float pan);
     void setBusVolume(std::size_t bus, float decibels);
+    /// The player's volume for the bus of `role` (SPEC-0036's user-volume
+    /// surface, D625), in decibels on top of the bus's own, from -80 to
+    /// +12; nought, as at first, leaves the bus as it is. A role no bus
+    /// has, `None`, and a volume not finite change nothing.
+    void setRoleVolume(Role role, float decibels);
     void setBusMuted(std::size_t bus, bool muted);
     /// Writes a parameter of effect `effect` of bus `bus` (of its band
     /// `band`, for an equalizer), from the next block on; a gain effect's

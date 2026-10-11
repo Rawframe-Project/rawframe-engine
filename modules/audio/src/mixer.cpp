@@ -17,6 +17,10 @@ namespace rawframe::audio {
 
 namespace {
 
+/// The least and most a role's volume is (D625).
+constexpr float kQuietestRole = -80;
+constexpr float kLoudestRole = 12;
+
 /// A bounded queue from one thread to one other, allocated once. Neither
 /// side waits: a push to a full queue and a pop from an empty one say so.
 template <typename T> class Ring {
@@ -152,6 +156,9 @@ struct Mixer::State {
     MixerStatistics statistics;
     // The owner's.
     std::vector<Slot> slots;
+    /// Each bus's own volume, and each role's on top of it, in decibels.
+    std::vector<float> busDecibels;
+    std::array<float, 7> roleDecibels{};
     // The mix thread's.
     std::vector<Voice> voices;
     std::vector<BusRuntime> buses;
@@ -173,6 +180,7 @@ struct Mixer::State {
             }
             runtime.fader = gainOf(bus.volume);
             runtime.currentFader = runtime.fader;
+            busDecibels.push_back(bus.volume);
             runtime.muted = bus.muted;
             for (const Effect& effect : bus.effects) {
                 runtime.effects.emplace_back(effect, settings.rate, settings.shortestFade);
@@ -589,8 +597,27 @@ void Mixer::setPan(Playback playback, float pan) {
 void Mixer::setBusVolume(std::size_t bus, float decibels) {
     State& state = *state_;
     if (bus < state.layout.buses.size()) {
-        static_cast<void>(state.send(Command{
-            .kind = Command::Kind::BusVolume, .bus = static_cast<std::uint32_t>(bus), .value = gainOf(decibels)}));
+        state.busDecibels[bus] = decibels;
+        const float kRole = state.roleDecibels[static_cast<std::size_t>(state.layout.buses[bus].role)];
+        static_cast<void>(state.send(Command{.kind = Command::Kind::BusVolume,
+                                             .bus = static_cast<std::uint32_t>(bus),
+                                             .value = gainOf(decibels + kRole)}));
+    }
+}
+
+void Mixer::setRoleVolume(Role role, float decibels) {
+    State& state = *state_;
+    const auto kRole = static_cast<std::size_t>(role);
+    if (role == Role::None || kRole >= state.roleDecibels.size() || !std::isfinite(decibels)) {
+        return;
+    }
+    state.roleDecibels[kRole] = std::clamp(decibels, kQuietestRole, kLoudestRole);
+    for (std::size_t bus = 0; bus < state.layout.buses.size(); ++bus) {
+        if (state.layout.buses[bus].role == role) {
+            static_cast<void>(state.send(Command{.kind = Command::Kind::BusVolume,
+                                                 .bus = static_cast<std::uint32_t>(bus),
+                                                 .value = gainOf(state.busDecibels[bus] + state.roleDecibels[kRole])}));
+        }
     }
 }
 
