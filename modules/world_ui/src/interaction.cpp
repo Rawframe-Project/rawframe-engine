@@ -254,7 +254,7 @@ void WorldUi::type(const view::Typing& typing) {
         return;
     }
     ui::TextEdit& edit = *state.focus->edit;
-    const Node& kField = state.focus->entry->value;
+    const ui::NodeFields& kField = state.focus->entry->value;
     ++state.statistics.typed;
     const std::optional<view::TypingKey> kLeft = view::edit(edit, typing);
     if (!kLeft.has_value()) {

@@ -43,8 +43,11 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
     schema::RegistryBuilder builder;
     for (const auto& [kId, kName] :
          {std::pair{kHudId, "test.hud"}, std::pair{kMeterId, "test.meter"}, std::pair{kRowId, "test.row"}}) {
-        builder.add(schema::ComponentDescriptor{
-            .id = kId, .name = kName, .size = sizeof(Node), .alignment = alignof(Node), .plainData = true});
+        builder.add(schema::ComponentDescriptor{.id = kId,
+                                                .name = kName,
+                                                .size = sizeof(ui::NodeFields),
+                                                .alignment = alignof(ui::NodeFields),
+                                                .plainData = true});
     }
     builder.add(schema::ComponentDescriptor{
         .id = kWordsId, .name = "test.words", .size = sizeof(Typed), .alignment = alignof(Typed), .plainData = true});
@@ -78,13 +81,13 @@ struct Rig {
     }
 };
 
-Node panel() {
-    return Node{
+ui::NodeFields panel() {
+    return ui::NodeFields{
         .widthOffset = 300, .heightOffset = 40, .gap = 10, .shrink = 1, .padding = 5, .fill = 0x202020FF, .radius = 6};
 }
 
-Node meter(float width) {
-    return Node{.widthOffset = width, .shrink = 1, .fill = 0x40C040FF};
+ui::NodeFields meter(float width) {
+    return ui::NodeFields{.widthOffset = width, .shrink = 1, .fill = 0x40C040FF};
 }
 
 bool at(const ui::Box& box, float x, float y, float width, float height) {
@@ -100,8 +103,8 @@ RAWFRAME_TEST(NodesAreLaidOutInTheirPlayersView) {
     // Two rows on other entities, in the panel on the player, by order.
     const world::EntityHandle kFirst = *rig.world.create();
     const world::EntityHandle kSecond = *rig.world.create();
-    rig.put(kFirst, kRowId, Node{.widthOffset = 20, .shrink = 1, .fill = 0xC04040FF, .order = 2});
-    rig.put(kSecond, kRowId, Node{.widthOffset = 30, .shrink = 1, .fill = 0x4040C0FF, .order = 1});
+    rig.put(kFirst, kRowId, ui::NodeFields{.widthOffset = 20, .shrink = 1, .fill = 0xC04040FF, .order = 2});
+    rig.put(kSecond, kRowId, ui::NodeFields{.widthOffset = 30, .shrink = 1, .fill = 0x4040C0FF, .order = 1});
     RAWFRAME_EXPECT(rig.frame());
     const ui::DrawList& kDrawn = rig.ui->drawn();
     RAWFRAME_EXPECT(kDrawn.boxes.size() == 4 && kDrawn.scale == 1);
@@ -130,7 +133,7 @@ RAWFRAME_TEST(ANodeFollowsItsComponent) {
     RAWFRAME_EXPECT(rig.ui->statistics().changed == 1 && rig.ui->drawn().boxes.size() == 2 &&
                     at(rig.ui->drawn().boxes[1], 105, 55, 250, 30));
     // Absolute, along the view's bottom, centered.
-    Node bottom = panel();
+    ui::NodeFields bottom = panel();
     bottom.absolute = 1;
     bottom.xScale = 0.5F;
     bottom.yScale = 1;
@@ -163,7 +166,7 @@ RAWFRAME_TEST(ANewWorldStartsAfresh) {
     RAWFRAME_EXPECT(rig.frame());
     world::World other{rig.schema};
     const world::EntityHandle kPlayer = *other.create();
-    Node node = panel();
+    ui::NodeFields node = panel();
     node.widthOffset = 120;
     RAWFRAME_EXPECT(other.insertErased(kPlayer, *rig.schema->find(kHudId), &node).has_value());
     const std::array<UiView, 1> kViews = {
@@ -178,20 +181,20 @@ RAWFRAME_TEST(ANewWorldStartsAfresh) {
 
 RAWFRAME_TEST(WhatTheTreeCannotTakeIsLeftOut) {
     Rig rig;
-    Node bad = panel();
+    ui::NodeFields bad = panel();
     bad.direction = 9;
     rig.put(rig.player, kHudId, bad);
     RAWFRAME_EXPECT(rig.frame() && rig.frame());
     // Counted each frame it stays so, and the meter in it has no parent.
     RAWFRAME_EXPECT(rig.ui->drawn().boxes.empty() && rig.ui->statistics().leftOut == 2);
-    Node negative = panel();
+    ui::NodeFields negative = panel();
     negative.radius = -1;
     rig.put(rig.player, kHudId, negative);
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().boxes.empty());
     rig.put(rig.player, kHudId, panel());
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().boxes.size() == 1);
     // A gradient of a kind past the set is refused; a linear one drawn.
-    Node ramped = panel();
+    ui::NodeFields ramped = panel();
     ramped.gradientKind = 9;
     ramped.gradientFrom = 0xFF0000FF;
     ramped.gradientTo = 0x0000FFFF;
@@ -230,8 +233,9 @@ RAWFRAME_TEST(ANodeShowsItsLabelsWordsInTheGamesFont) {
              return std::string(static_cast<std::size_t>(value), 'X');
          }});
     // Words in Ahem, whose glyphs are em boxes: three of them, 10 pixels.
-    rig.put(
-        rig.player, kHudId, Node{.text = 0xA1, .textValue = 3, .font = 0xF1, .textSize = 10, .textColor = 0xFFFFFFFF});
+    rig.put(rig.player,
+            kHudId,
+            ui::NodeFields{.text = 0xA1, .textValue = 3, .font = 0xF1, .textSize = 10, .textColor = 0xFFFFFFFF});
     RAWFRAME_EXPECT(rig.frame());
     RAWFRAME_EXPECT(asked == 1 && rig.ui->statistics().texts == 1);
     // No font read yet: nothing is drawn.
@@ -252,16 +256,17 @@ RAWFRAME_TEST(ANodeShowsItsLabelsWordsInTheGamesFont) {
     }
     // Its words change with its value; a label the game does not have, or a
     // text look past the constants, shows nothing.
-    rig.put(
-        rig.player, kHudId, Node{.text = 0xA1, .textValue = 5, .font = 0xF1, .textSize = 10, .textColor = 0xFFFFFFFF});
+    rig.put(rig.player,
+            kHudId,
+            ui::NodeFields{.text = 0xA1, .textValue = 5, .font = 0xF1, .textSize = 10, .textColor = 0xFFFFFFFF});
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 5);
-    rig.put(rig.player, kHudId, Node{.text = 0xA9, .textSize = 10, .textColor = 0xFFFFFFFF});
+    rig.put(rig.player, kHudId, ui::NodeFields{.text = 0xA9, .textSize = 10, .textColor = 0xFFFFFFFF});
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.empty() && rig.ui->statistics().textsUnknown == 1);
-    rig.put(rig.player, kHudId, Node{.text = 0xA1, .textValue = 2, .textAlign = 3});
+    rig.put(rig.player, kHudId, ui::NodeFields{.text = 0xA1, .textValue = 2, .textAlign = 3});
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.empty());
     RAWFRAME_EXPECT(rig.ui->statistics().leftOut == 1);
     // Font nought is the first declared font read so far: here the one.
-    rig.put(rig.player, kHudId, Node{.text = 0xA1, .textValue = 2, .textSize = 10, .textColor = 0xFFFFFFFF});
+    rig.put(rig.player, kHudId, ui::NodeFields{.text = 0xA1, .textValue = 2, .textSize = 10, .textColor = 0xFFFFFFFF});
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 2);
 }
 
@@ -280,7 +285,7 @@ RAWFRAME_TEST(EachLocalPlayersWordsAreInTheirOwnLocale) {
          }});
     const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
     RAWFRAME_EXPECT(rig.ui->addFont(0xF1, std::as_bytes(std::span{kAhem.data(), kAhem.size()})).has_value());
-    Node label{.text = 0xA1, .textValue = 3, .font = 0xF1, .textSize = 10, .textColor = 0xFFFFFFFF};
+    ui::NodeFields label{.text = 0xA1, .textValue = 3, .font = 0xF1, .textSize = 10, .textColor = 0xFFFFFFFF};
     rig.put(rig.player, kHudId, label);
     world::World second{rig.schema};
     const world::EntityHandle kSecond = *second.create();
@@ -309,7 +314,7 @@ RAWFRAME_TEST(APressLandsOnANodeThatTakesIt) {
     RAWFRAME_EXPECT(!rig.ui->press(110, 60).has_value() && !rig.ui->press(10, 10).has_value());
     // A meter that is its own, with a code: pressed on it, the code; on the
     // panel around it, through.
-    Node pressing = meter(100);
+    ui::NodeFields pressing = meter(100);
     pressing.hit = 1;
     pressing.press = 42;
     rig.put(rig.player, kMeterId, pressing);
@@ -317,7 +322,7 @@ RAWFRAME_TEST(APressLandsOnANodeThatTakesIt) {
     RAWFRAME_EXPECT(rig.ui->press(110, 60) == std::optional<std::int64_t>{42});
     RAWFRAME_EXPECT(!rig.ui->press(350, 60).has_value());
     // A panel that blocks and says nothing; one that leaves its subtree out.
-    Node blocking = panel();
+    ui::NodeFields blocking = panel();
     blocking.hit = 1;
     rig.put(rig.player, kHudId, blocking);
     RAWFRAME_EXPECT(rig.frame());
@@ -340,13 +345,13 @@ RAWFRAME_TEST(ATextFieldTakesTheKeyboardAndGivesItsText) {
     const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
     RAWFRAME_EXPECT(rig.ui->addFont(0xF1, std::as_bytes(std::span{kAhem.data(), kAhem.size()})).has_value());
     // A field 200 by 20 at the view's top left, (100, 50), in Ahem at 10.
-    Node field{.widthOffset = 200,
-               .heightOffset = 20,
-               .font = 0xF1,
-               .textSize = 10,
-               .textColor = 0xFFFFFFFF,
-               .press = 7,
-               .edit = 1};
+    ui::NodeFields field{.widthOffset = 200,
+                         .heightOffset = 20,
+                         .font = 0xF1,
+                         .textSize = 10,
+                         .textColor = 0xFFFFFFFF,
+                         .press = 7,
+                         .edit = 1};
     rig.put(rig.player, kHudId, field);
     RAWFRAME_EXPECT(rig.frame() && !rig.ui->caret().has_value());
     const auto kType = [&rig](std::string_view text) {
@@ -436,13 +441,13 @@ RAWFRAME_TEST(AScreenReaderTypesIntoAFieldAsTypingDoes) {
     // The field of the test above, read by a screen reader.
     rig.put(rig.player,
             kHudId,
-            Node{.widthOffset = 200,
-                 .heightOffset = 20,
-                 .font = 0xF1,
-                 .textSize = 10,
-                 .textColor = 0xFFFFFFFF,
-                 .press = 7,
-                 .edit = 1});
+            ui::NodeFields{.widthOffset = 200,
+                           .heightOffset = 20,
+                           .font = 0xF1,
+                           .textSize = 10,
+                           .textColor = 0xFFFFFFFF,
+                           .press = 7,
+                           .edit = 1});
     ui::AccessSeat seat;
     RAWFRAME_EXPECT(rig.frame() && rig.ui->seatIn(seat).has_value() && seat.open({}).has_value());
     RAWFRAME_EXPECT(rig.ui->enterNavigation() && rig.frame() && seat.update().has_value());
@@ -494,7 +499,7 @@ RAWFRAME_TEST(ANodeShowsTypedWordsInPlaceOfItsLabel) {
         std::memcpy(typed.bytes.data(), text.data(), text.size());
         return typed;
     };
-    rig.put(rig.player, kHudId, Node{.text = 0xA1, .textSize = 10, .textColor = 0xFFFFFFFF});
+    rig.put(rig.player, kHudId, ui::NodeFields{.text = 0xA1, .textSize = 10, .textColor = 0xFFFFFFFF});
     // Without words, the label.
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 5 && rig.ui->statistics().typedShown == 0);
     // With them, the words; changed, the new ones, though the node is not.
@@ -511,7 +516,7 @@ RAWFRAME_TEST(ANodeShowsTypedWordsInPlaceOfItsLabel) {
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 5);
     // A node with no words line shows its label beside it.
     rig.put(rig.player, kWordsId, kTyped("x"));
-    rig.put(rig.player, kMeterId, Node{.text = 0xA1, .textSize = 10, .textColor = 0xFFFFFFFF});
+    rig.put(rig.player, kMeterId, ui::NodeFields{.text = 0xA1, .textSize = 10, .textColor = 0xFFFFFFFF});
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 6);
 }
 
@@ -527,14 +532,14 @@ RAWFRAME_TEST(AnEmptyFieldShowsItsLabelUntilItHasTheKeyboard) {
     RAWFRAME_EXPECT(rig.ui->addFont(0xF1, std::as_bytes(std::span{kAhem.data(), kAhem.size()})).has_value());
     rig.put(rig.player,
             kHudId,
-            Node{.widthOffset = 200,
-                 .heightOffset = 20,
-                 .text = 0xA1,
-                 .font = 0xF1,
-                 .textSize = 10,
-                 .textColor = 0xFFFFFFFF,
-                 .press = 3,
-                 .edit = 1});
+            ui::NodeFields{.widthOffset = 200,
+                           .heightOffset = 20,
+                           .text = 0xA1,
+                           .font = 0xF1,
+                           .textSize = 10,
+                           .textColor = 0xFFFFFFFF,
+                           .press = 3,
+                           .edit = 1});
     const auto kGlyphs = [&rig] {
         return rig.frame() ? rig.ui->drawn().glyphs.size() : std::size_t{99};
     };
@@ -572,14 +577,14 @@ RAWFRAME_TEST(TabMovesTheKeyboardBetweenAViewsFields) {
     // In the panel, side by side: the row's field first (105, 55), then
     // the meter's (215, 55), whatever order they were made in.
     const auto kField = [](std::int64_t press, std::int32_t order) {
-        return Node{.widthOffset = 100,
-                    .heightOffset = 20,
-                    .order = order,
-                    .font = 0xF1,
-                    .textSize = 10,
-                    .textColor = 0xFFFFFFFF,
-                    .press = press,
-                    .edit = 1};
+        return ui::NodeFields{.widthOffset = 100,
+                              .heightOffset = 20,
+                              .order = order,
+                              .font = 0xF1,
+                              .textSize = 10,
+                              .textColor = 0xFFFFFFFF,
+                              .press = press,
+                              .edit = 1};
     };
     rig.put(rig.player, kHudId, panel());
     rig.put(rig.player, kMeterId, kField(1, 1));
@@ -636,18 +641,19 @@ RAWFRAME_TEST(NavigationMovesFocusAndActivatesWhatItHolds) {
     rig.put(rig.player, kHudId, panel());
     RAWFRAME_EXPECT(rig.frame() && rig.ui->reachable() == 0);
     // Navigation reaches each as it is made (D476).
-    rig.put(rig.player, kMeterId, Node{.widthOffset = 100, .heightOffset = 20, .fill = 0x40C040FF, .press = 1});
+    rig.put(
+        rig.player, kMeterId, ui::NodeFields{.widthOffset = 100, .heightOffset = 20, .fill = 0x40C040FF, .press = 1});
     RAWFRAME_EXPECT(rig.frame() && rig.ui->reachable() == 1);
     rig.put(rig.player,
             kRowId,
-            Node{.widthOffset = 100,
-                 .heightOffset = 20,
-                 .order = 1,
-                 .font = 0xF1,
-                 .textSize = 10,
-                 .textColor = 0xFFFFFFFF,
-                 .press = 2,
-                 .edit = 1});
+            ui::NodeFields{.widthOffset = 100,
+                           .heightOffset = 20,
+                           .order = 1,
+                           .font = 0xF1,
+                           .textSize = 10,
+                           .textColor = 0xFFFFFFFF,
+                           .press = 2,
+                           .edit = 1});
     RAWFRAME_EXPECT(rig.frame() && rig.ui->reachable() == 2);
     const auto kRinged = [&rig] {
         return rig.frame() ? rig.ui->drawn().shadows.size() : std::size_t{99};
@@ -721,7 +727,7 @@ RAWFRAME_TEST(AStyledNodeLooksAsItsClassSaysInEachState) {
     rig.ui =
         *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId}, .parents = {std::nullopt, 0, 0}, .styles = *kStyles});
     // A button at the view's top left, (100, 50), 100 by 20.
-    Node button{.widthOffset = 100, .heightOffset = 20, .press = 1, .hit = 1, .style = 0x11};
+    ui::NodeFields button{.widthOffset = 100, .heightOffset = 20, .press = 1, .hit = 1, .style = 0x11};
     rig.put(rig.player, kHudId, button);
     // The button's box's fill as drawn: red, green, blue, nought to one.
     const auto kFill = [&rig]() -> std::array<float, 3> {
@@ -770,12 +776,12 @@ RAWFRAME_TEST(ANodeThatScrollsMovesItsChildrenUnderTheWheel) {
     // The panel a column that scrolls, 30 pixels inside its padding; five
     // rows of 20 in it, 10 apart, reach 140.
     Rig rig;
-    Node scrolling = panel();
+    ui::NodeFields scrolling = panel();
     scrolling.direction = 2;
     scrolling.scroll = 2;
     rig.put(rig.player, kHudId, scrolling);
     for (int each = 0; each < 5; ++each) {
-        rig.put(*rig.world.create(), kRowId, Node{.heightOffset = 20, .shrink = 0, .fill = 0xC04040FF});
+        rig.put(*rig.world.create(), kRowId, ui::NodeFields{.heightOffset = 20, .shrink = 0, .fill = 0xC04040FF});
     }
     RAWFRAME_EXPECT(rig.frame(1, 1.0));
     const auto kFirstRow = [&rig]() {

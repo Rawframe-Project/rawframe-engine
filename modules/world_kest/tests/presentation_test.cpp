@@ -2,14 +2,17 @@
 // component attached to the entities that have its `on` component, or to
 // the client's own player alone (D261), the present systems run over the
 // mirror in line order, telling the client's own player from others
-// (D390), a refused one changing nothing, and a new mirror bound afresh.
+// (D390), a refused one changing nothing, and a new mirror bound afresh;
+// and a component started as a document says (D619).
 
 #include "../src/presentation.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_kest/game_files.h"
 
+#include <array>
 #include <cstdio>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -210,4 +213,75 @@ RAWFRAME_TEST(AClientPresentsTheWorldItMirrors) {
             PresentationSettings{.program = *kCompiled, .game = &kPlain->description(), .descriptors = kDescriptors});
         RAWFRAME_EXPECT(kNone.has_value() && *kNone == nullptr);
     }
+}
+
+namespace {
+
+/// The view starting part framed, and the look as many bytes as no
+/// component has.
+class Starts final : public PresentationStarts {
+public:
+    std::span<const std::byte> startOf(schema::ComponentTypeId component) const noexcept override {
+        if (component == kViewId) {
+            return std::as_bytes(std::span{&view, 1});
+        }
+        return component == kLookId ? std::as_bytes(std::span{wrong}) : std::span<const std::byte>{};
+    }
+
+    Camera view{.offsetX = 0, .offsetY = 5, .height = 3};
+    std::array<float, 3> wrong{1, 2, 3};
+};
+
+} // namespace
+
+RAWFRAME_TEST(APresentationComponentStartsAsItsDocumentSays) {
+    const auto kFiles =
+        GameFiles::fromHeld("shown.game", {{"shown.game", std::string{kGame}}, {"shown.kest", std::string{kProgram}}});
+    RAWFRAME_EXPECT(kFiles.has_value());
+    if (!kFiles.has_value()) {
+        return;
+    }
+    std::string report;
+    const auto kCompiled = kFiles->compile("shown.kest", {}, &report);
+    RAWFRAME_EXPECT(kCompiled.has_value());
+    if (!kCompiled.has_value()) {
+        return;
+    }
+    const std::vector<schema::ComponentDescriptor> kDescriptors = {
+        {.id = kStickId, .name = "shown.stick", .size = sizeof(Stick), .alignment = alignof(Stick), .plainData = true},
+        {.id = kLookId, .name = "shown.look", .size = sizeof(Sprite), .alignment = alignof(Sprite), .plainData = true},
+        {.id = kViewId, .name = "shown.view", .size = sizeof(Camera), .alignment = alignof(Camera), .plainData = true}};
+    auto presentation = ClientPresentation::create(
+        PresentationSettings{.program = *kCompiled,
+                             .game = &kFiles->description(),
+                             .descriptors = kDescriptors,
+                             .limits = {.heapBytes = std::size_t{1} << 20U, .fuelPerCall = 100'000}});
+    if (!presentation.has_value() || *presentation == nullptr) {
+        RAWFRAME_EXPECT(false);
+        return;
+    }
+    const Starts kStarts;
+    (*presentation)->startWith(&kStarts);
+    schema::RegistryBuilder builder;
+    for (const schema::ComponentDescriptor& descriptor : kDescriptors) {
+        builder.add(descriptor);
+    }
+    builder.add({.id = world::Persistent::kComponentTypeId,
+                 .name = world::Persistent::kComponentName,
+                 .size = sizeof(world::Persistent),
+                 .alignment = alignof(world::Persistent),
+                 .plainData = true});
+    const auto kRegistry = *builder.freeze();
+    world::World mirror{kRegistry};
+    const world::EntityHandle kRunner = *mirror.create();
+    Stick stick{.run = 2.0F};
+    RAWFRAME_EXPECT(mirror.insertErased(kRunner, *kRegistry->find(kStickId), &stick).has_value());
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kRunner, {}, *world::TickRate::of(60)).has_value());
+    // The view starts as the document says and the frame writes over what
+    // it writes; what it leaves stays as started.
+    const auto* view = static_cast<const Camera*>(mirror.getErased(kRunner, *kRegistry->find(kViewId)));
+    RAWFRAME_EXPECT(view != nullptr && view->offsetY == 5.0F && view->height == 8.0F && view->offsetX == 1.0F);
+    // A start of another size is no start: the look starts at nought.
+    const auto* look = static_cast<const Sprite*>(mirror.getErased(kRunner, *kRegistry->find(kLookId)));
+    RAWFRAME_EXPECT(look != nullptr && look->texture == 8 && look->placed[0] == 0.0F && look->placed[4] == 2.0F);
 }

@@ -2,7 +2,7 @@
 
 // The UI as World data (ADR-0034, D376): every `rawframe.ui.Node` component
 // of the World a local player's client mirrors is a node of one UI tree,
-// keyed by its entity, nested by the game's `ui` lines, and laid out in the
+// keyed by its entity, nested by the game's UI document, and laid out in the
 // player's view. What it draws is SPEC-0032's draw-command list, for the
 // device to draw over the scene and the canvas. Client only: a dedicated
 // server carries the components as values and links none of this.
@@ -10,6 +10,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/schema/component.h"
 #include "rawframe/ui/access.h"
+#include "rawframe/ui/document.h"
 #include "rawframe/ui/styles.h"
 #include "rawframe/ui/tree.h"
 #include "rawframe/view/navigation.h"
@@ -30,64 +31,6 @@
 
 namespace rawframe::world_ui {
 
-/// `rawframe.ui.Node` as Kest lays it out (rawframe/ui.kest).
-struct Node {
-    float widthScale = 0;
-    float widthOffset = 0;
-    float heightScale = 0;
-    float heightOffset = 0;
-    std::uint32_t direction = 0;
-    std::uint32_t justify = 0;
-    std::uint32_t alignItems = 0;
-    std::uint32_t alignSelf = 0;
-    float gap = 0;
-    float grow = 0;
-    float shrink = 0;
-    float padding = 0;
-    float margin = 0;
-    float border = 0;
-    std::uint32_t absolute = 0;
-    float xScale = 0;
-    float xOffset = 0;
-    float yScale = 0;
-    float yOffset = 0;
-    float anchorX = 0;
-    float anchorY = 0;
-    std::uint32_t fill = 0;
-    std::uint32_t borderColor = 0;
-    float radius = 0;
-    std::uint32_t clip = 0;
-    std::int32_t order = 0;
-    std::uint64_t image = 0;
-    std::uint32_t imageTint = 0;
-    float imageSlice = 0;
-    std::uint32_t shadowColor = 0;
-    float shadowX = 0;
-    float shadowY = 0;
-    float shadowBlur = 0;
-    std::uint32_t gradientKind = 0;
-    float gradientAngle = 0;
-    std::uint32_t gradientFrom = 0;
-    std::uint32_t gradientTo = 0;
-    std::uint64_t text = 0;
-    std::int64_t textValue = 0;
-    std::uint64_t font = 0;
-    float textSize = 0;
-    std::uint32_t textColor = 0;
-    std::uint32_t textAlign = 0;
-    std::uint32_t textWrap = 0;
-    std::int64_t press = 0;
-    std::uint32_t hit = 0;
-    std::uint32_t layer = 0;
-    std::uint32_t edit = 0;
-    std::uint32_t editLimit = 0;
-    std::uint64_t style = 0;
-    std::uint32_t scroll = 0;
-    /// The four bytes Kest's layout pads the node with, named and nought,
-    /// so a node compared byte for byte reads no stray padding.
-    std::uint32_t reserved = 0;
-};
-
 /// A text field's most bytes: what `rawframe.ui.Typed` holds (D426).
 inline constexpr std::uint32_t kMostTypedBytes = 252;
 
@@ -103,7 +46,8 @@ struct Typed {
 using Words = std::function<std::optional<std::string>(std::size_t player, std::uint64_t label, std::int64_t value)>;
 
 /// The game's node components, in declaration order, and the one each is
-/// inside by its `ui` line, an index of them; none for a root of its view.
+/// inside by its UI document (D619), an index of them; none for a root of
+/// its view.
 /// The game's fonts by the identities its `font` lines give, in their order,
 /// the first the one a node's nought names, and where its labels' words come
 /// from (D386).
@@ -111,7 +55,7 @@ struct UiSettings {
     std::vector<schema::ComponentTypeId> nodes;
     std::vector<std::optional<std::size_t>> parents;
     /// Each node's words (D427): a component of `rawframe.ui.Typed` on its
-    /// entity, by the `ui <node> shows <words>` line; none for a node that
+    /// entity, as the UI document says (`shows`); none for a node that
     /// shows only its label. As long as `nodes`, or empty for none at all.
     std::vector<std::optional<schema::ComponentTypeId>> shows;
     std::vector<std::uint64_t> fonts;

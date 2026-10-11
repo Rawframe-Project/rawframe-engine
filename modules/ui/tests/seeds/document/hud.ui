@@ -1,0 +1,39 @@
+{
+  "kind": "ui.document",
+  "formatVersion": 1,
+  "nodes": [
+    {
+      "component": "game.hud",
+      "widthOffset": 240,
+      "alignItems": "center",
+      "padding": 6,
+      "absolute": true,
+      "xScale": 0.5,
+      "yOffset": -12,
+      "fill": "#101820c0",
+      "children": [
+        {
+          "component": "game.points",
+          "order": 2,
+          "text": "f1182d0420cc09a0",
+          "textValue": -3,
+          "textSize": 14,
+          "textWrap": "no_wrap"
+        },
+        {
+          "component": "game.sign",
+          "shows": "game.words",
+          "press": 7,
+          "hit": "self",
+          "edit": "line",
+          "editLimit": 32,
+          "style": "139f1a51051d860e"
+        }
+      ]
+    },
+    {
+      "component": "game.banner",
+      "layer": "overlay"
+    }
+  ]
+}

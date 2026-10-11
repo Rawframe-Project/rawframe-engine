@@ -118,11 +118,11 @@
 //
 //   entity game.target who
 //
-// A `ui` line puts one UI node inside another (D376): components of
-// `rawframe.ui.Node`, the parent on the same entity or else on the client's
-// player; a node without one is a root of its player's view:
+// A `ui` line names the game's UI document (D619), which puts UI nodes
+// inside others (D376), starts them, and has them show typed words; a
+// client's UI reads it:
 //
-//   ui game.meter in game.hud
+//   ui game.ui
 
 #include "rawframe/base/bits128.h"
 #include "rawframe/physics/collision.h"
@@ -193,24 +193,6 @@ struct GamePresentation {
     std::vector<std::string> components;
     /// Nothing for `on player`.
     std::optional<std::string> on;
-};
-
-/// A UI node inside another (ADR-0034, D376), from a `ui <node> in
-/// <parent>` line: both components of `rawframe.ui.Node`, the parent that
-/// component on the node's entity, or else on the client's player. A node
-/// is inside one parent at most, and no node is inside itself.
-struct GameUiParent {
-    std::string node;
-    std::string parent;
-};
-
-/// The words a UI node shows (D427), from a `ui <node> shows <words>`
-/// line: `words` a component of `rawframe.ui.Typed` on the node's entity,
-/// whose text the node shows in its text look in place of its label while
-/// it holds any. A node shows one at most.
-struct GameUiWords {
-    std::string node;
-    std::string words;
 };
 
 /// What the player feels of an effect (D251), from a trailing `felt
@@ -606,9 +588,6 @@ struct GameDescription {
     /// (D369): every local player's view constrained to the shape, between
     /// bars of the color (black unless named); none fills.
     std::optional<GameAspect> aspect;
-    /// From `ui <node> in <parent>` lines (D376).
-    std::vector<GameUiParent> uiParents;
-    std::vector<GameUiWords> uiWords;
     /// From `animator <16 hex digits> <graph file> [parameters <component>]
     /// [subset <32 hex digits>]` lines.
     std::vector<GameAnimator> animators;
@@ -648,6 +627,10 @@ struct GameDescription {
     /// The `ui.styles` document a client's UI classes come from (D431),
     /// from a `styles <file>` line; empty for none.
     std::string styles;
+    /// The `ui.document` that nests a client's UI nodes, starts them, and
+    /// says which words they show (D619), from a `ui <file>` line; empty
+    /// for none.
+    std::string ui;
     /// From `label <16 hex digits> <table> <key> [<argument>]` lines, each
     /// table one a `text` line names.
     std::vector<GameLabel> labels;

@@ -25,7 +25,7 @@ namespace rawframe::world_ui {
 /// while its value is refused or there was no room for it.
 struct Entry {
     std::optional<ui::Node> node;
-    Node value;
+    ui::NodeFields value;
     /// The words it shows, as last read (D427).
     Typed words;
     bool seen = false;
@@ -73,7 +73,7 @@ struct Placed {
 
 /// How a field's text is edited: its kind and room, and its caret and
 /// selection in its text's color.
-ui::EditSettings editSettingsOf(const Node& node) noexcept;
+ui::EditSettings editSettingsOf(const ui::NodeFields& node) noexcept;
 
 struct WorldUi::State {
     UiSettings settings;
@@ -154,7 +154,7 @@ struct WorldUi::State {
 
     /// `value` given to `entry`, its node made if it has none; whether the
     /// tree took it.
-    bool give(Entry& entry, world::EntityHandle entity, const Node& value);
+    bool give(Entry& entry, world::EntityHandle entity, const ui::NodeFields& value);
 
     /// A text field shows what was typed into it in its text look, never a
     /// label (D426); empty and without the keyboard, its label's words as
@@ -165,7 +165,7 @@ struct WorldUi::State {
     /// `value`'s words given to `node`, or none, the typed `shown` in place
     /// of its label (D427); whether the tree took them.
     bool giveWords(ui::Node node,
-                   const Node& value,
+                   const ui::NodeFields& value,
                    std::size_t player,
                    std::optional<std::string_view> shown = std::nullopt);
     /// Every node of an entry `which` picks given its words again, a field

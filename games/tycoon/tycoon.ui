@@ -1,0 +1,60 @@
+{
+  "kind": "ui.document",
+  "formatVersion": 1,
+  "nodes": [
+    {
+      "component": "tycoon.purse",
+      "padding": 10,
+      "margin": 12,
+      "text": "f1182d0420cc09a0",
+      "font": "8e12f827f47f7d51",
+      "textSize": 18,
+      "textColor": "#f4e9c8ff",
+      "textWrap": "no_wrap",
+      "hit": "self",
+      "style": "85ecf7b643b63d65"
+    },
+    {
+      "component": "tycoon.sign",
+      "widthOffset": 220,
+      "heightOffset": 34,
+      "padding": 6,
+      "margin": 12,
+      "border": 1,
+      "order": 1,
+      "text": "bdb5be7acb84d040",
+      "font": "8e12f827f47f7d51",
+      "textSize": 18,
+      "textColor": "#f4e9c8ff",
+      "textWrap": "no_wrap",
+      "edit": "line",
+      "editLimit": 32,
+      "style": "139f1a51051d860e"
+    },
+    {
+      "component": "tycoon.board",
+      "shows": "tycoon.named",
+      "padding": 6,
+      "margin": 12,
+      "radius": 6,
+      "order": 2,
+      "font": "8e12f827f47f7d51",
+      "textSize": 18,
+      "textColor": "#e8b83aff",
+      "textWrap": "no_wrap"
+    },
+    {
+      "component": "tycoon.banner",
+      "padding": 16,
+      "absolute": true,
+      "xScale": 0.5,
+      "yScale": 0.4,
+      "anchorX": 0.5,
+      "anchorY": 0.5,
+      "radius": 8,
+      "font": "8e12f827f47f7d51",
+      "textSize": 28,
+      "textWrap": "no_wrap"
+    }
+  ]
+}

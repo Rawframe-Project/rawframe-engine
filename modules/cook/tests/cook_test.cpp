@@ -516,9 +516,9 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     // resource; both programs as
     // entries of the project's sources.
     RAWFRAME_EXPECT(kGameRead->text == readText(kGame / "runners.game"));
-    RAWFRAME_EXPECT(kGameRead->files.size() == 5 && kGameRead->file("runners.actions") != nullptr &&
-                    kGameRead->scenes.size() == 2 && kGameRead->scene("level.scene") != nullptr &&
-                    kGameRead->scene("hall.scene") != nullptr &&
+    RAWFRAME_EXPECT(kGameRead->files.size() == 6 && kGameRead->file("runners.actions") != nullptr &&
+                    kGameRead->file("runners.ui") != nullptr && kGameRead->scenes.size() == 2 &&
+                    kGameRead->scene("level.scene") != nullptr && kGameRead->scene("hall.scene") != nullptr &&
                     kGameRead->scene("level.scene")->scene ==
                         base::parseBits128Hex("52771075251e7361deaecf4939c72e56").value &&
                     kGameRead->file("runners.mixer") != nullptr && kGameRead->file("shot.sound") != nullptr &&
@@ -582,6 +582,13 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     writeText(kGame / "hud.tr.translations", orphan);
     RAWFRAME_EXPECT(failedWith(kCook(), CookError::BadReference));
     writeText(kGame / "hud.tr.translations", kTurkish);
+    RAWFRAME_EXPECT(kCook().failures.empty());
+
+    // A UI document that does not read is refused (D619).
+    const std::string kUi = readText(kGame / "runners.ui");
+    writeText(kGame / "runners.ui", kUi.substr(0, kUi.find("\"nodes\"")) + "\"nodes\": 3\n}\n");
+    RAWFRAME_EXPECT(!kCook().failures.empty());
+    writeText(kGame / "runners.ui", kUi);
     RAWFRAME_EXPECT(kCook().failures.empty());
 
     // A scene it names is named by its resource; one without a sidecar is

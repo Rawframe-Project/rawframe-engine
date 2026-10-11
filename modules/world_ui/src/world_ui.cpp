@@ -30,7 +30,7 @@ ui::Dimension dimensionOf(float scale, float offset) noexcept {
 
 /// `node`'s layout as the tree takes it; none for a number past its
 /// constants.
-std::optional<ui::Layout> layoutOf(const Node& node) noexcept {
+std::optional<ui::Layout> layoutOf(const ui::NodeFields& node) noexcept {
     if (node.direction > 3 || node.justify > 5 || node.alignItems > 4 || node.alignSelf > 4 || node.scroll > 3) {
         return std::nullopt;
     }
@@ -60,7 +60,7 @@ std::optional<ui::Layout> layoutOf(const Node& node) noexcept {
     };
 }
 
-ui::Look lookOf(const Node& node) noexcept {
+ui::Look lookOf(const ui::NodeFields& node) noexcept {
     const float kSlice = node.imageSlice;
     // A kind past the set is passed on, for the tree to refuse.
     const ui::GradientLook kGradient = node.gradientKind == 0
@@ -86,7 +86,7 @@ ui::Look lookOf(const Node& node) noexcept {
 
 /// `node`'s part in what presses hit (D421); none for a number past its
 /// constants. Nought passes presses through to its children and past them.
-std::optional<ui::Interaction> interactionOf(const Node& node) noexcept {
+std::optional<ui::Interaction> interactionOf(const ui::NodeFields& node) noexcept {
     if (node.hit > 2 || node.layer > 3 || node.edit > 3) {
         return std::nullopt;
     }
@@ -110,7 +110,7 @@ std::optional<ui::Interaction> interactionOf(const Node& node) noexcept {
 /// field, something to press, a modal layer, a view that scrolls, an image
 /// without words. A node with words and none of these is read as a label by
 /// its words; one with neither only lays out others.
-ui::Role roleOf(const Node& node) noexcept {
+ui::Role roleOf(const ui::NodeFields& node) noexcept {
     if (node.edit != 0) {
         return node.edit == 3 ? ui::Role::MultilineTextInput : ui::Role::TextInput;
     }
@@ -130,7 +130,7 @@ ui::Role roleOf(const Node& node) noexcept {
 }
 
 /// `node`'s text look.
-ui::TextLook textLookOf(const Node& node, ui::Font font) noexcept {
+ui::TextLook textLookOf(const ui::NodeFields& node, ui::Font font) noexcept {
     return ui::TextLook{.font = font,
                         .size = node.textSize > 0 ? node.textSize : 16,
                         .color = node.textColor,
@@ -156,7 +156,7 @@ constexpr ui::ShadowLook kFocusRing{.color = 0xFFD24AFF, .spread = 2};
 
 /// The parts of its look a styled node sets itself (D431): those it gives
 /// a value other than nought. An inner shadow it has no field for.
-ui::LookParts ownPartsOf(const Node& node) noexcept {
+ui::LookParts ownPartsOf(const ui::NodeFields& node) noexcept {
     ui::LookParts parts = 0;
     const auto kOwn = [&parts](bool given, ui::LookPart part) {
         parts |= given ? static_cast<ui::LookParts>(part) : 0;
@@ -185,7 +185,7 @@ std::optional<std::string_view> wordsOf(const Typed& typed) noexcept {
 
 /// How a field's text is edited: its kind and room, and its caret and
 /// selection in its text's color.
-ui::EditSettings editSettingsOf(const Node& node) noexcept {
+ui::EditSettings editSettingsOf(const ui::NodeFields& node) noexcept {
     const std::uint32_t kColor = node.textColor != 0 ? node.textColor : 0x000000FF;
     return ui::EditSettings{.multiline = node.edit == 3,
                             .maximumBytes =
@@ -230,7 +230,7 @@ void WorldUi::State::drop(Entry& entry) {
     --held;
 }
 
-bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const Node& value) {
+bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const ui::NodeFields& value) {
     entry.value = value;
     const std::optional<ui::Layout> kLayout = layoutOf(value);
     const std::optional<ui::Interaction> kInteraction = interactionOf(value);
@@ -279,7 +279,7 @@ bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const Node& 
 }
 
 bool WorldUi::State::giveFieldLook(Entry& entry) {
-    const Node& kValue = entry.value;
+    const ui::NodeFields& kValue = entry.value;
     if (kValue.textAlign > 2 || kValue.textWrap > 1) {
         return false;
     }
@@ -321,7 +321,7 @@ void WorldUi::State::giveWordsAgain(const std::function<bool(const Entry&)>& whi
 }
 
 bool WorldUi::State::giveWords(ui::Node node,
-                               const Node& value,
+                               const ui::NodeFields& value,
                                std::size_t player,
                                std::optional<std::string_view> shown) {
     if (value.textAlign > 2 || value.textWrap > 1) {
@@ -370,7 +370,7 @@ result::Status WorldUi::State::bind(ViewState& view, world::World* world) {
         if (!kComponent.has_value()) {
             return refuse("a UI node component is not in the World");
         }
-        if (world->registry().descriptor(*kComponent).size != sizeof(Node)) {
+        if (world->registry().descriptor(*kComponent).size != sizeof(ui::NodeFields)) {
             return refuse("a UI node component is not rawframe.ui's size");
         }
         const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{*kComponent, world::Access::Read}};
@@ -398,8 +398,8 @@ void WorldUi::State::mirror(ViewState& view) {
     for (std::uint32_t component = 0; component < view.queries.size(); ++component) {
         view.queries[component].forEachChunk(*view.world, [&](const world::ColumnChunk& chunk) {
             for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-                Node value;
-                std::memcpy(&value, chunk.columns[0] + (row * sizeof(Node)), sizeof(Node));
+                ui::NodeFields value;
+                std::memcpy(&value, chunk.columns[0] + (row * sizeof(ui::NodeFields)), sizeof(ui::NodeFields));
                 auto [at, made] = view.entries.try_emplace(EntryKey{chunk.entities[row], component});
                 Entry& entry = at->second;
                 entry.seen = true;
@@ -415,7 +415,7 @@ void WorldUi::State::mirror(ViewState& view) {
                 entry.words = words;
                 // Unchanged, a node costs nothing; one refused is tried
                 // again only once it changes.
-                if (!made && !kWordsChanged && std::memcmp(&entry.value, &value, sizeof(Node)) == 0) {
+                if (!made && !kWordsChanged && std::memcmp(&entry.value, &value, sizeof(ui::NodeFields)) == 0) {
                     if (!entry.node.has_value()) {
                         ++statistics.leftOut;
                     }

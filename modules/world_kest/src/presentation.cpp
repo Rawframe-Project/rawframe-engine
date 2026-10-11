@@ -16,6 +16,7 @@
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/hover.h"
 #include "rawframe/world_kest/kest_systems.h"
+#include "rawframe/world_kest/starts.h"
 #include "rawframe/world_replication/client_worlds.h"
 
 #include <algorithm>
@@ -50,6 +51,7 @@ struct ClientPresentation::State {
     AnimationDoorContext animationDoors;
     PlayerDoorContext playerDoor;
     HoverDoorContext hoverDoor;
+    const PresentationStarts* starts = nullptr;
     PhysicsDoorContext physicsDoors;
     std::unique_ptr<ModServices> services;
     std::unique_ptr<EffectDoors> effects;
@@ -70,7 +72,7 @@ struct ClientPresentation::State {
     std::vector<Attached> attached;
     world::TickIndex tick;
     std::vector<world::EntityHandle> missing;
-    std::vector<std::byte> zero;
+    std::vector<std::byte> started;
     PresentationStatistics statistics;
 
     /// The present systems and the animation made for `mirror`'s registry.
@@ -148,8 +150,9 @@ struct ClientPresentation::State {
         return {};
     }
 
-    /// Each presentation component, zeroed, onto every entity that has its
-    /// `on` component (or is `player`) and lacks it.
+    /// Each presentation component onto every entity that has its `on`
+    /// component (or is `player`) and lacks it: as `starts` says, or
+    /// zeroed (D619).
     result::Status attach(world::World& mirror, world::EntityHandle player) {
         for (Attached& each : attached) {
             for (const schema::ComponentRuntimeId kComponent : each.components) {
@@ -167,9 +170,16 @@ struct ClientPresentation::State {
                         }
                     });
                 }
-                zero.assign(mirror.registry().descriptor(kComponent).size, std::byte{});
+                const schema::ComponentDescriptor& kDescriptor = mirror.registry().descriptor(kComponent);
+                const std::span<const std::byte> kStart =
+                    starts != nullptr ? starts->startOf(kDescriptor.id) : std::span<const std::byte>{};
+                if (kStart.size() == kDescriptor.size) {
+                    started.assign(kStart.begin(), kStart.end());
+                } else {
+                    started.assign(kDescriptor.size, std::byte{});
+                }
                 for (const world::EntityHandle kEntity : missing) {
-                    RAWFRAME_TRY(mirror.insertErased(kEntity, kComponent, zero.data()));
+                    RAWFRAME_TRY(mirror.insertErased(kEntity, kComponent, started.data()));
                     ++statistics.attached;
                 }
             }
@@ -261,6 +271,10 @@ void ClientPresentation::hover(std::int64_t code) noexcept {
     state_->hoverDoor.hovered = code;
 }
 
+void ClientPresentation::startWith(const PresentationStarts* starts) noexcept {
+    state_->starts = starts;
+}
+
 PresentationStatistics ClientPresentation::statistics() const noexcept {
     return state_->statistics;
 }
@@ -278,7 +292,7 @@ namespace {
 constexpr diagnostics::EventIdentity kPresentedSummary{"world_kest", "presented_summary"};
 constexpr diagnostics::EventIdentity kUnpresented{"world_kest", "presentation_unavailable"};
 constexpr std::string_view kPresentedMaybe[] = {
-    kPresentationPlan.name, world_replication::kClientWorlds.name, kUiHover.name};
+    kPresentationPlan.name, world_replication::kClientWorlds.name, kUiHover.name, kPresentationStarts.name};
 constexpr std::uint64_t kMostTicksPerFrame = 4;
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 constexpr std::string_view kPresentedProvided[] = {world_animation::kPresentedPoses.name};
@@ -308,6 +322,12 @@ public:
         clients_ = clients;
         if (context.has(kUiHover.name)) {
             RAWFRAME_TRY_ASSIGN(hover_, context.capability(kUiHover));
+        }
+        if (context.has(kPresentationStarts.name)) {
+            RAWFRAME_TRY_ASSIGN(const PresentationStarts* starts, context.capability(kPresentationStarts));
+            for (Presented& each : presented_) {
+                each.presentation->startWith(starts);
+            }
         }
         return {};
     }

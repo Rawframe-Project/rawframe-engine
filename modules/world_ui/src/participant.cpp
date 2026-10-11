@@ -11,6 +11,7 @@
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/hover.h"
 #include "rawframe/world_kest/layouts.h"
+#include "rawframe/world_kest/starts.h"
 #include "rawframe/world_localization/text.h"
 #include "rawframe/world_replication/client_worlds.h"
 #include "rawframe/world_ui/errors.h"
@@ -20,8 +21,10 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstring>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -46,7 +49,8 @@ constexpr diagnostics::EventIdentity kKeyUnknown{"ui", "label_unformatted"};
 constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
 /// The fonts' bytes, all together (D386).
 constexpr std::uint64_t kFontBudgetBytes = std::uint64_t{64} * 1024 * 1024;
-constexpr std::string_view kProvided[] = {ui::kUiFrames.name, world_kest::kUiHover.name};
+constexpr std::string_view kProvided[] = {
+    ui::kUiFrames.name, world_kest::kUiHover.name, world_kest::kPresentationStarts.name};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        view::kPlayerViews.name,
@@ -78,9 +82,16 @@ struct WantedFont {
     bool done = false;
 };
 
-/// The game's node components and their parents; none for a game without
-/// any.
-result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles& files, const kest::Program& program) {
+/// What a node component starts as, as the UI document says (D619).
+struct Start {
+    schema::ComponentTypeId component;
+    ui::NodeFields fields;
+};
+
+/// The game's node components and their parents, and in `starts` what its
+/// UI document starts them as; none for a game without any.
+result::Result<std::optional<UiSettings>>
+settingsOf(const world_kest::GameFiles& files, const kest::Program& program, std::vector<Start>& starts) {
     const world_kest::GameDescription& kGame = files.description();
     UiSettings settings;
     std::vector<std::string_view> names;
@@ -96,89 +107,120 @@ result::Result<std::optional<UiSettings>> settingsOf(const world_kest::GameFiles
     // By its full name: a game's own type called `Node` is not this one.
     if (!world_kest::laidOutAs(program,
                                "rawframe.ui.Node",
-                               sizeof(Node),
-                               {{"widthScale", offsetof(Node, widthScale)},
-                                {"widthOffset", offsetof(Node, widthOffset)},
-                                {"heightScale", offsetof(Node, heightScale)},
-                                {"heightOffset", offsetof(Node, heightOffset)},
-                                {"direction", offsetof(Node, direction)},
-                                {"justify", offsetof(Node, justify)},
-                                {"alignItems", offsetof(Node, alignItems)},
-                                {"alignSelf", offsetof(Node, alignSelf)},
-                                {"gap", offsetof(Node, gap)},
-                                {"grow", offsetof(Node, grow)},
-                                {"shrink", offsetof(Node, shrink)},
-                                {"padding", offsetof(Node, padding)},
-                                {"margin", offsetof(Node, margin)},
-                                {"border", offsetof(Node, border)},
-                                {"absolute", offsetof(Node, absolute)},
-                                {"xScale", offsetof(Node, xScale)},
-                                {"xOffset", offsetof(Node, xOffset)},
-                                {"yScale", offsetof(Node, yScale)},
-                                {"yOffset", offsetof(Node, yOffset)},
-                                {"anchorX", offsetof(Node, anchorX)},
-                                {"anchorY", offsetof(Node, anchorY)},
-                                {"fill", offsetof(Node, fill)},
-                                {"borderColor", offsetof(Node, borderColor)},
-                                {"radius", offsetof(Node, radius)},
-                                {"clip", offsetof(Node, clip)},
-                                {"order", offsetof(Node, order)},
-                                {"image", offsetof(Node, image)},
-                                {"imageTint", offsetof(Node, imageTint)},
-                                {"imageSlice", offsetof(Node, imageSlice)},
-                                {"shadowColor", offsetof(Node, shadowColor)},
-                                {"shadowX", offsetof(Node, shadowX)},
-                                {"shadowY", offsetof(Node, shadowY)},
-                                {"shadowBlur", offsetof(Node, shadowBlur)},
-                                {"gradientKind", offsetof(Node, gradientKind)},
-                                {"gradientAngle", offsetof(Node, gradientAngle)},
-                                {"gradientFrom", offsetof(Node, gradientFrom)},
-                                {"gradientTo", offsetof(Node, gradientTo)},
-                                {"text", offsetof(Node, text)},
-                                {"textValue", offsetof(Node, textValue)},
-                                {"font", offsetof(Node, font)},
-                                {"textSize", offsetof(Node, textSize)},
-                                {"textColor", offsetof(Node, textColor)},
-                                {"textAlign", offsetof(Node, textAlign)},
-                                {"textWrap", offsetof(Node, textWrap)},
-                                {"press", offsetof(Node, press)},
-                                {"hit", offsetof(Node, hit)},
-                                {"layer", offsetof(Node, layer)},
-                                {"edit", offsetof(Node, edit)},
-                                {"editLimit", offsetof(Node, editLimit)},
-                                {"style", offsetof(Node, style)},
-                                {"scroll", offsetof(Node, scroll)}})) {
+                               sizeof(ui::NodeFields),
+                               {{"widthScale", offsetof(ui::NodeFields, widthScale)},
+                                {"widthOffset", offsetof(ui::NodeFields, widthOffset)},
+                                {"heightScale", offsetof(ui::NodeFields, heightScale)},
+                                {"heightOffset", offsetof(ui::NodeFields, heightOffset)},
+                                {"direction", offsetof(ui::NodeFields, direction)},
+                                {"justify", offsetof(ui::NodeFields, justify)},
+                                {"alignItems", offsetof(ui::NodeFields, alignItems)},
+                                {"alignSelf", offsetof(ui::NodeFields, alignSelf)},
+                                {"gap", offsetof(ui::NodeFields, gap)},
+                                {"grow", offsetof(ui::NodeFields, grow)},
+                                {"shrink", offsetof(ui::NodeFields, shrink)},
+                                {"padding", offsetof(ui::NodeFields, padding)},
+                                {"margin", offsetof(ui::NodeFields, margin)},
+                                {"border", offsetof(ui::NodeFields, border)},
+                                {"absolute", offsetof(ui::NodeFields, absolute)},
+                                {"xScale", offsetof(ui::NodeFields, xScale)},
+                                {"xOffset", offsetof(ui::NodeFields, xOffset)},
+                                {"yScale", offsetof(ui::NodeFields, yScale)},
+                                {"yOffset", offsetof(ui::NodeFields, yOffset)},
+                                {"anchorX", offsetof(ui::NodeFields, anchorX)},
+                                {"anchorY", offsetof(ui::NodeFields, anchorY)},
+                                {"fill", offsetof(ui::NodeFields, fill)},
+                                {"borderColor", offsetof(ui::NodeFields, borderColor)},
+                                {"radius", offsetof(ui::NodeFields, radius)},
+                                {"clip", offsetof(ui::NodeFields, clip)},
+                                {"order", offsetof(ui::NodeFields, order)},
+                                {"image", offsetof(ui::NodeFields, image)},
+                                {"imageTint", offsetof(ui::NodeFields, imageTint)},
+                                {"imageSlice", offsetof(ui::NodeFields, imageSlice)},
+                                {"shadowColor", offsetof(ui::NodeFields, shadowColor)},
+                                {"shadowX", offsetof(ui::NodeFields, shadowX)},
+                                {"shadowY", offsetof(ui::NodeFields, shadowY)},
+                                {"shadowBlur", offsetof(ui::NodeFields, shadowBlur)},
+                                {"gradientKind", offsetof(ui::NodeFields, gradientKind)},
+                                {"gradientAngle", offsetof(ui::NodeFields, gradientAngle)},
+                                {"gradientFrom", offsetof(ui::NodeFields, gradientFrom)},
+                                {"gradientTo", offsetof(ui::NodeFields, gradientTo)},
+                                {"text", offsetof(ui::NodeFields, text)},
+                                {"textValue", offsetof(ui::NodeFields, textValue)},
+                                {"font", offsetof(ui::NodeFields, font)},
+                                {"textSize", offsetof(ui::NodeFields, textSize)},
+                                {"textColor", offsetof(ui::NodeFields, textColor)},
+                                {"textAlign", offsetof(ui::NodeFields, textAlign)},
+                                {"textWrap", offsetof(ui::NodeFields, textWrap)},
+                                {"press", offsetof(ui::NodeFields, press)},
+                                {"hit", offsetof(ui::NodeFields, hit)},
+                                {"layer", offsetof(ui::NodeFields, layer)},
+                                {"edit", offsetof(ui::NodeFields, edit)},
+                                {"editLimit", offsetof(ui::NodeFields, editLimit)},
+                                {"style", offsetof(ui::NodeFields, style)},
+                                {"scroll", offsetof(ui::NodeFields, scroll)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());
-    for (const world_kest::GameUiParent& kLine : kGame.uiParents) {
-        const auto kNode = std::ranges::find(names, kLine.node);
-        const auto kParent = std::ranges::find(names, kLine.parent);
-        if (kNode == names.end() || kParent == names.end()) {
-            return refuse("a ui line names a component that is not a rawframe.ui.Node");
+    // The UI document (D619): which node is inside which, which typed words
+    // each shows, and what each presentation component starts as.
+    if (!kGame.ui.empty()) {
+        RAWFRAME_TRY_ASSIGN(const std::string_view kText, files.document(kGame.ui));
+        auto document = ui::readDocument(kText);
+        if (!document.has_value()) {
+            return std::unexpected<result::Error>{std::move(document).error().withContext("name", kGame.ui)};
         }
-        settings.parents[static_cast<std::size_t>(kNode - names.begin())] =
-            static_cast<std::size_t>(kParent - names.begin());
-    }
-    // What nodes show of typed words (D427): rawframe.ui.Typed's length,
-    // then its bytes, each laid out a byte.
-    if (!kGame.uiWords.empty()) {
-        const auto kTyped = program.layout("rawframe.ui.Typed");
-        if (!kTyped.has_value() || kTyped->size != sizeof(Typed) || kTyped->fields.size() < 2 ||
-            kTyped->fields[0].name != "length" || kTyped->fields[0].offset != offsetof(Typed, length) ||
-            kTyped->fields[1].offset != offsetof(Typed, bytes)) {
-            return refuse("the game's rawframe.ui.Typed is not as the engine reads it");
+        const auto kPresented = [&kGame](std::string_view component) {
+            return std::ranges::any_of(kGame.presentation, [component](const world_kest::GamePresentation& each) {
+                return std::ranges::contains(each.components, component);
+            });
+        };
+        for (const ui::DocumentNode& kNode : document->nodes) {
+            const auto kNamed = std::ranges::find(names, kNode.component);
+            if (kNamed == names.end()) {
+                return std::unexpected<result::Error>{
+                    refuse("a UI document names a component that is not a rawframe.ui.Node")
+                        .error()
+                        .withContext("component", kNode.component)};
+            }
+            const auto kIndex = static_cast<std::size_t>(kNamed - names.begin());
+            if (kNode.parent.has_value()) {
+                // A parent comes before what is inside it, so is named.
+                settings.parents[kIndex] = static_cast<std::size_t>(
+                    std::ranges::find(names, document->nodes[*kNode.parent].component) - names.begin());
+            }
+            if (!kNode.shows.empty()) {
+                // What nodes show of typed words (D427): rawframe.ui.Typed's
+                // length, then its bytes, each laid out a byte.
+                const auto kTyped = program.layout("rawframe.ui.Typed");
+                if (!kTyped.has_value() || kTyped->size != sizeof(Typed) || kTyped->fields.size() < 2 ||
+                    kTyped->fields[0].name != "length" || kTyped->fields[0].offset != offsetof(Typed, length) ||
+                    kTyped->fields[1].offset != offsetof(Typed, bytes)) {
+                    return refuse("the game's rawframe.ui.Typed is not as the engine reads it");
+                }
+                const auto kWords = std::ranges::find(kGame.components, kNode.shows, &world_kest::GameComponent::name);
+                if (kWords == kGame.components.end() || !world_kest::ofEngineType(*kWords, "rawframe.ui.Typed")) {
+                    return std::unexpected<result::Error>{
+                        refuse("a UI node shows the words of a rawframe.ui.Typed component")
+                            .error()
+                            .withContext("component", kNode.shows)};
+                }
+                settings.shows.resize(settings.nodes.size());
+                settings.shows[kIndex] = kWords->id;
+            }
+            constexpr ui::NodeFields kNought{};
+            if (std::memcmp(&kNode.fields, &kNought, sizeof kNought) != 0) {
+                // Only presentation attaches a component, so only one of
+                // its components starts as a document says.
+                if (!kPresented(kNode.component)) {
+                    return std::unexpected<result::Error>{
+                        refuse("a UI document starts only the game's presentation components")
+                            .error()
+                            .withContext("component", kNode.component)};
+                }
+                starts.push_back(Start{.component = settings.nodes[kIndex], .fields = kNode.fields});
+            }
         }
-        settings.shows.resize(settings.nodes.size());
-    }
-    for (const world_kest::GameUiWords& kLine : kGame.uiWords) {
-        const auto kNode = std::ranges::find(names, kLine.node);
-        const auto kWords = std::ranges::find(kGame.components, kLine.words, &world_kest::GameComponent::name);
-        if (kNode == names.end() || kWords == kGame.components.end() ||
-            !world_kest::ofEngineType(*kWords, "rawframe.ui.Typed")) {
-            return refuse("a ui shows line names a rawframe.ui.Node and a rawframe.ui.Typed component");
-        }
-        settings.shows[static_cast<std::size_t>(kNode - names.begin())] = kWords->id;
     }
     for (const world_kest::GameFont& kFont : kGame.fonts) {
         settings.fonts.push_back(kFont.id);
@@ -210,7 +252,10 @@ ui::Box cursorAt(std::array<float, 2> at) noexcept {
                    .borderColors = {kRing, kRing, kRing, kRing}};
 }
 
-class UiParticipant final : public composition::Participant, public ui::UiFrames, public world_kest::UiHover {
+class UiParticipant final : public composition::Participant,
+                            public ui::UiFrames,
+                            public world_kest::UiHover,
+                            public world_kest::PresentationStarts {
 public:
     result::Status load(composition::ParticipantContext& context) {
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
@@ -235,7 +280,7 @@ public:
                                                       .withContext("program", files->description().program)
                                                       .withContext("report", report)};
         }
-        RAWFRAME_TRY_ASSIGN(std::optional<UiSettings> settings, settingsOf(*files, **program));
+        RAWFRAME_TRY_ASSIGN(std::optional<UiSettings> settings, settingsOf(*files, **program, starts_));
         if (!settings.has_value()) {
             return {};
         }
@@ -653,6 +698,9 @@ public:
         if (capability == world_kest::kUiHover.name) {
             return composition::provideAs<world_kest::UiHover>(*this);
         }
+        if (capability == world_kest::kPresentationStarts.name) {
+            return composition::provideAs<world_kest::PresentationStarts>(*this);
+        }
         return {};
     }
 
@@ -675,6 +723,12 @@ public:
     // What the host lends of the pointer, where the mouse is now (D422).
     std::int64_t hovered() const override {
         return pointing_ != nullptr ? pointing_->hovered().value_or(0) : 0;
+    }
+
+    // What the UI document starts a node component as (D619).
+    std::span<const std::byte> startOf(schema::ComponentTypeId component) const noexcept override {
+        const auto kStart = std::ranges::find(starts_, component, &Start::component);
+        return kStart == starts_.end() ? std::span<const std::byte>{} : std::as_bytes(std::span{&kStart->fields, 1});
     }
 
 private:
@@ -758,6 +812,7 @@ private:
     game_textures::AskedTextures images_{std::nullopt, {}, 0};
     std::unique_ptr<assets::AssetSet> fontSet_;
     std::vector<WantedFont> fonts_;
+    std::vector<Start> starts_;
     std::uint64_t fontsRead_ = 0;
     std::uint64_t glyphRuns_ = 0;
     std::uint64_t glyphsLeftOut_ = 0;

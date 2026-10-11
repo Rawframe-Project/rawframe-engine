@@ -1,0 +1,73 @@
+{
+  "kind": "ui.document",
+  "formatVersion": 1,
+  "nodes": [
+    {
+      "component": "runners.hud",
+      "widthOffset": 240,
+      "alignItems": "center",
+      "gap": 8,
+      "padding": 6,
+      "absolute": true,
+      "xScale": 0.5,
+      "yScale": 1,
+      "yOffset": -12,
+      "anchorX": 0.5,
+      "anchorY": 1,
+      "fill": "#101820c0",
+      "radius": 6,
+      "shadowColor": "#00000080",
+      "shadowY": 2,
+      "shadowBlur": 8,
+      "children": [
+        {
+          "component": "runners.target",
+          "widthOffset": 16,
+          "heightOffset": 16,
+          "image": "c067c4be8ce86d12",
+          "imageTint": "#d8e4ffff"
+        },
+        {
+          "component": "runners.meters",
+          "direction": "column",
+          "alignItems": "start",
+          "gap": 4,
+          "grow": 1,
+          "order": 1,
+          "children": [
+            {
+              "component": "runners.landed",
+              "heightOffset": 8,
+              "fill": "#58d068ff",
+              "radius": 4,
+              "gradientKind": "linear",
+              "gradientAngle": 90,
+              "gradientFrom": "#2e8a3cff",
+              "gradientTo": "#9cf0a8ff"
+            },
+            {
+              "component": "runners.taken",
+              "heightOffset": 8,
+              "fill": "#e05050ff",
+              "radius": 4,
+              "order": 1,
+              "gradientKind": "linear",
+              "gradientAngle": 90,
+              "gradientFrom": "#9a2828ff",
+              "gradientTo": "#ff8c7aff"
+            }
+          ]
+        },
+        {
+          "component": "runners.points",
+          "order": 2,
+          "text": "ac39139dad885119",
+          "font": "c3b22aa9db1c2239",
+          "textSize": 14,
+          "textColor": "#e8eef8ff",
+          "textWrap": "no_wrap"
+        }
+      ]
+    }
+  ]
+}

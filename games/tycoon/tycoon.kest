@@ -70,16 +70,10 @@ const GLIDE: f64 = 0.2
 const GOAL: i64 = 1000
 const CHEER: u32 = 300
 
-// The HUD's font and its labels (tycoon.game's `font` and `label` lines):
-// the coins, and a round won or lost.
-const HUD_FONT: u64 = 0x8e12f827f47f7d51
-const HUD_COINS: u64 = 0xf1182d0420cc09a0
+// The labels of a round won or lost (tycoon.game's `label` lines); the
+// HUD's font and its other labels and classes are tycoon.ui's (D619).
 const HUD_WON: u64 = 0xafcb66432b6d2152
 const HUD_LOST: u64 = 0xb777d548435986ab
-const HUD_SIGN: u64 = 0xbdb5be7acb84d040
-// Classes of tycoon.styles (D431).
-const STYLE_BUTTON: u64 = 0x85ecf7b643b63d65
-const STYLE_FIELD: u64 = 0x139f1a51051d860e
 
 // An owner: whether it has joined, its cursor on the ground, its coins, its
 // stalls and their levels together, whether the build it asked for is
@@ -365,47 +359,27 @@ fn sign(count: i32, owners: [Owner], signs: [ui.Typed], entities: [world.Entity]
 // The sign field under the purse (D426): a line of at most 32 bytes the
 // player writes in, its text in the purse's look, which asks for a sign
 // while it is empty (D428); its panel and border are the field class's,
-// lit under the mouse and gold while it holds focus (D431).
+// lit under the mouse and gold while it holds focus (D431). tycoon.ui
+// starts all of it (D619); a press on it is the controls' SIGN.
 fn field(count: i32, signs: [ui.Node]) {
     let i = 0
     while i < count {
-        signs[i].widthOffset = 220.0
-        signs[i].heightOffset = 34.0
-        signs[i].padding = 6.0
-        signs[i].margin = 12.0
-        signs[i].border = 1.0
-        signs[i].style = STYLE_FIELD
-        signs[i].order = 1
-        signs[i].font = HUD_FONT
-        signs[i].textSize = 18.0
-        signs[i].textColor = u32(0xF4E9C8FF)
-        signs[i].textWrap = ui.NO_WRAP
-        signs[i].text = HUD_SIGN
         signs[i].press = controls.SIGN
-        signs[i].edit = ui.EDIT_LINE
-        signs[i].editLimit = u32(32)
         i = i + 1
     }
 }
 
-// The owner's sign as the server keeps it (D427), in gold under the field:
-// its words are the sign's, which the `ui ... shows` line puts in place of
-// a label.
+// The owner's sign as the server keeps it (D427), in gold under the field
+// as tycoon.ui starts it (D619): its words are the sign's, which the
+// document has it show in place of a label, on a dark panel while it has
+// any.
 fn board(count: i32, signs: [ui.Typed], boards: [ui.Node]) {
     let i = 0
     while i < count {
-        boards[i].padding = 6.0
-        boards[i].margin = 12.0
-        boards[i].order = 2
         boards[i].fill = u32(0)
         if signs[i].length > u32(0) {
             boards[i].fill = u32(0x101820C0)
         }
-        boards[i].radius = 6.0
-        boards[i].font = HUD_FONT
-        boards[i].textSize = 18.0
-        boards[i].textColor = u32(0xE8B83AFF)
-        boards[i].textWrap = ui.NO_WRAP
         i = i + 1
     }
 }
@@ -646,28 +620,21 @@ fn frame(count: i32, poses: [physics3d.Pose3D], views: [model.Camera]) {
 // The owner's coins in its HUD: words along the top left of its view, a
 // panel a click on builds nothing under (D421), a button that lights under
 // the mouse, darkens as it is pressed, and is ringed while it holds focus
-// (the button class, D431).
+// (the button class, D431), as tycoon.ui starts it (D619); a press on it
+// is the controls' PURSE.
 fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
     let i = 0
     while i < count {
-        huds[i].padding = 10.0
-        huds[i].margin = 12.0
-        huds[i].style = STYLE_BUTTON
-        huds[i].text = HUD_COINS
         huds[i].textValue = owners[i].coins
-        huds[i].font = HUD_FONT
-        huds[i].textSize = 18.0
-        huds[i].textColor = u32(0xF4E9C8FF)
-        huds[i].textWrap = ui.NO_WRAP
-        huds[i].hit = ui.HIT_SELF
         huds[i].press = controls.PURSE
         i = i + 1
     }
 }
 
 // A round's end, in the middle of the client's view for five seconds
-// (D394): "You won round 3!" in gold, or that another owner won it, in a
-// dark panel; nothing between rounds.
+// (D394), placed and sized as tycoon.ui starts it (D619): "You won round
+// 3!" in gold, or that another owner won it, in a dark panel; nothing
+// between rounds.
 fn cheer(count: i32, cheers: [Cheer], banners: [ui.Node]) {
     let i = 0
     while i < count {
@@ -679,14 +646,7 @@ fn cheer(count: i32, cheers: [Cheer], banners: [ui.Node]) {
         banners[i].fill = u32(0)
         if cheers[i].ticks > u32(0) {
             cheers[i].ticks = cheers[i].ticks - u32(1)
-            banners[i].absolute = u32(1)
-            banners[i].xScale = 0.5
-            banners[i].yScale = 0.4
-            banners[i].anchorX = 0.5
-            banners[i].anchorY = 0.5
-            banners[i].padding = 16.0
             banners[i].fill = u32(0x101820E0)
-            banners[i].radius = 8.0
             banners[i].text = HUD_LOST
             banners[i].textColor = u32(0xF4E9C8FF)
             if cheers[i].mine == u32(1) {
@@ -694,9 +654,6 @@ fn cheer(count: i32, cheers: [Cheer], banners: [ui.Node]) {
                 banners[i].textColor = u32(0xE8B83AFF)
             }
             banners[i].textValue = i64(cheers[i].round)
-            banners[i].font = HUD_FONT
-            banners[i].textSize = 28.0
-            banners[i].textWrap = ui.NO_WRAP
         }
         i = i + 1
     }

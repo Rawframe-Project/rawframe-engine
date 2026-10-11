@@ -13,7 +13,8 @@ inline constexpr result::ErrorDomain kWorldUiDomain{base::parseBits128Hex("07c3a
 /// Codes within kWorldUiDomain.
 enum class WorldUiError : std::uint32_t {
     /// The game's UI node components are not as `rawframe.ui` lays them
-    /// out, or a `ui` line names a component that is not one.
+    /// out, or its UI document names a component that is not one, or
+    /// starts one presentation does not attach (D619).
     BadNodes = 1,
 };
 

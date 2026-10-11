@@ -17,6 +17,7 @@
 #include "rawframe/world/world.h"
 #include "rawframe/world_animation/animation.h"
 #include "rawframe/world_kest/game.h"
+#include "rawframe/world_kest/starts.h"
 #include "rawframe/world_replication/messages.h"
 
 #include <cstdint>
@@ -71,6 +72,9 @@ public:
     /// The press code of the UI node under the mouse from now on, which
     /// `UI.hovered` answers its present systems; nought for none (D422).
     void hover(std::int64_t code) noexcept;
+    /// What its components start as when it attaches them (D619); none,
+    /// as without it, starts every one at nought. `starts` outlives it.
+    void startWith(const PresentationStarts* starts) noexcept;
     [[nodiscard]] PresentationStatistics statistics() const noexcept;
     [[nodiscard]] world_animation::AnimationStatistics animationStatistics() const noexcept;
     /// The animation that played `world`, if it is the World last

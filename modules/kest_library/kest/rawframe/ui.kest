@@ -4,11 +4,13 @@ module rawframe.ui
 // entity's component of this type, a node of its client's UI tree. A game
 // declares components of it, usually presentation components its present
 // systems write (`presentation <node>... on player` for a player's HUD),
-// and a `ui <node> in <parent>` line for each node inside another: the
-// parent is that component on the same entity, or else on the client's
-// player. A node with no such line is a root of its player's view, laid
-// out in the view's rectangle, those of one view drawn in `order` (then by
-// entity) over the scene and the canvas. Logical pixels, y down.
+// and its UI document (`ui <file>`, D619) puts each node inside another:
+// the parent is that component on the same entity, or else on the
+// client's player. The document also starts each presentation component
+// as it says, so a present system writes only what changes. A node inside
+// none is a root of its player's view, laid out in the view's rectangle,
+// those of one view drawn in `order` (then by entity) over the scene and
+// the canvas. Logical pixels, y down.
 //
 // Sizes are SPEC-0030's Scale+Offset: a share of the parent's content box
 // plus pixels; a size of nought and nought is automatic, fitting what the
@@ -54,8 +56,8 @@ module rawframe.ui
 // children out. A node may root a `layer`, drawn and hit above the content
 // it is in: a dialog's (ACTIVATION), a MODAL one that presses missing it
 // reach nothing below, or an OVERLAY above them all. A zeroed node, as
-// presentation attaches it, is empty, draws nothing, and passes every
-// press on.
+// presentation attaches it without a document, is empty, draws nothing,
+// and passes every press on.
 //
 // A node whose `edit` is not NO_EDIT is a text field (D426): a press on it
 // gives it the keyboard, the caret where the press landed, and a press
@@ -191,9 +193,9 @@ const EDIT_MESSAGE: u32 = 2
 const EDIT_LINES: u32 = 3
 
 // What a player typed into a field: `length` bytes of UTF-8 in `bytes`.
-// As a component on a node's entity, a `ui <node> shows <words>` line has
-// the node show its words in its text look, in place of its label, while
-// it holds any (D427): a sign, a name, a line of chat.
+// As a component on a node's entity that the UI document has the node
+// show (`shows`), the node shows its words in its text look, in place of
+// its label, while it holds any (D427): a sign, a name, a line of chat.
 struct Typed {
     length: u32
     bytes: [u8; 252]

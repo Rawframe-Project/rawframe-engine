@@ -132,14 +132,11 @@ present runners.glint glint read runners.emitter write runners.dust write runner
 # The player's HUD (D376): a panel along the bottom of its view, a target
 # (hud.png, D378) beside a green meter of the hits its runner landed and a
 # red one of those it took, each filling over ten and starting again, and
-# its score in words (D386); the client's own, drawn over all.
+# its score in words (D386); the client's own, drawn over all. runners.ui
+# lays it out and starts its look (D619); the gauge writes what changes.
 presentation runners.hud runners.target runners.meters runners.landed runners.taken runners.points on player
-ui runners.target in runners.hud
-ui runners.meters in runners.hud
-ui runners.landed in runners.meters
-ui runners.taken in runners.meters
-ui runners.points in runners.hud
-present runners.gauge gauge read runners.score write runners.hud write runners.target write runners.meters write runners.landed write runners.taken write runners.points
+ui runners.ui
+present runners.gauge gauge read runners.score write runners.landed write runners.taken write runners.points
 texture eddbc014cab63eb2 runner.png
 texture a44ecb4a39ac5cc8 tiles.png
 texture c067c4be8ce86d12 hud.png

@@ -327,27 +327,18 @@ RAWFRAME_TEST(AConstrainedAspectIsDeclaredByLine) {
     }
 }
 
-RAWFRAME_TEST(UiNodesAreNestedByLine) {
+RAWFRAME_TEST(AGameNamesOneUiDocument) {
     const std::string kHead = "program p.kest\n"
-                              "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.hud Node\n"
-                              "component 6c2e9a1f-3b55-4d20-8e1f-8b7d4c3f2a02 g.bar Node\n"
-                              "component 7d3fab20-4c66-4e31-9f20-9c8e5d4a3b13 g.fill Node\n";
-    const auto kGame = parseGame(kHead + "ui g.bar in g.hud\nui g.fill in g.bar\n");
-    RAWFRAME_EXPECT(kGame.has_value() && kGame->uiParents.size() == 2 && kGame->uiParents[0].node == "g.bar" &&
-                    kGame->uiParents[0].parent == "g.hud" && kGame->uiParents[1].node == "g.fill");
-    // One parent each, never itself however far up (D376).
-    for (const std::string_view kLines : {"ui g.bar\n",
-                                          "ui g.bar on g.hud\n",
-                                          "ui g.bar in g.bar\n",
-                                          "ui g.bar in g.hud\nui g.bar in g.fill\n",
-                                          "ui g.bar in g.hud\nui g.hud in g.bar\n",
-                                          "ui g.bar in g.hud\nui g.fill in g.bar\nui g.hud in g.fill\n"}) {
-        const std::string kText = kHead + std::string{kLines};
-        RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "5") ||
-                        refusedAt(kText, WorldKestError::BadGameLine, "6") ||
-                        refusedAt(kText, WorldKestError::BadGameLine, "7"));
+                              "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.hud Node\n";
+    const auto kGame = parseGame(kHead + "ui g.ui\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->ui == "g.ui");
+    // One document, which nests the nodes (D619): the lines that did are
+    // gone.
+    for (const std::string_view kLines :
+         {"ui\n", "ui g.ui\nui h.ui\n", "ui g.bar in g.hud\n", "ui g.bar shows g.sign\n"}) {
+        RAWFRAME_EXPECT(refusedAt(kHead + std::string{kLines}, WorldKestError::BadGameLine, "3") ||
+                        refusedAt(kHead + std::string{kLines}, WorldKestError::BadGameLine, "4"));
     }
-    RAWFRAME_EXPECT(!parseGame(kHead + "ui g.bar in g.panel\n").has_value());
 }
 
 RAWFRAME_TEST(MaterialsAreDeclaredByLine) {
@@ -692,21 +683,6 @@ RAWFRAME_TEST(CommandsAreDeclaredByLine) {
         many += "command c" + std::to_string(index) + " Push\n";
     }
     RAWFRAME_EXPECT(!parseGame(many).has_value());
-}
-
-RAWFRAME_TEST(ANodesWordsAreDeclaredByLine) {
-    const std::string kHead =
-        "program p.kest\ncomponent 6b1f0c2e-1d4a-4f57-9a3e-0c2b7d5e8f10 g.board rawframe.ui.Node\n"
-        "component 7c2a1d3f-2e5b-4a68-8b4f-1d3c8e6f9a21 g.sign rawframe.ui.Typed\n";
-    const auto kGame = parseGame(kHead + "ui g.board shows g.sign\n");
-    RAWFRAME_EXPECT(kGame.has_value() && kGame->uiWords.size() == 1 && kGame->uiWords[0].node == "g.board" &&
-                    kGame->uiWords[0].words == "g.sign");
-    for (const std::string_view kLines : {"ui g.board shows g.board\n",
-                                          "ui g.board shows g.sign\nui g.board shows g.sign\n",
-                                          "ui g.board shows g.missing\n",
-                                          "ui g.board displays g.sign\n"}) {
-        RAWFRAME_EXPECT(!parseGame(kHead + std::string{kLines}).has_value());
-    }
 }
 
 RAWFRAME_TEST(AGameNamesOneStylesDocument) {

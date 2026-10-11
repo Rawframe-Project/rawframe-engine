@@ -102,4 +102,4 @@ present tycoon.cheer cheer write tycoon.cheer write tycoon.banner
 present tycoon.field field write tycoon.sign
 # The owner's sign as the server keeps it, shown under the field (D427).
 present tycoon.board board read tycoon.named write tycoon.board
-ui tycoon.board shows tycoon.named
+ui tycoon.ui

@@ -98,8 +98,10 @@ text tycoon.strings
 text tycoon.tr.translations
 locale en
 font 8e12f827f47f7d51 Inter-Regular.ttf
-# The HUD's classes (D431).
+# The HUD's classes (D431), and its nodes' layout, look, and words as
+# tycoon.ui starts them (D619); the present systems write what changes.
 styles tycoon.styles
+ui tycoon.ui
 label f1182d0420cc09a0 tycoon.strings hud.coins coins
 label afcb66432b6d2152 tycoon.strings hud.won round
 label b777d548435986ab tycoon.strings hud.lost round
@@ -113,6 +115,6 @@ present tycoon.frame frame read rawframe.physics3d.pose write tycoon.view
 present tycoon.purse purse read tycoon.owner write tycoon.purse
 present tycoon.cheer cheer write tycoon.cheer write tycoon.banner
 present tycoon.field field write tycoon.sign
-# The owner's sign as the server keeps it, shown under the field (D427).
+# The owner's sign as the server keeps it, shown under the field (D427):
+# tycoon.ui has the board show tycoon.named.
 present tycoon.board board read tycoon.named write tycoon.board
-ui tycoon.board shows tycoon.named

@@ -147,6 +147,9 @@ std::vector<std::string> documentNames(const GameDescription& description) {
     if (!description.styles.empty()) {
         names.push_back(description.styles);
     }
+    if (!description.ui.empty()) {
+        names.push_back(description.ui);
+    }
     if (description.audio) {
         names.push_back(description.audio->mixer);
         for (const GameSound& sound : description.audio->sounds) {
