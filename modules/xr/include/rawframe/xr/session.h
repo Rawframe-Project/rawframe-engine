@@ -145,6 +145,9 @@ struct SessionStatistics {
     std::uint64_t framesHandLocated = 0;
     /// Vibrations the runtime took (D600).
     std::uint64_t hapticsApplied = 0;
+    /// Controllers' interaction profiles the runtime took the hands'
+    /// bindings for, of the five suggested (D659).
+    std::uint64_t profilesTaken = 0;
 };
 
 class Session {

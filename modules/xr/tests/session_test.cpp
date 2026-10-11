@@ -234,6 +234,8 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
     RAWFRAME_EXPECT(session.state() == xr::SessionState::Exiting);
     RAWFRAME_EXPECT(kTotals.framesLocated >= 30);
     RAWFRAME_EXPECT(kTotals.framesSubmitted >= 30);
+    // Monado knows every controller suggested (D659).
+    RAWFRAME_EXPECT(kTotals.profilesTaken == 5);
     RAWFRAME_EXPECT(handsHeld >= 30 && kTotals.framesHandLocated >= 30);
     RAWFRAME_EXPECT(kTotals.hapticsApplied == 2);
     RAWFRAME_EXPECT(kTotals.framesPanelSubmitted == kTotals.framesSubmitted);

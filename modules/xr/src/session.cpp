@@ -3,9 +3,12 @@
 #include "openxr.h"
 
 #include <algorithm>
+#include <array>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 namespace rawframe::xr {
 
@@ -23,6 +26,38 @@ struct Chain {
 constexpr XrDuration kImageWait = 1'000'000'000;
 
 constexpr std::array<std::string_view, 2> kHandPaths = {"/user/hand/left", "/user/hand/right"};
+
+/// A controller's interaction profile, and the inputs its hands' select and
+/// menu are suggested on, the left hand's first; the poses and the haptic
+/// output are the same on every one.
+struct Profile {
+    std::string_view path;
+    std::array<std::string_view, 2> select;
+    std::array<std::string_view, 2> menu;
+};
+
+/// The simple controller first, the floor every runtime binds (ADR-0081
+/// section 5), then the common controllers' own profiles, so a runtime
+/// binds each to the controller it has rather than emulating the simple
+/// one (D659): a trigger selects, and the menu button, or the right hand's
+/// B where it has none, is the menu.
+constexpr std::array<Profile, 5> kProfiles = {
+    Profile{"/interaction_profiles/khr/simple_controller",
+            {"/input/select/click", "/input/select/click"},
+            {"/input/menu/click", "/input/menu/click"}},
+    Profile{"/interaction_profiles/oculus/touch_controller",
+            {"/input/trigger/value", "/input/trigger/value"},
+            {"/input/menu/click", "/input/b/click"}},
+    Profile{"/interaction_profiles/valve/index_controller",
+            {"/input/trigger/click", "/input/trigger/click"},
+            {"/input/b/click", "/input/b/click"}},
+    Profile{"/interaction_profiles/htc/vive_controller",
+            {"/input/trigger/click", "/input/trigger/click"},
+            {"/input/menu/click", "/input/menu/click"}},
+    Profile{"/interaction_profiles/microsoft/motion_controller",
+            {"/input/trigger/value", "/input/trigger/value"},
+            {"/input/menu/click", "/input/menu/click"}},
+};
 
 /// `name` into one of OpenXR's fixed name fields, which stay terminated.
 template <std::size_t N> void named(char (&into)[N], std::string_view name) {
@@ -229,8 +264,38 @@ struct Session::State {
         return {};
     }
 
-    /// The hands' actions, suggested for the simple controller, their
-    /// spaces made, and the set attached to the session.
+    /// The hands' actions suggested on `profile`'s inputs.
+    XrResult suggest(const Profile& profile) {
+        std::vector<XrActionSuggestedBinding> bindings;
+        for (std::size_t hand = 0; hand < kHandPaths.size(); ++hand) {
+            for (const auto& [kAction, kInput] : {std::pair{select, profile.select.at(hand)},
+                                                  std::pair{menu, profile.menu.at(hand)},
+                                                  std::pair{grip, std::string_view{"/input/grip/pose"}},
+                                                  std::pair{aim, std::string_view{"/input/aim/pose"}},
+                                                  std::pair{haptic, std::string_view{"/output/haptic"}}}) {
+                XrActionSuggestedBinding& binding =
+                    bindings.emplace_back(XrActionSuggestedBinding{kAction, XR_NULL_PATH});
+                const std::string kPath = std::string{kHandPaths.at(hand)} + std::string{kInput};
+                if (const XrResult kNamed = xrStringToPath(runtime->instance, kPath.c_str(), &binding.binding);
+                    XR_FAILED(kNamed)) {
+                    return kNamed;
+                }
+            }
+        }
+        XrInteractionProfileSuggestedBinding suggested{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
+        const std::string kProfile{profile.path};
+        if (const XrResult kNamed = xrStringToPath(runtime->instance, kProfile.c_str(), &suggested.interactionProfile);
+            XR_FAILED(kNamed)) {
+            return kNamed;
+        }
+        suggested.countSuggestedBindings = static_cast<std::uint32_t>(bindings.size());
+        suggested.suggestedBindings = bindings.data();
+        return xrSuggestInteractionProfileBindings(runtime->instance, &suggested);
+    }
+
+    /// The hands' actions, suggested for the simple controller and the
+    /// common controllers (D659), their spaces made, and the set attached
+    /// to the session.
     result::Status makeActions() {
         XrActionSetCreateInfo set{XR_TYPE_ACTION_SET_CREATE_INFO};
         named(set.actionSetName, "rawframe");
@@ -260,33 +325,14 @@ struct Session::State {
                 return failed("a hand's action could not be made", kMade);
             }
         }
-        std::vector<XrActionSuggestedBinding> bindings;
-        for (const std::string_view kHand : kHandPaths) {
-            for (const auto& [kAction, kInput] : {std::pair{select, "/input/select/click"},
-                                                  std::pair{menu, "/input/menu/click"},
-                                                  std::pair{grip, "/input/grip/pose"},
-                                                  std::pair{aim, "/input/aim/pose"},
-                                                  std::pair{haptic, "/output/haptic"}}) {
-                XrActionSuggestedBinding& binding =
-                    bindings.emplace_back(XrActionSuggestedBinding{kAction, XR_NULL_PATH});
-                const std::string kPath = std::string{kHand} + kInput;
-                if (const XrResult kNamed = xrStringToPath(runtime->instance, kPath.c_str(), &binding.binding);
-                    XR_FAILED(kNamed)) {
-                    return failed("a controller's input could not be named", kNamed);
-                }
+        for (const Profile& kProfile : kProfiles) {
+            const XrResult kSuggested = suggest(kProfile);
+            statistics.profilesTaken += XR_SUCCEEDED(kSuggested) ? 1 : 0;
+            // The simple controller is the floor; a runtime that knows
+            // another profile not is left to bind what it has.
+            if (XR_FAILED(kSuggested) && kProfile.path == kProfiles[0].path) {
+                return failed("the simple controller's bindings were refused", kSuggested);
             }
-        }
-        XrInteractionProfileSuggestedBinding suggested{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
-        if (const XrResult kNamed = xrStringToPath(
-                runtime->instance, "/interaction_profiles/khr/simple_controller", &suggested.interactionProfile);
-            XR_FAILED(kNamed)) {
-            return failed("the simple controller could not be named", kNamed);
-        }
-        suggested.countSuggestedBindings = static_cast<std::uint32_t>(bindings.size());
-        suggested.suggestedBindings = bindings.data();
-        if (const XrResult kSuggested = xrSuggestInteractionProfileBindings(runtime->instance, &suggested);
-            XR_FAILED(kSuggested)) {
-            return failed("the simple controller's bindings were refused", kSuggested);
         }
         for (std::size_t hand = 0; hand < hands.size(); ++hand) {
             for (const auto& [kAt, kAction] : {std::pair{0, grip}, std::pair{1, aim}}) {
