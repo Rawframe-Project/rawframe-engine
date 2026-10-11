@@ -11,6 +11,7 @@
 // beside it, since an app has no standard output anyone reads. Nothing is
 // read from the package's assets yet.
 
+#include "rawframe/base/fatal.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/composition/registrar.h"
 #include "rawframe/game_content/registrar.h"
@@ -41,6 +42,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unistd.h>
 
 namespace {
 
@@ -133,6 +135,12 @@ struct AndroidClient {
             return nullptr;
         }
         log = std::fopen((*kFiles + "/client.log").c_str(), "wb");
+        // Standard error is the log, so a crash's record lands in it
+        // (D617); Android's own crash report still follows it.
+        if (log != nullptr) {
+            static_cast<void>(::dup2(::fileno(log), STDERR_FILENO));
+        }
+        static_cast<void>(base::installCrashCapture());
         const std::optional<std::string> kText = readText(*kFiles + "/client.conf");
         if (!kText.has_value()) {
             say("cannot read the configuration file client.conf");

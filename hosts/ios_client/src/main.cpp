@@ -15,6 +15,7 @@
 // diagnostics go to `client.log` in Documents, since an application has no
 // standard output anyone reads.
 
+#include "rawframe/base/fatal.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/composition/registrar.h"
 #include "rawframe/game_content/registrar.h"
@@ -45,6 +46,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unistd.h>
 
 namespace {
 
@@ -133,6 +135,12 @@ int main() {
     }
     const std::string kFiles = std::string{kHome} + "/Documents";
     std::FILE* const kLog = std::fopen((kFiles + "/client.log").c_str(), "wb");
+    // Standard error is the log, so a crash's record lands in it (D617); the
+    // system's own crash report still follows it.
+    if (kLog != nullptr) {
+        static_cast<void>(::dup2(::fileno(kLog), STDERR_FILENO));
+    }
+    static_cast<void>(base::installCrashCapture());
     std::string base = kFiles;
     std::optional<std::string> text = readText(base + "/client.conf");
     if (!text.has_value()) {
