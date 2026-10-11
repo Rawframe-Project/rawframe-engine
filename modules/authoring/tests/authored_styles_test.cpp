@@ -1,0 +1,177 @@
+// A style sheet open for authoring (D636): a part set, changed, and unset,
+// a variant made and gone with its first and last part, each change one
+// entry that undo and redo walk exactly back to the bytes before, the
+// clean place kept, and changes the sheet does not read refused with the
+// document as it was.
+
+#include "rawframe/authoring/authored_styles.h"
+#include "rawframe/authoring/errors.h"
+#include "rawframe/test/test.h"
+
+#include <array>
+#include <memory>
+#include <string>
+
+using namespace rawframe;
+using namespace rawframe::authoring;
+using document::Value;
+
+namespace {
+
+bool refusedWith(const auto& outcome, AuthoringError error) {
+    return !outcome.has_value() && outcome.error().domain() == kAuthoringDomain &&
+           outcome.error().code() == code(error);
+}
+
+const base::Bits128 kDocument{9, 9};
+constexpr std::uint64_t kButton = 0x85ecf7b643b63d65;
+
+constexpr std::string_view kSheet = R"({
+  "kind": "ui.styles",
+  "formatVersion": 1,
+  "styles": [
+    {
+      "styleId": "85ecf7b643b63d65",
+      "name": "button",
+      "base": {
+        "fill": "#101820c0",
+        "radius": 6
+      },
+      "hovered": {
+        "fill": "#304860e0"
+      },
+      "transitions": [
+        {
+          "parts": [
+            "fill"
+          ],
+          "seconds": 0.12,
+          "easing": "ease_out"
+        }
+      ]
+    },
+    {
+      "styleId": "1d2c3b4a59687706",
+      "name": "panel"
+    }
+  ]
+}
+)";
+
+/// One part set, alone in its batch.
+result::Result<Committed> set(AuthoredStyles& styles,
+                              std::uint64_t generation,
+                              std::uint64_t style,
+                              std::string_view variant,
+                              std::string_view part,
+                              std::optional<Value> value) {
+    const std::array<Operation, 1> kOne = {
+        SetStylePart{.style = style, .variant = std::string{variant}, .part = std::string{part}, .value = value}};
+    return styles.change(generation, kOne);
+}
+
+std::string fillOf(const AuthoredStyles& styles, std::string_view variant) {
+    const auto kFill = styles.part(kButton, variant, "fill");
+    return kFill.has_value() && kFill->text() != nullptr ? *kFill->text() : "";
+}
+
+} // namespace
+
+RAWFRAME_TEST(AStyleSheetsPartsChangeAndUndoExactly) {
+    auto opened = AuthoredStyles::open(kDocument, kSheet);
+    RAWFRAME_EXPECT(opened.has_value());
+    if (!opened.has_value()) {
+        return;
+    }
+    AuthoredStyles& styles = **opened;
+    RAWFRAME_EXPECT(styles.text() == kSheet && !styles.dirty() && styles.generation() == 0);
+    RAWFRAME_EXPECT(fillOf(styles, "base") == "#101820c0" && fillOf(styles, "pressed").empty());
+    // A part changed: the sheet reads it, one entry.
+    RAWFRAME_EXPECT(set(styles, 0, kButton, "base", "fill", Value::string("#c01818c0")).has_value());
+    RAWFRAME_EXPECT(styles.generation() == 1 && styles.dirty() && styles.undoable() == 1);
+    RAWFRAME_EXPECT(fillOf(styles, "base") == "#c01818c0" && styles.sheet().styles[0].looks[0].look.fill == 0xc01818c0);
+    const std::string kChanged = styles.text();
+    // A variant made by its first part, in its place among the class's
+    // fields, and gone with its last.
+    RAWFRAME_EXPECT(set(styles, 1, kButton, "pressed", "fill", Value::string("#080c14e0")).has_value());
+    RAWFRAME_EXPECT(styles.text().find("\"hovered\"") < styles.text().find("\"pressed\"") &&
+                    styles.text().find("\"pressed\"") < styles.text().find("\"transitions\""));
+    RAWFRAME_EXPECT(set(styles, 2, kButton, "pressed", "fill", std::nullopt).has_value());
+    RAWFRAME_EXPECT(styles.text() == kChanged && styles.generation() == 3);
+    // The same value again is no change and no entry.
+    const auto kSame = set(styles, 3, kButton, "base", "radius", Value::integer(6));
+    RAWFRAME_EXPECT(kSame.has_value() && kSame->deltas == 0 && styles.undoable() == 3);
+    // A class with no look yet takes one.
+    RAWFRAME_EXPECT(set(styles, 3, 0x1d2c3b4a59687706, "base", "clip", Value::boolean(true)).has_value());
+    RAWFRAME_EXPECT(styles.sheet().styles[1].looks[0].look.clip);
+    // Back to the start exactly, the clean place found again, then forward.
+    for (int back = 0; back < 4; ++back) {
+        RAWFRAME_EXPECT(styles.undo(styles.generation()).has_value());
+    }
+    RAWFRAME_EXPECT(styles.text() == kSheet && !styles.dirty() && !styles.canUndo());
+    RAWFRAME_EXPECT(styles.redo(styles.generation()).has_value() && styles.text() == kChanged);
+    // A new change drops what could be redone.
+    RAWFRAME_EXPECT(set(styles, styles.generation(), kButton, "hovered", "radius", Value::integer(8)).has_value());
+    RAWFRAME_EXPECT(!styles.canRedo() && styles.undoable() == 2);
+}
+
+RAWFRAME_TEST(AStyleSheetsBatchIsOneEntryOrNothing) {
+    auto opened = AuthoredStyles::open(kDocument, kSheet);
+    RAWFRAME_EXPECT(opened.has_value());
+    if (!opened.has_value()) {
+        return;
+    }
+    AuthoredStyles& styles = **opened;
+    // Two parts and a part set twice: one entry, the last value kept.
+    const std::array<Operation, 3> kThree = {
+        SetStylePart{.style = kButton, .variant = "base", .part = "fill", .value = Value::string("#000000ff")},
+        SetStylePart{.style = kButton, .variant = "hovered", .part = "radius", .value = Value::integer(3)},
+        SetStylePart{.style = kButton, .variant = "base", .part = "fill", .value = Value::string("#ffffffff")}};
+    const auto kDone = styles.change(0, kThree);
+    RAWFRAME_EXPECT(kDone.has_value() && kDone->deltas == 3 && styles.undoable() == 1);
+    RAWFRAME_EXPECT(fillOf(styles, "base") == "#ffffffff" && styles.sheet().styles[0].looks[2].look.radius == 3);
+    RAWFRAME_EXPECT(styles.undo(1).has_value() && styles.text() == kSheet);
+    // One refused, by its index: nothing kept. A scene's operation too.
+    const std::array<Operation, 2> kBad = {
+        SetStylePart{.style = kButton, .variant = "base", .part = "fill", .value = Value::string("#000000ff")},
+        SetStylePart{.style = kButton, .variant = "base", .part = "fill", .value = Value::string("black")}};
+    const auto kRefused = styles.change(2, kBad);
+    RAWFRAME_EXPECT(refusedWith(kRefused, AuthoringError::ValidationFailed) && styles.text() == kSheet);
+    const std::array<Operation, 1> kScenes = {RestoreEntity{}};
+    const auto kScene = styles.change(2, kScenes);
+    RAWFRAME_EXPECT(refusedWith(kScene, AuthoringError::ValidationFailed));
+    bool indexed = false;
+    for (const auto& kField : kScene.error().context()) {
+        indexed = indexed || (kField.key == "index" && kField.value == "0");
+    }
+    RAWFRAME_EXPECT(indexed);
+}
+
+RAWFRAME_TEST(AStyleSheetRefusesWhatItDoesNotRead) {
+    auto opened = AuthoredStyles::open(kDocument, kSheet);
+    RAWFRAME_EXPECT(opened.has_value());
+    if (!opened.has_value()) {
+        return;
+    }
+    AuthoredStyles& styles = **opened;
+    // Another generation, another class, a part or variant a look has not.
+    RAWFRAME_EXPECT(refusedWith(set(styles, 4, kButton, "base", "fill", std::nullopt), AuthoringError::TargetStale));
+    RAWFRAME_EXPECT(refusedWith(set(styles, 0, 1, "base", "fill", std::nullopt), AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(
+        refusedWith(set(styles, 0, kButton, "base", "colour", std::nullopt), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(
+        refusedWith(set(styles, 0, kButton, "dragged", "fill", std::nullopt), AuthoringError::ValidationFailed));
+    // Values the sheet does not read: a color without its alpha, a radius
+    // past a screen, a shadow without its color.
+    RAWFRAME_EXPECT(refusedWith(set(styles, 0, kButton, "base", "fill", Value::string("#c01818")),
+                                AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(
+        refusedWith(set(styles, 0, kButton, "base", "radius", Value::integer(5000)), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(set(styles, 0, kButton, "focused", "outerShadow", Value::object()),
+                                AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(styles.text() == kSheet && styles.generation() == 0 && !styles.canUndo());
+    // Nothing undone.
+    RAWFRAME_EXPECT(refusedWith(styles.undo(0), AuthoringError::TargetNotFound));
+    // A text that is no sheet does not open.
+    RAWFRAME_EXPECT(refusedWith(AuthoredStyles::open(kDocument, "{}"), AuthoringError::ValidationFailed));
+}

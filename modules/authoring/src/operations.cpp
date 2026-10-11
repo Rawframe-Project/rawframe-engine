@@ -14,9 +14,6 @@ namespace rawframe::authoring {
 
 namespace {
 
-/// The most operations one batch holds (SPEC-0040's named limit).
-constexpr std::size_t kMaximumBatchOperations = 4096;
-
 constexpr std::array<InputDeclaration, 3> kCreateInputs = {
     {{"entity", InputType::Entity}, {"name", InputType::Text}, {"place", InputType::OptionalPlace}}};
 constexpr std::array<InputDeclaration, 1> kEntityInputs = {{{"entity", InputType::Entity}}};
@@ -42,7 +39,12 @@ constexpr std::array<InputDeclaration, 3> kRevertFieldInputs = {
 constexpr std::array<InputDeclaration, 2> kAddInstanceInputs = {
     {{"scene", InputType::Resource}, {"instance", InputType::Identity}}};
 
-constexpr std::array<OperationDeclaration, 17> kDeclarations = {{
+constexpr std::array<InputDeclaration, 4> kStylePartInputs = {{{"style", InputType::Style},
+                                                               {"variant", InputType::Text},
+                                                               {"part", InputType::Text},
+                                                               {"value", InputType::StyleValue}}};
+
+constexpr std::array<OperationDeclaration, 18> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -57,6 +59,7 @@ constexpr std::array<OperationDeclaration, 17> kDeclarations = {{
     {.name = "scene.restore_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.add_instance", .targets = "rawframe.scene instance", .inputs = kAddInstanceInputs},
     {.name = "scene.remove_instance", .targets = "rawframe.scene instance", .inputs = kEntityInputs},
+    {.name = "styles.set_part", .targets = "ui.styles part", .inputs = kStylePartInputs},
     {.name = "scene.list_entities", .history = HistoryClass::ReadOnly, .targets = "rawframe.scene", .inputs = {}},
     {.name = "scene.read_entity",
      .history = HistoryClass::ReadOnly,
@@ -164,6 +167,12 @@ result::Result<Journal> derive(const scene::Scene& scene,
                                const ComponentCatalog& catalog,
                                const scene::SceneSource* sources,
                                base::Bits128 document) {
+    if (std::holds_alternative<SetStylePart>(operation)) {
+        return result::fail(result::ErrorClass::InvalidArgument,
+                            kAuthoringDomain,
+                            code(AuthoringError::ValidationFailed),
+                            "the operation changes a style sheet, not a scene");
+    }
     if (std::holds_alternative<AddInstance>(operation) || std::holds_alternative<RemoveInstance>(operation)) {
         return deriveInstance(scene, operation, sources, document);
     }

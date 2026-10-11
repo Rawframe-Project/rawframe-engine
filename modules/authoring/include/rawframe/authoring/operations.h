@@ -30,6 +30,7 @@
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/delta.h"
 #include "rawframe/base/bits128.h"
+#include "rawframe/document/json.h"
 #include "rawframe/result/result.h"
 #include "rawframe/scene/resolve.h"
 #include "rawframe/schema/stable_id.h"
@@ -44,6 +45,9 @@
 #include <vector>
 
 namespace rawframe::authoring {
+
+/// The most operations one batch holds (SPEC-0040's named limit).
+inline constexpr std::size_t kMaximumBatchOperations = 4096;
 
 /// The surface's generation: its operations, their inputs, and its error
 /// codes as a whole. Not the engine's version.
@@ -195,6 +199,16 @@ struct RemoveInstance {
     base::Bits128 entity{};
 };
 
+/// One part of one variant's look of one class of a style sheet (D636),
+/// set to its value as the styles document holds it, or unset for none: a
+/// `ui.styles` document's operation, refused by a scene.
+struct SetStylePart {
+    std::uint64_t style = 0;
+    std::string variant;
+    std::string part;
+    std::optional<document::Value> value;
+};
+
 /// The id an instantiation named `instance` gives the source's entity
 /// `source`: a version 8 UUID from their SHA-256 (D156).
 [[nodiscard]] base::Bits128 instanceEntityId(base::Bits128 instance, base::Bits128 source) noexcept;
@@ -212,7 +226,8 @@ using Operation = std::variant<CreateEntity,
                                RevertComponent,
                                RestoreEntity,
                                AddInstance,
-                               RemoveInstance>;
+                               RemoveInstance,
+                               SetStylePart>;
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the
 /// scene holds, one entity whole, and the entities a typed search finds
@@ -254,6 +269,10 @@ enum class InputType : std::uint8_t {
     Identity,
     /// A component that may be left out.
     OptionalComponent,
+    /// A style class's identity, as 16 hex digits (D636).
+    Style,
+    /// A look part's value as a styles document holds it, or null for none.
+    StyleValue,
 };
 
 struct InputDeclaration {

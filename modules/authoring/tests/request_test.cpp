@@ -1,5 +1,6 @@
-// Authoring on the wire (SPEC-0040): requests read exactly as declared,
-// discovery complete enough to build any call from, and one error record.
+// Authoring on the wire (SPEC-0040): requests read exactly as declared, a
+// style sheet's operation among them (D636), discovery complete enough to
+// build any call from, and one error record.
 
 #include "rawframe/authoring/request.h"
 #include "rawframe/test/test.h"
@@ -58,6 +59,10 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
         R"({"operation": "scene.add_instance", "scene": "8d1a709be7c6f665a9d32c2c07e122c3", "instance": ")" +
             std::string{kDoor} + "\"}",
         operation("scene.remove_instance", ""),
+        R"({"operation": "styles.set_part", "style": "85ecf7b643b63d65", "variant": "hovered", "part": "fill",
+            "value": "#304860e0"})",
+        R"({"operation": "styles.set_part", "style": "85ecf7b643b63d65", "variant": "focused",
+            "part": "outerShadow", "value": null})",
     };
     std::string joined;
     for (const std::string& each : kAll) {
@@ -80,6 +85,18 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
     RAWFRAME_EXPECT(std::get<AddInstance>(kRead->operations[17]).scene ==
                         base::parseBits128Hex("8d1a709be7c6f665a9d32c2c07e122c3").value &&
                     std::holds_alternative<RemoveInstance>(kRead->operations[18]));
+    // A style sheet's part (D636): its value as the document holds it, or
+    // null to unset; the class by 16 hex digits.
+    const auto& kHovered = std::get<SetStylePart>(kRead->operations[19]);
+    RAWFRAME_EXPECT(kHovered.style == 0x85ecf7b643b63d65 && kHovered.variant == "hovered" && kHovered.part == "fill" &&
+                    kHovered.value.has_value() && *kHovered.value->text() == "#304860e0");
+    RAWFRAME_EXPECT(!std::get<SetStylePart>(kRead->operations[20]).value.has_value());
+    RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "styles.set_part", "style": "85ecf7b6",
+        "variant": "base", "part": "fill", "value": null})")),
+                                AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "styles.set_part", "style": "85ecf7b643b63d65",
+        "variant": "base", "part": "fill"})")),
+                                AuthoringError::ValidationFailed));
     RAWFRAME_EXPECT(
         refusedWith(readRequest(request(R"({"operation": "scene.add_instance", "scene": ")" + std::string{kDoor} +
                                         R"(", "instance": ")" + std::string{kDoor} + "\"}")),

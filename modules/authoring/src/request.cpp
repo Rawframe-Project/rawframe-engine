@@ -1,6 +1,7 @@
 #include "rawframe/authoring/request.h"
 
 #include "operation_parts.h"
+#include "rawframe/base/hex64.h"
 #include "rawframe/schema/stable_id.h"
 
 #include <algorithm>
@@ -25,7 +26,7 @@ constexpr std::array<std::string_view, 10> kCodeNames = {"validation_failed",
                                                          "delta_invalid",
                                                          "delta_mismatch"};
 
-constexpr std::array<std::string_view, 11> kInputTypeNames = {"entity",
+constexpr std::array<std::string_view, 13> kInputTypeNames = {"entity",
                                                               "component",
                                                               "field",
                                                               "text",
@@ -35,7 +36,9 @@ constexpr std::array<std::string_view, 11> kInputTypeNames = {"entity",
                                                               "optional_entity",
                                                               "resource",
                                                               "identity",
-                                                              "optional_component"};
+                                                              "optional_component",
+                                                              "style",
+                                                              "style_value"};
 constexpr std::array<std::string_view, 4> kHistoryNames = {
     "undoable", "non_dirtying", "bulk_non_undoable", "read_only"};
 
@@ -184,6 +187,21 @@ result::Result<Operation> operationOf(const Value& value) {
             return kBad();
         }
         return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
+    }
+    if (kIndex == 14) {
+        const std::string* style = textOf(value.find("style"));
+        const std::optional<std::uint64_t> kStyle =
+            style != nullptr && style->size() == 16 ? base::parseHex64(*style) : std::nullopt;
+        const std::string* variant = textOf(value.find("variant"));
+        const std::string* part = textOf(value.find("part"));
+        const Value& given = *value.find("value");
+        if (!kStyle.has_value() || variant == nullptr || part == nullptr) {
+            return kBad();
+        }
+        return Operation{SetStylePart{.style = *kStyle,
+                                      .variant = *variant,
+                                      .part = *part,
+                                      .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
     }
     if (kIndex == 8) {
         if (!kComponent.has_value()) {
