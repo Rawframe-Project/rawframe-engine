@@ -59,11 +59,31 @@ struct Argument {
     bool lent = false;
 };
 
+/// A line of a program's source (D630): its file, matched against the path
+/// the build read it by, either being the other's end after a `/`, and its
+/// line, counted from one.
+struct SourceLine {
+    std::string file;
+    std::uint32_t line = 0;
+    friend bool operator==(const SourceLine&, const SourceLine&) = default;
+};
+
+/// Where `breakAt` broke: how many of the functions named are the
+/// program's, and for each line asked, in order, whether a body has an
+/// instruction from it.
+struct Breaks {
+    std::size_t functions = 0;
+    std::vector<bool> lines;
+};
+
 /// One frame of a stopped machine (D460): the function it is in, as it was
-/// written, and its arguments by name, each as text: the locals a call has
-/// surely written. Others wait for Kest to say which a stop has written.
+/// written; where it stands (D630), its file as the build read it and the
+/// line, none where Kest cannot say; and its arguments by name, each as
+/// text: the locals a call has surely written. Others wait for Kest to say
+/// which a stop has written.
 struct StoppedFrame {
     std::string function;
+    std::optional<SourceLine> at;
     std::vector<std::pair<std::string, std::string>> locals;
 };
 
@@ -115,17 +135,20 @@ public:
 
     /// Debugging (ADR-0066's debugger bridge, D460). Breaks at the start of
     /// each function named as written, with its module (`game.tick`) or
-    /// without it, and at no other: the program's breakpoints before are
-    /// taken out. Between calls, or while stopped (from the handler). Answers
-    /// how many of the names were functions of the program; none while
-    /// another machine stands on the program, which would run into them on
-    /// whatever thread it runs.
+    /// without it, and at the first instruction from each line given in
+    /// every body that has one (D630), and at no other: the program's
+    /// breakpoints before are taken out. Between calls, or while stopped
+    /// (from the handler). Answers nothing broken while another machine
+    /// stands on the program, which would run into them on whatever thread
+    /// it runs.
     ///
-    /// A breakpoint is written into the program. A breakpoint the machine
-    /// stood on is out until the call that met it ends: Kest's public header does not say where the next
-    /// instruction starts. The breakpoints go with the machine that wrote
-    /// them.
-    [[nodiscard]] std::size_t breakAt(std::span<const std::string> functions);
+    /// A breakpoint is written into the program. One the machine stops at
+    /// is stepped past (D630): taken out, a breakpoint of the machine's own
+    /// written at the instruction after it, and the first written again
+    /// once the machine stops there, unseen; where the instruction jumps
+    /// instead, at its next stop, or as the call ends. The breakpoints go
+    /// with the machine that wrote them.
+    [[nodiscard]] Breaks breakAt(std::span<const std::string> functions, std::span<const SourceLine> lines = {});
     /// What runs, on the calling thread, each time a call stops at a
     /// breakpoint; the call carries on once it returns. While it runs the
     /// machine is stopped in the middle of the call: `stack` reads it, and

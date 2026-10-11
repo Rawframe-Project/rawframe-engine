@@ -41,12 +41,18 @@ struct Program::State {
     /// Puts a written byte back, or writes the breakpoint again, through any
     /// machine of the program.
     void put(KestRuntime* runtime, Written& one, bool breaking) const {
+        write(runtime, one, breaking);
+        one.out = !breaking;
+    }
+
+    /// The byte alone, whether it is out unchanged: a walk of a body reads it
+    /// as compiled, its breakpoints put back for the walk (D630).
+    void write(KestRuntime* runtime, const Written& one, bool breaking) const {
         std::uint32_t count = 0;
         std::uint8_t* const kCode = kest_code_of(runtime, one.entry, &count);
         if (kCode != nullptr && one.at < count) {
             kCode[one.at] = breaking ? kest_break_byte() : one.was;
         }
-        one.out = !breaking;
     }
 
     ~State() {

@@ -605,7 +605,7 @@ RAWFRAME_TEST(ABreakpointStopsACallWhichCarriesOn) {
     auto outer = machine->entry("outer");
     RAWFRAME_EXPECT(outer.has_value());
     const std::array<std::string, 2> kNames = {"count", "nowhere"};
-    RAWFRAME_EXPECT(machine->breakAt(kNames) == 1);
+    RAWFRAME_EXPECT(machine->breakAt(kNames).functions == 1);
     std::vector<std::vector<kest::StoppedFrame>> seen;
     machine->whenStopped([&] {
         seen.push_back(machine->stack());
@@ -615,25 +615,59 @@ RAWFRAME_TEST(ABreakpointStopsACallWhichCarriesOn) {
     RAWFRAME_EXPECT(machine->call(*outer, frame).hasValue());
     // The answer is the program's: stopping changed nothing it did.
     RAWFRAME_EXPECT(frame[0].integer == 30);
-    // Stopped once, at count's start, called from outer, its argument read;
-    // the breakpoint it stood on is out until the call ends.
-    RAWFRAME_EXPECT(machine->stops() == 1 && seen.size() == 1);
+    // Stopped at count's start, called from outer, its argument read; and
+    // again as outer calls it again, the breakpoint stepped past (D630).
+    RAWFRAME_EXPECT(machine->stops() == 2 && seen.size() == 2);
     RAWFRAME_EXPECT(seen[0].size() == 2 && seen[0][0].function == "t.count" && seen[0][1].function == "t.outer");
+    // A function's start is its first statement's line.
+    RAWFRAME_EXPECT(seen[0][0].at == (kest::SourceLine{.file = "test.kest", .line = 4}));
+    RAWFRAME_EXPECT(seen[0][1].at.has_value() && seen[0][1].at->line == 14);
+    RAWFRAME_EXPECT(seen[1].size() == 2 && seen[1][1].at.has_value() && seen[1][1].at->line == 15);
+    RAWFRAME_EXPECT(std::ranges::any_of(seen[1][0].locals, [](const auto& kLocal) {
+        return kLocal.first == "up" && kLocal.second == "10";
+    }));
     RAWFRAME_EXPECT(std::ranges::any_of(seen[0][0].locals, [](const auto& kLocal) {
         return kLocal.first == "up" && kLocal.second == "5";
     }));
     RAWFRAME_EXPECT(std::ranges::any_of(seen[0][1].locals, [](const auto& kLocal) {
         return kLocal.first == "n" && kLocal.second == "5";
     }));
-    // Written back as the call ended: the next call stops again.
+    // The next call stops at both again.
     frame[0].integer = 1;
     RAWFRAME_EXPECT(machine->call(*outer, frame).hasValue() && frame[0].integer == 6);
-    RAWFRAME_EXPECT(machine->stops() == 2);
+    RAWFRAME_EXPECT(machine->stops() == 4);
     // None asked for: none met, and a machine not stopped has no frames.
-    RAWFRAME_EXPECT(machine->breakAt({}) == 0);
+    RAWFRAME_EXPECT(machine->breakAt({}).functions == 0);
     frame[0].integer = 5;
     RAWFRAME_EXPECT(machine->call(*outer, frame).hasValue() && frame[0].integer == 30);
-    RAWFRAME_EXPECT(machine->stops() == 2 && machine->stack().empty());
+    RAWFRAME_EXPECT(machine->stops() == 4 && machine->stack().empty());
+}
+
+RAWFRAME_TEST(ALineBreakpointStopsEachTimeItsLineRuns) {
+    auto machine = start(kStopping);
+    auto outer = machine->entry("outer");
+    RAWFRAME_EXPECT(outer.has_value());
+    // The loop's body, by the file's full path; a blank line, and a line of
+    // another file, have no code.
+    const std::array<kest::SourceLine, 3> kLines = {kest::SourceLine{.file = "/games/t/test.kest", .line = 7},
+                                                    kest::SourceLine{.file = "test.kest", .line = 2},
+                                                    kest::SourceLine{.file = "other.kest", .line = 7}};
+    const kest::Breaks kBroken = machine->breakAt({}, kLines);
+    RAWFRAME_EXPECT(kBroken.functions == 0 && kBroken.lines == (std::vector<bool>{true, false, false}));
+    std::vector<std::uint32_t> lines;
+    machine->whenStopped([&] {
+        const std::vector<kest::StoppedFrame> kFrames = machine->stack();
+        lines.push_back(!kFrames.empty() && kFrames[0].at.has_value() ? kFrames[0].at->line : 0);
+    });
+    std::array<Value, 1> frame{};
+    frame[0].integer = 3;
+    // Stopped each time round count's loop, three times, then six.
+    RAWFRAME_EXPECT(machine->call(*outer, frame).hasValue() && frame[0].integer == 18);
+    RAWFRAME_EXPECT(machine->stops() == 9 && lines == std::vector<std::uint32_t>(9, 7));
+    // Taken out, the call runs through.
+    RAWFRAME_EXPECT(machine->breakAt({}).lines.empty());
+    frame[0].integer = 3;
+    RAWFRAME_EXPECT(machine->call(*outer, frame).hasValue() && frame[0].integer == 18 && machine->stops() == 9);
 }
 
 RAWFRAME_TEST(BreakpointsChangedWhileStoppedLetTheCallCarryOn) {
@@ -641,7 +675,7 @@ RAWFRAME_TEST(BreakpointsChangedWhileStoppedLetTheCallCarryOn) {
     auto outer = machine->entry("outer");
     const std::array<std::string, 1> kCount = {"count"};
     const std::array<std::string, 1> kOuter = {"t.outer"};
-    RAWFRAME_EXPECT(outer.has_value() && machine->breakAt(kCount) == 1);
+    RAWFRAME_EXPECT(outer.has_value() && machine->breakAt(kCount).functions == 1);
     // Asked again from the stop, the one it stands on among them, and for
     // outer, whose call it is in: the call carries on, and the next stops at
     // outer's start.
@@ -652,7 +686,7 @@ RAWFRAME_TEST(BreakpointsChangedWhileStoppedLetTheCallCarryOn) {
     std::array<Value, 1> frame{};
     frame[0].integer = 5;
     RAWFRAME_EXPECT(machine->call(*outer, frame).hasValue() && frame[0].integer == 30);
-    RAWFRAME_EXPECT(machine->stops() == 1);
+    RAWFRAME_EXPECT(machine->stops() == 2);
     std::vector<kest::StoppedFrame> seen;
     machine->whenStopped([&] {
         seen = machine->stack();
@@ -660,7 +694,7 @@ RAWFRAME_TEST(BreakpointsChangedWhileStoppedLetTheCallCarryOn) {
     });
     frame[0].integer = 5;
     RAWFRAME_EXPECT(machine->call(*outer, frame).hasValue() && frame[0].integer == 30);
-    RAWFRAME_EXPECT(machine->stops() == 2 && seen.size() == 1 && seen[0].function == "t.outer");
+    RAWFRAME_EXPECT(machine->stops() == 3 && seen.size() == 1 && seen[0].function == "t.outer");
 }
 
 RAWFRAME_TEST(AStoppedFrameShowsOnlyItsArguments) {
@@ -683,7 +717,7 @@ RAWFRAME_TEST(AStoppedFrameShowsOnlyItsArguments) {
                          "}\n");
     auto named = machine->entry("named");
     const std::array<std::string, 1> kNames = {"named"};
-    RAWFRAME_EXPECT(named.has_value() && machine->breakAt(kNames) == 1);
+    RAWFRAME_EXPECT(named.has_value() && machine->breakAt(kNames).functions == 1);
     std::vector<kest::StoppedFrame> seen;
     machine->whenStopped([&] {
         seen = machine->stack();
@@ -703,9 +737,9 @@ RAWFRAME_TEST(AProgramTwoMachinesStandOnTakesNoBreakpoints) {
     auto other = Machine::start(program, {}, Trust::Trusted, kLimits);
     RAWFRAME_EXPECT(debugged.has_value() && other.has_value());
     const std::array<std::string, 1> kNames = {"count"};
-    RAWFRAME_EXPECT((*debugged)->breakAt(kNames) == 0);
+    RAWFRAME_EXPECT((*debugged)->breakAt(kNames).functions == 0);
     other->reset();
-    RAWFRAME_EXPECT((*debugged)->breakAt(kNames) == 1);
+    RAWFRAME_EXPECT((*debugged)->breakAt(kNames).functions == 1);
     // A machine let go takes its breakpoints out of the program with it.
     debugged->reset();
     auto after = Machine::start(program, {}, Trust::Trusted, kLimits);

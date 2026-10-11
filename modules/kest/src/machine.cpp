@@ -8,7 +8,9 @@
 #include <atomic>
 #include <cstdio>
 #include <functional>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rawframe::kest {
@@ -108,6 +110,20 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, KestError e
     return result::fail(errorClass, kKestDomain, code(error), description);
 }
 
+/// Whether two paths name one file (D630): the same, or either the other's
+/// end after a separator, a backslash read as `/`.
+bool sameFile(std::string_view built, std::string_view asked) {
+    std::string named{built};
+    std::string given{asked};
+    std::ranges::replace(named, '\\', '/');
+    std::ranges::replace(given, '\\', '/');
+    const auto kEndsWith = [](std::string_view longer, std::string_view shorter) {
+        return longer.size() > shorter.size() && longer.ends_with(shorter) &&
+               longer[longer.size() - shorter.size() - 1] == '/';
+    };
+    return !given.empty() && (named == given || kEndsWith(named, given) || kEndsWith(given, named));
+}
+
 } // namespace
 
 struct Machine::State {
@@ -122,6 +138,10 @@ struct Machine::State {
     std::uint64_t stops = 0;
     /// Whether this machine wrote the program's breakpoints (D460).
     bool breaking = false;
+    /// The machine's own breakpoint at the instruction after one it stopped
+    /// at, by which it steps past that one (D630); none while none is
+    /// written.
+    std::optional<Program::State::Written> stepping;
 
     [[nodiscard]] Program::State& built() const noexcept {
         return program->state();
@@ -138,8 +158,13 @@ struct Machine::State {
         }
     }
 
-    /// Every breakpoint taken out to carry on, written again.
+    /// Every breakpoint taken out to carry on, written again, and the step
+    /// past one taken out.
     void putBack() {
+        if (stepping.has_value()) {
+            built().write(runtime, *stepping, false);
+            stepping.reset();
+        }
         for (Program::State::Written& one : built().written) {
             if (one.out) {
                 built().put(runtime, one, true);
@@ -147,8 +172,83 @@ struct Machine::State {
         }
     }
 
+    /// Whether a breakpoint the program was asked for is at `at` in `entry`.
+    [[nodiscard]] bool asked(std::int32_t entry, std::int64_t at) const {
+        return std::ranges::any_of(built().written, [entry, at](const Program::State::Written& one) {
+            return one.entry == entry && static_cast<std::int64_t>(one.at) == at;
+        });
+    }
+
+    /// A stop (D630): the step past the breakpoint before it is done, so
+    /// that one is written again; whether this stop is that step's, which
+    /// no one is told of.
+    bool arrive() {
+        const std::int64_t kAt = kest_stopped(runtime);
+        const std::int32_t kIn = kest_stopped_in(runtime);
+        const bool kStep = stepping.has_value() && stepping->entry == kIn &&
+                           static_cast<std::int64_t>(stepping->at) == kAt && !asked(kIn, kAt);
+        putBack();
+        return kStep;
+    }
+
+    /// Carrying on from a stop: a breakpoint where it stands taken out, and
+    /// one of the machine's own written at the instruction after it, which
+    /// writes it again as the machine stops there (D630).
+    void stepPast() {
+        const std::int64_t kAt = kest_stopped(runtime);
+        const std::int32_t kIn = kest_stopped_in(runtime);
+        if (!asked(kIn, kAt)) {
+            return;
+        }
+        takeOutWhereItStands();
+        std::uint32_t count = 0;
+        const std::uint8_t* const kCode = kest_code_of(runtime, kIn, &count);
+        const std::int64_t kNext = kest_next_at(runtime, kIn, static_cast<std::uint32_t>(kAt));
+        if (kCode == nullptr || kNext <= kAt || kNext >= static_cast<std::int64_t>(count) || asked(kIn, kNext)) {
+            return;
+        }
+        stepping = Program::State::Written{
+            .entry = kIn, .at = static_cast<std::uint32_t>(kNext), .was = kCode[kNext], .out = false};
+        built().write(runtime, *stepping, true);
+    }
+
+    /// Every byte a breakpoint is written over put back (`compiled`), or
+    /// written again: Kest walks a body from its start, as it was compiled
+    /// (D630).
+    void showCompiled(bool compiled) const {
+        for (const Program::State::Written& one : built().written) {
+            if (!one.out) {
+                built().write(runtime, one, !compiled);
+            }
+        }
+        if (stepping.has_value()) {
+            built().write(runtime, *stepping, !compiled);
+        }
+    }
+
+    /// The line of `entry`'s instruction at `at`, its body as compiled;
+    /// none where Kest cannot say.
+    [[nodiscard]] std::optional<SourceLine> lineOf(std::int32_t entry, std::int64_t at) const {
+        if (at < 0) {
+            return std::nullopt;
+        }
+        const std::int64_t kFrom = kest_came_from(runtime, entry, static_cast<std::uint32_t>(at));
+        const char* const kFile = kest_entry_source(runtime, entry);
+        std::uint32_t line = 0;
+        std::uint32_t column = 0;
+        if (kFrom < 0 || kFile == nullptr ||
+            !kest_locate(runtime, entry, static_cast<std::uint32_t>(kFrom), &line, &column)) {
+            return std::nullopt;
+        }
+        return SourceLine{.file = kFile, .line = line};
+    }
+
     /// The program's breakpoints taken out, so it is the program again.
     void clear() {
+        if (stepping.has_value()) {
+            built().write(runtime, *stepping, false);
+            stepping.reset();
+        }
         for (Program::State::Written& one : built().written) {
             if (!one.out) {
                 built().put(runtime, one, false);
@@ -330,13 +430,16 @@ execution::TaskOutcome<void> Machine::call(Entry entry, std::span<Value> frame, 
     KestValue* const kFrame = frame.empty() ? nullptr : reinterpret_cast<KestValue*>(frame.data());
     bool went = kest_call(state_->runtime, entry.index, kFrame, static_cast<std::uint32_t>(frame.size()));
     // Stopped at a breakpoint (D460): the handler sees it, and the call
-    // carries on from it, the breakpoint out until the call ends.
+    // carries on from it, stepping past it (D630); a stop that is only that
+    // step's carries on unseen.
     while (!went && kest_stopped(state_->runtime) >= 0) {
-        ++state_->stops;
-        if (state_->whenStopped) {
-            state_->whenStopped();
+        if (!state_->arrive()) {
+            ++state_->stops;
+            if (state_->whenStopped) {
+                state_->whenStopped();
+            }
         }
-        state_->takeOutWhereItStands();
+        state_->stepPast();
         went = kest_resume(state_->runtime, kFrame, static_cast<std::uint32_t>(frame.size()));
     }
     state_->putBack();
@@ -391,53 +494,86 @@ void Machine::cancel(execution::CancelReason reason) noexcept {
     kest_cancel(state_->runtime);
 }
 
-std::size_t Machine::breakAt(std::span<const std::string> functions) {
+Breaks Machine::breakAt(std::span<const std::string> functions, std::span<const SourceLine> lines) {
     State& state = *state_;
     state.clear();
+    Breaks breaks;
+    breaks.lines.assign(lines.size(), false);
     // Only into a program no other machine stands on: another, perhaps on
     // another thread, would run into them (Kest's D1077).
     if (state.built().machines.load(std::memory_order_acquire) != 1) {
-        return 0;
+        return breaks;
     }
-    std::size_t found = 0;
-    // A function is found by the name it was written with, which every copy
-    // of a generic shares, its module's name before it (`game.tick`).
+    // Found with every breakpoint out, as Kest walks the bodies as they were
+    // compiled, and written after.
+    std::vector<Program::State::Written> wanted;
+    const auto kWant = [&wanted](std::int32_t entry, std::uint32_t at, std::uint8_t was) {
+        if (std::ranges::none_of(wanted, [entry, at](const Program::State::Written& one) {
+                return one.entry == entry && one.at == at;
+            })) {
+            wanted.push_back(Program::State::Written{.entry = entry, .at = at, .was = was, .out = false});
+        }
+    };
     for (std::int32_t index = 0;; ++index) {
         const char* const kWrote = kest_entry_wrote(state.runtime, index);
         if (kWrote == nullptr) {
             break;
         }
+        std::uint32_t count = 0;
+        const std::uint8_t* const kCode = kest_code_of(state.runtime, index, &count);
+        if (kCode == nullptr || count == 0) {
+            continue;
+        }
+        // A function by the name it was written with, which every copy of a
+        // generic shares, with its module's name before it (`game.tick`) or
+        // without it.
         const std::string_view kQualified{kWrote};
-        for (const std::string& kName : functions) {
-            // The name with its module, or without it.
-            const bool kNamed =
-                kQualified == kName || (kQualified.size() > kName.size() && kQualified.ends_with(kName) &&
-                                        kQualified[kQualified.size() - kName.size() - 1] == '.');
-            if (!kNamed) {
-                continue;
+        if (std::ranges::any_of(functions, [kQualified](const std::string& name) {
+                return kQualified == name || (kQualified.size() > name.size() && kQualified.ends_with(name) &&
+                                              kQualified[kQualified.size() - name.size() - 1] == '.');
+            })) {
+            kWant(index, 0, kCode[0]);
+            ++breaks.functions;
+        }
+        // A line, at the first instruction from it in each body of its file
+        // that has one (D630).
+        const char* const kSource = kest_entry_source(state.runtime, index);
+        if (lines.empty() || kSource == nullptr) {
+            continue;
+        }
+        std::vector<std::size_t> mine;
+        for (std::size_t at = 0; at < lines.size(); ++at) {
+            if (sameFile(kSource, lines[at].file)) {
+                mine.push_back(at);
             }
-            std::uint32_t count = 0;
-            const std::uint8_t* const kCode = kest_code_of(state.runtime, index, &count);
-            if (kCode == nullptr || count == 0) {
-                continue;
+        }
+        std::vector<bool> placed(lines.size(), false);
+        for (std::int64_t at = 0; !mine.empty() && at >= 0 && at < static_cast<std::int64_t>(count);) {
+            const std::optional<SourceLine> kLine = state.lineOf(index, at);
+            for (const std::size_t kAsked : mine) {
+                if (kLine.has_value() && kLine->line == lines[kAsked].line && !placed[kAsked]) {
+                    kWant(index, static_cast<std::uint32_t>(at), kCode[at]);
+                    placed[kAsked] = true;
+                    breaks.lines[kAsked] = true;
+                }
             }
-            Program::State::Written& one = state.built().written.emplace_back();
-            one.entry = index;
-            one.was = kCode[0];
-            state.built().put(state.runtime, one, true);
-            state.breaking = true;
-            ++found;
-            break;
+            const std::int64_t kNext = kest_next_at(state.runtime, index, static_cast<std::uint32_t>(at));
+            at = kNext > at ? kNext : -1;
         }
     }
+    for (Program::State::Written& one : wanted) {
+        state.built().put(state.runtime, one, true);
+        state.built().written.push_back(one);
+        state.breaking = true;
+    }
     // Asked while stopped, in the middle of a call: one where the machine
-    // stands is out until the call ends, or carrying on would stop on it
+    // stands is out until it carries on, or carrying on would stop on it
     // again at once.
     if (kest_stopped(state.runtime) >= 0) {
         state.takeOutWhereItStands();
     }
     static_cast<void>(takeReport());
-    return found;
+    return breaks;
 }
 
 void Machine::whenStopped(std::function<void()> handler) {
@@ -456,6 +592,10 @@ std::vector<StoppedFrame> Machine::stack() const {
         StoppedFrame& made = frames.emplace_back();
         const char* const kWrote = kest_entry_wrote(state_->runtime, kest_frame_in(kRuntime, kFrame));
         made.function = kWrote != nullptr ? kWrote : "?";
+        // Where it stands, its body read as compiled (D630).
+        state_->showCompiled(true);
+        made.at = state_->lineOf(kest_frame_in(kRuntime, kFrame), kest_frame_ip(kRuntime, kFrame));
+        state_->showCompiled(false);
         // Its arguments only: written by the call, where every other local a
         // body names may not yet be, and a slot not yet written holds what
         // the stack held, an address among it (D460).
