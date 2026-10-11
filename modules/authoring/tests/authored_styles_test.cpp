@@ -3,7 +3,7 @@
 // entry that undo and redo walk exactly back to the bytes before, the
 // clean place kept, a batch one entry or nothing, changes the sheet does
 // not read refused with the document as it was, and the sheet read whole;
-// classes made, removed, and renamed (D638).
+// classes made, removed, and renamed (D638); transitions set (D639).
 
 #include "rawframe/authoring/authored_styles.h"
 #include "rawframe/authoring/errors.h"
@@ -191,6 +191,37 @@ RAWFRAME_TEST(AStyleSheetsClassesAreMadeRemovedAndRenamed) {
     // A name the sheet does not read: past its 64 characters.
     const std::array<Operation, 1> kLong = {RenameStyleClass{.style = kButton, .name = std::string(65, 'a')}};
     RAWFRAME_EXPECT(refusedWith(styles.change(4, kLong), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(styles.text() == kSheet);
+}
+
+RAWFRAME_TEST(AStyleClassesTransitionsAreSetWhole) {
+    auto opened = AuthoredStyles::open(kDocument, kSheet);
+    RAWFRAME_EXPECT(opened.has_value());
+    if (!opened.has_value()) {
+        return;
+    }
+    AuthoredStyles& styles = **opened;
+    // A spring in place of the button's timed fill; the panel given its
+    // first; the button's taken away; each undone exactly.
+    const auto kSpring = document::parse(R"([{"parts": ["fill", "radius"], "kind": "spring", "frequency": 4,
+        "dampingRatio": 0.8}])");
+    const std::array<Operation, 1> kSprung = {SetStyleTransitions{.style = kButton, .value = *kSpring}};
+    RAWFRAME_EXPECT(styles.change(0, kSprung).has_value());
+    RAWFRAME_EXPECT(styles.sheet().styles[0].transitions.size() == 1 &&
+                    styles.sheet().styles[0].transitions[0].second.kind == ui::Transition::Kind::Spring);
+    RAWFRAME_EXPECT(summaryOf(styles.journalAt(0)) == "set transitions");
+    const std::array<Operation, 2> kMoved = {SetStyleTransitions{.style = 0x1d2c3b4a59687706, .value = *kSpring},
+                                             SetStyleTransitions{.style = kButton, .value = std::nullopt}};
+    RAWFRAME_EXPECT(styles.change(1, kMoved).has_value() && styles.sheet().styles[0].transitions.empty() &&
+                    styles.sheet().styles[1].transitions.size() == 1);
+    RAWFRAME_EXPECT(styles.undo(2).has_value() && styles.undo(3).has_value() && styles.text() == kSheet);
+    // Refused: what the reader does not read, as a transition of no part
+    // or a list that is no list.
+    const std::array<Operation, 1> kNoPart = {
+        SetStyleTransitions{.style = kButton, .value = *document::parse(R"([{"parts": [], "seconds": 1}])")}};
+    const std::array<Operation, 1> kNoList = {SetStyleTransitions{.style = kButton, .value = Value::integer(1)}};
+    RAWFRAME_EXPECT(refusedWith(styles.change(4, kNoPart), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(styles.change(4, kNoList), AuthoringError::ValidationFailed));
     RAWFRAME_EXPECT(styles.text() == kSheet);
 }
 

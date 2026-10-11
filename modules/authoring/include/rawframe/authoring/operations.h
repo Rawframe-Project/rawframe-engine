@@ -225,6 +225,12 @@ struct RenameStyleClass {
     std::uint64_t style = 0;
     std::string name;
 };
+/// A class's transitions, all of them, as the styles document holds them
+/// (an array), or none for no transitions (D639).
+struct SetStyleTransitions {
+    std::uint64_t style = 0;
+    std::optional<document::Value> value;
+};
 
 /// The id an instantiation named `instance` gives the source's entity
 /// `source`: a version 8 UUID from their SHA-256 (D156).
@@ -247,11 +253,12 @@ using Operation = std::variant<CreateEntity,
                                SetStylePart,
                                CreateStyleClass,
                                RemoveStyleClass,
-                               RenameStyleClass>;
+                               RenameStyleClass,
+                               SetStyleTransitions>;
 
 /// Whether `operation` is a style sheet's rather than a scene's (D636).
 [[nodiscard]] constexpr bool changesStyles(const Operation& operation) noexcept {
-    return operation.index() >= std::variant_size_v<Operation> - 4;
+    return operation.index() >= std::variant_size_v<Operation> - 5;
 }
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the

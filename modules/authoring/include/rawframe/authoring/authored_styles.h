@@ -10,6 +10,7 @@
 //   create_node   a class, from none to its record at its place (D638)
 //   destroy_node  a class, from its record at its place to none
 //   set_name      a class's name
+//   set_field     a class's transitions, all of them (D639)
 //
 // A change is kept only where the whole sheet still reads, so every
 // generation is in form.
@@ -40,6 +41,8 @@ struct StyleDelta {
         CreateClass,
         DestroyClass,
         SetName,
+        /// A class's transitions (D639).
+        SetTransitions,
     };
     Kind kind = Kind::SetPart;
     std::uint64_t style = 0;

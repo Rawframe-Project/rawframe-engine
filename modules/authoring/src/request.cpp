@@ -195,6 +195,14 @@ result::Result<Operation> operationOf(const Value& value) {
         const std::string* style = textOf(value.find("style"));
         const std::optional<std::uint64_t> kStyle =
             style != nullptr && style->size() == 16 ? base::parseHex64(*style) : std::nullopt;
+        if (kIndex == 18) {
+            const Value& given = *value.find("value");
+            if (!kStyle.has_value()) {
+                return kBad();
+            }
+            return Operation{SetStyleTransitions{.style = *kStyle,
+                                                 .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
+        }
         if (kIndex > 14) {
             const Value* place = value.find("place");
             const std::optional<std::size_t> kPlace = place != nullptr ? placeOf(place) : std::nullopt;

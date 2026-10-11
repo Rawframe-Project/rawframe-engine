@@ -93,6 +93,11 @@ std::optional<Value> classIn(const Value& root, std::uint64_t style) {
     return kPlace.has_value() ? std::optional<Value>{root.find("styles")->items()[*kPlace]} : std::nullopt;
 }
 
+/// The class's member a whole-member delta sets.
+std::string_view memberOf(const StyleDelta& delta) {
+    return delta.kind == StyleDelta::Kind::SetName ? "name" : "transitions";
+}
+
 /// What `delta`'s slot holds in `root`.
 std::optional<Value> slotIn(const Value& root, const StyleDelta& delta) {
     switch (delta.kind) {
@@ -101,10 +106,11 @@ std::optional<Value> slotIn(const Value& root, const StyleDelta& delta) {
     case StyleDelta::Kind::CreateClass:
     case StyleDelta::Kind::DestroyClass:
         return classIn(root, delta.style);
-    case StyleDelta::Kind::SetName: {
+    case StyleDelta::Kind::SetName:
+    case StyleDelta::Kind::SetTransitions: {
         const std::optional<Value> kClass = classIn(root, delta.style);
-        const Value* name = kClass.has_value() ? kClass->find("name") : nullptr;
-        return name != nullptr ? std::optional<Value>{*name} : std::nullopt;
+        const Value* held = kClass.has_value() ? kClass->find(memberOf(delta)) : nullptr;
+        return held != nullptr ? std::optional<Value>{*held} : std::nullopt;
     }
     }
     return std::nullopt;
@@ -145,8 +151,8 @@ result::Status applyTo(Value& root, const StyleDelta& delta, bool forward) {
         }
         const Value& kClass = kClasses.items()[*kPlace];
         Value changed;
-        if (delta.kind == StyleDelta::Kind::SetName) {
-            changed = withMember(kClass, ui::kStyleFields, "name", kTo);
+        if (delta.kind == StyleDelta::Kind::SetName || delta.kind == StyleDelta::Kind::SetTransitions) {
+            changed = withMember(kClass, ui::kStyleFields, memberOf(delta), kTo);
         } else {
             const Value* look = kClass.find(delta.variant);
             Value parts = withMember(look != nullptr ? *look : Value::object(), ui::kStyleLookFields, delta.part, kTo);
@@ -227,6 +233,14 @@ result::Result<std::optional<StyleDelta>> deltaOf(const Value& staged, const Ope
         named.before = slotIn(staged, named);
         named.after = Value::string(rename->name);
         delta = std::move(named);
+    } else if (const auto* timed = std::get_if<SetStyleTransitions>(&operation)) {
+        if (!placeOf(staged, timed->style).has_value()) {
+            return kUnknown();
+        }
+        StyleDelta transitions{.kind = StyleDelta::Kind::SetTransitions, .style = timed->style};
+        transitions.before = slotIn(staged, transitions);
+        transitions.after = timed->value;
+        delta = std::move(transitions);
     } else {
         return refuse(result::ErrorClass::InvalidArgument,
                       AuthoringError::ValidationFailed,
@@ -371,6 +385,9 @@ std::string summaryOf(std::span<const StyleDelta> journal) {
         break;
     case StyleDelta::Kind::SetName:
         made = "rename class to " + kName(kFirst.after, "");
+        break;
+    case StyleDelta::Kind::SetTransitions:
+        made = kFirst.after.has_value() ? "set transitions" : "unset transitions";
         break;
     }
     if (journal.size() > 1) {
