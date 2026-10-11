@@ -355,8 +355,9 @@ struct Shadow {
 /// run's origin, in pixels, y down; and its image (D398): the rectangle it
 /// is drawn in, from the root's top left in pixels, its edges on device
 /// pixels, and where its coverage is in the list's atlas, in the atlas's
-/// pixels. Both are empty for a glyph with no outline (a space), and for one
-/// left out.
+/// pixels, or, in a run drawn from fields (D667), the rectangle its field
+/// scales to and where its field is in the list's field atlas. Both are
+/// empty for a glyph with no outline (a space), and for one left out.
 struct Glyph {
     std::uint32_t id = 0;
     float x = 0;
@@ -380,9 +381,33 @@ struct GlyphAtlas {
     std::uint64_t revision = 0;
 };
 
+/// The distance fields of the glyphs a tree draws large (ADR-0049's MSDF
+/// primary path, D667): `side` by `side` pixels of four bytes, rows from
+/// the top, each glyph's multi-channel signed distance field rendered once
+/// at `pixelSize` and drawn at any larger or somewhat smaller size. Red,
+/// green, and blue are three distances whose median is the outline's, with
+/// its corners kept sharp; alpha is the one-channel field. Each is 128 at
+/// the outline and 128 / `spread` more for each of the field's pixels
+/// inside, less outside. Maul UI's glyph atlas of four channels, as
+/// `GlyphAtlas` is of one; `revision` changes whenever its pixels do.
+struct FieldAtlas {
+    std::uint32_t side = 0;
+    std::vector<std::uint8_t> pixels;
+    std::uint64_t revision = 0;
+    float pixelSize = 0;
+    std::uint32_t spread = 0;
+};
+
+/// A run whose size is at least this many device pixels is drawn from
+/// distance fields (D667); a smaller one from coverage rendered at its own
+/// size, sharper there.
+inline constexpr float kFieldsFrom = 24;
+
 /// A run of glyphs to draw (D384): its font, its size in pixels (an em),
 /// its color, linear with premultiplied alpha, its origin on the baseline,
-/// its span of the list's glyphs, and its clip.
+/// its span of the list's glyphs, and its clip; and whether its glyphs are
+/// drawn from the field atlas (D667), as runs `kFieldsFrom` device pixels
+/// and larger are.
 struct GlyphRun {
     Font font;
     float size = 0;
@@ -392,6 +417,7 @@ struct GlyphRun {
     std::uint32_t first = 0;
     std::uint32_t count = 0;
     std::uint32_t clip = 0;
+    bool field = false;
     friend constexpr bool operator==(GlyphRun, GlyphRun) noexcept = default;
 };
 
@@ -439,11 +465,14 @@ struct DrawList {
     /// The tree's glyph atlas, which the glyphs' images are in (D398), until
     /// the tree draws again.
     const GlyphAtlas* atlas = nullptr;
-    /// Glyphs with an outline left out: past what the atlas holds at once,
+    /// The tree's field atlas, which the fields of the runs drawn from
+    /// fields are in (D667), until the tree draws again.
+    const FieldAtlas* fields = nullptr;
+    /// Glyphs with an outline left out: past what the atlases hold at once,
     /// or of a size or font that cannot be rendered.
     std::uint32_t glyphsLeftOut = 0;
-    /// The same commands of the same things, the atlas by address: whether
-    /// its glyphs changed is its `revision`'s to say.
+    /// The same commands of the same things, the atlases by address:
+    /// whether their glyphs changed is their `revision`s' to say.
     friend bool operator==(const DrawList&, const DrawList&) = default;
 };
 

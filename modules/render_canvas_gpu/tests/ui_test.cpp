@@ -15,7 +15,9 @@
 #include "rawframe/test/test.h"
 #include "rawframe/ui/tree.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -490,4 +492,55 @@ RAWFRAME_TEST(AGlyphsCoverageIsDrawnFromTheAtlasInItsRunsColor) {
     RAWFRAME_EXPECT(near(at(*kPixels, 30, 44), {0, 188, 0}, 4) && near(at(*kPixels, 31, 44), {0, 0, 0}));
     RAWFRAME_EXPECT(near(at(*kPixels, 34, 44), {0, 0, 0}));
     RAWFRAME_EXPECT(statistics.glyphRuns == 2 && statistics.glyphs == 4 && statistics.glyphRunsWaiting == 0);
+}
+
+RAWFRAME_TEST(AGlyphsFieldIsDrawnScaledWithAPixelWideEdge) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    // A field of eight texels square with two of spread (D667): a square
+    // from texel 2 to texel 6 on both axes, every channel its distance,
+    // drawn four times its size from half a pixel past 8, so its left edge
+    // falls on the middle of pixel 16.
+    constexpr std::uint32_t kSpread = 2;
+    ui::FieldAtlas fields{.side = 16,
+                          .pixels = std::vector<std::uint8_t>(16 * 16 * 4, 0),
+                          .revision = 1,
+                          .pixelSize = 8,
+                          .spread = kSpread};
+    for (std::uint32_t y = 0; y < 8; ++y) {
+        for (std::uint32_t x = 0; x < 8; ++x) {
+            const float kX = static_cast<float>(x) + 0.5F;
+            const float kY = static_cast<float>(y) + 0.5F;
+            // Inside positive, by the nearer edge's axis.
+            const float kInside = std::min(std::min(kX - 2, 6 - kX), std::min(kY - 2, 6 - kY));
+            const float kByte = std::clamp(128.0F + (128.0F * kInside / kSpread), 0.0F, 255.0F);
+            for (std::uint32_t channel = 0; channel < 4; ++channel) {
+                fields.pixels[(((y * 16) + x) * 4) + channel] = static_cast<std::uint8_t>(std::lround(kByte));
+            }
+        }
+    }
+    ui::DrawList list;
+    list.clips.push_back({});
+    list.gradients.push_back({});
+    list.fields = &fields;
+    list.glyphRuns.push_back(
+        {.size = 32, .color = {1, 1, 1, 1}, .x = 8.5F, .y = 32, .first = 0, .count = 1, .field = true});
+    list.glyphs.push_back({.id = 1,
+                           .image = {.x = 8.5F, .y = 8, .width = 32, .height = 32},
+                           .atlas = {.x = 0, .y = 0, .width = 8, .height = 8}});
+    list.commands = {{.kind = ui::DrawCommand::Kind::Glyphs, .index = 0}};
+    render_canvas_gpu::UiStatistics statistics;
+    const auto kPixels = drawn(*kDevice, list, {}, &statistics);
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (!kPixels.has_value()) {
+        return;
+    }
+    // Inside whole, outside nothing, and the edge's pixel half covered:
+    // 188 in sRGB; a pixel past it, the next before it, whole and none.
+    RAWFRAME_EXPECT(near(at(*kPixels, 24, 24), {255, 255, 255}) && near(at(*kPixels, 10, 24), {0, 0, 0}));
+    RAWFRAME_EXPECT(near(at(*kPixels, 16, 24), {188, 188, 188}, 8));
+    RAWFRAME_EXPECT(near(at(*kPixels, 17, 24), {255, 255, 255}, 4) && near(at(*kPixels, 15, 24), {0, 0, 0}, 4));
+    RAWFRAME_EXPECT(statistics.glyphRuns == 1 && statistics.fieldRuns == 1 && statistics.glyphRunsWaiting == 0);
 }

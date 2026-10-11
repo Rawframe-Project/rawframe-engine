@@ -4,6 +4,7 @@
 #include "rawframe/render/errors.h"
 #include "rawframe/render/textures.h"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <maul-rhi/encoder.h>
@@ -62,8 +63,10 @@ constexpr std::size_t kImageFloats = 20;
 constexpr std::size_t kShadowFloats = 20;
 constexpr std::size_t kGradientFloats = 24;
 constexpr std::size_t kGlyphFloats = 16;
-/// The glyph atlas among the textures held, by an id no image's key is.
+/// The glyph atlas among the textures held, by an id no image's key is,
+/// and the field atlas (D667).
 constexpr std::uint64_t kAtlasId = ~std::uint64_t{0};
+constexpr std::uint64_t kFieldsId = ~std::uint64_t{1};
 /// The UI's share of a frame's uploads, for its images.
 constexpr std::uint64_t kImageUploadBytes = render::kFrameUploadBytes / 8;
 
@@ -181,12 +184,21 @@ std::array<float, kShadowFloats> shadowBlockOf(const ui::Shadow& shadow, float s
 
 /// `list`'s glyphs in the shader's layout and the picture's pixels, each
 /// with its run's color and clip; a glyph with no image is an empty quad.
+/// A glyph drawn from its field (D667) also carries how many of the
+/// picture's pixels a field's spread spans as drawn, and the field atlas's
+/// side.
 std::vector<float> glyphsOf(const ui::DrawList& list) {
     std::vector<float> glyphs(list.glyphs.size() * kGlyphFloats, 0);
+    const ui::FieldAtlas* kFields = list.fields;
     for (const ui::GlyphRun& kRun : list.glyphRuns) {
         const std::uint32_t kClip = kRun.clip < list.clips.size() ? kRun.clip : 0;
+        const bool kField = kRun.field && kFields != nullptr;
         for (std::uint32_t at = kRun.first; at < kRun.first + kRun.count && at < list.glyphs.size(); ++at) {
             const ui::Glyph& kGlyph = list.glyphs[at];
+            const float kSpread =
+                kField && kGlyph.atlas.width > 0
+                    ? static_cast<float>(kFields->spread) * kGlyph.image.width * list.scale / kGlyph.atlas.width
+                    : 0.0F;
             const std::array<float, kGlyphFloats> kBlock = {kGlyph.image.x * list.scale,
                                                             kGlyph.image.y * list.scale,
                                                             kGlyph.image.width * list.scale,
@@ -200,8 +212,8 @@ std::vector<float> glyphsOf(const ui::DrawList& list) {
                                                             kRun.color[2],
                                                             kRun.color[3],
                                                             static_cast<float>(kClip),
-                                                            0,
-                                                            0,
+                                                            kSpread,
+                                                            kField ? static_cast<float>(kFields->side) : 0.0F,
                                                             0};
             std::ranges::copy(kBlock, glyphs.begin() + static_cast<std::ptrdiff_t>(at * kGlyphFloats));
         }
@@ -241,9 +253,9 @@ struct UiRenderer::State {
     render::Device* device = nullptr;
     mrhiDevice* native = nullptr;
     mrhiShaderId shader{};
-    /// Boxes, images, shadows, and glyphs.
-    std::array<mrhiGraphicsPipelineId, 4> pipelines{};
-    std::array<std::uint64_t, 4> requests{};
+    /// Boxes, images, shadows, glyphs, and glyphs from fields.
+    std::array<mrhiGraphicsPipelineId, 5> pipelines{};
+    std::array<std::uint64_t, 5> requests{};
     bool ready = false;
     mrhiSamplerId nearest{};
     mrhiSamplerId linear{};
@@ -269,6 +281,10 @@ struct UiRenderer::State {
     std::shared_ptr<const texture::Texture> atlas;
     std::uint64_t atlasRevision = 0;
     bool atlasHeld = false;
+    /// The field atlas likewise (D667).
+    std::shared_ptr<const texture::Texture> fields;
+    std::uint64_t fieldsRevision = 0;
+    bool fieldsHeld = false;
     /// Each image's held texture this frame, none for one not drawn.
     std::vector<std::uint64_t> imageTextures;
     std::array<float, 4> view{};
@@ -303,11 +319,12 @@ struct UiRenderer::State {
         if (const mrhiResult kMade = mrhiCreateShader(native, &shaderDef, &shader); kMade != mrhi_success) {
             return failed("the UI's shader could not be made", kMade);
         }
-        constexpr std::array<std::array<std::string_view, 3>, 4> kEntries = {{
+        constexpr std::array<std::array<std::string_view, 3>, 5> kEntries = {{
             {"rawframe.ui.boxes", "vs", "fs"},
             {"rawframe.ui.images", "imageVs", "imageFs"},
             {"rawframe.ui.shadows", "shadowVs", "shadowFs"},
             {"rawframe.ui.glyphs", "glyphVs", "glyphFs"},
+            {"rawframe.ui.fields", "glyphVs", "fieldFs"},
         }};
         for (std::size_t at = 0; at < kEntries.size(); ++at) {
             mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
@@ -390,6 +407,23 @@ struct UiRenderer::State {
                 atlasRevision = kAtlas->revision;
             }
             atlasHeld = held->choose(kAtlasId, atlas);
+        }
+        // The field atlas, a new texture whenever its fields changed.
+        fieldsHeld = false;
+        const ui::FieldAtlas* kFields = list->fields;
+        const bool kAnyField = std::ranges::any_of(list->glyphRuns, &ui::GlyphRun::field);
+        if (kFields != nullptr && kAnyField && kFields->side > 0 &&
+            kFields->pixels.size() == std::size_t{kFields->side} * kFields->side * 4) {
+            if (fields == nullptr || fieldsRevision != kFields->revision) {
+                texture::Texture made{.format = texture::Format::Rgba8};
+                const auto* kBytes = reinterpret_cast<const std::byte*>(kFields->pixels.data());
+                made.levels.push_back(texture::Level{.width = kFields->side,
+                                                     .height = kFields->side,
+                                                     .bytes = {kBytes, kBytes + kFields->pixels.size()}});
+                fields = std::make_shared<const texture::Texture>(std::move(made));
+                fieldsRevision = kFields->revision;
+            }
+            fieldsHeld = held->choose(kFieldsId, fields);
         }
     }
 
@@ -530,15 +564,16 @@ struct UiRenderer::State {
         return {};
     }
 
-    /// The bindings of a draw sampling `texture` (the clear one for none).
-    [[nodiscard]] std::array<mrhiBinding, 9> bindings(std::uint64_t texture) const noexcept {
+    /// The bindings of a draw sampling `texture` (the clear one for none),
+    /// `filtered` where it is sampled between texels, as fields are.
+    [[nodiscard]] std::array<mrhiBinding, 9> bindings(std::uint64_t texture, bool filtered = false) const noexcept {
         const std::uint64_t kHeld = held->resource(texture);
         return {bufferAt(0, viewResource, sizeof(view)),
                 bufferAt(1, boxesResource, blocks.size() * sizeof(float)),
                 bufferAt(2, clipsResource, clips.size() * sizeof(float)),
                 bufferAt(3, imagesResource, imageBlocks.size() * sizeof(float)),
                 textureAt(4, resourceOf(kHeld != 0 ? kHeld : held->resource(0))),
-                samplerAt(5, texture != 0 && held->compressed(texture) ? linear : nearest),
+                samplerAt(5, filtered || (texture != 0 && held->compressed(texture)) ? linear : nearest),
                 bufferAt(6, shadowsResource, shadowBlocks.size() * sizeof(float)),
                 bufferAt(7, gradientsResource, gradients.size() * sizeof(float)),
                 bufferAt(8, glyphsResource, glyphBlocks.size() * sizeof(float))};
@@ -576,24 +611,27 @@ struct UiRenderer::State {
         }
         // In paint order: each run of boxes, and each of shadows, one
         // instanced draw; each image drawn alone with its texture; each run
-        // of glyphs one instanced draw from the atlas, once it is held.
+        // of glyphs one instanced draw from its atlas, coverage or fields,
+        // once it is held.
         const std::vector<ui::DrawCommand>& kCommands = list->commands;
         std::uint64_t boxes = 0;
         for (std::size_t at = 0; at < kCommands.size();) {
             const ui::DrawCommand& kCommand = kCommands[at];
             if (kCommand.kind == ui::DrawCommand::Kind::Glyphs) {
                 const ui::GlyphRun& kRun = list->glyphRuns.at(kCommand.index);
-                if (!atlasHeld) {
+                if (!(kRun.field ? fieldsHeld : atlasHeld)) {
                     ++statistics.glyphRunsWaiting;
                 } else if (kRun.count > 0 && kRun.first + kRun.count <= list->glyphs.size()) {
-                    const std::array<mrhiBinding, 9> kBindings = bindings(kAtlasId);
-                    if (mrhiSetGraphicsPipeline(native, drawing, pipelines[3]) != mrhi_success ||
+                    const std::array<mrhiBinding, 9> kBindings =
+                        kRun.field ? bindings(kFieldsId, true) : bindings(kAtlasId);
+                    if (mrhiSetGraphicsPipeline(native, drawing, pipelines[kRun.field ? 4 : 3]) != mrhi_success ||
                         mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
                         mrhiDraw(native, drawing, 6, kRun.count, 0, kRun.first) != mrhi_success) {
                         return failed("the UI's glyphs could not be drawn", mrhi_errorState);
                     }
                     ++statistics.glyphRuns;
                     statistics.glyphs += kRun.count;
+                    statistics.fieldRuns += kRun.field ? 1U : 0U;
                 }
                 ++at;
                 continue;

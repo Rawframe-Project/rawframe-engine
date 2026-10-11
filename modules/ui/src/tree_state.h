@@ -98,8 +98,20 @@ struct Tree::State {
     GlyphAtlas atlas;
     muiGlyphAtlas* glyphs = nullptr;
     std::vector<muiAtlasUpdate> updates;
+    /// The field atlas as the draw list hands it over (D667), and Maul
+    /// UI's of four channels it is copied from.
+    FieldAtlas fields{.pixelSize = kFieldSize, .spread = kFieldSpread};
+    muiGlyphAtlas* fieldGlyphs = nullptr;
+
+    /// A field's em in its pixels, and how far it reaches past the outline
+    /// (D667): about the size of large UI text, and four pixels, so a run
+    /// a little smaller still has a pixel and more of field to smooth its
+    /// edges.
+    static constexpr float kFieldSize = 32;
+    static constexpr std::uint32_t kFieldSpread = 4;
 
     ~State() {
+        muiDestroyGlyphAtlas(fieldGlyphs);
         muiDestroyGlyphAtlas(glyphs);
         muiDestroyContext(context);
         muiDestroyTextService(text);
@@ -131,85 +143,115 @@ struct Tree::State {
     /// frame: room is made by emptying the plot least recently drawn, never
     /// one this list uses, and a glyph is left out when there is none, or
     /// when it cannot be rendered or is larger than a plot.
+    /// Each glyph of `list` given its image from Maul UI's atlases, which
+    /// render and pack it the first time (D404): a run `kFieldsFrom` device
+    /// pixels and larger its distance fields, scaled to its size (D667), a
+    /// smaller one its coverage at its size. A draw is the atlases' frame:
+    /// room is made by emptying the plot least recently drawn, never one
+    /// this list uses, and a glyph is left out when there is none, or when
+    /// it cannot be rendered or is larger than a plot.
     void placeGlyphs(DrawList& list) {
         list.glyphsLeftOut = 0;
         list.atlas = &atlas;
+        list.fields = &fields;
         if (list.glyphRuns.empty()) {
             return;
         }
-        if (glyphs == nullptr) {
-            muiGlyphAtlasDef def = muiDefaultGlyphAtlasDef();
-            def.pageWidth = atlas.side;
-            def.pageHeight = atlas.side;
-            def.plotWidth = atlas.side / 4;
-            def.plotHeight = atlas.side / 4;
-            def.maxPages = 1;
-            if (muiCreateGlyphAtlas(text, &def, &glyphs) != mui_success) {
-                for (const GlyphRun& kRun : list.glyphRuns) {
-                    list.glyphsLeftOut += kRun.count;
-                }
-                return;
+        const bool kMade =
+            made(glyphs, atlas.side, mui_atlasOneChannel) && made(fieldGlyphs, fields.side, mui_atlasFourChannel);
+        if (!kMade) {
+            for (const GlyphRun& kRun : list.glyphRuns) {
+                list.glyphsLeftOut += kRun.count;
             }
+            return;
         }
         muiGlyphAtlas_NextFrame(glyphs);
-        for (const GlyphRun& kRun : list.glyphRuns) {
-            const float kPixelSize = kRun.size * list.scale;
-            for (std::uint32_t at = kRun.first; at < kRun.first + kRun.count; ++at) {
+        muiGlyphAtlas_NextFrame(fieldGlyphs);
+        for (GlyphRun& run : list.glyphRuns) {
+            const float kPixelSize = run.size * list.scale;
+            run.field = kPixelSize >= kFieldsFrom;
+            // A field's pixels to the device's.
+            const float kScaled = kPixelSize / kFieldSize;
+            for (std::uint32_t at = run.first; at < run.first + run.count; ++at) {
                 Glyph& glyph = list.glyphs[at];
                 glyph.image = {};
                 glyph.atlas = {};
+                const float kPenX = (run.x + glyph.x) * list.scale;
+                const float kPenY = (run.y + glyph.y) * list.scale;
                 muiAtlasGlyph got{};
-                if (muiGlyphAtlas_Get(glyphs,
-                                      kRun.font.key,
-                                      glyph.id,
-                                      kPixelSize,
-                                      (kRun.x + glyph.x) * list.scale,
-                                      (kRun.y + glyph.y) * list.scale,
-                                      &got) != mui_success) {
+                const muiResult kGot =
+                    run.field ? muiGlyphAtlas_GetMultiField(
+                                    fieldGlyphs, run.font.key, glyph.id, kFieldSize, kFieldSpread, &got)
+                              : muiGlyphAtlas_Get(glyphs, run.font.key, glyph.id, kPixelSize, kPenX, kPenY, &got);
+                if (kGot != mui_success) {
                     ++list.glyphsLeftOut;
                     continue;
                 }
                 if (got.width == 0 || got.height == 0) {
                     continue;
                 }
-                glyph.image = Rect{.x = static_cast<float>(got.x) / list.scale,
-                                   .y = static_cast<float>(got.y) / list.scale,
-                                   .width = static_cast<float>(got.width) / list.scale,
-                                   .height = static_cast<float>(got.height) / list.scale};
+                const float kFrom = run.field ? kScaled : 1.0F;
+                const float kX = run.field ? kPenX + (static_cast<float>(got.x) * kScaled) : static_cast<float>(got.x);
+                const float kY = run.field ? kPenY + (static_cast<float>(got.y) * kScaled) : static_cast<float>(got.y);
+                glyph.image = Rect{.x = kX / list.scale,
+                                   .y = kY / list.scale,
+                                   .width = static_cast<float>(got.width) * kFrom / list.scale,
+                                   .height = static_cast<float>(got.height) * kFrom / list.scale};
                 glyph.atlas = Rect{.x = static_cast<float>(got.u),
                                    .y = static_cast<float>(got.v),
                                    .width = static_cast<float>(got.width),
                                    .height = static_cast<float>(got.height)};
             }
         }
-        takeUpdates();
+        takeUpdates(glyphs, atlas.side, 1, atlas.coverage, atlas.revision);
+        takeUpdates(fieldGlyphs, fields.side, 4, fields.pixels, fields.revision);
     }
 
-    /// The page's changed rectangles copied into the coverage the list
-    /// hands over, its revision moved when there were any.
-    void takeUpdates() {
+    /// `into`, an atlas of `side` and `format`, made if it is not yet.
+    bool made(muiGlyphAtlas*& into, std::uint32_t side, muiAtlasFormat format) {
+        if (into != nullptr) {
+            return true;
+        }
+        muiGlyphAtlasDef def = muiDefaultGlyphAtlasDef();
+        def.pageWidth = side;
+        def.pageHeight = side;
+        def.plotWidth = side / 4;
+        def.plotHeight = side / 4;
+        def.maxPages = 1;
+        def.format = format;
+        return muiCreateGlyphAtlas(text, &def, &into) == mui_success;
+    }
+
+    /// The page's changed rectangles of `from`, `side` pixels of `bytes`
+    /// each, copied into the pixels the list hands over, its revision moved
+    /// when there were any.
+    void takeUpdates(muiGlyphAtlas* from,
+                     std::uint32_t side,
+                     std::uint32_t bytes,
+                     std::vector<std::uint8_t>& pixels,
+                     std::uint64_t& revision) {
         std::uint32_t count = 0;
-        if (muiGlyphAtlas_TakeUpdates(glyphs, nullptr, 0, &count) == mui_errorCapacity) {
+        if (muiGlyphAtlas_TakeUpdates(from, nullptr, 0, &count) == mui_errorCapacity) {
             updates.resize(count);
-            if (muiGlyphAtlas_TakeUpdates(glyphs, updates.data(), count, &count) != mui_success) {
+            if (muiGlyphAtlas_TakeUpdates(from, updates.data(), count, &count) != mui_success) {
                 return;
             }
         }
         muiAtlasPage page{};
-        if (count == 0 || muiGlyphAtlas_GetPage(glyphs, 0, &page) != mui_success) {
+        if (count == 0 || muiGlyphAtlas_GetPage(from, 0, &page) != mui_success) {
             return;
         }
-        if (atlas.coverage.empty()) {
-            atlas.coverage.assign(std::size_t{atlas.side} * atlas.side, 0);
+        if (pixels.empty()) {
+            pixels.assign(std::size_t{side} * side * bytes, 0);
         }
         for (std::uint32_t at = 0; at < count; ++at) {
             const muiAtlasUpdate& kUpdate = updates[at];
             for (std::uint32_t row = kUpdate.y; row < kUpdate.y + kUpdate.height; ++row) {
-                const std::size_t kAt = (std::size_t{row} * atlas.side) + kUpdate.x;
-                std::memcpy(&atlas.coverage[kAt], &page.pixels[kAt], kUpdate.width);
+                const std::size_t kAt = ((std::size_t{row} * side) + kUpdate.x) * bytes;
+                std::memcpy(&pixels[kAt], &page.pixels[kAt], std::size_t{kUpdate.width} * bytes);
             }
         }
-        ++atlas.revision;
+        ++revision;
     }
 };
 

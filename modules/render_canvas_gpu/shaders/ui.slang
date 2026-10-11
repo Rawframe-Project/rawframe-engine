@@ -1,8 +1,8 @@
 // The UI's drawing (SPEC-0032), in Slang (ADR-0026, D475), from which the
 // SPIR-V and the WGSL are compiled: boxes (D375), images (D378), shadows
-// (D381), and glyphs (D398), each one quad an instance, in the picture's
-// pixels from its top left, y down, inside every clip above it (D377);
-// premultiplied, in linear light.
+// (D381), and glyphs (D398), from coverage or distance fields (D667), each
+// one quad an instance, in the picture's pixels from its top left, y down,
+// inside every clip above it (D377); premultiplied, in linear light.
 //
 // An instance is numbered as Vulkan and WebGPU number it, its draw's first
 // instance included (SV_VulkanInstanceID): each draw starts at its run's
@@ -440,4 +440,26 @@ float4 glyphFs(Corner corner) : SV_Target0
     const float2 within = clamp(floor(pixel - rect.xy), float2(0.0), max(atlas.zw - 1.0, float2(0.0)));
     const float covered = picture.Load(int3(int2(atlas.xy + within), 0)).r;
     return clipped(glyphs[glyph].color * covered, pixel, int(glyphs[glyph].clip.x));
+}
+
+// The glyph's coverage from its multi-channel distance field (D667), scaled
+// over its image and sampled between texels: the median of red, green, and
+// blue is the distance to the outline, 128 / 255 on it and 128 / 255 of a
+// spread for each of the field's pixels inside; `clip.y` is the picture's
+// pixels a spread spans as drawn, so the edge is a pixel wide at any size,
+// and `clip.z` the field atlas's side.
+[shader("fragment")]
+float4 fieldFs(Corner corner) : SV_Target0
+{
+    const float2 pixel = corner.pixel;
+    const uint glyph = corner.record;
+    const float4 rect = glyphs[glyph].rect;
+    const float4 atlas = glyphs[glyph].atlas;
+    const float4 clip = glyphs[glyph].clip;
+    const float2 within = (pixel - rect.xy) / max(rect.zw, float2(1.0e-6)) * atlas.zw;
+    const float3 field = picture.SampleLevel(pictureSampler, (atlas.xy + within) / clip.z, 0.0).rgb;
+    const float median = max(min(field.r, field.g), min(max(field.r, field.g), field.b));
+    const float distance = (median * 255.0 - 128.0) / 128.0 * clip.y;
+    const float covered = clamp(distance + 0.5, 0.0, 1.0);
+    return clipped(glyphs[glyph].color * covered, pixel, int(clip.x));
 }

@@ -131,6 +131,8 @@ Tree::create(std::uint32_t maximumNodes, std::uint32_t maximumFonts, std::uint32
     RAWFRAME_TRY(checked(muiCreateTextService(&text, &state->text), "a UI tree's text could not be made"));
     state->host = muiTextHost{.service = state->text, .context = state->context};
     state->atlas.side = atlasSide;
+    // Half the coverage atlas's side, in plots of a quarter of it.
+    state->fields.side = std::max<std::uint32_t>((atlasSide / 8) * 4, 64);
     return std::unique_ptr<Tree>{new Tree{std::move(state)}};
 }
 
@@ -492,6 +494,7 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
     into.skipped = 0;
     into.scale = scale;
     into.atlas = nullptr;
+    into.fields = nullptr;
     into.glyphsLeftOut = 0;
     for (std::uint32_t at = 0; at < list.gradientCount; ++at) {
         const muiDrawGradient& kGradient = list.gradients[at];

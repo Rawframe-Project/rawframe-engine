@@ -10,6 +10,10 @@
 #include "rawframe/ui/errors.h"
 #include "rawframe/ui/tree.h"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
 #include <span>
 #include <string>
 
@@ -210,4 +214,61 @@ RAWFRAME_TEST(GlyphsAreRenderedIntoTheAtlasOnceAndPlacedOnDevicePixels) {
     RAWFRAME_EXPECT(ui.layOut(kLabel, 200, 200).has_value());
     RAWFRAME_EXPECT(ui.draw(kLabel, 4, list).has_value());
     RAWFRAME_EXPECT(list.glyphsLeftOut == 3 && sized(list.glyphs[0].image, 0, 0));
+}
+
+RAWFRAME_TEST(LargeRunsAreDrawnFromDistanceFieldsScaledToTheirSize) {
+    // ADR-0049's MSDF path (D667): a run of 24 device pixels or more takes
+    // its glyphs' fields, rendered once at 32 pixels an em with four of
+    // spread, scaled to its size; a smaller run keeps coverage at its own.
+    const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
+    auto tree = Tree::create(16, 4, 1024);
+    RAWFRAME_EXPECT(tree.has_value());
+    if (!tree.has_value()) {
+        return;
+    }
+    Tree& ui = **tree;
+    RAWFRAME_EXPECT(ui.addFont(bytesOf(kAhem)).has_value());
+    const Node kLabel = *ui.add(1);
+    RAWFRAME_EXPECT(ui.setText(kLabel, "XX", {.size = 40}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kLabel, 200, 200).has_value());
+    DrawList list;
+    RAWFRAME_EXPECT(ui.draw(kLabel, 1, list).has_value());
+    RAWFRAME_EXPECT(list.fields != nullptr && list.glyphRuns.size() == 1 && list.glyphs.size() == 2);
+    if (list.fields == nullptr || list.glyphRuns.size() != 1 || list.glyphs.size() != 2) {
+        return;
+    }
+    RAWFRAME_EXPECT(list.glyphRuns[0].field && list.glyphsLeftOut == 0);
+    const FieldAtlas& kFields = *list.fields;
+    RAWFRAME_EXPECT(kFields.side == 512 && kFields.pixels.size() == std::size_t{512} * 512 * 4 &&
+                    kFields.revision == 1 && kFields.pixelSize == 32 && kFields.spread == 4);
+    // The em box's field: 32 pixels and four of spread on each side, 40
+    // wide (41 tall, its top 25.6 pixels up falling inside a row), drawn
+    // at 40 / 32 of it, 50 pixels from 5 before the pen; the same field for
+    // both glyphs.
+    const Glyph& kFirst = list.glyphs[0];
+    RAWFRAME_EXPECT(sized(kFirst.atlas, 40, 41) && sized(kFirst.image, 50, 51.25F) && kFirst.image.x == -5);
+    RAWFRAME_EXPECT(list.glyphs[1].image.x == 35 && list.glyphs[1].atlas.x == kFirst.atlas.x);
+    // Inside the outline its median distance is past 128, outside it short
+    // of 128, and on it about 128.
+    const auto kMedian = [&](float x, float y) {
+        const std::size_t kAt = ((static_cast<std::size_t>(kFirst.atlas.y + y) * kFields.side) +
+                                 static_cast<std::size_t>(kFirst.atlas.x + x)) *
+                                4;
+        std::array<std::uint8_t, 3> channels = {kFields.pixels[kAt], kFields.pixels[kAt + 1], kFields.pixels[kAt + 2]};
+        std::ranges::sort(channels);
+        return static_cast<int>(channels[1]);
+    };
+    RAWFRAME_EXPECT(kMedian(20, 20) == 255 && kMedian(0, 0) < 64 && std::abs(kMedian(4, 20) - 128) < 24);
+    // Drawn again, nothing is rendered; a ten-pixel run keeps coverage.
+    RAWFRAME_EXPECT(ui.draw(kLabel, 1, list).has_value());
+    RAWFRAME_EXPECT(list.fields->revision == 1);
+    RAWFRAME_EXPECT(ui.setText(kLabel, "XX", {.size = 10}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kLabel, 200, 200).has_value());
+    RAWFRAME_EXPECT(ui.draw(kLabel, 1, list).has_value());
+    RAWFRAME_EXPECT(!list.glyphRuns.at(0).field && sized(list.glyphs.at(0).image, 10, 10));
+    // A 20-pixel run at a scale of 1.25 is 25 device pixels: fields.
+    RAWFRAME_EXPECT(ui.setText(kLabel, "XX", {.size = 20}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kLabel, 200, 200).has_value());
+    RAWFRAME_EXPECT(ui.draw(kLabel, 1.25F, list).has_value());
+    RAWFRAME_EXPECT(list.glyphRuns.at(0).field && list.fields->revision == 1);
 }
