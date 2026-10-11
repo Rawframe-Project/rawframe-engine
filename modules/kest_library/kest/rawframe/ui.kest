@@ -123,6 +123,13 @@ module rawframe.ui
 // no field, checks nothing, and moves no slider; navigation passes it by.
 // Its style class's `disabled` look shows it, over every other state's,
 // and assistive technology reads it as disabled.
+//
+// A slider or a checkable node whose `kept` is one is the player's
+// setting (D626): what the player makes it is kept on their machine,
+// under its component's name, where the client keeps the player's
+// settings (`ui.kept`), and it starts as kept on the next run, as if the
+// player had moved it there; `ui.value(press)` reads it. A client
+// keeping none, and the web's, starts it as the node says.
 struct Node {
     widthScale: f32
     widthOffset: f32
@@ -185,6 +192,7 @@ struct Node {
     checked: u32
     popup: u32
     disabled: u32
+    kept: u32
 }
 
 // A node's `scroll`.

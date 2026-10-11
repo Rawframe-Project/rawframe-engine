@@ -62,6 +62,9 @@ struct UiSettings {
     Words words;
     /// The game's style classes (D431), which nodes name by identity.
     ui::StyleSheet styles;
+    /// Each node's value kept from a run before (D626), which its kept
+    /// nodes start as; as long as `nodes`, or empty for none at all.
+    std::vector<std::optional<float>> kept;
     /// The most nodes held at once, every view's together; a node past them
     /// is left out and counted.
     std::uint32_t maximumNodes = 4096;
@@ -118,6 +121,10 @@ struct UiStatistics {
     std::uint64_t ranged = 0;
     /// Checkable nodes checked or unchecked by the player (D622).
     std::uint64_t toggled = 0;
+    /// Changes to the values of kept nodes, and kept nodes started as kept
+    /// (D626).
+    std::uint64_t kept = 0;
+    std::uint64_t keptGiven = 0;
 };
 
 class WorldUi {
@@ -186,6 +193,11 @@ public:
     /// `player`'s view, as the player moved it (D621), or of the checkable
     /// node's, one checked and nought not (D622); none for no such node.
     [[nodiscard]] std::optional<float> valueOf(std::size_t player, std::int64_t press) const;
+    /// Each node component's value as its kept node in the first local
+    /// player's view holds it (D626), a range's value or one for checked;
+    /// as the settings' `kept` until such a node appears. As long as the
+    /// settings' nodes; `statistics().kept` counts its changes.
+    [[nodiscard]] std::span<const std::optional<float>> kept() const noexcept;
     /// What was typed, to the field holding the keyboard; nothing while
     /// none does. Enter gives a single line's text, Escape lets go.
     void type(const view::Typing& typing);

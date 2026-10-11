@@ -70,6 +70,8 @@ struct Entry {
     /// beside it.
     std::uint64_t parent = 0;
     std::optional<PopupGiven> popped;
+    /// Its component, an index of the settings' nodes.
+    std::uint32_t component = 0;
 };
 
 /// The node holding focus (D430): a text field given the keyboard, its
@@ -138,6 +140,8 @@ struct WorldUi::State {
     /// range's node, as the last frame nested them.
     bool ranging = false;
     std::unordered_map<std::uint64_t, ui::Node> thumbs;
+    /// Each node component's kept value (D626), by its index.
+    std::vector<std::optional<float>> kept;
 
     /// Focus taken from the node holding it: its ring goes, and a field
     /// gives back the keyboard and shows its placeholder again if it is
@@ -159,6 +163,13 @@ struct WorldUi::State {
     /// Each popup placed beside the node it is inside where its side, gap,
     /// or parent changed; a node no longer one cleared (D623).
     void givePopups();
+
+    /// The value `entry` starts as if it is kept and one is (D626).
+    [[nodiscard]] std::optional<float> keptFor(const Entry& entry);
+
+    /// Each kept node's value in the first local player's view noted, a
+    /// change counted (D626).
+    void noteKept();
 
     /// `entry` checked or unchecked as a press does it (D622): a box or a
     /// switch turned over, a radio checked and the radios beside it

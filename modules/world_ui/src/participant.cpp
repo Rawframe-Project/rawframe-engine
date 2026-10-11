@@ -1,3 +1,4 @@
+#include "keeper.h"
 #include "rawframe/assets/assets.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/game_content/game_content.h"
@@ -45,6 +46,8 @@ constexpr diagnostics::EventIdentity kFontUnread{"ui", "font_unavailable"};
 constexpr diagnostics::EventIdentity kAccessible{"ui", "accessibility_ready"};
 constexpr diagnostics::EventIdentity kInaccessible{"ui", "accessibility_unavailable"};
 constexpr diagnostics::EventIdentity kKeyUnknown{"ui", "label_unformatted"};
+constexpr diagnostics::EventIdentity kKeptUnread{"ui", "kept_unread"};
+constexpr diagnostics::EventIdentity kKeptUnwritten{"ui", "kept_unwritten"};
 /// The decoded levels each image may hold.
 constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
 /// The fonts' bytes, all together (D386).
@@ -168,7 +171,8 @@ settingsOf(const world_kest::GameFiles& files, const kest::Program& program, std
                                 {"check", offsetof(ui::NodeFields, check)},
                                 {"checked", offsetof(ui::NodeFields, checked)},
                                 {"popup", offsetof(ui::NodeFields, popup)},
-                                {"disabled", offsetof(ui::NodeFields, disabled)}})) {
+                                {"disabled", offsetof(ui::NodeFields, disabled)},
+                                {"kept", offsetof(ui::NodeFields, kept)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());
@@ -268,6 +272,9 @@ class UiParticipant final : public composition::Participant,
                             public world_kest::PresentationStarts {
 public:
     result::Status load(composition::ParticipantContext& context) {
+        // Where the player's settings are kept (D626), read whatever the
+        // game is: a game without UI, and the web, keep none.
+        [[maybe_unused]] const std::optional<std::string> kKept = context.configuration().path("ui.kept");
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
             return {};
         }
@@ -294,6 +301,32 @@ public:
         if (!settings.has_value()) {
             return {};
         }
+#if RAWFRAME_FILE_SYSTEM
+        // The player's settings, kept where the client keeps them (D626):
+        // a file that does not read is said at the start, and written over
+        // once the player changes one.
+        if (kKept.has_value()) {
+            keeper_ = std::make_unique<Keeper>(std::filesystem::path{*kKept});
+            io_ = context.blockingIoExecutor();
+            owner_ = context.owner();
+            for (const world_kest::GameComponent& component : files->description().components) {
+                if (world_kest::ofEngineType(component, "rawframe.ui.Node")) {
+                    keptNames_.push_back(component.name);
+                }
+            }
+            if (auto held = keeper_->read(); held.has_value()) {
+                held_ = std::move(*held);
+            } else {
+                unkept_ = std::string{held.error().description()};
+            }
+            settings->kept.resize(keptNames_.size());
+            for (std::size_t at = 0; at < keptNames_.size(); ++at) {
+                if (const auto kHeld = held_.find(keptNames_[at]); kHeld != held_.end()) {
+                    settings->kept[at] = kHeld->second;
+                }
+            }
+        }
+#endif
         // A label's words from the game's text in the player's locale; none
         // without it.
         if (context.has(world_localization::kGameText.name)) {
@@ -399,6 +432,12 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
+        if (unkept_.has_value()) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kKeptUnread,
+                         "the player's settings could not be read: they start as the game says",
+                         {diagnostics::field("reason", *unkept_)});
+        }
         // The window's UI where assistive technology reads it, when the
         // program that runs the window asked for it (D571); a machine whose
         // platform cannot be reached plays on unread.
@@ -568,6 +607,7 @@ public:
             return;
         }
         drawn_ = &ui_->drawn();
+        keepSettings();
         // On a headset's panel, where a hand points is drawn over all of
         // the UI (D605): no window's cursor shows there.
         if (panel_ && pointing_ != nullptr) {
@@ -668,6 +708,22 @@ public:
         if (ui_ == nullptr) {
             return;
         }
+#if RAWFRAME_FILE_SYSTEM
+        // The last of the player's settings written before the UI goes.
+        if (keeper_ != nullptr) {
+            keeper_->finish(io_);
+            if (ui_->statistics().kept != keptAsked_) {
+                keptAsked_ = ui_->statistics().kept;
+                keeper_->keep(keptNow(), nullptr, owner_);
+            }
+            if (keeper_->failed() != 0) {
+                emitter_.log(diagnostics::Severity::Warning,
+                             kKeptUnwritten,
+                             "the player's settings could not be written",
+                             {diagnostics::field("failed", keeper_->failed())});
+            }
+        }
+#endif
         const UiStatistics& kStatistics = ui_->statistics();
         emitter_.log(diagnostics::Severity::Info,
                      kUiSummary,
@@ -700,7 +756,10 @@ public:
                       diagnostics::field("pressesMissed", missed_),
                       diagnostics::field("framesPointed", pointedFrames_),
                       diagnostics::field("ranged", kStatistics.ranged),
-                      diagnostics::field("toggled", kStatistics.toggled)});
+                      diagnostics::field("toggled", kStatistics.toggled),
+                      diagnostics::field("kept", kStatistics.kept),
+                      diagnostics::field("keptGiven", kStatistics.keptGiven),
+                      diagnostics::field("keptWritten", keptWritten())});
     }
 
     /// The host told where the caret of the field holding the keyboard is
@@ -757,6 +816,38 @@ public:
     }
 
 private:
+    /// The player's settings as they hold now (D626): those read, each the
+    /// UI holds over them.
+    KeptValues keptNow() const {
+        KeptValues values = held_;
+        const std::span<const std::optional<float>> kKept = ui_->kept();
+        for (std::size_t at = 0; at < keptNames_.size() && at < kKept.size(); ++at) {
+            if (kKept[at].has_value()) {
+                values[keptNames_[at]] = *kKept[at];
+            }
+        }
+        return values;
+    }
+
+    /// The player's settings written as they change (D626), one write at a
+    /// time, the changes made while one is under way by the next.
+    void keepSettings() {
+#if RAWFRAME_FILE_SYSTEM
+        if (keeper_ != nullptr && ui_->statistics().kept != keptAsked_ && !keeper_->writing()) {
+            keptAsked_ = ui_->statistics().kept;
+            keeper_->keep(keptNow(), io_, owner_);
+        }
+#endif
+    }
+
+    std::uint64_t keptWritten() const noexcept {
+#if RAWFRAME_FILE_SYSTEM
+        return keeper_ != nullptr ? keeper_->written() : 0;
+#else
+        return 0;
+#endif
+    }
+
     /// Fonts read since the last frame given to the UI; one that failed said
     /// once.
     void takeFonts() {
@@ -854,6 +945,17 @@ private:
     /// The fields' texts submitted, told as each is (D489).
     std::uint64_t submittedTold_ = 0;
     bool failed_ = false;
+    /// The player's settings (D626): their file, its values as read, the
+    /// node components' names in order, and the changes asked written.
+#if RAWFRAME_FILE_SYSTEM
+    std::unique_ptr<Keeper> keeper_;
+#endif
+    execution::Executor* io_ = nullptr;
+    execution::OwnerId owner_{};
+    KeptValues held_;
+    std::vector<std::string> keptNames_;
+    std::optional<std::string> unkept_;
+    std::uint64_t keptAsked_ = 0;
     diagnostics::Emitter emitter_;
 };
 
@@ -873,10 +975,12 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .providedCapabilities = kProvided,
         .optionalCapabilities = kMaybe,
         .eligibility = {.roles = ~kServer},
-        // Images are decoded, and fonts copied, on the CPU executor;
-        // stopping only says what was drawn.
-        .executor = {.cpu = true, .quota = {.maximumPendingTasks = 64}},
-        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
+        // Images are decoded, and fonts copied, on the CPU executor, and
+        // the player's settings written on the blocking-I/O one (D626);
+        // stopping writes the last of them, flushed to the disk, and says
+        // what was drawn.
+        .executor = {.cpu = true, .blockingIo = true, .quota = {.maximumPendingTasks = 64}},
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
         .observabilityIdentity = "world_ui.ui",
         .budgetOwner = "ui",
         .hostPhases = composition::hostPhaseBit(composition::HostPhase::PresentationExtract),

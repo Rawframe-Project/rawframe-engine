@@ -89,7 +89,7 @@ ui::Look lookOf(const ui::NodeFields& node) noexcept {
 /// constants. Nought passes presses through to its children and past them.
 std::optional<ui::Interaction> interactionOf(const ui::NodeFields& node) noexcept {
     if (node.hit > 2 || node.layer > 3 || node.edit > 3 || node.range > 2 || node.thumb > 1 || node.check > 3 ||
-        node.checked > 1 || node.popup > 5 || node.disabled > 1) {
+        node.checked > 1 || node.popup > 5 || node.disabled > 1 || node.kept > 1) {
         return std::nullopt;
     }
     constexpr std::array<ui::Interaction::Hits, 3> kHits = {
@@ -259,8 +259,11 @@ bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const ui::No
         entry.checkGiven.reset();
         entry.checkedNow = false;
     } else if (entry.checkGiven != value.checked) {
+        // A kept node starts as kept (D626).
+        const std::optional<float> kKept =
+            entry.checkGiven.has_value() ? std::nullopt : (entry.value.kept != 0 ? keptFor(entry) : std::nullopt);
         entry.checkGiven = value.checked;
-        entry.checkedNow = value.checked != 0;
+        entry.checkedNow = kKept.has_value() ? *kKept != 0 : value.checked != 0;
     }
     const std::optional<ui::Layout> kLayout = layoutOf(value);
     const std::optional<ui::Interaction> kInteraction = interactionOf(value);
@@ -338,6 +341,9 @@ void WorldUi::State::giveRanges() {
                 if (const std::optional<ui::Range> kHeld = tree->rangeOf(*entry.node)) {
                     value = kHeld->value;
                 }
+            } else if (!entry.ranged.has_value() && kValue.kept != 0) {
+                // A kept node starts as kept (D626).
+                value = keptFor(entry).value_or(value);
             }
             const float kSpan = wanted.maximum - wanted.minimum;
             const ui::Range kRange{.minimum = wanted.minimum,
@@ -517,6 +523,7 @@ void WorldUi::State::mirror(ViewState& view) {
                 auto [at, made] = view.entries.try_emplace(EntryKey{chunk.entities[row], component});
                 Entry& entry = at->second;
                 entry.seen = true;
+                entry.component = component;
                 entry.player = static_cast<std::size_t>(&view - views.data());
                 // Its words, read where it shows any (D427).
                 Typed words;
@@ -648,6 +655,9 @@ result::Result<std::unique_ptr<WorldUi>> WorldUi::create(UiSettings settings) {
         })) {
         return refuse("each UI node component's parent is another of them");
     }
+    if (!settings.kept.empty() && settings.kept.size() != settings.nodes.size()) {
+        return refuse("kept values are each UI node component's");
+    }
     auto state = std::make_unique<State>();
     // Room for the window's root and a root for each view beside the
     // game's nodes.
@@ -660,6 +670,8 @@ result::Result<std::unique_ptr<WorldUi>> WorldUi::create(UiSettings settings) {
     for (std::size_t at = 0; at < kMade.size(); ++at) {
         state->classes.emplace(settings.styles.styles[at].id, kMade[at]);
     }
+    state->kept = settings.kept;
+    state->kept.resize(settings.nodes.size());
     state->settings = std::move(settings);
     return std::unique_ptr<WorldUi>{new WorldUi{std::move(state)}};
 }
@@ -711,6 +723,7 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
     state.giveRanges();
     state.givePopups();
     state.giveStates();
+    state.noteKept();
     state.seconds = seconds;
     RAWFRAME_TRY(state.tree->layOut(state.window, width, height, seconds));
     RAWFRAME_TRY(state.tree->draw(state.window, scale, state.drawn));

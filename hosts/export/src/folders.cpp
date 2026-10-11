@@ -175,7 +175,9 @@ bool writeNative(const Exported& exported, const std::array<fs::path, 4>& progra
                                 "# cannot keep up (D533).\n"
                                 "scene.render_scale_least_percent = 50\n"
                                 "# No picture read back: that is for tests (D534).\n"
-                                "render.read_every = 0\nwindow.title = " +
+                                "render.read_every = 0\n"
+                                "# The player's settings kept beside it between runs (D626).\n"
+                                "ui.kept = settings.json\nwindow.title = " +
                                 exported.title + "\n" + kContent +
                                 "kest.plan_only = true\nnetwork.quic.pin_file = fingerprint\n"
                                 "bots.endpoint = 127.0.0.1:" +

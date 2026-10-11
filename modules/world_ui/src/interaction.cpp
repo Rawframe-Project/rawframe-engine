@@ -329,6 +329,48 @@ void WorldUi::hoverAt(std::optional<std::array<float, 2>> pointer) {
     state.pointer = pointer;
 }
 
+std::optional<float> WorldUi::State::keptFor(const Entry& entry) {
+    if (entry.component >= kept.size() || !kept[entry.component].has_value()) {
+        return std::nullopt;
+    }
+    ++statistics.keptGiven;
+    return kept[entry.component];
+}
+
+void WorldUi::State::noteKept() {
+    // The first local player's: one machine keeps one value a node, which
+    // every local player's starts as.
+    if (views.empty()) {
+        return;
+    }
+    for (const auto& [kKey, kEntry] : views.front().entries) {
+        if (!kEntry.node.has_value() || kEntry.value.kept == 0 || kEntry.component >= kept.size()) {
+            continue;
+        }
+        std::optional<float> now;
+        if (kEntry.checkGiven.has_value()) {
+            now = kEntry.checkedNow ? 1.0F : 0.0F;
+        } else if (kEntry.ranged.has_value()) {
+            if (const std::optional<ui::Range> kHeld = tree->rangeOf(*kEntry.node)) {
+                now = kHeld->value;
+            }
+        }
+        std::optional<float>& noted = kept[kEntry.component];
+        if (!now.has_value() || noted == now) {
+            continue;
+        }
+        // What a node starts as is no change of the player's.
+        if (noted.has_value()) {
+            ++statistics.kept;
+        }
+        noted = now;
+    }
+}
+
+std::span<const std::optional<float>> WorldUi::kept() const noexcept {
+    return state_->kept;
+}
+
 std::optional<float> WorldUi::valueOf(std::size_t player, std::int64_t press) const {
     const State& state = *state_;
     if (player >= state.views.size() || press == 0) {

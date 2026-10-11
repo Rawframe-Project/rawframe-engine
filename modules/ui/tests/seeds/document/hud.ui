@@ -39,7 +39,8 @@
       "rangeMaximum": 500000,
       "rangeValue": 2.5,
       "thumb": true,
-      "disabled": true
+      "disabled": true,
+      "kept": true
     }
   ]
 }

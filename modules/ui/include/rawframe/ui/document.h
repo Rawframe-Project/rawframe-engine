@@ -32,9 +32,8 @@
 // place of its label (D427). Then any of `rawframe.ui.Node`'s fields, in
 // its order, at their defaults omitted: numbers as they are; colors
 // `#rrggbbaa`; identities (`image`, `text`, `font`, `style`) 16 lowercase
-// hexadecimal digits; `absolute`, `clip`, `thumb`, `checked`, and `disabled`
-// as `true`; a closed set by the
-// lowercase name of its case (`direction`: row, row_reverse, column,
+// hexadecimal digits; `absolute`, `clip`, `thumb`, `checked`, `disabled`,
+// and `kept` as `true`; a closed set by the lowercase name of its case (`direction`: row, row_reverse, column,
 // column_reverse; `justify`: start, end, center, space_between,
 // space_around, space_evenly; `alignItems`, `alignSelf`: auto, stretch,
 // start, end, center; `gradientKind`: none, linear, radial; `textAlign`:
@@ -122,9 +121,7 @@ struct NodeFields {
     std::uint32_t checked = 0;
     std::uint32_t popup = 0;
     std::uint32_t disabled = 0;
-    /// The four bytes Kest's layout pads the node with, named and nought,
-    /// so a node compared byte for byte reads no stray padding.
-    std::uint32_t reserved = 0;
+    std::uint32_t kept = 0;
 };
 
 /// One node of a document.
