@@ -53,6 +53,19 @@ std::optional<Range> Tree::rangeOf(Node node) const {
     return range;
 }
 
+bool Tree::stepRange(Node node, bool up) {
+    const std::optional<Range> kRange = rangeOf(node);
+    if (!kRange.has_value()) {
+        return false;
+    }
+    const float kStep = kRange->step > 0 ? kRange->step : (kRange->maximum - kRange->minimum) / 100;
+    if (muiNode_SetRangeValue(state_->context, idOf(node), kRange->value + (up ? kStep : -kStep)) != mui_success) {
+        return false;
+    }
+    const std::optional<Range> kMoved = rangeOf(node);
+    return kMoved.has_value() && kMoved->value != kRange->value;
+}
+
 result::Result<bool> Tree::point(Node root, const PointerEvent& event) {
     constexpr muiPointerAction kActions[] = {
         mui_pointerMove, mui_pointerPress, mui_pointerRelease, mui_pointerCancel, mui_pointerLeave};

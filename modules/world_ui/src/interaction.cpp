@@ -352,7 +352,22 @@ std::size_t WorldUi::reachable() {
 }
 
 bool WorldUi::navigate(view::NavigationMove move) {
-    return state_->moveFocus(move, false);
+    State& state = *state_;
+    // A slider holding focus takes the moves along its axis, a step toward
+    // each, as ARIA's slider does; the others move focus on (D621).
+    if (state.focus.has_value() && state.focus->entry->node.has_value() && state.focus->entry->value.range != 0) {
+        using Move = view::NavigationMove;
+        const bool kVertical = state.focus->entry->value.range == 2;
+        const bool kAlong =
+            kVertical ? move == Move::Up || move == Move::Down : move == Move::Left || move == Move::Right;
+        if (kAlong) {
+            if (state.tree->stepRange(*state.focus->entry->node, move == Move::Right || move == Move::Up)) {
+                ++state.statistics.ranged;
+            }
+            return true;
+        }
+    }
+    return state.moveFocus(move, false);
 }
 
 std::optional<std::int64_t> WorldUi::activate() {

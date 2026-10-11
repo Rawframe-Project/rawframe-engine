@@ -428,6 +428,9 @@ public:
         if (pointing_ != nullptr && ui_ != nullptr) {
             pointing_->onRelease([this] {
                 if (!failed_) {
+                    // Where the pointer is as the press is let go, which a
+                    // range dragged since the last frame moves to (D621).
+                    ui_->hoverAt(pointing_->pointer());
                     ui_->release();
                 }
             });

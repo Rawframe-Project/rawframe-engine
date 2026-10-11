@@ -705,6 +705,10 @@ public:
     /// `node`'s range with the value it holds now, which presses and drags
     /// move; none for a node that is not a range.
     [[nodiscard]] std::optional<Range> rangeOf(Node node) const;
+    /// `node`'s range moved a step up or down, as an arrow key moves it: a
+    /// hundredth of its span for one of any value. Whether its value moved;
+    /// false for a node that is not a range, or one at its end.
+    [[nodiscard]] bool stepRange(Node node, bool up);
     /// The pointer's event in `root`'s space (D621), for the ranges under
     /// it: a press on a range pages its value toward the point, and a drag
     /// moves it. Whether a range took it. Only a press the owner gives a

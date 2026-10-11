@@ -89,7 +89,9 @@ module rawframe.ui
 // bottom if vertical. A press on it moves the value a tenth of its span
 // (or a step, if more) toward the press, and a drag moves it with the
 // pointer, from where the node inside it whose `thumb` is one was grabbed
-// (none, and the value follows the pointer). Its `rangeValue` is what it
+// (none, and the value follows the pointer). Holding focus, it moves a
+// step for each navigation move along it, and a screen reader steps and
+// sets it too. Its `rangeValue` is what it
 // starts at; the value the player moved it to stays until `rangeValue` is
 // written anew. A present system reads it by its `press` with
 // `ui.value(press)` and places the thumb and sizes a fill from it: a

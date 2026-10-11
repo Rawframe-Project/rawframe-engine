@@ -873,6 +873,15 @@ RAWFRAME_TEST(ARangeIsPagedAndDraggedAndKeepsWhatThePlayerMovedItTo) {
     rig.put(rig.player, kHudId, track);
     RAWFRAME_EXPECT(rig.frame(1, 4));
     RAWFRAME_EXPECT(rig.ui->valueOf(0, 9) == 10.0F);
+    // Reached by navigation, it takes the moves along it, a step each, and
+    // leaves the others to focus.
+    RAWFRAME_EXPECT(rig.ui->enterNavigation());
+    RAWFRAME_EXPECT(rig.ui->navigate(view::NavigationMove::Right) && rig.ui->valueOf(0, 9) == 11.0F);
+    RAWFRAME_EXPECT(rig.ui->navigate(view::NavigationMove::Left) && rig.ui->navigate(view::NavigationMove::Left) &&
+                    rig.ui->valueOf(0, 9) == 9.0F);
+    RAWFRAME_EXPECT(!rig.ui->navigate(view::NavigationMove::Up) && rig.ui->valueOf(0, 9) == 9.0F);
+    RAWFRAME_EXPECT(rig.frame(1, 4.5));
+    RAWFRAME_EXPECT(rig.ui->valueOf(0, 9) == 9.0F);
     // No longer a range, it has no value; a range past its axes is left out.
     track.range = 0;
     rig.put(rig.player, kHudId, track);
