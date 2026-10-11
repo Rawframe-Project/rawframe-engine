@@ -8,8 +8,10 @@
 // Its files are the app's own: the configuration is `client.conf` in the
 // app's files directory (`/data/data/<package>/files`), whose relative paths
 // are under it (D188), and the run's NDJSON diagnostics go to `client.log`
-// beside it, since an app has no standard output anyone reads. Nothing is
-// read from the package's assets yet.
+// beside it, since an app has no standard output anyone reads. The
+// player's settings are kept there too, in `settings.json`, unless the
+// configuration keeps them elsewhere (D626). Nothing is read from the
+// package's assets yet.
 
 #include "rawframe/base/fatal.h"
 #include "rawframe/composition/configuration.h"
@@ -102,6 +104,16 @@ std::optional<std::string> readText(const std::string& path) {
     return text;
 }
 
+/// `text` keeping the player's settings at `path` unless it keeps them
+/// somewhere itself (D626).
+std::string keptAt(std::string text, const std::string& path) {
+    const auto kParsed = composition::Configuration::parse(text);
+    if (kParsed.has_value() && !kParsed->text("ui.kept").has_value()) {
+        text += "\nui.kept = " + path + "\n";
+    }
+    return text;
+}
+
 bool writeLog(void* context, std::span<const char> bytes) noexcept {
     auto* log = static_cast<std::FILE*>(context);
     const bool kWritten = std::fwrite(bytes.data(), 1, bytes.size(), log) == bytes.size();
@@ -146,7 +158,7 @@ struct AndroidClient {
             say("cannot read the configuration file client.conf");
             return nullptr;
         }
-        auto parsed = composition::Configuration::parse(*kText, *kFiles);
+        auto parsed = composition::Configuration::parse(keptAt(*kText, *kFiles + "/settings.json"), *kFiles);
         if (!parsed.has_value()) {
             say(parsed.error().description());
             return nullptr;

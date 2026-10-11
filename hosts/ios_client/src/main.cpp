@@ -13,7 +13,10 @@
 // container) is read instead where there is one, its paths under
 // Documents, as a developer's run gives it (D586). The run's NDJSON
 // diagnostics go to `client.log` in Documents, since an application has no
-// standard output anyone reads.
+// standard output anyone reads. The player's settings are kept in
+// `Library/Application Support/settings.json` in its container, which a
+// bundle's directory cannot be, unless the configuration keeps them
+// elsewhere (D626).
 
 #include "rawframe/base/fatal.h"
 #include "rawframe/composition/configuration.h"
@@ -87,6 +90,16 @@ std::optional<std::string> readText(const std::string& path) {
     return text;
 }
 
+/// `text` keeping the player's settings at `path` unless it keeps them
+/// somewhere itself (D626).
+std::string keptAt(std::string text, const std::string& path) {
+    const auto kParsed = composition::Configuration::parse(text);
+    if (kParsed.has_value() && !kParsed->text("ui.kept").has_value()) {
+        text += "\nui.kept = " + path + "\n";
+    }
+    return text;
+}
+
 bool writeLog(void* context, std::span<const char> bytes) noexcept {
     auto* log = static_cast<std::FILE*>(context);
     const bool kWritten = std::fwrite(bytes.data(), 1, bytes.size(), log) == bytes.size();
@@ -151,7 +164,8 @@ int main() {
         say(kLog, "cannot read the configuration file client.conf");
         return host::exitCode(host::HostExit::InvalidLaunchDescriptor);
     }
-    auto configuration = composition::Configuration::parse(*text, base);
+    auto configuration = composition::Configuration::parse(
+        keptAt(*text, std::string{kHome} + "/Library/Application Support/settings.json"), base);
     if (!configuration.has_value()) {
         say(kLog, configuration.error().description());
         return host::exitCode(host::HostExit::InvalidLaunchDescriptor);

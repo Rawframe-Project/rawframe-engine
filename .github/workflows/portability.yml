@@ -168,7 +168,8 @@ jobs:
         run: ADB="$ANDROID_HOME/platform-tools/adb -s emulator-5554" tools/android_tests.sh out/android-development
       # Stalls exported on the emulator and played from the package made of
       # it, a touch on its purse the UI's press and the server's command
-      # (D590). The emulator draws by software (SwiftShader): at the phone's
+      # (D590), and one on its top view switch kept in the player's settings
+      # in the app's files (D628). The emulator draws by software (SwiftShader): at the phone's
       # 1080 by 2340 a frame took two and a half seconds, and the purse was
       # not drawn in nine minutes, so the screen is a quarter of that.
       - name: Play exported Stalls on the emulator
@@ -176,7 +177,7 @@ jobs:
         run: |
           adb="$ANDROID_HOME/platform-tools/adb -s emulator-5554"
           $adb shell wm size 540x1170
-          ADB="$adb" tools/android_play_exported.sh out/android-development games/tycoon coins
+          ADB="$adb" tools/android_play_exported.sh out/android-development games/tycoon "coins,Top view" '"tycoon.top": 1'
 
   # A longer search than the check's fixed runs (D242): five minutes a fuzz
   # target from an empty corpus, each finding printed so it can be replayed.

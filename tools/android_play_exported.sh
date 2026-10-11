@@ -5,26 +5,30 @@
 # beside it, for the device's loopback; the game's files it packs come back
 # to be packaged by tools/android_apk.sh, as `--packager` would package them;
 # the exported server runs on the device as its folder has it, and the
-# package, installed and launched, plays from the files it carries. Given a
-# label pattern, the first button whose accessibility name matches it is
-# touched at the middle of its bounds once the client is admitted, as a
-# player's finger would (D590): the touch is the UI's press, and the press
-# the game's command, which the server takes. The client is stopped by the
-# back key, the server as a supervisor stops it, both for their totals.
+# package, installed and launched, plays from the files it carries. Given
+# label patterns, separated by commas, the first node whose accessibility
+# name matches each is touched in turn at the middle of its bounds once the
+# client is admitted, as a player's finger would (D590): the touch is the
+# UI's press, and the press the game's command, which the server takes. The
+# client is stopped by the back key, the server as a supervisor stops it,
+# both for their totals. Given a settings pattern, the player's settings
+# the client kept in its files directory must match it (D628).
 #
-#   tools/android_play_exported.sh <android build tree> [<game directory> [<label pattern>]]
+#   tools/android_play_exported.sh <android build tree> [<game directory> [<label patterns> [<settings pattern>]]]
 #
 # ADB is the adb command with its device (`adb` when unset), for example
 # ADB="adb -P 5139 -s emulator-5590"; ANDROID_HOME names the SDK the
 # packager uses. Passes when the client made its surface, was admitted, and
-# never stalled, and, given a pattern, pressed the button, sent the command,
-# and the server took it.
+# never stalled, and, given patterns, pressed a node, sent the command, and
+# the server took it; and, given a settings pattern, kept settings matching
+# it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 tree="$(cd "$1" && pwd)"
 game="${2:-games/tycoon}"
-pattern="${3:-}"
+patterns="${3:-}"
+kept="${4:-}"
 adb=(${ADB:-adb})
 name="$(basename "$game")"
 package="local.$name"
@@ -77,15 +81,16 @@ for _ in $(seq 90); do
     sleep 2
 done
 
-if [ -n "$pattern" ]; then
+IFS=, read -r -a wanted <<<"$patterns"
+for pattern in "${wanted[@]}"; do
     # The first dump only asks the client's view for its provider: asked
-    # again until the button is in it, up to five minutes, as an emulator
-    # in CI draws a frame in a second or two.
+    # again until the node is in it, up to five minutes, as an emulator in
+    # CI draws a frame in a second or two.
     bounds=""
     for _ in $(seq 60); do
         "${adb[@]}" shell uiautomator dump /sdcard/rawframe-play.xml >/dev/null 2>&1 || true
         bounds="$("${adb[@]}" shell cat /sdcard/rawframe-play.xml 2>/dev/null | sed 's/<node /\n<node /g' |
-            grep "package=\"$package\"" | grep 'class="android.widget.Button"' |
+            grep "package=\"$package\"" |
             sed -n 's/.*content-desc="\([^"]*\)".*bounds="\[\([0-9]*\),\([0-9]*\)\]\[\([0-9]*\),\([0-9]*\)\]".*/\2 \3 \4 \5 \1/p' |
             grep -E -- " .*$pattern" | head -1 || true)"
         [ -n "$bounds" ] && break
@@ -93,7 +98,7 @@ if [ -n "$pattern" ]; then
     done
     "${adb[@]}" shell rm -f /sdcard/rawframe-play.xml
     if [ -z "$bounds" ]; then
-        echo "no button matching $pattern"
+        echo "nothing matching $pattern"
     else
         read -r left top right bottom label <<<"$bounds"
         "${adb[@]}" shell input tap $(((left + right) / 2)) $(((top + bottom) / 2))
@@ -106,7 +111,7 @@ if [ -n "$pattern" ]; then
         done
         sleep 10
     fi
-fi
+done
 
 "${adb[@]}" shell input keyevent BACK
 for _ in $(seq 60); do
@@ -121,14 +126,17 @@ done
 server_pid=""
 
 client_log >"$work/client.log"
+"${adb[@]}" shell run-as "$package" cat files/settings.json 2>/dev/null | tr -d '\r' >"$work/settings.json" || true
+echo "kept: $(tr -d '\n' <"$work/settings.json")"
 "${adb[@]}" shell cat "$device/server.log" | tr -d '\r' >"$work/server.log"
 grep -o '"code":"server_summary"[^}]*}[^}]*}' "$work/server.log" || true
 grep -o '"code":"\(bots_admitted\|bots_summary\|surface_made\|accessibility_ready\|input_summary\|ui_summary\|start_failed\|stopped\)"[^}]*}[^}]*}' \
     "$work/client.log" || { echo "nothing of note:"; tail -20 "$work/client.log"; }
 if grep -q '"code":"surface_made"' "$work/client.log" && grep -q '"code":"bots_admitted"' "$work/client.log" &&
     grep -q '"admitted":1,.*"stalled":0,' "$work/client.log" &&
-    { [ -z "$pattern" ] || { grep -q '"presses":[1-9]' "$work/client.log" &&
-        grep -q '"commandsSent":[1-9]' "$work/client.log" && grep -q '"commandsTaken":[1-9]' "$work/server.log"; }; }; then
+    { [ -z "$patterns" ] || { grep -q '"presses":[1-9]' "$work/client.log" &&
+        grep -q '"commandsSent":[1-9]' "$work/client.log" && grep -q '"commandsTaken":[1-9]' "$work/server.log"; }; } &&
+    { [ -z "$kept" ] || grep -qE -- "$kept" "$work/settings.json"; }; then
     exit 0
 fi
 echo "== the client's records"
