@@ -68,6 +68,35 @@
           "textWrap": "no_wrap"
         }
       ]
+    },
+    {
+      "component": "runners.loudness",
+      "widthOffset": 140,
+      "heightOffset": 14,
+      "absolute": true,
+      "xScale": 1,
+      "xOffset": -12,
+      "yOffset": 12,
+      "anchorX": 1,
+      "fill": "#101820c0",
+      "radius": 7,
+      "text": "0ddc1c32e7926c4c",
+      "range": "horizontal",
+      "rangeMinimum": -40,
+      "rangeStep": 2,
+      "children": [
+        {
+          "component": "runners.dial",
+          "widthOffset": 14,
+          "heightOffset": 14,
+          "absolute": true,
+          "xScale": 1,
+          "anchorX": 1,
+          "fill": "#d8e4ffff",
+          "radius": 7,
+          "thumb": true
+        }
+      ]
     }
   ]
 }

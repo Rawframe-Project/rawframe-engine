@@ -8,6 +8,10 @@
       "message": "Vuruldun!",
       "sourceHash": "17ead5c6ce1de56f"
     },
+    "hud.loudness": {
+      "message": "Efekt sesi",
+      "sourceHash": "ccc5c6641208c47c"
+    },
     "hud.score": {
       "message": "{$points} puan",
       "sourceHash": "92a0315619079782"

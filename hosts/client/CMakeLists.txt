@@ -46,6 +46,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set(CONTENT ${PROJECT_BINARY_DIR}/hosts/arena/runners_content)
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/client_drawn.tga)
         configure_file(tests/drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/drawn.conf @ONLY)
+        configure_file(tests/runners_clicked.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_clicked.conf @ONLY)
+        # Runners' effects volume slider dragged from its top to its least
+        # (D625): the present system sets the player's effects volume from
+        # its value, and the client's sound, played to no device, takes it;
+        # the two summaries come in either order as the client stops.
+        add_test(NAME client_quiets_runners
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/runners_clicked.conf
+                         games/runners/runners.game drag=1261,19,1131,19
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_quiets_runners PROPERTIES
+                             FIXTURES_REQUIRED runners_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "(\"code\":\"ui_summary\"[^\n]*\"ranged\":([3-9]|[1-9][0-9]+),.*\"what one client played\"[^\n]*\"volumesSet\":[1-9]|\"what one client played\"[^\n]*\"volumesSet\":[1-9].*\"code\":\"ui_summary\"[^\n]*\"ranged\":([3-9]|[1-9][0-9]+),)")
         add_test(NAME client_drawn
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh $<TARGET_FILE:rawframe_host_dedicated_server>

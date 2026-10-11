@@ -35,6 +35,8 @@ component 1e5be856-5be3-47ab-84a3-433ac63f84c6 runners.taken rawframe.ui.Node
 component d06185a9-60a5-4e0a-9779-7ca0cb5699c9 runners.target rawframe.ui.Node
 component beb08a69-db84-40d4-bc0f-d7deafc09bc9 runners.meters rawframe.ui.Node
 component 14308cc4-eefa-459e-96da-a72867574b9d runners.points rawframe.ui.Node
+component 2f46a65c-2840-454c-bb2e-079977abf179 runners.loudness rawframe.ui.Node
+component 7d6a5c91-f124-40bf-8eb7-f374cf22368a runners.dial rawframe.ui.Node
 
 system runners.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose write rawframe.physics2d.character with runners.stick random spawn before rawframe.physics2d.step
 system runners.run simulation run read runners.stick read rawframe.physics2d.character write rawframe.physics2d.velocity entities before rawframe.physics2d.step predicted emits jump
@@ -109,6 +111,7 @@ locale en
 # D386).
 font c3b22aa9db1c2239 Inter-Regular.ttf
 label ac39139dad885119 hud.strings hud.score points
+label 0ddc1c32e7926c4c hud.strings hud.loudness
 
 # What a client draws (D254): runners (runner.png) over the level's tiles
 # (tiles.png, the level's runners.tile), through its own runner's camera
@@ -137,6 +140,10 @@ present runners.glint glint read runners.emitter write runners.dust write runner
 presentation runners.hud runners.target runners.meters runners.landed runners.taken runners.points on player
 ui runners.ui
 present runners.gauge gauge read runners.score write runners.landed write runners.taken write runners.points
+# The effects' volume, a slider at the top right of the view (D625): its
+# value is the player's volume for the mixer's effects bus.
+presentation runners.loudness runners.dial on player
+present runners.loudness loudness write runners.loudness write runners.dial
 texture eddbc014cab63eb2 runner.png
 texture a44ecb4a39ac5cc8 tiles.png
 texture c067c4be8ce86d12 hud.png

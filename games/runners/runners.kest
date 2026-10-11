@@ -146,6 +146,31 @@ fn gauge(count: i32, scores: [Score], landed: [ui.Node], taken: [ui.Node], point
     }
 }
 
+// The effects' volume slider's press code (D625), by which the present
+// system reads the value the player slid it to.
+const LOUDNESS: i64 = 1
+
+// The effects' volume at the top right of the view (D625), as runners.ui
+// starts it: a dark track from -40 decibels to nought by twos, at nought
+// to begin, its dial at the value's share of it; the player's volume for
+// the mixer's effects bus, silent at its least.
+fn loudness(count: i32, tracks: [ui.Node], dials: [ui.Node]) {
+    let decibels = ui.value(LOUDNESS)
+    let share = (decibels + 40.0) / 40.0
+    if decibels <= -40.0 {
+        sound.volume(sound.EFFECTS, -80.0)
+    } else {
+        sound.volume(sound.EFFECTS, decibels)
+    }
+    let i = 0
+    while i < count {
+        tracks[i].press = LOUDNESS
+        dials[i].xScale = share
+        dials[i].anchorX = share
+        i = i + 1
+    }
+}
+
 // A hit runner's wince (D272): its player's emitter, the client's own and
 // carried by no server, cued once for each hit told this tick.
 fn wince(count: i32, emitters: [sound.Emitter]) {

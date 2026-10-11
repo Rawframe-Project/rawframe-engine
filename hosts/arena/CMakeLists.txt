@@ -153,11 +153,11 @@ if(RAWFRAME_BUILD_TESTS)
     set(rawframe_runners_coverage "")
     if(NOT RAWFRAME_CONFIGURATION STREQUAL "shipping")
         set(rawframe_runners_coverage
-            "\"text_coverage\".*\"locale\":\"tr\",\"translated\":3,\"keys\":3,\"firstMissing\":\"\".*")
+            "\"text_coverage\".*\"locale\":\"tr\",\"translated\":4,\"keys\":4,\"firstMissing\":\"\".*")
     endif()
     set_tests_properties(runners_text PROPERTIES
                          FIXTURES_REQUIRED runners_content
-                         PASS_REGULAR_EXPRESSION "${rawframe_runners_coverage}\"text_catalog\".*\"tables\":1,\"translations\":1,\"keys\":3,\"stale\":0,\"locale\":\"tr-TR\",\"default\":\"en\"")
+                         PASS_REGULAR_EXPRESSION "${rawframe_runners_coverage}\"text_catalog\".*\"tables\":1,\"translations\":1,\"keys\":4,\"stale\":0,\"locale\":\"tr-TR\",\"default\":\"en\"")
     # Eight bots play runners and the first one's World is heard: its shots
     # and the others' within range sound, its own jumps sound as predicted
     # effects (D220), it winces when hit through its client's own emitter
@@ -190,7 +190,7 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED runners_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+,\"images\":[1-9][0-9]+,[^\n]*\"shadows\":[1-9][0-9]+,\"glyphRuns\":[1-9][0-9]+,\"glyphs\":[1-9][0-9]+,\"glyphRunsWaiting\":0.*\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,\"mostNodes\":12,[^\n]*\"fontsRead\":1,\"texts\":[1-9][0-9]*,\"textsUnknown\":0,\"glyphRuns\":[1-9][0-9]*,\"glyphsLeftOut\":0,.*\"code\":\"drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"draws\":[1-9][0-9]+,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]*,\"ribbonsDrawn\":[1-9][0-9]*,\"playerFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,[^\n]*\"captured\":true")
+                             "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+,\"images\":[1-9][0-9]+,[^\n]*\"shadows\":[1-9][0-9]+,\"glyphRuns\":[1-9][0-9]+,\"glyphs\":[1-9][0-9]+,\"glyphRunsWaiting\":0.*\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,\"mostNodes\":16,[^\n]*\"fontsRead\":1,\"texts\":[1-9][0-9]*,\"textsUnknown\":0,\"glyphRuns\":[1-9][0-9]*,\"glyphsLeftOut\":0,.*\"code\":\"drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"draws\":[1-9][0-9]+,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]*,\"ribbonsDrawn\":[1-9][0-9]*,\"playerFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,[^\n]*\"captured\":true")
     endif()
     # A picture too large to read back is drawn without (D534): frames are
     # made past the first asked to be read back.

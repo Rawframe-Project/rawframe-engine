@@ -7,6 +7,10 @@
       "message": "Hit!",
       "description": "Shown when the player's runner is hit."
     },
+    "hud.loudness": {
+      "message": "Effects volume",
+      "description": "The name a screen reader reads for the slider that sets how loud the game's sound effects are."
+    },
     "hud.score": {
       "message": ".input {$points :integer}\n.match $points\none {{{$points} point}}\n* {{{$points} points}}",
       "description": "The player's score, which counts the hits they took."
