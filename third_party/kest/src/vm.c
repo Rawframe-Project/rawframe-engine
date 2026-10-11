@@ -7284,6 +7284,49 @@ int64_t kest_came_from(const KestRuntime *runtime, int32_t entry,
     return (int64_t)kest_chunk_origin(runtime->module->functions[entry], at);
 }
 
+const char *kest_entry_source(const KestRuntime *runtime, int32_t entry) {
+    if (runtime == NULL || entry < 0 ||
+        (uint32_t)entry >= runtime->module->count) {
+        return NULL;
+    }
+    const KestSource *source = runtime->module->functions[entry]->source;
+    return source == NULL ? NULL : source->path;
+}
+
+bool kest_locate(const KestRuntime *runtime, int32_t entry, uint32_t offset,
+                 uint32_t *line, uint32_t *column) {
+    if (runtime == NULL || line == NULL || column == NULL || entry < 0 ||
+        (uint32_t)entry >= runtime->module->count) {
+        return false;
+    }
+    // The file the body was compiled from, which is the one a refusal while
+    // it runs is reported against, counted the way every message counts.
+    const KestSource *source = runtime->module->functions[entry]->source;
+    if (source == NULL || source->line_count == 0 ||
+        offset > source->length) {
+        return false;
+    }
+    kest_source_locate(source, offset, line, column);
+    return true;
+}
+
+int64_t kest_next_at(const KestRuntime *runtime, int32_t entry, uint32_t at) {
+    if (runtime == NULL || entry < 0 ||
+        (uint32_t)entry >= runtime->module->count) {
+        return -1;
+    }
+    const KestChunk *chunk = runtime->module->functions[entry];
+    // A breakpoint is one byte wide and the instruction under it is not, so
+    // the width read through one is the start of somewhere in the middle of
+    // the next instruction. Nothing compiles to that byte, so a body that has
+    // it here has a breakpoint here, and the host that wrote it has the byte
+    // it wrote over. See D991.
+    if (at >= chunk->code_count || chunk->code[at] == (uint8_t)KEST_OP_STOP) {
+        return -1;
+    }
+    return (int64_t)at + kest_op_wide(chunk->code[at]);
+}
+
 bool kest_frame_at_address(const KestRuntime *runtime, uint32_t deep,
                            uint16_t slot) {
     if (runtime == NULL || deep >= runtime->frame_count) {

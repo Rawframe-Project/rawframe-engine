@@ -1511,8 +1511,39 @@ uint8_t *kest_code_of(KestRuntime *runtime, int32_t entry, uint32_t *count);
 // Where in the source the instruction at this offset came from, or -1. One per
 // instruction, which is what makes a breakpoint at a line a breakpoint at an
 // instruction and what makes a stack trace say where.
+//
+// It finds the instruction by walking the body from its start, so it is asked
+// of the body as it was compiled: a breakpoint written in front of `at` is one
+// byte where a wider instruction was, and the walk past it is a walk through
+// the middle of instructions. Put back the bytes written over first and write
+// them again after, which is what `kest debug` does.
 int64_t kest_came_from(const KestRuntime *runtime, int32_t entry,
                        uint32_t at);
+
+// Which file a body was written in: the path as the build read it, which is
+// the one every message about that body names. It lives as long as the build
+// does. NULL for an index that is no function. See D1290.
+const char *kest_entry_source(const KestRuntime *runtime, int32_t entry);
+
+// A source offset `kest_came_from` answered, as a line and a column of that
+// body's file: both counted from one, and the column in characters rather
+// than bytes, the way every message and `kest debug` say them. False for an
+// index that is no function and for an offset past the end of the file. It is
+// a search of lines the build already counted, not a walk.
+bool kest_locate(const KestRuntime *runtime, int32_t entry, uint32_t offset,
+                 uint32_t *line, uint32_t *column);
+
+// Where the instruction after the one at `at` starts, which is the body's
+// length after its last. It is what a host steps past a breakpoint it is
+// standing on with: take it out, write one here, carry on, and write the first
+// back when the machine stops at the second. `at` has to be where an
+// instruction starts, which `kest_stopped`, `kest_frame_ip` and this answer.
+//
+// -1 for an index that is no function, for an `at` past the end, and for a
+// breakpoint at `at`: the byte a host wrote is one wide and the instruction
+// under it is not, and only the host knows what it wrote over. A host walking
+// a body for every line does it with the breakpoints out, as above. See D1290.
+int64_t kest_next_at(const KestRuntime *runtime, int32_t entry, uint32_t at);
 
 // How many frames deep the machine is, and what each is: `kest_frame_in` is
 // which body, by the number `kest_entry` answers with, and `kest_frame_ip` is
