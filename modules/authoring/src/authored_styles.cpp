@@ -22,10 +22,15 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, AuthoringEr
 result::Result<ui::StyleSheet> sheetOf(const std::string& text) {
     auto read = ui::readStyles(text);
     if (!read.has_value()) {
-        return std::unexpected<result::Error>{std::move(read).error().mappedTo(result::ErrorClass::InvalidArgument,
-                                                                               kAuthoringDomain,
-                                                                               code(AuthoringError::ValidationFailed),
-                                                                               "an authored style sheet reads")};
+        // What the reader refused, and where, said to whoever asked.
+        std::string why = "the style sheet does not read: " + std::string{read.error().description()};
+        for (const result::ContextField& kField : read.error().context()) {
+            if (kField.key == "path") {
+                why += " at " + std::string{kField.value};
+            }
+        }
+        return std::unexpected<result::Error>{std::move(read).error().mappedTo(
+            result::ErrorClass::InvalidArgument, kAuthoringDomain, code(AuthoringError::ValidationFailed), why)};
     }
     return read;
 }

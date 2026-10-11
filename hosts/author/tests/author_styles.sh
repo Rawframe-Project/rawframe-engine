@@ -56,7 +56,7 @@ cmp "$work/root/tycoon.styles" "$work/original.styles"
 reply 4 | grep -q '"undoable":1,"redoable":0'
 grep -q '"fill": "#c01818c0"' "$work/root/tycoon.styles"
 cp "$work/root/tycoon.styles" "$work/redone.styles"
-reply 5 | grep -q '"code":"validation_failed"'
+reply 5 | grep -q '"code":"validation_failed".*"message":"the style sheet does not read: a color is # and 8 lowercase hexadecimal digits, #rrggbbaa at $.styles\[0\].base.fill"'
 reply 6 | grep -q '"code":"validation_failed".*"message":"the operation changes a scene, not a style sheet"'
 reply 7 | grep -q '"code":"target_stale"'
 cmp "$work/root/tycoon.styles" "$work/redone.styles"
