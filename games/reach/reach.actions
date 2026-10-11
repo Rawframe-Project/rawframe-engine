@@ -1,0 +1,122 @@
+{
+  "kind": "input.actions",
+  "formatVersion": 1,
+  "actions": [
+    {
+      "actionId": "a07f7d7955fc52d3",
+      "name": "right_hand",
+      "valueType": "pose",
+      "displayName": "Right hand",
+      "bindings": [
+        {
+          "device": "controller",
+          "control": "grip_right"
+        }
+      ]
+    },
+    {
+      "actionId": "937b28cd2632ea8d",
+      "name": "left_hand",
+      "valueType": "pose",
+      "displayName": "Left hand",
+      "bindings": [
+        {
+          "device": "controller",
+          "control": "grip_left"
+        }
+      ]
+    },
+    {
+      "actionId": "812fadf7ba529e3c",
+      "name": "take_right",
+      "valueType": "bool",
+      "displayName": "Take with the right hand",
+      "bindings": [
+        {
+          "device": "controller",
+          "control": "select_right"
+        },
+        {
+          "device": "mouse",
+          "control": "left"
+        },
+        {
+          "device": "keyboard",
+          "physicalKey": "space"
+        }
+      ]
+    },
+    {
+      "actionId": "f9af09d99a0439c9",
+      "name": "take_left",
+      "valueType": "bool",
+      "displayName": "Take with the left hand",
+      "bindings": [
+        {
+          "device": "controller",
+          "control": "select_left"
+        }
+      ]
+    },
+    {
+      "actionId": "2a9fe1dbc9eaf74c",
+      "name": "reach",
+      "valueType": "axis2d",
+      "displayName": "Reach",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "quad": {
+            "up": "key_w",
+            "down": "key_s",
+            "left": "key_a",
+            "right": "key_d"
+          }
+        },
+        {
+          "device": "gamepad",
+          "control": "stick_left"
+        }
+      ]
+    },
+    {
+      "actionId": "c709e697ea408e86",
+      "name": "raise",
+      "valueType": "bool",
+      "displayName": "Raise the hand",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "physicalKey": "key_e"
+        }
+      ]
+    },
+    {
+      "actionId": "0f7d4a311b49ceea",
+      "name": "lower",
+      "valueType": "bool",
+      "displayName": "Lower the hand",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "physicalKey": "key_q"
+        }
+      ]
+    }
+  ],
+  "contexts": [
+    {
+      "contextId": "8a9f43d46d07160e",
+      "name": "seated",
+      "actions": [
+        "right_hand",
+        "left_hand",
+        "take_right",
+        "take_left",
+        "reach",
+        "raise",
+        "lower"
+      ]
+    }
+  ]
+}

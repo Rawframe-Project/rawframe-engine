@@ -416,6 +416,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                                  PASS_REGULAR_EXPRESSION
                                  "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"framesOnPanel\":[1-9][0-9]+,[^\n]*\"glyphRuns\":[1-9][0-9]+,.*\"code\":\"ui_summary\"[^\n]*\"framesPointed\":[1-9][0-9]+,.*\"code\":\"xr_summary\"[^\n]*\"framesPanelSubmitted\":[1-9][0-9]+,[^\n]*\"handsPointing\":[1-9][0-9]+,[^\n]*\"failed\":false")
         endif()
+        # Reach on a headset (D657): the room drawn for both eyes from the
+        # player's seat, the controllers its hands, and a flat bot seated
+        # at the table beside it in one World (ADR-0081's cross-play).
+        if(RAWFRAME_CLIENT_HEADSET AND RAWFRAME_MONADO_SERVICE AND NOT WIN32)
+            configure_file(tests/reach_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/reach_headset.conf @ONLY)
+            add_test(NAME client_reach_headset
+                     COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                             ${PROJECT_SOURCE_DIR}/tools/xr_run.sh ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh
+                             $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                             ${CMAKE_CURRENT_BINARY_DIR}/reach_headset.conf games/reach/reach.game /dev/null 1
+                     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+            set_tests_properties(client_reach_headset PROPERTIES
+                                 PROCESSORS 2
+                                 PASS_REGULAR_EXPRESSION
+                                 "\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+}.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":[1-9][0-9]+,[^\n]*\"failed\":false}.*\"code\":\"input_summary\"[^\n]*\"controllerEvents\":[1-9][0-9]+")
+        endif()
         # Each draws a window on lavapipe beside a server, and bots or a
         # second client in some: two of a preset's processors each, so a full
         # check, eight trees at once, starts fewer at once and none is starved
@@ -440,5 +456,9 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # 66 s in each instrumented tree, their longest (D616).
     if(TEST client_stalls_headset)
         set_tests_properties(client_stalls_headset PROPERTIES LABELS "window;headset")
+    endif()
+    # So is Reach's (D657).
+    if(TEST client_reach_headset)
+        set_tests_properties(client_reach_headset PROPERTIES LABELS "window;headset")
     endif()
 endif()

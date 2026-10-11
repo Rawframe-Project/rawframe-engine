@@ -7,6 +7,7 @@ module reach
 // the hand opens.
 
 import controls
+import rawframe.model
 import rawframe.physics3d
 import rawframe.world
 import std.math
@@ -240,6 +241,40 @@ fn release(count: i32, grips: [Grip], entities: [world.Entity]) {
                 world.destroy(entities[i])
             }
         }
+        i = i + 1
+    }
+}
+
+// What a client draws: every body it mirrors by its shape, the floor a
+// grey, the table a wood's brown, the blocks a bright orange, and the
+// hands a pale skin.
+fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
+    let i = 0
+    while i < count {
+        let b = bodies[i]
+        let look = model.Model(model.BOX, b.width, b.height, b.depth, 0x8C8C84FF, u64(0), 0.0)
+        if b.width < 1.0 {
+            look.color = 0x7A5230FF
+        }
+        if b.collisionClass == BLOCK {
+            look.color = 0xE8822AFF
+        }
+        if b.collisionClass == HAND {
+            look = model.Model(model.SPHERE, b.width, b.width, b.width, 0xE6C3A5FF, u64(0), 0.0)
+        }
+        looks[i] = look
+        i = i + 1
+    }
+}
+
+// A client's view from its seat: a seated eye's height above the floor,
+// looking toward the table's middle and down at it. A headset's eyes are
+// placed from here, its play space (D595).
+fn frame(count: i32, seats: [Seat], views: [model.Camera]) {
+    let i = 0
+    while i < count {
+        views[i] = model.Camera(f32(seats[i].x), 1.2, f32(seats[i].z), f32(seats[i].heading), -0.5, 1.1, 0.05,
+                                15.0, u32(0), model.FIXED)
         i = i + 1
     }
 }

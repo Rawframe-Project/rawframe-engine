@@ -18,6 +18,9 @@ component aa174e17-8efd-4de0-b82e-bd5b6d42d638 reach.seat Seat
 component 8c4cd7c9-b5ff-4560-8edd-1dc2b3795509 reach.hand Hand
 component ea827a4e-3a16-42dc-b120-eb28ea24c609 reach.block Block
 component 84064735-82e5-4725-90d0-39e682d09191 reach.grip Grip
+# What a client draws and where it looks from; no server carries either.
+component 5a30e0bb-bf22-49df-b00a-22b24f0980ee reach.look rawframe.model.Model
+component f0992124-ca0d-469d-8379-bfc5880526c8 reach.view rawframe.model.Camera
 
 # A player is seated, given two hands; each hand goes where its player
 # holds it; a hand that grips near a block takes it, and lets it go when
@@ -39,8 +42,20 @@ spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.04 height=0.04 depth=0.
 spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.04 height=0.04 depth=0.04 collisionClass=block density=500 friction=0.7 rawframe.physics3d.pose x=0 y=0.79 z=0.15 rawframe.physics3d.velocity rawframe.physics3d.impulse reach.block
 spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.04 height=0.04 depth=0.04 collisionClass=block density=500 friction=0.7 rawframe.physics3d.pose x=0.3 y=0.79 z=0.15 rawframe.physics3d.velocity rawframe.physics3d.impulse reach.block
 
-replicate rawframe.physics3d.body rawframe.physics3d.pose reach.block
+replicate rawframe.physics3d.body rawframe.physics3d.pose reach.block reach.seat
 entity reach.block holder
 player reach.hands reach.seat
 input reach.hands
+# A client makes its hands from its player's actions (reach.actions) with
+# sample.kest: a headset's controllers, or keys and the mouse; bots press
+# the same controls.
+actions reach.actions
+sample sample.kest sample
 interpolate rawframe.physics3d.pose
+
+# What a client draws: every body it mirrors, by its shape, from its own
+# seat.
+presentation reach.look on rawframe.physics3d.body
+present reach.dress dress read rawframe.physics3d.body write reach.look
+presentation reach.view on player
+present reach.frame frame read reach.seat write reach.view

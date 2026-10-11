@@ -1,0 +1,81 @@
+module sample
+
+// A client's input for Reach (reach.game's `sample` line): its player's
+// hands, made each tick from its actions (reach.actions). A headset's
+// controllers place each hand where they are, from where the head began,
+// seated: the head begins at a seated eye's height above the floor, so a
+// hand's height is the eye's and the controller's below or above it. A
+// flat player reaches with the right hand by keys (ahead, back, aside, up,
+// and down), which the sample builds on tick to tick (D525), and takes with
+// the mouse's left button or the space bar.
+
+import controls
+import rawframe.input
+
+const RIGHT_HAND: u64 = 0xa07f7d7955fc52d3
+const LEFT_HAND: u64 = 0x937b28cd2632ea8d
+const TAKE_RIGHT: u64 = 0x812fadf7ba529e3c
+const TAKE_LEFT: u64 = 0xf9af09d99a0439c9
+const REACH: u64 = 0x2a9fe1dbc9eaf74c
+const RAISE: u64 = 0xc709e697ea408e86
+const LOWER: u64 = 0x0f7d4a311b49ceea
+
+// A seated eye's height, meters above the floor.
+const EYE: f32 = 1.2
+
+// Meters a flat player's hand moves in a tick at a full key, and how far
+// it may go from the seat.
+const STEP: f32 = 0.01
+const FURTHEST: f32 = 1.2
+
+fn sample(into: [controls.Hands]) {
+    if input.on(RIGHT_HAND) {
+        into[0].rightX = input.x(RIGHT_HAND)
+        into[0].rightY = EYE + input.y(RIGHT_HAND)
+        into[0].rightZ = input.z(RIGHT_HAND)
+    } else {
+        // Where the right hand rests until moved: above the table's edge.
+        if into[0].rightX == 0.0 && into[0].rightY == 0.0 && into[0].rightZ == 0.0 {
+            into[0].rightX = 0.2
+            into[0].rightY = 0.95
+            into[0].rightZ = -0.35
+        }
+        let lift = 0.0
+        if input.on(RAISE) {
+            lift = lift + STEP
+        }
+        if input.on(LOWER) {
+            lift = lift - STEP
+        }
+        into[0].rightX = within(into[0].rightX + input.x(REACH) * STEP, 0.0 - FURTHEST, FURTHEST)
+        into[0].rightY = within(into[0].rightY + lift, 0.1, 2.0)
+        into[0].rightZ = within(into[0].rightZ - input.y(REACH) * STEP, 0.0 - FURTHEST, FURTHEST)
+    }
+    into[0].leftX = 0.0
+    into[0].leftY = 0.0
+    into[0].leftZ = 0.0
+    if input.on(LEFT_HAND) {
+        into[0].leftX = input.x(LEFT_HAND)
+        into[0].leftY = EYE + input.y(LEFT_HAND)
+        into[0].leftZ = input.z(LEFT_HAND)
+    }
+    into[0].rightGrip = 0.0
+    if input.on(TAKE_RIGHT) || input.pressed(TAKE_RIGHT) {
+        into[0].rightGrip = 1.0
+    }
+    into[0].leftGrip = 0.0
+    if input.on(TAKE_LEFT) || input.pressed(TAKE_LEFT) {
+        into[0].leftGrip = 1.0
+    }
+}
+
+// `value` kept between `least` and `most`.
+fn within(value: f32, least: f32, most: f32) -> f32 {
+    if value < least {
+        return least
+    }
+    if value > most {
+        return most
+    }
+    return value
+}
