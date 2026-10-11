@@ -1,0 +1,1 @@
+{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[{"operation":"styles.set_transitions","style":"1d2c3b4a59687706","value":[{"parts":["fill","radius"],"seconds":0.25,"easing":"linear"}]}]}

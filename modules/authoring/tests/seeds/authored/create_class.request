@@ -1,0 +1,1 @@
+{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[{"operation":"styles.create_class","style":"0123456789abcdef","name":"badge","place":0}]}

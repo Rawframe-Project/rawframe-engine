@@ -1,0 +1,1 @@
+{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[{"operation":"styles.set_part","style":"85ecf7b643b63d65","variant":"pressed","part":"fill","value":"#203040ff"},{"operation":"styles.set_part","style":"85ecf7b643b63d65","variant":"base","part":"radius","value":null}]}

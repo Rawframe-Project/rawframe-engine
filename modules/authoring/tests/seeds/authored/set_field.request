@@ -1,0 +1,1 @@
+{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[{"operation":"ui.set_field","node":"game.points","field":"fill","value":"#c01818c0"},{"operation":"ui.set_field","node":"game.hud","field":"widthOffset","value":null}]}

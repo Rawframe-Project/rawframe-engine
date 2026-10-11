@@ -1,0 +1,1 @@
+{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[{"operation":"ui.move_node","node":"game.points","parent":null,"place":0},{"operation":"ui.move_node","node":"game.menu","parent":"game.points"}]}

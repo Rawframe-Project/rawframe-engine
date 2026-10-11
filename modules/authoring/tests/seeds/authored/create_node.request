@@ -1,0 +1,1 @@
+{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[{"operation":"ui.create_node","node":"game.coin","parent":"game.hud","place":0},{"operation":"ui.set_field","node":"game.coin","field":"textSize","value":12}]}

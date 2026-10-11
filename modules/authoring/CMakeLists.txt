@@ -10,3 +10,4 @@ rawframe_module(NAME authoring
 rawframe_module_tests(NAME authoring SOURCES tests/authored_scene_test.cpp tests/authored_styles_test.cpp tests/authored_ui_test.cpp tests/delta_test.cpp tests/json_document_test.cpp tests/operations_test.cpp tests/queries_test.cpp tests/request_test.cpp tests/session_test.cpp)
 rawframe_module_fuzz(NAME authoring TARGET journal RUNS 15000 SEEDS tests/seeds/journal SOURCES tests/fuzz_journal.cpp)
 rawframe_module_fuzz(NAME authoring TARGET session RUNS 15000 SEEDS tests/seeds/session SOURCES tests/fuzz_session.cpp)
+rawframe_module_fuzz(NAME authoring TARGET authored RUNS 15000 SEEDS tests/seeds/authored SOURCES tests/fuzz_authored.cpp)
