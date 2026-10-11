@@ -130,7 +130,7 @@ AuthoredScene::open(base::Bits128 document, std::string_view text, const History
     std::unique_ptr<AuthoredScene> made{new AuthoredScene()};
     made->identity_ = document;
     made->scene_ = std::move(*read);
-    made->limits_ = limits;
+    made->history_ = History<Entry>{limits};
     return made;
 }
 
@@ -178,7 +178,8 @@ result::Status AuthoredScene::stage(const Delta& delta) {
     }
     open.journal.push_back(delta);
     open.journalBytes += bytesOf(delta);
-    if (open.journal.size() > limits_.maximumJournalDeltas || open.journalBytes > limits_.maximumJournalBytes) {
+    if (open.journal.size() > history_.limits().maximumJournalDeltas ||
+        open.journalBytes > history_.limits().maximumJournalBytes) {
         discard();
         return refuse(result::ErrorClass::ResourceExhausted,
                       AuthoringError::LimitExceeded,
@@ -206,12 +207,13 @@ result::Result<Committed> AuthoredScene::commit() {
     ++generation_;
     const std::size_t kDeltas = open.journal.size();
     selection_ = heldOf(scene_, selection_);
-    append(Entry{.journal = std::move(open.journal),
-                 .bytes = open.journalBytes + selectionBytes(open.selectedBefore, selection_) + 2 * sizeof(SceneView),
-                 .selectedBefore = std::move(open.selectedBefore),
-                 .selectedAfter = selection_,
-                 .viewBefore = open.viewBefore,
-                 .viewAfter = view_});
+    history_.append(
+        Entry{.journal = std::move(open.journal),
+              .bytes = open.journalBytes + selectionBytes(open.selectedBefore, selection_) + 2 * sizeof(SceneView),
+              .selectedBefore = std::move(open.selectedBefore),
+              .selectedAfter = selection_,
+              .viewBefore = open.viewBefore,
+              .viewAfter = view_});
     return Committed{.generation = generation_, .deltas = kDeltas};
 }
 
@@ -271,29 +273,6 @@ void AuthoredScene::discard() noexcept {
     open_.reset();
 }
 
-void AuthoredScene::append(Entry entry) {
-    // A new entry drops the redo side.
-    while (history_.size() > applied_) {
-        historyBytes_ -= history_.back().bytes;
-        history_.pop_back();
-    }
-    if (clean_.has_value() && *clean_ > applied_) {
-        clean_.reset();
-    }
-    historyBytes_ += entry.bytes;
-    history_.push_back(std::move(entry));
-    ++applied_;
-    // Oldest first; a clean place evicted is definitely dirty.
-    while (!history_.empty() && (history_.size() > limits_.maximumEntries || historyBytes_ > limits_.maximumBytes)) {
-        historyBytes_ -= history_.front().bytes;
-        history_.pop_front();
-        --applied_;
-        if (clean_.has_value()) {
-            clean_ = *clean_ == 0 ? std::nullopt : std::optional{*clean_ - 1};
-        }
-    }
-}
-
 result::Result<Committed> AuthoredScene::step(std::uint64_t generation, bool undo) {
     if (generation != generation_) {
         return refuse(result::ErrorClass::FailedPrecondition,
@@ -308,14 +287,14 @@ result::Result<Committed> AuthoredScene::step(std::uint64_t generation, bool und
                       AuthoringError::TargetNotFound,
                       undo ? "there is nothing to undo" : "there is nothing to redo");
     }
-    const Entry& entry = history_[undo ? applied_ - 1 : applied_];
+    const Entry& entry = history_.next(undo);
     auto applied = apply(scene_, entry.journal, !undo);
     if (!applied.has_value()) {
         // An entry is only ever applied to the scene it was made against.
         return std::unexpected<result::Error>{std::move(applied).error().mappedTo(
             result::ErrorClass::Internal, kAuthoringDomain, code(AuthoringError::Internal), "a history entry applies")};
     }
-    applied_ = undo ? applied_ - 1 : applied_ + 1;
+    history_.stepped(undo);
     ++generation_;
     selection_ = heldOf(scene_, undo ? entry.selectedBefore : entry.selectedAfter);
     view_ = undo ? entry.viewBefore : entry.viewAfter;
@@ -327,7 +306,7 @@ result::Status AuthoredScene::select(std::span<const base::Bits128> entities) {
     std::ranges::sort(chosen);
     const auto kRepeated = std::ranges::unique(chosen);
     chosen.erase(kRepeated.begin(), kRepeated.end());
-    if (chosen.size() > limits_.maximumSelection) {
+    if (chosen.size() > history_.limits().maximumSelection) {
         return refuse(result::ErrorClass::ResourceExhausted,
                       AuthoringError::LimitExceeded,
                       "a selection holds at most its limit of entities");
