@@ -7,7 +7,7 @@
 // each local player's own locale chosen by their sample (D548), and a
 // controller's pose read by the sample (D596), and its select the UI's at
 // its pointer on a headset's panel (D598); and whether its player wears
-// a headset (D603).
+// a headset (D603); and a tracked hand's joints (D663).
 
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/input_kest/sources.h"
@@ -709,4 +709,68 @@ RAWFRAME_TEST(TheSampleKnowsItsPlayerWearsAHeadset) {
     RAWFRAME_EXPECT(play(**bot, 1)[0][4] == 0.0F);
     eyes.tell({});
     RAWFRAME_EXPECT(play(**source, 1)[0][4] == 0.0F);
+}
+
+RAWFRAME_TEST(TheSampleReadsATrackedHandsJoints) {
+    // ADR-0081's tracked source (D663): the first local player's sample
+    // reads the right hand's index tip as the headset tracks it, apart from
+    // every action; past the last joint, an untracked hand, and a bot read
+    // nothing located.
+    const world_kest::GameFiles* game = &gameAt("runners/runners.game",
+                                                "sample sample.kest sample",
+                                                "sample tracked.kest sample",
+                                                {{"tracked.kest",
+                                                  "module tracked\n"
+                                                  "import controls\n"
+                                                  "import rawframe.input\n"
+                                                  "fn sample(into: [controls.Stick]) {\n"
+                                                  "    let tip = input.joint(input.RIGHT, input.INDEX_TIP)\n"
+                                                  "    into[0].run = tip.x\n"
+                                                  "    into[0].jump = tip.y\n"
+                                                  "    into[0].aimX = tip.z\n"
+                                                  "    into[0].aimY = tip.radius\n"
+                                                  "    into[0].fire = 0.0\n"
+                                                  "    if input.handTracked(input.RIGHT) {\n"
+                                                  "        into[0].fire = 1.0\n"
+                                                  "    }\n"
+                                                  "    into[0].pointed = 0.0\n"
+                                                  "    if tip.located {\n"
+                                                  "        into[0].pointed = 1.0\n"
+                                                  "    }\n"
+                                                  "    into[0].targetX = 0.0\n"
+                                                  "    if input.joint(input.RIGHT, input.JOINTS).located {\n"
+                                                  "        into[0].targetX = 1.0\n"
+                                                  "    }\n"
+                                                  "    into[0].targetY = 0.0\n"
+                                                  "    if input.handTracked(input.LEFT) {\n"
+                                                  "        into[0].targetY = 1.0\n"
+                                                  "    }\n"
+                                                  "}\n"}});
+    input::Feed feed;
+    input::TrackedHands hands;
+    auto sources =
+        makeInputSources(SourceSettings{.game = game, .inputSize = sizeof(Stick), .feed = &feed, .hands = &hands});
+    RAWFRAME_EXPECT(sources.has_value());
+    if (!sources.has_value()) {
+        return;
+    }
+    auto source = (*sources)->playerSource(0);
+    auto bot = (*sources)->botSource(7);
+    RAWFRAME_EXPECT(source.has_value() && bot.has_value());
+    if (!source.has_value() || !bot.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(play(**source, 1)[0] == Stick{});
+    std::array<input::HandJoints, 2> told{};
+    told[1].tracked = true;
+    for (input::HandJoint& joint : told[1].joints) {
+        joint.located = true;
+    }
+    told[1].joints[10] = input::HandJoint{
+        .position = {0.25F, -0.3F, -0.45F}, .orientation = {0, 0, 0, 1}, .radius = 0.005F, .located = true};
+    hands.tell(told);
+    RAWFRAME_EXPECT((play(**source, 1)[0] == Stick{0.25F, -0.3F, -0.45F, 0.005F, 1, 1, 0, 0}));
+    RAWFRAME_EXPECT(play(**bot, 1)[0] == Stick{});
+    hands.tell({});
+    RAWFRAME_EXPECT(play(**source, 1)[0] == Stick{});
 }

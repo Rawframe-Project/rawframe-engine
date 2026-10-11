@@ -6,7 +6,9 @@
 // controllers are read and located (D596), and a panel is shown over the
 // views, a quad layer (D597); an aim points at the panel where its ray
 // meets it (D598); and each hand's controller is felt (D600). The loader's
-// environment overrides are never trusted (D654). Run under
+// environment overrides are never trusted (D654). Tracked hands' joints
+// are read where the runtime tracks hands, and none where it does not
+// (D663). Run under
 // tools/xr_run.sh, which starts Monado's service headless (its null
 // compositor, simulated headset, and simulated simple controllers) on
 // lavapipe and names its manifest in RAWFRAME_XR_RUNTIME, the tests' own
@@ -242,6 +244,74 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
     RAWFRAME_EXPECT(kDrawn.imagesPlaced >= 3 * kTotals.framesSubmitted);
     // The frames, then the session, go before the device they are made on.
     framer->reset();
+    made->reset();
+}
+
+RAWFRAME_TEST(TrackedHandsJointsAreReadApartFromTheControllers) {
+    // ADR-0081's tracked source (D663). Under Monado's remote driver
+    // (tools/xr_run.sh --hands tests/hands.py, RAWFRAME_XR_HANDS set) the
+    // right hand is tracked, open, its joints about its controller's grip,
+    // and the left is not; under the simulated controllers no hand is
+    // tracked (D601), and none is read.
+    const auto kRuntime = opened();
+    if (kRuntime == nullptr) {
+        return;
+    }
+    const char* kHands = std::getenv("RAWFRAME_XR_HANDS");
+    const bool kTracks = kHands != nullptr && kHands[0] != '\0';
+    RAWFRAME_EXPECT(kRuntime->system().handTracking == kTracks);
+    const auto kDevice = deviceOf(*kRuntime);
+    RAWFRAME_EXPECT(kDevice != nullptr);
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = xr::Session::create(*kRuntime, *kDevice);
+    RAWFRAME_EXPECT(made.has_value());
+    if (!made.has_value()) {
+        return;
+    }
+    xr::Session& session = **made;
+    // Frames whose right hand was tracked, its every joint located about
+    // its grip, while the left was not.
+    int read = 0;
+    int tracked = 0;
+    for (int frame = 0; frame < 3000 && read < 30; ++frame) {
+        const auto kFrame = session.begin();
+        RAWFRAME_EXPECT(kFrame.has_value());
+        if (!kFrame.has_value()) {
+            break;
+        }
+        if (!kFrame->begun) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            continue;
+        }
+        RAWFRAME_EXPECT(session.end(false).has_value());
+        const xr::SpacePose& kGrip = kFrame->hands[1].grip;
+        if (session.state() != xr::SessionState::Focused || !kGrip.located) {
+            continue;
+        }
+        ++read;
+        const input::HandJoints& kRight = kFrame->joints[1];
+        RAWFRAME_EXPECT(!kFrame->joints[0].tracked);
+        if (!kRight.tracked) {
+            RAWFRAME_EXPECT(std::ranges::none_of(kRight.joints, &input::HandJoint::located));
+            continue;
+        }
+        const bool kAbout = std::ranges::all_of(kRight.joints, [&kGrip](const input::HandJoint& joint) {
+            const float kX = joint.position[0] - kGrip.position[0];
+            const float kY = joint.position[1] - kGrip.position[1];
+            const float kZ = joint.position[2] - kGrip.position[2];
+            return joint.located && joint.radius > 0 && std::sqrt((kX * kX) + (kY * kY) + (kZ * kZ)) < 0.3F;
+        });
+        RAWFRAME_EXPECT(kAbout);
+        tracked += kAbout ? 1 : 0;
+    }
+    std::printf("hands read %d, the right tracked %d, frames %llu\n",
+                read,
+                tracked,
+                static_cast<unsigned long long>(session.statistics().framesHandTracked));
+    RAWFRAME_EXPECT(read == 30);
+    RAWFRAME_EXPECT(kTracks ? tracked == 30 : tracked == 0 && session.statistics().framesHandTracked == 0);
     made->reset();
 }
 

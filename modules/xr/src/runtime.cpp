@@ -121,6 +121,9 @@ result::Result<std::unique_ptr<Runtime>> Runtime::made(const RuntimeSettings& se
     if (!kVulkan) {
         return refused(XrError::Runtime, "the runtime cannot draw through Vulkan");
     }
+    // Hands tracked where the runtime offers it (D663), a tracked source
+    // apart from the actions.
+    RAWFRAME_TRY_ASSIGN(const bool kHands, offers(XR_EXT_HAND_TRACKING_EXTENSION_NAME));
     auto state = std::make_unique<State>();
     XrInstanceCreateInfo create{XR_TYPE_INSTANCE_CREATE_INFO};
     const std::size_t kName = std::min(settings.application.size(), std::size_t{XR_MAX_APPLICATION_NAME_SIZE - 1});
@@ -128,8 +131,9 @@ result::Result<std::unique_ptr<Runtime>> Runtime::made(const RuntimeSettings& se
     std::memcpy(create.applicationInfo.engineName, "Rawframe", sizeof("Rawframe"));
     // OpenXR 1.0, which every runtime takes, 1.1's included.
     create.applicationInfo.apiVersion = XR_API_VERSION_1_0;
-    const std::array<const char*, 1> kExtensions = {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME};
-    create.enabledExtensionCount = kExtensions.size();
+    const std::array<const char*, 2> kExtensions = {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME,
+                                                    XR_EXT_HAND_TRACKING_EXTENSION_NAME};
+    create.enabledExtensionCount = kHands ? 2 : 1;
     create.enabledExtensionNames = kExtensions.data();
     if (const XrResult kMade = xrCreateInstance(&create, &state->instance); XR_FAILED(kMade)) {
         state->instance = XR_NULL_HANDLE;
@@ -148,12 +152,17 @@ result::Result<std::unique_ptr<Runtime>> Runtime::made(const RuntimeSettings& se
         return failed("the runtime has no head-mounted system", kFound);
     }
     XrSystemProperties properties{XR_TYPE_SYSTEM_PROPERTIES};
+    XrSystemHandTrackingPropertiesEXT handTracking{XR_TYPE_SYSTEM_HAND_TRACKING_PROPERTIES_EXT};
+    if (kHands) {
+        properties.next = &handTracking;
+    }
     if (const XrResult kRead = xrGetSystemProperties(state->instance, state->system, &properties); XR_FAILED(kRead)) {
         return failed("the system could not be read", kRead);
     }
     state->description.name = properties.systemName;
     state->description.orientationTracking = properties.trackingProperties.orientationTracking == XR_TRUE;
     state->description.positionTracking = properties.trackingProperties.positionTracking == XR_TRUE;
+    state->description.handTracking = kHands && handTracking.supportsHandTracking == XR_TRUE;
     std::uint32_t views = 0;
     if (const XrResult kCounted = xrEnumerateViewConfigurationViews(
             state->instance, state->system, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 0, &views, nullptr);

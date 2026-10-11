@@ -118,6 +118,12 @@ struct Session::State {
     XrAction haptic = XR_NULL_HANDLE;
     std::array<XrPath, 2> hands{};
     std::array<std::array<XrSpace, 2>, 2> spaces{};
+    /// Each hand's tracker, where the system tracks hands (D663), and the
+    /// extension's functions.
+    std::array<XrHandTrackerEXT, 2> trackers{};
+    PFN_xrCreateHandTrackerEXT createHandTracker = nullptr;
+    PFN_xrDestroyHandTrackerEXT destroyHandTracker = nullptr;
+    PFN_xrLocateHandJointsEXT locateHandJoints = nullptr;
 
     State() = default;
     State(const State&) = delete;
@@ -134,6 +140,11 @@ struct Session::State {
             }
             if (chain.swapchain != XR_NULL_HANDLE) {
                 xrDestroySwapchain(chain.swapchain);
+            }
+        }
+        for (const XrHandTrackerEXT kTracker : trackers) {
+            if (kTracker != XR_NULL_HANDLE) {
+                destroyHandTracker(kTracker);
             }
         }
         for (const auto& kHand : spaces) {
@@ -401,6 +412,72 @@ struct Session::State {
         return read;
     }
 
+    /// A tracker for each hand (D663).
+    result::Status track() {
+        const auto kRead = [this](const char* name, auto& into) -> result::Status {
+            PFN_xrVoidFunction found = nullptr;
+            if (const XrResult kFound = xrGetInstanceProcAddr(runtime->instance, name, &found); XR_FAILED(kFound)) {
+                return failed("the runtime lacks a hand tracking function", kFound);
+            }
+            into = reinterpret_cast<std::remove_reference_t<decltype(into)>>(found);
+            return {};
+        };
+        RAWFRAME_TRY(kRead("xrCreateHandTrackerEXT", createHandTracker));
+        RAWFRAME_TRY(kRead("xrDestroyHandTrackerEXT", destroyHandTracker));
+        RAWFRAME_TRY(kRead("xrLocateHandJointsEXT", locateHandJoints));
+        for (std::size_t at = 0; at < trackers.size(); ++at) {
+            XrHandTrackerCreateInfoEXT create{XR_TYPE_HAND_TRACKER_CREATE_INFO_EXT};
+            create.hand = at == 0 ? XR_HAND_LEFT_EXT : XR_HAND_RIGHT_EXT;
+            create.handJointSet = XR_HAND_JOINT_SET_DEFAULT_EXT;
+            if (const XrResult kMade = createHandTracker(session, &create, &trackers.at(at)); XR_FAILED(kMade)) {
+                trackers.at(at) = XR_NULL_HANDLE;
+                return failed("a hand's tracker could not be made", kMade);
+            }
+        }
+        return {};
+    }
+
+    /// Both hands' joints at `time`, in the local space: neither tracked
+    /// where the system tracks no hand.
+    result::Result<std::array<input::HandJoints, 2>> readJoints(XrTime time) {
+        static_assert(input::kHandJoints == XR_HAND_JOINT_COUNT_EXT);
+        std::array<input::HandJoints, 2> read;
+        constexpr XrSpaceLocationFlags kValid =
+            XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+        for (std::size_t at = 0; at < trackers.size(); ++at) {
+            if (trackers.at(at) == XR_NULL_HANDLE) {
+                continue;
+            }
+            XrHandJointsLocateInfoEXT info{XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT};
+            info.baseSpace = local;
+            info.time = time;
+            std::array<XrHandJointLocationEXT, XR_HAND_JOINT_COUNT_EXT> joints{};
+            XrHandJointLocationsEXT locations{XR_TYPE_HAND_JOINT_LOCATIONS_EXT};
+            locations.jointCount = XR_HAND_JOINT_COUNT_EXT;
+            locations.jointLocations = joints.data();
+            if (const XrResult kLocated = locateHandJoints(trackers.at(at), &info, &locations); XR_FAILED(kLocated)) {
+                return failed("a hand's joints could not be located", kLocated);
+            }
+            input::HandJoints& hand = read.at(at);
+            hand.tracked = locations.isActive == XR_TRUE;
+            for (std::size_t joint = 0; hand.tracked && joint < joints.size(); ++joint) {
+                const XrHandJointLocationEXT& kJoint = joints.at(joint);
+                if ((kJoint.locationFlags & kValid) != kValid) {
+                    continue;
+                }
+                hand.joints.at(joint) = {
+                    .position = {kJoint.pose.position.x, kJoint.pose.position.y, kJoint.pose.position.z},
+                    .orientation = {kJoint.pose.orientation.x,
+                                    kJoint.pose.orientation.y,
+                                    kJoint.pose.orientation.z,
+                                    kJoint.pose.orientation.w},
+                    .radius = kJoint.radius,
+                    .located = true};
+            }
+        }
+        return read;
+    }
+
     /// The views at `time`, in the local space.
     result::Result<std::vector<ViewPose>> locate(XrTime time) {
         XrViewLocateInfo info{XR_TYPE_VIEW_LOCATE_INFO};
@@ -547,6 +624,9 @@ Session::create(Runtime& runtime, render::Device& device, const PanelSettings& p
     }
     RAWFRAME_TRY(state->makeChains());
     RAWFRAME_TRY(state->makeActions());
+    if (runtime.system().handTracking) {
+        RAWFRAME_TRY(state->track());
+    }
     return std::unique_ptr<Session>{new Session{std::move(state)}};
 }
 
@@ -578,6 +658,10 @@ result::Result<SessionFrame> Session::begin() {
                 return hand.grip.located;
             })) {
             ++state.statistics.framesHandLocated;
+        }
+        RAWFRAME_TRY_ASSIGN(made.joints, state.readJoints(frame.predictedDisplayTime));
+        if (std::ranges::any_of(made.joints, &input::HandJoints::tracked)) {
+            ++state.statistics.framesHandTracked;
         }
     }
     if (made.shown) {

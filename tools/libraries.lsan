@@ -14,3 +14,7 @@ leak:maul-audio/src/alsa_
 # runtime as the instance ends, so the runtime's frames are unnamed; the
 # loader's entry point into it is named instead.
 leak:xrSuggestInteractionProfileBindings
+# Monado's remote driver keeps what it makes for its two hand-tracking
+# devices as an instance is made (160 bytes, D663); the loader's runtime
+# interface, which makes the instance, is named instead.
+leak:RuntimeInterface::CreateInstance

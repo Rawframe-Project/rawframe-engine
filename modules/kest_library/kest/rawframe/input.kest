@@ -84,6 +84,52 @@ fn headset() -> bool {
     return Input.headset()
 }
 
+// A joint of a tracked hand (ADR-0081's tracked source, D663): where it is,
+// in meters in the headset's play space as a pose action's place is, its
+// turn, a unit quaternion's parts, and its radius in meters. Not `located`
+// where the runtime does not know where it is.
+struct Joint {
+    located: bool
+    x: f32
+    y: f32
+    z: f32
+    turnX: f32
+    turnY: f32
+    turnZ: f32
+    turnW: f32
+    radius: f32
+}
+
+// The hands, and each hand's joints in OpenXR's order: the palm, the
+// wrist, then each finger from its root to its tip.
+const LEFT: u32 = 0
+const RIGHT: u32 = 1
+const PALM: u32 = 0
+const WRIST: u32 = 1
+const THUMB_TIP: u32 = 5
+const INDEX_TIP: u32 = 10
+const MIDDLE_TIP: u32 = 15
+const RING_TIP: u32 = 20
+const LITTLE_TIP: u32 = 25
+const JOINTS: u32 = 26
+
+extern fn Input.handTracked(hand: u32) -> bool
+extern fn Input.joint(hand: u32, index: u32) -> Joint
+
+// Whether the headset's runtime tracks the hand (`LEFT` or `RIGHT`) now:
+// a hand seen by its cameras, not a controller held in it. False for a
+// player who wears no headset, or whose runtime tracks no hand. A hand is
+// not an action: the sample reads it apart from the action set, and the
+// World learns of it only what the sample writes into the game's input.
+fn handTracked(hand: u32) -> bool {
+    return Input.handTracked(hand)
+}
+
+// Joint `index` of the hand, below `JOINTS`.
+fn joint(hand: u32, index: u32) -> Joint {
+    return Input.joint(hand, index)
+}
+
 extern fn UI.pressed() -> i64
 
 // The `press` of the UI node the player's press landed on during the tick,

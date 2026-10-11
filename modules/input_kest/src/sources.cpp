@@ -115,7 +115,56 @@ void headsetDoor(kest::DoorCall& call, void* context) noexcept {
     call.answerBoolean(doors.headset != nullptr && !doors.headset->eyes().empty());
 }
 
+/// `rawframe.input.Joint`, laid out as Kest lays it out.
+struct Joint {
+    bool located = false;
+    float x = 0;
+    float y = 0;
+    float z = 0;
+    float turnX = 0;
+    float turnY = 0;
+    float turnZ = 0;
+    float turnW = 1;
+    float radius = 0;
+};
+
+/// The hand the sample asks for (0 left, 1 right), as the headset tracks it
+/// now; untracked where it tracks none.
+const input::HandJoints& handOf(const kest::DoorCall& call, const InputDoorContext& doors) noexcept {
+    static constexpr input::HandJoints kNone{};
+    return doors.hands != nullptr ? doors.hands->hand(static_cast<std::size_t>(call.integer(0))) : kNone;
+}
+
+void handTrackedDoor(kest::DoorCall& call, void* context) noexcept {
+    call.answerBoolean(handOf(call, *static_cast<const InputDoorContext*>(context)).tracked);
+}
+
+/// Joint `joint` of the hand, in OpenXR's order; unlocated past the last.
+void jointDoor(kest::DoorCall& call, void* context) noexcept {
+    const input::HandJoints& kHand = handOf(call, *static_cast<const InputDoorContext*>(context));
+    const auto kIndex = static_cast<std::size_t>(call.integer(1));
+    Joint answer;
+    if (kIndex < input::kHandJoints && kHand.joints.at(kIndex).located) {
+        const input::HandJoint& kJoint = kHand.joints.at(kIndex);
+        answer = Joint{.located = true,
+                       .x = kJoint.position[0],
+                       .y = kJoint.position[1],
+                       .z = kJoint.position[2],
+                       .turnX = kJoint.orientation[0],
+                       .turnY = kJoint.orientation[1],
+                       .turnZ = kJoint.orientation[2],
+                       .turnW = kJoint.orientation[3],
+                       .radius = kJoint.radius};
+    }
+    if (!call.answerValue(std::as_bytes(std::span{&answer, 1}))) {
+        call.fail("the program's joint type is not the engine's");
+    }
+}
+
 constexpr std::array<kest::Parameter, 1> kActionTakes = {kest::Slot::U64};
+constexpr std::array<kest::Parameter, 1> kHandTakes = {kest::Slot::U32};
+constexpr std::array<kest::Parameter, 2> kJointTakes = {kest::Slot::U32, kest::Slot::U32};
+constexpr std::array<kest::Parameter, 1> kJointGives = {kest::Parameter{kest::Slot::Value, "rawframe.input.Joint"}};
 constexpr std::array<kest::Parameter, 1> kTruthGives = {kest::Slot::Bool};
 constexpr std::array<kest::Parameter, 1> kAxisGives = {kest::Slot::F32};
 
@@ -236,6 +285,7 @@ struct Shared {
     /// engine's navigation actions added, where they are (D430).
     const view::UiNavigation* navigation = nullptr;
     const view::HeadsetEyes* headset = nullptr;
+    const input::TrackedHands* hands = nullptr;
     std::optional<input::ActionSet> navigable;
     world_localization::GameText* text = nullptr;
     input::Navigation navigationActions;
@@ -340,9 +390,11 @@ public:
             mapper_->setEnabled({}, navigationActions_.context, false);
             ui_.navigation = navigation_;
         }
+        const bool kWears = !seed.has_value() && player == 0;
         doors_ = InputDoorContext{.mapper = mapper_.get(),
                                   .player = {},
-                                  .headset = !seed.has_value() && player == 0 ? shared.headset : nullptr};
+                                  .headset = kWears ? shared.headset : nullptr,
+                                  .hands = kWears ? shared.hands : nullptr};
         kest::DoorTable table;
         RAWFRAME_TRY(kest::addStandardMath(table));
         RAWFRAME_TRY(addInputDoors(table, &doors_));
@@ -680,6 +732,18 @@ result::Status addInputDoors(kest::DoorTable& doors, const InputDoorContext* con
                                       .context = kContext,
                                       .gives = kTruthGives,
                                       .safeForUntrusted = true}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Input.handTracked",
+                                      .function = &handTrackedDoor,
+                                      .context = kContext,
+                                      .takes = kHandTakes,
+                                      .gives = kTruthGives,
+                                      .safeForUntrusted = true}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Input.joint",
+                                      .function = &jointDoor,
+                                      .context = kContext,
+                                      .takes = kJointTakes,
+                                      .gives = kJointGives,
+                                      .safeForUntrusted = true}));
     return {};
 }
 
@@ -746,6 +810,7 @@ result::Result<std::unique_ptr<InputSources>> makeInputSources(const SourceSetti
     shared.typing = settings.typing;
     shared.text = settings.text;
     shared.headset = settings.headset;
+    shared.hands = settings.hands;
     if (settings.navigation != nullptr) {
         shared.navigation = settings.navigation;
         shared.navigable = shared.actions;

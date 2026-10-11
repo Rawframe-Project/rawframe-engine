@@ -24,6 +24,7 @@ constexpr std::string_view kMayUse[] = {kFeed.name,
                                         view::kUiTyping.name,
                                         view::kUiNavigation.name,
                                         view::kHeadsetEyes.name,
+                                        kTrackedHands.name,
                                         world_localization::kGameText.name};
 
 /// Sources for a game without controls: every one refuses, bots steer at
@@ -74,6 +75,9 @@ public:
         }
         if (context.has(view::kHeadsetEyes.name)) {
             RAWFRAME_TRY_ASSIGN(settings.headset, context.capability(view::kHeadsetEyes));
+        }
+        if (context.has(kTrackedHands.name)) {
+            RAWFRAME_TRY_ASSIGN(settings.hands, context.capability(kTrackedHands));
         }
         if (context.has(view::kUiPointing.name)) {
             RAWFRAME_TRY_ASSIGN(settings.pointing, context.capability(view::kUiPointing));

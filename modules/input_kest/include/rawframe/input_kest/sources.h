@@ -7,6 +7,7 @@
 #include "rawframe/diagnostics/emitter.h"
 #include "rawframe/input/feed.h"
 #include "rawframe/input/mapper.h"
+#include "rawframe/input/tracked.h"
 #include "rawframe/kest/doors.h"
 #include "rawframe/kest/machine.h"
 #include "rawframe/kest/program.h"
@@ -34,11 +35,13 @@
 namespace rawframe::input_kest {
 
 /// What the `Input.*` doors read: one player's committed actions, and the
-/// headset the player wears, if any (the first local player's, D603).
+/// headset the player wears, if any (the first local player's, D603), and
+/// the hands it tracks (D663).
 struct InputDoorContext {
     const input::Mapper* mapper = nullptr;
     input::PlayerSlot player;
     const view::HeadsetEyes* headset = nullptr;
+    const input::TrackedHands* hands = nullptr;
 };
 
 /// Adds `Input.on`, `Input.pressed`, `Input.released`, `Input.x`, and
@@ -46,9 +49,13 @@ struct InputDoorContext {
 /// and refuses one the set does not have. And `Input.headset`, whether the
 /// player sees the game on a headset now (ADR-0081's typed XR presence,
 /// D603): a sample writes it into the game's input, so a server knows each
-/// tick who plays in XR and takes its own stance. They read and change
-/// nothing else, so each is safe for untrusted code. `context` outlives
-/// every machine started with the table.
+/// tick who plays in XR and takes its own stance. And `Input.handTracked`
+/// and `Input.joint`, a tracked hand's joints (ADR-0081's tracked source,
+/// D663), read while the sample runs, apart from every action: untracked,
+/// and every joint unlocated, for a player who wears no headset or whose
+/// runtime tracks no hand. They read and change nothing else, so each is
+/// safe for untrusted code. `context` outlives every machine started with
+/// the table.
 [[nodiscard]] result::Status addInputDoors(kest::DoorTable& doors, const InputDoorContext* context);
 
 /// What the `View.*` doors read: the local players' views, and whose.
@@ -130,6 +137,10 @@ void typedOf(std::string_view text, std::array<std::byte, 256>& into) noexcept;
 /// its window reported between two ticks.
 inline constexpr composition::Capability<input::Feed> kFeed{"rawframe.input.feed"};
 
+/// The hands the headset's runtime tracks (D663), lent by the XR module
+/// where a headset is worn: the first local player's.
+inline constexpr composition::Capability<input::TrackedHands> kTrackedHands{"rawframe.input.tracked_hands"};
+
 /// What the process's own player feels (D251): an effect the game says is
 /// felt, through the devices its host lends. Provided with the input
 /// sources, which hold the player's pairing.
@@ -182,6 +193,9 @@ struct SourceSettings {
     /// The headset's eyes (D595), or null where no headset is drawn for:
     /// the first local player wears it (D603); outlives the sources.
     const view::HeadsetEyes* headset = nullptr;
+    /// The hands the headset tracks (D663), or null where none is worn:
+    /// the first local player's; outlives the sources.
+    const input::TrackedHands* hands = nullptr;
     /// The game's text (D539), or null where the host lends none: the
     /// local players choose its locale; outlives the sources.
     world_localization::GameText* text = nullptr;

@@ -22,6 +22,7 @@
 // image acquired with the views' and submitted as a quad layer over them.
 // Main thread only; the runtime and the device outlive it.
 
+#include "rawframe/input/tracked.h"
 #include "rawframe/render/device.h"
 #include "rawframe/result/result.h"
 #include "rawframe/xr/runtime.h"
@@ -127,6 +128,9 @@ struct SessionFrame {
     /// display time; read while the session has the input focus, else
     /// neither active (the runtime keeps the input for itself).
     std::array<Hand, 2> hands;
+    /// The left hand's joints, then the right's, where the system tracks
+    /// hands (D663), read with the controllers: neither tracked otherwise.
+    std::array<input::HandJoints, 2> joints;
 };
 
 struct SessionStatistics {
@@ -143,6 +147,8 @@ struct SessionStatistics {
     /// in which a hand's grip was located.
     std::uint64_t framesHandsRead = 0;
     std::uint64_t framesHandLocated = 0;
+    /// Frames whose hands were read in which a hand was tracked (D663).
+    std::uint64_t framesHandTracked = 0;
     /// Vibrations the runtime took (D600).
     std::uint64_t hapticsApplied = 0;
     /// Controllers' interaction profiles the runtime took the hands'

@@ -24,7 +24,8 @@ constexpr diagnostics::EventIdentity kIgnored{"xr", "xr_overrides_ignored"};
 constexpr diagnostics::EventIdentity kState{"xr", "xr_session_state"};
 constexpr diagnostics::EventIdentity kFailed{"xr", "xr_failed"};
 constexpr diagnostics::EventIdentity kSummary{"xr", "xr_summary"};
-constexpr std::string_view kProvided[] = {render::kHeadset.name, view::kHeadsetEyes.name};
+constexpr std::string_view kProvided[] = {
+    render::kHeadset.name, view::kHeadsetEyes.name, input_kest::kTrackedHands.name};
 constexpr std::string_view kMayUse[] = {input_kest::kFeed.name, view::kUiPointing.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
@@ -138,7 +139,8 @@ public:
                           diagnostics::field("runtime", kSystem.runtime),
                           diagnostics::field("views", kSystem.views.size()),
                           diagnostics::field("width", kSystem.views.empty() ? 0U : kSystem.views[0].width),
-                          diagnostics::field("height", kSystem.views.empty() ? 0U : kSystem.views[0].height)});
+                          diagnostics::field("height", kSystem.views.empty() ? 0U : kSystem.views[0].height),
+                          diagnostics::field("handTracking", kSystem.handTracking)});
         } else if (asked_) {
             emitter_.log(diagnostics::Severity::Warning,
                          kUnavailable,
@@ -163,6 +165,7 @@ public:
                       diagnostics::field("framesTracked", totals_.framesTracked),
                       diagnostics::field("framesSubmitted", totals_.framesSubmitted),
                       diagnostics::field("framesPanelSubmitted", totals_.framesPanelSubmitted),
+                      diagnostics::field("framesHandTracked", totals_.framesHandTracked),
                       diagnostics::field("framesHandsRead", totals_.framesHandsRead),
                       diagnostics::field("framesHandLocated", totals_.framesHandLocated),
                       diagnostics::field("controllerEvents", controllerEvents_),
@@ -178,6 +181,9 @@ public:
         }
         if (capability == view::kHeadsetEyes.name) {
             return composition::provideAs(eyes_);
+        }
+        if (capability == input_kest::kTrackedHands.name) {
+            return composition::provideAs(hands_);
         }
         return {};
     }
@@ -244,6 +250,7 @@ public:
 
     void close() noexcept override {
         eyes_.tell({});
+        hands_.tell({});
         letGo();
         if (session_ == nullptr) {
             return;
@@ -258,6 +265,7 @@ public:
         totals_.framesPanelSubmitted += kSession.framesPanelSubmitted;
         totals_.framesHandsRead += kSession.framesHandsRead;
         totals_.framesHandLocated += kSession.framesHandLocated;
+        totals_.framesHandTracked += kSession.framesHandTracked;
         session_.reset();
         told_ = SessionState::Unknown;
     }
@@ -267,6 +275,7 @@ private:
     /// images acquired and its eyes told; or none, and no eyes.
     void begin() noexcept {
         eyes_.tell({});
+        hands_.tell({});
         if (session_ == nullptr || failed_ || over_ || open_) {
             return;
         }
@@ -286,6 +295,7 @@ private:
             return;
         }
         feedHands(frame->hands);
+        hands_.tell(frame->joints);
         feel();
         if (!frame->shown || frame->views.size() != session_->images().size()) {
             if (const result::Status kEnded = session_->end(false); !kEnded.has_value()) {
@@ -453,6 +463,8 @@ private:
     }
 
     view::HeadsetEyes eyes_;
+    /// The hands the runtime tracks, told each frame (D663).
+    input::TrackedHands hands_;
     /// The client's devices, where its host lends them, and what the hands
     /// last told them.
     input::Feed* feed_ = nullptr;

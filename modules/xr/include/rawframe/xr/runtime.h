@@ -51,6 +51,9 @@ struct SystemDescription {
     std::vector<ViewSize> views;
     bool orientationTracking = false;
     bool positionTracking = false;
+    /// The system tracks hands, their joints read apart from the actions
+    /// (XR_EXT_hand_tracking, D663).
+    bool handTracking = false;
     /// The loader's environment overrides that were set and removed before
     /// it ran, comma-separated; empty where none was (D654).
     std::string overridesIgnored;
