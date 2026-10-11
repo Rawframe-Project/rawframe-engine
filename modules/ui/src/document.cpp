@@ -64,9 +64,10 @@ constexpr std::array<std::string_view, 4> kEdits = {"none", "line", "message", "
 constexpr std::array<std::string_view, 4> kScrolls = {"none", "horizontal", "vertical", "both"};
 constexpr std::array<std::string_view, 3> kRanges = {"none", "horizontal", "vertical"};
 constexpr std::array<std::string_view, 4> kChecks = {"none", "checkbox", "switch", "radio"};
+constexpr std::array<std::string_view, 6> kPopups = {"none", "below", "above", "start", "end", "center"};
 
 // rawframe.ui.Node's fields in its order.
-constexpr std::array<FieldForm, 59> kFieldForms = {{
+constexpr std::array<FieldForm, 60> kFieldForms = {{
     {"widthScale", offsetof(NodeFields, widthScale), Form::Real, {}},
     {"widthOffset", offsetof(NodeFields, widthOffset), Form::Real, {}},
     {"heightScale", offsetof(NodeFields, heightScale), Form::Real, {}},
@@ -126,6 +127,7 @@ constexpr std::array<FieldForm, 59> kFieldForms = {{
     {"thumb", offsetof(NodeFields, thumb), Form::Truth, {}},
     {"check", offsetof(NodeFields, check), Form::Case, kChecks},
     {"checked", offsetof(NodeFields, checked), Form::Truth, {}},
+    {"popup", offsetof(NodeFields, popup), Form::Case, kPopups},
 }};
 
 /// A node's members in the order it writes them: its component, its

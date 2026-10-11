@@ -45,8 +45,9 @@ module rawframe.ui
 // for the game's first), `textSize` pixels to the em (nought for 16), of
 // `textColor` (0xRRGGBBAA), their lines at the start, center, or end
 // (`textAlign`), wrapped to the node's width unless NO_WRAP. A node with
-// words is sized by them unless its size says otherwise; its children
-// inherit their look.
+// words is sized by them unless its size says otherwise, and lays out no
+// children of its own, which would leave it no size (D623): words and
+// other nodes sit side by side inside a node that holds both.
 //
 // A press of the mouse or a touch (D421) is the UI's where it lands on a
 // node whose `hit` is HIT_SELF, and then no game action sees it, nor its
@@ -108,6 +109,14 @@ module rawframe.ui
 // and assistive technology reads it as a check box, a switch, or a radio
 // button. A checkable node and a slider are named to assistive technology
 // by their label's words, which they do not draw.
+//
+// A node whose `popup` is not NO_POPUP is placed beside its parent (D623),
+// as a tooltip or a menu is: on that side, centered along it, `margin`
+// pixels away, flipped to the other side where the view leaves no room,
+// and taking no room inside its parent; usually an OVERLAY `layer`, drawn
+// over all. A game shows one while it wants it, as a tooltip while
+// `ui.hovered()` is its parent's press, and empties it otherwise. A popup
+// with words and nothing to press reads as a tooltip.
 struct Node {
     widthScale: f32
     widthOffset: f32
@@ -168,6 +177,7 @@ struct Node {
     thumb: u32
     check: u32
     checked: u32
+    popup: u32
 }
 
 // A node's `scroll`.
@@ -186,6 +196,15 @@ const NO_CHECK: u32 = 0
 const CHECKBOX: u32 = 1
 const SWITCH: u32 = 2
 const RADIO: u32 = 3
+
+// A node's `popup`: beside its parent, below, above, at its start or end,
+// or on its center.
+const NO_POPUP: u32 = 0
+const POPUP_BELOW: u32 = 1
+const POPUP_ABOVE: u32 = 2
+const POPUP_START: u32 = 3
+const POPUP_END: u32 = 4
+const POPUP_CENTER: u32 = 5
 
 // A node's `direction`.
 const ROW: u32 = 0

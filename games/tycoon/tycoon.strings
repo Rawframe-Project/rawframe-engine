@@ -15,6 +15,10 @@
       "message": "Write your sign",
       "description": "The sign field's placeholder while it is empty."
     },
+    "hud.tip": {
+      "message": "Collect your takings",
+      "description": "The tooltip under the purse: pressing it collects the stalls' takings."
+    },
     "hud.top": {
       "message": "Top view",
       "description": "The name a screen reader reads for the switch that turns the view to look straight down."

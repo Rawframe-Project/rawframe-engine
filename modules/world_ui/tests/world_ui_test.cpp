@@ -943,3 +943,32 @@ RAWFRAME_TEST(ACheckableIsCheckedByPressesAndARadioUnchecksItsGroup) {
     RAWFRAME_EXPECT(rig.ui->enterNavigation() && rig.ui->activate() == std::optional<std::int64_t>{5});
     RAWFRAME_EXPECT(rig.ui->valueOf(0, 5) == 1.0F && rig.ui->statistics().toggled == 7);
 }
+
+RAWFRAME_TEST(APopupIsPlacedBesideItsParent) {
+    Rig rig;
+    rig.put(rig.player, kHudId, panel());
+    // A tip 60 by 30 below the panel, 4 from it, centered on it.
+    ui::NodeFields tip{.widthOffset = 60, .heightOffset = 30, .margin = 4, .fill = 0x101820FF, .layer = 3};
+    tip.popup = 1;
+    rig.put(rig.player, kMeterId, tip);
+    RAWFRAME_EXPECT(rig.frame());
+    const auto kBoxAt = [&rig](float x, float y, float width, float height) {
+        for (const ui::Box& kBox : rig.ui->drawn().boxes) {
+            if (at(kBox, x, y, width, height)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    RAWFRAME_EXPECT(kBoxAt(220, 94, 60, 30));
+    // Above it, where the window leaves room.
+    tip.popup = 2;
+    rig.put(rig.player, kMeterId, tip);
+    RAWFRAME_EXPECT(rig.frame() && kBoxAt(220, 16, 60, 30));
+    // No longer a popup, it is in the panel's row again, its margin inside
+    // the panel's padding.
+    tip.popup = 0;
+    rig.put(rig.player, kMeterId, tip);
+    RAWFRAME_EXPECT(rig.frame() && kBoxAt(109, 59, 60, 30));
+    RAWFRAME_EXPECT(rig.ui->statistics().leftOut == 0);
+}

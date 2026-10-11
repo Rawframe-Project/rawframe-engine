@@ -166,7 +166,8 @@ settingsOf(const world_kest::GameFiles& files, const kest::Program& program, std
                                 {"rangeValue", offsetof(ui::NodeFields, rangeValue)},
                                 {"thumb", offsetof(ui::NodeFields, thumb)},
                                 {"check", offsetof(ui::NodeFields, check)},
-                                {"checked", offsetof(ui::NodeFields, checked)}})) {
+                                {"checked", offsetof(ui::NodeFields, checked)},
+                                {"popup", offsetof(ui::NodeFields, popup)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());

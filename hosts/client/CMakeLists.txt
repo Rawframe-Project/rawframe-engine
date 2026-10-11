@@ -143,6 +143,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"ui_summary\"[^\n]*\"toggled\":1}")
+        # Stalls' purse tooltip (D623): the mouse brought over the purse
+        # and away; the tooltip given its words while it is over it and
+        # emptied after, as the present system says, beside the purse (a
+        # run without it gives four nodes words, this one five).
+        add_test(NAME client_tips_stalls
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
+                         games/tycoon/tycoon.game move=30,30 wait=2 move=600,600 wait=2
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_tips_stalls PROPERTIES
+                             FIXTURES_REQUIRED tycoon_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"ui_summary\"[^\n]*\"changed\":([2-9]|[1-9][0-9]+),[^\n]*\"texts\":([5-9]|[1-9][0-9]+),")
         # Stalls' sign typed by a screen reader (D613): its entry, named by
         # its label's words and read as empty while it shows them, takes
         # text inserted through AT-SPI's EditableText as the field's own

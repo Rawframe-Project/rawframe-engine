@@ -36,6 +36,8 @@ component e7564868-c06a-4065-ad77-a8ab9ea2aa71 tycoon.cheer Cheer
 component da4daa93-8f6e-4f41-8ce5-ea5ae423e4a0 tycoon.banner rawframe.ui.Node
 component 3efabfb3-083d-491e-8aea-23c41ec92868 tycoon.board rawframe.ui.Node
 component 9547d96d-27fb-4ec0-950c-a990145d2d97 tycoon.sign rawframe.ui.Node
+component 89b3dffc-802e-4eab-a30e-71a816c31edb tycoon.tip rawframe.ui.Node
+component d8103a5c-b214-4609-874c-1fab1c95de0b tycoon.wallet rawframe.ui.Node
 component 3b8cfcc3-d5fb-4d4c-9649-e25056a0124f tycoon.zoom rawframe.ui.Node
 component 3729cefe-e029-4f14-ad9f-8a89f0a30ac9 tycoon.knob rawframe.ui.Node
 component 3128607a-7d0b-4df5-bd60-434ded311b7d tycoon.top rawframe.ui.Node
@@ -111,14 +113,18 @@ label afcb66432b6d2152 tycoon.strings hud.won round
 label b777d548435986ab tycoon.strings hud.lost round
 label bdb5be7acb84d040 tycoon.strings hud.sign
 label 553f856290bb3e9f tycoon.strings hud.zoom
+label 61d16641e8e52da5 tycoon.strings hud.tip
 label 4d594c1ea35a7c50 tycoon.strings hud.top
 presentation tycoon.look on rawframe.physics3d.body
 present tycoon.dress dress read rawframe.physics3d.body write tycoon.look
 present tycoon.tint tint read tycoon.stall write tycoon.look
-presentation tycoon.mark tycoon.view tycoon.purse tycoon.cheer tycoon.banner tycoon.sign tycoon.board tycoon.zoom tycoon.knob tycoon.top tycoon.flip on player
+presentation tycoon.mark tycoon.view tycoon.purse tycoon.cheer tycoon.banner tycoon.sign tycoon.board tycoon.zoom tycoon.knob tycoon.top tycoon.flip tycoon.wallet tycoon.tip on player
 present tycoon.mark mark read tycoon.owner write tycoon.mark
 present tycoon.frame frame read rawframe.physics3d.pose write tycoon.view
 present tycoon.purse purse read tycoon.owner write tycoon.purse
+# The purse's tooltip while the mouse is over it (D623), beside the
+# wallet that holds them both: a node with words lays out no children.
+present tycoon.tip tip write tycoon.tip
 present tycoon.cheer cheer write tycoon.cheer write tycoon.banner
 present tycoon.field field write tycoon.sign
 # The owner's sign as the server keeps it, shown under the field (D427):

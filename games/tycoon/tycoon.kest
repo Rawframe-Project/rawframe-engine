@@ -70,10 +70,12 @@ const GLIDE: f64 = 0.2
 const GOAL: i64 = 1000
 const CHEER: u32 = 300
 
-// The labels of a round won or lost (tycoon.game's `label` lines); the
-// HUD's font and its other labels and classes are tycoon.ui's (D619).
+// The labels of a round won or lost, and of the purse's tooltip
+// (tycoon.game's `label` lines); the HUD's font and its other labels and
+// classes are tycoon.ui's (D619).
 const HUD_WON: u64 = 0xafcb66432b6d2152
 const HUD_LOST: u64 = 0xb777d548435986ab
+const HUD_TIP: u64 = 0x61d16641e8e52da5
 
 // An owner: whether it has joined, its cursor on the ground, its coins, its
 // stalls and their levels together, whether the build it asked for is
@@ -674,6 +676,23 @@ fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
     while i < count {
         huds[i].textValue = owners[i].coins
         huds[i].press = controls.PURSE
+        i = i + 1
+    }
+}
+
+// The purse's tooltip (D623): "Collect your takings" in a dark box under
+// the purse, over all, while the mouse is over the purse, and nothing
+// otherwise; tycoon.ui places it.
+fn tip(count: i32, tips: [ui.Node]) {
+    let shown = ui.hovered() == controls.PURSE
+    let i = 0
+    while i < count {
+        tips[i].text = u64(0)
+        tips[i].fill = u32(0)
+        if shown {
+            tips[i].text = HUD_TIP
+            tips[i].fill = u32(0x101820F0)
+        }
         i = i + 1
     }
 }

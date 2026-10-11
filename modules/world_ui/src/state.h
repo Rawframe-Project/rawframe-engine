@@ -33,6 +33,15 @@ struct RangeGiven {
     friend bool operator==(const RangeGiven&, const RangeGiven&) = default;
 };
 
+/// The popup a node was last made (D623): its side, its gap, and the node
+/// it is placed beside, by its key.
+struct PopupGiven {
+    std::uint32_t side = 0;
+    float gap = 0;
+    std::uint64_t anchor = 0;
+    friend bool operator==(const PopupGiven&, const PopupGiven&) = default;
+};
+
 /// A node component of an entity, and the node it is in the tree: none
 /// while its value is refused or there was no room for it.
 struct Entry {
@@ -57,8 +66,10 @@ struct Entry {
     std::optional<std::uint32_t> checkGiven;
     bool checkedNow = false;
     /// The node it is inside, by its key, as the last frame nested it: a
-    /// radio's group is those inside the same one.
+    /// radio's group is those inside the same one, and a popup is placed
+    /// beside it.
     std::uint64_t parent = 0;
+    std::optional<PopupGiven> popped;
 };
 
 /// The node holding focus (D430): a text field given the keyboard, its
@@ -141,6 +152,10 @@ struct WorldUi::State {
     /// value the player moved kept unless its own changed; a node no
     /// longer a range cleared (D621).
     void giveRanges();
+
+    /// Each popup placed beside the node it is inside where its side, gap,
+    /// or parent changed; a node no longer one cleared (D623).
+    void givePopups();
 
     /// `entry` checked or unchecked as a press does it (D622): a box or a
     /// switch turned over, a radio checked and the radios beside it

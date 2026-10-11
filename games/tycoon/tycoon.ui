@@ -3,16 +3,34 @@
   "formatVersion": 1,
   "nodes": [
     {
-      "component": "tycoon.purse",
-      "padding": 10,
+      "component": "tycoon.wallet",
       "margin": 12,
-      "text": "f1182d0420cc09a0",
-      "font": "8e12f827f47f7d51",
-      "textSize": 18,
-      "textColor": "#f4e9c8ff",
-      "textWrap": "no_wrap",
-      "hit": "self",
-      "style": "85ecf7b643b63d65"
+      "children": [
+        {
+          "component": "tycoon.purse",
+          "padding": 10,
+          "text": "f1182d0420cc09a0",
+          "font": "8e12f827f47f7d51",
+          "textSize": 18,
+          "textColor": "#f4e9c8ff",
+          "textWrap": "no_wrap",
+          "hit": "self",
+          "style": "85ecf7b643b63d65"
+        },
+        {
+          "component": "tycoon.tip",
+          "padding": 6,
+          "margin": 6,
+          "radius": 4,
+          "font": "8e12f827f47f7d51",
+          "textSize": 14,
+          "textColor": "#f4e9c8ff",
+          "textWrap": "no_wrap",
+          "hit": "none",
+          "layer": "overlay",
+          "popup": "below"
+        }
+      ]
     },
     {
       "component": "tycoon.sign",

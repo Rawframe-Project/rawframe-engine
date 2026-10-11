@@ -49,9 +49,10 @@ std::optional<ui::Layout> layoutOf(const ui::NodeFields& node) noexcept {
         .shrink = node.shrink,
         .alignSelf = static_cast<ui::Align>(node.alignSelf),
         .padding = kSides(node.padding),
-        .margin = kSides(node.margin),
+        // A popup's margin is its gap from its anchor (D623).
+        .margin = kSides(node.popup != 0 ? 0 : node.margin),
         .border = kSides(node.border),
-        .placement = {.absolute = node.absolute != 0,
+        .placement = {.absolute = node.absolute != 0 || node.popup != 0,
                       .x = {.automatic = false, .scale = node.xScale, .offset = node.xOffset},
                       .y = {.automatic = false, .scale = node.yScale, .offset = node.yOffset},
                       .anchorX = node.anchorX,
@@ -88,7 +89,7 @@ ui::Look lookOf(const ui::NodeFields& node) noexcept {
 /// constants. Nought passes presses through to its children and past them.
 std::optional<ui::Interaction> interactionOf(const ui::NodeFields& node) noexcept {
     if (node.hit > 2 || node.layer > 3 || node.edit > 3 || node.range > 2 || node.thumb > 1 || node.check > 3 ||
-        node.checked > 1) {
+        node.checked > 1 || node.popup > 5) {
         return std::nullopt;
     }
     constexpr std::array<ui::Interaction::Hits, 3> kHits = {
@@ -119,6 +120,9 @@ ui::Role roleOf(const ui::NodeFields& node) noexcept {
     }
     if (node.range != 0) {
         return ui::Role::Slider;
+    }
+    if (node.popup != 0 && node.press == 0 && node.edit == 0 && node.text != 0) {
+        return ui::Role::Tooltip;
     }
     if (node.check != 0) {
         constexpr std::array<ui::Role, 3> kChecks = {ui::Role::CheckBox, ui::Role::Switch, ui::Role::RadioButton};
@@ -151,6 +155,10 @@ ui::TextLook textLookOf(const ui::NodeFields& node, ui::Font font) noexcept {
 /// The window's root and each view's: what they do not cover passes
 /// through.
 constexpr ui::Interaction kThrough{.hits = ui::Interaction::Hits::Children, .passThrough = true};
+
+ui::Node nodeOfKey(std::uint64_t key) noexcept {
+    return ui::Node{.index1 = static_cast<std::uint32_t>(key >> 32U), .generation = static_cast<std::uint32_t>(key)};
+}
 
 std::uint64_t keyOf(ui::Node node) noexcept {
     return (std::uint64_t{node.index1} << 32U) | node.generation;
@@ -229,6 +237,7 @@ void WorldUi::State::drop(Entry& entry) {
     }
     entry.states = {};
     entry.ranged.reset();
+    entry.popped.reset();
     if (const auto kChildren = attached.find(keyOf(*entry.node)); kChildren != attached.end()) {
         for (const ui::Node kChild : kChildren->second) {
             if (tree->contains(kChild)) {
@@ -343,6 +352,38 @@ void WorldUi::State::giveRanges() {
                 continue;
             }
             entry.ranged = wanted;
+        }
+    }
+}
+
+void WorldUi::State::givePopups() {
+    // Kept inside the window by this much.
+    constexpr float kMargin = 4;
+    for (ViewState& view : views) {
+        for (auto& [kKey, entry] : view.entries) {
+            if (!entry.node.has_value()) {
+                continue;
+            }
+            if (entry.value.popup == 0 || entry.parent == 0) {
+                if (entry.popped.has_value() && tree->clearPopup(*entry.node).has_value()) {
+                    entry.popped.reset();
+                }
+                continue;
+            }
+            const PopupGiven kWanted{.side = entry.value.popup, .gap = entry.value.margin, .anchor = entry.parent};
+            if (entry.popped == kWanted) {
+                continue;
+            }
+            if (!tree->setPopup(*entry.node,
+                                ui::Popup{.anchor = nodeOfKey(kWanted.anchor),
+                                          .side = static_cast<ui::Popup::Side>(kWanted.side - 1),
+                                          .gap = kWanted.gap,
+                                          .margin = kMargin})
+                     .has_value()) {
+                ++statistics.leftOut;
+                continue;
+            }
+            entry.popped = kWanted;
         }
     }
 }
@@ -668,6 +709,7 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
     }
     RAWFRAME_TRY(state.attach(wanted));
     state.giveRanges();
+    state.givePopups();
     state.giveStates();
     state.seconds = seconds;
     RAWFRAME_TRY(state.tree->layOut(state.window, width, height, seconds));

@@ -40,7 +40,8 @@
 // start, center, end; `textWrap`: wrap, no_wrap; `hit`: children, self,
 // none; `layer`: none, activation, modal, overlay; `edit`: none, line,
 // message, lines; `scroll` and `range`: none, horizontal, vertical, and
-// for `scroll` both; `check`: none, checkbox, switch, radio; a range's
+// for `scroll` both; `check`: none, checkbox, switch, radio; `popup`:
+// none, below, above, start, end, center; a range's
 // numbers within a million of nought). Last,
 // `children`, the nodes inside it. Siblings are drawn by `order`, as
 // without a document.
@@ -118,9 +119,7 @@ struct NodeFields {
     std::uint32_t thumb = 0;
     std::uint32_t check = 0;
     std::uint32_t checked = 0;
-    /// The four bytes Kest's layout pads the node with, named and nought,
-    /// so a node compared byte for byte reads no stray padding.
-    std::uint32_t reserved = 0;
+    std::uint32_t popup = 0;
 };
 
 /// One node of a document.
