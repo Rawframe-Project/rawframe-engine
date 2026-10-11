@@ -37,7 +37,10 @@
 # it too (D472). An argument
 # `wait=` and a number of seconds waits that long, and `until=` and a
 # record's code waits, up to three minutes, until the log holds it (D445),
-# one whose field has a value where `,name=value` follows (D476).
+# one whose field has a value where `,name=value` follows (D476), or a
+# number at least that where `,name>=value` does. A record never seen in
+# that time is said ("never saw"), which the tests read as a failure: the
+# wait it stands for was three minutes lost (D627).
 # Five seconds after, it stops the program whose pid its pid file holds
 # (D430), whose iterations only bound it, and waits for the process it
 # watches to end; half a second, where the last argument waited for a
@@ -50,12 +53,13 @@
 #                 | frozenclick=<x>,<y>:<text>
 #                 | move=<x>,<y> | freeze | thaw
 #                 | orbit=<x>,<y>,<x>,<y>[,<key>] | wait=<seconds>
-#                 | until=<code>[,<field>=<value>]
+#                 | until=<code>[,<field>=<value> | ,<field>>=<number>]
 #                 [...]
 
 import ctypes
 import ctypes.util
 import os
+import re
 import signal
 import sys
 import time
@@ -90,13 +94,29 @@ class Frozen(str):
 
 def logged(log, code):
     """Whether the log holds the record `code`; a code followed by
-    `,name=value`, a record of it whose field `name` is `value` (D476)."""
+    `,name=value`, a record of it whose field `name` is `value` (D476), and
+    by `,name>=number`, one whose field is a number at least that (D627)."""
     code, _, field = code.partition(",")
-    name, _, value = field.partition("=")
-    wanted = f'"{name}":{value}' if field else ""
+    least = None
+    if ">=" in field:
+        name, _, number = field.partition(">=")
+        least = re.compile(f'"{re.escape(name)}":(-?[0-9]+)')
+        wanted = ""
+    else:
+        name, _, value = field.partition("=")
+        wanted = f'"{name}":{value}' if field else ""
+
+    def matches(line):
+        if f'"code":"{code}"' not in line or wanted not in line:
+            return False
+        if least is None:
+            return True
+        found = least.search(line)
+        return found is not None and int(found.group(1)) >= int(number)
+
     try:
         with open(log, encoding="utf-8", errors="replace") as records:
-            return any(f'"code":"{code}"' in line and wanted in line for line in records)
+            return any(matches(line) for line in records)
     except OSError:
         return False
 

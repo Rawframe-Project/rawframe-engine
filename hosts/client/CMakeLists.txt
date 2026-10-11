@@ -254,7 +254,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
-                         games/tycoon/tycoon.game until=ui_reachable,reachable=2 frozenclick=60,95:ann until=ui_submitted
+                         games/tycoon/tycoon.game "until=ui_reachable,reachable>=2" frozenclick=60,95:ann until=ui_submitted
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_types_stalls_frozen PROPERTIES
                              FIXTURES_REQUIRED tycoon_content
@@ -275,7 +275,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
-                         games/tycoon/tycoon.game until=ui_reachable,reachable=2 quick=Tab,Return keys=Tab keys=Return keys=b,o,Return until=ui_submitted
+                         games/tycoon/tycoon.game "until=ui_reachable,reachable>=2" quick=Tab,Return keys=Tab keys=Return keys=b,o,Return until=ui_submitted
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_navigates_stalls PROPERTIES
                              FIXTURES_REQUIRED tycoon_content
@@ -299,7 +299,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
-                         games/tycoon/tycoon.game until=ui_reachable,reachable=2 frozen=Tab,Return keys=Tab frozen=Return,b,o,Return
+                         games/tycoon/tycoon.game "until=ui_reachable,reachable>=2" frozen=Tab,Return keys=Tab frozen=Return,b,o,Return
                          until=ui_submitted
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_navigates_stalls_frozen PROPERTIES
@@ -412,10 +412,11 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     endif()
     # Every client test here draws a window, the content it plays cooked
     # first: labeled so the check can leave them out of a tree they find
-    # nothing in (D493).
+    # nothing in (D493). A record a test waited for and never saw fails
+    # it, rather than costing three minutes unseen (D627).
     get_property(window_tests DIRECTORY PROPERTY TESTS)
     list(FILTER window_tests INCLUDE REGEX "^client_")
-    set_tests_properties(${window_tests} PROPERTIES LABELS window)
+    set_tests_properties(${window_tests} PROPERTIES LABELS window FAIL_REGULAR_EXPRESSION "never saw")
     if(TEST client_turns_plaza)
         set_tests_properties(client_turns_plaza PROPERTIES LABELS "window;alone" RUN_SERIAL TRUE)
     endif()

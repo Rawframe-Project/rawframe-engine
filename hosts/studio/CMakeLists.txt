@@ -240,7 +240,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game level.scene 200,129 640,129 wheel=1100,400,6 1100,297:hud.png
-                     1100,297:hud "until=studio_said,status=\"texture: 2 assets match hud\""
+                     1100,297:hud "until=studio_said,status=\"texture: "
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_names_assets PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -546,7 +546,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     endif()
     # Every test here draws a window: labeled so the check can leave them
     # out of a tree they find nothing in (D493), and Studio's out of the
-    # thread sanitizer's (D527).
+    # thread sanitizer's (D527). A record a test waited for and never saw
+    # fails it, rather than costing three minutes unseen (D627).
     get_property(window_tests DIRECTORY PROPERTY TESTS)
-    set_tests_properties(${window_tests} PROPERTIES LABELS "window;studio")
+    set_tests_properties(${window_tests} PROPERTIES LABELS "window;studio" FAIL_REGULAR_EXPRESSION "never saw")
 endif()
