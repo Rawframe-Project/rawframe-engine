@@ -19,10 +19,11 @@ using document::Record;
 using document::Value;
 
 constexpr std::array<std::string_view, 3> kDocumentFields = {"kind", "formatVersion", "styles"};
-constexpr std::array<std::string_view, 8> kStyleFields = {
-    "styleId", "name", "base", "focused", "hovered", "pressed", "disabled", "transitions"};
+constexpr std::array<std::string_view, 9> kStyleFields = {
+    "styleId", "name", "base", "checked", "focused", "hovered", "pressed", "disabled", "transitions"};
 // A variant's look, in Variant's order of the style's fields after `name`.
-constexpr std::array<std::string_view, 5> kVariantFields = {"base", "focused", "hovered", "pressed", "disabled"};
+constexpr std::array<std::string_view, 6> kVariantFields = {
+    "base", "focused", "hovered", "pressed", "disabled", "checked"};
 constexpr std::array<std::string_view, 8> kLookFields = {
     "fill", "borderColor", "radius", "clip", "imageTint", "outerShadow", "innerShadow", "gradient"};
 constexpr std::array<std::string_view, 5> kShadowFields = {"color", "x", "y", "blur", "spread"};

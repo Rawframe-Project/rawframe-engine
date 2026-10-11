@@ -206,7 +206,10 @@ enum class Variant : std::uint8_t {
     Focused,
     Hovered,
     Pressed,
-    Disabled
+    Disabled,
+    /// A checkable node checked (D622); any other state's variant wins
+    /// over it.
+    Checked
 };
 
 /// The states a node is in, which pick its classes' variants.
@@ -215,6 +218,7 @@ struct States {
     bool hovered = false;
     bool pressed = false;
     bool disabled = false;
+    bool checked = false;
     friend constexpr bool operator==(const States&, const States&) noexcept = default;
 };
 
@@ -536,7 +540,13 @@ enum class Role : std::uint8_t {
     /// Nodes that belong together, named as one.
     Group,
     /// A range the user moves (D621).
-    Slider
+    Slider,
+    /// What the user checks and unchecks: a box, an on and off switch, or
+    /// one of a group of which one is checked (D622). Its checked state is
+    /// read from its states.
+    CheckBox,
+    Switch,
+    RadioButton
 };
 
 /// What a point hits: the topmost node there, none for nothing, the point

@@ -23,8 +23,12 @@ muiStyleId styleIdOf(Style style) noexcept {
 }
 
 muiVariant variantOf(Variant variant) noexcept {
-    constexpr std::array<muiVariant, 5> kVariants = {
-        mui_variantBase, mui_variantFocused, mui_variantHovered, mui_variantPressed, mui_variantDisabled};
+    constexpr std::array<muiVariant, 6> kVariants = {mui_variantBase,
+                                                     mui_variantFocused,
+                                                     mui_variantHovered,
+                                                     mui_variantPressed,
+                                                     mui_variantDisabled,
+                                                     mui_variantChecked};
     return kVariants[static_cast<std::size_t>(variant)];
 }
 
@@ -127,6 +131,7 @@ result::Status Tree::setStates(Node node, States states) {
     bits |= states.hovered ? mui_stateHovered : 0;
     bits |= states.pressed ? mui_statePressed : 0;
     bits |= states.disabled ? mui_stateDisabled : 0;
+    bits |= states.checked ? mui_stateChecked : 0;
     return checked(muiNode_SetStates(state_->context, idOf(node), bits), "a UI node's states were refused");
 }
 

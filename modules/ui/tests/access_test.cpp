@@ -1,7 +1,8 @@
 // A UI tree as assistive technology reads it (D571): a root's subtree given
 // to a copy of the tree, its nodes' roles and names as their owner set
 // them, a name changed and a node removed reaching the copy with the next
-// update, and nothing given for a root no access reads.
+// update, and nothing given for a root no access reads; and a checkable
+// node's checked state read from its states (D622).
 
 #include "rawframe/test/test.h"
 #include "rawframe/ui/access.h"
@@ -190,4 +191,35 @@ RAWFRAME_TEST(TheFocusItsOwnerGivesIsTheOneAScreenReaderFollows) {
     RAWFRAME_EXPECT(!ui.focus(kLabel, true).has_value());
     RAWFRAME_EXPECT(ui.focus(std::nullopt, false).has_value() && (*access)->update().has_value());
     RAWFRAME_EXPECT(!(*access)->focused().has_value());
+}
+
+RAWFRAME_TEST(ACheckableReadsItsCheckedStateFromItsStates) {
+    auto made = Tree::create(8);
+    if (!made.has_value()) {
+        RAWFRAME_EXPECT(false);
+        return;
+    }
+    Tree& ui = **made;
+    const Node kRoot = *ui.add(1);
+    const Node kBox = *ui.add(2);
+    RAWFRAME_EXPECT(ui.attach(kRoot, kBox).has_value());
+    RAWFRAME_EXPECT(ui.setRole(kBox, Role::CheckBox).has_value() && ui.setName(kBox, "Top view").has_value());
+    RAWFRAME_EXPECT(ui.layOut(kRoot, 100, 100).has_value());
+    auto access = Access::create(ui, kRoot, {});
+    if (!access.has_value()) {
+        RAWFRAME_EXPECT(false);
+        return;
+    }
+    RAWFRAME_EXPECT((*access)->update().has_value());
+    const std::string kUnchecked = (*access)->written();
+    RAWFRAME_EXPECT(ui.setStates(kBox, States{.checked = true}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kRoot, 100, 100).has_value() && (*access)->update().has_value());
+    const std::string kChecked = (*access)->written();
+    // Checkable (1 << 5), and then checked too (1 << 16), as Maul UI writes
+    // its flags.
+    RAWFRAME_EXPECT(holds(kUnchecked, "checkBox") && holds(kUnchecked, "flags=32 ") && holds(kUnchecked, "Top view"));
+    RAWFRAME_EXPECT(holds(kChecked, "flags=65568 "));
+    // No longer checkable, it says nothing of it.
+    RAWFRAME_EXPECT(ui.setRole(kBox, Role::Button).has_value() && ui.layOut(kRoot, 100, 100).has_value() &&
+                    (*access)->update().has_value() && !holds((*access)->written(), "flags=65568"));
 }

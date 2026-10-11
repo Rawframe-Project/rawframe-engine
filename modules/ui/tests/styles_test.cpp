@@ -55,6 +55,9 @@ constexpr std::string_view kSheet = R"({
     {
       "styleId": "0a7d2e9c41b85f36",
       "name": "quiet",
+      "checked": {
+        "fill": "#0000ffff"
+      },
       "disabled": {
         "fill": "#80808080"
       }
@@ -96,6 +99,8 @@ RAWFRAME_TEST(AStyleSheetIsReadAsWritten) {
     RAWFRAME_EXPECT(kButton.transitions[1].second.kind == Transition::Kind::Spring &&
                     kButton.transitions[1].second.frequency == 4 && kButton.transitions[1].second.dampingRatio == 1);
     RAWFRAME_EXPECT(kSheetRead.styles[1].looks[4].look.fill == 0x80808080);
+    // A checked look (D622), by Variant's place.
+    RAWFRAME_EXPECT(kSheetRead.styles[1].looks[static_cast<std::size_t>(Variant::Checked)].look.fill == 0x0000FFFF);
 }
 
 RAWFRAME_TEST(AStyleSheetMakesItsClasses) {
@@ -126,6 +131,14 @@ RAWFRAME_TEST(AStyleSheetMakesItsClasses) {
     const float kHalfway = kRedAt(1.25);
     RAWFRAME_EXPECT(kHalfway > 0.05F && kHalfway < 0.95F);
     RAWFRAME_EXPECT(std::abs(kRedAt(2)) < 0.02F);
+    // A quiet node checked takes its checked look; a later state's wins.
+    const Node kQuiet = *ui.add(2);
+    RAWFRAME_EXPECT(ui.setLayout(kQuiet, {.width = pixels(40), .height = pixels(20)}).has_value());
+    RAWFRAME_EXPECT(ui.setClasses(kQuiet, std::span{kMade->data() + 1, 1}).has_value());
+    RAWFRAME_EXPECT(ui.setStates(kQuiet, {.checked = true}).has_value());
+    DrawList quiet;
+    RAWFRAME_EXPECT(ui.layOut(kQuiet, 100, 100, 3).has_value() && ui.draw(kQuiet, 1, quiet).has_value() &&
+                    !quiet.boxes.empty() && quiet.boxes[0].fill[2] > 0.98F && quiet.boxes[0].fill[0] < 0.02F);
 }
 
 RAWFRAME_TEST(AStyleSheetIsRefusedWhereItIsWrong) {

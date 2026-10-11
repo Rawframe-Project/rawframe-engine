@@ -57,6 +57,12 @@ muiRole roleOf(Role role) noexcept {
         return mui_roleGroup;
     case Role::Slider:
         return mui_roleSlider;
+    case Role::CheckBox:
+        return mui_roleCheckBox;
+    case Role::Switch:
+        return mui_roleSwitch;
+    case Role::RadioButton:
+        return mui_roleRadioButton;
     case Role::Generic:
         break;
     }
@@ -66,7 +72,12 @@ muiRole roleOf(Role role) noexcept {
 } // namespace
 
 result::Status Tree::setRole(Node node, Role role) {
-    return checked(muiNode_SetAccessRole(state_->context, idOf(node), roleOf(role)), "a node's role was refused");
+    RAWFRAME_TRY(
+        checked(muiNode_SetAccessRole(state_->context, idOf(node), roleOf(role)), "a node's role was refused"));
+    // What can be checked says whether it is, from its states (D622).
+    const bool kCheckable = role == Role::CheckBox || role == Role::Switch || role == Role::RadioButton;
+    return checked(muiNode_SetAccessFlags(state_->context, idOf(node), kCheckable ? mui_accessCheckable : 0),
+                   "a node's flags were refused");
 }
 
 result::Status Tree::setName(Node node, std::string_view name) {

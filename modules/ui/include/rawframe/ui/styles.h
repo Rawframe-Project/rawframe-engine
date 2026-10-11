@@ -14,6 +14,7 @@
 //         "styleId": "6c1f0e3b9a2d4c57",
 //         "name": "button",
 //         "base": {"fill": "#2a3140ff", "radius": 6},
+//         "checked": {"fill": "#3c8a4aff"},
 //         "hovered": {"fill": "#3a4458ff"},
 //         "pressed": {"fill": "#1c222cff"},
 //         "focused": {"outerShadow": {"color": "#ffd24aff", "spread": 2}},
@@ -54,7 +55,7 @@ struct StyleLook {
 struct StyleClass {
     std::uint64_t id = 0;
     std::string name;
-    std::array<StyleLook, 5> looks{};
+    std::array<StyleLook, 6> looks{};
     std::vector<std::pair<LookParts, Transition>> transitions;
 };
 
