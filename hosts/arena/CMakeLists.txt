@@ -353,6 +353,10 @@ if(RAWFRAME_BUILD_TESTS)
         # fed to no one, the arena lending no client devices (D596); with no
         # runtime, played flat and drawn offscreen all the same.
         configure_file(tests/plaza_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf @ONLY)
+        # Played with a runtime that does not exist named (D654).
+        set(RAWFRAME_TEST_XR_RUNTIME "xr.runtime = no_runtime.json")
+        configure_file(tests/plaza_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset_absent.conf @ONLY)
+        unset(RAWFRAME_TEST_XR_RUNTIME)
         if(RAWFRAME_ARENA_HEADSET AND RAWFRAME_MONADO_SERVICE AND NOT WIN32)
             add_test(NAME plaza_headset
                      COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xr_run.sh ${RAWFRAME_SHELL}
@@ -385,14 +389,16 @@ if(RAWFRAME_BUILD_TESTS)
             # tree, D617).
             add_test(NAME plaza_headset_absent
                      COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
-                             $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf
+                             $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset_absent.conf
                      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+            # A runtime named by the environment is ignored and said to be
+            # (D654); the one the configuration names does not exist.
             set_tests_properties(plaza_headset_absent PROPERTIES
                                  FIXTURES_REQUIRED plaza_content
-                                 ENVIRONMENT "XR_RUNTIME_JSON=${CMAKE_CURRENT_BINARY_DIR}/no_runtime.json"
+                                 ENVIRONMENT "XR_RUNTIME_JSON=${CMAKE_CURRENT_BINARY_DIR}/elsewhere.json"
                                  SKIP_REGULAR_EXPRESSION "skip: no device"
                                  PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"xr_unavailable\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,.*\"code\":\"frame_summary\"[^\n]*\"width\":320,\"height\":180,[^\n]*\"headsetFrames\":0")
+                                 "\"code\":\"xr_overrides_ignored\"[^\n]*\"variables\":\"XR_RUNTIME_JSON\".*\"code\":\"xr_unavailable\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,.*\"code\":\"frame_summary\"[^\n]*\"width\":320,\"height\":180,[^\n]*\"headsetFrames\":0")
         endif()
         # A view too large for its device drawn at a falling render scale
         # (D533): the scale changes to one lower than the whole, and the run

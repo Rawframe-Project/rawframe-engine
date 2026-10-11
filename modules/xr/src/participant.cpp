@@ -20,6 +20,7 @@ namespace {
 
 constexpr diagnostics::EventIdentity kReady{"xr", "xr_ready"};
 constexpr diagnostics::EventIdentity kUnavailable{"xr", "xr_unavailable"};
+constexpr diagnostics::EventIdentity kIgnored{"xr", "xr_overrides_ignored"};
 constexpr diagnostics::EventIdentity kState{"xr", "xr_session_state"};
 constexpr diagnostics::EventIdentity kFailed{"xr", "xr_failed"};
 constexpr diagnostics::EventIdentity kSummary{"xr", "xr_summary"};
@@ -100,18 +101,34 @@ public:
         if (context.has(view::kUiPointing.name)) {
             RAWFRAME_TRY_ASSIGN(pointing_, context.capability(view::kUiPointing));
         }
-        auto runtime = Runtime::open({});
+        // The system's active runtime, or one a trusted configuration names
+        // (D654); never one an environment variable names.
+        const std::string kManifest = context.configuration().path("xr.runtime").value_or("");
+        auto runtime = Runtime::open({.manifest = kManifest});
         if (!runtime.has_value()) {
             // Played flat: the headset is not present.
             unavailable_ = std::string{runtime.error().description()};
+            for (const result::ContextField& kField : runtime.error().context()) {
+                if (kField.key == "ignored") {
+                    ignored_ = std::string{kField.value};
+                }
+            }
             return {};
         }
         runtime_ = std::move(*runtime);
+        ignored_ = runtime_->system().overridesIgnored;
         return {};
     }
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
+        if (!ignored_.empty()) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kIgnored,
+                         "the OpenXR loader's environment overrides were ignored: the runtime is the system's or "
+                         "xr.runtime's",
+                         {diagnostics::field("variables", ignored_)});
+        }
         if (runtime_ != nullptr) {
             const SystemDescription& kSystem = runtime_->system();
             emitter_.log(diagnostics::Severity::Info,
@@ -461,6 +478,8 @@ private:
     bool asked_ = false;
     PanelSettings panel_;
     std::string unavailable_;
+    /// The loader's environment overrides ignored, if any (D654).
+    std::string ignored_;
     std::unique_ptr<Runtime> runtime_;
     std::unique_ptr<Session> session_;
     SessionState told_ = SessionState::Unknown;

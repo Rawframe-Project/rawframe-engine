@@ -9,5 +9,6 @@ scene.shadow_side = 256
 input.gamepads = false
 render.frame_rate = 30
 xr.headset = true
+@RAWFRAME_TEST_XR_RUNTIME@
 xr.panel_width = 320
 xr.panel_height = 180

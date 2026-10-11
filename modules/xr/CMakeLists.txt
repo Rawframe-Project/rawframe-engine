@@ -14,6 +14,14 @@ target_include_directories(rawframe_xr SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/third_
 # Under a runtime of its own where Monado is installed (tools/xr_run.sh);
 # where none is, the tests find no runtime and skip.
 find_program(RAWFRAME_MONADO_SERVICE monado-service)
+# Monado's manifest, which the headset tests' configurations name as
+# `xr.runtime` (D654), and the line that names it.
+find_file(RAWFRAME_MONADO_MANIFEST openxr_monado.json PATHS /usr/share/openxr/1 /usr/local/share/openxr/1 NO_DEFAULT_PATH)
+if(RAWFRAME_MONADO_MANIFEST)
+    set(RAWFRAME_TEST_XR_RUNTIME "xr.runtime = ${RAWFRAME_MONADO_MANIFEST}" CACHE INTERNAL "")
+else()
+    set(RAWFRAME_TEST_XR_RUNTIME "" CACHE INTERNAL "")
+endif()
 if(RAWFRAME_MONADO_SERVICE AND NOT WIN32 AND RAWFRAME_BUILD_TESTS)
     add_executable(rawframe_xr_tests tests/session_test.cpp)
     target_link_libraries(rawframe_xr_tests PRIVATE rawframe::xr rawframe::test)

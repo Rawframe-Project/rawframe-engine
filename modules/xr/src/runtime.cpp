@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -49,6 +50,45 @@ result::Result<bool> offers(const char* name) {
     });
 }
 
+/// The loader's own environment overrides: the runtime it loads, where it
+/// looks for API layers, and which it enables.
+constexpr std::array<const char*, 3> kOverrides = {"XR_RUNTIME_JSON", "XR_API_LAYER_PATH", "XR_ENABLE_API_LAYERS"};
+
+/// Sets `name` in this process's environment, or removes it with none.
+void setVariable(const char* name, const char* value) {
+#if defined(_WIN32)
+    ::_putenv_s(name, value != nullptr ? value : "");
+#else
+    if (value != nullptr) {
+        ::setenv(name, value, 1);
+    } else {
+        ::unsetenv(name);
+    }
+#endif
+}
+
+/// The loader confined to the system's active runtime or `manifest` (D654):
+/// every override it would read removed, the one variable it takes a
+/// runtime's manifest from then set to `manifest` where one is named.
+/// Answers the overrides removed. The environment is the loader's only
+/// door; the main thread alone opens a runtime.
+std::string confine(const std::filesystem::path& manifest) {
+    std::string ignored;
+    const std::string kNamed = manifest.string();
+    for (const char* name : kOverrides) {
+        // The manifest named, as an earlier open set it, is no override.
+        const char* set = std::getenv(name);
+        if (set != nullptr && !(name == kOverrides[0] && !kNamed.empty() && kNamed == set)) {
+            setVariable(name, nullptr);
+            ignored += ignored.empty() ? name : std::string{","} + name;
+        }
+    }
+    if (!kNamed.empty()) {
+        setVariable(kOverrides[0], kNamed.c_str());
+    }
+    return ignored;
+}
+
 template <typename Function> result::Status function(XrInstance instance, const char* name, Function& out) {
     PFN_xrVoidFunction found = nullptr;
     if (const XrResult kRead = xrGetInstanceProcAddr(instance, name, &found); XR_FAILED(kRead)) {
@@ -66,6 +106,17 @@ Runtime::Runtime(std::unique_ptr<State> state) noexcept : state_(std::move(state
 Runtime::~Runtime() = default;
 
 result::Result<std::unique_ptr<Runtime>> Runtime::open(const RuntimeSettings& settings) {
+    const std::string kIgnored = confine(settings.manifest);
+    auto opened = made(settings);
+    if (!opened.has_value()) {
+        return std::unexpected{kIgnored.empty() ? std::move(opened.error())
+                                                : std::move(opened.error()).withContext("ignored", kIgnored)};
+    }
+    (*opened)->state_->description.overridesIgnored = kIgnored;
+    return opened;
+}
+
+result::Result<std::unique_ptr<Runtime>> Runtime::made(const RuntimeSettings& settings) {
     RAWFRAME_TRY_ASSIGN(const bool kVulkan, offers(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME));
     if (!kVulkan) {
         return refused(XrError::Runtime, "the runtime cannot draw through Vulkan");

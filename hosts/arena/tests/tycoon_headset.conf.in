@@ -19,6 +19,7 @@ render.height = 180
 scene.shadow_side = 256
 render.read_every = 8
 xr.headset = true
+@RAWFRAME_TEST_XR_RUNTIME@
 xr.panel_width = 320
 xr.panel_height = 180
 # What is checked is what is drawn, not how fast a loaded machine ticks

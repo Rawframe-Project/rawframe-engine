@@ -3,10 +3,12 @@
 # service, headless (its null compositor, which shows nothing, its
 # simulated headset, and a simulated simple controller in each hand, D596),
 # in a runtime directory of its own, so tests started at the same moment
-# never share a service; and RAWFRAME_REQUIRE_XR set, so a test that finds
-# no runtime fails instead of skipping. The service reads
-# its standard input to quit, so it is given a pipe held open until the
-# command ends. Vulkan is the caller's: the check's lavapipe
+# never share a service; its manifest named in RAWFRAME_XR_RUNTIME for
+# tests that name it themselves, as a game names one in `xr.runtime`
+# (D654: the loader's own XR_RUNTIME_JSON is never trusted); and
+# RAWFRAME_REQUIRE_XR set, so a test that finds no runtime fails instead of
+# skipping. The service reads its standard input to quit, so it is given a
+# pipe held open until the command ends. Vulkan is the caller's: the check's lavapipe
 # (VK_DRIVER_FILES).
 #
 # usage: xr_run.sh <command> [<argument>...]
@@ -25,7 +27,7 @@ service=""
 trap 'exec 4>&-; [ -z "$service" ] || { kill "$service" 2>/dev/null; wait "$service" 2>/dev/null; }; rm -rf "$place"' EXIT
 chmod 700 "$place"
 mkfifo "$place/input"
-export XDG_RUNTIME_DIR="$place" XR_RUNTIME_JSON="$manifest" XRT_COMPOSITOR_NULL=1 SIMULATED_ENABLE=1 \
+export XDG_RUNTIME_DIR="$place" RAWFRAME_XR_RUNTIME="$manifest" XRT_COMPOSITOR_NULL=1 SIMULATED_ENABLE=1 \
     SIMULATED_LEFT=simple SIMULATED_RIGHT=simple
 monado-service <"$place/input" >"$place/service.log" 2>&1 &
 service=$!

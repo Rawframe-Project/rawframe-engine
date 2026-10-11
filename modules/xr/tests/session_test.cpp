@@ -5,11 +5,14 @@
 // session ended when asked. While it has the input focus, both hands'
 // controllers are read and located (D596), and a panel is shown over the
 // views, a quad layer (D597); an aim points at the panel where its ray
-// meets it (D598); and each hand's controller is felt (D600). Run under tools/xr_run.sh, which starts
-// Monado's service headless (its null compositor, simulated headset, and
-// simulated simple controllers) on lavapipe; a machine with no runtime
-// skips, unless RAWFRAME_REQUIRE_XR is set, as the check sets it where
-// Monado is installed.
+// meets it (D598); and each hand's controller is felt (D600). The loader's
+// environment overrides are never trusted (D654). Run under
+// tools/xr_run.sh, which starts Monado's service headless (its null
+// compositor, simulated headset, and simulated simple controllers) on
+// lavapipe and names its manifest in RAWFRAME_XR_RUNTIME, the tests' own
+// variable, which these tests name as a configuration would; a machine with
+// no runtime skips, unless RAWFRAME_REQUIRE_XR is set, as the check sets it
+// where Monado is installed.
 
 #include "rawframe/render/device.h"
 #include "rawframe/render/frame.h"
@@ -25,6 +28,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -37,10 +42,24 @@ bool required() {
     return value != nullptr && value[0] != '\0';
 }
 
+/// The runtime's manifest tools/xr_run.sh names, or none.
+std::string manifest() {
+    const char* value = std::getenv("RAWFRAME_XR_RUNTIME");
+    return value != nullptr ? value : "";
+}
+
+void setVariable(const char* name, const char* value) {
+#if defined(_WIN32)
+    ::_putenv_s(name, value);
+#else
+    ::setenv(name, value, 1);
+#endif
+}
+
 /// The runtime's system, or none where no runtime answers and none is
 /// required.
 std::unique_ptr<xr::Runtime> opened() {
-    auto runtime = xr::Runtime::open({.application = "rawframe_xr_tests"});
+    auto runtime = xr::Runtime::open({.application = "rawframe_xr_tests", .manifest = manifest()});
     if (!runtime.has_value()) {
         const bool kAbsent =
             runtime.error().domain() == xr::kXrDomain && runtime.error().code() == xr::code(xr::XrError::NoRuntime);
@@ -89,6 +108,33 @@ RAWFRAME_TEST(TheRuntimesHeadMountedSystemHasStereoViews) {
         RAWFRAME_EXPECT(kView.width > 0 && kView.height > 0);
     }
     RAWFRAME_EXPECT(kSystem.orientationTracking);
+}
+
+RAWFRAME_TEST(TheLoadersEnvironmentOverridesAreNeverTrusted) {
+    // A runtime, API layers, and an enabled layer, each named by a variable
+    // whoever starts the process may set: all removed before the loader
+    // runs, and said (D654). The layer named does not exist, so an instance
+    // made proves it was not enabled.
+    setVariable("XR_RUNTIME_JSON", "/nowhere/runtime.json");
+    setVariable("XR_API_LAYER_PATH", "/nowhere");
+    setVariable("XR_ENABLE_API_LAYERS", "XR_APILAYER_NOWHERE");
+    const std::string kManifest = manifest();
+    auto runtime = xr::Runtime::open({.application = "rawframe_xr_tests", .manifest = kManifest});
+    RAWFRAME_EXPECT(std::getenv("XR_API_LAYER_PATH") == nullptr && std::getenv("XR_ENABLE_API_LAYERS") == nullptr);
+    const char* kRuntime = std::getenv("XR_RUNTIME_JSON");
+    RAWFRAME_EXPECT(kManifest.empty() ? kRuntime == nullptr : kRuntime != nullptr && kRuntime == kManifest);
+    constexpr std::string_view kAll = "XR_RUNTIME_JSON,XR_API_LAYER_PATH,XR_ENABLE_API_LAYERS";
+    if (runtime.has_value()) {
+        RAWFRAME_EXPECT((*runtime)->system().overridesIgnored == kAll);
+    } else {
+        RAWFRAME_EXPECT(!required());
+        RAWFRAME_EXPECT(std::ranges::any_of(runtime.error().context(), [kAll](const result::ContextField& field) {
+            return field.key == "ignored" && field.value == kAll;
+        }));
+    }
+    // Opened again with nothing set: nothing said, the manifest named kept.
+    auto again = xr::Runtime::open({.application = "rawframe_xr_tests", .manifest = kManifest});
+    RAWFRAME_EXPECT(!again.has_value() || (*again)->system().overridesIgnored.empty());
 }
 
 RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
