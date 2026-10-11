@@ -668,8 +668,8 @@ struct ToolingServer::State {
     }
 
     /// `debug.break` (`functions`, names, and `lines`, each a `file` and a
-    /// `line`, D630), `debug.status`, and `debug.continue`, under the debug
-    /// grant (D460).
+    /// `line`, D630), `debug.status`, `debug.continue`, and `debug.step`
+    /// (`how`: over, into, or out, D632), under the debug grant (D460).
     void debug(
         network::ConnectionId connection, Client& client, const Value& id, std::string_view kind, const Value& record) {
         if (!settings.grants.debug || settings.debugging == nullptr) {
@@ -742,6 +742,25 @@ struct ToolingServer::State {
             }
             carryOn = true;
             made.add("kind", Value::string("debug.continued"));
+        } else if (kind == "debug.step") {
+            const Value* const kHow = record.find("how");
+            const std::string_view kSaid =
+                kHow != nullptr && kHow->text() != nullptr ? std::string_view{*kHow->text()} : std::string_view{};
+            const std::optional<world_runtime::DebugStep> kStep =
+                kSaid == "over"   ? std::optional{world_runtime::DebugStep::Over}
+                : kSaid == "into" ? std::optional{world_runtime::DebugStep::Into}
+                : kSaid == "out"  ? std::optional{world_runtime::DebugStep::Out}
+                                  : std::nullopt;
+            if (!kStep.has_value()) {
+                send(connection, client, errorLine(id, ToolingError::Malformed, "how is over, into, or out"));
+                return;
+            }
+            if (!stopped || !debugging.step(*kStep)) {
+                send(connection, client, errorLine(id, ToolingError::Stopped, "the game is not stopped"));
+                return;
+            }
+            carryOn = true;
+            made.add("kind", Value::string("debug.stepped"));
         } else {
             send(connection, client, errorLine(id, ToolingError::Unsupported, "this endpoint has no such verb"));
             return;

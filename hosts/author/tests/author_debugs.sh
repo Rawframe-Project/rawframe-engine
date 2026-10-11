@@ -4,7 +4,8 @@
 # stroll system stops the game in its tick, where the stopped frame names
 # the function, the line it stands at, and its arguments, every other verb
 # is refused, and the breakpoints are taken out; told to carry on, the game
-# runs again. Stopped again at a line of the stroll (D630), with its
+# runs again, a line stepped first (D632). Stopped again at a line of the
+# stroll (D630), with its
 # debugger still there, the server asked to stop carries on and drains,
 # rather than waiting for the debugger.
 #
@@ -54,6 +55,10 @@ done
     sleep 2
     echo '{"kind":"debug.status","id":2}'
     echo '{"kind":"tooling.status","id":3}'
+    echo '{"kind":"debug.step","id":21,"how":"sideways"}'
+    echo '{"kind":"debug.step","id":22,"how":"over"}'
+    sleep 1
+    echo '{"kind":"debug.status","id":23}'
     echo '{"kind":"debug.break","id":4,"functions":[]}'
     echo '{"kind":"debug.continue","id":5}'
     sleep 1
@@ -67,9 +72,13 @@ grep -q '"id":1,"answer":{"kind":"debug.broken","found":1,"lines":\[false\]}' "$
 grep '"id":2,' "$work/replies" |
     grep -q '"answer":{"kind":"debug.status","stopped":true,"stops":[1-9][0-9]*,"frames":\[{"function":"plaza.stroll","file":"[^"]*plaza.kest","line":[0-9][0-9]*,"locals":\[{"name":"count","value":"[0-9]*"}'
 grep -q '"id":3,"error":{"code":"stopped"' "$work/replies"
+# A line on (D632): stopped again at the stroll's next line.
+grep -q '"id":21,"error":{"code":"malformed"' "$work/replies"
+grep -q '"id":22,"answer":{"kind":"debug.stepped"}' "$work/replies"
+grep -q '"id":23,"answer":{"kind":"debug.status","stopped":true,"stops":2,"frames":\[{"function":"plaza.stroll","file":"[^"]*plaza.kest","line":255,' "$work/replies"
 grep -q '"id":4,"answer":{"kind":"debug.broken","found":0,"lines":\[\]}' "$work/replies"
 grep -q '"id":5,"answer":{"kind":"debug.continued"}' "$work/replies"
-grep -q '"id":6,"answer":{"kind":"debug.status","stopped":false,"stops":1,"frames":\[\]}' "$work/replies"
+grep -q '"id":6,"answer":{"kind":"debug.status","stopped":false,"stops":2,"frames":\[\]}' "$work/replies"
 grep -q '"id":7,"answer":{"kind":"tooling.status","tick":' "$work/replies"
 grep -q '"id":8,"error":{"code":"stopped"' "$work/replies"
 grep -q '"id":9,"error":{"code":"malformed"' "$work/replies"

@@ -46,6 +46,16 @@ void GameDebugging::whileStopped(std::function<bool()> serve) noexcept {
     serve_ = std::move(serve);
 }
 
+bool GameDebugging::step(world_runtime::DebugStep how) noexcept {
+    if (!stopped_ || machine_ == nullptr) {
+        return false;
+    }
+    machine_->step(how == world_runtime::DebugStep::Into  ? kest::Step::Into
+                   : how == world_runtime::DebugStep::Out ? kest::Step::Out
+                                                          : kest::Step::Over);
+    return true;
+}
+
 bool GameDebugging::stopped() const noexcept {
     return stopped_;
 }

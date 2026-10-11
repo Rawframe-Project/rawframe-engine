@@ -43,8 +43,8 @@ Debugs a running game's Kest scripts (ADR-0066's debugger bridge, D461, D462). V
 
 The endpoint must be on this machine, a loopback address: a configuration a cloned workspace brings never sends a token elsewhere.
 
-When a breakpoint is hit, the server waits inside its tick. The call stack shows the functions, the line each stands at (opened in the editor when attached by the game), and each frame its locals: numbers, truths, and text by value, and `(not written yet)` for one the function has not reached. Continue lets the game run to the next breakpoint, which may be the same one again later in the tick, and disconnecting takes the breakpoints out and lets the game run.
+When a breakpoint is hit, the server waits inside its tick. The call stack shows the functions, the line each stands at (opened in the editor when attached by the game), and each frame its locals: numbers, truths, and text by value, and `(not written yet)` for one the function has not reached. Continue lets the game run to the next breakpoint, which may be the same one again later in the tick; stepping moves it a line (below); and disconnecting takes the breakpoints out and lets the game run.
 
-## Not yet
+## Stepping
 
-Stepping through lines.
+Step Over, Step Into, and Step Out move the stopped game a line: over a call to the next line of the function or one it returns to, into the next line wherever it is, or out to the line the function returns to. A breakpoint met on the way stops it there instead; a step past the last line of a tick's function lets the game run to the next breakpoint. Pause is not offered: a game stops at its breakpoints.

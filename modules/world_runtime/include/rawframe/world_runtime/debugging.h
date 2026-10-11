@@ -27,6 +27,15 @@ struct DebugLine {
     std::uint32_t line = 0;
 };
 
+/// How a stopped game steps (D632): to the next line wherever it is
+/// (`Into`), the next in this function or one it returns to (`Over`), or
+/// the line it returns to (`Out`).
+enum class DebugStep : std::uint8_t {
+    Over,
+    Into,
+    Out
+};
+
 /// Where `breakAt` broke: how many of the functions named are the
 /// program's, and for each line asked, in order, whether code comes from it.
 struct DebugBroken {
@@ -60,6 +69,12 @@ public:
     /// milliseconds apart, until it answers true: carry on. None carries on
     /// at once.
     virtual void whileStopped(std::function<bool()> serve) noexcept = 0;
+    /// While stopped, from what serves the stop (D632): once it answers
+    /// carry on, the game runs only to the next line as `how` says and
+    /// stops again; a breakpoint met on the way stops it there instead, and
+    /// a function that ends on the way ends the step. False while not
+    /// stopped.
+    virtual bool step(DebugStep how) noexcept = 0;
     [[nodiscard]] virtual bool stopped() const noexcept = 0;
     /// How many times the game stopped.
     [[nodiscard]] virtual std::uint64_t stops() const noexcept = 0;

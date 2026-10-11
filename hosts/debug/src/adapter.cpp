@@ -350,8 +350,18 @@ std::vector<Value> Adapter::handle(const Value& request) {
         link_.reset();
         done_ = true;
         out.push_back(response(request, true));
-    } else if (kCommand == "next" || kCommand == "stepIn" || kCommand == "stepOut" || kCommand == "pause") {
-        out.push_back(response(request, false, {}, "a game is not stepped yet; continue to the next breakpoint"));
+    } else if (kCommand == "next" || kCommand == "stepIn" || kCommand == "stepOut") {
+        // A line on, the game stopping there (D632).
+        Value step = Value::object();
+        step.add("kind", Value::string("debug.step"));
+        step.add("how", Value::string(kCommand == "next" ? "over" : kCommand == "stepIn" ? "into" : "out"));
+        const bool kStepped = ask(std::move(step), why).has_value();
+        stepped_ = kStepped;
+        told_ = false;
+        frames_.clear();
+        out.push_back(response(request, kStepped, {}, kStepped ? std::string{} : why));
+    } else if (kCommand == "pause") {
+        out.push_back(response(request, false, {}, "a game stops at its breakpoints; pausing it is not offered"));
     } else {
         out.push_back(response(request, false, {}, "this adapter does not answer " + kCommand));
     }
@@ -383,7 +393,8 @@ std::vector<Value> Adapter::poll() {
     if (kIsStopped && !told_) {
         told_ = true;
         Value body = Value::object();
-        body.add("reason", Value::string("breakpoint"));
+        body.add("reason", Value::string(stepped_ ? "step" : "breakpoint"));
+        stepped_ = false;
         body.add("threadId", Value::integer(kGameThread));
         body.add("allThreadsStopped", Value::boolean(true));
         out.push_back(event("stopped", std::move(body)));

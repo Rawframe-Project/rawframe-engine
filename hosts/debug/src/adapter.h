@@ -4,8 +4,8 @@
 // bridge, D461): an editor's requests turned into the tooling endpoint's
 // debug verbs (D460), and what the game does turned into the protocol's
 // events. Function and line breakpoints (D630), the stopped frames, where
-// they stand, and their locals (D631), and carrying on; stepping is
-// answered as not yet offered.
+// they stand, and their locals (D631), carrying on, and stepping a line
+// over, into, or out (D632).
 
 #include "rawframe/authoring_session/attach.h"
 #include "rawframe/authoring_session/link.h"
@@ -63,6 +63,8 @@ private:
     std::vector<std::string> functions_;
     std::map<std::string, std::vector<std::int64_t>> lines_;
     bool told_ = false;
+    /// The game was told to step, so its next stop is the step's.
+    bool stepped_ = false;
     bool done_ = false;
     bool terminated_ = false;
 };

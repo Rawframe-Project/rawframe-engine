@@ -29,6 +29,7 @@ public:
     [[nodiscard]] world_runtime::DebugBroken breakAt(std::vector<std::string> functions,
                                                      std::vector<world_runtime::DebugLine> lines) noexcept override;
     void whileStopped(std::function<bool()> serve) noexcept override;
+    bool step(world_runtime::DebugStep how) noexcept override;
     [[nodiscard]] bool stopped() const noexcept override;
     [[nodiscard]] std::uint64_t stops() const noexcept override;
     [[nodiscard]] std::vector<world_runtime::DebugFrame> stack() const override;

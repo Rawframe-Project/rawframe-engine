@@ -239,13 +239,18 @@ scopes = editor.answer(editor.send("scopes", {"frameId": frame["id"]}))
 reference = scopes["body"]["scopes"][0]["variablesReference"]
 variables = editor.answer(editor.send("variables", {"variablesReference": reference}))["body"]["variables"]
 assert variables[0]["name"] == "count" and int(variables[0]["value"]) > 0, variables
-assert editor.answer(editor.send("next", {"threadId": 1}))["success"] is False
 assert editor.answer(editor.send("continue", {"threadId": 1}))["success"]
 # Stopped again, at the line in the stroll's loop: the editor is told
 # again, and the frame stands at the line.
 editor.until(lambda m: m.get("event") == "stopped", "stopped again")
 stack = editor.answer(editor.send("stackTrace", {"threadId": 1}))
 assert stack["body"]["stackFrames"][0]["line"] == 262, stack
+# A line on (D632): the stop is the step's, at the next line.
+assert editor.answer(editor.send("next", {"threadId": 1}))["success"]
+stepped = editor.until(lambda m: m.get("event") == "stopped", "stepped")
+assert stepped["body"]["reason"] == "step", stepped
+stack = editor.answer(editor.send("stackTrace", {"threadId": 1}))
+assert stack["body"]["stackFrames"][0]["line"] == 263, stack
 editor.leave()
 print("stroll stopped with count", variables[0]["value"], flush=True)
 
