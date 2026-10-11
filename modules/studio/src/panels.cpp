@@ -233,7 +233,7 @@ void ShellParticipant::showScene(std::size_t at) {
         view_.reset();
         find_.clear();
         static_cast<void>(tree_->scrollTo(entitiesColumn_, 0, 0));
-        if (sheetChosen()) {
+        if (documentChosen()) {
             clear(viewRows_);
             viewFields_.clear();
             showHistoryList();
@@ -262,6 +262,10 @@ void ShellParticipant::showScene(std::size_t at) {
     findField_.reset();
     if (sheetChosen()) {
         showSheet();
+        return;
+    }
+    if (uiChosen()) {
+        showUi();
         return;
     }
     const std::optional<Value> kList = entitiesShown();
@@ -354,6 +358,10 @@ std::optional<Value> ShellParticipant::entitiesShown() {
 void ShellParticipant::showEntity(std::size_t at) {
     if (sheetChosen()) {
         showClass(at);
+        return;
+    }
+    if (uiChosen()) {
+        showNode(at);
         return;
     }
     endEdit();

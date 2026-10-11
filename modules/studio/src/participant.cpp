@@ -120,18 +120,21 @@ bool ShellParticipant::openGame() {
     std::ranges::sort(scenes);
     scenes_.clear();
     sceneSources_.clear();
-    sheets_.clear();
+    listed_.clear();
     for (auto& [path, source] : scenes) {
         scenes_.push_back(std::move(path));
         sceneSources_.push_back(std::move(source));
-        sheets_.push_back(false);
+        listed_.push_back(Listed::Scene);
     }
-    // The game's style sheets after its scenes, edited as they are (D637).
-    for (const std::filesystem::path& kSheet : authoring_session::sheetsBeside(description_)) {
-        std::error_code error;
-        scenes_.push_back(std::filesystem::relative(kSheet, sceneRoot_, error).generic_string());
-        sceneSources_.emplace_back();
-        sheets_.push_back(true);
+    // The game's style sheets after its scenes, then its UI documents,
+    // edited as they are (D637, D643).
+    for (const auto& [kKind, kExtension] : {std::pair{Listed::Sheet, ".styles"}, std::pair{Listed::Ui, ".ui"}}) {
+        for (const std::filesystem::path& kFile : authoring_session::filesBeside(description_, kExtension)) {
+            std::error_code error;
+            scenes_.push_back(std::filesystem::relative(kFile, sceneRoot_, error).generic_string());
+            sceneSources_.emplace_back();
+            listed_.push_back(kKind);
+        }
     }
     return true;
 }

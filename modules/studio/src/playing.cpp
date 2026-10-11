@@ -320,7 +320,7 @@ void ShellParticipant::moveDragged(const Moved& moved) {
 }
 
 void ShellParticipant::attachPreview() {
-    if (sheetChosen()) {
+    if (documentChosen()) {
         return;
     }
     const Answered kAttached = answeredOf(ask(previewRecord(next(), scene_, &*preview_)));

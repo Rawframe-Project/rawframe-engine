@@ -96,7 +96,9 @@ struct FieldRow {
         /// A part of a style class's look: `component` its variant, `field`
         /// the part (D637); with no variant, the class's transitions
         /// (D639).
-        Part
+        Part,
+        /// A field of a UI document's node (D643).
+        NodeField
     };
     ui::Node value{};
     Role role = Role::Field;
@@ -295,9 +297,16 @@ private:
     /// `why` in the header, nothing asked, the entity shown as it stands.
     void refuse(const std::string& why);
 
-    /// Whether the chosen document is a style sheet (D637).
+    /// Whether the chosen document is a style sheet (D637), a UI document
+    /// (D643), or either: a document with no view or preview.
     [[nodiscard]] bool sheetChosen() const noexcept {
-        return !scene_.empty() && sceneAt_ < sheets_.size() && sheets_[sceneAt_];
+        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Sheet;
+    }
+    [[nodiscard]] bool uiChosen() const noexcept {
+        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Ui;
+    }
+    [[nodiscard]] bool documentChosen() const noexcept {
+        return sheetChosen() || uiChosen();
     }
     /// The chosen style sheet's classes in the entity column, read whole
     /// from the session (`styles.read_sheet`).
@@ -309,6 +318,15 @@ private:
     /// unsets it, JSON is taken as it reads, and anything else as text, so
     /// a color is typed as `#rrggbbaa`.
     void setPart(const FieldRow& row, const std::string& text);
+    /// The chosen UI document's nodes in the entity column, each indented
+    /// by how deep it stands, read whole (`ui.read_document`, D643).
+    void showUi();
+    /// The node at `at`: `shows` and every field of `rawframe.ui.Node`, each
+    /// a field showing what the document sets.
+    void showNode(std::size_t at);
+    /// `text` set as the node's field `row` names (`ui.set_field`), typed
+    /// as a part's is.
+    void setNodeField(const FieldRow& row, const std::string& text);
 
     /// One operation asked of the session for the chosen scene; `done` or
     /// the session's message said; the scene shown again with `choose`
@@ -398,9 +416,14 @@ private:
     ui::Node retryNode_{};
     std::uint64_t opened_ = 0;
     std::vector<std::string> scenes_;
-    /// Whether each document listed with the scenes is a style sheet
-    /// (D637), and the chosen sheet as the session last read it.
-    std::vector<bool> sheets_;
+    /// What each document listed with the scenes is (D637, D643), and the
+    /// chosen sheet or UI document as the session last read it.
+    enum class Listed : std::uint8_t {
+        Scene,
+        Sheet,
+        Ui,
+    };
+    std::vector<Listed> listed_;
     std::optional<Value> sheet_;
     /// The assets the game declares, read as it opens (D455).
     std::vector<Asset> assets_;

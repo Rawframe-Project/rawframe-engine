@@ -1,9 +1,13 @@
-// A game's style sheet in Studio (D637): listed with the scenes, its
-// classes in the entity column, made with New, deleted with Delete, and
-// named in the name field (D638), and a chosen class's looks as fields,
-// each part set through the session's `styles.set_part` (D636), which a
-// played game follows (D634), then its transitions as one (D639).
+// A game's JSON documents in Studio, listed after its scenes and followed
+// by a played game (D634). A style sheet (D637): its classes in the entity
+// column, made with New, deleted with Delete, and named in the name field
+// (D638), and a chosen class's looks as fields, each part set through the
+// session's `styles.set_part` (D636), then its transitions as one (D639).
+// A UI document (D643): its nodes in the entity column, indented by how
+// deep each stands, deleted with Delete, and a chosen node's fields, each
+// set through `ui.set_field` (D641).
 
+#include "rawframe/ui/document.h"
 #include "rawframe/ui/styles.h"
 #include "shell.h"
 
@@ -27,6 +31,30 @@ const Value* classOf(const std::optional<Value>& sheet, const std::string& id) {
 /// anything else as JSON.
 std::string partText(const Value& value) {
     return value.text() != nullptr ? *value.text() : document::writeCompact(value);
+}
+
+/// Typed text as a document holds it: nothing for none, JSON as it reads,
+/// anything else as text, so a color is typed bare.
+Value documentedValue(const std::string& text) {
+    if (text.empty()) {
+        return Value{};
+    }
+    auto read = document::parse(text);
+    return read.has_value() ? std::move(*read) : Value::string(text);
+}
+
+/// The node `component` names among `nodes` and the children inside them.
+const Value* nodeOf(const Value* nodes, const std::string& component) {
+    for (const Value& each : nodes != nullptr ? nodes->items() : std::span<const Value>{}) {
+        const Value* held = each.find("component");
+        if (held != nullptr && held->text() != nullptr && *held->text() == component) {
+            return &each;
+        }
+        if (const Value* inside = nodeOf(each.find("children"), component)) {
+            return inside;
+        }
+    }
+    return nullptr;
 }
 
 } // namespace
@@ -125,11 +153,7 @@ void ShellParticipant::showClass(std::size_t at) {
 }
 
 void ShellParticipant::setPart(const FieldRow& row, const std::string& text) {
-    Value value;
-    if (!text.empty()) {
-        auto read = document::parse(text);
-        value = read.has_value() ? std::move(*read) : Value::string(text);
-    }
+    Value value = documentedValue(text);
     Value operation = Value::object();
     if (row.component.empty()) {
         operation.add("operation", Value::string("styles.set_transitions"));
@@ -145,6 +169,78 @@ void ShellParticipant::setPart(const FieldRow& row, const std::string& text) {
     operation.add("value", std::move(value));
     commit(
         std::move(operation), row.component + " " + row.field + (text.empty() ? " unset" : " set to " + text), entity_);
+}
+
+void ShellParticipant::showUi() {
+    const std::optional<Value> kRead = read(scene_, "ui.read_document");
+    sheet_ = kRead.has_value() && kRead->find("document") != nullptr ? std::optional<Value>{*kRead->find("document")}
+                                                                     : std::nullopt;
+    // Each node before those inside it, as the document nests them.
+    const auto kList = [this](const auto& self, const Value* nodes, std::size_t depth) -> void {
+        for (const Value& each : nodes != nullptr ? nodes->items() : std::span<const Value>{}) {
+            const Value* component = each.find("component");
+            if (component == nullptr || component->text() == nullptr) {
+                continue;
+            }
+            auto added = row(entitiesColumn_, std::string(2 * depth, ' ') + *component->text(), kText, kRow, true);
+            if (!added.has_value()) {
+                return;
+            }
+            entityRows_.push_back(*added);
+            entities_.push_back(*component->text());
+            names_.push_back(*component->text());
+            brought_.push_back(false);
+            removed_.push_back(false);
+            places_.push_back(std::nullopt);
+            self(self, each.find("children"), depth + 1);
+        }
+    };
+    kList(kList, sheet_.has_value() ? sheet_->find("nodes") : nullptr, 0);
+}
+
+void ShellParticipant::showNode(std::size_t at) {
+    endEdit();
+    fields_.clear();
+    entityAt_ = at;
+    if (entity_ != entities_[at]) {
+        static_cast<void>(tree_->scrollTo(componentsColumn_, 0, 0));
+    }
+    entity_ = entities_[at];
+    for (std::size_t each = 0; each < entityRows_.size(); ++each) {
+        static_cast<void>(
+            tree_->setLook(entityRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
+    }
+    clear(componentRows_);
+    actions_.clear();
+    components_ = 0;
+    const Value* chosen = nodeOf(sheet_.has_value() ? sheet_->find("nodes") : nullptr, entity_);
+    if (chosen == nullptr) {
+        return;
+    }
+    // Every field a node has, in the document's order, set or not.
+    for (const std::string_view kMember : ui::nodeMembers()) {
+        if (kMember == "component" || kMember == "children") {
+            continue;
+        }
+        const Value* held = chosen->find(kMember);
+        auto line = fieldRow(kMember, held != nullptr ? partText(*held) : std::string{}, std::nullopt, held != nullptr);
+        if (!line.has_value()) {
+            return;
+        }
+        componentRows_.push_back(line->first);
+        fields_.push_back(
+            FieldRow{.value = line->second, .role = FieldRow::Role::NodeField, .field = std::string{kMember}});
+    }
+    components_ = 1;
+}
+
+void ShellParticipant::setNodeField(const FieldRow& row, const std::string& text) {
+    Value operation = Value::object();
+    operation.add("operation", Value::string("ui.set_field"));
+    operation.add("node", Value::string(entity_));
+    operation.add("field", Value::string(row.field));
+    operation.add("value", documentedValue(text));
+    commit(std::move(operation), row.field + (text.empty() ? " unset" : " set to " + text), entity_);
 }
 
 } // namespace rawframe::studio

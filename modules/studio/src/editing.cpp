@@ -101,13 +101,21 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         operation.add("operation", Value::string("styles.remove_class"));
         operation.add("style", Value::string(entity_));
         commit(std::move(operation), "class deleted", std::nullopt);
-    } else if (sheetChosen() &&
-               (node == deleteNode_ || node == duplicateNode_ || node == moveNode_ || node == upNode_ ||
-                node == downNode_ || node == restoreNode_ || node == uninstanceNode_)) {
+    } else if (uiChosen() && node == deleteNode_ && !entity_.empty()) {
+        // A node is removed with what is inside it (D643); one is made in
+        // the game's own words, its component declared, so not here.
+        endEdit();
+        Value operation = Value::object();
+        operation.add("operation", Value::string("ui.remove_node"));
+        operation.add("node", Value::string(entity_));
+        commit(std::move(operation), "node deleted", std::nullopt);
+    } else if (documentChosen() &&
+               (node == newNode_ || node == deleteNode_ || node == duplicateNode_ || node == moveNode_ ||
+                node == upNode_ || node == downNode_ || node == restoreNode_ || node == uninstanceNode_)) {
         // The rest are an entity's (D637).
         endEdit();
         ++refused_;
-        say("not done to a style class");
+        say(sheetChosen() ? "not done to a style class" : "not done to a UI node");
     } else if (node == newNode_ && !scene_.empty()) {
         endEdit();
         create();
@@ -292,6 +300,10 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
         setPart(row, text);
         return;
     }
+    if (row.role == FieldRow::Role::NodeField) {
+        setNodeField(row, text);
+        return;
+    }
     if (row.role == FieldRow::Role::Name && sheetChosen()) {
         Value operation = Value::object();
         operation.add("operation", Value::string("styles.rename_class"));
@@ -471,7 +483,7 @@ ShellParticipant::copyOf(const Value& components, const std::string& entity, con
 }
 
 void ShellParticipant::moveTo(std::size_t sceneAt) {
-    if (sceneAt < sheets_.size() && sheets_[sceneAt]) {
+    if (sceneAt < listed_.size() && listed_[sceneAt] != Listed::Scene) {
         ++refused_;
         say("an entity moves to a scene");
         return;

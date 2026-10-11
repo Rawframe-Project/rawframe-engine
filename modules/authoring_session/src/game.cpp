@@ -150,13 +150,13 @@ std::vector<std::pair<rawframe::base::Bits128, std::filesystem::path>> scenesBes
     return made;
 }
 
-std::vector<std::filesystem::path> sheetsBeside(const std::filesystem::path& game) {
+std::vector<std::filesystem::path> filesBeside(const std::filesystem::path& game, std::string_view extension) {
     std::vector<std::filesystem::path> made;
     std::error_code error;
     for (auto entry = std::filesystem::recursive_directory_iterator{game.parent_path(), error};
          !error && entry != std::filesystem::recursive_directory_iterator{};
          entry.increment(error)) {
-        if (entry->is_regular_file() && entry->path().extension() == ".styles") {
+        if (entry->is_regular_file() && entry->path().extension() == extension) {
             made.push_back(entry->path());
         }
     }

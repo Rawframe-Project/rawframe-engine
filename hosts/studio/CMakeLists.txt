@@ -24,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":3,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":21,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":4,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":22,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its buttons, its columns as scroll panes named by their
     # headings, and its fields as entries named by theirs; runners' level
@@ -119,25 +119,25 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_makes_scenes
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game crate.scene 248,193:crate 463,97 "until=studio_said,status=\"entity created\""
+                     games/runners/runners.game crate.scene 248,225:crate 463,97 "until=studio_said,status=\"entity created\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_makes_scenes PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed crate at 248,193.*clicked at 463,97.*\"code\":\"studio_summary\"[^\n]*\"scenes\":4,\"scene\":\"crate.scene\",\"entities\":1,[^\n]*\"applied\":2,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+                         "typed crate at 248,225.*clicked at 463,97.*\"code\":\"studio_summary\"[^\n]*\"scenes\":5,\"scene\":\"crate.scene\",\"entities\":1,[^\n]*\"applied\":2,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
     # A file imported from Studio (D503, D505): the plaza's paving typed by
     # its absolute path into the field under runners' scenes, made one of
     # runners' textures under its own name.
     add_test(NAME studio_imports
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene 248,193:${PROJECT_SOURCE_DIR}/games/plaza/paving.png
+                     games/runners/runners.game level.scene 248,225:${PROJECT_SOURCE_DIR}/games/plaza/paving.png
                      "until=studio_said,status=\"imported "
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_imports PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed [^\n]*/games/plaza/paving.png at 248,193.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"imported texture paving.png\".*\"exit\":\"clean_stop\"")
+                         "typed [^\n]*/games/plaza/paving.png at 248,225.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"imported texture paving.png\".*\"exit\":\"clean_stop\"")
     # An entity moved among the scene's own (D451): ground, first in
     # runners' level, is refused Up and moved Down twice, staying chosen.
     add_test(NAME studio_moves
@@ -206,7 +206,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ENVIRONMENT "STUDIO_SCENE_EDIT=$a this is not kest (;STUDIO_SETTINGS=studio.editor = ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixing_editor.sh --goto {file}:{line}:{column}"
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "clicked at 76,164.*clicked at 160,164.*controls.kest written: no.*editor opened --goto [^ ]*/game/controls.kest:[0-9]+:1.*\"code\":\"studio_summary\"[^\n]*\"scenes\":3,[^\n]*\"opened\":1,[^\n]*\"status\":\"the game reads\".*\"exit\":\"clean_stop\"")
+                         "clicked at 76,164.*clicked at 160,164.*controls.kest written: no.*editor opened --goto [^ ]*/game/controls.kest:[0-9]+:1.*\"code\":\"studio_summary\"[^\n]*\"scenes\":4,[^\n]*\"opened\":1,[^\n]*\"status\":\"the game reads\".*\"exit\":\"clean_stop\"")
     # A search of the entity column (D473): in runners' level, slope finds
     # the three slopes, and the field, under them now, then takes a wall
     # holding runners.tile by its last part, which finds the two walls.
@@ -227,12 +227,12 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game level.scene 200,129 640,129 1100,97:first 1100,97:second
-                     1100,97:third 200,417 200,481 "until=studio_said,status=\"redone\""
+                     1100,97:third 200,449 200,513 "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_steps_history PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed third at 1100,97.*clicked at 200,417.*clicked at 200,481.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":3,\"refused\":0,\"undone\":2,\"redone\":2,\"undoable\":3,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+                         "typed third at 1100,97.*clicked at 200,449.*clicked at 200,513.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":3,\"refused\":0,\"undone\":2,\"redone\":2,\"undoable\":3,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
     # An asset typed by name (D455): ground's tile texture, scrolled to, is
     # given hud.png, which the game declares, by its name; hud alone, which
     # several assets' names start with, is refused.
@@ -289,12 +289,12 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game level.scene 200,129 640,129 1100,97:first 1100,97:second
-                     freeze 1100,97:third 200,417 200,481 thaw "until=studio_said,status=\"redone\""
+                     freeze 1100,97:third 200,449 200,513 thaw "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_steps_history_frozen PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed third at 1100,97.*clicked at 200,417.*clicked at 200,481.*let the program go on.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":3,\"refused\":0,\"undone\":2,\"redone\":2,\"undoable\":3,\"redoable\":0,")
+                         "typed third at 1100,97.*clicked at 200,449.*clicked at 200,513.*let the program go on.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":3,\"refused\":0,\"undone\":2,\"redone\":2,\"undoable\":3,\"redoable\":0,")
     # Studio reverting (D443): runners' level brings a platform whose pose
     # its instance sets; the instance's x reverted drops its own value for
     # its source's, written to the level.
@@ -347,6 +347,19 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "clicked at 1100,695.*pressed BackSpace,Return.*tycoon.styles written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"transitions unset\".*\"exit\":\"clean_stop\"")
+    # A game's UI document edited in Studio (D643): Stalls' listed after its
+    # sheet and chosen, its purse's width typed, its tip deleted, and the
+    # delete undone, so the document is written with the width.
+    add_test(NAME studio_ui
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/tycoon/tycoon.game tycoon.ui 200,126 640,161 1100,161:300 640,193 517,97 1166,23
+                     "until=studio_said,status=\"undone\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_ui PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "typed 300 at 1100,161.*clicked at 640,193.*clicked at 517,97.*clicked at 1166,23.*tycoon.ui written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"tycoon.ui\",[^\n]*\"applied\":2,\"refused\":0,\"undone\":1,\"redone\":0,\"undoable\":1,\"redoable\":1,[^\n]*\"status\":\"undone\".*\"exit\":\"clean_stop\"")
     # Studio previewing the plaza (D433, D440): choosing its gate attaches
     # the playing client's tooling endpoint as the scene's preview, and an
     # eye typed is handed to it, so the client draws frames through the
