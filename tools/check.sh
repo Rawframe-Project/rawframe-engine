@@ -86,6 +86,15 @@ build_and_test() {
         grep -E 'error|FAILED' "out/$preset.build.log" | head -20; fail "$preset build"; return
     fi
     built=$(date +%s)
+    # The full check builds clang-development and tests it nowhere else: the
+    # fast check runs every one of its tests, alone, before every push, and
+    # the same tests run here in clang's optimized tree, both sanitizers'
+    # trees, and gcc's debug tree. Its run here was a seventh of the check's
+    # processor time on a machine the trees keep full (D618).
+    if [ "$preset" = clang-development ] && [ "$tier" = full ]; then
+        printf '   %s: built in %ss, tested by the fast check\n' "$preset" "$((built - began))"
+        return
+    fi
     # Window tests play in real time against a software rasterizer, and gcc's
     # optimized tree finds nothing in them that clang's optimized tree, the
     # sanitizers, and gcc's slow debug tree do not; it leaves them out (D493).
@@ -227,6 +236,15 @@ else
     web=""
     wait "${pids[2]}" || true
     wait "${pids[6]}" || true
+    # The web budget's slowest part, brotli's size of the shipping module,
+    # is not a time: it is made beside the trees, and the budget measured
+    # after them reads it (D618).
+    wait "${pids[7]}" || true
+    squeeze=""
+    if ! grep -q '^FAILED' out/wasm-shipping.check.log; then
+        tools/web_budget.sh squeeze >out/web-squeeze.log 2>&1 &
+        squeeze=$!
+    fi
     if ! grep -q '^FAILED' out/clang-development.check.log out/wasm-development.check.log; then
         ( web_steps ) >out/web.check.log 2>&1 &
         web=$!
@@ -250,6 +268,7 @@ else
         step "tick budget"
         tools/bench.sh check || fail "tick budget"
         step "web budget"
+        [ -n "$squeeze" ] && { wait "$squeeze" || true; }
         tools/web_budget.sh check || fail "web budget"
     fi
 fi

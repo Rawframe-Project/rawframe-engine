@@ -12,6 +12,11 @@
 #                               machine's recorded one (the median of its last
 #                               three rows) and 64 KiB; or on compiling,
 #                               instantiating, and starting past 250 ms
+#   tools/web_budget.sh squeeze compress the module ahead, under
+#                               out/web-budget, so a later measurement of the
+#                               same module reads its size rather than
+#                               spending brotli's slowest setting again: the
+#                               full check squeezes beside its trees (D618)
 #
 # Needs out/wasm-shipping built; the full check builds it first.
 set -euo pipefail
@@ -27,14 +32,27 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 llvm-strip-20 -o "$work/client.wasm" "$module"
+ahead=out/web-budget
+if [ "$mode" = squeeze ]; then
+    mkdir -p "$ahead"
+    brotli -q 11 -c "$work/client.wasm" >"$work/client.wasm.br"
+    mv "$work/client.wasm.br" "$ahead/client.wasm.br"
+    mv "$work/client.wasm" "$ahead/client.wasm"
+    exit 0
+fi
 stripped=$(stat -c %s "$work/client.wasm")
 gzipped=$(gzip -9 -c "$work/client.wasm" | wc -c)
 # Brotli's slowest setting, on one processor, while the module is loaded
-# and timed beside it (D526).
-brotli -q 11 -c "$work/client.wasm" >"$work/client.wasm.br" &
-squeezing=$!
+# and timed beside it (D526); none when the same module was squeezed ahead.
+if [ -f "$ahead/client.wasm.br" ] && cmp -s "$work/client.wasm" "$ahead/client.wasm"; then
+    cp "$ahead/client.wasm.br" "$work/client.wasm.br"
+    squeezing=""
+else
+    brotli -q 11 -c "$work/client.wasm" >"$work/client.wasm.br" &
+    squeezing=$!
+fi
 load="$(node --no-warnings tools/web_load.mjs "$work/client.wasm" "$PWD")"
-wait "$squeezing"
+[ -n "$squeezing" ] && wait "$squeezing"
 brotlied=$(stat -c %s "$work/client.wasm.br")
 read -r compile instantiate start p50 p99 < <(python3 -c '
 import json, sys
