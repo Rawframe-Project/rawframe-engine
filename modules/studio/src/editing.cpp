@@ -85,14 +85,29 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (node == undoNode_ || node == redoNode_) {
         endEdit();
         step(node == undoNode_ ? "authoring.undo" : "authoring.redo");
+    } else if (sheetChosen() && node == newNode_) {
+        // A sheet's class is made and deleted as an entity is (D638).
+        endEdit();
+        const std::string kStyle = mintedStyle();
+        Value operation = Value::object();
+        operation.add("operation", Value::string("styles.create_class"));
+        operation.add("style", Value::string(kStyle));
+        // Named as a class's name may be, from its identity, till renamed.
+        operation.add("name", Value::string("class_" + kStyle.substr(0, 6)));
+        commit(std::move(operation), "class made", kStyle);
+    } else if (sheetChosen() && node == deleteNode_ && !entity_.empty()) {
+        endEdit();
+        Value operation = Value::object();
+        operation.add("operation", Value::string("styles.remove_class"));
+        operation.add("style", Value::string(entity_));
+        commit(std::move(operation), "class deleted", std::nullopt);
     } else if (sheetChosen() &&
-               (node == newNode_ || node == deleteNode_ || node == duplicateNode_ || node == moveNode_ ||
-                node == upNode_ || node == downNode_ || node == restoreNode_ || node == uninstanceNode_)) {
-        // A sheet's classes are as the sheet has them; their looks change
-        // part by part (D637).
+               (node == deleteNode_ || node == duplicateNode_ || node == moveNode_ || node == upNode_ ||
+                node == downNode_ || node == restoreNode_ || node == uninstanceNode_)) {
+        // The rest are an entity's (D637).
         endEdit();
         ++refused_;
-        say("a style class changes part by part");
+        say("not done to a style class");
     } else if (node == newNode_ && !scene_.empty()) {
         endEdit();
         create();
@@ -275,6 +290,14 @@ Value ShellParticipant::operationOn(std::string_view operation) const {
 void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
     if (row.role == FieldRow::Role::Part) {
         setPart(row, text);
+        return;
+    }
+    if (row.role == FieldRow::Role::Name && sheetChosen()) {
+        Value operation = Value::object();
+        operation.add("operation", Value::string("styles.rename_class"));
+        operation.add("style", Value::string(entity_));
+        operation.add("name", Value::string(text));
+        commit(std::move(operation), "renamed " + text, entity_);
         return;
     }
     Value operation;

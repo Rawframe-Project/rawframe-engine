@@ -1,7 +1,8 @@
 // A game's style sheet in Studio (D637): listed with the scenes, its
-// classes in the entity column, and a chosen class's looks as fields, each
-// part set through the session's `styles.set_part` (D636), which a played
-// game follows (D634).
+// classes in the entity column, made with New, deleted with Delete, and
+// named in the name field (D638), and a chosen class's looks as fields,
+// each part set through the session's `styles.set_part` (D636), which a
+// played game follows (D634).
 
 #include "rawframe/ui/styles.h"
 #include "shell.h"
@@ -74,6 +75,13 @@ void ShellParticipant::showClass(std::size_t at) {
     if (chosen == nullptr) {
         return;
     }
+    // Its name first, as an entity's is (D638).
+    auto named = fieldRow("name", names_[at]);
+    if (!named.has_value()) {
+        return;
+    }
+    componentRows_.push_back(named->first);
+    fields_.push_back(FieldRow{.value = named->second, .role = FieldRow::Role::Name, .field = "name"});
     // Each variant a heading, in the order a node's states pick them, and
     // under it every part a look has, set or not.
     for (const std::string_view kVariant : ui::kStyleVariantFields) {

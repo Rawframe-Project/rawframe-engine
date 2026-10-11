@@ -314,13 +314,27 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_styles
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/tycoon/tycoon.game tycoon.styles 200,97 640,129 "1100,129:#c01818c0" 1166,23 1236,23
+                     games/tycoon/tycoon.game tycoon.styles 200,97 640,129 "1100,161:#c01818c0" 1166,23 1236,23
                      "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_styles PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "clicked at 200,97.*clicked at 640,129.*typed #c01818c0 at 1100,129.*clicked at 1166,23.*clicked at 1236,23.*tycoon.styles written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"tycoon.styles\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+                         "clicked at 200,97.*clicked at 640,129.*typed #c01818c0 at 1100,161.*clicked at 1166,23.*clicked at 1236,23.*tycoon.styles written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"tycoon.styles\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+    # A style class made, named, and deleted in Studio (D638): in Stalls'
+    # sheet New makes a class and chooses it, its name typed as tip, and
+    # Delete deletes it; Undo brings it back, so the sheet is written with
+    # it.
+    add_test(NAME studio_style_classes
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/tycoon/tycoon.game tycoon.styles 200,97 463,97 1100,97:tip 517,97 1166,23
+                     "until=studio_said,status=\"undone\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_style_classes PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "clicked at 463,97.*typed tip at 1100,97.*clicked at 517,97.*clicked at 1166,23.*tycoon.styles written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"tycoon.styles\",\"entities\":5,[^\n]*\"applied\":3,\"refused\":0,\"undone\":1,\"redone\":0,\"undoable\":2,\"redoable\":1,[^\n]*\"status\":\"undone\".*\"exit\":\"clean_stop\"")
     # Studio previewing the plaza (D433, D440): choosing its gate attaches
     # the playing client's tooling endpoint as the scene's preview, and an
     # eye typed is handed to it, so the client draws frames through the

@@ -535,8 +535,7 @@ void ShellParticipant::showView() {
 void ShellParticipant::showHistoryList() {
     clear(historyRows_);
     entryRows_.clear();
-    // A style sheet's history is undone and redone, not listed (D637).
-    if (scene_.empty() || sheetChosen()) {
+    if (scene_.empty()) {
         return;
     }
     auto heading = row(scenesColumn_, "History", kQuiet, kPanel);

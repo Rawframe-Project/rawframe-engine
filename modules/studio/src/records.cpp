@@ -918,4 +918,18 @@ std::string mintedIdentity() {
     return text;
 }
 
+std::string mintedStyle() {
+    std::random_device device;
+    std::uint64_t made = 0;
+    while (made == 0) {
+        made = (std::uint64_t{device()} << 32U) | device();
+    }
+    constexpr std::string_view kDigits = "0123456789abcdef";
+    std::string text;
+    for (int at = 60; at >= 0; at -= 4) {
+        text.push_back(kDigits[(made >> static_cast<unsigned>(at)) & 0xFU]);
+    }
+    return text;
+}
+
 } // namespace rawframe::studio

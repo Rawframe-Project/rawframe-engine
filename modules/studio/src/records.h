@@ -357,5 +357,8 @@ editorCommand(std::string_view command, const std::string& file, std::int64_t li
 /// is the client's to choose (D438), and an identity is data, not
 /// simulation, so nothing needs it repeated.
 [[nodiscard]] std::string mintedIdentity();
+/// A fresh style class identity (D638): 16 hex digits from the system's
+/// random device, never all nought.
+[[nodiscard]] std::string mintedStyle();
 
 } // namespace rawframe::studio
