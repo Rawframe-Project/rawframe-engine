@@ -18,6 +18,7 @@
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world_kest/game_files.h"
 #include "replies.h"
+#include "styling.h"
 #include "viewing.h"
 
 #include <algorithm>
@@ -70,7 +71,7 @@ class Held {
 public:
     Held(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook)
         : game_(std::move(game)), root_(std::filesystem::weakly_canonical(root)), cook_(cook),
-          cooking_(std::move(cook)) {
+          cooking_(std::move(cook)), styling_(root_) {
     }
     Held(const Held&) = delete;
     Held& operator=(const Held&) = delete;
@@ -399,6 +400,9 @@ private:
     }
 
     result::Result<Value> applied(const authoring::SessionRecord& record) {
+        if (Styling::names(record.scene)) {
+            return styling_.applied(record, failed_);
+        }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
         authoring::AuthoredScene& document = *open->document;
@@ -871,6 +875,9 @@ private:
     }
 
     result::Result<Value> answered(const authoring::SessionRecord& record) {
+        if (Styling::names(record.scene)) {
+            return styling_.answered(record, failed_);
+        }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
         Value answers = Value::array();
@@ -894,6 +901,9 @@ private:
     }
 
     result::Result<Value> stepped(const authoring::SessionRecord& record, bool undo) {
+        if (Styling::names(record.scene)) {
+            return styling_.stepped(record, undo, failed_);
+        }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
         authoring::AuthoredScene& document = *open->document;
@@ -948,6 +958,8 @@ private:
     /// runs (D502).
     std::filesystem::path cook_;
     Cooking cooking_;
+    /// The style sheets records name (D636).
+    Styling styling_;
 };
 
 } // namespace

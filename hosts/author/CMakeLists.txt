@@ -50,6 +50,10 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_session.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_session)
     set_tests_properties(author_session PROPERTIES PASS_REGULAR_EXPRESSION "authored runners in a session")
+    add_test(NAME author_styles
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_styles.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_styles)
+    set_tests_properties(author_styles PROPERTIES PASS_REGULAR_EXPRESSION "authored stalls' styles in a session")
     # A session cooking its game as a long-running operation (D502): the
     # plaza cooked source by source while records are answered, then from
     # the cache; a second cook refused, one stopped as asked, one into the
