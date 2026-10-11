@@ -99,6 +99,56 @@ public:
         pointed_ = false;
     }
 
+    /// How a finger touched the window.
+    enum class Touching : std::uint8_t {
+        Down,
+        Moved,
+        Up,
+        Cancelled
+    };
+    /// The host's side: finger `finger` touched the window at `x`, `y`
+    /// (D628). The first finger down is the pointer until it lifts, as a
+    /// mouse is with its button held: it is where the finger is, so a
+    /// range drags and a press let go over the node it went down on clicks
+    /// it, and it is off the window once the finger lifts or the touch is
+    /// cancelled, hovering nothing. Every finger goes down and is let go as
+    /// a press.
+    void touched(Touching touching, std::uint64_t finger, float x, float y) {
+        const bool kFollowed = finger_.has_value() && *finger_ == finger;
+        switch (touching) {
+        case Touching::Down:
+            if (!finger_.has_value()) {
+                finger_ = finger;
+                pointAt(x, y);
+            }
+            pressed(x, y);
+            break;
+        case Touching::Moved:
+            if (kFollowed) {
+                pointAt(x, y);
+            }
+            break;
+        case Touching::Up:
+            if (kFollowed) {
+                pointAt(x, y);
+            }
+            released();
+            if (kFollowed) {
+                left();
+                finger_.reset();
+            }
+            break;
+        case Touching::Cancelled:
+            // Off the window first: a cancelled touch clicks nothing.
+            if (kFollowed) {
+                left();
+                finger_.reset();
+            }
+            released();
+            break;
+        }
+    }
+
     /// What a press where the mouse is now would land on: none off the
     /// window, while no UI answers, or where a press passes through.
     [[nodiscard]] std::optional<std::int64_t> hovered() const {
@@ -132,6 +182,8 @@ private:
     Valued valued_;
     std::array<float, 2> pointer_{};
     bool pointed_ = false;
+    /// The finger that is the pointer while it touches.
+    std::optional<std::uint64_t> finger_;
 };
 
 inline constexpr composition::Capability<UiPointing> kUiPointing{"rawframe.view.ui_pointing"};

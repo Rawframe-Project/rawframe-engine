@@ -9,4 +9,4 @@ rawframe_module(NAME view
     DEPS ui composition execution diagnostics result base
 )
 
-rawframe_module_tests(NAME view SOURCES tests/view_test.cpp tests/players_test.cpp)
+rawframe_module_tests(NAME view SOURCES tests/view_test.cpp tests/players_test.cpp tests/pointing_test.cpp)

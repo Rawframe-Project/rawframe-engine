@@ -284,13 +284,20 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
                     settings_.preview->clicked(*kRay, event->pointer.modifiers);
                 }
             }
-        } else if (event->kind == window::EventKind::TouchDown) {
-            pointing_.pressed(event->touch.position.x, event->touch.position.y);
-        } else if (event->kind == window::EventKind::ButtonUp || event->kind == window::EventKind::TouchUp) {
+        } else if (event->kind == window::EventKind::TouchDown || event->kind == window::EventKind::TouchMoved ||
+                   event->kind == window::EventKind::TouchUp || event->kind == window::EventKind::TouchCancelled) {
+            // A finger is the pointer while it touches (D628).
+            using Touching = view::UiPointing::Touching;
+            const Touching kTouching = event->kind == window::EventKind::TouchDown    ? Touching::Down
+                                       : event->kind == window::EventKind::TouchMoved ? Touching::Moved
+                                       : event->kind == window::EventKind::TouchUp    ? Touching::Up
+                                                                                      : Touching::Cancelled;
+            pointing_.touched(kTouching, event->touch.id, event->touch.position.x, event->touch.position.y);
+        } else if (event->kind == window::EventKind::ButtonUp) {
             pointing_.released();
             // And where the press was let go, for a drag (D457).
-            if (event->kind == window::EventKind::ButtonUp && settings_.preview != nullptr &&
-                settings_.preview->looking().has_value() && event->pointer.button == window::MouseButton::Left) {
+            if (settings_.preview != nullptr && settings_.preview->looking().has_value() &&
+                event->pointer.button == window::MouseButton::Left) {
                 if (const auto kRay = view::pointToRay(*settings_.preview->looking(),
                                                        views_.window(),
                                                        event->pointer.position.x,
