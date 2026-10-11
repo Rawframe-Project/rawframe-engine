@@ -286,7 +286,7 @@ try {
     let read = [];
     if (!plaza) {
         // Stalls' HUD is whole once its purse and its sign's field are read.
-        const wanted = stalls ? [/^button "\d+ coins"$/, /^textbox "/] : [/ points"$/];
+        const wanted = stalls ? [/^button "[\d,]+ of 1,000 coins"$/, /^textbox "/] : [/ points"$/];
         const ready = () => wanted.every((pattern) => read.some((line) => pattern.test(line)));
         unread = await readUnder(tab, host);
         await tab.evaluate((selector) => document.querySelector(`${selector} button`)?.click(), host);
@@ -396,7 +396,7 @@ try {
                     `${typing?.[3] ?? 'no'} given; the client sent ${field('commandsSent')} commands`);
         Object.assign(checks, {
             unread: unread.length === 1 && unread[0] === 'button "Enable accessibility"',
-            read: read.some((line) => /^button "\d+ coins"$/.test(line)) && read.includes('textbox "Write your sign"'),
+            read: read.some((line) => /^button "[\d,]+ of 1,000 coins"$/.test(line)) && read.includes('textbox "Write your sign"'),
             typed: typing !== null && Number(typing[2]) >= 3 && Number(typing[3]) === 1,
             sent: field('commandsSent') === 1,
         });

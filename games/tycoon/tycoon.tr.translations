@@ -5,8 +5,8 @@
   "locale": "tr",
   "entries": {
     "hud.coins": {
-      "message": "{$coins :integer} altın",
-      "sourceHash": "b0f62854edbdf746"
+      "message": "{$coins :integer} / {$goal :integer} altın",
+      "sourceHash": "72d930c8a529f8db"
     },
     "hud.lost": {
       "message": "{$round :integer}. tur başka bir sahibe gitti.",

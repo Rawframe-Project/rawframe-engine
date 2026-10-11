@@ -4,8 +4,8 @@
   "sourceLocale": "en",
   "entries": {
     "hud.coins": {
-      "message": ".input {$coins :integer}\n.match $coins\none {{{$coins} coin}}\n* {{{$coins} coins}}",
-      "description": "The owner's coins, shown in the HUD."
+      "message": "{$coins :integer} of {$goal :integer} coins",
+      "description": "The owner's coins and the coins that win a round, shown in the HUD."
     },
     "hud.lost": {
       "message": "Round {$round :integer} went to another owner.",

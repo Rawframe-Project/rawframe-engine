@@ -116,7 +116,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED tycoon_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "a11y: 2 push button [0-9]+ coins\na11y: 2 entry Write your sign\na11y: 2 slider Zoom\na11y: 2 toggle button Top view\na11y: pressed [^\n]*: b true.*\"commandsTaken\":1,.*\"commandsSent\":1,")
+                             "a11y: 2 push button [0-9,]+ of 1,000 coins\na11y: 2 entry Write your sign\na11y: 2 slider Zoom\na11y: 2 toggle button Top view\na11y: pressed [^\n]*: b true.*\"commandsTaken\":1,.*\"commandsSent\":1,")
         # Stalls' zoom slider set by a screen reader (D621): read as "slider
         # Zoom" at 100, set to 120 through AT-SPI's Value as the tree's own
         # range does it, read back at 120, and the knob the present system

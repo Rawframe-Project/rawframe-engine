@@ -677,15 +677,17 @@ fn top(count: i32, tops: [ui.Node], flips: [ui.Node]) {
     }
 }
 
-// The owner's coins in its HUD: words along the top left of its view, a
-// panel a click on builds nothing under (D421), a button that lights under
-// the mouse, darkens as it is pressed, and is ringed while it holds focus
-// (the button class, D431), as tycoon.ui starts it (D619); a press on it
+// The owner's coins in its HUD, of the coins that win a round (D647):
+// words along the top left of its view, a panel a click on builds nothing
+// under (D421), a button that lights under the mouse, darkens as it is
+// pressed, and is ringed while it holds focus (the button class, D431), as
+// tycoon.ui starts it (D619); a press on it
 // is the controls' PURSE.
 fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
     let i = 0
     while i < count {
         huds[i].textValue = owners[i].coins
+        huds[i].textSecond = GOAL
         huds[i].press = controls.PURSE
         i = i + 1
     }
