@@ -14,10 +14,15 @@
 #include <string>
 
 #if defined(_WIN32)
+#include <cstdlib>
 #include <windows.h>
 #elif defined(__linux__)
 #include <cstdlib>
 #include <sys/prctl.h>
+#include <unistd.h>
+#elif defined(__APPLE__)
+#include <cstdlib>
+#include <dispatch/dispatch.h>
 #include <unistd.h>
 #endif
 
@@ -50,6 +55,63 @@ BOOL WINAPI requestStopOnEvent(DWORD event) {
         return FALSE;
     }
 }
+
+VOID CALLBACK requestStopOnParentEnd(PVOID, BOOLEAN) {
+    requestStop(0);
+}
+
+/// A program started to stop with its parent (D646) waits on it through the
+/// system's thread pool and stops at once if it has already gone. A process
+/// now under the parent's identity began after this one did, so it is not
+/// the parent.
+void stopWithParent(const char* parent) {
+    const auto kIdentity = static_cast<DWORD>(std::strtoul(parent, nullptr, 10));
+    HANDLE held = ::OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, kIdentity);
+    if (held == nullptr) {
+        // Refused for another reason than its absence: not watched.
+        if (::GetLastError() == ERROR_INVALID_PARAMETER) {
+            requestStop(0);
+        }
+        return;
+    }
+    FILETIME parentBegan{};
+    FILETIME thisBegan{};
+    std::array<FILETIME, 3> rest{};
+    const bool kTimed = ::GetProcessTimes(held, &parentBegan, &rest[0], &rest[1], &rest[2]) != FALSE &&
+                        ::GetProcessTimes(::GetCurrentProcess(), &thisBegan, &rest[0], &rest[1], &rest[2]) != FALSE;
+    HANDLE wait = nullptr;
+    if (kTimed && ::CompareFileTime(&parentBegan, &thisBegan) > 0) {
+        requestStop(0);
+    } else if (::RegisterWaitForSingleObject(
+                   &wait, held, &requestStopOnParentEnd, nullptr, INFINITE, WT_EXECUTEONLYONCE) != FALSE) {
+        // Kept, with the wait, for the rest of the process's life.
+        return;
+    }
+    ::CloseHandle(held);
+}
+#elif defined(__APPLE__)
+void requestStopOnParentEnd(void*) {
+    requestStop(SIGTERM);
+}
+
+/// A program started to stop with its parent (D646) is told by the system
+/// when the parent ends, on a queue of its own, and stops at once if it has
+/// already: an orphan is a child of launchd.
+void stopWithParent(const char* parent) {
+    const auto kIdentity = static_cast<pid_t>(std::strtol(parent, nullptr, 10));
+    // Kept for the rest of the process's life.
+    dispatch_source_t source = dispatch_source_create(DISPATCH_SOURCE_TYPE_PROC,
+                                                      static_cast<uintptr_t>(kIdentity),
+                                                      DISPATCH_PROC_EXIT,
+                                                      dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+    if (source != nullptr) {
+        dispatch_source_set_event_handler_f(source, &requestStopOnParentEnd);
+        dispatch_resume(source);
+    }
+    if (::getppid() != kIdentity) {
+        requestStop(SIGTERM);
+    }
+}
 #endif
 
 bool writeStandardOutput(void*, std::span<const char> bytes) noexcept {
@@ -77,6 +139,9 @@ bool readFile(const char* path, std::string& text) {
 void installStopBridge() {
 #if defined(_WIN32)
     ::SetConsoleCtrlHandler(&requestStopOnEvent, TRUE);
+    if (const char* parent = std::getenv("RAWFRAME_PARENT"); parent != nullptr) {
+        stopWithParent(parent);
+    }
 #elif defined(__unix__) || defined(__APPLE__)
     struct sigaction action{};
     action.sa_handler = &requestStop;
@@ -91,6 +156,10 @@ void installStopBridge() {
         if (std::to_string(::getppid()) != parent) {
             requestStop(SIGTERM);
         }
+    }
+#elif defined(__APPLE__)
+    if (const char* parent = std::getenv("RAWFRAME_PARENT"); parent != nullptr) {
+        stopWithParent(parent);
     }
 #endif
 #else

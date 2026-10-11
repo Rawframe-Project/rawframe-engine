@@ -14,7 +14,7 @@ if(RAWFRAME_BUILD_TESTS)
     add_test(NAME dedicated_server_orphaned
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/orphaned.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                      ${CMAKE_CURRENT_BINARY_DIR}/orphaned)
-    set_tests_properties(dedicated_server_orphaned PROPERTIES PASS_REGULAR_EXPRESSION "stopped with its parent|skip: not Linux")
+    set_tests_properties(dedicated_server_orphaned PROPERTIES PASS_REGULAR_EXPRESSION "stopped with its parent|skip: not Linux or macOS")
     # Loads a Kest-scripted game, ticks it, and stops. Paths in the
     # configuration are relative to the repository root.
     add_test(NAME dedicated_server_kest_game

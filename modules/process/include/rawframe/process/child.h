@@ -31,9 +31,9 @@ struct ChildSettings {
     std::filesystem::path output;
     /// Whether it stops when this process ends, however this process ends
     /// (D646): it is told this process's identity in `RAWFRAME_PARENT`, and
-    /// a Host so told asks the system for a stop signal when its parent
-    /// goes, which it takes as any stop, in order. On Linux; elsewhere the
-    /// variable is set and nothing asks yet.
+    /// a Host so told asks the system to tell it when its parent goes
+    /// (Linux a signal, macOS a process source, Windows a wait on the
+    /// parent), which it takes as any stop, in order.
     bool stopsWithThis = false;
 };
 

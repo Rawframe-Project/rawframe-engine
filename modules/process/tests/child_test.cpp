@@ -11,16 +11,18 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <optional>
 #include <string>
-
-#if !defined(_WIN32)
-#include <cstdlib>
-#include <unistd.h>
-#endif
 #include <string_view>
 #include <thread>
+
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 using namespace rawframe;
 using process::Child;
@@ -94,29 +96,42 @@ RAWFRAME_TEST(AChildEndsWithItsCodeAndSaysWhatItWasGiven) {
     }
 }
 
-#if !defined(_WIN32)
 RAWFRAME_TEST(AChildThatStopsWithThisIsToldWhoThisIs) {
     // Told this process's identity, and only when it is to stop with it
     // (D646); one this process was told itself is not passed on.
+#if defined(_WIN32)
+    const std::string kThis = std::to_string(::GetCurrentProcessId());
+    const auto kTell = [](const char* value) {
+        ::_putenv_s(process::kParentVariable, value);
+    };
+#else
+    const std::string kThis = std::to_string(::getpid());
+    const auto kTell = [](const char* value) {
+        if (value[0] == '\0') {
+            ::unsetenv(process::kParentVariable);
+        } else {
+            ::setenv(process::kParentVariable, value, 1);
+        }
+    };
+#endif
     const std::filesystem::path kTold = scratch("told.txt");
     auto told = Child::start(
         {.program = RAWFRAME_PROCESS_CHILD, .arguments = {"parent"}, .output = kTold, .stopsWithThis = true});
     RAWFRAME_EXPECT(startedAll(told));
     if (told.has_value()) {
         RAWFRAME_EXPECT(waitFor(*told) == 0);
-        RAWFRAME_EXPECT(test::readFile(kTold.string()) == std::to_string(::getpid()));
+        RAWFRAME_EXPECT(test::readFile(kTold.string()) == kThis);
     }
-    ::setenv(process::kParentVariable, "1", 1);
+    kTell("1");
     const std::filesystem::path kUntold = scratch("untold.txt");
     auto untold = Child::start({.program = RAWFRAME_PROCESS_CHILD, .arguments = {"parent"}, .output = kUntold});
-    ::unsetenv(process::kParentVariable);
+    kTell("");
     RAWFRAME_EXPECT(startedAll(untold));
     if (untold.has_value()) {
         RAWFRAME_EXPECT(waitFor(*untold) == 0);
         RAWFRAME_EXPECT(test::readFile(kUntold.string()) == "none");
     }
 }
-#endif
 
 RAWFRAME_TEST(AChildStopsWhenAskedAndIsKilledOtherwise) {
     const std::filesystem::path kHeard = scratch("heard.txt");

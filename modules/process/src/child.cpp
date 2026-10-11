@@ -59,6 +59,30 @@ void appendQuoted(std::wstring& line, const std::wstring& argument) {
     line.append(backslashes * 2, L'\\');
     line += L'"';
 }
+
+/// This process's environment as a block CreateProcessW takes, with its
+/// identity for a child that stops with it (D646) in place of any it was
+/// given itself.
+std::wstring environmentFor(const ChildSettings& settings) {
+    const std::wstring kPrefix = wide(std::string{kParentVariable} + "=");
+    std::wstring block;
+    if (wchar_t* strings = ::GetEnvironmentStringsW(); strings != nullptr) {
+        for (const wchar_t* each = strings; *each != L'\0'; each += std::wstring_view{each}.size() + 1) {
+            const std::wstring_view kEntry{each};
+            if (kEntry.substr(0, kPrefix.size()) != kPrefix) {
+                block.append(kEntry);
+                block += L'\0';
+            }
+        }
+        ::FreeEnvironmentStringsW(strings);
+    }
+    if (settings.stopsWithThis) {
+        block += kPrefix + std::to_wstring(::GetCurrentProcessId());
+        block += L'\0';
+    }
+    block += L'\0';
+    return block;
+}
 #endif
 
 } // namespace
@@ -127,13 +151,14 @@ result::Result<Child> Child::start(const ChildSettings& settings) {
     startup.hStdOutput = output;
     startup.hStdError = output;
     PROCESS_INFORMATION made{};
+    std::wstring environment = environmentFor(settings);
     const BOOL kStarted = ::CreateProcessW(kProgram.c_str(),
                                            line.data(),
                                            nullptr,
                                            nullptr,
                                            TRUE,
-                                           CREATE_NEW_PROCESS_GROUP,
-                                           nullptr,
+                                           CREATE_NEW_PROCESS_GROUP | CREATE_UNICODE_ENVIRONMENT,
+                                           environment.data(),
                                            nullptr,
                                            &startup,
                                            &made);

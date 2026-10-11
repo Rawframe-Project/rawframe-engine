@@ -2,18 +2,22 @@
 # A server started to stop with its parent (D646) stops in order when the
 # parent is killed, as a test's runner kills a tool that started it: a
 # shell starts the server, told its identity, and is killed with SIGKILL;
-# the server, set to run a minute, stops at once. Linux alone asks the
-# system for the signal; elsewhere the test says so and passes.
+# the server, set to run a minute, stops at once. On Linux and macOS; a
+# shell's identity on Windows is not the system's, and the launcher's
+# test (D649) proves it there.
 #
 # usage: orphaned.sh <rawframe-server> <work directory>
 set -euo pipefail
 
 server=$1
 work=$2
-if [ "$(uname -s)" != Linux ]; then
-    echo "skip: not Linux"
+case "$(uname -s)" in
+Linux | Darwin) ;;
+*)
+    echo "skip: not Linux or macOS"
     exit 0
-fi
+    ;;
+esac
 rm -rf "$work"
 mkdir -p "$work"
 cat >"$work/server.conf" <<CONF
