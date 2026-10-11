@@ -170,6 +170,9 @@ struct WorldAudio::State {
             }
             if (kEmitter.playing && !follow.continuous) {
                 play(follow, *kSound, kAt, true);
+                if (follow.continuous) {
+                    ++statistics.continuous;
+                }
             } else if (!kEmitter.playing && follow.continuous) {
                 sounds->stop(*follow.continuous, 0.05F);
                 follow.continuous.reset();

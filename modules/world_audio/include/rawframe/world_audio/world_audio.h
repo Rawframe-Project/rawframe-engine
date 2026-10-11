@@ -72,6 +72,8 @@ struct WorldAudioStatistics {
     std::uint64_t refused = 0;
     /// Sounds played once by `playOnce`, a predicted effect's (D220).
     std::uint64_t once = 0;
+    /// Sounds started playing on while an emitter is `playing` (D629).
+    std::uint64_t continuous = 0;
 };
 
 class WorldAudio {

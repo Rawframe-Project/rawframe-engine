@@ -381,7 +381,8 @@ public:
                       diagnostics::field("refused", kHeard.refused),
                       diagnostics::field("unknownSounds", kHeard.unknownSounds),
                       diagnostics::field("listenerConflicts", kHeard.listenerConflicts),
-                      diagnostics::field("volumesSet", hearing_.volumesSet)});
+                      diagnostics::field("volumesSet", hearing_.volumesSet),
+                      diagnostics::field("continuous", kHeard.continuous)});
     }
 
 private:
@@ -526,7 +527,8 @@ public:
                           diagnostics::field("effects", kHeard.once),
                           diagnostics::field("refused", kHeard.refused),
                           diagnostics::field("suspensions", suspensions_),
-                          diagnostics::field("volumesSet", hearing_.volumesSet)});
+                          diagnostics::field("volumesSet", hearing_.volumesSet),
+                          diagnostics::field("continuous", kHeard.continuous)});
             return;
         }
         if (output_ == nullptr) {
@@ -551,7 +553,8 @@ public:
                       diagnostics::field("effects", kHeard.once),
                       diagnostics::field("refused", kHeard.refused),
                       diagnostics::field("suspensions", suspensions_),
-                      diagnostics::field("volumesSet", hearing_.volumesSet)});
+                      diagnostics::field("volumesSet", hearing_.volumesSet),
+                      diagnostics::field("continuous", kHeard.continuous)});
     }
 
 private:
