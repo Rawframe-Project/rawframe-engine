@@ -1,0 +1,36 @@
+#pragma once
+
+// Files written so a crash leaves either the old file or the new one, whole
+// (D626): written and flushed past the system's cache, then moved over the
+// old one, and the move flushed in its directory. Where there are files
+// (RAWFRAME_FILE_SYSTEM) only.
+
+#include "rawframe/base/platform.h"
+
+#include <cstddef>
+#include <span>
+
+#if RAWFRAME_FILE_SYSTEM
+
+#include <filesystem>
+
+namespace rawframe::base {
+
+/// `bytes` written as the whole of the file at `path`, made or emptied
+/// first, and flushed to the disk; whether all of it was.
+[[nodiscard]] bool writeWholeFile(const std::filesystem::path& path, std::span<const std::byte> bytes) noexcept;
+
+/// The directory flushed, so a move in it survives a crash; nothing where
+/// the platform keeps none of its own.
+void flushDirectory(const std::filesystem::path& directory) noexcept;
+
+/// `bytes` put at `path` whole or not at all: written beside it under
+/// `.partial`, then moved over it. A file another handle holds open cannot
+/// be replaced on Windows for that moment, so the move is tried again for
+/// up to half a second. Whether it is in place; the partial file is gone
+/// either way. The directory must exist.
+[[nodiscard]] bool replaceFile(const std::filesystem::path& path, std::span<const std::byte> bytes) noexcept;
+
+} // namespace rawframe::base
+
+#endif

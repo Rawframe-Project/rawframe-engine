@@ -1,6 +1,7 @@
 #include "rawframe/install/installation.h"
 
 #include "files.h"
+#include "rawframe/base/files.h"
 #include "rawframe/content/errors.h"
 #include "rawframe/content/product.h"
 #include "rawframe/document/json.h"
@@ -212,7 +213,7 @@ result::Result<UpdateReport> Installation::install(std::span<const content::Buil
                 return failed(
                     result::ErrorClass::Unavailable, InstallError::WriteFailed, "a Build cannot be put in place");
             }
-            flushDirectory(kPath.parent_path());
+            base::flushDirectory(kPath.parent_path());
         }
         fs::remove_all(kStaged, error);
     }

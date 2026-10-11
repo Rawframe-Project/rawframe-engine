@@ -1,5 +1,6 @@
 #include "rawframe/world_save/store.h"
 
+#include "rawframe/base/files.h"
 #include "rawframe/execution/executor.h"
 #include "rawframe/world_save/errors.h"
 
@@ -8,17 +9,7 @@
 #include <cstdio>
 #include <string>
 
-#if defined(__unix__) || defined(__APPLE__)
-#include <fcntl.h>
-#include <unistd.h>
-#elif defined(_WIN32)
-#include <io.h>
-#endif
-
 #if RAWFRAME_FILE_SYSTEM
-
-#include <chrono>
-#include <thread>
 
 namespace rawframe::world_save {
 
@@ -42,51 +33,6 @@ result::Status checkSlot(std::string_view slot) {
                       "a save slot is 1 to 64 of a-z, 0-9, _, and -");
     }
     return {};
-}
-
-/// Writes and flushes a whole file.
-bool writeWhole(const std::string& path, std::span<const std::byte> bytes) {
-#if defined(__unix__) || defined(__APPLE__)
-    const int kFile = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-    if (kFile < 0) {
-        return false;
-    }
-    std::size_t written = 0;
-    while (written < bytes.size()) {
-        const ssize_t kWrote = ::write(kFile, bytes.data() + written, bytes.size() - written);
-        if (kWrote <= 0) {
-            ::close(kFile);
-            return false;
-        }
-        written += static_cast<std::size_t>(kWrote);
-    }
-    const bool kFlushed = ::fsync(kFile) == 0;
-    return ::close(kFile) == 0 && kFlushed;
-#else
-    std::FILE* file = std::fopen(path.c_str(), "wb");
-    if (file == nullptr) {
-        return false;
-    }
-    const bool kWritten = std::fwrite(bytes.data(), 1, bytes.size(), file) == bytes.size();
-#if defined(_WIN32)
-    // Past the C library's buffer and the system's cache, to the disk.
-    const bool kFlushed = std::fflush(file) == 0 && ::_commit(::_fileno(file)) == 0;
-#else
-    const bool kFlushed = std::fflush(file) == 0;
-#endif
-    return std::fclose(file) == 0 && kWritten && kFlushed;
-#endif
-}
-
-/// Flushes the directory, so a rename in it survives a crash.
-void flushDirectory([[maybe_unused]] const std::filesystem::path& directory) {
-#if defined(__unix__) || defined(__APPLE__)
-    const int kDirectory = ::open(directory.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (kDirectory >= 0) {
-        static_cast<void>(::fsync(kDirectory));
-        ::close(kDirectory);
-    }
-#endif
 }
 
 } // namespace
@@ -123,28 +69,9 @@ result::Status DirectorySaveStore::keep(std::string_view slot, std::span<const s
     std::error_code error;
     std::filesystem::create_directories(directory_, error);
     const std::filesystem::path kPath = directory_ / (std::string{slot} + std::string{kSuffix});
-    const std::string kPartial = kPath.string() + ".partial";
-    if (!writeWhole(kPartial, bytes)) {
-        std::remove(kPartial.c_str());
+    if (!base::replaceFile(kPath, bytes)) {
         return failed(result::ErrorClass::Unavailable, SaveError::StorageFailed, "a save cannot be written");
     }
-    // A save another handle holds open, a reader or a scanner, cannot be
-    // replaced on Windows for that moment: the move is tried again for up
-    // to half a second before the save is given up as not put in place.
-    for (int attempt = 0; attempt < 50; ++attempt) {
-        error.clear();
-        std::filesystem::rename(kPartial, kPath, error);
-        if (!error) {
-            break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds{10});
-    }
-    if (error) {
-        std::remove(kPartial.c_str());
-        return failed(
-            result::ErrorClass::Unavailable, SaveError::StorageFailed, "a written save cannot be put in place");
-    }
-    flushDirectory(directory_);
     return {};
 }
 

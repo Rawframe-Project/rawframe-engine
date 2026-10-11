@@ -25,7 +25,4 @@ readFile(const std::filesystem::path& path, std::uint64_t ceiling, std::string_v
 [[nodiscard]] result::Status
 publishFile(const std::filesystem::path& staged, const std::filesystem::path& path, std::span<const std::byte> bytes);
 
-/// Flushes a directory, so a rename in it survives a crash.
-void flushDirectory(const std::filesystem::path& directory);
-
 } // namespace rawframe::install

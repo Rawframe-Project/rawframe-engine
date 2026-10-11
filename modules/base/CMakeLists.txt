@@ -1,15 +1,16 @@
 # The zero-dependency leaf of the module graph (ADR-0075): assertion and fatal
 # primitives, the 128-bit value, the byte vocabulary, platform detection,
-# SHA-256 for fingerprints, and the operating system's secure random source.
-rawframe_module(NAME base SOURCES src/fatal.cpp src/usage.cpp src/secure_random.cpp src/sha256.cpp)
+# SHA-256 for fingerprints, the operating system's secure random source, and
+# files replaced whole.
+rawframe_module(NAME base SOURCES src/fatal.cpp src/usage.cpp src/secure_random.cpp src/sha256.cpp src/files.cpp)
 # Windows' secure random numbers (D237).
 if(WIN32)
     target_link_libraries(rawframe_base PUBLIC bcrypt)
 endif()
 
 # The fatal path ends the process, which is watched from a parent process;
-# a WebAssembly module has neither.
-set(rawframe_base_process_tests tests/fatal_test.cpp)
+# a WebAssembly module has neither, nor files.
+set(rawframe_base_process_tests tests/fatal_test.cpp tests/files_test.cpp)
 if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
     set(rawframe_base_process_tests "")
 endif()
