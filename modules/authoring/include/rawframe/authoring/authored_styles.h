@@ -97,6 +97,10 @@ public:
     [[nodiscard]] const std::vector<JsonDelta>& journalAt(std::size_t entry) const noexcept {
         return document_.journalAt(entry);
     }
+    /// What the history's entry at `entry` does, in a line an author reads
+    /// in a history, as a scene's (D454, D638): its first delta, as `set
+    /// hovered.fill`, and how many more there are.
+    [[nodiscard]] std::string summaryAt(std::size_t entry) const;
 
 private:
     AuthoredStyles(base::Bits128 identity, JsonDocument document, ui::StyleSheet sheet)
@@ -110,11 +114,6 @@ private:
     JsonDocument document_;
     ui::StyleSheet sheet_;
 };
-
-/// What a sheet's journal does, in a line an author reads in a history, as
-/// a scene's (D454, D638): its first delta, as `set hovered.fill`,
-/// and how many more there are; `no change` for an empty one.
-[[nodiscard]] std::string summaryOf(std::span<const JsonDelta> journal);
 
 /// A style sheet's query answered (`styles.read_sheet`: `{"sheet": ...}`, the
 /// document whole); refuses (`ValidationFailed`) a scene's.

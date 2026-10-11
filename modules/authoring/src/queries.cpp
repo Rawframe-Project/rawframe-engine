@@ -87,13 +87,14 @@ bool holdsComponent(const scene::Scene& scene, const EntityEntry& entry, std::st
 } // namespace
 
 result::Result<Answer> answer(const scene::Scene& scene, const Query& query, const ComponentCatalog& catalog) {
-    if (std::holds_alternative<ReadSheet>(query)) {
-        return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
-                                                           kAuthoringDomain,
-                                                           code(AuthoringError::ValidationFailed),
-                                                           "the query reads a style sheet, not a scene")
-                                                  .error()
-                                                  .withContext("operation", declarationOf(query).name)};
+    if (std::holds_alternative<ReadSheet>(query) || std::holds_alternative<ReadUiDocument>(query)) {
+        return std::unexpected<result::Error>{
+            result::fail(result::ErrorClass::InvalidArgument,
+                         kAuthoringDomain,
+                         code(AuthoringError::ValidationFailed),
+                         "the query reads a style sheet or a UI document, not a scene")
+                .error()
+                .withContext("operation", declarationOf(query).name)};
     }
     std::vector<EntityEntry> entries = entriesOf(scene);
     if (std::holds_alternative<ListEntities>(query)) {

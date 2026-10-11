@@ -26,7 +26,7 @@ constexpr std::array<std::string_view, 10> kCodeNames = {"validation_failed",
                                                          "delta_invalid",
                                                          "delta_mismatch"};
 
-constexpr std::array<std::string_view, 13> kInputTypeNames = {"entity",
+constexpr std::array<std::string_view, 14> kInputTypeNames = {"entity",
                                                               "component",
                                                               "field",
                                                               "text",
@@ -38,7 +38,8 @@ constexpr std::array<std::string_view, 13> kInputTypeNames = {"entity",
                                                               "identity",
                                                               "optional_component",
                                                               "style",
-                                                              "style_value"};
+                                                              "document_value",
+                                                              "optional_text"};
 constexpr std::array<std::string_view, 4> kHistoryNames = {
     "undoable", "non_dirtying", "bulk_non_undoable", "read_only"};
 
@@ -130,7 +131,7 @@ result::Result<std::size_t> declaredOf(const Value& value) {
     }
     for (const InputDeclaration& input : kDeclared->inputs) {
         if (input.type != InputType::OptionalPlace && input.type != InputType::OptionalComponent &&
-            value.find(input.name) == nullptr) {
+            input.type != InputType::OptionalText && value.find(input.name) == nullptr) {
             return malformed("an operation holds every input its declaration lists");
         }
     }
@@ -150,6 +151,9 @@ result::Result<Query> queryOf(const Value& value) {
     }
     if (kIndex == kChanging + 3) {
         return Query{ReadSheet{}};
+    }
+    if (kIndex == kChanging + 4) {
+        return Query{ReadUiDocument{}};
     }
     if (kIndex == kChanging + 2) {
         const std::string* named = textOf(value.find("named"));
@@ -190,6 +194,34 @@ result::Result<Operation> operationOf(const Value& value) {
             return kBad();
         }
         return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
+    }
+    if (kIndex >= 19) {
+        // A UI document's node, by its component's name (D641).
+        const std::string* node = textOf(value.find("node"));
+        if (node == nullptr) {
+            return kBad();
+        }
+        if (kIndex == 19) {
+            const Value& given = *value.find("value");
+            if (field == nullptr) {
+                return kBad();
+            }
+            return Operation{SetUiField{
+                .node = *node, .field = *field, .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
+        }
+        if (kIndex == 20) {
+            const Value* parent = value.find("parent");
+            const Value* place = value.find("place");
+            const std::optional<std::size_t> kPlace = place != nullptr ? placeOf(place) : std::nullopt;
+            const std::string* named = textOf(parent);
+            if ((parent != nullptr && !parent->isNull() && named == nullptr) ||
+                (place != nullptr && !kPlace.has_value())) {
+                return kBad();
+            }
+            return Operation{CreateUiNode{
+                .node = *node, .parent = named != nullptr ? std::optional{*named} : std::nullopt, .place = kPlace}};
+        }
+        return Operation{RemoveUiNode{.node = *node}};
     }
     if (kIndex >= 14) {
         const std::string* style = textOf(value.find("style"));

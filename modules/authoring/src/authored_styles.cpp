@@ -140,7 +140,7 @@ result::Result<JsonDelta> deltaOf(const Value& staged, const Operation& operatio
     }
     return refuse(result::ErrorClass::InvalidArgument,
                   AuthoringError::ValidationFailed,
-                  "the operation changes a scene, not a style sheet");
+                  "the operation does not change a style sheet");
 }
 
 } // namespace
@@ -192,7 +192,8 @@ result::Result<Committed> AuthoredStyles::redo(std::uint64_t generation) {
     return reread(document_.redo(generation));
 }
 
-std::string summaryOf(std::span<const JsonDelta> journal) {
+std::string AuthoredStyles::summaryAt(std::size_t entry) const {
+    const std::vector<JsonDelta>& journal = document_.journalAt(entry);
     if (journal.empty()) {
         return "no change";
     }
@@ -222,7 +223,7 @@ result::Result<Value> answer(const AuthoredStyles& styles, const Query& query) {
     if (!std::holds_alternative<ReadSheet>(query)) {
         return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
                                                      AuthoringError::ValidationFailed,
-                                                     "the query reads a scene, not a style sheet")
+                                                     "the query does not read a style sheet")
                                                   .error()
                                                   .withContext("operation", declarationOf(query).name)};
     }

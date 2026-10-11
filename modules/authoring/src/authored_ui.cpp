@@ -1,0 +1,219 @@
+#include "rawframe/authoring/authored_ui.h"
+
+#include "rawframe/authoring/errors.h"
+
+#include <algorithm>
+#include <string>
+#include <utility>
+#include <variant>
+
+namespace rawframe::authoring {
+
+namespace {
+
+using document::Value;
+
+std::unexpected<result::Error> refuse(result::ErrorClass errorClass, AuthoringError error, std::string_view why) {
+    return result::fail(errorClass, kAuthoringDomain, code(error), why);
+}
+
+/// The document's objects' members in order, by what holds them: the root,
+/// and a node in `nodes` or `children`.
+std::span<const std::string_view> orderOf(std::string_view holder) noexcept {
+    if (holder.empty()) {
+        return ui::kUiDocumentFields;
+    }
+    return ui::nodeMembers();
+}
+
+result::Result<ui::UiDocument> readOf(std::string_view text) {
+    auto read = ui::readDocument(text);
+    if (!read.has_value()) {
+        // What the reader refused, and where, said to whoever asked.
+        std::string why = "the UI document does not read: " + std::string{read.error().description()};
+        for (const result::ContextField& kField : read.error().context()) {
+            if (kField.key == "path") {
+                why += " at " + std::string{kField.value};
+            }
+        }
+        return std::unexpected<result::Error>{std::move(read).error().mappedTo(
+            result::ErrorClass::InvalidArgument, kAuthoringDomain, code(AuthoringError::ValidationFailed), why)};
+    }
+    return read;
+}
+
+result::Status reads(std::string_view text) {
+    RAWFRAME_TRY(readOf(text));
+    return {};
+}
+
+/// The path to node `node` under `held`'s `member`, found depth first.
+std::optional<JsonPath> found(const Value& held, std::string_view member, std::string_view node, JsonPath& path) {
+    const Value* items = held.find(member);
+    for (const Value& kItem : items != nullptr ? items->items() : std::span<const Value>{}) {
+        const Value* component = kItem.find("component");
+        if (component == nullptr || component->text() == nullptr) {
+            continue;
+        }
+        path.push_back(JsonStep{.member = std::string{member}, .key = "component", .id = *component->text()});
+        if (*component->text() == node) {
+            return path;
+        }
+        if (auto inside = found(kItem, "children", node, path)) {
+            return inside;
+        }
+        path.pop_back();
+    }
+    return std::nullopt;
+}
+
+std::optional<JsonPath> nodeIn(const Value& root, std::string_view node) {
+    JsonPath path;
+    return found(root, "nodes", node, path);
+}
+
+/// The delta `operation` makes of `staged`; refused where it cannot be
+/// made.
+result::Result<JsonDelta> deltaOf(const Value& staged, const Operation& operation) {
+    const auto kUnknown = [] {
+        return refuse(result::ErrorClass::NotFound, AuthoringError::TargetNotFound, "the document has no such node");
+    };
+    if (const auto* set = std::get_if<SetUiField>(&operation)) {
+        const std::span<const std::string_view> kMembers = ui::nodeMembers();
+        if (set->field == "component" || set->field == "children" ||
+            std::ranges::find(kMembers, set->field) == kMembers.end()) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          AuthoringError::ValidationFailed,
+                          "a field is one a node has, not its component or children");
+        }
+        std::optional<JsonPath> path = nodeIn(staged, set->node);
+        if (!path.has_value()) {
+            return kUnknown();
+        }
+        path->push_back(JsonStep{.member = set->field, .key = {}, .id = {}});
+        std::optional<Value> before = slotAt(staged, *path);
+        return JsonDelta{.path = std::move(*path), .place = 0, .before = std::move(before), .after = set->value};
+    }
+    if (const auto* create = std::get_if<CreateUiNode>(&operation)) {
+        if (nodeIn(staged, create->node).has_value()) {
+            return refuse(
+                result::ErrorClass::AlreadyExists, AuthoringError::Conflict, "a component is one node's in a document");
+        }
+        JsonPath path;
+        if (create->parent.has_value()) {
+            std::optional<JsonPath> parent = nodeIn(staged, *create->parent);
+            if (!parent.has_value()) {
+                return kUnknown();
+            }
+            path = std::move(*parent);
+        }
+        const std::optional<Value> kHolder = slotAt(staged, path);
+        const Value* siblings = kHolder.has_value() ? kHolder->find(path.empty() ? "nodes" : "children") : nullptr;
+        const std::size_t kCount = siblings != nullptr ? siblings->items().size() : 0;
+        if (create->place.value_or(kCount) > kCount) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          AuthoringError::ValidationFailed,
+                          "a new node's place is among its siblings or after them");
+        }
+        path.push_back(JsonStep{.member = path.empty() ? "nodes" : "children", .key = "component", .id = create->node});
+        Value record = Value::object();
+        record.add("component", Value::string(create->node));
+        return JsonDelta{
+            .path = std::move(path), .place = create->place.value_or(kCount), .before = std::nullopt, .after = record};
+    }
+    if (const auto* remove = std::get_if<RemoveUiNode>(&operation)) {
+        std::optional<JsonPath> path = nodeIn(staged, remove->node);
+        if (!path.has_value()) {
+            return kUnknown();
+        }
+        const std::size_t kPlace = placeAt(staged, *path).value_or(0);
+        std::optional<Value> before = slotAt(staged, *path);
+        return JsonDelta{.path = std::move(*path), .place = kPlace, .before = std::move(before), .after = std::nullopt};
+    }
+    return refuse(result::ErrorClass::InvalidArgument,
+                  AuthoringError::ValidationFailed,
+                  "the operation does not change a UI document");
+}
+
+} // namespace
+
+result::Result<std::unique_ptr<AuthoredUi>>
+AuthoredUi::open(base::Bits128 document, std::string_view text, const HistoryLimits& limits) {
+    RAWFRAME_TRY_ASSIGN(ui::UiDocument read, readOf(text));
+    RAWFRAME_TRY_ASSIGN(JsonDocument opened, JsonDocument::open(text, orderOf, reads, limits));
+    return std::unique_ptr<AuthoredUi>{new AuthoredUi(document, std::move(opened), std::move(read))};
+}
+
+std::optional<JsonPath> AuthoredUi::pathOf(std::string_view node) const {
+    return nodeIn(document_.root(), node);
+}
+
+result::Result<Committed> AuthoredUi::change(std::uint64_t generation, std::span<const Operation> operations) {
+    RAWFRAME_TRY_ASSIGN(JsonDocument::Staged staged, document_.stage(generation));
+    if (operations.size() > kMaximumBatchOperations) {
+        return refuse(result::ErrorClass::ResourceExhausted,
+                      AuthoringError::LimitExceeded,
+                      "a batch has more operations than its limit");
+    }
+    for (std::size_t at = 0; at < operations.size(); ++at) {
+        auto delta = deltaOf(staged.root, operations[at]);
+        if (!delta.has_value()) {
+            return std::unexpected<result::Error>{std::move(delta).error().withContext("index", std::to_string(at))};
+        }
+        auto applied = document_.apply(staged, std::move(*delta));
+        if (!applied.has_value()) {
+            return std::unexpected<result::Error>{std::move(applied).error().withContext("index", std::to_string(at))};
+        }
+    }
+    return reread(document_.keep(std::move(staged)));
+}
+
+result::Result<Committed> AuthoredUi::reread(result::Result<Committed> done) {
+    if (done.has_value() && done->deltas > 0) {
+        // What the document's reader has just read reads again.
+        read_ = *readOf(document_.text());
+    }
+    return done;
+}
+
+result::Result<Committed> AuthoredUi::undo(std::uint64_t generation) {
+    return reread(document_.undo(generation));
+}
+
+result::Result<Committed> AuthoredUi::redo(std::uint64_t generation) {
+    return reread(document_.redo(generation));
+}
+
+std::string AuthoredUi::summaryAt(std::size_t entry) const {
+    const std::vector<JsonDelta>& journal = document_.journalAt(entry);
+    if (journal.empty()) {
+        return "no change";
+    }
+    const JsonDelta& kFirst = journal.front();
+    std::string made;
+    if (!kFirst.path.back().key.empty()) {
+        made = (kFirst.after.has_value() ? "create node " : "delete node ") + kFirst.path.back().id;
+    } else {
+        const std::string& kNode = kFirst.path[kFirst.path.size() - 2].id;
+        made = (kFirst.after.has_value() ? "set " : "unset ") + kFirst.path.back().member + " of " + kNode;
+    }
+    if (journal.size() > 1) {
+        made += " and " + std::to_string(journal.size() - 1) + " more";
+    }
+    return made;
+}
+
+result::Result<Value> answer(const AuthoredUi& document, const Query& query) {
+    if (!std::holds_alternative<ReadUiDocument>(query)) {
+        return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
+                                                     AuthoringError::ValidationFailed,
+                                                     "the query does not read a UI document")
+                                                  .error()
+                                                  .withContext("operation", declarationOf(query).name)};
+    }
+    Value made = Value::object();
+    made.add("document", document.documentValue());
+    return made;
+}
+
+} // namespace rawframe::authoring

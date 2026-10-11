@@ -231,6 +231,25 @@ struct SetStyleTransitions {
     std::uint64_t style = 0;
     std::optional<document::Value> value;
 };
+/// One field of the UI document's node `node` (its component's name), as
+/// the document holds it, or none for its default: `shows`, or any of
+/// `rawframe.ui.Node`'s fields (D641).
+struct SetUiField {
+    std::string node;
+    std::string field;
+    std::optional<document::Value> value;
+};
+/// A new node of component `node`, inside `parent` or a root for none, at
+/// `place` among its siblings or after them; it starts at every default.
+struct CreateUiNode {
+    std::string node;
+    std::optional<std::string> parent;
+    std::optional<std::size_t> place;
+};
+/// A node gone, with the nodes inside it.
+struct RemoveUiNode {
+    std::string node;
+};
 
 /// The id an instantiation named `instance` gives the source's entity
 /// `source`: a version 8 UUID from their SHA-256 (D156).
@@ -254,11 +273,15 @@ using Operation = std::variant<CreateEntity,
                                CreateStyleClass,
                                RemoveStyleClass,
                                RenameStyleClass,
-                               SetStyleTransitions>;
+                               SetStyleTransitions,
+                               SetUiField,
+                               CreateUiNode,
+                               RemoveUiNode>;
 
-/// Whether `operation` is a style sheet's rather than a scene's (D636).
-[[nodiscard]] constexpr bool changesStyles(const Operation& operation) noexcept {
-    return operation.index() >= std::variant_size_v<Operation> - 5;
+/// Whether `operation` changes a scene, rather than a style sheet (D636) or
+/// a UI document (D641), which follow the scene's in `Operation`.
+[[nodiscard]] constexpr bool changesScene(const Operation& operation) noexcept {
+    return operation.index() < std::variant_size_v<Operation> - 8;
 }
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the
@@ -278,8 +301,10 @@ struct FindEntities {
 /// A style sheet's document whole (D636), as a `ui.styles` document holds
 /// it: a style sheet's query, refused by a scene.
 struct ReadSheet {};
+/// A UI document whole (D641), as it holds itself: a UI document's query.
+struct ReadUiDocument {};
 
-using Query = std::variant<ListEntities, ReadEntity, FindEntities, ReadSheet>;
+using Query = std::variant<ListEntities, ReadEntity, FindEntities, ReadSheet, ReadUiDocument>;
 
 /// SPEC-0040's history classes: every operation that changes a scene is
 /// `Undoable`, and every query `ReadOnly`.
@@ -307,8 +332,10 @@ enum class InputType : std::uint8_t {
     OptionalComponent,
     /// A style class's identity, as 16 hex digits (D636).
     Style,
-    /// A look part's value as a styles document holds it, or null for none.
-    StyleValue,
+    /// A value as a JSON document holds it, or null for none (D636).
+    DocumentValue,
+    /// Text that may be null (D641).
+    OptionalText,
 };
 
 struct InputDeclaration {

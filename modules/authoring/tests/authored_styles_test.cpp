@@ -167,13 +167,13 @@ RAWFRAME_TEST(AStyleSheetsClassesAreMadeRemovedAndRenamed) {
     RAWFRAME_EXPECT(styles.sheet().styles.size() == 3 && styles.sheet().styles[0].id == kTip &&
                     styles.sheet().styles[0].name == "tooltip" && styles.sheet().styles[0].looks[0].look.radius == 4);
     RAWFRAME_EXPECT(styles.text().find("\"styleId\": \"00000000000000a1\"") != std::string::npos);
-    RAWFRAME_EXPECT(summaryOf(styles.journalAt(0)) == "create class tip and 2 more");
+    RAWFRAME_EXPECT(styles.summaryAt(0) == "create class tip and 2 more");
     // The button removed, its looks and transitions with it; undone, it is
     // back where it stood.
     const std::array<Operation, 1> kRemoved = {RemoveStyleClass{.style = kButton}};
     RAWFRAME_EXPECT(styles.change(1, kRemoved).has_value() && styles.sheet().styles.size() == 2 &&
                     !styles.sheet().styleWithId(kButton).has_value());
-    RAWFRAME_EXPECT(summaryOf(styles.journalAt(1)) == "delete class button");
+    RAWFRAME_EXPECT(styles.summaryAt(1) == "delete class button");
     RAWFRAME_EXPECT(styles.undo(2).has_value() && styles.sheet().styleWithId(kButton) == 1);
     RAWFRAME_EXPECT(styles.undo(3).has_value() && styles.text() == kSheet);
     // Refused: an identity the sheet holds or nought, a place past the
@@ -209,7 +209,7 @@ RAWFRAME_TEST(AStyleClassesTransitionsAreSetWhole) {
     RAWFRAME_EXPECT(styles.change(0, kSprung).has_value());
     RAWFRAME_EXPECT(styles.sheet().styles[0].transitions.size() == 1 &&
                     styles.sheet().styles[0].transitions[0].second.kind == ui::Transition::Kind::Spring);
-    RAWFRAME_EXPECT(summaryOf(styles.journalAt(0)) == "set transitions");
+    RAWFRAME_EXPECT(styles.summaryAt(0) == "set transitions");
     const std::array<Operation, 2> kMoved = {SetStyleTransitions{.style = 0x1d2c3b4a59687706, .value = *kSpring},
                                              SetStyleTransitions{.style = kButton, .value = std::nullopt}};
     RAWFRAME_EXPECT(styles.change(1, kMoved).has_value() && styles.sheet().styles[0].transitions.empty() &&

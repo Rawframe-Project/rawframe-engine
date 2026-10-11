@@ -67,6 +67,10 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
         R"({"operation": "styles.remove_class", "style": "85ecf7b643b63d65"})",
         R"({"operation": "styles.rename_class", "style": "85ecf7b643b63d65", "name": "knob"})",
         R"({"operation": "styles.set_transitions", "style": "85ecf7b643b63d65", "value": null})",
+        R"({"operation": "ui.set_field", "node": "game.hud", "field": "fill", "value": "#101820c0"})",
+        R"({"operation": "ui.create_node", "node": "game.coin", "parent": "game.hud", "place": 0})",
+        R"({"operation": "ui.create_node", "node": "game.menu"})",
+        R"({"operation": "ui.remove_node", "node": "game.hud"})",
     };
     std::string joined;
     for (const std::string& each : kAll) {
@@ -100,6 +104,15 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
     RAWFRAME_EXPECT(std::get<RemoveStyleClass>(kRead->operations[22]).style == 0x85ecf7b643b63d65 &&
                     std::get<RenameStyleClass>(kRead->operations[23]).name == "knob" &&
                     !std::get<SetStyleTransitions>(kRead->operations[24]).value.has_value());
+    // A UI document's (D641), its node by its component's name.
+    RAWFRAME_EXPECT(std::get<SetUiField>(kRead->operations[25]).field == "fill" &&
+                    std::get<CreateUiNode>(kRead->operations[26]).parent == "game.hud" &&
+                    std::get<CreateUiNode>(kRead->operations[26]).place == 0 &&
+                    !std::get<CreateUiNode>(kRead->operations[27]).parent.has_value() &&
+                    std::get<RemoveUiNode>(kRead->operations[28]).node == "game.hud");
+    RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "ui.create_node", "node": "game.coin",
+        "parent": 3})")),
+                                AuthoringError::ValidationFailed));
     RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "styles.create_class",
         "style": "00000000000000a1"})")),
                                 AuthoringError::ValidationFailed));

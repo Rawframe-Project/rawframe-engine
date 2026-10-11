@@ -42,17 +42,22 @@ constexpr std::array<InputDeclaration, 2> kAddInstanceInputs = {
 constexpr std::array<InputDeclaration, 4> kStylePartInputs = {{{"style", InputType::Style},
                                                                {"variant", InputType::Text},
                                                                {"part", InputType::Text},
-                                                               {"value", InputType::StyleValue}}};
+                                                               {"value", InputType::DocumentValue}}};
 
 constexpr std::array<InputDeclaration, 3> kCreateClassInputs = {
     {{"style", InputType::Style}, {"name", InputType::Text}, {"place", InputType::OptionalPlace}}};
 constexpr std::array<InputDeclaration, 1> kClassInputs = {{{"style", InputType::Style}}};
+constexpr std::array<InputDeclaration, 3> kUiFieldInputs = {
+    {{"node", InputType::Text}, {"field", InputType::Text}, {"value", InputType::DocumentValue}}};
+constexpr std::array<InputDeclaration, 3> kUiCreateInputs = {
+    {{"node", InputType::Text}, {"parent", InputType::OptionalText}, {"place", InputType::OptionalPlace}}};
+constexpr std::array<InputDeclaration, 1> kUiNodeInputs = {{{"node", InputType::Text}}};
 constexpr std::array<InputDeclaration, 2> kTransitionsInputs = {
-    {{"style", InputType::Style}, {"value", InputType::StyleValue}}};
+    {{"style", InputType::Style}, {"value", InputType::DocumentValue}}};
 constexpr std::array<InputDeclaration, 2> kRenameClassInputs = {
     {{"style", InputType::Style}, {"name", InputType::Text}}};
 
-constexpr std::array<OperationDeclaration, 23> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 27> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -72,6 +77,9 @@ constexpr std::array<OperationDeclaration, 23> kDeclarations = {{
     {.name = "styles.remove_class", .targets = "ui.styles class", .inputs = kClassInputs},
     {.name = "styles.rename_class", .targets = "ui.styles class", .inputs = kRenameClassInputs},
     {.name = "styles.set_transitions", .targets = "ui.styles transitions", .inputs = kTransitionsInputs},
+    {.name = "ui.set_field", .targets = "ui.document field", .inputs = kUiFieldInputs},
+    {.name = "ui.create_node", .targets = "ui.document node", .inputs = kUiCreateInputs},
+    {.name = "ui.remove_node", .targets = "ui.document node", .inputs = kUiNodeInputs},
     {.name = "scene.list_entities", .history = HistoryClass::ReadOnly, .targets = "rawframe.scene", .inputs = {}},
     {.name = "scene.read_entity",
      .history = HistoryClass::ReadOnly,
@@ -82,6 +90,7 @@ constexpr std::array<OperationDeclaration, 23> kDeclarations = {{
      .targets = "rawframe.scene",
      .inputs = kFindInputs},
     {.name = "styles.read_sheet", .history = HistoryClass::ReadOnly, .targets = "ui.styles", .inputs = {}},
+    {.name = "ui.read_document", .history = HistoryClass::ReadOnly, .targets = "ui.document", .inputs = {}},
 }};
 static_assert(kDeclarations.size() == std::variant_size_v<Operation> + std::variant_size_v<Query>);
 
@@ -180,11 +189,11 @@ result::Result<Journal> derive(const scene::Scene& scene,
                                const ComponentCatalog& catalog,
                                const scene::SceneSource* sources,
                                base::Bits128 document) {
-    if (changesStyles(operation)) {
+    if (!changesScene(operation)) {
         return result::fail(result::ErrorClass::InvalidArgument,
                             kAuthoringDomain,
                             code(AuthoringError::ValidationFailed),
-                            "the operation changes a style sheet, not a scene");
+                            "the operation changes a style sheet or a UI document, not a scene");
     }
     if (std::holds_alternative<AddInstance>(operation) || std::holds_alternative<RemoveInstance>(operation)) {
         return deriveInstance(scene, operation, sources, document);
