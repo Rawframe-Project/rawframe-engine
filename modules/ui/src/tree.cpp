@@ -133,6 +133,7 @@ Tree::create(std::uint32_t maximumNodes, std::uint32_t maximumFonts, std::uint32
     state->atlas.side = atlasSide;
     // Half the coverage atlas's side, in plots of a quarter of it.
     state->fields.side = std::max<std::uint32_t>((atlasSide / 8) * 4, 64);
+    state->colors.side = state->fields.side;
     return std::unique_ptr<Tree>{new Tree{std::move(state)}};
 }
 
@@ -495,6 +496,7 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
     into.scale = scale;
     into.atlas = nullptr;
     into.fields = nullptr;
+    into.colors = nullptr;
     into.glyphsLeftOut = 0;
     for (std::uint32_t at = 0; at < list.gradientCount; ++at) {
         const muiDrawGradient& kGradient = list.gradients[at];

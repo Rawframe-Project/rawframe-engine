@@ -1,5 +1,6 @@
 // The cook's font sanitizer (ADR-0078, D385): a font rebuilt the same each
-// time and taken again as it was written, a table OTS does not know dropped,
+// time and taken again as it was written, a color font's colors kept
+// (D669), a table OTS does not know dropped,
 // web fonts and bytes that are not a font refused, a font cut short or
 // damaged refused with what OTS found, and a font past the limit refused.
 
@@ -58,6 +59,17 @@ RAWFRAME_TEST(AFontIsRebuiltTheSameAndTakenAgain) {
     // What it wrote it takes again, unchanged.
     const auto kTwice = sanitize(*kRebuilt);
     RAWFRAME_EXPECT(kTwice.has_value() && *kTwice == *kRebuilt);
+}
+
+RAWFRAME_TEST(AColorFontKeepsItsColors) {
+    // COLR and CPAL, versions 0 and 1, are tables OTS checks and keeps, so a
+    // cooked color font draws its color glyphs (D669).
+    const std::string kColor = test::readFile(RAWFRAME_FONT_IMPORT_FONTS "RawframeColor.ttf");
+    const auto kRebuilt = sanitize(bytesOf(kColor));
+    RAWFRAME_EXPECT(kRebuilt.has_value());
+    if (kRebuilt.has_value()) {
+        RAWFRAME_EXPECT(hasTable(*kRebuilt, "COLR") && hasTable(*kRebuilt, "CPAL") && hasTable(*kRebuilt, "glyf"));
+    }
 }
 
 RAWFRAME_TEST(ATableOtsDoesNotKnowIsDropped) {

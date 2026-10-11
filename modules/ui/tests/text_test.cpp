@@ -272,3 +272,47 @@ RAWFRAME_TEST(LargeRunsAreDrawnFromDistanceFieldsScaledToTheirSize) {
     RAWFRAME_EXPECT(ui.draw(kLabel, 1.25F, list).has_value());
     RAWFRAME_EXPECT(list.glyphRuns.at(0).field && list.fields->revision == 1);
 }
+
+RAWFRAME_TEST(AColorGlyphIsDrawnInItsFontsColors) {
+    // ADR-0049's color glyphs (D669): RawframeColor.ttf's A, COLR version 0
+    // layers over its palette (an em box of red, its right half of
+    // half-transparent blue), is rendered into the color atlas at its size,
+    // as an sRGB texture holds premultiplied color; its B, with no color,
+    // keeps coverage.
+    const std::string kColor = test::readFile(RAWFRAME_UI_FONTS "RawframeColor.ttf");
+    auto tree = Tree::create(16, 4, 256);
+    RAWFRAME_EXPECT(tree.has_value());
+    if (!tree.has_value()) {
+        return;
+    }
+    Tree& ui = **tree;
+    RAWFRAME_EXPECT(ui.addFont(bytesOf(kColor)).has_value());
+    const Node kLabel = *ui.add(1);
+    RAWFRAME_EXPECT(ui.setText(kLabel, "AB", {.size = 10}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kLabel, 200, 200).has_value());
+    DrawList list;
+    RAWFRAME_EXPECT(ui.draw(kLabel, 1, list).has_value());
+    RAWFRAME_EXPECT(list.colors != nullptr && list.glyphs.size() == 2 && list.glyphsLeftOut == 0);
+    if (list.colors == nullptr || list.glyphs.size() != 2) {
+        return;
+    }
+    const Glyph& kA = list.glyphs[0];
+    RAWFRAME_EXPECT(kA.color && !list.glyphs[1].color && kA.image.x == 1 && sized(kA.image, 8, 8));
+    RAWFRAME_EXPECT(sized(list.glyphs[1].image, 8, 8) && list.colors->revision == 1);
+    const ColorAtlas& kColors = *list.colors;
+    const auto kAt = [&](float x, float y) {
+        const std::size_t kPixel =
+            ((static_cast<std::size_t>(kA.atlas.y + y) * kColors.side) + static_cast<std::size_t>(kA.atlas.x + x)) * 4;
+        return std::array<int, 4>{
+            kColors.pixels[kPixel], kColors.pixels[kPixel + 1], kColors.pixels[kPixel + 2], kColors.pixels[kPixel + 3]};
+    };
+    const auto kNear = [](std::array<int, 4> got, std::array<int, 4> wanted) {
+        return std::ranges::all_of(std::array<int, 4>{0, 1, 2, 3}, [&](int at) {
+            return std::abs(got.at(at) - wanted.at(at)) <= 2;
+        });
+    };
+    // Red on the left; half blue over red on the right, linear 0.5 red and
+    // 0.5 blue, 188 each in sRGB.
+    RAWFRAME_EXPECT(kNear(kAt(0, 0), {255, 0, 0, 255}));
+    RAWFRAME_EXPECT(kNear(kAt(7, 0), {188, 0, 188, 255}));
+}

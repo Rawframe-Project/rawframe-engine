@@ -14,6 +14,7 @@
 #include <maul-rhi/shader.h>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -67,6 +68,8 @@ constexpr std::size_t kGlyphFloats = 16;
 /// and the field atlas (D667).
 constexpr std::uint64_t kAtlasId = ~std::uint64_t{0};
 constexpr std::uint64_t kFieldsId = ~std::uint64_t{1};
+/// And the color atlas (D669).
+constexpr std::uint64_t kColorsId = ~std::uint64_t{2};
 /// The UI's share of a frame's uploads, for its images.
 constexpr std::uint64_t kImageUploadBytes = render::kFrameUploadBytes / 8;
 
@@ -186,7 +189,7 @@ std::array<float, kShadowFloats> shadowBlockOf(const ui::Shadow& shadow, float s
 /// with its run's color and clip; a glyph with no image is an empty quad.
 /// A glyph drawn from its field (D667) also carries how many of the
 /// picture's pixels a field's spread spans as drawn, and the field atlas's
-/// side.
+/// side; a color glyph (D669), that it is one.
 std::vector<float> glyphsOf(const ui::DrawList& list) {
     std::vector<float> glyphs(list.glyphs.size() * kGlyphFloats, 0);
     const ui::FieldAtlas* kFields = list.fields;
@@ -214,7 +217,7 @@ std::vector<float> glyphsOf(const ui::DrawList& list) {
                                                             static_cast<float>(kClip),
                                                             kSpread,
                                                             kField ? static_cast<float>(kFields->side) : 0.0F,
-                                                            0};
+                                                            kGlyph.color ? 1.0F : 0.0F};
             std::ranges::copy(kBlock, glyphs.begin() + static_cast<std::ptrdiff_t>(at * kGlyphFloats));
         }
     }
@@ -253,9 +256,10 @@ struct UiRenderer::State {
     render::Device* device = nullptr;
     mrhiDevice* native = nullptr;
     mrhiShaderId shader{};
-    /// Boxes, images, shadows, glyphs, and glyphs from fields.
-    std::array<mrhiGraphicsPipelineId, 5> pipelines{};
-    std::array<std::uint64_t, 5> requests{};
+    /// Boxes, images, shadows, glyphs, glyphs from fields, and color
+    /// glyphs.
+    std::array<mrhiGraphicsPipelineId, 6> pipelines{};
+    std::array<std::uint64_t, 6> requests{};
     bool ready = false;
     mrhiSamplerId nearest{};
     mrhiSamplerId linear{};
@@ -285,6 +289,10 @@ struct UiRenderer::State {
     std::shared_ptr<const texture::Texture> fields;
     std::uint64_t fieldsRevision = 0;
     bool fieldsHeld = false;
+    /// The color atlas likewise (D669).
+    std::shared_ptr<const texture::Texture> colors;
+    std::uint64_t colorsRevision = 0;
+    bool colorsHeld = false;
     /// Each image's held texture this frame, none for one not drawn.
     std::vector<std::uint64_t> imageTextures;
     std::array<float, 4> view{};
@@ -319,12 +327,13 @@ struct UiRenderer::State {
         if (const mrhiResult kMade = mrhiCreateShader(native, &shaderDef, &shader); kMade != mrhi_success) {
             return failed("the UI's shader could not be made", kMade);
         }
-        constexpr std::array<std::array<std::string_view, 3>, 5> kEntries = {{
+        constexpr std::array<std::array<std::string_view, 3>, 6> kEntries = {{
             {"rawframe.ui.boxes", "vs", "fs"},
             {"rawframe.ui.images", "imageVs", "imageFs"},
             {"rawframe.ui.shadows", "shadowVs", "shadowFs"},
             {"rawframe.ui.glyphs", "glyphVs", "glyphFs"},
             {"rawframe.ui.fields", "glyphVs", "fieldFs"},
+            {"rawframe.ui.colors", "colorVs", "colorFs"},
         }};
         for (std::size_t at = 0; at < kEntries.size(); ++at) {
             mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
@@ -424,6 +433,23 @@ struct UiRenderer::State {
                 fieldsRevision = kFields->revision;
             }
             fieldsHeld = held->choose(kFieldsId, fields);
+        }
+        // The color atlas, a new texture whenever its images changed.
+        colorsHeld = false;
+        const ui::ColorAtlas* kColors = list->colors;
+        const bool kAnyColor = std::ranges::any_of(list->glyphs, &ui::Glyph::color);
+        if (kColors != nullptr && kAnyColor && kColors->side > 0 &&
+            kColors->pixels.size() == std::size_t{kColors->side} * kColors->side * 4) {
+            if (colors == nullptr || colorsRevision != kColors->revision) {
+                texture::Texture made{.format = texture::Format::Rgba8Srgb};
+                const auto* kBytes = reinterpret_cast<const std::byte*>(kColors->pixels.data());
+                made.levels.push_back(texture::Level{.width = kColors->side,
+                                                     .height = kColors->side,
+                                                     .bytes = {kBytes, kBytes + kColors->pixels.size()}});
+                colors = std::make_shared<const texture::Texture>(std::move(made));
+                colorsRevision = kColors->revision;
+            }
+            colorsHeld = held->choose(kColorsId, colors);
         }
     }
 
@@ -619,19 +645,38 @@ struct UiRenderer::State {
             const ui::DrawCommand& kCommand = kCommands[at];
             if (kCommand.kind == ui::DrawCommand::Kind::Glyphs) {
                 const ui::GlyphRun& kRun = list->glyphRuns.at(kCommand.index);
-                if (!(kRun.field ? fieldsHeld : atlasHeld)) {
+                const bool kWhole = kRun.count > 0 && kRun.first + kRun.count <= list->glyphs.size();
+                const std::span<const ui::Glyph> kGlyphs =
+                    kWhole ? std::span{list->glyphs}.subspan(kRun.first, kRun.count) : std::span<const ui::Glyph>{};
+                // Its glyphs with an image, of coverage or a field, and in
+                // color (D669): a draw each from its atlas, once both are
+                // held.
+                const auto kDrawn = [](bool color) {
+                    return [color](const ui::Glyph& glyph) {
+                        return glyph.color == color && glyph.image.width > 0;
+                    };
+                };
+                const bool kPlain = std::ranges::any_of(kGlyphs, kDrawn(false));
+                const bool kColored = std::ranges::any_of(kGlyphs, kDrawn(true));
+                const bool kHeld = (!kPlain || (kRun.field ? fieldsHeld : atlasHeld)) && (!kColored || colorsHeld);
+                if (!kHeld) {
                     ++statistics.glyphRunsWaiting;
-                } else if (kRun.count > 0 && kRun.first + kRun.count <= list->glyphs.size()) {
-                    const std::array<mrhiBinding, 9> kBindings =
-                        kRun.field ? bindings(kFieldsId, true) : bindings(kAtlasId);
-                    if (mrhiSetGraphicsPipeline(native, drawing, pipelines[kRun.field ? 4 : 3]) != mrhi_success ||
-                        mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-                        mrhiDraw(native, drawing, 6, kRun.count, 0, kRun.first) != mrhi_success) {
+                } else if (kWhole) {
+                    const auto kDraw = [&](std::size_t pipeline, const std::array<mrhiBinding, 9>& kBindings) {
+                        return mrhiSetGraphicsPipeline(native, drawing, pipelines.at(pipeline)) == mrhi_success &&
+                               mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) ==
+                                   mrhi_success &&
+                               mrhiDraw(native, drawing, 6, kRun.count, 0, kRun.first) == mrhi_success;
+                    };
+                    if ((kPlain &&
+                         !kDraw(kRun.field ? 4 : 3, kRun.field ? bindings(kFieldsId, true) : bindings(kAtlasId))) ||
+                        (kColored && !kDraw(5, bindings(kColorsId)))) {
                         return failed("the UI's glyphs could not be drawn", mrhi_errorState);
                     }
                     ++statistics.glyphRuns;
                     statistics.glyphs += kRun.count;
                     statistics.fieldRuns += kRun.field ? 1U : 0U;
+                    statistics.colorRuns += kColored ? 1U : 0U;
                 }
                 ++at;
                 continue;

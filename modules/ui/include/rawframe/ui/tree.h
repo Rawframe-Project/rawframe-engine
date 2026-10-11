@@ -356,14 +356,19 @@ struct Shadow {
 /// is drawn in, from the root's top left in pixels, its edges on device
 /// pixels, and where its coverage is in the list's atlas, in the atlas's
 /// pixels, or, in a run drawn from fields (D667), the rectangle its field
-/// scales to and where its field is in the list's field atlas. Both are
-/// empty for a glyph with no outline (a space), and for one left out.
+/// scales to and where its field is in the list's field atlas, or, for a
+/// color glyph (D669), where its color image is in the list's color
+/// atlas. Both are empty for a glyph with no outline (a space), and for
+/// one left out.
 struct Glyph {
     std::uint32_t id = 0;
     float x = 0;
     float y = 0;
     Rect image;
     Rect atlas;
+    /// Drawn in its font's own colors (COLR and CPAL), from the color
+    /// atlas, at any size of its run (D669).
+    bool color = false;
     friend constexpr bool operator==(Glyph, Glyph) noexcept = default;
 };
 
@@ -396,6 +401,19 @@ struct FieldAtlas {
     std::uint64_t revision = 0;
     float pixelSize = 0;
     std::uint32_t spread = 0;
+};
+
+/// The color glyphs a tree draws (ADR-0049's color glyphs on the bitmap
+/// path, D669): `side` by `side` pixels of four bytes, rows from the top,
+/// red, green, and blue sRGB-encoded and premultiplied, alpha linear, as an
+/// sRGB texture holds them; each glyph rendered from its font's COLR
+/// layers or paint graph and CPAL palette, the text's color where the font
+/// names it, at its size in device pixels, as coverage is. Maul UI's glyph
+/// atlas of color; `revision` changes whenever its pixels do.
+struct ColorAtlas {
+    std::uint32_t side = 0;
+    std::vector<std::uint8_t> pixels;
+    std::uint64_t revision = 0;
 };
 
 /// A run whose size is at least this many device pixels is drawn from
@@ -468,6 +486,9 @@ struct DrawList {
     /// The tree's field atlas, which the fields of the runs drawn from
     /// fields are in (D667), until the tree draws again.
     const FieldAtlas* fields = nullptr;
+    /// The tree's color atlas, which color glyphs' images are in (D669),
+    /// until the tree draws again.
+    const ColorAtlas* colors = nullptr;
     /// Glyphs with an outline left out: past what the atlases hold at once,
     /// or of a size or font that cannot be rendered.
     std::uint32_t glyphsLeftOut = 0;

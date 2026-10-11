@@ -424,7 +424,11 @@ RAWFRAME_TEST(AGlyphRunWaitsBetweenBoxesItDoesNotJoin) {
     list.boxes.push_back({.rect = {.x = 0, .y = 0, .width = 32, .height = 64}, .fill = {1, 0, 0, 1}});
     list.boxes.push_back({.rect = {.x = 32, .y = 0, .width = 32, .height = 64}, .fill = {0, 0, 1, 1}});
     list.glyphRuns.push_back({.size = 16, .color = {1, 1, 1, 1}, .x = 8, .y = 40, .first = 0, .count = 1});
-    list.glyphs.push_back({.id = 1});
+    // A glyph with an image, which waits for the atlas the list lacks (a
+    // run of spaces alone waits for nothing).
+    list.glyphs.push_back({.id = 1,
+                           .image = {.x = 8, .y = 28, .width = 12, .height = 12},
+                           .atlas = {.x = 0, .y = 0, .width = 12, .height = 12}});
     list.commands = {{.kind = ui::DrawCommand::Kind::Box, .index = 0},
                      {.kind = ui::DrawCommand::Kind::Glyphs, .index = 0},
                      {.kind = ui::DrawCommand::Kind::Box, .index = 1}};
@@ -543,4 +547,50 @@ RAWFRAME_TEST(AGlyphsFieldIsDrawnScaledWithAPixelWideEdge) {
     RAWFRAME_EXPECT(near(at(*kPixels, 16, 24), {188, 188, 188}, 8));
     RAWFRAME_EXPECT(near(at(*kPixels, 17, 24), {255, 255, 255}, 4) && near(at(*kPixels, 15, 24), {0, 0, 0}, 4));
     RAWFRAME_EXPECT(statistics.glyphRuns == 1 && statistics.fieldRuns == 1 && statistics.glyphRunsWaiting == 0);
+}
+
+RAWFRAME_TEST(AColorGlyphIsDrawnInItsOwnColorsBesideCoverage) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    // One run, half transparent (D669): a color glyph of four texels
+    // square, red on its left half and half-transparent blue over red on
+    // its right (sRGB 188, 0, 188 premultiplied), and a coverage block.
+    ui::ColorAtlas colors{.side = 16, .pixels = std::vector<std::uint8_t>(16 * 16 * 4, 0), .revision = 1};
+    for (std::uint32_t y = 0; y < 4; ++y) {
+        for (std::uint32_t x = 0; x < 4; ++x) {
+            const std::array<std::uint8_t, 4> kTexel =
+                x < 2 ? std::array<std::uint8_t, 4>{255, 0, 0, 255} : std::array<std::uint8_t, 4>{188, 0, 188, 255};
+            std::ranges::copy(kTexel, colors.pixels.begin() + static_cast<std::ptrdiff_t>(((y * 16) + x) * 4));
+        }
+    }
+    ui::GlyphAtlas atlas{.side = 16, .coverage = std::vector<std::uint8_t>(16 * 16, 255), .revision = 1};
+    ui::DrawList list;
+    list.clips.push_back({});
+    list.gradients.push_back({});
+    list.atlas = &atlas;
+    list.colors = &colors;
+    list.glyphRuns.push_back({.size = 4, .color = {0, 0.5F, 0, 0.5F}, .x = 8, .y = 12, .first = 0, .count = 2});
+    list.glyphs.push_back({.id = 1,
+                           .image = {.x = 8, .y = 8, .width = 4, .height = 4},
+                           .atlas = {.x = 0, .y = 0, .width = 4, .height = 4},
+                           .color = true});
+    list.glyphs.push_back({.id = 2,
+                           .x = 8,
+                           .image = {.x = 16, .y = 8, .width = 4, .height = 4},
+                           .atlas = {.x = 0, .y = 0, .width = 4, .height = 4}});
+    list.commands = {{.kind = ui::DrawCommand::Kind::Glyphs, .index = 0}};
+    render_canvas_gpu::UiStatistics statistics;
+    const auto kPixels = drawn(*kDevice, list, {}, &statistics);
+    RAWFRAME_EXPECT(kPixels.has_value());
+    if (!kPixels.has_value()) {
+        return;
+    }
+    // Its own colors at the run's half alpha over black: linear 0.5 red,
+    // 188 in sRGB; 0.25 red and blue, 137; the coverage glyph in the run's
+    // half-transparent green, 188.
+    RAWFRAME_EXPECT(near(at(*kPixels, 9, 9), {188, 0, 0}, 4) && near(at(*kPixels, 11, 9), {137, 0, 137}, 4));
+    RAWFRAME_EXPECT(near(at(*kPixels, 17, 9), {0, 188, 0}, 4) && near(at(*kPixels, 13, 9), {0, 0, 0}));
+    RAWFRAME_EXPECT(statistics.glyphRuns == 1 && statistics.colorRuns == 1 && statistics.glyphRunsWaiting == 0);
 }

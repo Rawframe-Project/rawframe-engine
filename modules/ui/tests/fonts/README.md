@@ -10,3 +10,12 @@
   1000 units per em, ascent 800 and descent 200, every glyph a box an em
   wide, so text measures to exact values. SHA-256
   `b719ecb31c5b21fc573c03f6421c74ac63c271a5a3ff841e34f9705fb94b8448`.
+- `RawframeColor.ttf`: written by `make_color_font.py` beside it
+  (fontTools 4.66.1, the same bytes each time), the engine's own: an A of
+  COLR version 0 layers over one CPAL palette (an em box of entry 0, red;
+  its right half of entry 1, blue at half alpha; a small box of the text's
+  color) and a B with no color, 1000 units per em, ascent 800, for color
+  glyphs (D669). Maul UI's MaulColor.ttf names a palette entry past its
+  palettes on purpose, which the cook's sanitizer refuses; this one it
+  takes whole. SHA-256
+  `b4de765c1e0c442bbf360321aed4e74f2d32ff1725fe70ed084f6a5ebe5d527c`.

@@ -1,7 +1,7 @@
 // The UI's drawing (SPEC-0032), in Slang (ADR-0026, D475), from which the
 // SPIR-V and the WGSL are compiled: boxes (D375), images (D378), shadows
-// (D381), and glyphs (D398), from coverage or distance fields (D667), each
-// one quad an instance, in the picture's pixels from its top left, y down,
+// (D381), and glyphs (D398), from coverage or distance fields (D667) or in
+// their fonts' colors (D669), each one quad an instance, in the picture's pixels from its top left, y down,
 // inside every clip above it (D377); premultiplied, in linear light.
 //
 // An instance is numbered as Vulkan and WebGPU number it, its draw's first
@@ -421,10 +421,34 @@ float4 shadowFs(Corner corner) : SV_Target0
     return clipped(shadows[shadow].color * value, pixel, int(flags.y));
 }
 
+// A glyph's quad, of coverage or a field; a color glyph (`clip.w`, D669)
+// is drawn by `colorVs` and is no quad here.
 [shader("vertex")]
 Corner glyphVs(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
 {
-    return cornerOf(glyphs[instance].rect, vertex, instance);
+    return cornerOf(glyphs[instance].clip.w > 0.5 ? float4(0.0) : glyphs[instance].rect, vertex, instance);
+}
+
+// A color glyph's quad (D669); any other is no quad here.
+[shader("vertex")]
+Corner colorVs(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
+{
+    return cornerOf(glyphs[instance].clip.w > 0.5 ? glyphs[instance].rect : float4(0.0), vertex, instance);
+}
+
+// A color glyph's own colors, read texel for pixel from the color atlas,
+// an sRGB texture of premultiplied color, so read linear; the run's alpha
+// fades it, its color already in the image where the font names it.
+[shader("fragment")]
+float4 colorFs(Corner corner) : SV_Target0
+{
+    const float2 pixel = corner.pixel;
+    const uint glyph = corner.record;
+    const float4 rect = glyphs[glyph].rect;
+    const float4 atlas = glyphs[glyph].atlas;
+    const float2 within = clamp(floor(pixel - rect.xy), float2(0.0), max(atlas.zw - 1.0, float2(0.0)));
+    const float4 colored = picture.Load(int3(int2(atlas.xy + within), 0));
+    return clipped(colored * glyphs[glyph].color.a, pixel, int(glyphs[glyph].clip.x));
 }
 
 // The glyph's coverage, read texel for pixel from the atlas (its image

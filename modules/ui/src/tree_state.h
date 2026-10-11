@@ -102,6 +102,9 @@ struct Tree::State {
     /// UI's of four channels it is copied from.
     FieldAtlas fields{.pixelSize = kFieldSize, .spread = kFieldSpread};
     muiGlyphAtlas* fieldGlyphs = nullptr;
+    /// The color atlas likewise (D669).
+    ColorAtlas colors;
+    muiGlyphAtlas* colorGlyphs = nullptr;
 
     /// A field's em in its pixels, and how far it reaches past the outline
     /// (D667): about the size of large UI text, and four pixels, so a run
@@ -111,6 +114,7 @@ struct Tree::State {
     static constexpr std::uint32_t kFieldSpread = 4;
 
     ~State() {
+        muiDestroyGlyphAtlas(colorGlyphs);
         muiDestroyGlyphAtlas(fieldGlyphs);
         muiDestroyGlyphAtlas(glyphs);
         muiDestroyContext(context);
@@ -146,7 +150,9 @@ struct Tree::State {
     /// Each glyph of `list` given its image from Maul UI's atlases, which
     /// render and pack it the first time (D404): a run `kFieldsFrom` device
     /// pixels and larger its distance fields, scaled to its size (D667), a
-    /// smaller one its coverage at its size. A draw is the atlases' frame:
+    /// smaller one its coverage at its size; and a glyph its font colors,
+    /// at any size, its color image at its size (D669). A draw is the
+    /// atlases' frame:
     /// room is made by emptying the plot least recently drawn, never one
     /// this list uses, and a glyph is left out when there is none, or when
     /// it cannot be rendered or is larger than a plot.
@@ -154,11 +160,13 @@ struct Tree::State {
         list.glyphsLeftOut = 0;
         list.atlas = &atlas;
         list.fields = &fields;
+        list.colors = &colors;
         if (list.glyphRuns.empty()) {
             return;
         }
-        const bool kMade =
-            made(glyphs, atlas.side, mui_atlasOneChannel) && made(fieldGlyphs, fields.side, mui_atlasFourChannel);
+        const bool kMade = made(glyphs, atlas.side, mui_atlasOneChannel) &&
+                           made(fieldGlyphs, fields.side, mui_atlasFourChannel) &&
+                           made(colorGlyphs, colors.side, mui_atlasColor);
         if (!kMade) {
             for (const GlyphRun& kRun : list.glyphRuns) {
                 list.glyphsLeftOut += kRun.count;
@@ -167,6 +175,7 @@ struct Tree::State {
         }
         muiGlyphAtlas_NextFrame(glyphs);
         muiGlyphAtlas_NextFrame(fieldGlyphs);
+        muiGlyphAtlas_NextFrame(colorGlyphs);
         for (GlyphRun& run : list.glyphRuns) {
             const float kPixelSize = run.size * list.scale;
             run.field = kPixelSize >= kFieldsFrom;
@@ -176,9 +185,32 @@ struct Tree::State {
                 Glyph& glyph = list.glyphs[at];
                 glyph.image = {};
                 glyph.atlas = {};
+                glyph.color = false;
                 const float kPenX = (run.x + glyph.x) * list.scale;
                 const float kPenY = (run.y + glyph.y) * list.scale;
                 muiAtlasGlyph got{};
+                // Its colors first: a font without them answers at once.
+                const muiLinearColor kText{run.color[0], run.color[1], run.color[2], run.color[3]};
+                const muiResult kColored = muiGlyphAtlas_GetColor(
+                    colorGlyphs, run.font.key, glyph.id, kPixelSize, kPenX, kPenY, 0, kText, &got);
+                if (kColored != mui_success && kColored != mui_empty) {
+                    ++list.glyphsLeftOut;
+                    continue;
+                }
+                if (kColored == mui_success) {
+                    glyph.color = true;
+                    if (got.width != 0 && got.height != 0) {
+                        glyph.image = Rect{.x = static_cast<float>(got.x) / list.scale,
+                                           .y = static_cast<float>(got.y) / list.scale,
+                                           .width = static_cast<float>(got.width) / list.scale,
+                                           .height = static_cast<float>(got.height) / list.scale};
+                        glyph.atlas = Rect{.x = static_cast<float>(got.u),
+                                           .y = static_cast<float>(got.v),
+                                           .width = static_cast<float>(got.width),
+                                           .height = static_cast<float>(got.height)};
+                    }
+                    continue;
+                }
                 const muiResult kGot =
                     run.field ? muiGlyphAtlas_GetMultiField(
                                     fieldGlyphs, run.font.key, glyph.id, kFieldSize, kFieldSpread, &got)
@@ -205,6 +237,7 @@ struct Tree::State {
         }
         takeUpdates(glyphs, atlas.side, 1, atlas.coverage, atlas.revision);
         takeUpdates(fieldGlyphs, fields.side, 4, fields.pixels, fields.revision);
+        takeUpdates(colorGlyphs, colors.side, 4, colors.pixels, colors.revision);
     }
 
     /// `into`, an atlas of `side` and `format`, made if it is not yet.

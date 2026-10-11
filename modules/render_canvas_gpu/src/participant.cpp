@@ -250,7 +250,8 @@ public:
                       diagnostics::field("glyphRuns", statistics.glyphRuns),
                       diagnostics::field("glyphs", statistics.glyphs),
                       diagnostics::field("glyphRunsWaiting", statistics.glyphRunsWaiting),
-                      diagnostics::field("fieldRuns", statistics.fieldRuns)});
+                      diagnostics::field("fieldRuns", statistics.fieldRuns),
+                      diagnostics::field("colorRuns", statistics.colorRuns)});
     }
 
 private:

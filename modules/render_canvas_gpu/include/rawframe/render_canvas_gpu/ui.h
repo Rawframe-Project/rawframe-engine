@@ -48,6 +48,8 @@ struct UiStatistics {
     std::uint64_t glyphRunsWaiting = 0;
     /// Of the runs drawn, those drawn from distance fields (D667).
     std::uint64_t fieldRuns = 0;
+    /// And those with color glyphs (D669).
+    std::uint64_t colorRuns = 0;
 };
 
 class UiRenderer final : public render::FrameRecorder {
