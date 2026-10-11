@@ -40,7 +40,9 @@
 # one whose field has a value where `,name=value` follows (D476), or a
 # number at least that where `,name>=value` does. A record never seen in
 # that time is said ("never saw"), which the tests read as a failure: the
-# wait it stands for was three minutes lost (D627).
+# wait it stands for was three minutes lost (D627). An argument `edit=`
+# and a file, the text in it to replace, and what with, separated by
+# colons, edits the file as an author would while the game plays (D634).
 # Five seconds after, it stops the program whose pid its pid file holds
 # (D430), whose iterations only bound it, and waits for the process it
 # watches to end; half a second, where the last argument waited for a
@@ -54,6 +56,7 @@
 #                 | move=<x>,<y> | freeze | thaw
 #                 | orbit=<x>,<y>,<x>,<y>[,<key>] | wait=<seconds>
 #                 | until=<code>[,<field>=<value> | ,<field>>=<number>]
+#                 | edit=<file>:<text>:<text>
 #                 [...]
 
 import ctypes
@@ -175,6 +178,10 @@ def main():
         if argument.startswith("until="):
             points.append((None, None, ("until", argument[len("until="):])))
             continue
+        if argument.startswith("edit="):
+            path, old, new = argument[len("edit="):].rsplit(":", 2)
+            points.append((None, None, ("edit", path, old, new)))
+            continue
         if argument.startswith("wait="):
             points.append((None, None, float(argument[len("wait="):])))
             continue
@@ -268,6 +275,13 @@ def main():
                 os.kill(int(told.read().strip()), signal.SIGSTOP if text[0] == "freeze" else signal.SIGCONT)
             print("froze the program" if text[0] == "freeze" else "let the program go on")
             time.sleep(0.5 if text[0] == "freeze" else 1.5)
+            continue
+        if isinstance(text, tuple) and text[0] == "edit":
+            with open(text[1], encoding="utf-8") as read:
+                before = read.read()
+            with open(text[1], "w", encoding="utf-8") as written:
+                written.write(before.replace(text[2], text[3]))
+            print(f"edited {text[1]}: {text[2]} to {text[3]}{'' if text[2] in before else ', which it did not hold'}")
             continue
         if isinstance(text, tuple) and text[0] == "move":
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)

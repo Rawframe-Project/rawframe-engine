@@ -164,6 +164,19 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "kept: [^\n]*\"tycoon.top\":1[,}][^\n]*\n== first run\n.*\"code\":\"ui_summary\"[^\n]*\"toggled\":1,\"kept\":1,\"keptGiven\":0,\"keptWritten\":[1-9].*== second run\n.*\"code\":\"ui_summary\"[^\n]*\"ranged\":0,\"toggled\":0,\"kept\":0,\"keptGiven\":[1-9]")
+        # Stalls' styles edited as it plays (D634): its HUD's dark panel
+        # turned red in a copy of the game, the client styles its UI anew.
+        add_test(NAME client_restyles_stalls
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/restyled.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
+                         ${PROJECT_SOURCE_DIR}/games/tycoon tycoon.game tycoon.styles "#101820c0" "#c01818c0"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_restyles_stalls PROPERTIES
+                             FIXTURES_REQUIRED tycoon_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "edited [^\n]*tycoon.styles: #101820c0 to #c01818c0\n.*saw ui_restyled.*\"code\":\"ui_summary\"[^\n]*\"restyled\":1")
         # Stalls' purse tooltip (D623): the mouse brought over the purse
         # and away; the tooltip given its words while it is over it and
         # emptied after, as the present system says, beside the purse (a
