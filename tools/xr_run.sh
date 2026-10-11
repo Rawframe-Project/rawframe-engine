@@ -13,8 +13,10 @@
 #
 # With --hands, Monado runs its remote driver instead: Valve Index
 # controllers that <program> places and presses over a socket, started
-# beside the command with the port the driver listens on, so a test presses
-# what the simulated controllers never do (D662).
+# beside the command with the port the driver listens on and a file to
+# write once its first state is written, so a test presses what the
+# simulated controllers never do (D662). The command starts after that
+# file, never on the driver's own first state (D667 follow-up).
 #
 # usage: xr_run.sh [--hands <program>] <command> [<argument>...]
 set -uo pipefail
@@ -61,8 +63,16 @@ for _ in $(seq 1 400); do
     sleep 0.05
 done
 if [ -n "$hands" ]; then
-    python3 "$hands" "$port" &
+    python3 "$hands" "$port" "$place/hands.ready" &
     driver=$!
+    for _ in $(seq 1 400); do
+        [ -e "$place/hands.ready" ] && break
+        if ! kill -0 "$driver" 2>/dev/null; then
+            echo "xr_run.sh: $hands ended before its first state" >&2
+            exit 1
+        fi
+        sleep 0.05
+    done
 fi
 RAWFRAME_REQUIRE_XR=1 "$@"
 status=$?

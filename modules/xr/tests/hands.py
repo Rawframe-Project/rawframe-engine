@@ -5,8 +5,9 @@
 # controller; its left hand is not tracked. The hub sends its first and
 # latest state as it accepts, then reads one state a write.
 #
-# usage: hands.py <port>
+# usage: hands.py <port> <ready file, written once the first state is>
 
+import os
 import socket
 import sys
 import time
@@ -55,6 +56,8 @@ def main():
             link.sendall(state)
         except OSError:
             return
+        if not os.path.exists(sys.argv[2]):
+            open(sys.argv[2], "w").close()
         time.sleep(0.01)
 
 

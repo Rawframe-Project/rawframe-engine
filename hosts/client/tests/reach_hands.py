@@ -15,8 +15,9 @@
 # them (x to the right, y up from the floor, -z ahead), the head where
 # Monado puts it at the start and the seated eye at 1.2 meters (sample.kest).
 #
-# usage: reach_hands.py <port>
+# usage: reach_hands.py <port> <ready file, written once the first state is>
 
+import os
 import socket
 import struct
 import sys
@@ -113,6 +114,8 @@ def main():
             link.sendall(state)
         except OSError:
             return
+        if not os.path.exists(sys.argv[2]):
+            open(sys.argv[2], "w").close()
         time.sleep(0.01)
 
 
