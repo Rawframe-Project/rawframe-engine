@@ -278,9 +278,12 @@ int main(int argc, char** argv) {
 
     // A fingerprint left from an earlier run is not this server's.
     std::filesystem::remove(*kFingerprint, error);
+    // The server and the client stop with the launcher however it ends, so
+    // a launcher killed leaves no server holding the game's port (D649).
     auto server = process::Child::start({.program = *kServer,
                                          .arguments = {"--config", *kServerConfig},
-                                         .output = configuration.path("play.server_log").value_or("")});
+                                         .output = configuration.path("play.server_log").value_or(""),
+                                         .stopsWithThis = true});
     if (!server.has_value()) {
         std::fprintf(stderr, "rawframe-play: %s\n", std::string{server.error().description()}.c_str());
         return 1;
@@ -298,7 +301,8 @@ int main(int argc, char** argv) {
 
     auto client = process::Child::start({.program = *kClient,
                                          .arguments = {"--config", *kClientConfig},
-                                         .output = configuration.path("play.client_log").value_or("")});
+                                         .output = configuration.path("play.client_log").value_or(""),
+                                         .stopsWithThis = true});
     if (!client.has_value()) {
         std::fprintf(stderr, "rawframe-play: %s\n", std::string{client.error().description()}.c_str());
         stopWithin(*server, kGraceTime);

@@ -19,6 +19,13 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(play_launched PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":1,\"admitted\":1,.*\"exit\":\"clean_stop\".*play: exit 0")
+    # The launcher killed: its server and client stop with it (D649).
+    add_test(NAME play_orphaned
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/orphaned.sh
+                     $<TARGET_FILE:rawframe_host_play_tool> $<TARGET_FILE:rawframe_host_dedicated_server>
+                     $<TARGET_FILE:rawframe_host_bots> games/arena/arena.game
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(play_orphaned PROPERTIES PASS_REGULAR_EXPRESSION "both stopped with the launcher")
     # Runners exported to follow its studio's mirror, 0.2.0 then released on
     # stable: the launcher installs it before the game plays it, finds it
     # current the next time, and with the mirror gone plays it still.
