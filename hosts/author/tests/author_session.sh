@@ -52,7 +52,9 @@ reply 6 | grep -q '"undoable":0,"redoable":1'
 cmp "$work/root/level.scene" "$work/original.scene"
 # Nothing is read past end.
 reply 7 | grep -q '"kind":"authoring.ended"'
-! grep -q '"id":8,' "$work/replies"
+if grep -q '"id":8,' "$work/replies"; then
+    exit 1
+fi
 
 # The history lives as long as the session: made, undone, redone, a stale
 # undo refused; then the file changed under the session is opened again,
@@ -78,7 +80,9 @@ reply 5 | grep -q '"code":"target_stale"'
 reply 6 | grep -q '"reopened":true,"undoable":0,"redoable":0,"selection":\[\],"view":null,"results":\[{"error":{"code":"target_not_found"'
 cmp "$work/root/level.scene" "$work/original.scene"
 reply 7 | grep -q '"kind":"authoring.answers"'
-! reply 7 | grep -q "$crate"
+if reply 7 | grep -q "$crate"; then
+    exit 1
+fi
 reply 8 | grep -q '"message":"a session'"'"'s scenes are .scene files under its root"'
 reply 9 | grep -q '"code":"validation_failed"'
 grep -q '"id":null,"error":{"code":"validation_failed"' "$work/replies"
@@ -239,7 +243,9 @@ cp "$work/together/hall.scene" "$work/hall.made"
 } | "$author" session "$game" "$work/together" >"$work/replies" || true
 reply 2 | grep -q '"results":\[{"error":{"code":"conflict".*"scene":"level.scene"},{.*"results":\[{"error":{"code":"conflict".*"scene":"hall.scene"}\]}}$'
 reply 2 | grep -q '"details":{"operation":"scene.create_entity","part":"1","index":"0"}'
-! reply 2 | grep -q '"written":true'
+if reply 2 | grep -q '"written":true'; then
+    exit 1
+fi
 cmp "$work/together/level.scene" "$work/original.scene"
 cmp "$work/together/hall.scene" "$work/hall.made"
 echo "authored runners in a session"

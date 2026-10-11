@@ -105,5 +105,7 @@ grep -q '"id":5,"answer":{"kind":"authoring.outcome"' "$work/replies"
 grep -q '"code":"scene_followed".*"created":1' "$work/server.log"
 grep -q '"code":"scene_followed".*"created":0,"destroyed":0,"changed":1' "$work/server.log"
 grep -q '"code":"scene_followed".*"destroyed":1' "$work/server.log"
-! grep -q '"code":"scene_refused"' "$work/server.log"
+if grep -q '"code":"scene_refused"' "$work/server.log"; then
+    exit 1
+fi
 echo "runners' level followed live"

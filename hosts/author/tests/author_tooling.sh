@@ -76,7 +76,9 @@ assert "rawframe.world.persistent" in components, components
 '
 
 # Another token is refused, and the client says so.
-! echo '{"kind":"tooling.status","id":1}' |
-    "$author" connect "127.0.0.1:$port" "$work/fingerprint" "$work/other" >"$work/refused"
+if echo '{"kind":"tooling.status","id":1}' |
+    "$author" connect "127.0.0.1:$port" "$work/fingerprint" "$work/other" >"$work/refused"; then
+    exit 1
+fi
 grep -q '"error":{"code":"unauthenticated"' "$work/refused"
 echo "inspected runners through the tooling endpoint"
