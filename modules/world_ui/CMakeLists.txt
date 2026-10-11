@@ -4,15 +4,15 @@
 # dedicated server carries the components as plain values and links none of
 # this.
 rawframe_module(NAME world_ui
-    SOURCES src/world_ui.cpp src/interaction.cpp src/keeper.cpp src/participant.cpp
+    SOURCES src/world_ui.cpp src/interaction.cpp src/keeper.cpp src/participant.cpp src/settings.cpp
     DEPS ui document view game_textures assets game_content content texture graph world_localization localization world_replication world_kest kest world composition schema execution diagnostics result base
 )
 
 # The player's settings are kept in a file where there are files (D626).
 if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
-    rawframe_module_tests(NAME world_ui SOURCES tests/world_ui_test.cpp tests/restyle_test.cpp)
+    rawframe_module_tests(NAME world_ui SOURCES tests/world_ui_test.cpp tests/fields_test.cpp tests/restyle_test.cpp)
 else()
-    rawframe_module_tests(NAME world_ui SOURCES tests/world_ui_test.cpp tests/kept_test.cpp tests/restyle_test.cpp)
+    rawframe_module_tests(NAME world_ui SOURCES tests/world_ui_test.cpp tests/fields_test.cpp tests/kept_test.cpp tests/restyle_test.cpp)
 endif()
 if(TARGET rawframe_world_ui_tests)
     target_compile_definitions(rawframe_world_ui_tests PRIVATE
