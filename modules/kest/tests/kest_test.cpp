@@ -697,9 +697,11 @@ RAWFRAME_TEST(BreakpointsChangedWhileStoppedLetTheCallCarryOn) {
     RAWFRAME_EXPECT(machine->stops() == 3 && seen.size() == 1 && seen[0].function == "t.outer");
 }
 
-RAWFRAME_TEST(AStoppedFrameShowsOnlyItsArguments) {
-    // A local not yet written holds whatever the stack held: only the
-    // arguments, which the call wrote, are read.
+RAWFRAME_TEST(AStoppedFrameSaysWhatItsBodyHasWritten) {
+    // A local not yet written holds whatever the stack held: Kest's proof
+    // says which are written where the frame stands, and which are one
+    // piece of text, so text is said by its bytes and the rest by value
+    // (D631).
     auto machine = start("module t\n"
                          "\n"
                          "fn named(n: i32) -> i32 {\n"
@@ -717,16 +719,32 @@ RAWFRAME_TEST(AStoppedFrameShowsOnlyItsArguments) {
                          "}\n");
     auto named = machine->entry("named");
     const std::array<std::string, 1> kNames = {"named"};
-    RAWFRAME_EXPECT(named.has_value() && machine->breakAt(kNames).functions == 1);
-    std::vector<kest::StoppedFrame> seen;
+    const std::array<kest::SourceLine, 1> kLoop = {kest::SourceLine{.file = "test.kest", .line = 11}};
+    RAWFRAME_EXPECT(named.has_value() && machine->breakAt(kNames, kLoop).functions == 1);
+    std::vector<std::vector<kest::StoppedFrame>> seen;
     machine->whenStopped([&] {
-        seen = machine->stack();
+        seen.push_back(machine->stack());
     });
     std::array<Value, 1> frame{};
     frame[0].integer = 3;
     RAWFRAME_EXPECT(machine->call(*named, frame).hasValue() && frame[0].integer == 15);
-    RAWFRAME_EXPECT(seen.size() == 1 && seen[0].locals.size() == 1 && seen[0].locals[0].first == "n" &&
-                    seen[0].locals[0].second == "3");
+    const auto kSaid = [&seen](std::size_t stop, std::string_view name) -> std::string {
+        if (stop >= seen.size() || seen[stop].empty()) {
+            return "(no stop)";
+        }
+        for (const auto& [kName, kValue] : seen[stop][0].locals) {
+            if (kName == name) {
+                return kValue;
+            }
+        }
+        return "(not named)";
+    };
+    // At its start, then three times round the loop.
+    RAWFRAME_EXPECT(seen.size() == 4);
+    RAWFRAME_EXPECT(kSaid(0, "n") == "3" && kSaid(0, "total") == "(not written yet)" &&
+                    kSaid(0, "word") == "(not written yet)" && kSaid(0, "i") == "(not written yet)");
+    RAWFRAME_EXPECT(kSaid(1, "word") == "\"stall\"" && kSaid(1, "total") == "0" && kSaid(1, "i") == "0");
+    RAWFRAME_EXPECT(kSaid(3, "total") == "10" && kSaid(3, "i") == "2");
 }
 
 RAWFRAME_TEST(AProgramTwoMachinesStandOnTakesNoBreakpoints) {

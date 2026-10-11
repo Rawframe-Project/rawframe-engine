@@ -296,11 +296,12 @@ std::vector<Value> Adapter::handle(const Value& request) {
         body.add("stackFrames", std::move(stack));
         out.push_back(response(request, kStatus.has_value(), std::move(body), why));
     } else if (kCommand == "scopes") {
-        // One scope a frame, its arguments: the locals a stop surely wrote.
+        // One scope a frame, its locals, each said as Kest's proof allows
+        // (D631).
         const Value* kFrame = arguments.find("frameId");
         const std::int64_t kId = kFrame != nullptr ? kFrame->integer().value_or(0) : 0;
         Value scope = Value::object();
-        scope.add("name", Value::string("Arguments"));
+        scope.add("name", Value::string("Locals"));
         scope.add("variablesReference", Value::integer(kId));
         scope.add("expensive", Value::boolean(false));
         Value body = Value::object();

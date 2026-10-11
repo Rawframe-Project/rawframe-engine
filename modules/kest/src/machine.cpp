@@ -124,6 +124,52 @@ bool sameFile(std::string_view built, std::string_view asked) {
     return !given.empty() && (named == given || kEndsWith(named, given) || kEndsWith(given, named));
 }
 
+/// The most bytes of a text local said (D631).
+constexpr std::uint32_t kMostTextSaid = 200;
+
+/// What a stopped frame's slot holds, as text: numbers and truths by value,
+/// text by its bytes where Kest proves it one piece of text, and nothing
+/// read as an address (D460, D631). Asked with the breakpoints out.
+std::string saidOf(const KestRuntime* runtime,
+                   std::uint32_t frame,
+                   std::uint16_t slot,
+                   std::uint8_t kind,
+                   std::uint16_t slots,
+                   KestValue value) {
+    if (!kest_frame_written(runtime, frame, slot)) {
+        return "(not written yet)";
+    }
+    if (kest_frame_at_address(runtime, frame, slot)) {
+        return "(an element)";
+    }
+    if (kind == KEST_L_TEXT) {
+        std::uint32_t length = 0;
+        const char* const kBytes = kest_frame_text(runtime, frame, slot, &length);
+        if (kBytes == nullptr) {
+            return "(text, not one piece here)";
+        }
+        return "\"" + std::string{kBytes, std::min(length, kMostTextSaid)} + (length > kMostTextSaid ? "...\"" : "\"");
+    }
+    std::string text;
+    if (kind == KEST_L_F32 || kind == KEST_L_F64) {
+        std::array<char, 32> number{};
+        std::snprintf(number.data(), number.size(), "%.17g", value.real);
+        text = number.data();
+    } else if (kind == KEST_L_BOOL) {
+        text = value.integer != 0 ? "true" : "false";
+    } else if (kind >= KEST_L_U8 && kind <= KEST_L_U64) {
+        text = std::to_string(static_cast<std::uint64_t>(value.integer));
+    } else if (kind <= KEST_L_I64 || kind == KEST_L_TAG || (kind >= KEST_L_FLAGS8 && kind <= KEST_L_FLAGS64)) {
+        text = std::to_string(value.integer);
+    } else {
+        text = "(a value)";
+    }
+    // A wider value's other slots are its pieces, not read.
+    if (slots > 1) {
+        text += " (of " + std::to_string(slots) + " slots)";
+    }
+    return text;
+}
 } // namespace
 
 struct Machine::State {
@@ -592,54 +638,28 @@ std::vector<StoppedFrame> Machine::stack() const {
         StoppedFrame& made = frames.emplace_back();
         const char* const kWrote = kest_entry_wrote(state_->runtime, kest_frame_in(kRuntime, kFrame));
         made.function = kWrote != nullptr ? kWrote : "?";
-        // Where it stands, its body read as compiled (D630).
+        // Where it stands (D630), its body read as compiled, as the proof
+        // below is too.
         state_->showCompiled(true);
         made.at = state_->lineOf(kest_frame_in(kRuntime, kFrame), kest_frame_ip(kRuntime, kFrame));
-        state_->showCompiled(false);
-        // Its arguments only: written by the call, where every other local a
-        // body names may not yet be, and a slot not yet written holds what
-        // the stack held, an address among it (D460).
-        const std::int32_t kIn = kest_frame_in(kRuntime, kFrame);
-        const std::uint32_t kTakes = kest_frame_takes(state_->runtime, kIn);
-        for (std::uint32_t which = 0; which < kTakes; ++which) {
-            const auto kSlot = static_cast<std::uint16_t>(kest_frame_at(state_->runtime, kIn, which));
+        // Every slot the body named (D631), each said only as Kest's proof
+        // of the body allows: one not written on every path to where the
+        // frame stands holds what the stack held, an address among it, and
+        // is said as not written; text is said where it is proved one piece
+        // of text; nothing is followed as an address. The proof is of the
+        // body as compiled, so it is asked with the breakpoints out.
+        const std::uint16_t kWide = kest_frame_wide(kRuntime, kFrame);
+        for (std::uint16_t slot = 0; slot < kWide; ++slot) {
             std::uint16_t slots = 1;
             std::uint8_t kind = KEST_L_WORD;
-            const char* const kName = kest_frame_name(kRuntime, kFrame, kSlot, &slots, &kind);
+            const char* const kName = kest_frame_name(kRuntime, kFrame, slot, &slots, &kind);
             KestValue value{};
-            if (kName == nullptr || !kest_frame_slot(kRuntime, kFrame, kSlot, &value)) {
+            if (kName == nullptr || !kest_frame_slot(kRuntime, kFrame, slot, &value)) {
                 continue;
             }
-            // Read as its kind says, and nothing followed: text, a held
-            // object, a reference, or a function would be an address read
-            // as one, and an address told to a debugger says where the
-            // server's memory is. Numbers and truths are said; the rest by
-            // kind.
-            std::string text;
-            if (kest_frame_at_address(kRuntime, kFrame, kSlot)) {
-                text = "(an element)";
-            } else if (kind == KEST_L_F32 || kind == KEST_L_F64) {
-                std::array<char, 32> number{};
-                std::snprintf(number.data(), number.size(), "%.17g", value.real);
-                text = number.data();
-            } else if (kind == KEST_L_BOOL) {
-                text = value.integer != 0 ? "true" : "false";
-            } else if (kind == KEST_L_TEXT) {
-                text = "(text)";
-            } else if (kind >= KEST_L_U8 && kind <= KEST_L_U64) {
-                text = std::to_string(static_cast<std::uint64_t>(value.integer));
-            } else if (kind <= KEST_L_I64 || kind == KEST_L_TAG || (kind >= KEST_L_FLAGS8 && kind <= KEST_L_FLAGS64)) {
-                text = std::to_string(value.integer);
-            } else {
-                text = "(a value)";
-            }
-            // A text's second slot is its length; a wider value's are its
-            // pieces, not read.
-            if (slots > 1 && kind != KEST_L_TEXT) {
-                text += " (of " + std::to_string(slots) + " slots)";
-            }
-            made.locals.emplace_back(kName, std::move(text));
+            made.locals.emplace_back(kName, saidOf(kRuntime, kFrame, slot, kind, slots, value));
         }
+        state_->showCompiled(false);
     }
     return frames;
 }

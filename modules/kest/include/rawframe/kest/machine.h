@@ -78,9 +78,10 @@ struct Breaks {
 
 /// One frame of a stopped machine (D460): the function it is in, as it was
 /// written; where it stands (D630), its file as the build read it and the
-/// line, none where Kest cannot say; and its arguments by name, each as
-/// text: the locals a call has surely written. Others wait for Kest to say
-/// which a stop has written.
+/// line, none where Kest cannot say; and every local its body named, each
+/// as text (D631): `(not written yet)` where the body has not written it on
+/// every path to here, text quoted where it is proved one piece of text,
+/// numbers and truths by value, and nothing read as an address.
 struct StoppedFrame {
     std::string function;
     std::optional<SourceLine> at;

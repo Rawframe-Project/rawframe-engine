@@ -4,8 +4,8 @@
 // bridge, D461): an editor's requests turned into the tooling endpoint's
 // debug verbs (D460), and what the game does turned into the protocol's
 // events. Function and line breakpoints (D630), the stopped frames, where
-// they stand, and their arguments, and carrying on; stepping is answered as
-// not yet offered.
+// they stand, and their locals (D631), and carrying on; stepping is
+// answered as not yet offered.
 
 #include "rawframe/authoring_session/attach.h"
 #include "rawframe/authoring_session/link.h"
