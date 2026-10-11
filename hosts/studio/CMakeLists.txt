@@ -615,4 +615,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # fails it, rather than costing three minutes unseen (D627).
     get_property(window_tests DIRECTORY PROPERTY TESTS)
     set_tests_properties(${window_tests} PROPERTIES LABELS "window;studio" FAIL_REGULAR_EXPRESSION "never saw")
+    # The played tests that differ only in the gesture made in the game,
+    # each three instrumented programs drawing for half a minute: the
+    # address sanitizer's tree plays the played path through previews,
+    # plays, cooks, and picks, and leaves these to the fast check (D645).
+    if(TEST studio_drags_plaza)
+        set_tests_properties(studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza
+                             studio_snaps_plaza studio_looks_plaza studio_rings_plaza studio_raises_plaza
+                             studio_turns_plaza PROPERTIES LABELS "window;studio;gesture")
+    endif()
 endif()

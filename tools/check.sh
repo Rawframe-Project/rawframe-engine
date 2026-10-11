@@ -126,6 +126,11 @@ build_and_test() {
         # Studio's window tests play under the address sanitizer alone:
         # here as well they were half this tree's test time (D602).
         leave=(-LE 'alone|headset|studio')
+    elif [ "$preset" = clang-sanitize ] && [ "$tier" = full ]; then
+        # Studio's played tests that differ only in a gesture are left to
+        # the fast check: nine instrumented games drawing were a third of
+        # this tree's time, the full check's longest (D645).
+        leave=(-LE 'alone|headset|gesture')
     elif [ "$tier" = full ]; then
         leave=(-LE 'alone|headset')
     fi
