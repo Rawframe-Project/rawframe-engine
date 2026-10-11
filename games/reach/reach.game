@@ -1,0 +1,46 @@
+# Reach (D656), the small VR game: players sit round a table and pick up,
+# hand over, and throw the blocks on it with their hands, Maul3D bodies all,
+# the server deciding. A headset's controllers are a player's hands; a flat
+# player reaches with one. VR and flat players share the one World
+# (ADR-0081's cross-play), and the game is Palmshift's class among the
+# constitution's reference games: hands, low-latency input and physics, and
+# a small 3D World.
+program reach.kest
+physics3d gravity 0 -9.81 0
+
+# Hands pass through each other; blocks meet everything.
+collision class hand e6a4ac0cc7060f0b
+collision class block a94a65b891476416
+collision rule hand hand ignore
+
+component dced10fa-8c5c-4fde-98c4-769f8565275c reach.hands Hands
+component aa174e17-8efd-4de0-b82e-bd5b6d42d638 reach.seat Seat
+component 8c4cd7c9-b5ff-4560-8edd-1dc2b3795509 reach.hand Hand
+component ea827a4e-3a16-42dc-b120-eb28ea24c609 reach.block Block
+component 84064735-82e5-4725-90d0-39e682d09191 reach.grip Grip
+
+# A player is seated, given two hands; each hand goes where its player
+# holds it; a hand that grips near a block takes it, and lets it go when
+# it opens.
+system reach.join simulation join write reach.seat entities before rawframe.physics3d.step
+system reach.reach simulation reach read reach.hand write rawframe.physics3d.target entities lookup reach.hands lookup reach.seat before rawframe.physics3d.step
+system reach.grip simulation grip write reach.hand entities lookup reach.hands lookup reach.block lookup rawframe.physics3d.pose after rawframe.physics3d.step
+system reach.release simulation release read reach.grip entities lookup reach.hand lookup reach.hands lookup reach.block after reach.grip
+
+# The floor, and a table 0.75 meters high, 1.2 by 0.8.
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=5 height=0.5 depth=5 friction=0.8 rawframe.physics3d.pose y=-0.5 rawframe.physics3d.velocity
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=0.6 height=0.375 depth=0.4 friction=0.8 rawframe.physics3d.pose y=0.375 rawframe.physics3d.velocity
+
+# Six blocks of eight centimeters on the table.
+spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.04 height=0.04 depth=0.04 collisionClass=block density=500 friction=0.7 rawframe.physics3d.pose x=-0.3 y=0.79 z=-0.15 rawframe.physics3d.velocity rawframe.physics3d.impulse reach.block
+spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.04 height=0.04 depth=0.04 collisionClass=block density=500 friction=0.7 rawframe.physics3d.pose x=0 y=0.79 z=-0.15 rawframe.physics3d.velocity rawframe.physics3d.impulse reach.block
+spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.04 height=0.04 depth=0.04 collisionClass=block density=500 friction=0.7 rawframe.physics3d.pose x=0.3 y=0.79 z=-0.15 rawframe.physics3d.velocity rawframe.physics3d.impulse reach.block
+spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.04 height=0.04 depth=0.04 collisionClass=block density=500 friction=0.7 rawframe.physics3d.pose x=-0.3 y=0.79 z=0.15 rawframe.physics3d.velocity rawframe.physics3d.impulse reach.block
+spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.04 height=0.04 depth=0.04 collisionClass=block density=500 friction=0.7 rawframe.physics3d.pose x=0 y=0.79 z=0.15 rawframe.physics3d.velocity rawframe.physics3d.impulse reach.block
+spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.04 height=0.04 depth=0.04 collisionClass=block density=500 friction=0.7 rawframe.physics3d.pose x=0.3 y=0.79 z=0.15 rawframe.physics3d.velocity rawframe.physics3d.impulse reach.block
+
+replicate rawframe.physics3d.body rawframe.physics3d.pose reach.block
+entity reach.block holder
+player reach.hands reach.seat
+input reach.hands
+interpolate rawframe.physics3d.pose

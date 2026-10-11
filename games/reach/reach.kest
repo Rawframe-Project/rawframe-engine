@@ -1,0 +1,245 @@
+module reach
+
+// Reach (D656): players sit round a table and take its blocks in their
+// hands. Each hand is a kinematic ball of its own, moved to where its
+// player holds it; one that grips near a free block takes it, welded to the
+// hand by a joint, so the block moves as the hand does and flies on when
+// the hand opens.
+
+import controls
+import rawframe.physics3d
+import rawframe.world
+import std.math
+
+// The game's collision classes (reach.game).
+const HAND: u64 = 0xe6a4ac0cc7060f0b
+const BLOCK: u64 = 0xa94a65b891476416
+
+// Meters from the table's middle to a seat, a hand's radius, and how near
+// a block's middle a hand must be to take it.
+const SEAT_DISTANCE: f32 = 0.9
+const HAND_RADIUS: f32 = 0.05
+const REACH: f32 = 0.1
+
+// A hand grips past this.
+const GRIPPED: f32 = 0.5
+
+// Where a player sits, facing the table's middle: a quarter turn round
+// from the seat before for each player seated, a fifth where the first is.
+struct Seat {
+    x: f64
+    z: f64
+    heading: f64
+    placed: bool
+}
+
+// A hand: its player, which of the two (0 left, 1 right), and the block it
+// holds while `holding`.
+struct Hand {
+    player: world.Entity
+    side: u8
+    holding: bool
+    held: world.Entity
+}
+
+// A block: whether a hand holds it, which, and how often it has been taken.
+struct Block {
+    held: bool
+    holder: world.Entity
+    grips: u32
+}
+
+// A grip, on the joint's own entity: the hand and the block it joins.
+struct Grip {
+    hand: world.Entity
+    block: world.Entity
+}
+
+extern fn Hand.insert(entity: world.Entity, value: Hand)
+extern fn Hand.has(entity: world.Entity) -> bool
+extern fn Hand.get(entity: world.Entity) -> Hand
+extern fn Hands.has(entity: world.Entity) -> bool
+extern fn Hands.get(entity: world.Entity) -> controls.Hands
+extern fn Seat.has(entity: world.Entity) -> bool
+extern fn Seat.get(entity: world.Entity) -> Seat
+extern fn Block.get(entity: world.Entity) -> Block
+extern fn Block.insert(entity: world.Entity, value: Block)
+extern fn Grip.insert(entity: world.Entity, value: Grip)
+extern fn Body3D.insert(entity: world.Entity, value: physics3d.Body3D)
+extern fn Pose3D.insert(entity: world.Entity, value: physics3d.Pose3D)
+extern fn Pose3D.get(entity: world.Entity) -> physics3d.Pose3D
+extern fn Velocity3D.insert(entity: world.Entity, value: physics3d.Velocity3D)
+extern fn Target3D.insert(entity: world.Entity, value: physics3d.Target3D)
+extern fn Joint3D.insert(entity: world.Entity, value: physics3d.Joint3D)
+
+// A player's entity arrives with its components zeroed: it is seated at
+// the next place round the table and given its two hands.
+fn join(count: i32, seats: [Seat], entities: [world.Entity]) {
+    let placed = 0
+    let i = 0
+    while i < count {
+        if seats[i].placed {
+            placed = placed + 1
+        }
+        i = i + 1
+    }
+    i = 0
+    while i < count {
+        if !seats[i].placed {
+            let heading = f64(placed % 4) * f64(1.5707963267948966)
+            seats[i] = Seat(math.sin(heading) * f64(SEAT_DISTANCE), math.cos(heading) * f64(SEAT_DISTANCE), heading,
+                            true)
+            give(entities[i], u8(0), seats[i])
+            give(entities[i], u8(1), seats[i])
+            placed = placed + 1
+        }
+        i = i + 1
+    }
+}
+
+// One of a player's hands, made at rest.
+fn give(player: world.Entity, side: u8, seat: Seat) {
+    let hand = world.create()
+    Hand.insert(hand, Hand(player, side, false, player))
+    Body3D.insert(hand, physics3d.Body3D(physics3d.KINEMATIC, physics3d.SPHERE, false, false, false, HAND,
+                                         HAND_RADIUS, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0))
+    let at = place(seat, side, controls.Hands(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+    Pose3D.insert(hand, at)
+    Velocity3D.insert(hand, physics3d.Velocity3D(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+    Target3D.insert(hand, physics3d.Target3D(at.x, at.y, at.z, 0.0, 0.0, 0.0, 0.0, false))
+}
+
+// Where a hand is in the World: its place in its seat's frame turned by the
+// seat's heading about +Y, from the seat. A hand its player holds nowhere
+// (all noughts) rests above the table's edge before the seat.
+fn place(seat: Seat, side: u8, hands: controls.Hands) -> physics3d.Pose3D {
+    let x = f64(hands.leftX)
+    let y = f64(hands.leftY)
+    let z = f64(hands.leftZ)
+    if side == u8(1) {
+        x = f64(hands.rightX)
+        y = f64(hands.rightY)
+        z = f64(hands.rightZ)
+    }
+    if x == f64(0.0) && y == f64(0.0) && z == f64(0.0) {
+        x = f64(-0.2)
+        if side == u8(1) {
+            x = f64(0.2)
+        }
+        y = f64(0.95)
+        z = f64(-0.35)
+    }
+    let c = math.cos(seat.heading)
+    let s = math.sin(seat.heading)
+    return physics3d.Pose3D(seat.x + x * c + z * s, y, seat.z - x * s + z * c, 0.0, 0.0, 0.0, 1.0)
+}
+
+// How hard a hand grips.
+fn gripOf(hands: controls.Hands, side: u8) -> f32 {
+    if side == u8(1) {
+        return hands.rightGrip
+    }
+    return hands.leftGrip
+}
+
+// Each hand to where its player holds it; a hand whose player is gone goes.
+fn reach(count: i32, hands: [Hand], targets: [physics3d.Target3D], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let player = hands[i].player
+        if !Hands.has(player) || !Seat.has(player) {
+            world.destroy(entities[i])
+        } else {
+            let at = place(Seat.get(player), hands[i].side, Hands.get(player))
+            targets[i] = physics3d.Target3D(at.x, at.y, at.z, 0.0, 0.0, 0.0, 0.0, true)
+        }
+        i = i + 1
+    }
+}
+
+// A hand that grips takes the first free block within reach, joined where
+// the hand is; one that opens lets its block go.
+fn grip(count: i32, hands: [Hand], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let player = hands[i].player
+        if Hands.has(player) {
+            let gripping = gripOf(Hands.get(player), hands[i].side) > GRIPPED
+            if hands[i].holding && !gripping {
+                let block = Block.get(hands[i].held)
+                Block.insert(hands[i].held, Block(false, block.holder, block.grips))
+                hands[i].holding = false
+            } else if !hands[i].holding && gripping {
+                take(hands, i, entities[i])
+            }
+        }
+        i = i + 1
+    }
+}
+
+// The first free block within reach of hand `i`, taken.
+fn take(hands: [Hand], i: i32, hand: world.Entity) {
+    let at = Pose3D.get(hand)
+    let first = physics3d.overlapSphere(BLOCK, at.x, at.y, at.z, REACH, u32(0))
+    let index = u32(0)
+    while index < first.count {
+        let found = physics3d.overlapSphere(BLOCK, at.x, at.y, at.z, REACH, index)
+        let block = Block.get(found.entity)
+        if !block.held {
+            let pose = Pose3D.get(found.entity)
+            let joint = world.create()
+            // Welded as they are: the hand never turns, so its +Z is the
+            // World's, which the block's frame names in its own.
+            Joint3D.insert(joint, physics3d.fixed(hand, found.entity, vec3(0.0, 0.0, 0.0),
+                                                  local(pose, at.x - pose.x, at.y - pose.y, at.z - pose.z),
+                                                  vec3(0.0, 0.0, 1.0), local(pose, f64(0.0), f64(0.0), f64(1.0))))
+            Grip.insert(joint, Grip(hand, found.entity))
+            Block.insert(found.entity, Block(true, hand, block.grips + u32(1)))
+            hands[i].holding = true
+            hands[i].held = found.entity
+            return
+        }
+        index = index + u32(1)
+    }
+}
+
+// A point `x`, `y`, `z` from a body's origin, in the body's own frame: turned
+// back by the inverse of its rotation (all noughts is none).
+fn local(pose: physics3d.Pose3D, x: f64, y: f64, z: f64) -> vec3 {
+    let px = f32(x)
+    let py = f32(y)
+    let pz = f32(z)
+    if pose.qx == 0.0 && pose.qy == 0.0 && pose.qz == 0.0 && pose.qw == 0.0 {
+        return vec3(px, py, pz)
+    }
+    // The conjugate's vector part: v + w t + u x t, with t = 2 (u x v).
+    let ux = -pose.qx
+    let uy = -pose.qy
+    let uz = -pose.qz
+    let tx = 2.0 * (uy * pz - uz * py)
+    let ty = 2.0 * (uz * px - ux * pz)
+    let tz = 2.0 * (ux * py - uy * px)
+    return vec3(px + pose.qw * tx + (uy * tz - uz * ty), py + pose.qw * ty + (uz * tx - ux * tz),
+                pz + pose.qw * tz + (ux * ty - uy * tx))
+}
+
+// A grip whose hand opens, or is gone, is let go the tick it does: its
+// joint goes, and a block a gone hand held is free.
+fn release(count: i32, grips: [Grip], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let hand = grips[i].hand
+        if !Hand.has(hand) {
+            let block = Block.get(grips[i].block)
+            Block.insert(grips[i].block, Block(false, block.holder, block.grips))
+            world.destroy(entities[i])
+        } else {
+            // Opened this tick: let go now, at the hand's speed.
+            let held = Hand.get(hand)
+            if !held.holding || !Hands.has(held.player) || gripOf(Hands.get(held.player), held.side) <= GRIPPED {
+                world.destroy(entities[i])
+            }
+        }
+        i = i + 1
+    }
+}
