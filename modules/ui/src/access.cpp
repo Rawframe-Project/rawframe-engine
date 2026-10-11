@@ -222,7 +222,8 @@ namespace {
 
 /// What a client asked for (D572): a press, a focus, or a field's edit
 /// (D613) kept for the UI's owner, whose input decides what they do; a
-/// scroll done by the tree.
+/// scroll, and a range stepped or set (D621), done by the tree, as a drag
+/// of the range is.
 bool act(Access::State& state, const muiAccessRequest& request) {
     const muiNodeId kId = muiNodeIdOfAccess(request.target);
     const Node kNode{.index1 = kId.index1, .generation = kId.generation};
@@ -254,8 +255,9 @@ bool act(Access::State& state, const muiAccessRequest& request) {
         return true;
     }
     const bool kScroll = request.action >= mui_actionScrollIntoView && request.action <= mui_actionSetScrollOffset;
+    const bool kRange = request.action >= mui_actionIncrement && request.action <= mui_actionSetValue;
     bool handled = false;
-    return kScroll && muiPerformAccessAction(state.context(), &request, &handled) == mui_success && handled;
+    return (kScroll || kRange) && muiPerformAccessAction(state.context(), &request, &handled) == mui_success && handled;
 }
 
 #if RAWFRAME_UI_ATSPI || RAWFRAME_UI_ANDROID || RAWFRAME_UI_UIA || RAWFRAME_UI_APPKIT || RAWFRAME_UI_UIKIT ||          \

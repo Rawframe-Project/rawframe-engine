@@ -101,6 +101,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "a11y: 2 push button [0-9]+ coins\na11y: 2 entry Write your sign\na11y: 2 slider Zoom\na11y: pressed [^\n]*: b true.*\"commandsTaken\":1,.*\"commandsSent\":1,")
+        # Stalls' zoom slider set by a screen reader (D621): read as "slider
+        # Zoom" at 100, set to 120 through AT-SPI's Value as the tree's own
+        # range does it, read back at 120, and the knob the present system
+        # places from it moved.
+        add_test(NAME client_slides_stalls_aloud
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_aloud.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
+                         games/tycoon/tycoon.game slide 120
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_slides_stalls_aloud PROPERTIES
+                             FIXTURES_REQUIRED tycoon_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "a11y: 2 slider Zoom\na11y: slid [^\n]*: done\na11y: the slider reads 120\n.*\"code\":\"ui_summary\"[^\n]*\"changed\":([2-9]|[1-9][0-9]+),")
         # Stalls' sign typed by a screen reader (D613): its entry, named by
         # its label's words and read as empty while it shows them, takes
         # text inserted through AT-SPI's EditableText as the field's own

@@ -8,9 +8,13 @@
 # through AT-SPI's Action interface (D572), and the client plays on a
 # while. Given `type <text>`, the text is inserted into the first entry
 # found as a screen reader types (D613), through AT-SPI's EditableText
-# interface, and the entry's text is read back. Then it is asked to stop.
+# interface, and the entry's text is read back. Given `slide <value>`, the
+# first slider found is set to the value as a screen reader sets one
+# (D621), through AT-SPI's Value interface, and its value is read back.
+# Then it is asked to stop.
 #
-# usage: read_aloud.sh <rawframe-server> <rawframe-client> <configuration> <game> [press | type <text>]
+# usage: read_aloud.sh <rawframe-server> <rawframe-client> <configuration> <game>
+#                      [press | type <text> | slide <value>]
 set -uo pipefail
 here="$(dirname "$0")"
 log="$(mktemp)"
@@ -43,6 +47,7 @@ name="$(busctl --address="$address" list --no-legend 2>/dev/null | awk '$3 == "r
 # button and the first entry kept.
 button=""
 entry=""
+slider=""
 walk() {
     local path="$1" depth="$2"
     local role label
@@ -56,6 +61,9 @@ walk() {
     fi
     if [ "$role" = "entry" ] && [ -z "$entry" ]; then
         entry="$path"
+    fi
+    if [ "$role" = "slider" ] && [ -z "$slider" ]; then
+        slider="$path"
     fi
     [ "$depth" -ge 8 ] && return
     local child
@@ -84,6 +92,14 @@ if [ "${5:-}" = type ] && [ -n "$entry" ]; then
     read="$(busctl --address="$address" call "$name" "$entry" org.a11y.atspi.Text GetText ii 0 "${count:-0}" 2>/dev/null |
         sed -n 's/^s "\(.*\)"$/\1/p')"
     echo "a11y: the entry reads $read"
+fi
+if [ "${5:-}" = slide ] && [ -n "$slider" ]; then
+    done="$(busctl --address="$address" set-property "$name" "$slider" org.a11y.atspi.Value CurrentValue d "$6" 2>&1)"
+    echo "a11y: slid $slider: ${done:-done}"
+    sleep 2
+    value="$(busctl --address="$address" get-property "$name" "$slider" org.a11y.atspi.Value CurrentValue 2>/dev/null |
+        sed -n 's/^d \(.*\)$/\1/p')"
+    echo "a11y: the slider reads $value"
 fi
 
 kill -INT "$(cat "$work/bots-1.pid" 2>/dev/null)" 2>/dev/null
