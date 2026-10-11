@@ -972,3 +972,45 @@ RAWFRAME_TEST(APopupIsPlacedBesideItsParent) {
     RAWFRAME_EXPECT(rig.frame() && kBoxAt(109, 59, 60, 30));
     RAWFRAME_EXPECT(rig.ui->statistics().leftOut == 0);
 }
+
+RAWFRAME_TEST(ADisabledNodeTakesNothing) {
+    Rig rig;
+    // A check box and a slider in the panel, both disabled.
+    rig.put(rig.player, kHudId, panel());
+    ui::NodeFields box{.widthOffset = 20, .heightOffset = 20, .shrink = 0, .press = 5};
+    box.check = 1;
+    box.disabled = 1;
+    rig.put(rig.player, kMeterId, box);
+    const world::EntityHandle kRow = *rig.world.create();
+    ui::NodeFields track{.widthOffset = 100, .heightOffset = 20, .shrink = 0, .order = 1, .press = 9};
+    track.range = 1;
+    track.rangeMaximum = 100;
+    track.rangeStep = 1;
+    track.rangeValue = 50;
+    track.disabled = 1;
+    rig.put(kRow, kRowId, track);
+    RAWFRAME_EXPECT(rig.frame());
+    // A press on either is the UI's but gives no press code, and changes
+    // neither; navigation finds nothing to reach.
+    RAWFRAME_EXPECT(rig.ui->press(115, 65) == std::optional<std::int64_t>{0} &&
+                    rig.ui->press(150, 65) == std::optional<std::int64_t>{0});
+    for (const float kX : {115.0F, 140.0F}) {
+        rig.ui->hoverAt(std::array<float, 2>{kX, 65});
+        rig.ui->pressAt(kX, 65);
+        rig.ui->hoverAt(std::array<float, 2>{kX + 30, 65});
+        rig.ui->release();
+        RAWFRAME_EXPECT(rig.frame());
+    }
+    RAWFRAME_EXPECT(rig.ui->valueOf(0, 5) == 0.0F && rig.ui->valueOf(0, 9) == 50.0F);
+    RAWFRAME_EXPECT(!rig.ui->enterNavigation());
+    RAWFRAME_EXPECT(rig.ui->statistics().toggled == 0 && rig.ui->statistics().ranged == 0);
+    // Enabled again, a click checks the box.
+    box.disabled = 0;
+    rig.put(rig.player, kMeterId, box);
+    RAWFRAME_EXPECT(rig.frame());
+    rig.ui->hoverAt(std::array<float, 2>{115, 65});
+    rig.ui->pressAt(115, 65);
+    rig.ui->release();
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->valueOf(0, 5) == 1.0F &&
+                    rig.ui->press(115, 65) == std::optional<std::int64_t>{5});
+}

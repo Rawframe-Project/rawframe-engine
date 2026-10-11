@@ -63,6 +63,26 @@
       ]
     },
     {
+      "styleId": "df422f7977a51520",
+      "name": "track",
+      "base": {
+        "fill": "#101820c0",
+        "radius": 8
+      },
+      "disabled": {
+        "fill": "#10182060"
+      },
+      "transitions": [
+        {
+          "parts": [
+            "fill"
+          ],
+          "seconds": 0.15,
+          "easing": "ease_out"
+        }
+      ]
+    },
+    {
       "styleId": "99679e6b9ac91a9b",
       "name": "switch",
       "base": {

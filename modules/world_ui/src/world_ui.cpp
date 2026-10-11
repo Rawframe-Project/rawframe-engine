@@ -89,7 +89,7 @@ ui::Look lookOf(const ui::NodeFields& node) noexcept {
 /// constants. Nought passes presses through to its children and past them.
 std::optional<ui::Interaction> interactionOf(const ui::NodeFields& node) noexcept {
     if (node.hit > 2 || node.layer > 3 || node.edit > 3 || node.range > 2 || node.thumb > 1 || node.check > 3 ||
-        node.checked > 1 || node.popup > 5) {
+        node.checked > 1 || node.popup > 5 || node.disabled > 1) {
         return std::nullopt;
     }
     constexpr std::array<ui::Interaction::Hits, 3> kHits = {
@@ -106,8 +106,8 @@ std::optional<ui::Interaction> interactionOf(const ui::NodeFields& node) noexcep
     return ui::Interaction{.hits = kField || kScrolls ? ui::Interaction::Hits::Itself : kHits[node.hit],
                            .passThrough = node.hit == 0 && !kField,
                            .layer = static_cast<ui::Interaction::Layer>(node.layer),
-                           .focusable = node.edit != 0 || node.press != 0,
-                           .drags = node.range != 0};
+                           .focusable = (node.edit != 0 || node.press != 0) && node.disabled == 0,
+                           .drags = node.range != 0 && node.disabled == 0};
 }
 
 /// What `node` is to assistive technology, from what it does (D571): a
@@ -160,10 +160,6 @@ ui::Node nodeOfKey(std::uint64_t key) noexcept {
     return ui::Node{.index1 = static_cast<std::uint32_t>(key >> 32U), .generation = static_cast<std::uint32_t>(key)};
 }
 
-std::uint64_t keyOf(ui::Node node) noexcept {
-    return (std::uint64_t{node.index1} << 32U) | node.generation;
-}
-
 std::uint64_t keyOf(world::EntityHandle entity) noexcept {
     return (std::uint64_t{entity.slot} << 32U) | entity.generation;
 }
@@ -203,6 +199,10 @@ std::optional<std::string_view> wordsOf(const Typed& typed) noexcept {
 
 /// How a field's text is edited: its kind and room, and its caret and
 /// selection in its text's color.
+std::uint64_t keyOf(ui::Node node) noexcept {
+    return (std::uint64_t{node.index1} << 32U) | node.generation;
+}
+
 ui::EditSettings editSettingsOf(const ui::NodeFields& node) noexcept {
     const std::uint32_t kColor = node.textColor != 0 ? node.textColor : 0x000000FF;
     return ui::EditSettings{.multiline = node.edit == 3,

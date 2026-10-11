@@ -54,7 +54,8 @@ constexpr std::string_view kDocument = R"({
       "rangeMinimum": -5,
       "rangeMaximum": 500000,
       "rangeValue": 2.5,
-      "thumb": true
+      "thumb": true,
+      "disabled": true
     }
   ]
 }
@@ -112,7 +113,7 @@ RAWFRAME_TEST(AUiDocumentIsReadAsATreeOfComponents) {
     const NodeFields& kBanner = kNodes[3].fields;
     RAWFRAME_EXPECT(kBanner.layer == 3 && kBanner.range == 2 && kBanner.rangeMinimum == -5 &&
                     kBanner.rangeMaximum == 500000 && kBanner.rangeStep == 0 && kBanner.rangeValue == 2.5F &&
-                    kBanner.thumb == 1);
+                    kBanner.thumb == 1 && kBanner.disabled == 1);
     // Every field left out is nought, as presentation attaches a node.
     NodeFields banner;
     banner.layer = 3;
@@ -121,6 +122,7 @@ RAWFRAME_TEST(AUiDocumentIsReadAsATreeOfComponents) {
     banner.rangeMaximum = 500000;
     banner.rangeValue = 2.5F;
     banner.thumb = 1;
+    banner.disabled = 1;
     RAWFRAME_EXPECT(std::memcmp(&banner, &kNodes[3].fields, sizeof banner) == 0);
 }
 
@@ -150,7 +152,9 @@ RAWFRAME_TEST(AUiDocumentIsRefusedWhereItIsWrong) {
     RAWFRAME_EXPECT(refused(with("\"padding\": 6", "\"paddings\": 6"), "nodes[0]"));
     RAWFRAME_EXPECT(refused(
         with("\"padding\": 6,\n      \"absolute\": true", "\"absolute\": true,\n      \"padding\": 6"), "nodes[0]"));
-    RAWFRAME_EXPECT(refused(with("\"thumb\": true", "\"thumb\": true,\n      \"children\": []"), "nodes[1].children"));
+    RAWFRAME_EXPECT(
+        refused(with("\"disabled\": true", "\"disabled\": true,\n      \"children\": []"), "nodes[1].children"));
+    RAWFRAME_EXPECT(refused(with("\"disabled\": true", "\"disabled\": false"), "disabled"));
     // Limits: nodes, and nodes inside nodes.
     RAWFRAME_EXPECT(refused(std::string{kDocument}, "nodes[1]", DocumentLimits{.maximumNodes = 3}));
     RAWFRAME_EXPECT(refused(std::string{kDocument}, "children[0]", DocumentLimits{.maximumDepth = 1}));

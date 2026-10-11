@@ -108,6 +108,9 @@ struct Placed {
 /// selection in its text's color.
 ui::EditSettings editSettingsOf(const ui::NodeFields& node) noexcept;
 
+/// A node by one number: its slot, then its generation.
+std::uint64_t keyOf(ui::Node node) noexcept;
+
 struct WorldUi::State {
     UiSettings settings;
     std::unique_ptr<ui::Tree> tree;

@@ -113,6 +113,7 @@ void WorldUi::State::giveStates() {
             const ui::States kNow{.focused = focus.has_value() && focus->entry == &entry,
                                   .hovered = &entry == hovered,
                                   .pressed = &entry == pressed,
+                                  .disabled = entry.value.disabled != 0,
                                   .checked = entry.checkedNow};
             if (entry.node.has_value() && kNow != entry.states && tree->setStates(*entry.node, kNow).has_value()) {
                 entry.states = kNow;
@@ -167,7 +168,9 @@ std::vector<WorldUi::State::Reachable> WorldUi::State::reachable(bool fields) {
         bool holds = false;
         for (auto& [kKey, entry] : view.entries) {
             holds = holds || (focus.has_value() && &entry == focus->entry);
-            if (!entry.node.has_value() || !(entry.editable || (!fields && entry.value.press != 0))) {
+            // A disabled node is passed by (D624).
+            if (!entry.node.has_value() || entry.value.disabled != 0 ||
+                !(entry.editable || (!fields && entry.value.press != 0))) {
                 continue;
             }
             const auto kPlace = tree->placeOf(window, *entry.node);
@@ -235,7 +238,8 @@ std::optional<std::int64_t> WorldUi::press(float x, float y) const {
     for (const ViewState& kView : state.views) {
         for (const auto& [kKey, kEntry] : kView.entries) {
             if (kEntry.node == kHit->node) {
-                return kEntry.value.press;
+                // A disabled node blocks and says nothing (D624).
+                return kEntry.value.disabled != 0 ? 0 : kEntry.value.press;
             }
         }
     }
@@ -255,6 +259,29 @@ void WorldUi::pressAt(float x, float y) {
     State& state = *state_;
     const auto kHit = state.tree->hit(state.window, x, y);
     Entry* entry = kHit.has_value() && kHit->node.has_value() ? state.entryOf(*kHit->node) : nullptr;
+    // A disabled node takes it and does nothing with it (D624), nor does
+    // the thumb of a disabled range.
+    const auto kDisabled = [&state](const Entry& pressed) {
+        if (pressed.value.disabled != 0) {
+            return true;
+        }
+        if (pressed.value.thumb == 0) {
+            return false;
+        }
+        for (const ViewState& kView : state.views) {
+            for (const auto& [kKey, kOther] : kView.entries) {
+                if (kOther.node.has_value() && keyOf(*kOther.node) == pressed.parent) {
+                    return kOther.value.disabled != 0;
+                }
+            }
+        }
+        return false;
+    };
+    if (entry != nullptr && kDisabled(*entry)) {
+        state.letGo();
+        state.pressed = nullptr;
+        return;
+    }
     state.pressed = entry;
     // A range, or its thumb, takes the press: paged toward it, then
     // dragged as the pointer moves until it is let go (D621).
@@ -387,7 +414,8 @@ bool WorldUi::navigate(view::NavigationMove move) {
     State& state = *state_;
     // A slider holding focus takes the moves along its axis, a step toward
     // each, as ARIA's slider does; the others move focus on (D621).
-    if (state.focus.has_value() && state.focus->entry->node.has_value() && state.focus->entry->value.range != 0) {
+    if (state.focus.has_value() && state.focus->entry->node.has_value() && state.focus->entry->value.range != 0 &&
+        state.focus->entry->value.disabled == 0) {
         using Move = view::NavigationMove;
         const bool kVertical = state.focus->entry->value.range == 2;
         const bool kAlong =
@@ -408,6 +436,9 @@ std::optional<std::int64_t> WorldUi::activate() {
         return std::nullopt;
     }
     Entry& entry = *state.focus->entry;
+    if (entry.value.disabled != 0) {
+        return std::nullopt;
+    }
     if (entry.editable) {
         state.focusOn(entry, true, state.focus->navigated);
         static_cast<void>(state.focus->edit->press(ui::EditKey::End, {}));

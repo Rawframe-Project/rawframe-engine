@@ -117,6 +117,12 @@ module rawframe.ui
 // over all. A game shows one while it wants it, as a tooltip while
 // `ui.hovered()` is its parent's press, and empties it otherwise. A popup
 // with words and nothing to press reads as a tooltip.
+//
+// A node whose `disabled` is one takes nothing (D624): a press on it is
+// the UI's and reaches no game action, but gives no press code, focuses
+// no field, checks nothing, and moves no slider; navigation passes it by.
+// Its style class's `disabled` look shows it, over every other state's,
+// and assistive technology reads it as disabled.
 struct Node {
     widthScale: f32
     widthOffset: f32
@@ -178,6 +184,7 @@ struct Node {
     check: u32
     checked: u32
     popup: u32
+    disabled: u32
 }
 
 // A node's `scroll`.
