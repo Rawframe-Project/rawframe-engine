@@ -166,22 +166,26 @@ bool writeNative(const Exported& exported, const std::array<fs::path, 4>& progra
                                 "network.quic.self_signed = true\nnetwork.quic.fingerprint_file = fingerprint\n"
                                 "replication.endpoint = 127.0.0.1:" +
                                 exported.port + "\n";
-    const std::string kClient = "# The player, from this window, pinned to the server's identity, drawn on\n"
-                                "# this machine's graphics device (a software one where it has none) and\n"
-                                "# heard on its sound device.\n"
-                                "host.iteration_rate = 120\nbots.player = true\nrender.device = any\n"
-                                "audio.play = device\n"
-                                "# Its view drawn at fewer pixels, down to half each way, while the device\n"
-                                "# cannot keep up (D533).\n"
-                                "scene.render_scale_least_percent = 50\n"
-                                "# No picture read back: that is for tests (D534).\n"
-                                "render.read_every = 0\n"
-                                "# The player's settings kept beside it between runs (D626).\n"
-                                "ui.kept = settings.json\nwindow.title = " +
-                                exported.title + "\n" + kContent +
-                                "kest.plan_only = true\nnetwork.quic.pin_file = fingerprint\n"
-                                "bots.endpoint = 127.0.0.1:" +
-                                exported.port + "\n";
+    const std::string kClient =
+        "# The player, from this window, pinned to the server's identity, drawn on\n"
+        "# this machine's graphics device (a software one where it has none) and\n"
+        "# heard on its sound device.\n"
+        "host.iteration_rate = 120\nbots.player = true\nrender.device = any\n"
+        "audio.play = device\n"
+        "# Its view drawn at fewer pixels, down to half each way, while the device\n"
+        "# cannot keep up (D533).\n"
+        "scene.render_scale_least_percent = 50\n"
+        "# No picture read back: that is for tests (D534).\n"
+        "render.read_every = 0\n"
+        "# The player's settings kept beside it between runs (D626).\n"
+        "ui.kept = settings.json\nwindow.title = " +
+        exported.title + "\n" + kContent +
+        "kest.plan_only = true\nnetwork.quic.pin_file = fingerprint\n"
+        "bots.endpoint = 127.0.0.1:" +
+        exported.port + "\n" +
+        (exported.headset ? "# Shown on a headset where the system's OpenXR runtime has one, played\n"
+                            "# flat where it has none (D658).\nxr.headset = true\n"
+                          : std::string{});
     const std::string kPlay =
         "# Run rawframe-play" + kSuffix +
         " to play: it starts the server, then the client.\n"

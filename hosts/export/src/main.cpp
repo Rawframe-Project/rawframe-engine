@@ -264,7 +264,8 @@ std::string bindingText(const rawframe::input::Binding& binding) {
 
 /// What a player of the exported game reads first: how to start it, and
 /// each action of the game's `actions` file with its default bindings.
-std::string howToPlay(const std::filesystem::path& game, const std::string& gameFile, const std::string& suffix) {
+std::string
+howToPlay(const std::filesystem::path& game, const std::string& gameFile, const std::string& suffix, bool headset) {
     std::string text = "To play, run rawframe-play" + suffix +
                        " in this folder: it starts the game's server, then the game in a window.\n"
                        "Closing the window ends both. The server's and the game's records are\n"
@@ -273,6 +274,11 @@ std::string howToPlay(const std::filesystem::path& game, const std::string& game
                        "client.conf starts it there. Where the graphics device cannot keep up, the\n"
                        "picture is drawn at fewer pixels, down to half each way;\n"
                        "scene.render_scale_least_percent = 100 in client.conf keeps every one.\n";
+    if (headset) {
+        text += "\nThe game is shown on a VR headset where the system's OpenXR runtime has one\n"
+                "(SteamVR, Meta's, or Monado made active), and played flat in the window\n"
+                "where it has none; xr.headset = false in client.conf always plays it flat.\n";
+    }
     std::ifstream description{game / gameFile};
     std::string line;
     while (std::getline(description, line)) {
@@ -408,7 +414,8 @@ int usage() {
                "                       [--android-client <library> --packager <script> [--package <name>]\n"
                "                        [--android-keystore <file> --android-key-alias <alias>]]\n"
                "                       [--target ios --address <host> [--ios-client <application>]]\n"
-               "                       [--follow <origin> [--channel <channel>]] [--title <title>]\n",
+               "                       [--follow <origin> [--channel <channel>]] [--title <title>]\n"
+               "                       [--headset true]\n",
                stderr);
     return 2;
 }
@@ -446,6 +453,7 @@ int main(int argc, char** argv) {
     std::optional<std::string> follow;
     std::string channel = "stable";
     std::string title = kGame.filename().string();
+    std::optional<bool> headset;
     fs::path toolDirectory = kSelf.parent_path();
     std::map<std::string, fs::path, std::less<>> tools;
     for (int at = 3; at + 1 < argc; at += 2) {
@@ -489,6 +497,8 @@ int main(int argc, char** argv) {
             channel = kValue;
         } else if (kOption == "--title") {
             title = kValue;
+        } else if (kOption == "--headset" && (kValue == "true" || kValue == "false")) {
+            headset = kValue == "true";
         } else if (kOption == "--cook" || kOption == "--build" || kOption == "--server" || kOption == "--client" ||
                    kOption == "--play" || kOption == "--install" || kOption == "--web-client" ||
                    kOption == "--maul-window" || kOption == "--maul-rhi" || kOption == "--maul-ui" ||
@@ -513,7 +523,8 @@ int main(int argc, char** argv) {
         (iosClient.has_value() && !kIos) ||
         (kPackaged && (!kAndroid || !androidClient.has_value() || !packager.has_value())) ||
         keystore.has_value() != keyAlias.has_value() || (keystore.has_value() && !androidClient.has_value()) ||
-        !rawframe::release::channelNamed(channel).has_value() || !titleLike(title)) {
+        !rawframe::release::channelNamed(channel).has_value() || !titleLike(title) ||
+        (headset.value_or(false) && target != Target::Native)) {
         return usage();
     }
     const auto kTool = [&](const char* name) {
@@ -636,7 +647,8 @@ int main(int argc, char** argv) {
                              .gameResource = kGameResource,
                              .port = *port,
                              .title = title,
-                             .suffix = kSuffix};
+                             .suffix = kSuffix,
+                             .headset = headset.value_or(false)};
     std::vector<std::string> written = std::move(installed);
     const bool kWritten =
         kAndroid
@@ -706,7 +718,7 @@ int main(int argc, char** argv) {
     }
     // How to play it, for a native folder's player.
     if (target == Target::Native) {
-        if (!writeText(kOutput / "README.txt", howToPlay(kGame, gameFile, kSuffix))) {
+        if (!writeText(kOutput / "README.txt", howToPlay(kGame, gameFile, kSuffix, headset.value_or(false)))) {
             std::fputs("rawframe-export: README.txt cannot be written\n", stderr);
             return 1;
         }

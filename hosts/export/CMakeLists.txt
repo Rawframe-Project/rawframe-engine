@@ -34,6 +34,20 @@ if(RAWFRAME_BUILD_TESTS)
                          TIMEOUT 300
                          PASS_REGULAR_EXPRESSION
                          "ios export: \"target\":\"ios\", pinned to the server's identity: yes, admitted 1, application <string>local.runners</string> carrying the game")
+    # Reach exported to be shown on a headset (D658): its client asks for
+    # one, its README says so, and its server admits a bot from its folder;
+    # the web is refused one.
+    if(TARGET rawframe_host_client)
+        add_test(NAME reach_exported_headset
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/exported_headset.sh
+                         $<TARGET_FILE:rawframe_host_export_tool> $<TARGET_FILE:rawframe_host_cook_tool>
+                         $<TARGET_FILE:rawframe_host_build_tool> $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> $<TARGET_FILE:rawframe_host_play_tool>
+                         $<TARGET_FILE:rawframe_host_bots> games/reach ${CMAKE_CURRENT_BINARY_DIR}/reach
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(reach_exported_headset PROPERTIES PASS_REGULAR_EXPRESSION
+                             "headset export: asked yes, told yes, web refused, admitted 1")
+    endif()
     # Stalls exported under a studio's key and played from its folder with
     # the real client in a window (D396): the key set pinned and the secret
     # left out, its font read from the folder's library, the player

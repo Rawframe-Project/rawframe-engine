@@ -38,6 +38,9 @@ struct Exported {
     std::string title;
     /// The programs' suffix on this system (`.exe` on Windows).
     std::string suffix;
+    /// Whether a native client is shown on a headset where one answers
+    /// (D658).
+    bool headset = false;
 };
 
 /// Keeps the Composition record at `record` in `library`, under its digest,

@@ -296,11 +296,15 @@ jobs:
         run: |
           set -euo pipefail
           tree=out/windows-development
-          for game in plaza tycoon runners; do
+          for game in plaza tycoon runners reach; do
+            # Reach is shown on a headset where the machine has one (D658).
+            headset=false
+            [ "$game" = reach ] && headset=true
             "$tree/hosts/export/rawframe-export.exe" "games/$game" "played/$game" \
               --cook "$tree/hosts/cook/rawframe-cook.exe" --build "$tree/hosts/build/rawframe-build.exe" \
               --server "$tree/hosts/dedicated_server/rawframe-server.exe" \
-              --client "$tree/hosts/client/rawframe-client.exe" --play "$tree/launcher/play/rawframe-play.exe"
+              --client "$tree/hosts/client/rawframe-client.exe" --play "$tree/launcher/play/rawframe-play.exe" \
+              --headset "$headset"
             for program in "played/$game"/*.exe; do
               for dll in $(llvm-objdump -p "$program" | sed -n 's/^ *DLL Name: //p' | tr -d '\r'); do
                 [ -e "played/$game/$dll" ] && continue
@@ -321,7 +325,7 @@ jobs:
         run: |
           set -uo pipefail
           failed=0
-          for game in plaza tycoon runners; do
+          for game in plaza tycoon runners reach; do
             cp -r "played/$game" "$RUNNER_TEMP/$game"
             printf 'host.maximum_iterations = 600\n' >>"$RUNNER_TEMP/$game/client.conf"
             # The plaza starts on the whole screen (D523).
