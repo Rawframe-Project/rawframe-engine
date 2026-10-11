@@ -1,3 +1,4 @@
+#include "cameras.h"
 #include "loading.h"
 #include "pictures.h"
 #include "rawframe/composition/composition.h"
@@ -47,11 +48,6 @@ constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        view::kPreviewCamera.name,
                                        world_animation::kPresentedPoses.name,
                                        view::kHeadsetEyes.name};
-
-/// A client's view without a camera of its own: behind its player and
-/// above, looking a little down, in a sunny day's exposure.
-constexpr Camera kDefaultCamera{
-    .offsetX = 0, .offsetY = 3, .offsetZ = 6, .yaw = 0, .pitch = -0.35F, .fovY = 1, .near = 0.1F, .exposure = 15};
 
 /// Draws one client's mirrored World in 3D each frame through its player's
 /// camera: the extract stage in `presentation_extract`, the queue stage in
@@ -147,7 +143,7 @@ public:
             regions_.push_back(world_kest::GameRegion{});
             regionFrames_.resize(1);
         }
-        cameraComponents_ = game->cameras;
+        cameras_ = GameCameras(*game);
         viewComponent_ = game->view;
         for (const world_kest::GameRenderTexture& kTexture : files->description().renderTextures) {
             textureViews_.push_back(
@@ -157,15 +153,6 @@ public:
                             .onDemand = kTexture.update == world_kest::RenderTextureUpdate::OnDemand});
         }
         textureFrames_.resize(textureViews_.size());
-        autoExposureComponent_ = game->autoExposure;
-        gradingComponent_ = game->grading;
-        occlusionComponent_ = game->occlusion;
-        bloomComponent_ = game->bloom;
-        reflectionsComponent_ = game->reflections;
-        motionBlurComponent_ = game->motionBlur;
-        depthOfFieldComponent_ = game->depthOfField;
-        contactShadowsComponent_ = game->contactShadows;
-        postProcessComponents_ = game->postProcesses;
         gameMeshes_ = game->meshes.size();
         // The game's materials from its cooked content, surfaces and post
         // processes (D349).
@@ -450,7 +437,7 @@ private:
         if (kView.owned.isNull() || !kView.world->alive(kView.owned)) {
             return;
         }
-        if (readCamera(*kView.world, kView.owned, camera_)) {
+        if (cameras_.read(*kView.world, kView.owned, camera_)) {
             ++viewed_;
         }
         // Seen from where the preview looks, exposed as the player's camera
@@ -579,7 +566,7 @@ private:
             }
             each.scene->extract(*kView.world, posesOf(*kView.world));
             if (!kView.owned.isNull() && kView.world->alive(kView.owned)) {
-                static_cast<void>(readCamera(*kView.world, kView.owned, each.camera));
+                static_cast<void>(cameras_.read(*kView.world, kView.owned, each.camera));
             }
             each.extracted = true;
         }
@@ -644,65 +631,6 @@ private:
                 views_->forgetPerspective(at + 1);
             }
         }
-    }
-
-    /// The camera on `entity` and its effects read into `camera`, the eye
-    /// placed by the entity's pose, or in the World where it is fixed
-    /// (D520); whether it has a camera (else it looks
-    /// as the default does).
-    bool readCamera(world::World& world, world::EntityHandle entity, SceneCamera& camera) const {
-        Camera view = kDefaultCamera;
-        bool found = false;
-        // The first of the game's camera components the entity has
-        // (D361: a player's and its views' may differ).
-        for (const schema::ComponentTypeId kComponent : cameraComponents_) {
-            if (const auto kCamera = world.registry().find(kComponent)) {
-                if (const auto* placed = static_cast<const Camera*>(world.getErased(entity, *kCamera))) {
-                    view = *placed;
-                    found = true;
-                    break;
-                }
-            }
-        }
-        camera.yaw = view.yaw;
-        camera.pitch = view.pitch;
-        camera.fovY = view.fovY;
-        camera.near = view.near;
-        camera.exposure = view.exposure;
-        camera.tonemapper = view.tonemapper;
-        const auto kRead = [&world, entity]<typename T>(const std::optional<schema::ComponentTypeId>& component,
-                                                        std::optional<T>& into) {
-            into.reset();
-            if (component.has_value()) {
-                if (const auto kId = world.registry().find(*component)) {
-                    if (const auto* asked = static_cast<const T*>(world.getErased(entity, *kId))) {
-                        into = *asked;
-                    }
-                }
-            }
-        };
-        kRead(gradingComponent_, camera.grading);
-        kRead(reflectionsComponent_, camera.reflections);
-        kRead(motionBlurComponent_, camera.motionBlur);
-        kRead(depthOfFieldComponent_, camera.depthOfField);
-        kRead(contactShadowsComponent_, camera.contactShadows);
-        kRead(bloomComponent_, camera.bloom);
-        kRead(occlusionComponent_, camera.occlusion);
-        kRead(autoExposureComponent_, camera.metering);
-        // Its post processes, in the game's order (D349).
-        camera.postProcesses.clear();
-        for (const schema::ComponentTypeId kComponent : postProcessComponents_) {
-            if (const auto kProcess = world.registry().find(kComponent)) {
-                if (const auto* asked = static_cast<const PostProcess*>(world.getErased(entity, *kProcess))) {
-                    camera.postProcesses.push_back(*asked);
-                }
-            }
-        }
-        const auto kPose = world.registry().key<physics3d::Pose3D>();
-        if (const auto kEye = eyeOf(view, kPose ? world.get(entity, *kPose) : nullptr)) {
-            camera.eye = *kEye;
-        }
-        return found;
     }
 
     /// Each render texture's view (D361): of the entities whose view names
@@ -787,7 +715,7 @@ private:
                 each.scene = std::move(*made);
             }
             each.scene->extract(world, posesOf(world));
-            static_cast<void>(readCamera(world, *each.entity, each.camera));
+            static_cast<void>(cameras_.read(world, *each.entity, each.camera));
         }
     }
 
@@ -832,7 +760,7 @@ private:
     SceneSettings settings_;
     ShadowSettings shadows_;
     SceneCamera camera_;
-    std::vector<schema::ComponentTypeId> cameraComponents_;
+    GameCameras cameras_;
     /// Split-screen (D362): the layout's regions, the local players after
     /// the first (whose are `scene_` and `camera_`), each region's frame,
     /// and the frames queued for the others.
@@ -896,15 +824,6 @@ private:
     std::uint64_t viewsMissed_ = 0;
     std::uint64_t viewsLeftOut_ = 0;
     std::uint64_t viewsRefused_ = 0;
-    std::optional<schema::ComponentTypeId> autoExposureComponent_;
-    std::optional<schema::ComponentTypeId> gradingComponent_;
-    std::optional<schema::ComponentTypeId> occlusionComponent_;
-    std::optional<schema::ComponentTypeId> bloomComponent_;
-    std::optional<schema::ComponentTypeId> reflectionsComponent_;
-    std::optional<schema::ComponentTypeId> motionBlurComponent_;
-    std::optional<schema::ComponentTypeId> depthOfFieldComponent_;
-    std::optional<schema::ComponentTypeId> contactShadowsComponent_;
-    std::vector<schema::ComponentTypeId> postProcessComponents_;
     std::optional<execution::MonotonicInstant> presented_;
     std::size_t gameMeshes_ = 0;
     /// Frames seen through the player's own camera.
