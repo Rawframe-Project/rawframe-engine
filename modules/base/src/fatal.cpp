@@ -213,6 +213,8 @@ void defaultFatalHandler(const FatalRecord& record) noexcept {
     writeStandardError(std::string_view{text.storage.data(), text.used});
 }
 
+#if !defined(__wasm__)
+
 /// The return addresses a crash record holds at most.
 constexpr std::size_t kCrashFrames = 32;
 
@@ -249,6 +251,8 @@ void writeCrashRecord(std::string_view what,
     text.append("\n", 1);
     writeStandardError(std::string_view{text.storage.data(), text.used});
 }
+
+#endif
 
 #if !defined(_WIN32) && !defined(__wasm__)
 

@@ -380,6 +380,9 @@ if(RAWFRAME_BUILD_TESTS)
                                  "\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+.*\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"framesOnPanel\":[1-9][0-9]+,[^\n]*\"glyphRuns\":[1-9][0-9]+,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,\"framesPanelSubmitted\":[1-9][0-9]+,[^\n]*\"failed\":false")
         endif()
         if(RAWFRAME_ARENA_HEADSET)
+            # Drawn flat where no runtime answers: any frame shows it, however
+            # few a loaded machine draws (nine in a check rebuilding every
+            # tree, D617).
             add_test(NAME plaza_headset_absent
                      COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
                              $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf
@@ -389,7 +392,7 @@ if(RAWFRAME_BUILD_TESTS)
                                  ENVIRONMENT "XR_RUNTIME_JSON=${CMAKE_CURRENT_BINARY_DIR}/no_runtime.json"
                                  SKIP_REGULAR_EXPRESSION "skip: no device"
                                  PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"xr_unavailable\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"frame_summary\"[^\n]*\"width\":320,\"height\":180,[^\n]*\"headsetFrames\":0")
+                                 "\"code\":\"xr_unavailable\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,.*\"code\":\"frame_summary\"[^\n]*\"width\":320,\"height\":180,[^\n]*\"headsetFrames\":0")
         endif()
         # A view too large for its device drawn at a falling render scale
         # (D533): the scale changes to one lower than the whole, and the run
