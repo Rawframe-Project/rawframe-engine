@@ -160,4 +160,24 @@ result::Result<Value> Styling::answered(const authoring::SessionRecord& record, 
     return made;
 }
 
+result::Result<Value> Styling::history(const authoring::SessionRecord& record) {
+    bool reopened = false;
+    RAWFRAME_TRY_ASSIGN(Open * open, this->open(record.scene, reopened));
+    const authoring::AuthoredStyles& styles = *open->document;
+    Value entries = Value::array();
+    for (std::size_t at = 0; at < styles.undoable() + styles.redoable(); ++at) {
+        const std::vector<authoring::StyleDelta>& kJournal = styles.journalAt(at);
+        Value entry = Value::object();
+        entry.add("summary", Value::string(authoring::summaryOf(kJournal)));
+        entry.add("deltas", Value::integer(static_cast<std::int64_t>(kJournal.size())));
+        entry.add("applied", Value::boolean(at < styles.undoable()));
+        entries.push(std::move(entry));
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.history"));
+    made.add("reopened", Value::boolean(reopened));
+    made.add("entries", std::move(entries));
+    return made;
+}
+
 } // namespace rawframe::authoring_session

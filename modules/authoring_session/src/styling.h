@@ -4,8 +4,9 @@
 // opened as records name them and kept open with their histories as its
 // scenes are, reopened when their file changes under it, and written by
 // rename when a change is kept. A record names one where it would name a
-// scene: apply runs `styles.set_part`, read `styles.read_sheet`, and undo
-// and redo step its history. A played game follows the file (D634).
+// scene: apply runs its operations, read `styles.read_sheet`, undo and
+// redo step its history, and history lists it (D638). A played game
+// follows the file (D634).
 
 #include "rawframe/authoring/authored_styles.h"
 #include "rawframe/authoring/session.h"
@@ -34,6 +35,8 @@ public:
     [[nodiscard]] result::Result<document::Value>
     stepped(const authoring::SessionRecord& record, bool undo, bool& failed);
     [[nodiscard]] result::Result<document::Value> answered(const authoring::SessionRecord& record, bool& failed);
+    /// The sheet's history, each entry summed up, as a scene's is (D638).
+    [[nodiscard]] result::Result<document::Value> history(const authoring::SessionRecord& record);
 
 private:
     struct Open {

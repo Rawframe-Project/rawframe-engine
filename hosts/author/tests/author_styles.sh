@@ -4,6 +4,7 @@
 # look made by one atomic request, written to the file; undone back to
 # its very bytes and redone; a value the sheet does not read and a scene's
 # operation refused with the file untouched; and a stale request refused.
+# Classes made, renamed, and removed, and the sheet's history (D638).
 #
 # usage: author_styles.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -59,5 +60,23 @@ cp "$work/root/tycoon.styles" "$work/redone.styles"
 reply 5 | grep -q '"code":"validation_failed".*"message":"the style sheet does not read: a color is # and 8 lowercase hexadecimal digits, #rrggbbaa at $.styles\[0\].base.fill"'
 reply 6 | grep -q '"code":"validation_failed".*"message":"the operation changes a scene, not a style sheet"'
 reply 7 | grep -q '"code":"target_stale"'
+cmp "$work/root/tycoon.styles" "$work/redone.styles"
+
+# Classes made, renamed, and removed (D638), the sheet's history listed,
+# and undone back to the bytes before.
+tip='{"operation":"styles.create_class","style":"00000000000000a1","name":"tip","place":0}'
+renamed='{"operation":"styles.rename_class","style":"00000000000000a1","name":"tooltip"}'
+removed='{"operation":"styles.remove_class","style":"'$button'"}'
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.apply","id":2,"scene":"tycoon.styles","request":'"$(request "$tip,$renamed")"'}'
+    echo '{"kind":"authoring.apply","id":3,"scene":"tycoon.styles","request":'"$(request "$removed")"'}'
+    echo '{"kind":"authoring.history","id":4,"scene":"tycoon.styles"}'
+    echo '{"kind":"authoring.undo","id":5,"scene":"tycoon.styles"}'
+    echo '{"kind":"authoring.undo","id":6,"scene":"tycoon.styles"}'
+} | "$author" session "$game" "$work/root" >"$work/replies"
+reply 2 | grep -q '"results":\[{"deltas":2}\]'
+reply 3 | grep -q '"written":true'
+reply 4 | grep -q '"entries":\[{"summary":"create class tip and 1 more","deltas":2,"applied":true},{"summary":"delete class button","deltas":1,"applied":true}\]'
 cmp "$work/root/tycoon.styles" "$work/redone.styles"
 echo "authored stalls' styles in a session"

@@ -317,6 +317,9 @@ private:
     /// how many deltas it holds and whether it is applied (undoable) or
     /// undone (redoable). A read: nothing staged, nothing written.
     result::Result<Value> historyOf(const authoring::SessionRecord& record) {
+        if (Styling::names(record.scene)) {
+            return styling_.history(record);
+        }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
         const authoring::AuthoredScene& scene = *open->document;
