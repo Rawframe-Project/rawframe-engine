@@ -184,10 +184,20 @@ struct Machine::State {
     std::uint64_t stops = 0;
     /// Whether this machine wrote the program's breakpoints (D460).
     bool breaking = false;
-    /// The machine's own breakpoint at the instruction after one it stopped
-    /// at, by which it steps past that one (D630); none while none is
-    /// written.
-    std::optional<Program::State::Written> stepping;
+    /// The machine's own breakpoints, written to carry on from a stop and
+    /// taken out at the next: at the instruction after it, which steps past
+    /// a breakpoint (D630), and at the first instruction of every line a
+    /// step may stop at (D632).
+    std::vector<Program::State::Written> temporary;
+    /// A step asked for from the handler (D632): how, and where the machine
+    /// stood, its body, line, and depth.
+    struct Stepping {
+        Step how = Step::Over;
+        std::int32_t in = -1;
+        std::uint32_t line = 0;
+        std::uint32_t deep = 0;
+    };
+    std::optional<Stepping> stepping;
 
     [[nodiscard]] Program::State& built() const noexcept {
         return program->state();
@@ -204,13 +214,13 @@ struct Machine::State {
         }
     }
 
-    /// Every breakpoint taken out to carry on, written again, and the step
-    /// past one taken out.
+    /// The machine's own breakpoints taken out, and every breakpoint asked
+    /// for that was taken out to carry on written again.
     void putBack() {
-        if (stepping.has_value()) {
-            built().write(runtime, *stepping, false);
-            stepping.reset();
+        for (const Program::State::Written& one : temporary) {
+            built().write(runtime, one, false);
         }
+        temporary.clear();
         for (Program::State::Written& one : built().written) {
             if (one.out) {
                 built().put(runtime, one, true);
@@ -225,37 +235,122 @@ struct Machine::State {
         });
     }
 
-    /// A stop (D630): the step past the breakpoint before it is done, so
-    /// that one is written again; whether this stop is that step's, which
-    /// no one is told of.
+    /// A breakpoint of the machine's own at `at` in `entry`, where none is.
+    void writeTemporary(std::int32_t entry, std::int64_t at) {
+        std::uint32_t count = 0;
+        const std::uint8_t* const kCode = kest_code_of(runtime, entry, &count);
+        if (kCode == nullptr || at < 0 || at >= static_cast<std::int64_t>(count) || asked(entry, at) ||
+            std::ranges::any_of(
+                temporary,
+                [entry, at](const Program::State::Written& one) {
+                    return one.entry == entry && static_cast<std::int64_t>(one.at) == at;
+                })) {
+            return;
+        }
+        temporary.push_back(Program::State::Written{
+            .entry = entry, .at = static_cast<std::uint32_t>(at), .was = kCode[at], .out = false});
+        built().write(runtime, temporary.back(), true);
+    }
+
+    /// Where the machine stands: its body, line, and depth (D632).
+    [[nodiscard]] Stepping standing(Step how) const {
+        const std::int32_t kIn = kest_stopped_in(runtime);
+        showCompiled(true);
+        const std::optional<SourceLine> kLine = lineOf(kIn, kest_stopped(runtime));
+        showCompiled(false);
+        return Stepping{
+            .how = how, .in = kIn, .line = kLine.has_value() ? kLine->line : 0, .deep = kest_frames_deep(runtime)};
+    }
+
+    /// A stop: the machine's own breakpoints taken out and those asked for
+    /// written again; whether anyone is told of it. A stop at a breakpoint
+    /// asked for is told, and ends a step; one at the machine's own is told
+    /// only where it ends the step asked for (D632), and is otherwise a step
+    /// past a breakpoint or a move of a step not yet done (D630).
     bool arrive() {
         const std::int64_t kAt = kest_stopped(runtime);
         const std::int32_t kIn = kest_stopped_in(runtime);
-        const bool kStep = stepping.has_value() && stepping->entry == kIn &&
-                           static_cast<std::int64_t>(stepping->at) == kAt && !asked(kIn, kAt);
         putBack();
-        return kStep;
+        if (asked(kIn, kAt)) {
+            stepping.reset();
+            return true;
+        }
+        if (!stepping.has_value()) {
+            return false;
+        }
+        const Stepping kNow = standing(stepping->how);
+        bool done = false;
+        if (stepping->how == Step::Out) {
+            done = kNow.deep < stepping->deep;
+        } else if (stepping->how == Step::Into || kNow.deep <= stepping->deep) {
+            done = kNow.in != stepping->in || kNow.line != stepping->line || kNow.deep != stepping->deep;
+        }
+        if (done) {
+            stepping.reset();
+        }
+        return done;
     }
 
-    /// Carrying on from a stop: a breakpoint where it stands taken out, and
-    /// one of the machine's own written at the instruction after it, which
-    /// writes it again as the machine stops there (D630).
-    void stepPast() {
+    /// The first instruction of every line of `entry`, its body as compiled.
+    [[nodiscard]] std::vector<std::uint32_t> lineStarts(std::int32_t entry) const {
+        std::vector<std::uint32_t> starts;
+        std::uint32_t count = 0;
+        if (kest_code_of(runtime, entry, &count) == nullptr) {
+            return starts;
+        }
+        std::optional<std::uint32_t> last;
+        for (std::int64_t at = 0; at >= 0 && at < static_cast<std::int64_t>(count);) {
+            const std::optional<SourceLine> kLine = lineOf(entry, at);
+            const std::uint32_t kNumber = kLine.has_value() ? kLine->line : 0;
+            if (!last.has_value() || *last != kNumber) {
+                starts.push_back(static_cast<std::uint32_t>(at));
+                last = kNumber;
+            }
+            const std::int64_t kNext = kest_next_at(runtime, entry, static_cast<std::uint32_t>(at));
+            at = kNext > at ? kNext : -1;
+        }
+        return starts;
+    }
+
+    /// Carrying on from a stop: a breakpoint asked for where it stands taken
+    /// out, and one of the machine's own written at the instruction after
+    /// it, which writes it again as the machine stops there (D630); while a
+    /// step is asked for, at the instruction after it whatever stands there,
+    /// and at the first instruction of every line of each body the step may
+    /// stop in: every body for one into, else those of the frames (D632).
+    void carryOn() {
         const std::int64_t kAt = kest_stopped(runtime);
         const std::int32_t kIn = kest_stopped_in(runtime);
-        if (!asked(kIn, kAt)) {
+        std::vector<std::pair<std::int32_t, std::uint32_t>> starts;
+        if (stepping.has_value()) {
+            std::vector<std::int32_t> bodies;
+            if (stepping->how == Step::Into) {
+                for (std::int32_t index = 0; kest_entry_wrote(runtime, index) != nullptr; ++index) {
+                    bodies.push_back(index);
+                }
+            } else {
+                for (std::uint32_t deep = 0; deep < kest_frames_deep(runtime); ++deep) {
+                    bodies.push_back(kest_frame_in(runtime, deep));
+                }
+            }
+            showCompiled(true);
+            for (const std::int32_t kBody : bodies) {
+                for (const std::uint32_t kStart : lineStarts(kBody)) {
+                    starts.emplace_back(kBody, kStart);
+                }
+            }
+            showCompiled(false);
+        }
+        if (!asked(kIn, kAt) && !stepping.has_value()) {
             return;
         }
         takeOutWhereItStands();
-        std::uint32_t count = 0;
-        const std::uint8_t* const kCode = kest_code_of(runtime, kIn, &count);
-        const std::int64_t kNext = kest_next_at(runtime, kIn, static_cast<std::uint32_t>(kAt));
-        if (kCode == nullptr || kNext <= kAt || kNext >= static_cast<std::int64_t>(count) || asked(kIn, kNext)) {
-            return;
+        writeTemporary(kIn, kest_next_at(runtime, kIn, static_cast<std::uint32_t>(kAt)));
+        for (const auto& [kBody, kStart] : starts) {
+            if (kBody != kIn || static_cast<std::int64_t>(kStart) != kAt) {
+                writeTemporary(kBody, kStart);
+            }
         }
-        stepping = Program::State::Written{
-            .entry = kIn, .at = static_cast<std::uint32_t>(kNext), .was = kCode[kNext], .out = false};
-        built().write(runtime, *stepping, true);
     }
 
     /// Every byte a breakpoint is written over put back (`compiled`), or
@@ -267,8 +362,8 @@ struct Machine::State {
                 built().write(runtime, one, !compiled);
             }
         }
-        if (stepping.has_value()) {
-            built().write(runtime, *stepping, !compiled);
+        for (const Program::State::Written& one : temporary) {
+            built().write(runtime, one, !compiled);
         }
     }
 
@@ -291,10 +386,10 @@ struct Machine::State {
 
     /// The program's breakpoints taken out, so it is the program again.
     void clear() {
-        if (stepping.has_value()) {
-            built().write(runtime, *stepping, false);
-            stepping.reset();
+        for (const Program::State::Written& one : temporary) {
+            built().write(runtime, one, false);
         }
+        temporary.clear();
         for (Program::State::Written& one : built().written) {
             if (!one.out) {
                 built().put(runtime, one, false);
@@ -476,18 +571,20 @@ execution::TaskOutcome<void> Machine::call(Entry entry, std::span<Value> frame, 
     KestValue* const kFrame = frame.empty() ? nullptr : reinterpret_cast<KestValue*>(frame.data());
     bool went = kest_call(state_->runtime, entry.index, kFrame, static_cast<std::uint32_t>(frame.size()));
     // Stopped at a breakpoint (D460): the handler sees it, and the call
-    // carries on from it, stepping past it (D630); a stop that is only that
-    // step's carries on unseen.
+    // carries on from it, stepping past it (D630) or a line as the handler
+    // asked (D632); a stop that is only a move of either carries on unseen.
     while (!went && kest_stopped(state_->runtime) >= 0) {
-        if (!state_->arrive()) {
+        if (state_->arrive()) {
             ++state_->stops;
             if (state_->whenStopped) {
                 state_->whenStopped();
             }
         }
-        state_->stepPast();
+        state_->carryOn();
         went = kest_resume(state_->runtime, kFrame, static_cast<std::uint32_t>(frame.size()));
     }
+    // A step the call ended before is over.
+    state_->stepping.reset();
     state_->putBack();
     if (went) {
         return Outcome::success();
@@ -624,6 +721,12 @@ Breaks Machine::breakAt(std::span<const std::string> functions, std::span<const 
 
 void Machine::whenStopped(std::function<void()> handler) {
     state_->whenStopped = std::move(handler);
+}
+
+void Machine::step(Step how) {
+    if (kest_stopped(state_->runtime) >= 0) {
+        state_->stepping = state_->standing(how);
+    }
 }
 
 std::vector<StoppedFrame> Machine::stack() const {

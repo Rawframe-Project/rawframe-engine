@@ -68,6 +68,15 @@ struct SourceLine {
     friend bool operator==(const SourceLine&, const SourceLine&) = default;
 };
 
+/// How a stopped machine steps (D632): to the next line wherever it is
+/// (`Into`), the next in this body or one it returns to (`Over`), or the
+/// line it returns to (`Out`).
+enum class Step : std::uint8_t {
+    Over,
+    Into,
+    Out
+};
+
 /// Where `breakAt` broke: how many of the functions named are the
 /// program's, and for each line asked, in order, whether a body has an
 /// instruction from it.
@@ -155,6 +164,11 @@ public:
     /// machine is stopped in the middle of the call: `stack` reads it, and
     /// nothing else may be asked of it.
     void whenStopped(std::function<void()> handler);
+    /// From the handler (D632): once it returns, the call carries on only
+    /// to the next line as `how` says, and stops there, the handler told
+    /// again. A breakpoint asked for met on the way stops it there instead;
+    /// a call that ends on the way ends the step. Nothing while not stopped.
+    void step(Step how);
     /// The frames of a stopped machine, the innermost first; none for one
     /// not stopped.
     [[nodiscard]] std::vector<StoppedFrame> stack() const;

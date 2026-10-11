@@ -697,6 +697,44 @@ RAWFRAME_TEST(BreakpointsChangedWhileStoppedLetTheCallCarryOn) {
     RAWFRAME_EXPECT(machine->stops() == 3 && seen.size() == 1 && seen[0].function == "t.outer");
 }
 
+RAWFRAME_TEST(AStoppedMachineStepsLineByLine) {
+    auto machine = start(kStopping);
+    auto outer = machine->entry("outer");
+    const std::array<std::string, 1> kOuter = {"outer"};
+    RAWFRAME_EXPECT(outer.has_value() && machine->breakAt(kOuter).functions == 1);
+    // Each stop said by its function and line, then stepped as the next of
+    // `steps` asks, carrying on once they run out (D632).
+    std::vector<kest::Step> steps;
+    std::vector<std::string> seen;
+    machine->whenStopped([&] {
+        const std::vector<kest::StoppedFrame> kFrames = machine->stack();
+        seen.push_back(kFrames.empty() ? "?"
+                                       : kFrames[0].function + ":" +
+                                             std::to_string(kFrames[0].at.has_value() ? kFrames[0].at->line : 0));
+        if (seen.size() <= steps.size()) {
+            machine->step(steps[seen.size() - 1]);
+        }
+    });
+    const auto kCall = [&](std::vector<kest::Step> asked) {
+        steps = std::move(asked);
+        seen.clear();
+        std::array<Value, 1> frame{};
+        frame[0].integer = 2;
+        return machine->call(*outer, frame).hasValue() && frame[0].integer == 12;
+    };
+    // Over count's first call to the next line, into its second, a line on.
+    RAWFRAME_EXPECT(kCall({kest::Step::Over, kest::Step::Into, kest::Step::Over}));
+    RAWFRAME_EXPECT(seen == (std::vector<std::string>{"t.outer:14", "t.outer:15", "t.count:4", "t.count:5"}));
+    // Into count's first call, and out to the line after it.
+    RAWFRAME_EXPECT(kCall({kest::Step::Into, kest::Step::Out}));
+    RAWFRAME_EXPECT(seen == (std::vector<std::string>{"t.outer:14", "t.count:4", "t.outer:15"}));
+    // A step past the call's last line ends with the call: the next call
+    // stops at its breakpoint, not before.
+    RAWFRAME_EXPECT(kCall({kest::Step::Over, kest::Step::Over}));
+    RAWFRAME_EXPECT(seen == (std::vector<std::string>{"t.outer:14", "t.outer:15"}));
+    RAWFRAME_EXPECT(kCall({}) && seen == (std::vector<std::string>{"t.outer:14"}));
+}
+
 RAWFRAME_TEST(AStoppedFrameSaysWhatItsBodyHasWritten) {
     // A local not yet written holds whatever the stack held: Kest's proof
     // says which are written where the frame stands, and which are one
