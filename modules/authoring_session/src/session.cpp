@@ -20,6 +20,7 @@
 #include "rawframe/scene/scene.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world_kest/game_files.h"
+#include "references.h"
 #include "replies.h"
 #include "viewing.h"
 
@@ -32,6 +33,7 @@
 #include <memory>
 #include <optional>
 #include <random>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -238,6 +240,13 @@ private:
         RAWFRAME_TRY_ASSIGN(catalog_, catalogOf(*files));
         beside_ = scenesBeside(game_);
         assets_ = assetsOf(files->description());
+        // The documents whose references the session keeps (D642).
+        for (const auto& [kNamed, kAt] : {std::pair{&files->description().ui, &gameDocuments_.ui},
+                                          std::pair{&files->description().styles, &gameDocuments_.styles}}) {
+            if (!kNamed->empty()) {
+                *kAt = std::filesystem::weakly_canonical(game_.parent_path() / *kNamed);
+            }
+        }
         return {};
     }
 
@@ -408,11 +417,11 @@ private:
     }
 
     result::Result<Value> applied(const authoring::SessionRecord& record) {
-        if (sheets_.names(record.scene)) {
-            return sheets_.applied(record, failed_);
-        }
-        if (uis_.names(record.scene)) {
-            return uis_.applied(record, failed_);
+        if (sheets_.names(record.scene) || uis_.names(record.scene)) {
+            // A node names a class the sheet has (D642).
+            RAWFRAME_TRY(referencesKept(
+                gameDocuments_, std::filesystem::weakly_canonical(root_ / record.scene), record.request));
+            return sheets_.names(record.scene) ? sheets_.applied(record, failed_) : uis_.applied(record, failed_);
         }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -915,11 +924,31 @@ private:
     }
 
     result::Result<Value> stepped(const authoring::SessionRecord& record, bool undo) {
-        if (sheets_.names(record.scene)) {
-            return sheets_.stepped(record, undo, failed_);
-        }
-        if (uis_.names(record.scene)) {
-            return uis_.stepped(record, undo, failed_);
+        if (sheets_.names(record.scene) || uis_.names(record.scene)) {
+            // A step that would leave a node naming a class the sheet no
+            // longer has is stepped back and refused (D642).
+            const auto kStep = [this](const authoring::SessionRecord& asked, bool back) {
+                return sheets_.names(asked.scene) ? sheets_.stepped(asked, back, failed_)
+                                                  : uis_.stepped(asked, back, failed_);
+            };
+            const std::set<std::uint64_t> kBefore = unresolvedStyles(gameDocuments_);
+            auto stepped = kStep(record, undo);
+            if (!stepped.has_value() || failed_) {
+                return stepped;
+            }
+            for (const std::uint64_t kStyle : unresolvedStyles(gameDocuments_)) {
+                if (!kBefore.contains(kStyle)) {
+                    authoring::SessionRecord back = record;
+                    back.expects.reset();
+                    static_cast<void>(kStep(back, !undo));
+                    failed_ = false;
+                    return std::unexpected{failure(authoring::AuthoringError::Conflict,
+                                                   result::ErrorClass::Conflict,
+                                                   "the step would leave a node naming a class the sheet does not "
+                                                   "have")};
+                }
+            }
+            return stepped;
         }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -978,6 +1007,7 @@ private:
     /// The style sheets and UI documents records name (D636, D641).
     Documents<authoring::AuthoredStyles> sheets_;
     Documents<authoring::AuthoredUi> uis_;
+    GameDocuments gameDocuments_;
 };
 
 } // namespace

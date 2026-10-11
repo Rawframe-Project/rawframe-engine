@@ -58,6 +58,10 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_ui.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_ui)
     set_tests_properties(author_ui PROPERTIES PASS_REGULAR_EXPRESSION "authored stalls' UI document in a session")
+    add_test(NAME author_references
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_references.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_references)
+    set_tests_properties(author_references PROPERTIES PASS_REGULAR_EXPRESSION "kept stalls' references in a session")
     # A session cooking its game as a long-running operation (D502): the
     # plaza cooked source by source while records are answered, then from
     # the cache; a second cook refused, one stopped as asked, one into the
