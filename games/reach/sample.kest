@@ -7,7 +7,9 @@ module sample
 // hand's height is the eye's and the controller's below or above it. A
 // flat player reaches with the right hand by keys (ahead, back, aside, up,
 // and down), which the sample builds on tick to tick (D525), and takes with
-// the mouse's left button or the space bar.
+// the mouse's left button or the space bar. A hand the headset tracks
+// (D664), held without a controller, is where its palm is, and a hand grips
+// as its fingers close, a controller in it or none.
 
 import controls
 import rawframe.input
@@ -28,11 +30,21 @@ const EYE: f32 = 1.2
 const STEP: f32 = 0.01
 const FURTHEST: f32 = 1.2
 
+// A tracked hand is closed while its middle, ring, and little fingertips
+// are within this many meters of its palm, taken together (the root of
+// their squares' mean): about three centimeters in a fist, eleven open.
+const CLOSED: f32 = 0.06
+
 fn sample(into: [controls.Hands]) {
+    let rightPalm = input.joint(input.RIGHT, input.PALM)
     if input.on(RIGHT_HAND) {
         into[0].rightX = input.x(RIGHT_HAND)
         into[0].rightY = EYE + input.y(RIGHT_HAND)
         into[0].rightZ = input.z(RIGHT_HAND)
+    } else if rightPalm.located {
+        into[0].rightX = rightPalm.x
+        into[0].rightY = EYE + rightPalm.y
+        into[0].rightZ = rightPalm.z
     } else {
         // Where the right hand rests until moved: above the table's edge.
         if into[0].rightX == 0.0 && into[0].rightY == 0.0 && into[0].rightZ == 0.0 {
@@ -54,19 +66,46 @@ fn sample(into: [controls.Hands]) {
     into[0].leftX = 0.0
     into[0].leftY = 0.0
     into[0].leftZ = 0.0
+    let leftPalm = input.joint(input.LEFT, input.PALM)
     if input.on(LEFT_HAND) {
         into[0].leftX = input.x(LEFT_HAND)
         into[0].leftY = EYE + input.y(LEFT_HAND)
         into[0].leftZ = input.z(LEFT_HAND)
+    } else if leftPalm.located {
+        into[0].leftX = leftPalm.x
+        into[0].leftY = EYE + leftPalm.y
+        into[0].leftZ = leftPalm.z
     }
     into[0].rightGrip = 0.0
-    if input.on(TAKE_RIGHT) || input.pressed(TAKE_RIGHT) {
+    if input.on(TAKE_RIGHT) || input.pressed(TAKE_RIGHT) || closed(input.RIGHT) {
         into[0].rightGrip = 1.0
     }
     into[0].leftGrip = 0.0
-    if input.on(TAKE_LEFT) || input.pressed(TAKE_LEFT) {
+    if input.on(TAKE_LEFT) || input.pressed(TAKE_LEFT) || closed(input.LEFT) {
         into[0].leftGrip = 1.0
     }
+}
+
+// Whether the headset tracks the hand closed: its middle, ring, and little
+// fingertips near its palm.
+fn closed(hand: u32) -> bool {
+    let palm = input.joint(hand, input.PALM)
+    let middle = input.joint(hand, input.MIDDLE_TIP)
+    let ring = input.joint(hand, input.RING_TIP)
+    let little = input.joint(hand, input.LITTLE_TIP)
+    if !palm.located || !middle.located || !ring.located || !little.located {
+        return false
+    }
+    let near = apart(palm, middle) + apart(palm, ring) + apart(palm, little)
+    return near < 3.0 * CLOSED * CLOSED
+}
+
+// The square of the meters between two joints.
+fn apart(a: input.Joint, b: input.Joint) -> f32 {
+    let x = a.x - b.x
+    let y = a.y - b.y
+    let z = a.z - b.z
+    return x * x + y * y + z * z
 }
 
 // `value` kept between `least` and `most`.
