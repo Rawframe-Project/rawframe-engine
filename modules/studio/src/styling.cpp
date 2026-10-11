@@ -2,7 +2,7 @@
 // classes in the entity column, made with New, deleted with Delete, and
 // named in the name field (D638), and a chosen class's looks as fields,
 // each part set through the session's `styles.set_part` (D636), which a
-// played game follows (D634).
+// played game follows (D634), then its transitions as one (D639).
 
 #include "rawframe/ui/styles.h"
 #include "shell.h"
@@ -106,6 +106,22 @@ void ShellParticipant::showClass(std::size_t at) {
                                        .field = std::string{kPart}});
         }
     }
+    // Last, its transitions, all of them as one field (D639).
+    auto heading = row(componentsColumn_, "transitions", kQuiet, kPanel);
+    if (!heading.has_value()) {
+        return;
+    }
+    componentRows_.push_back(*heading);
+    const Value* transitions = chosen->find("transitions");
+    auto line = fieldRow("all",
+                         transitions != nullptr ? document::writeCompact(*transitions) : std::string{},
+                         std::nullopt,
+                         transitions != nullptr);
+    if (!line.has_value()) {
+        return;
+    }
+    componentRows_.push_back(line->first);
+    fields_.push_back(FieldRow{.value = line->second, .role = FieldRow::Role::Part, .field = "transitions"});
 }
 
 void ShellParticipant::setPart(const FieldRow& row, const std::string& text) {
@@ -115,6 +131,13 @@ void ShellParticipant::setPart(const FieldRow& row, const std::string& text) {
         value = read.has_value() ? std::move(*read) : Value::string(text);
     }
     Value operation = Value::object();
+    if (row.component.empty()) {
+        operation.add("operation", Value::string("styles.set_transitions"));
+        operation.add("style", Value::string(entity_));
+        operation.add("value", std::move(value));
+        commit(std::move(operation), text.empty() ? "transitions unset" : "transitions set", entity_);
+        return;
+    }
     operation.add("operation", Value::string("styles.set_part"));
     operation.add("style", Value::string(entity_));
     operation.add("variant", Value::string(row.component));

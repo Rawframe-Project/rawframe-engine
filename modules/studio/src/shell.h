@@ -94,7 +94,8 @@ struct FieldRow {
         /// What the entity column shows of the scene (D473).
         Find,
         /// A part of a style class's look: `component` its variant, `field`
-        /// the part (D637).
+        /// the part (D637); with no variant, the class's transitions
+        /// (D639).
         Part
     };
     ui::Node value{};

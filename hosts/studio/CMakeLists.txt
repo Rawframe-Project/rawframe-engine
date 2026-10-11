@@ -335,6 +335,18 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "clicked at 463,97.*typed tip at 1100,97.*clicked at 517,97.*clicked at 1166,23.*tycoon.styles written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"tycoon.styles\",\"entities\":5,[^\n]*\"applied\":3,\"refused\":0,\"undone\":1,\"redone\":0,\"undoable\":2,\"redoable\":1,[^\n]*\"status\":\"undone\".*\"exit\":\"clean_stop\"")
+    # A style class's transitions in Studio (D639): the button's, under its
+    # looks at the column's end, cleared, so the class has none.
+    add_test(NAME studio_style_transitions
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/tycoon/tycoon.game tycoon.styles 200,97 640,129 wheel=1000,400,30 1100,695 keys=BackSpace,Return
+                     "until=studio_said,status=\"transitions unset\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_style_transitions PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "clicked at 1100,695.*pressed BackSpace,Return.*tycoon.styles written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"transitions unset\".*\"exit\":\"clean_stop\"")
     # Studio previewing the plaza (D433, D440): choosing its gate attaches
     # the playing client's tooling endpoint as the scene's preview, and an
     # eye typed is handed to it, so the client draws frames through the
