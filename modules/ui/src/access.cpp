@@ -55,6 +55,8 @@ muiRole roleOf(Role role) noexcept {
         return mui_roleDialog;
     case Role::Group:
         return mui_roleGroup;
+    case Role::Slider:
+        return mui_roleSlider;
     case Role::Generic:
         break;
     }

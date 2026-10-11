@@ -4,7 +4,7 @@
 # ui.styles document (D431), its node components started and nested as its
 # ui.document says (D619). Client and tools only: the dedicated server
 # links none of it.
-rawframe_module(NAME ui SOURCES src/access.cpp src/text_edit.cpp src/tree.cpp src/tree_edit.cpp src/tree_style.cpp src/styles.cpp src/document.cpp DEPS texture composition document result base)
+rawframe_module(NAME ui SOURCES src/access.cpp src/text_edit.cpp src/tree.cpp src/tree_edit.cpp src/tree_style.cpp src/tree_range.cpp src/styles.cpp src/document.cpp DEPS texture composition document result base)
 target_link_libraries(rawframe_ui PRIVATE maul-ui)
 # AT-SPI's adapter where Maul UI builds it, Linux's (D571).
 target_compile_definitions(rawframe_ui PRIVATE RAWFRAME_UI_ATSPI=$<BOOL:${MAUL_UI_ATSPI}>
@@ -14,7 +14,7 @@ target_compile_definitions(rawframe_ui PRIVATE RAWFRAME_UI_ATSPI=$<BOOL:${MAUL_U
                                                RAWFRAME_UI_UIKIT=$<BOOL:${MAUL_UI_UIACCESSIBILITY}>
                                                RAWFRAME_UI_ARIA=$<BOOL:${MAUL_UI_ARIA}>)
 
-rawframe_module_tests(NAME ui SOURCES tests/access_test.cpp tests/edit_test.cpp tests/text_test.cpp tests/tree_test.cpp tests/scroll_test.cpp tests/style_test.cpp tests/styles_test.cpp tests/document_test.cpp)
+rawframe_module_tests(NAME ui SOURCES tests/access_test.cpp tests/edit_test.cpp tests/text_test.cpp tests/tree_test.cpp tests/scroll_test.cpp tests/range_test.cpp tests/style_test.cpp tests/styles_test.cpp tests/document_test.cpp)
 if(TARGET rawframe_ui_tests)
     target_compile_definitions(rawframe_ui_tests PRIVATE RAWFRAME_UI_FONTS="${RAWFRAME_TEST_FILES}/modules/ui/tests/fonts/")
 endif()

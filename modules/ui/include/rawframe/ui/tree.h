@@ -477,6 +477,44 @@ struct Interaction {
     /// Whether the node may hold focus, as its owner's navigation gives it
     /// (D573): told to assistive technology with `focus`.
     bool focusable = false;
+    /// Whether a press on it becomes a drag once the pointer moves past
+    /// the drag threshold, as a range's does (D621).
+    bool drags = false;
+};
+
+/// A node's value between a minimum and a maximum (SPEC-0030's
+/// `UiRangeValue` and `UiDragValue`, D621), as a slider holds one: kept
+/// within them and on a step from the minimum (none for any value), moved
+/// a page by a press on the track and with the pointer by a drag, which
+/// keeps where `thumb` (a node inside it, none for the value to follow
+/// the pointer) was grabbed. The minimum is at the start of a horizontal
+/// range and at the bottom of a vertical one. Maul UI's ranges.
+struct Range {
+    float minimum = 0;
+    float maximum = 100;
+    float value = 0;
+    float step = 1;
+    float page = 10;
+    bool vertical = false;
+    std::optional<Node> thumb;
+};
+
+/// A pointer's event for `Tree::point` (D621): the primary button pressed
+/// or released, a move, the pointer cancelled, or gone from the window,
+/// at a point in the root's space; whether the button is held after it.
+struct PointerEvent {
+    enum class Action : std::uint8_t {
+        Move,
+        Press,
+        Release,
+        Cancel,
+        Leave
+    };
+    Action action = Action::Move;
+    float x = 0;
+    float y = 0;
+    bool held = false;
+    double seconds = 0;
 };
 
 /// What a node is to assistive technology (SPEC-0030's role vocabulary,
@@ -496,7 +534,9 @@ enum class Role : std::uint8_t {
     /// A layer that holds the input while it is up, as a modal one does.
     Dialog,
     /// Nodes that belong together, named as one.
-    Group
+    Group,
+    /// A range the user moves (D621).
+    Slider
 };
 
 /// What a point hits: the topmost node there, none for nothing, the point
@@ -656,6 +696,21 @@ public:
     [[nodiscard]] result::Status scrollTo(Node node, float x, float y);
     /// `node`'s scroll offset; nought along an axis it does not scroll.
     [[nodiscard]] std::array<float, 2> scrollOf(Node node) const noexcept;
+    /// `node` made a range, or its range set anew, its value kept within
+    /// it (D621); refused for numbers not finite, a maximum below the
+    /// minimum, a negative step or page, or a thumb not in the tree.
+    [[nodiscard]] result::Status setRange(Node node, const Range& range);
+    /// `node` no longer a range, whether or not it was one.
+    [[nodiscard]] result::Status clearRange(Node node);
+    /// `node`'s range with the value it holds now, which presses and drags
+    /// move; none for a node that is not a range.
+    [[nodiscard]] std::optional<Range> rangeOf(Node node) const;
+    /// The pointer's event in `root`'s space (D621), for the ranges under
+    /// it: a press on a range pages its value toward the point, and a drag
+    /// moves it. Whether a range took it. Only a press the owner gives a
+    /// range, and the moves and release after it, need come here: what
+    /// hovers and presses otherwise is the owner's `hit` and `setStates`.
+    [[nodiscard]] result::Result<bool> point(Node root, const PointerEvent& event);
     /// A font read from a TrueType or OpenType file's bytes, copied, or
     /// from `face` of a collection; refused for bytes that are not one,
     /// checked as hostile, and past the limit. The first becomes the

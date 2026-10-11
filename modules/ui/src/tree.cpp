@@ -306,7 +306,11 @@ result::Status Tree::setInteraction(Node node, const Interaction& interaction) {
         .layer = static_cast<muiLayerKind>(interaction.layer),
         // Focus is given by its owner's code, never by Maul UI's own
         // navigation, which the engine does not run (D430, D573).
-        .focusMode = static_cast<muiFocusMode>(interaction.focusable ? mui_focusPointer : mui_focusNone)};
+        .focusMode = static_cast<muiFocusMode>(interaction.focusable ? mui_focusPointer : mui_focusNone),
+        .tabOrder = 0,
+        .drags = interaction.drags,
+        .accepts = 0,
+        .exitLayout = {}};
     return checked(muiNode_SetInteractionValues(state_->context, idOf(node), &kStyle, MUI_INTERACTION_PROPERTIES),
                    "a UI node's interaction was refused");
 }
