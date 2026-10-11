@@ -7,7 +7,8 @@
 # refused, each answered by its own id; and a selection kept beside the
 # level, put back by undo (D417), as is where the level is looked at from
 # (D432); and two scenes changed in one transaction, all or nothing, each
-# its own history (D497).
+# its own history (D497); and a crate made in a dry run first, answered as
+# it would be kept and nothing kept (D650).
 #
 # usage: author_session.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -37,6 +38,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.hello","id":2,"surfaceGeneration":99}'
     echo '{"kind":"authoring.hello","id":3,"surfaceGeneration":1}'
     echo '{"kind":"authoring.describe","id":4}'
+    echo '{"kind":"authoring.apply","id":20,"scene":"level.scene","dryRun":true,"request":'"$create"'}'
     echo '{"kind":"authoring.apply","id":5,"scene":"level.scene","request":'"$create"'}'
     echo '{"kind":"authoring.undo","id":6,"scene":"level.scene"}'
     echo '{"kind":"authoring.end","id":7}'
@@ -46,7 +48,13 @@ reply 1 | grep -q '"message":"a session begins with hello"'
 reply 2 | grep -q '"code":"unsupported_operation"'
 reply 3 | grep -q '"kind":"authoring.welcome"'
 reply 4 | grep -q '"name":"scene.set_reference"'
+reply 20 | grep -q '"written":false,"reopened":false,"undoable":0,"redoable":0,"selection":\[\],"view":null,"results":\[{"deltas":2}\],"skipped":0,"dryRun":true'
 reply 5 | grep -q '"written":true,"reopened":false,"undoable":1,"redoable":0,"selection":\[\],"view":null,"results":\[{"deltas":2}\]'
+digest() { grep -o "\"$1\":\"sha256:[0-9a-f]*\"" | cut -d'"' -f4; }
+if [ "$(reply 20 | digest wouldBe)" != "$(reply 5 | digest document)" ]; then
+    echo "the dry run did not answer as the request was kept"
+    exit 1
+fi
 # Undone within the session, the level is its very bytes again.
 reply 6 | grep -q '"undoable":0,"redoable":1'
 cmp "$work/root/level.scene" "$work/original.scene"

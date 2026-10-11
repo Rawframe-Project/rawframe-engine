@@ -159,14 +159,19 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     const Members kMembers = membersOf(record.verb);
     const Value* scene = parsed->find("scene");
     const Value* expects = parsed->find("expects");
-    const std::size_t kGiven =
-        parsed->names().size() - 1 - (parsed->find("id") != nullptr ? 1 : 0) - (expects != nullptr ? 1 : 0);
+    const Value* dry = parsed->find("dryRun");
+    const std::size_t kGiven = parsed->names().size() - 1 - (parsed->find("id") != nullptr ? 1 : 0) -
+                               (expects != nullptr ? 1 : 0) - (dry != nullptr ? 1 : 0);
     if (kGiven != kMembers.required || (expects != nullptr && (kMembers.optional == 0 || textOf(expects) == nullptr))) {
         return malformed("a session record holds its verb's members and no others");
+    }
+    if (dry != nullptr && (record.verb != SessionVerb::Apply || !dry->truth().has_value())) {
+        return malformed("only apply runs dry, told so by dryRun, true or false");
     }
     if (expects != nullptr) {
         record.expects = *expects->text();
     }
+    record.dryRun = dry != nullptr && dry->truth().value_or(false);
     switch (record.verb) {
     case SessionVerb::Hello: {
         const Value* kGeneration = parsed->find("surfaceGeneration");

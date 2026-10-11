@@ -434,18 +434,25 @@ private:
                                            "the request was computed against another generation of the scene")
                                        .withContext("document", kBefore)};
         }
+        // A dry run runs on a copy, so it answers as the request would be
+        // kept, by the same code (D650).
+        std::unique_ptr<authoring::AuthoredScene> copy;
+        if (record.dryRun) {
+            RAWFRAME_TRY_ASSIGN(copy, authoring::AuthoredScene::open(document.identity(), document.text()));
+        }
+        authoring::AuthoredScene& target = copy != nullptr ? *copy : document;
         const rawframe::scene::SceneSource kSources = sources();
         Value results = Value::array();
         std::size_t skipped = 0;
         if (request.batch == authoring::Batch::Atomic) {
             const auto kOutcome =
-                authoring::executeAtomic(document, document.generation(), request.operations, *catalog_, &kSources);
+                authoring::executeAtomic(target, target.generation(), request.operations, *catalog_, &kSources);
             failed_ = !kOutcome.has_value();
             results.push(slotValue(kOutcome));
         } else {
             const authoring::IndependentOutcome kOutcomes = authoring::executeIndependent(
-                document,
-                document.generation(),
+                target,
+                target.generation(),
                 request.operations,
                 *catalog_,
                 request.batch == authoring::Batch::HaltRemaining ? authoring::OnFailure::HaltRemaining
@@ -456,6 +463,9 @@ private:
                 results.push(slotValue(each));
             }
             skipped = kOutcomes.skipped;
+        }
+        if (copy != nullptr) {
+            return ranDry(outcomeOf(document, false, reopened, std::move(results), skipped), copy->text());
         }
         RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.scene, *open));
         return outcomeOf(*open->document, kWritten, reopened, std::move(results), skipped);

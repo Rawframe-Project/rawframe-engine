@@ -28,7 +28,10 @@
 // JSON value, given back in the reply; `scene` is a scene's path under the
 // game's directory, or for apply, read, undo, redo, and history a style
 // sheet's (`.styles`, D636, D638); `expects`, on undo and redo, is the
-// generation the client last saw, as a request's is. `select` chooses the
+// generation the client last saw, as a request's is. `dryRun`, on apply,
+// is SPEC-0040's DryRun (D650): the request runs on a copy of the document
+// and is answered as it would be kept, nothing kept, written, or entered
+// in its history. `select` chooses the
 // scene's entities by their SourceEntityIds, in place of what was chosen:
 // no change to the document, but what undo and redo put back with it
 // (D417). `apply_together` is SPEC-0040's multi-document transaction
@@ -143,8 +146,9 @@ struct SessionRecord {
     std::uint32_t surfaceGeneration = 0;
     /// Undo's and redo's.
     std::optional<std::string> expects;
-    /// Apply's.
+    /// Apply's, and whether it runs dry (D650).
     Request request;
+    bool dryRun = false;
     /// Read's.
     std::vector<Query> queries;
     /// Select's, as given.

@@ -8,11 +8,18 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace rawframe::authoring_session {
 
 using document::Value;
+
+Value ranDry(Value outcome, std::string_view text) {
+    outcome.add("dryRun", Value::boolean(true));
+    outcome.add("wouldBe", Value::string(digestOf(text)));
+    return outcome;
+}
 
 Value outcomeOf(
     const authoring::AuthoredScene& scene, bool written, bool reopened, Value results, std::size_t skipped) {

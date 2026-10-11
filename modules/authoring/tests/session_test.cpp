@@ -34,6 +34,16 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
         R"({"kind":"authoring.apply","id":2,"scene":"level.scene","request":)" + std::string{kRequest} + "}", id);
     RAWFRAME_EXPECT(kApply.has_value() && kApply->verb == SessionVerb::Apply && kApply->scene == "level.scene");
     RAWFRAME_EXPECT(kApply.has_value() && kApply->request.operations.size() == 1 && id.integer() == 2);
+    RAWFRAME_EXPECT(kApply.has_value() && !kApply->dryRun);
+    // A dry run is told so, true or false (D650).
+    const auto kDry = readSessionRecord(R"({"kind":"authoring.apply","scene":"level.scene","dryRun":true,"request":)" +
+                                            std::string{kRequest} + "}",
+                                        id);
+    RAWFRAME_EXPECT(kDry.has_value() && kDry->dryRun && kDry->request.operations.size() == 1);
+    const auto kWet = readSessionRecord(R"({"kind":"authoring.apply","scene":"level.scene","dryRun":false,"request":)" +
+                                            std::string{kRequest} + "}",
+                                        id);
+    RAWFRAME_EXPECT(kWet.has_value() && !kWet->dryRun);
 
     const auto kRead = readSessionRecord(
         R"({"kind":"authoring.read","scene":"a.scene","queries":{"formatVersion":1,"kind":"authoring.query","queries":[{"operation":"scene.list_entities"}]}})",
@@ -135,6 +145,14 @@ RAWFRAME_TEST(ARecordOutOfItsFormIsRefusedNamingItsId) {
     RAWFRAME_EXPECT(
         refusedWith(readSessionRecord(R"({"kind":"authoring.apply","scene":"a.scene","expects":"x","request":{}})", id),
                     AuthoringError::ValidationFailed));
+    // Only apply runs dry, and only by a boolean.
+    RAWFRAME_EXPECT(
+        refusedWith(readSessionRecord(R"({"kind":"authoring.apply","scene":"a.scene","dryRun":"yes","request":)" +
+                                          std::string{kRequest} + "}",
+                                      id),
+                    AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(readSessionRecord(R"({"kind":"authoring.undo","scene":"a.scene","dryRun":true})", id),
+                                AuthoringError::ValidationFailed));
     // A selection names entities by their ids, in an array.
     RAWFRAME_EXPECT(refusedWith(readSessionRecord(R"({"kind":"authoring.select","scene":"a.scene"})", id),
                                 AuthoringError::ValidationFailed));

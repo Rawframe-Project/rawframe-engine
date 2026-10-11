@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # A game's UI document authored in a session (D641), over a copy of
 # Stalls': the document read whole; the purse's fill set, a node made
-# inside the wallet, and the banner removed by one atomic request,
-# written; the history listed; undone back to its very bytes; and a field
+# inside the wallet, and the banner removed by one atomic request, run dry
+# first (D650: answered as it would be kept, nothing kept), then written; the history listed; undone back to its very bytes; and a field
 # a node has not, a node the document has not, and a style sheet's
 # operation refused with the file untouched.
 #
@@ -32,12 +32,24 @@ reply() { grep "\"id\":$1," "$work/replies"; }
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.read","id":2,"scene":"tycoon.ui","queries":'"$read_document"'}'
+    echo '{"kind":"authoring.apply","id":20,"scene":"tycoon.ui","dryRun":true,"request":'"$(request "$fill,$made,$removed")"'}'
     echo '{"kind":"authoring.apply","id":3,"scene":"tycoon.ui","request":'"$(request "$fill,$made,$removed")"'}'
     echo '{"kind":"authoring.read","id":4,"scene":"tycoon.ui","queries":'"$read_document"'}'
     echo '{"kind":"authoring.history","id":5,"scene":"tycoon.ui"}'
     echo '{"kind":"authoring.undo","id":6,"scene":"tycoon.ui"}'
 } | "$author" session "$game" "$work/root" >"$work/replies"
 reply 2 | grep -q '"answer":{"document":{"kind":"ui.document","formatVersion":1,"nodes":\[{"component":"tycoon.wallet"'
+# The dry run: the document as it was, nothing written or entered, and the
+# digest the request then gives it.
+reply 20 | grep -q '"written":false,"reopened":false,"undoable":0,"redoable":0,"selection":\[\],"view":null,"results":\[{"deltas":3}\],"skipped":0,"dryRun":true'
+digest() { grep -o "\"$1\":\"sha256:[0-9a-f]*\"" | cut -d'"' -f4; }
+was=$(reply 20 | digest document)
+would=$(reply 20 | digest wouldBe)
+kept=$(reply 3 | digest document)
+if [ -z "$would" ] || [ "$would" != "$kept" ] || [ "$was" = "$kept" ]; then
+    echo "the dry run did not answer as the request was kept"
+    exit 1
+fi
 reply 3 | grep -q '"written":true,"reopened":false,"undoable":1,"redoable":0,"selection":\[\],"view":null,"results":\[{"deltas":3}\]'
 reply 4 | grep -q '"children":\[{"component":"tycoon.coin"},{"component":"tycoon.purse"'
 reply 4 | grep -q '"fill":"#c01818c0"'

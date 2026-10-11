@@ -5,6 +5,7 @@
 #include "rawframe/authoring/errors.h"
 #include "rawframe/authoring_session/game.h"
 #include "rawframe/base/files.h"
+#include "replies.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -95,16 +96,23 @@ result::Result<Value> Documents<Authored>::applied(const authoring::SessionRecor
                                        "the request was computed against another generation of the " + called_)
                                    .withContext("document", kBefore)};
     }
+    // A dry run runs on a copy, so it answers as the request would be kept,
+    // by the same code (D650).
+    std::unique_ptr<Authored> copy;
+    if (record.dryRun) {
+        RAWFRAME_TRY_ASSIGN(copy, Authored::open(authored.identity(), authored.text()));
+    }
+    Authored& target = copy != nullptr ? *copy : authored;
     Value results = Value::array();
     std::size_t skipped = 0;
     if (request.batch == authoring::Batch::Atomic) {
-        const auto kOutcome = authored.change(authored.generation(), request.operations);
+        const auto kOutcome = target.change(target.generation(), request.operations);
         failed = !kOutcome.has_value();
         results.push(slotValue(kOutcome));
     } else {
         // Each operation its own entry, against what the one before left.
         for (std::size_t at = 0; at < request.operations.size(); ++at) {
-            auto outcome = authored.change(authored.generation(), std::span{request.operations}.subspan(at, 1));
+            auto outcome = target.change(target.generation(), std::span{request.operations}.subspan(at, 1));
             const bool kFailed = !outcome.has_value();
             failed = failed || kFailed;
             results.push(slotValue(outcome));
@@ -113,6 +121,9 @@ result::Result<Value> Documents<Authored>::applied(const authoring::SessionRecor
                 break;
             }
         }
+    }
+    if (copy != nullptr) {
+        return ranDry(outcomeOf(authored, false, reopened, std::move(results), skipped), copy->text());
     }
     RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.scene, *open));
     return outcomeOf(authored, kWritten, reopened, std::move(results), skipped);
