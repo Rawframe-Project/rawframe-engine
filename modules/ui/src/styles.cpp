@@ -19,13 +19,6 @@ using document::Record;
 using document::Value;
 
 constexpr std::array<std::string_view, 3> kDocumentFields = {"kind", "formatVersion", "styles"};
-constexpr std::array<std::string_view, 9> kStyleFields = {
-    "styleId", "name", "base", "checked", "focused", "hovered", "pressed", "disabled", "transitions"};
-// A variant's look, in Variant's order of the style's fields after `name`.
-constexpr std::array<std::string_view, 6> kVariantFields = {
-    "base", "focused", "hovered", "pressed", "disabled", "checked"};
-constexpr std::array<std::string_view, 8> kLookFields = {
-    "fill", "borderColor", "radius", "clip", "imageTint", "outerShadow", "innerShadow", "gradient"};
 constexpr std::array<std::string_view, 5> kShadowFields = {"color", "x", "y", "blur", "spread"};
 constexpr std::array<std::string_view, 4> kGradientFields = {"kind", "angle", "from", "to"};
 constexpr std::array<std::string_view, 8> kTransitionFields = {
@@ -104,7 +97,7 @@ result::Result<GradientLook> gradientOf(const Value& value, const std::string& p
 
 /// A variant's look: the parts given, and only those.
 result::Result<StyleLook> lookOf(const Value& value, const std::string& path) {
-    RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(value, kLookFields, path));
+    RAWFRAME_TRY_ASSIGN(const Record kRecord, Record::of(value, kStyleLookFields, path));
     StyleLook styled;
     const auto kHas = [&value](std::string_view field) {
         return value.find(field) != nullptr;
@@ -259,10 +252,10 @@ result::Result<StyleClass> styleOf(const Value& value, const std::string& path, 
         return invalid(kRecord.pathOf("name"), "a name is a lowercase letter, then letters, digits, or underscores");
     }
     style.name = std::string{kName};
-    for (std::size_t variant = 0; variant < kVariantFields.size(); ++variant) {
-        RAWFRAME_TRY_ASSIGN(const Value* look, kRecord.optional(kVariantFields[variant], Value::Kind::Object));
+    for (std::size_t variant = 0; variant < kStyleVariantFields.size(); ++variant) {
+        RAWFRAME_TRY_ASSIGN(const Value* look, kRecord.optional(kStyleVariantFields[variant], Value::Kind::Object));
         if (look != nullptr) {
-            RAWFRAME_TRY_ASSIGN(style.looks[variant], lookOf(*look, kRecord.pathOf(kVariantFields[variant])));
+            RAWFRAME_TRY_ASSIGN(style.looks[variant], lookOf(*look, kRecord.pathOf(kStyleVariantFields[variant])));
         }
     }
     RAWFRAME_TRY_ASSIGN(const Value* transitions, kRecord.optional("transitions", Value::Kind::Array));

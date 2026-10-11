@@ -45,6 +45,16 @@
 
 namespace rawframe::ui {
 
+/// A class's fields in its document's order (D636).
+inline constexpr std::array<std::string_view, 9> kStyleFields = {
+    "styleId", "name", "base", "checked", "focused", "hovered", "pressed", "disabled", "transitions"};
+/// Each variant's look's field, by Variant.
+inline constexpr std::array<std::string_view, 6> kStyleVariantFields = {
+    "base", "focused", "hovered", "pressed", "disabled", "checked"};
+/// A look's parts in its document's order.
+inline constexpr std::array<std::string_view, 8> kStyleLookFields = {
+    "fill", "borderColor", "radius", "clip", "imageTint", "outerShadow", "innerShadow", "gradient"};
+
 /// What one variant of a class sets: its `parts` of `look`.
 struct StyleLook {
     Look look;
