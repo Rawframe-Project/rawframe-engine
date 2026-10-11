@@ -1,6 +1,7 @@
 #include "vm.h"
 #include "ground.h"
 #include "lexer.h"
+#include "verify.h"
 
 // The sanitised build is told where every block a host has ends, which is the
 // one thing a library cannot work out for itself about somebody else's memory.
@@ -7385,6 +7386,48 @@ const char *kest_frame_name(const KestRuntime *runtime, uint32_t deep,
     }
     return kest_chunk_named(runtime->frames[deep].chunk, slot, slots, kind,
                             NULL);
+}
+
+// What the proof says one slot of a frame holds where the frame stands. A
+// local a body has not written yet holds what the frame before it left, which
+// may be an address, and a host that reads it as text reads the machine's
+// memory wherever that says. See D1291.
+static KestProved frame_proved(const KestRuntime *runtime, uint32_t deep,
+                               uint16_t slot) {
+    if (runtime == NULL || deep >= runtime->frame_count) {
+        return KEST_PROVED_UNKNOWN;
+    }
+    int32_t in = kest_frame_in(runtime, deep);
+    int64_t at = kest_frame_ip(runtime, deep);
+    if (in < 0 || at < 0) {
+        return KEST_PROVED_UNKNOWN;
+    }
+    return kest_module_proved(runtime->module, (uint32_t)in, (uint32_t)at,
+                              slot, runtime->own);
+}
+
+bool kest_frame_written(const KestRuntime *runtime, uint32_t deep,
+                        uint16_t slot) {
+    KestProved proved = frame_proved(runtime, deep, slot);
+    return proved == KEST_PROVED_WRITTEN || proved == KEST_PROVED_TEXT;
+}
+
+const char *kest_frame_text(const KestRuntime *runtime, uint32_t deep,
+                            uint16_t slot, uint32_t *length) {
+    if (length != NULL) {
+        *length = 0;
+    }
+    if (frame_proved(runtime, deep, slot) != KEST_PROVED_TEXT) {
+        return NULL;
+    }
+    const KestValue *base = runtime->frames[deep].base;
+    if (base[slot].text == NULL) {
+        return "";
+    }
+    if (length != NULL) {
+        *length = (uint32_t)base[slot + 1].integer;
+    }
+    return base[slot].text;
 }
 
 uint16_t kest_frame_wide(const KestRuntime *runtime, uint32_t deep) {

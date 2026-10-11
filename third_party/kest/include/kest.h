@@ -1583,6 +1583,28 @@ bool kest_frame_at_address(const KestRuntime *runtime, uint32_t deep,
 // How many slots a frame has, which is how far a host walks looking for names.
 uint16_t kest_frame_wide(const KestRuntime *runtime, uint32_t deep);
 
+// Whether the body has written that slot on every way it can have come to
+// where the frame stands. A name is the body's for the whole of the body, and
+// a local it has not reached yet holds whatever the frame before it left
+// there: a number that means nothing, or an address. So a host shows nothing
+// for a slot this says false of, rather than reading it.
+//
+// What answers is the walk that proved the body before it ran, made again for
+// the asking, so it is asked of the body as it was compiled, with the bytes a
+// host wrote over put back: a body with a breakpoint in it is answered false,
+// because what was proved is not what is there. See D1291.
+bool kest_frame_written(const KestRuntime *runtime, uint32_t deep,
+                        uint16_t slot);
+
+// The bytes of the text in that slot and the one after it, and how many, where
+// the same walk proves they are one piece of text on every way here; NULL
+// anywhere else. It is the one way to read a text local out of a stopped
+// frame that never follows a slot that is not text as an address: a host
+// serving a debugger to somebody else is showing them whatever that address
+// is. `""` for a text that is nought. See D1291.
+const char *kest_frame_text(const KestRuntime *runtime, uint32_t deep,
+                            uint16_t slot, uint32_t *length);
+
 // Give this machine a budget, or take its budget away with
 // `KEST_FUEL_UNLIMITED`. One unit is one step, and a step is a jump that goes
 // back or a call: those are the two things a program does to go on doing

@@ -398,19 +398,45 @@ static void value_of(char *into, size_t room, KestValue value, uint8_t kind) {
     case KEST_L_BOOL:
         snprintf(into, room, "%s", value.integer != 0 ? "true" : "false");
         break;
-    case KEST_L_TEXT:
-        snprintf(into, room, "\"%s\"", value.text == NULL ? "" : value.text);
-        break;
     default:
         snprintf(into, room, "%lld", (long long)value.integer);
         break;
     }
 }
 
-static void say_value(Debugger *held, KestValue value, uint8_t kind) {
-    char said[256];
-    value_of(said, sizeof(said), value, kind);
-    fputs(said, held->out);
+// What a named slot of a frame holds, said only where the body is proved to
+// have written it, and a piece of text only where it is proved to be one. A
+// local the body has not reached holds what the frame before it left: read as
+// text, that is the machine's memory wherever it points, and `locals` before
+// a text was written ended the debugger on a fault. The proof is of the body
+// as it was compiled, so it is asked with the breakpoints out. See D1291.
+static void local_said(Debugger *held, uint32_t deep, uint16_t slot,
+                       uint8_t kind, KestValue value, char *into,
+                       size_t room) {
+    as_it_was(held);
+    bool written = kest_frame_written(held->runtime, deep, slot);
+    uint32_t length = 0;
+    const char *text = kind == KEST_L_TEXT
+                           ? kest_frame_text(held->runtime, deep, slot, &length)
+                           : NULL;
+    as_it_is(held);
+    if (!written) {
+        snprintf(into, room, "not written yet");
+    } else if (kest_frame_at_address(held->runtime, deep, slot)) {
+        // A slot that holds where the value is rather than the value, which
+        // a `for` does for an element the body never writes (D866). Saying
+        // the number as though it were the value is saying an address is a
+        // `Body`. See D1081.
+        snprintf(into, room, "at %p", value.object);
+    } else if (kind == KEST_L_TEXT) {
+        if (text == NULL) {
+            snprintf(into, room, "text, not one piece here");
+        } else {
+            snprintf(into, room, "\"%.*s\"", (int)length, text);
+        }
+    } else {
+        value_of(into, room, value, kind);
+    }
 }
 
 static void say_locals(Debugger *held, const char *only) {
@@ -436,16 +462,10 @@ static void say_locals(Debugger *held, const char *only) {
         if (!kest_frame_slot(held->runtime, deep - 1, slot, &value)) {
             continue;
         }
-        fprintf(held->out, "  %-20s slot %u  ", name, slot);
-        // A slot that holds where the value is rather than the value, which a
-        // `for` does for an element the body never writes (D866). Saying the
-        // number as though it were the value is saying an address is a
-        // `Body`. See D1081.
-        if (kest_frame_at_address(held->runtime, deep - 1, slot)) {
-            fprintf(held->out, "at %p", value.object);
-        } else {
-            say_value(held, value, kind);
-        }
+        char said_value[256];
+        local_said(held, deep - 1, slot, kind, value, said_value,
+                   sizeof said_value);
+        fprintf(held->out, "  %-20s slot %u  %s", name, slot, said_value);
         if (slots > 1) {
             fprintf(held->out, "  (and %u slot(s) more)", slots - 1);
         }
@@ -603,12 +623,7 @@ const char *kest_debugger_local(KestDebugger *held, uint32_t deep,
     if (!kest_frame_slot(held->runtime, deep, slot, &held_there)) {
         return NULL;
     }
-    // A slot that holds where the value is rather than the value. See D1081.
-    if (kest_frame_at_address(held->runtime, deep, slot)) {
-        snprintf(value, room, "at %p", held_there.object);
-    } else {
-        value_of(value, room, held_there, kind);
-    }
+    local_said(held, deep, slot, kind, held_there, value, room);
     return name;
 }
 

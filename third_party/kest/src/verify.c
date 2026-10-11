@@ -2754,11 +2754,35 @@ static uint32_t place_pop(uint32_t *work, uint32_t *waiting) {
     return first;
 }
 
+// What a host asked about one slot and the one after it at one place, joined
+// over every time the walk stood there, so what it ends with is what the slot
+// holds on every way into the place. See D1291.
+typedef struct {
+    uint32_t at;
+    uint32_t slot;
+    Kind kinds[2];
+    bool seen;
+} Asked;
+
+static void tell_asked(Verifying *v, Asked *asked, const Kind *now,
+                       uint32_t live) {
+    for (uint32_t i = 0; i < 2; i++) {
+        uint32_t s = asked->slot + i;
+        Kind is = HOLDS_JUNK;
+        if (s < live) {
+            is = HOLDS_OF(now[s]) == HOLDS_PAYLOAD ? resolved(v, now, 0, s)
+                                                   : now[s];
+        }
+        asked->kinds[i] = asked->seen ? joined(v, asked->kinds[i], is) : is;
+    }
+    asked->seen = true;
+}
+
 static const char *holds_on_every_path(Verifying *v, const KestChunk *chunk,
                                        const uint16_t *depth, Kind *laid,
                                        uint32_t laid_room,
                                        KestArena *scratch, char *said,
-                                       size_t room) {
+                                       size_t room, Asked *asked) {
     const KestModule *module = v->module;
     uint32_t wide = (uint32_t)chunk->slot_count + chunk->stack_needed + 1;
     uint32_t count = chunk->code_count;
@@ -2833,6 +2857,9 @@ static const char *holds_on_every_path(Verifying *v, const KestChunk *chunk,
             w.name = kest_op_name(op);
             if (!kest_diags_work(v->diags, 1)) {
                 break;
+            }
+            if (asked != NULL && at == asked->at) {
+                tell_asked(v, asked, now, chunk->slot_count);
             }
             wrong = kinds_step(&w);
             if (wrong != NULL) {
@@ -3061,7 +3088,7 @@ bool kest_module_prove(const KestModule *module, KestArena *arena,
                            ? "K0411"
                            : holds_on_every_path(&verifying, chunk, depth,
                                                  laid, widest, scratch, said,
-                                                 sizeof said);
+                                                 sizeof said, NULL);
                 if (code != NULL && laid == NULL) {
                     snprintf(said, sizeof said,
                              WANTED_ROOM);
@@ -3157,3 +3184,74 @@ bool kest_module_prove(const KestModule *module, KestArena *arena,
     return held;
 }
 
+
+KestProved kest_module_proved(const KestModule *module, uint32_t which,
+                              uint32_t at, uint32_t slot, KestArena *under) {
+    if (module == NULL || which >= module->count) {
+        return KEST_PROVED_UNKNOWN;
+    }
+    const KestChunk *chunk = module->functions[which];
+    if (at >= chunk->code_count || slot >= chunk->slot_count) {
+        return KEST_PROVED_UNKNOWN;
+    }
+    // The walks the proof made, made again over this one body: what it says
+    // is only as good as the body being the one that was proved, so a body
+    // that is not walkable -- a breakpoint written into it is one byte where
+    // a wider instruction was -- is answered with nothing rather than read.
+    uint32_t walked = 0;
+    uint8_t last = KEST_OP_RETURN;
+    while (walked < chunk->code_count) {
+        last = chunk->code[walked];
+        if (last >= (uint32_t)KEST_OP_STOP) {
+            return KEST_PROVED_UNKNOWN;
+        }
+        walked += kest_op_wide(last);
+    }
+    if (walked != chunk->code_count || last != KEST_OP_RETURN) {
+        return KEST_PROVED_UNKNOWN;
+    }
+    KestArena *scratch = kest_arena_new_under(under);
+    if (scratch == NULL) {
+        return KEST_PROVED_UNKNOWN;
+    }
+    uint32_t widest = 1;
+    for (uint32_t i = 0; i < module->layout_count; i++) {
+        if (module->layouts[i].slots > widest) {
+            widest = module->layouts[i].slots;
+        }
+    }
+    uint32_t count = chunk->code_count;
+    uint8_t *starts = kest_arena_alloc(scratch, ((size_t)count + 8) / 8, 1);
+    uint16_t *depth = KEST_ARENA_ARRAY(scratch, uint16_t, count);
+    uint32_t *work = KEST_ARENA_ARRAY(scratch, uint32_t, count);
+    Kind *laid = KEST_ARENA_ARRAY(scratch, Kind, widest);
+    const KestType **enums = KEST_ARENA_ARRAY(scratch, const KestType *, 256);
+    KestDiags diags;
+    kest_diags_init(&diags, scratch);
+    Verifying verifying = {module, enums, 0, enums == NULL ? 0 : 256, &diags};
+    Asked asked = {at, slot, {HOLDS_JUNK, HOLDS_JUNK}, false};
+    char said[200];
+    KestProved proved = KEST_PROVED_UNKNOWN;
+    if (starts != NULL && depth != NULL && work != NULL && laid != NULL &&
+        names_only_what_is_there(module, chunk, starts, said, sizeof said) ==
+            NULL &&
+        stack_on_every_path(module, chunk, depth, work, said, sizeof said) ==
+            NULL &&
+        holds_on_every_path(&verifying, chunk, depth, laid, widest, scratch,
+                            said, sizeof said, &asked) == NULL &&
+        asked.seen) {
+        Holds one = HOLDS_OF(asked.kinds[0]);
+        Holds two = HOLDS_OF(asked.kinds[1]);
+        // Text is where it is and how long, made or moved together: both
+        // marked as one piece's, or both nought, which is no text at all.
+        bool piece = one == HOLDS_TEXT && two == HOLDS_LENGTH &&
+                     (LAID_OF(asked.kinds[0]) & PAIRED) != 0 &&
+                     (LAID_OF(asked.kinds[1]) & PAIRED) != 0;
+        bool nothing = one == HOLDS_ZERO && two == HOLDS_ZERO;
+        proved = one == HOLDS_JUNK        ? KEST_PROVED_UNWRITTEN
+                 : piece || nothing       ? KEST_PROVED_TEXT
+                                          : KEST_PROVED_WRITTEN;
+    }
+    kest_arena_free(scratch);
+    return proved;
+}
