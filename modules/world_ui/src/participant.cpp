@@ -47,7 +47,9 @@ constexpr diagnostics::EventIdentity kAccessible{"ui", "accessibility_ready"};
 constexpr diagnostics::EventIdentity kInaccessible{"ui", "accessibility_unavailable"};
 constexpr diagnostics::EventIdentity kKeyUnknown{"ui", "label_unformatted"};
 constexpr diagnostics::EventIdentity kKeptUnread{"ui", "kept_unread"};
+#if RAWFRAME_FILE_SYSTEM
 constexpr diagnostics::EventIdentity kKeptUnwritten{"ui", "kept_unwritten"};
+#endif
 /// The decoded levels each image may hold.
 constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
 /// The fonts' bytes, all together (D386).
@@ -949,13 +951,13 @@ private:
     /// node components' names in order, and the changes asked written.
 #if RAWFRAME_FILE_SYSTEM
     std::unique_ptr<Keeper> keeper_;
-#endif
     execution::Executor* io_ = nullptr;
     execution::OwnerId owner_{};
+    std::uint64_t keptAsked_ = 0;
+#endif
     KeptValues held_;
     std::vector<std::string> keptNames_;
     std::optional<std::string> unkept_;
-    std::uint64_t keptAsked_ = 0;
     diagnostics::Emitter emitter_;
 };
 
