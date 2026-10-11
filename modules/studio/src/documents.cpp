@@ -5,7 +5,8 @@
 // session's `styles.set_part` (D636), then its transitions as one (D639).
 // A UI document (D643): its nodes in the entity column, indented by how
 // deep each stands, deleted with Delete, and a chosen node's fields, each
-// set through `ui.set_field` (D641).
+// set through `ui.set_field` (D641), and Up and Down moving it among its
+// siblings (D644).
 
 #include "rawframe/ui/document.h"
 #include "rawframe/ui/styles.h"
@@ -41,6 +42,31 @@ Value documentedValue(const std::string& text) {
     }
     auto read = document::parse(text);
     return read.has_value() ? std::move(*read) : Value::string(text);
+}
+
+/// Where node `component` stands: the node it is inside (none for a root),
+/// its place among its siblings, and how many they are.
+struct NodePlace {
+    std::optional<std::string> parent;
+    std::size_t place = 0;
+    std::size_t siblings = 0;
+};
+std::optional<NodePlace>
+placeOf(const Value* nodes, const std::string& component, const std::optional<std::string>& parent) {
+    const std::span<const Value> kItems = nodes != nullptr ? nodes->items() : std::span<const Value>{};
+    for (std::size_t at = 0; at < kItems.size(); ++at) {
+        const Value* held = kItems[at].find("component");
+        if (held == nullptr || held->text() == nullptr) {
+            continue;
+        }
+        if (*held->text() == component) {
+            return NodePlace{.parent = parent, .place = at, .siblings = kItems.size()};
+        }
+        if (auto inside = placeOf(kItems[at].find("children"), component, *held->text())) {
+            return inside;
+        }
+    }
+    return std::nullopt;
 }
 
 /// The node `component` names among `nodes` and the children inside them.
@@ -241,6 +267,22 @@ void ShellParticipant::setNodeField(const FieldRow& row, const std::string& text
     operation.add("field", Value::string(row.field));
     operation.add("value", documentedValue(text));
     commit(std::move(operation), row.field + (text.empty() ? " unset" : " set to " + text), entity_);
+}
+
+void ShellParticipant::moveNode(int by) {
+    const std::optional<NodePlace> kAt =
+        placeOf(sheet_.has_value() ? sheet_->find("nodes") : nullptr, entity_, std::nullopt);
+    if (!kAt.has_value() || (by < 0 && kAt->place == 0) || (by > 0 && kAt->place + 1 >= kAt->siblings)) {
+        ++refused_;
+        say(by < 0 ? "already first among its siblings" : "already last among its siblings");
+        return;
+    }
+    Value operation = Value::object();
+    operation.add("operation", Value::string("ui.move_node"));
+    operation.add("node", Value::string(entity_));
+    operation.add("parent", kAt->parent.has_value() ? Value::string(*kAt->parent) : Value{});
+    operation.add("place", Value::integer(static_cast<std::int64_t>(kAt->place) + by));
+    commit(std::move(operation), by < 0 ? "moved up" : "moved down", entity_);
 }
 
 } // namespace rawframe::studio

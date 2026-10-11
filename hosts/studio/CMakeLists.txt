@@ -360,6 +360,18 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "typed 300 at 1100,161.*clicked at 640,193.*clicked at 517,97.*clicked at 1166,23.*tycoon.ui written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"tycoon.ui\",[^\n]*\"applied\":2,\"refused\":0,\"undone\":1,\"redone\":0,\"undoable\":1,\"redoable\":1,[^\n]*\"status\":\"undone\".*\"exit\":\"clean_stop\"")
+    # A UI node moved among its siblings (D644): Stalls' purse, first in
+    # its wallet, is refused Up and moved Down, after the tip, staying
+    # chosen.
+    add_test(NAME studio_ui_moves
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/tycoon/tycoon.game tycoon.ui 200,126 640,161 756,97 800,97 "until=studio_said,status=\"moved down\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_ui_moves PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "clicked at 756,97.*clicked at 800,97.*tycoon.ui written: yes.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"tycoon.purse\",[^\n]*\"applied\":1,\"refused\":1,[^\n]*\"status\":\"moved down\".*\"exit\":\"clean_stop\"")
     # Studio previewing the plaza (D433, D440): choosing its gate attaches
     # the playing client's tooling endpoint as the scene's preview, and an
     # eye typed is handed to it, so the client draws frames through the

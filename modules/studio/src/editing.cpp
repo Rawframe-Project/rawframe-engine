@@ -109,6 +109,9 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         operation.add("operation", Value::string("ui.remove_node"));
         operation.add("node", Value::string(entity_));
         commit(std::move(operation), "node deleted", std::nullopt);
+    } else if (uiChosen() && (node == upNode_ || node == downNode_) && !entity_.empty()) {
+        endEdit();
+        moveNode(node == upNode_ ? -1 : 1);
     } else if (documentChosen() &&
                (node == newNode_ || node == deleteNode_ || node == duplicateNode_ || node == moveNode_ ||
                 node == upNode_ || node == downNode_ || node == restoreNode_ || node == uninstanceNode_)) {

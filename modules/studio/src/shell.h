@@ -327,6 +327,9 @@ private:
     /// `text` set as the node's field `row` names (`ui.set_field`), typed
     /// as a part's is.
     void setNodeField(const FieldRow& row, const std::string& text);
+    /// The chosen node moved one place earlier (`by` -1) or later (+1)
+    /// among its siblings (`ui.move_node`, D644).
+    void moveNode(int by);
 
     /// One operation asked of the session for the chosen scene; `done` or
     /// the session's message said; the scene shown again with `choose`
