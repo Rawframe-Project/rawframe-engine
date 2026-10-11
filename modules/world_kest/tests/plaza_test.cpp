@@ -60,17 +60,6 @@ struct Lamp {
     world::EntityHandle walker;
 };
 
-std::vector<world::EntityHandle> holding(world::World& world, schema::ComponentTypeId id) {
-    const std::array<world::ColumnTerm, 1> kTerms = {
-        world::ColumnTerm{*world.registry().find(id), world::Access::Read}};
-    auto query = world::ColumnQuery::resolve(kTerms, world.registry());
-    std::vector<world::EntityHandle> found;
-    query->forEachChunk(world, [&found](const world::ColumnChunk& chunk) {
-        found.insert(found.end(), chunk.entities.begin(), chunk.entities.end());
-    });
-    return found;
-}
-
 /// Plaza's files, held as a host holds what it fetched (D167), with its
 /// meshes and their bodies left out: meshes are read cooked, and lamps
 /// need none.
@@ -101,77 +90,20 @@ const composition::HeldFiles& plazaFiles() {
     return kHeld;
 }
 
-template <typename T> T* valueOf(world::World& world, world::EntityHandle entity, schema::ComponentTypeId id) {
-    return static_cast<T*>(world.getErased(entity, *world.registry().find(id)));
-}
-
-template <typename T> void put(world::World& world, world::EntityHandle entity, schema::ComponentTypeId id, T value) {
-    RAWFRAME_EXPECT(world.insertErased(entity, *world.registry().find(id), &value).has_value());
-}
-
-/// Plaza, composed and started, ticked at 60 Hz on a manual clock.
-class Played {
+/// Plaza, composed and started on its files held in memory.
+class PlayedPlaza : public PlayedGame {
 public:
-    Played() {
-        std::vector<composition::Problem> problems;
-        auto plan = composition::compose(
-            composition::CompositionRequest{.registrars = kPlaza,
-                                            .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
-            problems);
-        const std::string kText =
-            "kest.game = game/plaza.game\nworld.tick_rate = 60\nworld.maximum_ticks_per_iteration = 1\n";
-        auto configuration = composition::Configuration::parse(kText);
-        if (!plan.has_value() || !configuration.has_value()) {
-            return;
-        }
-        plan_.emplace(std::move(*plan));
-        configuration_.emplace(std::move(*configuration));
-        composition_.emplace(*plan_,
-                             composition::HostServices{.clock = &clock_,
-                                                       .scope = &root_,
-                                                       .cpu = &test::cpuExecutor(),
-                                                       .blockingIo = &test::blockingIoExecutor(),
-                                                       .configuration = &*configuration_,
-                                                       .files = &plazaFiles()});
-        started_ = composition_->start().has_value();
+    PlayedPlaza()
+        : PlayedGame(kPlaza,
+                     "kest.game = game/plaza.game\nworld.tick_rate = 60\nworld.maximum_ticks_per_iteration = 1\n",
+                     &plazaFiles()) {
     }
-
-    Played(const Played&) = delete;
-    Played& operator=(const Played&) = delete;
-
-    ~Played() {
-        if (started_) {
-            composition_->stop();
-        }
-        simulation = nullptr;
-    }
-
-    [[nodiscard]] bool started() const noexcept {
-        return started_;
-    }
-
-    void run(std::uint64_t ticks) {
-        for (std::uint64_t tick = 0; tick < ticks; ++tick) {
-            clock_.advance(execution::MonotonicDuration{16'666'667});
-            composition_->runHostPhase(composition::HostPhase::RunWorlds,
-                                       composition::HostFrame{.iteration = iteration_++, .now = clock_.now()});
-        }
-    }
-
-private:
-    std::optional<composition::Plan> plan_;
-    std::optional<composition::Configuration> configuration_;
-    execution::ManualClock clock_;
-    execution::CancellationScope root_{clock_};
-    std::optional<composition::Composition> composition_;
-    std::uint64_t iteration_ = 0;
-    bool started_ = false;
 };
 
 } // namespace
 
 RAWFRAME_TEST(AWalkersLampHangsAtItsSideAndFollowsItsHand) {
-    Played played;
+    PlayedPlaza played;
     RAWFRAME_EXPECT(played.started());
     if (!played.started()) {
         return;

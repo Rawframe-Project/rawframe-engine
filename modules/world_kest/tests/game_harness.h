@@ -2,20 +2,29 @@
 
 // What the game tests share: a composition of the game and the World
 // runtime, a participant that finds the simulation the game was loaded
-// into, the test games held as a host holds files, and small file helpers.
+// into, a game played tick by tick on a manual clock, reading and writing
+// its components, the test games held as a host holds files, and small file
+// helpers.
 
 #include "rawframe/composition/composition.h"
+#include "rawframe/composition/configuration.h"
+#include "rawframe/execution/time.h"
+#include "rawframe/test/executors.h"
 #include "rawframe/test/files.h"
+#include "rawframe/test/test.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_runtime/registrar.h"
 #include "rawframe/world_runtime/simulation.h"
 
 #include <array>
+#include <cstdint>
 #include <cstdio>
 #if defined(_WIN32)
 #include <filesystem>
 #endif
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -67,6 +76,87 @@ inline std::vector<std::pair<float, float>> positions() {
     });
     return found;
 }
+
+/// Every entity with component `id`, in World order.
+inline std::vector<world::EntityHandle> holding(world::World& world, schema::ComponentTypeId id) {
+    const std::array<world::ColumnTerm, 1> kTerms = {
+        world::ColumnTerm{*world.registry().find(id), world::Access::Read}};
+    auto query = world::ColumnQuery::resolve(kTerms, world.registry());
+    std::vector<world::EntityHandle> found;
+    query->forEachChunk(world, [&found](const world::ColumnChunk& chunk) {
+        found.insert(found.end(), chunk.entities.begin(), chunk.entities.end());
+    });
+    return found;
+}
+
+/// An entity's component `id`, as the program lays it out, or none.
+template <typename T> T* valueOf(world::World& world, world::EntityHandle entity, schema::ComponentTypeId id) {
+    return static_cast<T*>(world.getErased(entity, *world.registry().find(id)));
+}
+
+template <typename T> void put(world::World& world, world::EntityHandle entity, schema::ComponentTypeId id, T value) {
+    RAWFRAME_EXPECT(world.insertErased(entity, *world.registry().find(id), &value).has_value());
+}
+
+/// A game composed with `registrars` and `configuration` and started,
+/// reading `files` where given, ticked at 60 Hz on a manual clock.
+class PlayedGame {
+public:
+    PlayedGame(std::span<const composition::RegistrarEntry> registrars,
+               const std::string& configuration,
+               const composition::HeldFiles* files = nullptr) {
+        std::vector<composition::Problem> problems;
+        auto plan = composition::compose(
+            composition::CompositionRequest{.registrars = registrars,
+                                            .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+            problems);
+        auto parsed = composition::Configuration::parse(configuration);
+        if (!plan.has_value() || !parsed.has_value()) {
+            return;
+        }
+        plan_.emplace(std::move(*plan));
+        configuration_.emplace(std::move(*parsed));
+        composition_.emplace(*plan_,
+                             composition::HostServices{.clock = &clock_,
+                                                       .scope = &root_,
+                                                       .cpu = &test::cpuExecutor(),
+                                                       .blockingIo = &test::blockingIoExecutor(),
+                                                       .configuration = &*configuration_,
+                                                       .files = files});
+        started_ = composition_->start().has_value();
+    }
+
+    PlayedGame(const PlayedGame&) = delete;
+    PlayedGame& operator=(const PlayedGame&) = delete;
+
+    ~PlayedGame() {
+        if (started_) {
+            composition_->stop();
+        }
+        simulation = nullptr;
+    }
+
+    [[nodiscard]] bool started() const noexcept {
+        return started_;
+    }
+
+    void run(std::uint64_t ticks) {
+        for (std::uint64_t tick = 0; tick < ticks; ++tick) {
+            clock_.advance(execution::MonotonicDuration{16'666'667});
+            composition_->runHostPhase(composition::HostPhase::RunWorlds,
+                                       composition::HostFrame{.iteration = iteration_++, .now = clock_.now()});
+        }
+    }
+
+private:
+    std::optional<composition::Plan> plan_;
+    std::optional<composition::Configuration> configuration_;
+    execution::ManualClock clock_;
+    execution::CancellationScope root_{clock_};
+    std::optional<composition::Composition> composition_;
+    std::uint64_t iteration_ = 0;
+    bool started_ = false;
+};
 
 /// The test games' files, held under `game/` as a host holds what it
 /// fetched (D167), so that a game is played where there are no files.
