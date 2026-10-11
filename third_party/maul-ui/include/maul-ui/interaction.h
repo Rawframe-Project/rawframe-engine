@@ -100,7 +100,10 @@ extern "C"
         // Activation layers come in the order they became layers or were
         // raised, the overlay band after them all. Up to the context's
         // layers limit: a node that becomes a layer past it stays in its
-        // parent's layer until its kind changes again.
+        // parent's layer until its kind changes again. A layer remembers
+        // what each player focused outside it when it became one, which
+        // gets the focus back when it exits or is destroyed with the
+        // focus inside.
         muiLayerKind layer;
         // Disabled and exiting nodes take no focus whatever their mode.
         muiFocusMode focusMode;

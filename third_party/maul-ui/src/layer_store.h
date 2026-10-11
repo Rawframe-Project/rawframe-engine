@@ -7,15 +7,21 @@
 #ifndef MAUL_UI_SRC_LAYER_STORE_H
 #define MAUL_UI_SRC_LAYER_STORE_H
 
+#include "maul-ui/base.h"
+#include "maul-ui/focus.h"
+
 #include <stdint.h>
 
 // A node that roots a layer: its slot and generation, which tell a node
-// destroyed since, and when it became a layer or was raised.
+// destroyed since, when it became a layer or was raised, and what each
+// player focused when it became one, outside it (its openers), which
+// get the focus back when it closes.
 typedef struct muiLayerEntry
 {
     uint32_t slot;
     uint32_t generation;
     uint64_t activation;
+    muiNodeId openers[MUI_MAX_PLAYERS];
 } muiLayerEntry;
 
 typedef struct muiLayerStore

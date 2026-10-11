@@ -89,6 +89,11 @@ static const muiCacheEntry* FindCached(const muiSolver* solver, uint32_t node,
 {
     const muiLayoutNode* layout = &solver->nodes[node - 1];
     bool keyExtents = ReadsParentExtent(&layout->style.sizing);
+    // Only a row with children reads whether its height is loose
+    // (src/flex.c); for any other node the flag would split its entries.
+    muiFlexDirection direction = layout->style.container.direction;
+    bool keyLoose = (direction == mui_flexRow || direction == mui_flexRowReverse) &&
+                    muiTreeAt(solver->tree, node)->links.firstChild != 0;
     unsigned loose = LooseOf(solver, node);
     for (int i = 0; i < MUI_CACHE_ENTRIES; i++)
     {
@@ -101,7 +106,10 @@ static const muiCacheEntry* FindCached(const muiSolver* solver, uint32_t node,
         if (entry->valid && sameExtents && entry->input.rtl == input->rtl &&
             entry->input.contentHeight == input->contentHeight &&
             entry->input.contentOnly == input->contentOnly &&
+            entry->input.contentOnlyHeight == input->contentOnlyHeight &&
             entry->input.ratioPercent == input->ratioPercent &&
+            entry->input.ratioLines == input->ratioLines &&
+            (!keyLoose || entry->input.looseHeight == input->looseHeight) &&
             AxisAnswers(input->width, entry->input.width, entry->size.width, (loose & 1u) != 0) &&
             AxisAnswers(input->height, entry->input.height, entry->size.height, (loose & 2u) != 0))
         {
@@ -147,7 +155,7 @@ static muiSize SizeLeaf(const muiSolver* solver, uint32_t node, const muiSizingI
     muiAxisSizing height = muiResolveAxis(&style->sizing, false, input->parentHeight);
     if (input->contentOnly)
     {
-        width = height = (muiAxisSizing){.maximum = INFINITY};
+        *(input->contentOnlyHeight ? &height : &width) = (muiAxisSizing){.maximum = INFINITY};
     }
     if (style->content == mui_contentHost && solver->measure != nullptr && !decided)
     {
@@ -320,6 +328,16 @@ static float RatioContentHeight(const muiSolver* solver, uint32_t node, const mu
     return muiFlexRatioContentHeight(solver, node, &probe);
 }
 
+// Whether a node is a column that wraps, with items to wrap.
+static bool IsWrappingColumn(const muiSolver* solver, uint32_t node)
+{
+    const muiFlexContainer* container = &solver->nodes[node - 1].style.container;
+    return muiTreeAt(solver->tree, node)->links.firstChild != 0 &&
+           container->wrap != mui_wrapNone &&
+           (container->direction == mui_flexColumn ||
+            container->direction == mui_flexColumnReverse);
+}
+
 // The size the aspect ratio gives an axis from the other one's, at least
 // the content's min-content size when the axis's minimum is automatic
 // (CSS Sizing 4). A width given as a percentage that cannot resolve takes that
@@ -336,8 +354,12 @@ static muiMeasureAxis RatioAxis(const muiSolver* solver, uint32_t node, const mu
         // A row's stretched items take a height from the ratio, so they
         // leave its floor; asked its min-content height, as a column
         // measures its items, the node counts its content in full.
+        // A wrapping column so asked breaks its lines at the ratio's
+        // height all the same (as Chrome).
         bool full = horizontal || input->height.mode == mui_measureMinContent;
-        float floor = full ? ContentSize(solver, node, input, horizontal)
+        muiSizingInput lines = *input;
+        lines.ratioLines = !horizontal && IsWrappingColumn(solver, node);
+        float floor = full ? ContentSize(solver, node, &lines, horizontal)
                            : RatioContentHeight(solver, node, input, size);
         muiAxisSizing height = muiResolveAxis(&style->sizing, false, input->parentHeight);
         if (horizontal && !height.definite)
@@ -361,9 +383,8 @@ static muiMeasureAxis RatioAxis(const muiSolver* solver, uint32_t node, const mu
 }
 
 // With an aspect ratio, a node given an exact size on one axis and an
-// automatic one on the other takes the other from the ratio. A root or
-// absolute node given both, with a minimum width from its ratio, answers
-// a query for its min-content width with at least its content's.
+// automatic one on the other takes the other from the ratio; given
+// neither, its content's width within the ratio's limits.
 static void ApplyAspectRatio(const muiSolver* solver, uint32_t node, muiSizingInput* input)
 {
     const muiSizing* sizing = &solver->nodes[node - 1].style.sizing;
@@ -383,6 +404,17 @@ static void ApplyAspectRatio(const muiSolver* solver, uint32_t node, muiSizingIn
     else if (exactHeight && !exactWidth && !width.definite)
     {
         input->width = RatioAxis(solver, node, input, true, input->height.size * ratio);
+        if (muiRatioWidthMinimum(&solver->nodes[node - 1].style) && !height.definite)
+        {
+            // A percentage height with nothing to resolve against, which
+            // a column flexed to an exact size: the width through the
+            // ratio is at least the content's min-content width, an
+            // automatic minimum a given minimum width replaces (as Chrome
+            // and Firefox); the maximum width still clamps it.
+            muiSizingInput probe = *input;
+            probe.width = (muiMeasureAxis){0.0f, mui_measureMinContent};
+            input->width.size = fmaxf(input->width.size, ContentAnswer(solver, node, &probe).width);
+        }
     }
     else if (!exactWidth && !exactHeight && !width.definite && !height.definite)
     {
@@ -398,29 +430,6 @@ static void ApplyAspectRatio(const muiSolver* solver, uint32_t node, muiSizingIn
                             muiBoxSum(&solver->paddings[node - 1], style, true));
         input->width = muiExact(size);
         input->height = RatioAxis(solver, node, input, false, size / ratio);
-    }
-    else if (!exactWidth && !exactHeight && !width.definite && height.definite &&
-             input->height.mode != mui_measureMinContent)
-    {
-        // Its style gives the height, the ratio the width, whatever the
-        // query leaves open, as a column asks its items' widths; asked
-        // its min-content height, as for a content size suggestion, its
-        // content answers.
-        const muiLayoutStyle* style = &solver->nodes[node - 1].style;
-        input->height =
-            muiExact(muiClampSize(height.size, height.minimum, height.maximum,
-                                  muiBoxSum(&solver->paddings[node - 1], style, false)));
-        input->width = RatioAxis(solver, node, input, true, input->height.size * ratio);
-    }
-    else if (exactHeight && input->width.mode == mui_measureMinContent && width.definite &&
-             muiRatioWidthMinimum(&solver->nodes[node - 1].style) &&
-             (solver->nodes[node - 1].absolute || muiTreeAt(solver->tree, node)->links.parent == 0))
-    {
-        float content = fminf(ContentSize(solver, node, input, true), width.maximum);
-        const muiLayoutStyle* style = &solver->nodes[node - 1].style;
-        float own = muiClampSize(width.size, width.minimum, width.maximum,
-                                 muiBoxSum(&solver->paddings[node - 1], style, true));
-        input->width = muiExact(fmaxf(own, content));
     }
 }
 
@@ -482,6 +491,7 @@ muiSize muiSolveNode(const muiSolver* solver, uint32_t node, const muiSizingInpu
         if (cache->finalValid && cache->finalRtl == input->rtl &&
             cache->finalContentHeight == input->contentHeight &&
             cache->finalRatioPercent == input->ratioPercent &&
+            cache->finalLooseHeight == input->looseHeight &&
             cache->finalSize.width == input->width.size &&
             cache->finalSize.height == input->height.size)
         {
@@ -527,6 +537,7 @@ muiSize muiSolveNode(const muiSolver* solver, uint32_t node, const muiSizingInpu
         cache->finalRtl = input->rtl;
         cache->finalContentHeight = input->contentHeight;
         cache->finalRatioPercent = input->ratioPercent;
+        cache->finalLooseHeight = input->looseHeight;
         cache->finalSize = size;
         Published(solver, node, size, own.rtl);
     }

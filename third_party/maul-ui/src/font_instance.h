@@ -48,7 +48,8 @@ uint32_t muiKeyGeneration(uint32_t generation);
 
 // The instance a style's weight (1 to 1000), slant and size in logical
 // units make of a font, as a key's top 24 bits.
-uint64_t muiInstanceBits(const muiFont* font, float weight, muiFontSlant slant, float size);
+uint64_t muiInstanceBits(const muiFont* font, float weight, muiFontSlant slant, float size,
+                         muiFontSynthesis synthesis);
 
 muiInstance muiDecodeInstance(uint64_t key);
 

@@ -36,6 +36,20 @@ extern "C"
         mui_slantOblique = 2,
     };
 
+    // Which faces the text service may make when a font cannot show the
+    // weight or slant asked, as CSS's font-synthesis-weight and
+    // font-synthesis-style: 0, its default, allows both; each bit forbids
+    // one, so a lighter or upright face is shown as it is.
+    typedef uint8_t muiFontSynthesis;
+
+    enum
+    {
+        mui_synthesisAll = 0,
+        mui_synthesisNoBold = 1,
+        mui_synthesisNoOblique = 2,
+        mui_synthesisNone = 3,
+    };
+
     // Where lines sit across a node's content box: at the start, which
     // the text direction sets, the center or the end.
     typedef uint8_t muiTextAlign;
@@ -104,6 +118,9 @@ extern "C"
         // without font data. Not inherited, and a node's own does nothing,
         // as CSS's baseline-shift on a block container (record mui-0006).
         muiDimension baselineShift;
+        // The faces the text service may make (muiFontSynthesis).
+        // Inherited; spans take their node's.
+        muiFontSynthesis synthesis;
     } muiTextStyle;
 
     // A node's text values as inherited and resolved to logical units.
@@ -124,13 +141,14 @@ extern "C"
         muiTextDecoration decoration;
         // As given: alpha 0 is the text's color.
         muiColor decorationColor;
+        muiFontSynthesis synthesis;
     } muiComputedTextStyle;
 
     /// Returns the default text style: opaque black, font 0, 16 logical
     /// units, the font's own line height, no letter spacing, weight 400,
     /// upright, at the start, wrapping, with no decoration, whose color is
-    /// the text's. A root takes these for what no
-    /// layer gives it.
+    /// the text's, bold and oblique made where a font has none. A root
+    /// takes these for what no layer gives it.
     ///
     /// @return The style.
     /// @par Thread safety

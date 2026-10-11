@@ -391,6 +391,51 @@ void muiFocusRecheck(muiContext* context, uint32_t slot)
     }
 }
 
+void muiFocusReturns(const muiContext* context, uint32_t closing,
+                     muiNodeId returns[MUI_MAX_PLAYERS])
+{
+    const muiTree* tree = &context->tree;
+    for (uint32_t player = 0; player < MUI_MAX_PLAYERS; player++)
+    {
+        returns[player] = (muiNodeId){0, 0};
+        uint32_t focus = SlotOf(context, context->focus.nodes[player]);
+        if (focus == 0 || !muiTreeIsAncestor(tree, closing, focus))
+        {
+            continue;
+        }
+        // The outermost layer's: what opened a dialog, not a popup of its
+        // own closing with it.
+        for (uint32_t at = focus;; at = muiTreeAt(tree, at)->links.parent)
+        {
+            if (muiIsLayerRoot(tree, at))
+            {
+                returns[player] = muiLayerOpener(context, at, (uint8_t)player);
+            }
+            if (at == closing)
+            {
+                break;
+            }
+        }
+    }
+}
+
+void muiFocusGiveBack(muiContext* context, const muiNodeId returns[MUI_MAX_PLAYERS])
+{
+    for (uint32_t player = 0; player < MUI_MAX_PLAYERS; player++)
+    {
+        uint32_t slot = SlotOf(context, returns[player]);
+        if (slot == 0 || !IsNull(context->focus.nodes[player]) ||
+            !muiFocusTakes(context, slot, mui_focusPointer) || muiFocusIsCovered(context, slot))
+        {
+            continue;
+        }
+        // As a move by code shows it, not scrolled into view (HTML's
+        // dialogs and popovers).
+        muiFocusAssign(context, (uint8_t)player, slot, context->focus.showsByCode[player]);
+        muiPopupFocus(context, slot);
+    }
+}
+
 void muiFocusForgetDestroyed(muiContext* context)
 {
     muiFocusStore* store = &context->focus;

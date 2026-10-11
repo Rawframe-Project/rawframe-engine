@@ -4,7 +4,8 @@
 // Instances as CSS makes them: wght from the weight, ital or slnt from
 // the slant, opsz from the size, each within its axis's range; bold made
 // when 600 or more is asked of a face that cannot reach 600, oblique when
-// a slant is asked of an upright face without ital or slnt.
+// a slant is asked of an upright face without ital or slnt, each unless
+// the style's synthesis forbids it.
 
 #include "font_instance.h"
 
@@ -96,7 +97,8 @@ static uint64_t SlantOf(const muiFont* font, muiFontSlant slant)
     return font->faceSlant != mui_slantNormal ? SLANT_NONE : SLANT_SHEARED;
 }
 
-uint64_t muiInstanceBits(const muiFont* font, float weight, muiFontSlant slant, float size)
+uint64_t muiInstanceBits(const muiFont* font, float weight, muiFontSlant slant, float size,
+                         muiFontSynthesis synthesis)
 {
     uint64_t bits = 0;
     const muiFontAxis* wght = FindAxis(font, Tag('w', 'g', 'h', 't'));
@@ -108,11 +110,15 @@ uint64_t muiInstanceBits(const muiFont* font, float weight, muiFontSlant slant, 
         bits |= (uint64_t)(uint32_t)(value + 0.5f) << WEIGHT_SHIFT;
         reach = ToFloat(wght->maximum);
     }
-    if (weight >= (float)BOLD_WEIGHT && reach < (float)BOLD_WEIGHT)
+    if (weight >= (float)BOLD_WEIGHT && reach < (float)BOLD_WEIGHT &&
+        (synthesis & mui_synthesisNoBold) == 0)
     {
         bits |= 1ull << BOLD_SHIFT;
     }
-    bits |= SlantOf(font, slant) << SLANT_SHIFT;
+    uint64_t kind = SlantOf(font, slant);
+    bool sheared = kind == SLANT_SHEARED;
+    bits |= (sheared && (synthesis & mui_synthesisNoOblique) != 0 ? SLANT_NONE : kind)
+            << SLANT_SHIFT;
     const muiFontAxis* opsz = FindAxis(font, Tag('o', 'p', 's', 'z'));
     if (opsz != nullptr && size > 0.0f)
     {

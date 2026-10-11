@@ -19,8 +19,9 @@
 typedef struct muiContext muiContext;
 
 // Takes note of a node's layer kind after it may have changed from
-// before: a node that became a layer is the latest activated, one that
-// stopped is forgotten, and either is painted again.
+// before: a node that became a layer is the latest activated and records
+// its openers, one that stopped is forgotten, and either is painted
+// again.
 void muiNoteLayer(muiContext* context, uint32_t slot, muiLayerKind before);
 
 // Whether a node roots a layer: it has a layer kind and the store holds
@@ -33,5 +34,10 @@ static inline bool muiIsLayerRoot(const muiTree* tree, uint32_t slot)
 // The slot of the layer at a place from the bottom, or 0 when the node
 // there is gone or roots no layer any more.
 uint32_t muiLayerAt(const muiContext* context, uint32_t place);
+
+// What a player focused outside a layer when it became one, which the
+// focus returns to when the layer closes; the null id for none, or a
+// node that roots no layer.
+muiNodeId muiLayerOpener(const muiContext* context, uint32_t slot, uint8_t player);
 
 #endif // MAUL_UI_SRC_LAYER_H

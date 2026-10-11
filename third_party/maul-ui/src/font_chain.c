@@ -40,7 +40,7 @@ static void Add(const muiTextService* service, uint64_t key, const muiComputedTe
     {
         return;
     }
-    faceKey |= muiInstanceBits(font, style->weight, style->slant, style->size);
+    faceKey |= muiInstanceBits(font, style->weight, style->slant, style->size, style->synthesis);
     for (uint32_t i = 0; i < chain->count; i++)
     {
         if (chain->keys[i] == faceKey)

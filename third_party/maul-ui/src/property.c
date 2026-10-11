@@ -176,6 +176,7 @@ static const Row s_textRows[] = {
          mui_decorationUnderline | mui_decorationOverline | mui_decorationLineThrough),
     TEXT(decorationColor, muiColor, kindColor, 0, 0),
     TEXT(baselineShift, muiDimension, kindSpacing, 0, 0),
+    TEXT(synthesis, uint8_t, kindEnum, mui_synthesisAll, mui_synthesisNone),
 };
 
 static const Row s_interactionRows[] = {
@@ -207,7 +208,7 @@ static const GroupRows s_groups[MUI_PROPERTY_GROUPS] = {
 static_assert(
     sizeof s_layoutRows / sizeof s_layoutRows[0] == mui_propertySafeArea + 1 &&
         sizeof s_visualRows / sizeof s_visualRows[0] == (mui_propertyImageRepeatY & 63) + 1 &&
-        sizeof s_textRows / sizeof s_textRows[0] == (mui_propertyTextBaselineShift & 63) + 1 &&
+        sizeof s_textRows / sizeof s_textRows[0] == (mui_propertyFontSynthesis & 63) + 1 &&
         sizeof s_interactionRows / sizeof s_interactionRows[0] == (mui_propertyExitLayout & 63) + 1,
     "one row per property");
 static_assert(MUI_PROPERTY_GROUP(mui_propertyHitMode) == mui_groupInteraction &&
@@ -230,8 +231,7 @@ static_assert(sizeof(muiColor) == 4 * sizeof(float) && sizeof(muiShadow) == 8 * 
               "compared as floats alone");
 static_assert(MUI_LAYOUT_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertySafeArea) << 1) - 1 &&
                   MUI_VISUAL_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyImageRepeatY) << 1) - 1 &&
-                  MUI_TEXT_PROPERTIES ==
-                      (MUI_PROPERTY_BIT(mui_propertyTextBaselineShift) << 1) - 1 &&
+                  MUI_TEXT_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyFontSynthesis) << 1) - 1 &&
                   MUI_INTERACTION_PROPERTIES == (MUI_PROPERTY_BIT(mui_propertyExitLayout) << 1) - 1,
               "the masks name every property of their groups");
 

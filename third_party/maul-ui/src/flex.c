@@ -89,11 +89,12 @@ static bool ColumnContentHeight(const muiFlexFrame* frame, const muiLayoutStyle*
 // A box whose height its ratio gives, its container not fixing it:
 // percentages below resolve against the ratio's height, not the one its
 // content grew it to, and a column that wraps breaks its lines there,
-// as browsers do.
+// as browsers do; asked for its lines alone (ratioLines), only the
+// latter.
 static void RatioExtent(muiFlexFrame* frame, const muiLayoutStyle* style,
                         const muiSizingInput* input)
 {
-    if (!input->ratioPercent || input->width.mode != mui_measureExact)
+    if (!(input->ratioPercent || input->ratioLines) || input->width.mode != mui_measureExact)
     {
         return;
     }
@@ -101,8 +102,12 @@ static void RatioExtent(muiFlexFrame* frame, const muiLayoutStyle* style,
     float box = frame->row ? frame->boxCross : frame->boxMain;
     float ratioHeight = muiClampSize(input->width.size / style->sizing.aspectRatio, height.minimum,
                                      height.maximum, box);
-    *(frame->row ? &frame->extentCross : &frame->extentMain) = fmaxf(ratioHeight - box, 0.0f);
-    frame->ratioBreak = frame->row || !frame->multiLine ? -1.0f : frame->extentMain;
+    float extent = fmaxf(ratioHeight - box, 0.0f);
+    if (input->ratioPercent)
+    {
+        *(frame->row ? &frame->extentCross : &frame->extentMain) = extent;
+    }
+    frame->ratioBreak = frame->row || !frame->multiLine ? -1.0f : extent;
 }
 
 static muiFlexFrame Setup(const muiSolver* solver, uint32_t node, const muiSizingInput* input)
@@ -127,9 +132,12 @@ static muiFlexFrame Setup(const muiSolver* solver, uint32_t node, const muiSizin
     frame.crossLimits = muiResolveAxis(&style->sizing, !frame.row, parentCross);
     if (input->contentOnly)
     {
-        // The content's answer alone, its own limits left out.
-        frame.mainLimits.minimum = frame.crossLimits.minimum = 0.0f;
-        frame.mainLimits.maximum = frame.crossLimits.maximum = INFINITY;
+        // The content's answer alone, its own limits along its
+        // container's main axis left out.
+        muiAxisSizing* left =
+            frame.row != input->contentOnlyHeight ? &frame.mainLimits : &frame.crossLimits;
+        left->minimum = 0.0f;
+        left->maximum = INFINITY;
     }
     frame.gap = frame.row ? style->container.columnGap : style->container.rowGap;
     frame.crossGap = frame.row ? style->container.rowGap : style->container.columnGap;
@@ -151,6 +159,8 @@ static muiFlexFrame Setup(const muiSolver* solver, uint32_t node, const muiSizin
         frame.innerCross = fmaxf(frame.crossIn.size - frame.boxCross, 0.0f);
         frame.extentCross = crossDefinite ? frame.innerCross : -1.0f;
     }
+    frame.crossLoose = frame.row && (input->contentHeight || input->looseHeight) &&
+                       !muiResolveAxis(&style->sizing, false, input->parentHeight).definite;
     RatioExtent(&frame, style, input);
     return frame;
 }
@@ -158,6 +168,26 @@ static muiFlexFrame Setup(const muiSolver* solver, uint32_t node, const muiSizin
 // Section 9.2 and 9.3: every child's hypothetical main size, the
 // container's inner main size from its content when not given, then the
 // lines and each line's flexible lengths.
+// The longest of the lines the items make broken at a length.
+static float LongestLine(const muiFlexFrame* frame, float length)
+{
+    const muiTree* tree = frame->solver->tree;
+    float longest = 0.0f;
+    for (uint32_t first = muiFirstFlowChild(tree, frame->solver->nodes, frame->node); first != 0;)
+    {
+        uint32_t count =
+            muiCollectLine(tree, frame->solver->nodes, first, length, frame->gap, true);
+        float used = Gaps(frame->gap, count);
+        for (uint32_t i = 0; i < count;
+             i++, first = muiNextFlowChild(tree, frame->solver->nodes, first))
+        {
+            used += ItemOf(frame, first)->hypothetical + ItemOf(frame, first)->marginMain;
+        }
+        longest = fmaxf(longest, used);
+    }
+    return longest;
+}
+
 static void SizeMain(muiFlexFrame* frame)
 {
     const muiTree* tree = frame->solver->tree;
@@ -180,31 +210,33 @@ static void SizeMain(muiFlexFrame* frame)
         bool narrowest = wraps && frame->mainIn.mode == mui_measureMinContent;
         float content = narrowest ? widest : sum + Gaps(frame->gap, frame->count);
         content = wraps ? fmaxf(content, widest) : content;
-        if (frame->ratioBreak >= 0.0f)
+        // A wrapping column longer than its maximum height breaks its lines
+        // there, as Chrome and Firefox do; the ratio's height breaks them
+        // otherwise.
+        float breakAt = frame->ratioBreak;
+        if (breakAt < 0.0f && !frame->row && frame->multiLine &&
+            content + frame->boxMain > frame->mainLimits.maximum)
         {
-            // Its longest line, broken at the ratio's height.
-            content = 0.0f;
-            for (uint32_t first = muiFirstFlowChild(tree, frame->solver->nodes, frame->node);
-                 first != 0;)
-            {
-                uint32_t count = muiCollectLine(tree, frame->solver->nodes, first,
-                                                frame->ratioBreak, frame->gap, true);
-                float used = Gaps(frame->gap, count);
-                for (uint32_t i = 0; i < count;
-                     i++, first = muiNextFlowChild(tree, frame->solver->nodes, first))
-                {
-                    used += ItemOf(frame, first)->hypothetical + ItemOf(frame, first)->marginMain;
-                }
-                content = fmaxf(content, used);
-            }
+            breakAt = fmaxf(frame->mainLimits.maximum - frame->boxMain, 0.0f);
         }
+        content = breakAt >= 0.0f ? LongestLine(frame, breakAt) : content;
         float outer = muiClampSize(content + frame->boxMain, frame->mainLimits.minimum,
                                    frame->mainLimits.maximum, frame->boxMain);
         frame->innerMain = outer - frame->boxMain;
     }
+    // A column of indefinite height whose items fit it, its height its
+    // content's, is one line: items with negative margins may sum shorter
+    // than they run. One a maximum or its container shrank below them
+    // breaks there (section 9.3, as Chrome and Firefox).
+    float breakLength = frame->innerMain;
+    float fits = frame->innerMain + fmaxf(fabsf(frame->innerMain), 1.0f) * 1.0e-5f;
+    if (!frame->row && frame->extentMain < 0.0f && sum + Gaps(frame->gap, frame->count) <= fits)
+    {
+        breakLength = INFINITY;
+    }
     for (uint32_t first = muiFirstFlowChild(tree, frame->solver->nodes, frame->node); first != 0;)
     {
-        float length = frame->ratioBreak >= 0.0f ? frame->ratioBreak : frame->innerMain;
+        float length = frame->ratioBreak >= 0.0f ? frame->ratioBreak : breakLength;
         uint32_t count =
             muiCollectLine(tree, frame->solver->nodes, first, length, frame->gap, frame->multiLine);
         float used = Gaps(frame->gap, count);
@@ -271,9 +303,11 @@ static float HypotheticalCross(const muiFlexFrame* frame, uint32_t first, uint32
                 // stretched, it is so unless given or from its ratio).
                 muiSizingInput at =
                     muiFlexChildInput(frame, muiExact(item->target), muiExact(item->cross));
-                at.contentHeight =
-                    style->sizing.aspectRatio <= 0.0f &&
-                    !muiResolveAxis(&style->sizing, false, frame->extentCross).definite;
+                bool given = muiResolveAxis(&style->sizing, false, frame->extentCross).definite;
+                at.contentHeight = style->sizing.aspectRatio <= 0.0f && !given;
+                // Its ratio's height holds its percentages, as when it is
+                // laid out (FinalInput).
+                at.ratioPercent = style->sizing.aspectRatio > 0.0f && !given;
                 own = frame->solver->baseline(frame->solver, c, &at);
             }
             muiEdges margins = muiMarginsOf(style, frame->rtl);
@@ -369,38 +403,71 @@ static void DistributeLines(const muiFlexFrame* frame, float used)
 
 // Section 9.4: the lines' cross sizes, the container's, the lines'
 // places, and stretched children's cross sizes.
-// Section 9.9.2: a single-line column sized by its content, and a
-// wrapping one asked its min-content width, is as wide as its widest
-// item's contribution, its width with its height left open, as Chrome
-// sizes it, not as wide as its items are at their flexed heights; a
-// wrapping column's other widths are its lines'.
-static float ColumnContribution(const muiFlexFrame* frame, bool narrowest)
+// Section 9.9.2: a column sized by its content is as wide as its items'
+// contributions, each its width with its height left open (a flex basis
+// left out), as Chrome and Firefox size it, not as wide as its items are
+// at their flexed heights: a single line, or a wrapping column asked its
+// min-content width, its widest item's; a wrapping column asked its
+// max-content width the sum of its lines' widest.
+// An item's contribution to a column's width: its width at the
+// column's constraint (its min-content width with narrowest) and its
+// height from its style, open otherwise, within its limits, with its
+// margins.
+static float ItemContribution(const muiFlexFrame* frame, uint32_t c, bool narrowest)
+{
+    const muiLayoutStyle* style = &frame->solver->nodes[c - 1].style;
+    const muiFlexItemState* item = ItemOf(frame, c);
+    muiAxisSizing cross = muiResolveAxis(&style->sizing, true, frame->extentCross);
+    muiMeasureAxis constraint = muiFlexCrossConstraint(frame, style, &cross, false);
+    if (narrowest && !cross.definite)
+    {
+        constraint = (muiMeasureAxis){0.0f, mui_measureMinContent};
+    }
+    // A height the item's style gives is its own, open otherwise.
+    muiAxisSizing main = muiResolveAxis(&style->sizing, false, frame->extentMain);
+    const muiEdges padding = muiFlexChildPadding(frame, style);
+    muiMeasureAxis height = main.definite
+                                ? muiExact(muiClampSize(main.size, main.minimum, main.maximum,
+                                                        muiBoxSum(&padding, style, false)))
+                                : (muiMeasureAxis){0.0f, mui_measureMaxContent};
+    muiSizingInput input = muiFlexChildInput(frame, height, constraint);
+    float size = frame->solver->solve(frame->solver, c, &input, false).width;
+    size = muiClampSize(size, item->minCross, item->maxCross, muiBoxSum(&padding, style, true));
+    return size + item->marginCross;
+}
+
+// The largest contribution among count items from first, or among all
+// those after it.
+static float LineContribution(const muiFlexFrame* frame, uint32_t first, uint32_t count,
+                              bool narrowest)
 {
     float widest = 0.0f;
-    for (uint32_t c = muiFirstFlowChild(frame->solver->tree, frame->solver->nodes, frame->node);
-         c != 0; c = muiNextFlowChild(frame->solver->tree, frame->solver->nodes, c))
+    for (uint32_t c = first, i = 0; c != 0 && i < count;
+         c = muiNextFlowChild(frame->solver->tree, frame->solver->nodes, c), i++)
     {
-        const muiLayoutStyle* style = &frame->solver->nodes[c - 1].style;
-        const muiFlexItemState* item = ItemOf(frame, c);
-        muiAxisSizing cross = muiResolveAxis(&style->sizing, true, frame->extentCross);
-        muiMeasureAxis constraint = muiFlexCrossConstraint(frame, style, &cross, false);
-        if (narrowest && !cross.definite)
-        {
-            constraint = (muiMeasureAxis){0.0f, mui_measureMinContent};
-        }
-        // A height the item's style gives is its own, open otherwise.
-        muiAxisSizing main = muiResolveAxis(&style->sizing, false, frame->extentMain);
-        const muiEdges padding = muiFlexChildPadding(frame, style);
-        muiMeasureAxis height = main.definite
-                                    ? muiExact(muiClampSize(main.size, main.minimum, main.maximum,
-                                                            muiBoxSum(&padding, style, false)))
-                                    : (muiMeasureAxis){0.0f, mui_measureMaxContent};
-        muiSizingInput input = muiFlexChildInput(frame, height, constraint);
-        float size = frame->solver->solve(frame->solver, c, &input, false).width;
-        size = muiClampSize(size, item->minCross, item->maxCross, muiBoxSum(&padding, style, true));
-        widest = fmaxf(widest, size + item->marginCross);
+        widest = fmaxf(widest, ItemContribution(frame, c, narrowest));
     }
     return widest;
+}
+
+static float ColumnContribution(const muiFlexFrame* frame, bool narrowest)
+{
+    return LineContribution(
+        frame, muiFirstFlowChild(frame->solver->tree, frame->solver->nodes, frame->node),
+        UINT32_MAX, narrowest);
+}
+
+// A wrapping column's lines' widths from their items' contributions,
+// with the gaps.
+static float LinesContribution(const muiFlexFrame* frame)
+{
+    float total = Gaps(frame->crossGap, frame->lineCount);
+    for (uint32_t first = muiFirstFlowChild(frame->solver->tree, frame->solver->nodes, frame->node);
+         first != 0; first = Skip(frame, first, ItemOf(frame, first)->lineCount))
+    {
+        total += LineContribution(frame, first, ItemOf(frame, first)->lineCount, false);
+    }
+    return total;
 }
 
 static void SizeCross(muiFlexFrame* frame)
@@ -420,12 +487,19 @@ static void SizeCross(muiFlexFrame* frame)
     {
         total = ColumnContribution(frame, false);
     }
+    else if (!frame->row && frame->crossIn.mode == mui_measureMaxContent)
+    {
+        // A wrapping column's lines count their items' contributions.
+        total = LinesContribution(frame);
+    }
     else if (!frame->row && frame->crossIn.mode == mui_measureAtMost)
     {
-        // A wrapping column fits the space it is given, no narrower than
-        // its min-content width (CSS Sizing 3 fit-content).
+        // A wrapping column is as wide as its lines' contributions; past
+        // its space, as wide as the space but no narrower than its
+        // min-content width (CSS Sizing 3 fit-content).
         float space = fmaxf(frame->crossIn.size - frame->boxCross, 0.0f);
-        total = total > space ? fmaxf(space, ColumnContribution(frame, true)) : total;
+        float most = LinesContribution(frame);
+        total = most > space ? fmaxf(space, ColumnContribution(frame, true)) : most;
     }
     if (frame->crossIn.mode != mui_measureExact)
     {
@@ -543,6 +617,7 @@ static muiSizingInput FinalInput(const muiFlexFrame* frame, uint32_t child)
         input.ratioPercent =
             style->sizing.aspectRatio > 0.0f && !given &&
             (!muiFlexIsStretched(frame, style) || (column && !ItemOf(frame, child)->resized));
+        input.looseHeight = frame->crossLoose && muiFlexIsStretched(frame, style) && !given;
     }
     else
     {

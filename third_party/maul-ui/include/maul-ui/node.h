@@ -47,7 +47,10 @@ extern "C"
                                                   muiNodeId* nodeOut);
 
     /// Destroys a node and its whole subtree, detaching it from its parent
-    /// first. The ids of every destroyed node become stale.
+    /// first. The ids of every destroyed node become stale. A player's
+    /// focus inside goes back to what the player focused when the
+    /// outermost layer around it in the subtree became one, if that can
+    /// still take it (record mui-0007).
     ///
     /// @param context  The context.
     /// @param nodeId   The node.

@@ -22,6 +22,7 @@ static muiTextRecord Compute(const muiTextStyle* own, muiPropertyMask given,
                                             : above->size;
     out->weight = GIVEN(mui_propertyFontWeight) ? own->weight : above->weight;
     out->slant = GIVEN(mui_propertyFontSlant) ? own->slant : above->slant;
+    out->synthesis = GIVEN(mui_propertyFontSynthesis) ? own->synthesis : above->synthesis;
     out->align = GIVEN(mui_propertyTextAlign) ? own->align : above->align;
     out->wrap = GIVEN(mui_propertyTextWrap) ? own->wrap : above->wrap;
     out->decoration = GIVEN(mui_propertyTextDecoration) ? own->decoration : above->decoration;
@@ -69,7 +70,8 @@ static bool SizesDiffer(const muiComputedTextStyle* a, const muiComputedTextStyl
 {
     return a->font != b->font || a->size != b->size || a->lineHeight != b->lineHeight ||
            a->letterSpacing != b->letterSpacing || a->weight != b->weight || a->slant != b->slant ||
-           a->wrap != b->wrap || a->automaticLineHeight != b->automaticLineHeight;
+           a->synthesis != b->synthesis || a->wrap != b->wrap ||
+           a->automaticLineHeight != b->automaticLineHeight;
 }
 
 static bool SameColor(muiColor a, muiColor b)

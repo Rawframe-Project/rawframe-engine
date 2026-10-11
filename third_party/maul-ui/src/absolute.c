@@ -302,19 +302,24 @@ static bool RatioTakesHeight(const muiLayoutStyle* style, const muiEdges* paddin
 // A height from both insets, with an aspect ratio, is at least the
 // width's through the ratio and, its minimum automatic, the content's at
 // that width; stretched by its own align-self, it is the insets' as if
-// given (both as Chrome).
-static float RatioHeightFloor(const muiSolver* solver, uint32_t child, muiSizingInput* input,
-                              const Span* spanY, float width, float height)
+// given (both as Chrome). Returns whether its content grew it past the
+// insets', which holds its children's percentages at its ratio's height,
+// the insets' (as Chrome and Firefox).
+static bool RatioHeightFloor(const muiSolver* solver, uint32_t child, muiSizingInput* input,
+                             const Span* spanY, float width, float* height)
 {
     const muiLayoutStyle* style = &solver->nodes[child - 1].style;
     if (style->sizing.aspectRatio <= 0.0f || style->item.alignSelf == mui_alignStretch ||
         muiResolveAxis(&style->sizing, false, spanY->paddingSize).definite)
     {
-        return height;
+        return false;
     }
     input->width = muiExact(width);
     input->height = (muiMeasureAxis){0.0f, mui_measureMaxContent};
-    return fmaxf(height, solver->solve(solver, child, input, false).height);
+    float content = solver->solve(solver, child, input, false).height;
+    bool grown = content > *height;
+    *height = fmaxf(*height, content);
+    return grown;
 }
 
 // The vertical insets that size a child: between both, start, end or
@@ -391,7 +396,7 @@ static void PlaceChild(const muiSolver* solver, const muiLayoutStyle* container,
         input.height = muiExact(height);
         width = fmaxf(width, solver->solve(solver, child, &input, false).width);
     }
-    height = fixedHeight ? RatioHeightFloor(solver, child, &input, spanY, width, height) : height;
+    bool grown = fixedHeight && RatioHeightFloor(solver, child, &input, spanY, width, &height);
     if (!fixedHeight)
     {
         input.width = muiExact(width);
@@ -408,7 +413,7 @@ static void PlaceChild(const muiSolver* solver, const muiLayoutStyle* container,
     // A height neither given nor set by both insets is its content's,
     // unless its aspect ratio gives it.
     input.contentHeight = !fixedHeight && style->sizing.aspectRatio <= 0.0f;
-    input.ratioPercent = !fixedHeight && style->sizing.aspectRatio > 0.0f;
+    input.ratioPercent = style->sizing.aspectRatio > 0.0f && (!fixedHeight || grown);
     (void)solver->solve(solver, child, &input, true);
 }
 

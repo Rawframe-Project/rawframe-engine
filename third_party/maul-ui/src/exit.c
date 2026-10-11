@@ -85,8 +85,10 @@ muiResult muiNode_BeginExit(muiContext* context, muiNodeId nodeId)
         return mui_errorCapacity;
     }
     store->entries[store->count++] = (muiExitEntry){muiTreeIdOf(&context->tree, slot), false};
+    muiNodeId returns[MUI_MAX_PLAYERS];
+    muiFocusReturns(context, slot, returns);
     SetExiting(context, slot, true);
-    // Focus inside is given up.
+    // Focus inside is given up, back to what opened a layer closing.
     for (uint32_t player = 0; player < MUI_MAX_PLAYERS; player++)
     {
         uint32_t focus = muiTreeResolve(&context->tree, context->focus.nodes[player]);
@@ -95,6 +97,7 @@ muiResult muiNode_BeginExit(muiContext* context, muiNodeId nodeId)
             muiFocusAssign(context, (uint8_t)player, 0, false);
         }
     }
+    muiFocusGiveBack(context, returns);
     return mui_success;
 }
 

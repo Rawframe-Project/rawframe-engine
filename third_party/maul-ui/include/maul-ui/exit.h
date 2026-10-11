@@ -5,7 +5,9 @@
 // way out before it goes. Beginning an exit gives the node the exiting
 // state, so its classes' exiting variants and their transitions apply;
 // the node and its subtree leave hit testing, focus and navigation at
-// once, and focus inside it is given up. When no transition runs in the
+// once, and focus inside it is given up: back to what the player focused
+// when the outermost layer around it in the subtree became one, if that
+// can still take it (record mui-0007). When no transition runs in the
 // subtree any more, at a layout, mui_notificationExitFinished reports it,
 // once; the library never destroys the node. The host destroys it then,
 // or earlier, which ends the exit, or cancels the exit to bring it back.

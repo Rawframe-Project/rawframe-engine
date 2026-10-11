@@ -24,6 +24,8 @@
 
 #include "maul-ui/layout.h"
 
+#include <string.h>
+
 // The live classes of a node, its type's then its own, as class slots.
 typedef struct Classes
 {
@@ -326,36 +328,25 @@ static bool Commit(muiContext* context, uint32_t slot, const Resolution* resolut
     muiPropertyBits changed = {0};
     if (!muiAnyProperty(resolution->named) && context->style.nodes[slot - 1].firstAnimation == 0)
     {
-        const muiConstValuesRef now = muiConstRef(NodeValues(context, slot));
-        const muiPropertyBits layoutFree =
-            muiPropertiesOf(mui_groupLayout, free.words[mui_groupLayout]);
-        const muiPropertyBits visualFree =
-            muiPropertiesOf(mui_groupVisual, free.words[mui_groupVisual]);
-        const muiPropertyBits textFree = muiPropertiesOf(mui_groupText, free.words[mui_groupText]);
-        if (layoutFree.words[mui_groupLayout] != 0 &&
-            muiDoPropertiesDiffer(values, now, layoutFree))
+        // Each struct with a free property that changed is copied whole;
+        // inheritance, after, finds what text changes reach.
+        static_assert(MUI_PROPERTY_GROUPS == 4, "a values struct per group");
+        const muiValuesRef now = NodeValues(context, slot);
+        void* const targets[] = {now.layout, now.visual, now.text, now.interaction};
+        const void* const sources[] = {values.layout, values.visual, values.text,
+                                       values.interaction};
+        const size_t sizes[] = {sizeof *now.layout, sizeof *now.visual, sizeof *now.text,
+                                sizeof *now.interaction};
+        for (uint32_t group = 0; group < MUI_PROPERTY_GROUPS; group++)
         {
-            layout->style = resolution->values.layout;
-            changed = muiUnion(changed, layoutFree);
-        }
-        if (visualFree.words[mui_groupVisual] != 0 &&
-            muiDoPropertiesDiffer(values, now, visualFree))
-        {
-            context->visual[slot - 1] = resolution->values.visual;
-            changed = muiUnion(changed, visualFree);
-        }
-        // Inheritance, after, finds what text changes reach.
-        if (textFree.words[mui_groupText] != 0 && muiDoPropertiesDiffer(values, now, textFree))
-        {
-            context->text[slot - 1] = resolution->values.text;
-            changed = muiUnion(changed, textFree);
-        }
-        const muiPropertyBits interactionFree =
-            muiPropertiesOf(mui_groupInteraction, free.words[mui_groupInteraction]);
-        if (interactionFree.words[mui_groupInteraction] != 0 &&
-            muiDoPropertiesDiffer(values, now, interactionFree))
-        {
-            context->interaction[slot - 1] = resolution->values.interaction;
+            const muiPropertyBits groupFree =
+                muiPropertiesOf((muiPropertyGroup)group, free.words[group]);
+            if (groupFree.words[group] != 0 &&
+                muiDoPropertiesDiffer(values, muiConstRef(now), groupFree))
+            {
+                memcpy(targets[group], sources[group], sizes[group]);
+                changed = muiUnion(changed, groupFree);
+            }
         }
     }
     else

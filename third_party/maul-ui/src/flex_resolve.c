@@ -100,6 +100,10 @@ static float Distribute(const muiTree* tree, muiLayoutNode* nodes, uint32_t firs
     return violation;
 }
 
+// The relative error a total violation may carry and still be zero: the
+// clamps then cancel exactly, as browsers' fixed-point sums find.
+static const float VIOLATION_SLACK = 1.0e-5f;
+
 // Freezes every unfrozen child when the total violation is zero, the
 // ones raised to their minimum when it is positive, and the ones lowered
 // to their maximum when it is negative.
@@ -117,6 +121,9 @@ static void FreezeViolators(const muiTree* tree, muiLayoutNode* nodes, uint32_t 
     }
 }
 
+// The relative excess a line's float sum may carry and still fit.
+static const float LINE_SLACK = 1.0e-5f;
+
 uint32_t muiCollectLine(const muiTree* tree, const muiLayoutNode* nodes, uint32_t first,
                         float innerMain, float gap, bool wrap)
 {
@@ -126,7 +133,10 @@ uint32_t muiCollectLine(const muiTree* tree, const muiLayoutNode* nodes, uint32_
     {
         float outer = Outer(&nodes[c - 1].item, nodes[c - 1].item.hypothetical);
         float next = count == 0 ? outer : used + gap + outer;
-        if (wrap && count > 0 && next > innerMain)
+        // Lengths that fit exactly can pass by a rounding of their float
+        // sum (a line 59.95 long holding 19.95 and 40): only a real
+        // excess breaks the line, as in Chrome's fixed-point layout.
+        if (wrap && count > 0 && next > innerMain + fmaxf(fabsf(innerMain), 1.0f) * LINE_SLACK)
         {
             break;
         }
@@ -164,7 +174,8 @@ void muiResolveFlexibleLengths(const muiTree* tree, muiLayoutNode* nodes, uint32
             }
         }
         float violation = Distribute(tree, nodes, first, count, freeSpace, growing, &totals);
-        FreezeViolators(tree, nodes, first, count, violation);
+        bool cancels = fabsf(violation) <= fmaxf(fabsf(available), 1.0f) * VIOLATION_SLACK;
+        FreezeViolators(tree, nodes, first, count, cancels ? 0.0f : violation);
     }
 }
 

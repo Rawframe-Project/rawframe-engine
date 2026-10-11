@@ -16,6 +16,7 @@ static float ContentMain(const muiFlexFrame* frame, uint32_t child, muiMeasureMo
 {
     muiSizingInput input = muiFlexChildInput(frame, (muiMeasureAxis){0.0f, mode}, cross);
     input.contentOnly = contentOnly;
+    input.contentOnlyHeight = contentOnly && !frame->row;
     return muiFlexMainOf(frame, frame->solver->solve(frame->solver, child, &input, false));
 }
 
@@ -33,6 +34,7 @@ static float RatioBase(const muiFlexFrame* frame, uint32_t child, muiMeasureMode
     {
         muiSizingInput input = muiFlexChildInput(frame, (muiMeasureAxis){0.0f, mode}, cross);
         input.contentOnly = ownLeft;
+        input.contentOnlyHeight = ownLeft && !frame->row;
         size = muiFlexCrossOf(frame, frame->solver->solve(frame->solver, child, &input, false));
     }
     if (cross.mode != mui_measureExact && ownLeft)
@@ -64,7 +66,20 @@ static float ContentBase(const muiFlexFrame* frame, uint32_t child, const muiAxi
         return RatioBase(frame, child, mode, cross, true);
     }
     bool limited = !main->minimumAuto || main->maximum < INFINITY;
-    return ContentMain(frame, child, mode, cross, limited && ratio <= 0.0f);
+    if (!limited || ratio <= 0.0f)
+    {
+        return ContentMain(frame, child, mode, cross, limited);
+    }
+    // A row's ratio item may pass its own width limits, which clamp its
+    // hypothetical size, not its base (section 9.2.3 E): its content's
+    // width, held by its height limits through the ratio (as Chrome and
+    // Firefox).
+    const muiFlexItemState* item = &frame->solver->nodes[child - 1].item;
+    const muiLayoutStyle* style = &frame->solver->nodes[child - 1].style;
+    const muiEdges padding = muiFlexChildPadding(frame, style);
+    float least = fmaxf(item->minCross, muiBoxSum(&padding, style, false));
+    return fminf(fmaxf(ContentMain(frame, child, mode, cross, true), least * ratio),
+                 fmaxf(item->maxCross, least) * ratio);
 }
 
 float muiFlexAutomaticMinimum(const muiFlexFrame* frame, uint32_t child, const muiAxisSizing* main,
@@ -80,7 +95,15 @@ float muiFlexAutomaticMinimum(const muiFlexFrame* frame, uint32_t child, const m
     float ratio = frame->solver->nodes[child - 1].style.sizing.aspectRatio;
     float content =
         ContentMain(frame, child, mui_measureMinContent, cross, ratio > 0.0f && frame->row);
-    if (ratio > 0.0f && cross.mode == mui_measureExact)
+    // A row sizing its content, its height definite only through
+    // stretching in rows no style fixes, carries no minimum through a
+    // stretched item's ratio, nor through a percentage height of the
+    // item's, which that height would resolve (as Chrome, which sizes
+    // content before heights).
+    bool loose =
+        frame->row && frame->mainIn.mode != mui_measureExact && frame->crossLoose &&
+        !muiResolveAxis(&frame->solver->nodes[child - 1].style.sizing, false, -1.0f).definite;
+    if (ratio > 0.0f && cross.mode == mui_measureExact && !loose)
     {
         content = fmaxf(content, frame->row ? cross.size * ratio : cross.size / ratio);
     }
@@ -90,6 +113,7 @@ float muiFlexAutomaticMinimum(const muiFlexFrame* frame, uint32_t child, const m
         muiSizingInput input =
             muiFlexChildInput(frame, (muiMeasureAxis){0.0f, mui_measureMaxContent}, cross);
         input.contentOnly = true;
+        input.contentOnlyHeight = true;
         content =
             fmaxf(content, frame->solver->solve(frame->solver, child, &input, false).width / ratio);
     }

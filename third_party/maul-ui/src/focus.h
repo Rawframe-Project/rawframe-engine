@@ -54,6 +54,17 @@ static inline void muiNoteFocus(muiContext* context, uint32_t slot)
     }
 }
 
+// Before a subtree begins to exit or is destroyed: for each player whose
+// focus is inside it, the opener of the outermost layer between the
+// focus and the subtree's root, both included (record mui-0007); the
+// null id for the others.
+void muiFocusReturns(const muiContext* context, uint32_t closing,
+                     muiNodeId returns[MUI_MAX_PLAYERS]);
+
+// After: each player left with no focus gets its return back, if it
+// still exists, takes the focus and is not covered.
+void muiFocusGiveBack(muiContext* context, const muiNodeId returns[MUI_MAX_PLAYERS]);
+
 void muiFocusForgetDestroyed(muiContext* context);
 
 // Lets the focus of destroyed nodes go, after a destruction; only a

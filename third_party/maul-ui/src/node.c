@@ -79,10 +79,14 @@ muiResult muiDestroyNode(muiContext* context, muiNodeId nodeId)
     uint32_t slot = muiResolveEdit(context, nodeId, &status);
     if (slot != 0)
     {
+        // A focus inside goes back to what opened a layer destroyed.
+        muiNodeId returns[MUI_MAX_PLAYERS];
+        muiFocusReturns(context, slot, returns);
         muiPointersTaken taken = muiPointersOff(context, slot);
         muiTreeDestroy(&context->tree, slot);
         muiPointersOn(context, taken);
         muiNoteDestroyed(context);
+        muiFocusGiveBack(context, returns);
     }
     return status;
 }

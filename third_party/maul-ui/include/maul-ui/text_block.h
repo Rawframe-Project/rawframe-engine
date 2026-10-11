@@ -158,7 +158,8 @@ extern "C"
     /// Sets the spans of a block's text, copied, replacing the ones it had;
     /// later ones win where they overlap, as a stack of styles does.
     /// Spans set the text color, the decoration and its color, and the
-    /// font, size, weight and slant their runs are shaped in: a size is
+    /// font, size, weight and slant their runs are shaped in, the node's
+    /// synthesis kept: a size is
     /// against the node's, as a child's text is against its parent's, and
     /// a line is as tall as the runs on it reach (record mui-0006). A block
     /// takes up to 31 run styles apart from the node's; a span making more

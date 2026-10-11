@@ -60,9 +60,9 @@ static void Purge(muiContext* context)
     }
 }
 
-// Puts a node in as the latest activated of its band; nothing when the
-// store is full.
-static void Insert(muiContext* context, uint32_t slot)
+// Puts a node in as the latest activated of its band, with its openers;
+// nothing when the store is full.
+static void Insert(muiContext* context, uint32_t slot, const muiNodeId openers[MUI_MAX_PLAYERS])
 {
     muiLayerStore* store = &context->layers;
     if (store->count == store->capacity)
@@ -82,8 +82,11 @@ static void Insert(muiContext* context, uint32_t slot)
     }
     memmove(&store->entries[at + 1], &store->entries[at],
             (store->count - at) * sizeof(muiLayerEntry));
-    store->entries[at] =
-        (muiLayerEntry){slot, muiTreeIdOf(&context->tree, slot).generation, ++store->activations};
+    muiLayerEntry* entry = &store->entries[at];
+    entry->slot = slot;
+    entry->generation = muiTreeIdOf(&context->tree, slot).generation;
+    entry->activation = ++store->activations;
+    memcpy(entry->openers, openers, sizeof entry->openers);
     store->count++;
     muiTreeAt(&context->tree, slot)->flags |= MUI_TREE_APART;
 }
@@ -96,17 +99,44 @@ void muiNoteLayer(muiContext* context, uint32_t slot, muiLayerKind before)
         return;
     }
     muiLayerStore* store = &context->layers;
+    // A layer whose kind changes keeps its openers; a new one, or one in
+    // the slot of a layer destroyed, takes what each player focuses
+    // outside it.
+    muiNodeId openers[MUI_MAX_PLAYERS] = {0};
     uint32_t found = Find(store, slot);
+    bool kept = found != 0 && IsLive(context, &store->entries[found - 1]);
+    if (kept)
+    {
+        memcpy(openers, store->entries[found - 1].openers, sizeof openers);
+    }
     if (found != 0)
     {
         RemoveAt(store, found - 1);
         muiTreeAt(&context->tree, slot)->flags &= (uint8_t)~MUI_TREE_APART;
     }
+    if (!kept)
+    {
+        for (uint32_t player = 0; player < MUI_MAX_PLAYERS; player++)
+        {
+            muiNodeId focus = context->focus.nodes[player];
+            uint32_t at = focus.index1 != 0 ? muiTreeResolve(&context->tree, focus) : 0;
+            openers[player] =
+                at != 0 && !muiTreeIsAncestor(&context->tree, slot, at) ? focus : (muiNodeId){0, 0};
+        }
+    }
     if (kind != mui_layerNone)
     {
-        Insert(context, slot);
+        Insert(context, slot, openers);
     }
     muiTreeMark(&context->tree, slot, mui_stagePaint);
+}
+
+muiNodeId muiLayerOpener(const muiContext* context, uint32_t slot, uint8_t player)
+{
+    uint32_t found = Find(&context->layers, slot);
+    return found != 0 && IsLive(context, &context->layers.entries[found - 1])
+               ? context->layers.entries[found - 1].openers[player]
+               : (muiNodeId){0, 0};
 }
 
 uint32_t muiLayerAt(const muiContext* context, uint32_t place)
@@ -133,8 +163,11 @@ muiResult muiNode_RaiseLayer(muiContext* context, muiNodeId nodeId)
     {
         return muiRefuse(context);
     }
+    // Raised, it keeps its openers.
+    muiNodeId openers[MUI_MAX_PLAYERS];
+    memcpy(openers, store->entries[found - 1].openers, sizeof openers);
     RemoveAt(store, found - 1);
-    Insert(context, slot);
+    Insert(context, slot, openers);
     muiTreeMark(&context->tree, slot, mui_stagePaint);
     return mui_success;
 }
