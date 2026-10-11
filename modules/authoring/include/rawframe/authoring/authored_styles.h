@@ -64,7 +64,10 @@ public:
     /// holds it; none where it is not set or there is no such class.
     [[nodiscard]] std::optional<document::Value>
     part(std::uint64_t style, std::string_view variant, std::string_view part) const;
-    /// The document's bytes now.
+    /// The document now, and its bytes.
+    [[nodiscard]] const document::Value& documentValue() const noexcept {
+        return root_;
+    }
     [[nodiscard]] std::string text() const;
 
     /// SPEC-0040's AtomicBatch over the sheet: each change in order against
@@ -125,5 +128,9 @@ private:
     ui::StyleSheet sheet_;
     History<Entry> history_;
 };
+
+/// A style sheet's query answered (`styles.read_sheet`: `{"sheet": ...}`, the
+/// document whole); refuses (`ValidationFailed`) a scene's.
+[[nodiscard]] result::Result<document::Value> answer(const AuthoredStyles& styles, const Query& query);
 
 } // namespace rawframe::authoring

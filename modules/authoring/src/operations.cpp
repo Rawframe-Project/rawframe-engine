@@ -44,7 +44,7 @@ constexpr std::array<InputDeclaration, 4> kStylePartInputs = {{{"style", InputTy
                                                                {"part", InputType::Text},
                                                                {"value", InputType::StyleValue}}};
 
-constexpr std::array<OperationDeclaration, 18> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 19> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -69,6 +69,7 @@ constexpr std::array<OperationDeclaration, 18> kDeclarations = {{
      .history = HistoryClass::ReadOnly,
      .targets = "rawframe.scene",
      .inputs = kFindInputs},
+    {.name = "styles.read_sheet", .history = HistoryClass::ReadOnly, .targets = "ui.styles", .inputs = {}},
 }};
 static_assert(kDeclarations.size() == std::variant_size_v<Operation> + std::variant_size_v<Query>);
 

@@ -26,8 +26,10 @@
 // before any public stability promise only the tool's own is accepted
 // (SPEC-0040's capability exchange, exact match). `id` is the client's, any
 // JSON value, given back in the reply; `scene` is a scene's path under the
-// game's directory; `expects`, on undo and redo, is the generation the
-// client last saw, as a request's is. `select` chooses the scene's entities
+// game's directory, or for apply, read, undo, and redo a style sheet's
+// (`.styles`, D636: `styles.set_part`, `styles.read_sheet`); `expects`, on
+// undo and redo, is the generation the client last saw, as a request's
+// is. `select` chooses the scene's entities
 // by their SourceEntityIds, in place of what was chosen: no change to the
 // document, but what undo and redo put back with it (D417). `apply_together`
 // is SPEC-0040's multi-document transaction (D497): each part an atomic

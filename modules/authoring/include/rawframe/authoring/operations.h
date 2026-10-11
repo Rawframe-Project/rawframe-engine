@@ -243,7 +243,11 @@ struct FindEntities {
     std::optional<schema::ComponentTypeId> having;
 };
 
-using Query = std::variant<ListEntities, ReadEntity, FindEntities>;
+/// A style sheet's document whole (D636), as a `ui.styles` document holds
+/// it: a style sheet's query, refused by a scene.
+struct ReadSheet {};
+
+using Query = std::variant<ListEntities, ReadEntity, FindEntities, ReadSheet>;
 
 /// SPEC-0040's history classes: every operation that changes a scene is
 /// `Undoable`, and every query `ReadOnly`.

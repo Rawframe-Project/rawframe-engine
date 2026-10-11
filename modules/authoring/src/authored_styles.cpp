@@ -240,6 +240,19 @@ result::Result<Committed> AuthoredStyles::step(std::uint64_t generation, bool un
     return Committed{.generation = generation_, .deltas = kDeltas};
 }
 
+result::Result<Value> answer(const AuthoredStyles& styles, const Query& query) {
+    if (!std::holds_alternative<ReadSheet>(query)) {
+        return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
+                                                     AuthoringError::ValidationFailed,
+                                                     "the query reads a scene, not a style sheet")
+                                                  .error()
+                                                  .withContext("operation", declarationOf(query).name)};
+    }
+    Value made = Value::object();
+    made.add("sheet", styles.documentValue());
+    return made;
+}
+
 result::Result<Committed> AuthoredStyles::undo(std::uint64_t generation) {
     return step(generation, true);
 }

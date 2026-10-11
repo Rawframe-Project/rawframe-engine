@@ -148,6 +148,9 @@ result::Result<Query> queryOf(const Value& value) {
     if (kIndex == kChanging) {
         return Query{ListEntities{}};
     }
+    if (kIndex == kChanging + 3) {
+        return Query{ReadSheet{}};
+    }
     if (kIndex == kChanging + 2) {
         const std::string* named = textOf(value.find("named"));
         const Value* having = value.find("having");

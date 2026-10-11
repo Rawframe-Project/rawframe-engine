@@ -1,11 +1,12 @@
 // A style sheet open for authoring (D636): a part set, changed, and unset,
 // a variant made and gone with its first and last part, each change one
 // entry that undo and redo walk exactly back to the bytes before, the
-// clean place kept, and changes the sheet does not read refused with the
-// document as it was.
+// clean place kept, a batch one entry or nothing, changes the sheet does
+// not read refused with the document as it was, and the sheet read whole.
 
 #include "rawframe/authoring/authored_styles.h"
 #include "rawframe/authoring/errors.h"
+#include "rawframe/authoring/request.h"
 #include "rawframe/test/test.h"
 
 #include <array>
@@ -172,6 +173,14 @@ RAWFRAME_TEST(AStyleSheetRefusesWhatItDoesNotRead) {
     RAWFRAME_EXPECT(styles.text() == kSheet && styles.generation() == 0 && !styles.canUndo());
     // Nothing undone.
     RAWFRAME_EXPECT(refusedWith(styles.undo(0), AuthoringError::TargetNotFound));
+    // Read whole by its query, as a query document names it; a scene's
+    // query refused.
+    const auto kQueries = readQueries(R"({"formatVersion": 1, "kind": "authoring.query",
+        "queries": [{"operation": "styles.read_sheet"}]})");
+    RAWFRAME_EXPECT(kQueries.has_value() && kQueries->size() == 1);
+    const auto kRead = answer(styles, kQueries.has_value() ? kQueries->front() : Query{ListEntities{}});
+    RAWFRAME_EXPECT(kRead.has_value() && document::write(*kRead->find("sheet")) == kSheet);
+    RAWFRAME_EXPECT(refusedWith(answer(styles, Query{ListEntities{}}), AuthoringError::ValidationFailed));
     // A text that is no sheet does not open.
     RAWFRAME_EXPECT(refusedWith(AuthoredStyles::open(kDocument, "{}"), AuthoringError::ValidationFailed));
 }
