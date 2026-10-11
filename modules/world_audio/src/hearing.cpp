@@ -13,6 +13,7 @@
 #include "rawframe/world_audio/sound_loader.h"
 #include "rawframe/world_audio/world_audio.h"
 #include "rawframe/world_kest/game_files.h"
+#include "rawframe/world_kest/volumes.h"
 #include "rawframe/world_replication/client_worlds.h"
 
 #include <algorithm>
@@ -47,6 +48,7 @@ constexpr EventIdentity kSoundNotReloaded{"audio", "sound_reload_failed"};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        game_content::kGameContent.name,
                                        world_kest::kGameFiles.name,
+                                       world_kest::kPresentedVolumes.name,
                                        kFrameSink.name};
 constexpr std::uint32_t kRecordingRate = 48'000;
 
@@ -104,6 +106,12 @@ struct Hearing {
     bool failed = false;
     std::uint64_t tick = 0;
     diagnostics::Emitter emitter;
+    /// The player's volumes, as the client's present systems set them
+    /// (D625), and the revision last given to the mixer; none without a
+    /// presentation.
+    const world_kest::PresentedVolumes* volumes = nullptr;
+    std::uint64_t volumesSeen = 0;
+    std::uint64_t volumesSet = 0;
 
     /// Loads the game's audio for a mixer at `rate` and starts reading its
     /// sounds from the Runtime's cooked content (`rawframe.content.game`). `key` names the
@@ -126,6 +134,9 @@ struct Hearing {
         }
         RAWFRAME_TRY_ASSIGN(clients, context.capability(world_replication::kClientWorlds));
         RAWFRAME_TRY_ASSIGN(client, configuration.unsignedInteger("audio.client", 0));
+        if (context.has(world_kest::kPresentedVolumes.name)) {
+            RAWFRAME_TRY_ASSIGN(volumes, context.capability(world_kest::kPresentedVolumes));
+        }
 
         // The game's program, for the layout check, and its audio.
         std::string report;
@@ -257,6 +268,14 @@ struct Hearing {
         }
         const double kSeconds = static_cast<double>((frame.now - *last).nanoseconds) / 1e9;
         last = frame.now;
+        // The player's volumes as they are now, each role's on its bus.
+        if (volumes != nullptr && volumes->revision != volumesSeen) {
+            volumesSeen = volumes->revision;
+            for (std::size_t role = 1; role < volumes->decibels.size(); ++role) {
+                mixer->setRoleVolume(static_cast<audio::Role>(role), volumes->decibels[role]);
+            }
+            ++volumesSet;
+        }
         heard->bindListener(kView.owned.isNull() ? std::nullopt : std::optional{kView.owned});
         // The client's predicted effects, where its player is.
         effectsSeen = clients->readEffects(client, effectsSeen, effects);
@@ -361,7 +380,8 @@ public:
                       diagnostics::field("effectsTakenBack", hearing_.takenBack),
                       diagnostics::field("refused", kHeard.refused),
                       diagnostics::field("unknownSounds", kHeard.unknownSounds),
-                      diagnostics::field("listenerConflicts", kHeard.listenerConflicts)});
+                      diagnostics::field("listenerConflicts", kHeard.listenerConflicts),
+                      diagnostics::field("volumesSet", hearing_.volumesSet)});
     }
 
 private:
@@ -505,7 +525,8 @@ public:
                           diagnostics::field("emitterCues", emitterCuesOf(kHeard)),
                           diagnostics::field("effects", kHeard.once),
                           diagnostics::field("refused", kHeard.refused),
-                          diagnostics::field("suspensions", suspensions_)});
+                          diagnostics::field("suspensions", suspensions_),
+                          diagnostics::field("volumesSet", hearing_.volumesSet)});
             return;
         }
         if (output_ == nullptr) {
@@ -529,7 +550,8 @@ public:
                       diagnostics::field("emitterCues", emitterCuesOf(kHeard)),
                       diagnostics::field("effects", kHeard.once),
                       diagnostics::field("refused", kHeard.refused),
-                      diagnostics::field("suspensions", suspensions_)});
+                      diagnostics::field("suspensions", suspensions_),
+                      diagnostics::field("volumesSet", hearing_.volumesSet)});
     }
 
 private:

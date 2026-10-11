@@ -285,3 +285,61 @@ RAWFRAME_TEST(APresentationComponentStartsAsItsDocumentSays) {
     const auto* look = static_cast<const Sprite*>(mirror.getErased(kRunner, *kRegistry->find(kLookId)));
     RAWFRAME_EXPECT(look != nullptr && look->texture == 8 && look->placed[0] == 0.0F && look->placed[4] == 2.0F);
 }
+
+RAWFRAME_TEST(APresentSystemSetsThePlayersVolume) {
+    // The effects at -12 decibels, each tick the same.
+    constexpr std::string_view kQuiet = R"(module quiet
+
+import rawframe.canvas
+import rawframe.sound
+
+fn quiet(count: i32, views: [canvas.Camera]) {
+    sound.volume(sound.EFFECTS, -12.0)
+    sound.volume(u32(0), -12.0)
+    sound.volume(u32(9), -12.0)
+}
+)";
+    const auto kFiles =
+        GameFiles::fromHeld("quiet.game",
+                            {{"quiet.game",
+                              "program quiet.kest\n"
+                              "component 51a3c0de-3333-4a2b-8c3d-4e5f60718293 shown.view rawframe.canvas.Camera\n"
+                              "presentation shown.view on player\n"
+                              "present quiet.quiet quiet write shown.view\n"},
+                             {"quiet.kest", std::string{kQuiet}}});
+    RAWFRAME_EXPECT(kFiles.has_value());
+    if (!kFiles.has_value()) {
+        return;
+    }
+    std::string report;
+    const auto kCompiled = kFiles->compile("quiet.kest", {}, &report);
+    RAWFRAME_EXPECT(kCompiled.has_value());
+    if (!kCompiled.has_value()) {
+        std::fprintf(stderr, "%s\n", report.c_str());
+        return;
+    }
+    const std::vector<schema::ComponentDescriptor> kDescriptors = {
+        {.id = kViewId, .name = "shown.view", .size = sizeof(Camera), .alignment = alignof(Camera), .plainData = true}};
+    auto presentation = ClientPresentation::create(
+        PresentationSettings{.program = *kCompiled,
+                             .game = &kFiles->description(),
+                             .descriptors = kDescriptors,
+                             .limits = {.heapBytes = std::size_t{1} << 20U, .fuelPerCall = 100'000}});
+    if (!presentation.has_value() || *presentation == nullptr) {
+        RAWFRAME_EXPECT(false);
+        return;
+    }
+    PresentedVolumes volumes;
+    (*presentation)->setVolumesIn(&volumes);
+    schema::RegistryBuilder builder;
+    builder.add(kDescriptors[0]);
+    const auto kRegistry = *builder.freeze();
+    world::World mirror{kRegistry};
+    const world::EntityHandle kPlayer = *mirror.create();
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
+    // The effects' role set once; none's and one past the roles changed
+    // nothing; the same again moves no revision.
+    RAWFRAME_EXPECT(volumes.decibels[3] == -12.0F && volumes.decibels[0] == 0 && volumes.revision == 1);
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT(volumes.revision == 1);
+}

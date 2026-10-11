@@ -19,6 +19,7 @@
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/starts.h"
 #include "rawframe/world_kest/ui_queries.h"
+#include "rawframe/world_kest/volumes.h"
 #include "rawframe/world_replication/messages.h"
 
 #include <cstdint>
@@ -76,6 +77,10 @@ public:
     /// The UI whose ranges `UI.value` reads, local player `player`'s view
     /// of it (D621); none answers nought. `queries` outlives it.
     void askUi(const UiQueries* queries, std::size_t player) noexcept;
+    /// Where its present systems' `Sound.volume` writes the player's
+    /// volumes (D625); none, as in a simulation, for nowhere. `volumes`
+    /// outlives it.
+    void setVolumesIn(PresentedVolumes* volumes) noexcept;
     /// What its components start as when it attaches them (D619); none,
     /// as without it, starts every one at nought. `starts` outlives it.
     void startWith(const PresentationStarts* starts) noexcept;

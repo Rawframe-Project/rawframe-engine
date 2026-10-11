@@ -27,3 +27,23 @@ struct Emitter {
 struct Listener {
     active: bool
 }
+
+// The roles of a mixer's buses a player's volume binds to (SPEC-0036):
+// the master, music, effects, voices, the interface's, and ambience.
+const MASTER: u32 = 1
+const MUSIC: u32 = 2
+const EFFECTS: u32 = 3
+const VOICE: u32 = 4
+const INTERFACE: u32 = 5
+const AMBIENCE: u32 = 6
+
+extern fn Sound.volume(role: u32, decibels: f32)
+
+// The player's volume for the bus of `role` (D625), `decibels` on top of
+// the bus's own, from -80 to +12, as a settings slider sets it; nought, as
+// at first, leaves the bus as the mixer document says. A client's present
+// systems set it for the client's own hearing; in every simulation it does
+// nothing.
+fn volume(role: u32, decibels: f32) {
+    Sound.volume(role, decibels)
+}

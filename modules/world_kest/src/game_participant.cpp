@@ -31,6 +31,7 @@
 #include "rawframe/world_kest/layouts.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_kest/replication.h"
+#include "rawframe/world_kest/sound_doors.h"
 #include "rawframe/world_replication/perception.h"
 #include "rawframe/world_replication/plan.h"
 #include "rawframe/world_runtime/checkpoint.h"
@@ -265,6 +266,7 @@ public:
         // A server plays for everyone: it shows no one player.
         RAWFRAME_TRY(addPlayerDoor(doors, nullptr));
         RAWFRAME_TRY(addUiDoors(doors, nullptr));
+        RAWFRAME_TRY(addSoundDoors(doors, nullptr));
         std::vector<std::size_t> sizes;
         for (const kest::TypeLayout& layout : layouts_) {
             sizes.push_back(layout.size);

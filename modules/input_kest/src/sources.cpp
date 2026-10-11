@@ -6,6 +6,7 @@
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/world/random.h"
 #include "rawframe/world_kest/game_files.h"
+#include "rawframe/world_kest/sound_doors.h"
 #include "rawframe/world_replication/client_worlds.h"
 
 #include <algorithm>
@@ -356,6 +357,8 @@ public:
         RAWFRAME_TRY(addUiDoors(table, &ui_));
         text_ = TextDoorContext{.text = seed.has_value() ? nullptr : shared.text, .player = player};
         RAWFRAME_TRY(addTextDoors(table, &text_));
+        // A sample sets no volume; rawframe.sound asks for its door.
+        RAWFRAME_TRY(world_kest::addSoundDoors(table, nullptr));
         for (const world_kest::CommandKind& command : shared.commands) {
             auto kind = std::make_unique<CommandDoorContext::Kind>();
             kind->command = command;

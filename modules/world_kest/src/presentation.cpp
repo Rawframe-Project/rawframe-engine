@@ -14,6 +14,7 @@
 #include "rawframe/world/schedule.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/kest_systems.h"
+#include "rawframe/world_kest/sound_doors.h"
 #include "rawframe/world_kest/starts.h"
 #include "rawframe/world_kest/ui_queries.h"
 #include "rawframe/world_replication/client_worlds.h"
@@ -51,6 +52,7 @@ struct ClientPresentation::State {
     AnimationDoorContext animationDoors;
     PlayerDoorContext playerDoor;
     UiDoorContext uiDoor;
+    SoundDoorContext soundDoor;
     const PresentationStarts* starts = nullptr;
     PhysicsDoorContext physicsDoors;
     std::unique_ptr<ModServices> services;
@@ -119,6 +121,7 @@ struct ClientPresentation::State {
             RAWFRAME_TRY(addAnimationDoors(doors, &animationDoors));
             RAWFRAME_TRY(addPlayerDoor(doors, &playerDoor));
             RAWFRAME_TRY(addUiDoors(doors, &uiDoor));
+            RAWFRAME_TRY(addSoundDoors(doors, &soundDoor));
             RAWFRAME_TRY(services->addDoors(doors));
             RAWFRAME_TRY(effects->addDoors(doors));
             RAWFRAME_TRY(messages->addDoors(doors));
@@ -276,6 +279,10 @@ void ClientPresentation::askUi(const UiQueries* queries, std::size_t player) noe
     state_->uiDoor.player = player;
 }
 
+void ClientPresentation::setVolumesIn(PresentedVolumes* volumes) noexcept {
+    state_->soundDoor.volumes = volumes;
+}
+
 void ClientPresentation::startWith(const PresentationStarts* starts) noexcept {
     state_->starts = starts;
 }
@@ -300,7 +307,7 @@ constexpr std::string_view kPresentedMaybe[] = {
     kPresentationPlan.name, world_replication::kClientWorlds.name, kUiQueries.name, kPresentationStarts.name};
 constexpr std::uint64_t kMostTicksPerFrame = 4;
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
-constexpr std::string_view kPresentedProvided[] = {world_animation::kPresentedPoses.name};
+constexpr std::string_view kPresentedProvided[] = {world_animation::kPresentedPoses.name, kPresentedVolumes.name};
 
 /// Presents the Worlds of the process's local players (D362), each a frame,
 /// and tells what draws them the poses it played them with (D508).
@@ -319,6 +326,7 @@ public:
             if (presented.presentation == nullptr) {
                 return {};
             }
+            presented.presentation->setVolumesIn(&volumes_);
             presented_.push_back(std::move(presented));
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kRate, context.configuration().unsignedInteger("world.tick_rate", 60));
@@ -348,6 +356,9 @@ public:
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
         if (capability == world_animation::kPresentedPoses.name) {
             return composition::provideAs<world_animation::PresentedPoses>(*this);
+        }
+        if (capability == kPresentedVolumes.name) {
+            return composition::provideAs<PresentedVolumes>(volumes_);
         }
         return {};
     }
@@ -436,6 +447,8 @@ public:
 private:
     world_replication::ClientWorlds* clients_ = nullptr;
     const UiQueries* ui_ = nullptr;
+    /// The player's volumes its present systems set (D625).
+    PresentedVolumes volumes_;
     /// Each local player's presentation, and the game messages it has read.
     struct Presented {
         std::unique_ptr<ClientPresentation> presentation;

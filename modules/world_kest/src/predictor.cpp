@@ -13,6 +13,7 @@
 #include "rawframe/world/world.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/kest_systems.h"
+#include "rawframe/world_kest/sound_doors.h"
 #include "ui_doors.h"
 
 #include <cstddef>
@@ -103,6 +104,7 @@ public:
         // the server's do.
         RAWFRAME_TRY(addPlayerDoor(doors, nullptr));
         RAWFRAME_TRY(addUiDoors(doors, nullptr));
+        RAWFRAME_TRY(addSoundDoors(doors, nullptr));
         // Nor runs a mod: a service answers the value it is given, and the
         // server's state corrects what a provider would have changed.
         std::vector<std::size_t> sizes;
