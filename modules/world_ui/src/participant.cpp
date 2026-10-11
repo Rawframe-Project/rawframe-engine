@@ -9,9 +9,9 @@
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
 #include "rawframe/world_kest/game_files.h"
-#include "rawframe/world_kest/hover.h"
 #include "rawframe/world_kest/layouts.h"
 #include "rawframe/world_kest/starts.h"
+#include "rawframe/world_kest/ui_queries.h"
 #include "rawframe/world_localization/text.h"
 #include "rawframe/world_replication/client_worlds.h"
 #include "rawframe/world_ui/errors.h"
@@ -50,7 +50,7 @@ constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
 /// The fonts' bytes, all together (D386).
 constexpr std::uint64_t kFontBudgetBytes = std::uint64_t{64} * 1024 * 1024;
 constexpr std::string_view kProvided[] = {
-    ui::kUiFrames.name, world_kest::kUiHover.name, world_kest::kPresentationStarts.name};
+    ui::kUiFrames.name, world_kest::kUiQueries.name, world_kest::kPresentationStarts.name};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        view::kPlayerViews.name,
@@ -158,7 +158,13 @@ settingsOf(const world_kest::GameFiles& files, const kest::Program& program, std
                                 {"edit", offsetof(ui::NodeFields, edit)},
                                 {"editLimit", offsetof(ui::NodeFields, editLimit)},
                                 {"style", offsetof(ui::NodeFields, style)},
-                                {"scroll", offsetof(ui::NodeFields, scroll)}})) {
+                                {"scroll", offsetof(ui::NodeFields, scroll)},
+                                {"range", offsetof(ui::NodeFields, range)},
+                                {"rangeMinimum", offsetof(ui::NodeFields, rangeMinimum)},
+                                {"rangeMaximum", offsetof(ui::NodeFields, rangeMaximum)},
+                                {"rangeStep", offsetof(ui::NodeFields, rangeStep)},
+                                {"rangeValue", offsetof(ui::NodeFields, rangeValue)},
+                                {"thumb", offsetof(ui::NodeFields, thumb)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());
@@ -254,7 +260,7 @@ ui::Box cursorAt(std::array<float, 2> at) noexcept {
 
 class UiParticipant final : public composition::Participant,
                             public ui::UiFrames,
-                            public world_kest::UiHover,
+                            public world_kest::UiQueries,
                             public world_kest::PresentationStarts {
 public:
     result::Status load(composition::ParticipantContext& context) {
@@ -436,6 +442,10 @@ public:
                 if (!failed_) {
                     ui_->wheelAt(x, y, deltaX, deltaY);
                 }
+            });
+            // What a range holds, for the sample (D621).
+            pointing_->onValue([this](std::int64_t press) -> std::optional<float> {
+                return failed_ ? std::nullopt : ui_->valueOf(0, press);
             });
         }
         // What is typed, to the field holding the keyboard.
@@ -639,6 +649,7 @@ public:
             pointing_->answer({});
             pointing_->onPress({});
             pointing_->onWheel({});
+            pointing_->onValue({});
             pointing_->onRelease({});
         }
         if (typing_ != nullptr) {
@@ -680,7 +691,8 @@ public:
                       diagnostics::field("atlasRevisions",
                                          drawn_ != nullptr && drawn_->atlas != nullptr ? drawn_->atlas->revision : 0),
                       diagnostics::field("pressesMissed", missed_),
-                      diagnostics::field("framesPointed", pointedFrames_)});
+                      diagnostics::field("framesPointed", pointedFrames_),
+                      diagnostics::field("ranged", kStatistics.ranged)});
     }
 
     /// The host told where the caret of the field holding the keyboard is
@@ -695,8 +707,8 @@ public:
         if (capability == ui::kUiFrames.name) {
             return composition::provideAs<ui::UiFrames>(*this);
         }
-        if (capability == world_kest::kUiHover.name) {
-            return composition::provideAs<world_kest::UiHover>(*this);
+        if (capability == world_kest::kUiQueries.name) {
+            return composition::provideAs<world_kest::UiQueries>(*this);
         }
         if (capability == world_kest::kPresentationStarts.name) {
             return composition::provideAs<world_kest::PresentationStarts>(*this);
@@ -723,6 +735,11 @@ public:
     // What the host lends of the pointer, where the mouse is now (D422).
     std::int64_t hovered() const override {
         return pointing_ != nullptr ? pointing_->hovered().value_or(0) : 0;
+    }
+
+    // What a range holds now, the player's drags and presses in it (D621).
+    std::optional<float> valueOf(std::size_t player, std::int64_t press) const override {
+        return ui_ != nullptr && !failed_ ? ui_->valueOf(player, press) : std::nullopt;
     }
 
     // What the UI document starts a node component as (D619).

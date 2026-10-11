@@ -599,20 +599,46 @@ fn mark(count: i32, owners: [Owner], marks: [model.Model]) {
 
 // The client's view: from a fixed point forty-two meters up and thirty-six
 // south of the lot's middle, looking down at it, the whole lot in sight, wherever the
-// owner's cursor is. The eye is fixed in the World (D520): placed back from
-// the player's pose, the cursor's plot, it lurched for a frame whenever the
-// cursor crossed into another plot between two ticks.
+// owner's cursor is, nearer or further as the zoom slider says (D621). The
+// eye is fixed in the World (D520): placed back from the player's pose, the
+// cursor's plot, it lurched for a frame whenever the cursor crossed into
+// another plot between two ticks.
 fn frame(count: i32, poses: [physics3d.Pose3D], views: [model.Camera]) {
+    let distance = zoomed() / 100.0
     let i = 0
     while i < count {
         views[i].anchor = model.FIXED
         views[i].offsetX = 0.0
-        views[i].offsetY = 42.0
-        views[i].offsetZ = 36.0
+        views[i].offsetY = 42.0 * distance
+        views[i].offsetZ = 36.0 * distance
         views[i].pitch = -0.92
         views[i].fovY = 1.0
         views[i].near = 0.5
         views[i].exposure = 14.0
+        i = i + 1
+    }
+}
+
+// The view's distance in percent, as the player slid the zoom slider: 60
+// to 140 by tens, 100 until it has one (D621).
+fn zoomed() -> f32 {
+    let slid = ui.value(controls.ZOOM)
+    if slid == 0.0 {
+        return 100.0
+    }
+    return slid
+}
+
+// The zoom slider under the board (D621), as tycoon.ui starts it: a dark
+// track whose knob sits at the value's share of it, so a drag of the knob
+// moves the value with the pointer; a press on it is the controls' ZOOM.
+fn zoom(count: i32, zooms: [ui.Node], knobs: [ui.Node]) {
+    let share = (zoomed() - 60.0) / 80.0
+    let i = 0
+    while i < count {
+        zooms[i].press = controls.ZOOM
+        knobs[i].xScale = share
+        knobs[i].anchorX = share
         i = i + 1
     }
 }

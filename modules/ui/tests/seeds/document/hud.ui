@@ -33,7 +33,12 @@
     },
     {
       "component": "game.banner",
-      "layer": "overlay"
+      "layer": "overlay",
+      "range": "vertical",
+      "rangeMinimum": -5,
+      "rangeMaximum": 500000,
+      "rangeValue": 2.5,
+      "thumb": true
     }
   ]
 }

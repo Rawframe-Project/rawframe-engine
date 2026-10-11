@@ -100,9 +100,9 @@ struct UiDoorContext {
     const view::UiNavigation* navigation = nullptr;
 };
 
-/// Adds `UI.pressed`, `UI.submitted`, `UI.typed`, `UI.hovered`,
-/// `UI.navigate`, and `UI.navigating`. They read nothing else and change
-/// only where the player's own UI holds focus, so they are safe for
+/// Adds `UI.pressed`, `UI.submitted`, `UI.typed`, `UI.hovered`, `UI.value`
+/// (D621), `UI.navigate`, and `UI.navigating`. They read nothing else and
+/// change only where the player's own UI holds focus, so they are safe for
 /// untrusted code.
 /// `context` outlives every machine started with the table.
 [[nodiscard]] result::Status addUiDoors(kest::DoorTable& doors, const UiDoorContext* context);

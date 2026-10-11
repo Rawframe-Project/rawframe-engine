@@ -44,6 +44,34 @@
       "textWrap": "no_wrap"
     },
     {
+      "component": "tycoon.zoom",
+      "widthOffset": 160,
+      "heightOffset": 16,
+      "margin": 12,
+      "fill": "#101820c0",
+      "radius": 8,
+      "order": 3,
+      "text": "553f856290bb3e9f",
+      "range": "horizontal",
+      "rangeMinimum": 60,
+      "rangeMaximum": 140,
+      "rangeStep": 10,
+      "rangeValue": 100,
+      "children": [
+        {
+          "component": "tycoon.knob",
+          "widthOffset": 16,
+          "heightOffset": 16,
+          "absolute": true,
+          "xScale": 0.5,
+          "anchorX": 0.5,
+          "fill": "#f4e9c8ff",
+          "radius": 8,
+          "thumb": true
+        }
+      ]
+    },
+    {
       "component": "tycoon.banner",
       "padding": 16,
       "absolute": true,

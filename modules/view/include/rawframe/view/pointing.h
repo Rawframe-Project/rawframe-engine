@@ -109,11 +109,27 @@ public:
         return pointed_ ? std::optional{pointer_} : std::nullopt;
     }
 
+    /// What the pointer moved a range to (D621): the value the range whose
+    /// press code is `press` holds in the first local player's view, whose
+    /// mouse it is; none for no such range.
+    using Valued = std::function<std::optional<float>(std::int64_t press)>;
+    /// The UI's side: how values are answered from now on; empty, as the
+    /// UI goes, for none.
+    void onValue(Valued valued) noexcept {
+        valued_ = std::move(valued);
+    }
+    /// The input's side: the value of the range `press` names, none while
+    /// no UI answers.
+    [[nodiscard]] std::optional<float> value(std::int64_t press) const {
+        return valued_ ? valued_(press) : std::nullopt;
+    }
+
 private:
     Answer answer_;
     Pressed pressed_;
     Released released_;
     Wheeled wheeled_;
+    Valued valued_;
     std::array<float, 2> pointer_{};
     bool pointed_ = false;
 };

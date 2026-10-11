@@ -18,6 +18,7 @@
 #include "rawframe/world_animation/animation.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/starts.h"
+#include "rawframe/world_kest/ui_queries.h"
 #include "rawframe/world_replication/messages.h"
 
 #include <cstdint>
@@ -72,6 +73,9 @@ public:
     /// The press code of the UI node under the mouse from now on, which
     /// `UI.hovered` answers its present systems; nought for none (D422).
     void hover(std::int64_t code) noexcept;
+    /// The UI whose ranges `UI.value` reads, local player `player`'s view
+    /// of it (D621); none answers nought. `queries` outlives it.
+    void askUi(const UiQueries* queries, std::size_t player) noexcept;
     /// What its components start as when it attaches them (D619); none,
     /// as without it, starts every one at nought. `starts` outlives it.
     void startWith(const PresentationStarts* starts) noexcept;

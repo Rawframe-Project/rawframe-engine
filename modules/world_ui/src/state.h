@@ -21,6 +21,18 @@
 
 namespace rawframe::world_ui {
 
+/// What a node's range was last given from its fields (D621), and its
+/// thumb: the value the player moves stays until the node's own changes.
+struct RangeGiven {
+    std::uint32_t axis = 0;
+    float minimum = 0;
+    float maximum = 0;
+    float step = 0;
+    float value = 0;
+    std::optional<ui::Node> thumb;
+    friend bool operator==(const RangeGiven&, const RangeGiven&) = default;
+};
+
 /// A node component of an entity, and the node it is in the tree: none
 /// while its value is refused or there was no room for it.
 struct Entry {
@@ -37,6 +49,8 @@ struct Entry {
     ui::States states;
     /// The local player whose view it is in, whose locale its words are in.
     std::size_t player = 0;
+    /// The range its node was last given (D621): none for no range.
+    std::optional<RangeGiven> ranged;
 };
 
 /// The node holding focus (D430): a text field given the keyboard, its
@@ -97,6 +111,11 @@ struct WorldUi::State {
     std::unordered_map<std::uint64_t, ui::Style> classes;
     std::optional<std::array<float, 2>> pointer;
     Entry* pressed = nullptr;
+    /// A press went down on a range and is held: the pointer's moves drag
+    /// it until it is let go (D621). The thumb inside each range, by the
+    /// range's node, as the last frame nested them.
+    bool ranging = false;
+    std::unordered_map<std::uint64_t, ui::Node> thumbs;
 
     /// Focus taken from the node holding it: its ring goes, and a field
     /// gives back the keyboard and shows its placeholder again if it is
@@ -109,6 +128,15 @@ struct WorldUi::State {
 
     /// The entry whose node is `node`; null for none.
     [[nodiscard]] Entry* entryOf(ui::Node node) noexcept;
+
+    /// Each range given its fields where they or its thumb changed, the
+    /// value the player moved kept unless its own changed; a node no
+    /// longer a range cleared (D621).
+    void giveRanges();
+
+    /// The pointer's event given to the ranges under it (D621), counted
+    /// where one took it.
+    void point(ui::PointerEvent::Action action, float x, float y, bool holding);
 
     /// Each node given the states it is in now, where they changed: hovered
     /// under the mouse as the last layout placed it, pressed while a press

@@ -18,6 +18,10 @@
     "hud.won": {
       "message": "You won round {$round :integer}!",
       "description": "Shown to the owner that won a round, when it ends."
+    },
+    "hud.zoom": {
+      "message": "Zoom",
+      "description": "The name a screen reader reads for the slider that brings the view nearer or further."
     }
   }
 }

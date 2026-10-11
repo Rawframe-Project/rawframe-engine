@@ -27,6 +27,8 @@ enum class Form : std::uint8_t {
     /// A number of logical pixels, a share, degrees, or an em, within
     /// +/-4096 (an f32).
     Real,
+    /// A range's number, within a million of nought (an f32).
+    Value,
     /// `#rrggbbaa` (a u32 0xRRGGBBAA).
     Color,
     /// 16 lowercase hexadecimal digits (a u64).
@@ -60,9 +62,10 @@ constexpr std::array<std::string_view, 3> kHits = {"children", "self", "none"};
 constexpr std::array<std::string_view, 4> kLayers = {"none", "activation", "modal", "overlay"};
 constexpr std::array<std::string_view, 4> kEdits = {"none", "line", "message", "lines"};
 constexpr std::array<std::string_view, 4> kScrolls = {"none", "horizontal", "vertical", "both"};
+constexpr std::array<std::string_view, 3> kRanges = {"none", "horizontal", "vertical"};
 
 // rawframe.ui.Node's fields in its order.
-constexpr std::array<FieldForm, 51> kFieldForms = {{
+constexpr std::array<FieldForm, 57> kFieldForms = {{
     {"widthScale", offsetof(NodeFields, widthScale), Form::Real, {}},
     {"widthOffset", offsetof(NodeFields, widthOffset), Form::Real, {}},
     {"heightScale", offsetof(NodeFields, heightScale), Form::Real, {}},
@@ -114,6 +117,12 @@ constexpr std::array<FieldForm, 51> kFieldForms = {{
     {"editLimit", offsetof(NodeFields, editLimit), Form::Bytes, {}},
     {"style", offsetof(NodeFields, style), Form::Identity, {}},
     {"scroll", offsetof(NodeFields, scroll), Form::Case, kScrolls},
+    {"range", offsetof(NodeFields, range), Form::Case, kRanges},
+    {"rangeMinimum", offsetof(NodeFields, rangeMinimum), Form::Value, {}},
+    {"rangeMaximum", offsetof(NodeFields, rangeMaximum), Form::Value, {}},
+    {"rangeStep", offsetof(NodeFields, rangeStep), Form::Value, {}},
+    {"rangeValue", offsetof(NodeFields, rangeValue), Form::Value, {}},
+    {"thumb", offsetof(NodeFields, thumb), Form::Truth, {}},
 }};
 
 /// A node's members in the order it writes them: its component, its
@@ -130,6 +139,7 @@ constexpr std::array<std::string_view, kFieldForms.size() + 3> kNodeMembers = []
 }();
 constexpr std::array<std::string_view, 3> kDocumentFields = {"kind", "formatVersion", "nodes"};
 constexpr double kMostMagnitude = 4096;
+constexpr double kMostValue = 1'000'000;
 constexpr std::int64_t kMostEditBytes = 252;
 
 std::string indexed(const std::string& path, std::size_t index) {
@@ -161,10 +171,14 @@ result::Result<std::uint64_t> hexOf(const Record& record, std::string_view field
 
 result::Status fieldOf(const Record& record, const FieldForm& form, NodeFields& fields) {
     switch (form.form) {
-    case Form::Real: {
+    case Form::Real:
+    case Form::Value: {
         RAWFRAME_TRY_ASSIGN(const double kValue, record.real(form.name, 0));
-        if (!std::isfinite(kValue) || std::abs(kValue) > kMostMagnitude) {
-            return invalid(record.pathOf(form.name), "a number is within 4096 of nought");
+        const double kMost = form.form == Form::Real ? kMostMagnitude : kMostValue;
+        if (!std::isfinite(kValue) || std::abs(kValue) > kMost) {
+            return invalid(record.pathOf(form.name),
+                           form.form == Form::Real ? "a number is within 4096 of nought"
+                                                   : "a range's number is within a million of nought");
         }
         store(fields, form.offset, static_cast<float>(kValue));
         return {};

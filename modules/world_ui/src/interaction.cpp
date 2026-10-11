@@ -76,6 +76,14 @@ void WorldUi::State::letGo(bool shown) {
     return nullptr;
 }
 
+void WorldUi::State::point(ui::PointerEvent::Action action, float x, float y, bool holding) {
+    if (tree->contains(window) &&
+        tree->point(window, ui::PointerEvent{.action = action, .x = x, .y = y, .held = holding, .seconds = seconds})
+            .value_or(false)) {
+        ++statistics.ranged;
+    }
+}
+
 void WorldUi::State::giveStates() {
     Entry* hovered = nullptr;
     if (pointer.has_value()) {
@@ -231,6 +239,14 @@ void WorldUi::pressAt(float x, float y) {
     const auto kHit = state.tree->hit(state.window, x, y);
     Entry* entry = kHit.has_value() && kHit->node.has_value() ? state.entryOf(*kHit->node) : nullptr;
     state.pressed = entry;
+    // A range, or its thumb, takes the press: paged toward it, then
+    // dragged as the pointer moves until it is let go (D621).
+    if (entry != nullptr && (entry->value.range != 0 || entry->value.thumb != 0)) {
+        state.letGo();
+        state.ranging = true;
+        state.point(ui::PointerEvent::Action::Press, x, y, true);
+        return;
+    }
     if (entry != nullptr && entry->editable) {
         state.focusOn(*entry, true, false);
         static_cast<void>(state.focus->edit->pointAt(kHit->x, kHit->y, false));
@@ -241,11 +257,43 @@ void WorldUi::pressAt(float x, float y) {
 }
 
 void WorldUi::release() {
-    state_->pressed = nullptr;
+    State& state = *state_;
+    state.pressed = nullptr;
+    if (state.ranging) {
+        state.ranging = false;
+        const std::array<float, 2> kAt = state.pointer.value_or(std::array<float, 2>{});
+        state.point(ui::PointerEvent::Action::Release, kAt[0], kAt[1], false);
+        // Gone from the ranges, so none stays hovered by a pointer only
+        // they were told of.
+        state.point(ui::PointerEvent::Action::Leave, kAt[0], kAt[1], false);
+    }
 }
 
 void WorldUi::hoverAt(std::optional<std::array<float, 2>> pointer) {
-    state_->pointer = pointer;
+    State& state = *state_;
+    if (state.ranging && pointer.has_value() && pointer != state.pointer) {
+        state.point(ui::PointerEvent::Action::Move, (*pointer)[0], (*pointer)[1], true);
+    }
+    state.pointer = pointer;
+}
+
+std::optional<float> WorldUi::valueOf(std::size_t player, std::int64_t press) const {
+    const State& state = *state_;
+    if (player >= state.views.size() || press == 0) {
+        return std::nullopt;
+    }
+    for (const auto& [kKey, kEntry] : state.views[player].entries) {
+        if (kEntry.value.range == 0 || kEntry.value.press != press) {
+            continue;
+        }
+        if (kEntry.node.has_value()) {
+            if (const std::optional<ui::Range> kHeld = state.tree->rangeOf(*kEntry.node)) {
+                return kHeld->value;
+            }
+        }
+        return kEntry.value.rangeValue;
+    }
+    return std::nullopt;
 }
 
 void WorldUi::type(const view::Typing& typing) {

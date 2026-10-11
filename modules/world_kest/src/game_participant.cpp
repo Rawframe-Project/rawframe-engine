@@ -8,7 +8,6 @@
 #include "game_persistence.h"
 #include "game_plans.h"
 #include "game_scenes.h"
-#include "hover_doors.h"
 #include "message_doors.h"
 #include "mod_handlers.h"
 #include "mod_services.h"
@@ -39,6 +38,7 @@
 #include "rawframe/world_runtime/picking.h"
 #include "rawframe/world_runtime/save.h"
 #include "scene_follower.h"
+#include "ui_doors.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -264,7 +264,7 @@ public:
         RAWFRAME_TRY(addAnimationDoors(doors, &animationDoors_));
         // A server plays for everyone: it shows no one player.
         RAWFRAME_TRY(addPlayerDoor(doors, nullptr));
-        RAWFRAME_TRY(addHoverDoor(doors, nullptr));
+        RAWFRAME_TRY(addUiDoors(doors, nullptr));
         std::vector<std::size_t> sizes;
         for (const kest::TypeLayout& layout : layouts_) {
             sizes.push_back(layout.size);

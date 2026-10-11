@@ -49,7 +49,12 @@ constexpr std::string_view kDocument = R"({
     },
     {
       "component": "game.banner",
-      "layer": "overlay"
+      "layer": "overlay",
+      "range": "vertical",
+      "rangeMinimum": -5,
+      "rangeMaximum": 500000,
+      "rangeValue": 2.5,
+      "thumb": true
     }
   ]
 }
@@ -104,10 +109,18 @@ RAWFRAME_TEST(AUiDocumentIsReadAsATreeOfComponents) {
     const NodeFields& kSign = kNodes[2].fields;
     RAWFRAME_EXPECT(kSign.press == 7 && kSign.hit == 1 && kSign.edit == 1 && kSign.editLimit == 32 &&
                     kSign.style == 0x139F1A51051D860E);
-    RAWFRAME_EXPECT(kNodes[3].fields.layer == 3);
+    const NodeFields& kBanner = kNodes[3].fields;
+    RAWFRAME_EXPECT(kBanner.layer == 3 && kBanner.range == 2 && kBanner.rangeMinimum == -5 &&
+                    kBanner.rangeMaximum == 500000 && kBanner.rangeStep == 0 && kBanner.rangeValue == 2.5F &&
+                    kBanner.thumb == 1);
     // Every field left out is nought, as presentation attaches a node.
     NodeFields banner;
     banner.layer = 3;
+    banner.range = 2;
+    banner.rangeMinimum = -5;
+    banner.rangeMaximum = 500000;
+    banner.rangeValue = 2.5F;
+    banner.thumb = 1;
     RAWFRAME_EXPECT(std::memcmp(&banner, &kNodes[3].fields, sizeof banner) == 0);
 }
 
@@ -131,12 +144,13 @@ RAWFRAME_TEST(AUiDocumentIsRefusedWhereItIsWrong) {
     RAWFRAME_EXPECT(refused(with("\"editLimit\": 32", "\"editLimit\": 300"), "editLimit"));
     RAWFRAME_EXPECT(refused(with("\"order\": 2", "\"order\": 2.5"), "order"));
     RAWFRAME_EXPECT(refused(with("\"absolute\": true", "\"absolute\": false"), "absolute"));
+    RAWFRAME_EXPECT(refused(with("\"rangeMaximum\": 500000", "\"rangeMaximum\": 5000000"), "rangeMaximum"));
+    RAWFRAME_EXPECT(refused(with("\"vertical\"", "\"both\""), "range"));
     // Unknown, out of order, and empty children.
     RAWFRAME_EXPECT(refused(with("\"padding\": 6", "\"paddings\": 6"), "nodes[0]"));
     RAWFRAME_EXPECT(refused(
         with("\"padding\": 6,\n      \"absolute\": true", "\"absolute\": true,\n      \"padding\": 6"), "nodes[0]"));
-    RAWFRAME_EXPECT(refused(with("\"layer\": \"overlay\"", "\"layer\": \"overlay\",\n      \"children\": []"),
-                            "nodes[1].children"));
+    RAWFRAME_EXPECT(refused(with("\"thumb\": true", "\"thumb\": true,\n      \"children\": []"), "nodes[1].children"));
     // Limits: nodes, and nodes inside nodes.
     RAWFRAME_EXPECT(refused(std::string{kDocument}, "nodes[1]", DocumentLimits{.maximumNodes = 3}));
     RAWFRAME_EXPECT(refused(std::string{kDocument}, "children[0]", DocumentLimits{.maximumDepth = 1}));

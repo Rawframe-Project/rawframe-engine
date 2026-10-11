@@ -100,7 +100,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED tycoon_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "a11y: 2 push button [0-9]+ coins\na11y: 2 entry Write your sign\na11y: pressed [^\n]*: b true.*\"commandsTaken\":1,.*\"commandsSent\":1,")
+                             "a11y: 2 push button [0-9]+ coins\na11y: 2 entry Write your sign\na11y: 2 slider Zoom\na11y: pressed [^\n]*: b true.*\"commandsTaken\":1,.*\"commandsSent\":1,")
         # Stalls' sign typed by a screen reader (D613): its entry, named by
         # its label's words and read as empty while it shows them, takes
         # text inserted through AT-SPI's EditableText as the field's own
@@ -136,6 +136,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "at 16,16 [^\n]*: lighter.*\"commandsTaken\":1,\"commandsLimited\":0.*\"bodiesMade\":1,.*\"code\":\"ui_summary\"[^\n]*\"fontsRead\":1,[^\n]*\"presses\":1,.*\"commandsSent\":1,")
+        # Stalls' zoom slider dragged (D621): its knob, at the middle of the
+        # track under the board, carried to the right; the range takes the
+        # press, the drag, and the release, and the knob, which the present
+        # system places from the value it reads, moves with it (a run
+        # without the drag changes one node, the purse).
+        add_test(NAME client_slides_stalls
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
+                         games/tycoon/tycoon.game drag=92,180,132,180
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_slides_stalls PROPERTIES
+                             FIXTURES_REQUIRED tycoon_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"ui_summary\"[^\n]*\"changed\":([2-9]|[1-9][0-9]+),[^\n]*\"ranged\":([3-9]|[1-9][0-9]+)}")
         # Stalls' sign field written in (D426): a click gives it the
         # keyboard, the keys type into it and no action, Return gives its
         # text to the sample, which sends it to the server as the owner's
@@ -307,7 +323,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                                  FIXTURES_REQUIRED tycoon_content
                                  PROCESSORS 2
                                  PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"framesOnPanel\":[1-9][0-9]+,[^\n]*\"glyphRuns\":[1-9][0-9]+,.*\"code\":\"ui_summary\"[^\n]*\"framesPointed\":[1-9][0-9]+}.*\"code\":\"xr_summary\"[^\n]*\"framesPanelSubmitted\":[1-9][0-9]+,[^\n]*\"handsPointing\":[1-9][0-9]+,[^\n]*\"failed\":false")
+                                 "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"framesOnPanel\":[1-9][0-9]+,[^\n]*\"glyphRuns\":[1-9][0-9]+,.*\"code\":\"ui_summary\"[^\n]*\"framesPointed\":[1-9][0-9]+,.*\"code\":\"xr_summary\"[^\n]*\"framesPanelSubmitted\":[1-9][0-9]+,[^\n]*\"handsPointing\":[1-9][0-9]+,[^\n]*\"failed\":false")
         endif()
         # Each draws a window on lavapipe beside a server, and bots or a
         # second client in some: two of a preset's processors each, so a full

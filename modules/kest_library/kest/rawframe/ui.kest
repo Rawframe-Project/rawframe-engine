@@ -82,6 +82,19 @@ module rawframe.ui
 // axes (D444): it clips them to its padding box, may be smaller than they
 // are, and a wheel turned over it moves them, easing, while it can move
 // that way; children that should keep their sizes set `shrink` to nought.
+//
+// A node whose `range` is not NO_RANGE is a slider (D621): its value lies
+// from `rangeMinimum` to `rangeMaximum` on whole `rangeStep`s from the
+// minimum (nought for any value), the minimum at its start, or at its
+// bottom if vertical. A press on it moves the value a tenth of its span
+// (or a step, if more) toward the press, and a drag moves it with the
+// pointer, from where the node inside it whose `thumb` is one was grabbed
+// (none, and the value follows the pointer). Its `rangeValue` is what it
+// starts at; the value the player moved it to stays until `rangeValue` is
+// written anew. A present system reads it by its `press` with
+// `ui.value(press)` and places the thumb and sizes a fill from it: a
+// thumb `absolute` at `xScale` and `anchorX` both the value's share of
+// the range lies on the track as the drag expects.
 struct Node {
     widthScale: f32
     widthOffset: f32
@@ -134,6 +147,12 @@ struct Node {
     editLimit: u32
     style: u64
     scroll: u32
+    range: u32
+    rangeMinimum: f32
+    rangeMaximum: f32
+    rangeStep: f32
+    rangeValue: f32
+    thumb: u32
 }
 
 // A node's `scroll`.
@@ -141,6 +160,11 @@ const NO_SCROLL: u32 = 0
 const SCROLL_HORIZONTAL: u32 = 1
 const SCROLL_VERTICAL: u32 = 2
 const SCROLL_BOTH: u32 = 3
+
+// A node's `range`.
+const NO_RANGE: u32 = 0
+const RANGE_HORIZONTAL: u32 = 1
+const RANGE_VERTICAL: u32 = 2
 
 // A node's `direction`.
 const ROW: u32 = 0
@@ -202,6 +226,7 @@ struct Typed {
 }
 
 extern fn UI.hovered() -> i64
+extern fn UI.value(press: i64) -> f32
 
 // The `press` of the UI node under the client's mouse, where a press would
 // land, or nought for none (D422): a present system lights it. Nought in
@@ -209,4 +234,11 @@ extern fn UI.hovered() -> i64
 // local player but the first, whose mouse it is.
 fn hovered() -> i64 {
     return UI.hovered()
+}
+
+// The value of the slider whose `press` is `press` in the client's view,
+// as the player moved it (D621), or nought for none. Nought in every
+// simulation.
+fn value(press: i64) -> f32 {
+    return UI.value(press)
 }

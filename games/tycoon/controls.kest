@@ -31,6 +31,10 @@ struct Collect {
 // its stall's sign in, given to the server when the player presses Enter.
 const SIGN: i64 = 2
 
+// The zoom slider's press code (D621), by which a present system reads the
+// value the player slid it to.
+const ZOOM: i64 = 3
+
 // What an owner's player wrote on its sign.
 struct Sign {
     typed: ui.Typed

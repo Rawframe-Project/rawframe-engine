@@ -19,6 +19,10 @@
     "hud.won": {
       "message": "{$round :integer}. turu kazandın!",
       "sourceHash": "b3c52e859e3e7df1"
+    },
+    "hud.zoom": {
+      "message": "Yakınlaştır",
+      "sourceHash": "509c517ede79fef0"
     }
   }
 }

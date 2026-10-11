@@ -10,6 +10,8 @@ namespace rawframe::input_kest {
 namespace {
 
 constexpr std::array<kest::Parameter, 1> kCodeGives = {kest::Parameter{kest::Slot::I64}};
+constexpr std::array<kest::Parameter, 1> kCodeTakes = {kest::Parameter{kest::Slot::I64}};
+constexpr std::array<kest::Parameter, 1> kValueGives = {kest::Parameter{kest::Slot::F32}};
 constexpr std::array<kest::Parameter, 1> kTruthGives = {kest::Parameter{kest::Slot::Bool}};
 constexpr std::array<kest::Parameter, 1> kTypedGives = {kest::Parameter{kest::Slot::Value, "rawframe.ui.Typed"}};
 
@@ -42,6 +44,12 @@ void hoveredDoor(kest::DoorCall& call, void* context) noexcept {
     call.answerInteger(pointing != nullptr ? pointing->hovered().value_or(0) : 0);
 }
 
+void valueDoor(kest::DoorCall& call, void* context) noexcept {
+    const view::UiPointing* pointing = static_cast<const UiDoorContext*>(context)->pointing;
+    const std::int64_t kPress = call.integer(0);
+    call.answerReal(pointing != nullptr ? pointing->value(kPress).value_or(0) : 0);
+}
+
 } // namespace
 
 result::Status addUiDoors(kest::DoorTable& doors, const UiDoorContext* context) {
@@ -68,11 +76,18 @@ result::Status addUiDoors(kest::DoorTable& doors, const UiDoorContext* context) 
                                       .context = lent,
                                       .gives = kTruthGives,
                                       .safeForUntrusted = true}));
-    // rawframe.ui's own wrapper asks for it wherever the module is imported.
-    return doors.add(kest::Door{.name = "UI.hovered",
-                                .function = &hoveredDoor,
+    // rawframe.ui's own wrappers ask for them wherever the module is
+    // imported.
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "UI.hovered",
+                                      .function = &hoveredDoor,
+                                      .context = lent,
+                                      .gives = kCodeGives,
+                                      .safeForUntrusted = true}));
+    return doors.add(kest::Door{.name = "UI.value",
+                                .function = &valueDoor,
                                 .context = lent,
-                                .gives = kCodeGives,
+                                .takes = kCodeTakes,
+                                .gives = kValueGives,
                                 .safeForUntrusted = true});
 }
 

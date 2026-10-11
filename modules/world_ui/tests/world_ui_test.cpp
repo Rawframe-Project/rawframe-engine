@@ -826,3 +826,61 @@ RAWFRAME_TEST(AViewIsLaidOutInsideWhatThePlatformLeavesClear) {
     const UiView kUntold = insideSafeArea(UiView{.width = 640, .height = 360}, {}, kSafe);
     RAWFRAME_EXPECT(kUntold.y == 0 && kUntold.width == 640 && kUntold.height == 360);
 }
+
+RAWFRAME_TEST(ARangeIsPagedAndDraggedAndKeepsWhatThePlayerMovedItTo) {
+    Rig rig;
+    // A track 200 by 20 at the view's top left, 0 to 100 at 50, and its
+    // thumb, 20 wide, at the value's share of it, as a present system
+    // places one.
+    ui::NodeFields track{.widthOffset = 200, .heightOffset = 20, .shrink = 0, .press = 9};
+    track.range = 1;
+    track.rangeMaximum = 100;
+    track.rangeStep = 1;
+    track.rangeValue = 50;
+    ui::NodeFields thumb{.widthOffset = 20, .heightOffset = 20, .absolute = 1, .xScale = 0.5F, .anchorX = 0.5F};
+    thumb.thumb = 1;
+    rig.put(rig.player, kHudId, track);
+    rig.put(rig.player, kMeterId, thumb);
+    RAWFRAME_EXPECT(rig.frame());
+    RAWFRAME_EXPECT(rig.ui->valueOf(0, 9) == 50.0F && !rig.ui->valueOf(0, 8).has_value() &&
+                    !rig.ui->valueOf(1, 9).has_value());
+    // A press on the track before the thumb pages back a tenth.
+    rig.ui->hoverAt(std::array<float, 2>{110, 60});
+    rig.ui->pressAt(110, 60);
+    rig.ui->release();
+    RAWFRAME_EXPECT(rig.frame(1, 1));
+    RAWFRAME_EXPECT(rig.ui->valueOf(0, 9) == 40.0F);
+    // The thumb placed at 40, from 172 to 192, grabbed at its middle and
+    // dragged 36 to the right: 36 of the 180 it travels is 20 more.
+    thumb.xScale = 0.4F;
+    thumb.anchorX = 0.4F;
+    rig.put(rig.player, kMeterId, thumb);
+    RAWFRAME_EXPECT(rig.frame(1, 1.5));
+    rig.ui->hoverAt(std::array<float, 2>{182, 60});
+    rig.ui->pressAt(182, 60);
+    rig.ui->hoverAt(std::array<float, 2>{200, 60});
+    rig.ui->hoverAt(std::array<float, 2>{218, 60});
+    rig.ui->release();
+    RAWFRAME_EXPECT(rig.frame(1, 2));
+    RAWFRAME_EXPECT(rig.ui->valueOf(0, 9) == 60.0F && rig.ui->statistics().ranged >= 4);
+    // The node changed otherwise, the value the player moved stays; its own
+    // value changed, the range takes it.
+    track.fill = 0x303030FF;
+    rig.put(rig.player, kHudId, track);
+    RAWFRAME_EXPECT(rig.frame(1, 3));
+    RAWFRAME_EXPECT(rig.ui->valueOf(0, 9) == 60.0F);
+    track.rangeValue = 10;
+    rig.put(rig.player, kHudId, track);
+    RAWFRAME_EXPECT(rig.frame(1, 4));
+    RAWFRAME_EXPECT(rig.ui->valueOf(0, 9) == 10.0F);
+    // No longer a range, it has no value; a range past its axes is left out.
+    track.range = 0;
+    rig.put(rig.player, kHudId, track);
+    RAWFRAME_EXPECT(rig.frame(1, 5));
+    RAWFRAME_EXPECT(!rig.ui->valueOf(0, 9).has_value());
+    const std::uint64_t kLeftOut = rig.ui->statistics().leftOut;
+    track.range = 3;
+    rig.put(rig.player, kHudId, track);
+    RAWFRAME_EXPECT(rig.frame(1, 6));
+    RAWFRAME_EXPECT(rig.ui->statistics().leftOut > kLeftOut);
+}

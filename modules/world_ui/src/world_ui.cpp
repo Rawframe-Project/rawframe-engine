@@ -87,23 +87,24 @@ ui::Look lookOf(const ui::NodeFields& node) noexcept {
 /// `node`'s part in what presses hit (D421); none for a number past its
 /// constants. Nought passes presses through to its children and past them.
 std::optional<ui::Interaction> interactionOf(const ui::NodeFields& node) noexcept {
-    if (node.hit > 2 || node.layer > 3 || node.edit > 3) {
+    if (node.hit > 2 || node.layer > 3 || node.edit > 3 || node.range > 2 || node.thumb > 1) {
         return std::nullopt;
     }
     constexpr std::array<ui::Interaction::Hits, 3> kHits = {
         ui::Interaction::Hits::Children, ui::Interaction::Hits::Itself, ui::Interaction::Hits::Nothing};
     // A text field takes the presses that land on it (D426), unless it is
-    // left out with its children. A node that scrolls is hit, so a wheel
-    // over it finds it, and passes on the presses it leaves, as its hit of
-    // nought says (D444).
-    const bool kField = node.edit != 0 && node.hit != 2;
+    // left out with its children, as a range and its thumb do, which drag
+    // (D621). A node that scrolls is hit, so a wheel over it finds it, and
+    // passes on the presses it leaves, as its hit of nought says (D444).
+    const bool kField = (node.edit != 0 || node.range != 0 || node.thumb != 0) && node.hit != 2;
     const bool kScrolls = node.scroll != 0 && node.hit == 0;
     // What navigation reaches, a field and a node that takes presses, holds
     // focus as navigation gives it (D573).
     return ui::Interaction{.hits = kField || kScrolls ? ui::Interaction::Hits::Itself : kHits[node.hit],
                            .passThrough = node.hit == 0 && !kField,
                            .layer = static_cast<ui::Interaction::Layer>(node.layer),
-                           .focusable = node.edit != 0 || node.press != 0};
+                           .focusable = node.edit != 0 || node.press != 0,
+                           .drags = node.range != 0};
 }
 
 /// What `node` is to assistive technology, from what it does (D571): a
@@ -113,6 +114,9 @@ std::optional<ui::Interaction> interactionOf(const ui::NodeFields& node) noexcep
 ui::Role roleOf(const ui::NodeFields& node) noexcept {
     if (node.edit != 0) {
         return node.edit == 3 ? ui::Role::MultilineTextInput : ui::Role::TextInput;
+    }
+    if (node.range != 0) {
+        return ui::Role::Slider;
     }
     if (node.press != 0) {
         return ui::Role::Button;
@@ -215,8 +219,10 @@ void WorldUi::State::drop(Entry& entry) {
     }
     if (pressed == &entry) {
         pressed = nullptr;
+        ranging = false;
     }
     entry.states = {};
+    entry.ranged.reset();
     if (const auto kChildren = attached.find(keyOf(*entry.node)); kChildren != attached.end()) {
         for (const ui::Node kChild : kChildren->second) {
             if (tree->contains(kChild)) {
@@ -278,6 +284,54 @@ bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const ui::No
     return true;
 }
 
+void WorldUi::State::giveRanges() {
+    for (ViewState& view : views) {
+        for (auto& [kKey, entry] : view.entries) {
+            if (!entry.node.has_value()) {
+                continue;
+            }
+            const ui::NodeFields& kValue = entry.value;
+            if (kValue.range == 0) {
+                if (entry.ranged.has_value() && tree->clearRange(*entry.node).has_value()) {
+                    entry.ranged.reset();
+                }
+                continue;
+            }
+            const auto kThumb = thumbs.find(keyOf(*entry.node));
+            RangeGiven wanted{.axis = kValue.range,
+                              .minimum = kValue.rangeMinimum,
+                              .maximum = kValue.rangeMaximum,
+                              .step = kValue.rangeStep,
+                              .value = kValue.rangeValue,
+                              .thumb = kThumb != thumbs.end() ? std::optional{kThumb->second} : std::nullopt};
+            if (entry.ranged == wanted) {
+                continue;
+            }
+            // What the player moved it to stays unless its own value
+            // changed; a page is a tenth of its span, or a step if more.
+            float value = wanted.value;
+            if (entry.ranged.has_value() && entry.ranged->value == wanted.value) {
+                if (const std::optional<ui::Range> kHeld = tree->rangeOf(*entry.node)) {
+                    value = kHeld->value;
+                }
+            }
+            const float kSpan = wanted.maximum - wanted.minimum;
+            const ui::Range kRange{.minimum = wanted.minimum,
+                                   .maximum = wanted.maximum,
+                                   .value = value,
+                                   .step = wanted.step,
+                                   .page = std::max(kSpan / 10, wanted.step),
+                                   .vertical = wanted.axis == 2,
+                                   .thumb = wanted.thumb};
+            if (!tree->setRange(*entry.node, kRange).has_value()) {
+                ++statistics.leftOut;
+                continue;
+            }
+            entry.ranged = wanted;
+        }
+    }
+}
+
 bool WorldUi::State::giveFieldLook(Entry& entry) {
     const ui::NodeFields& kValue = entry.value;
     if (kValue.textAlign > 2 || kValue.textWrap > 1) {
@@ -335,11 +389,15 @@ bool WorldUi::State::giveWords(ui::Node node,
         words = settings.words ? settings.words(player, value.text, value.textValue) : std::nullopt;
         ++(words.has_value() ? statistics.texts : statistics.textsUnknown);
     }
-    // Something to press is read by its words, which name it (D571).
-    if (roleOf(value) == ui::Role::Button && !tree->setName(node, words.value_or(std::string{})).has_value()) {
+    // Something to press is read by its words, which name it (D571); a
+    // slider is named by its words and shows them nowhere, its thumb
+    // showing its value (D621).
+    const ui::Role kRole = roleOf(value);
+    if ((kRole == ui::Role::Button || kRole == ui::Role::Slider) &&
+        !tree->setName(node, words.value_or(std::string{})).has_value()) {
         return false;
     }
-    if (!words.has_value()) {
+    if (!words.has_value() || kRole == ui::Role::Slider) {
         return tree->clearText(node).has_value();
     }
     // A font not read yet is shown in the default until it is.
@@ -460,6 +518,9 @@ void WorldUi::State::nest(ViewState& view,
             ++statistics.leftOut;
             continue;
         }
+        if (kEntry.value.thumb != 0) {
+            thumbs[keyOf(*parent)] = *kEntry.node;
+        }
         into[keyOf(*parent)].push_back(
             Placed{.order = kEntry.value.order, .entity = kEntity, .component = kComponent, .node = *kEntry.node});
     }
@@ -560,6 +621,7 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
         state.views.pop_back();
     }
     state.views.resize(views.size());
+    state.thumbs.clear();
     std::unordered_map<std::uint64_t, std::vector<Placed>> wanted;
     for (std::size_t at = 0; at < views.size(); ++at) {
         const UiView& kView = views[at];
@@ -589,6 +651,7 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
         state.nest(view, kView.player, wanted);
     }
     RAWFRAME_TRY(state.attach(wanted));
+    state.giveRanges();
     state.giveStates();
     state.seconds = seconds;
     RAWFRAME_TRY(state.tree->layOut(state.window, width, height, seconds));

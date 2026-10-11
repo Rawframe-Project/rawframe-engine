@@ -114,6 +114,8 @@ struct UiStatistics {
     /// Moves of focus by navigation, and nodes it activated (D430).
     std::uint64_t navigated = 0;
     std::uint64_t activated = 0;
+    /// Presses, moves, and releases of the pointer a range took (D621).
+    std::uint64_t ranged = 0;
 };
 
 class WorldUi {
@@ -172,11 +174,16 @@ public:
     /// the frames that follow.
     void wheelAt(float x, float y, float deltaX, float deltaY);
     /// The press let go: the node it went down on is no longer pressed
-    /// (D431).
+    /// (D431), and a range it went down on lets the pointer go (D621).
     void release();
     /// Where the mouse is over the window, none off it: the node a press
-    /// there would land on is hovered (D431).
+    /// there would land on is hovered (D431), and a range a press went down
+    /// on is dragged there (D621).
     void hoverAt(std::optional<std::array<float, 2>> pointer);
+    /// The value of the range whose press code is `press` in local player
+    /// `player`'s view, as the player moved it (D621); none for no such
+    /// range.
+    [[nodiscard]] std::optional<float> valueOf(std::size_t player, std::int64_t press) const;
     /// What was typed, to the field holding the keyboard; nothing while
     /// none does. Enter gives a single line's text, Escape lets go.
     void type(const view::Typing& typing);

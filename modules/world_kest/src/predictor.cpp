@@ -3,7 +3,6 @@
 #include "animation_doors.h"
 #include "command_doors.h"
 #include "effect_doors.h"
-#include "hover_doors.h"
 #include "message_doors.h"
 #include "mod_services.h"
 #include "navigation.h"
@@ -14,6 +13,7 @@
 #include "rawframe/world/world.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/kest_systems.h"
+#include "ui_doors.h"
 
 #include <cstddef>
 #include <cstring>
@@ -102,7 +102,7 @@ public:
         // Nor tells its systems whose client it is: they must decide what
         // the server's do.
         RAWFRAME_TRY(addPlayerDoor(doors, nullptr));
-        RAWFRAME_TRY(addHoverDoor(doors, nullptr));
+        RAWFRAME_TRY(addUiDoors(doors, nullptr));
         // Nor runs a mod: a service answers the value it is given, and the
         // server's state corrects what a provider would have changed.
         std::vector<std::size_t> sizes;
