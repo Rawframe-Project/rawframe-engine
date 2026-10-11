@@ -1,7 +1,6 @@
 #include "rawframe/authoring/authored_styles.h"
 
 #include "rawframe/authoring/errors.h"
-#include "rawframe/base/hex64.h"
 
 #include <algorithm>
 #include <array>
@@ -19,7 +18,21 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, AuthoringEr
     return result::fail(errorClass, kAuthoringDomain, code(error), why);
 }
 
-result::Result<ui::StyleSheet> sheetOf(const std::string& text) {
+constexpr std::array<std::string_view, 3> kDocumentFields = {"kind", "formatVersion", "styles"};
+
+/// The sheet's objects' members in order, by what holds them: the root,
+/// a class in `styles`, and a variant's look.
+std::span<const std::string_view> orderOf(std::string_view holder) noexcept {
+    if (holder.empty()) {
+        return kDocumentFields;
+    }
+    if (holder == "styles") {
+        return ui::kStyleFields;
+    }
+    return ui::kStyleLookFields;
+}
+
+result::Result<ui::StyleSheet> sheetOf(std::string_view text) {
     auto read = ui::readStyles(text);
     if (!read.has_value()) {
         // What the reader refused, and where, said to whoever asked.
@@ -35,147 +48,44 @@ result::Result<ui::StyleSheet> sheetOf(const std::string& text) {
     return read;
 }
 
-/// Where class `style` is among the document's, if it is.
-std::optional<std::size_t> placeOf(const Value& root, std::uint64_t style) {
-    const Value* styles = root.find("styles");
-    if (styles == nullptr) {
-        return std::nullopt;
-    }
-    for (std::size_t at = 0; at < styles->items().size(); ++at) {
-        const Value* id = styles->items()[at].find("styleId");
-        if (id != nullptr && id->text() != nullptr && base::parseHex64(*id->text()) == style) {
-            return at;
-        }
-    }
-    return std::nullopt;
-}
-
-/// `object` with its member `name` set to `value`, or gone for none, its
-/// members in `order`.
-Value withMember(const Value& object,
-                 std::span<const std::string_view> order,
-                 std::string_view name,
-                 const std::optional<Value>& value) {
-    Value made = Value::object();
-    for (const std::string_view kField : order) {
-        if (kField == name) {
-            if (value.has_value()) {
-                made.add(std::string{kField}, *value);
-            }
-        } else if (const Value* held = object.find(kField)) {
-            made.add(std::string{kField}, *held);
-        }
-    }
-    return made;
-}
-
-constexpr std::array<std::string_view, 3> kDocumentFields = {"kind", "formatVersion", "styles"};
-
-bool same(const std::optional<Value>& left, const std::optional<Value>& right) {
-    return left.has_value() == right.has_value() &&
-           (!left.has_value() || document::write(*left) == document::write(*right));
-}
-
-/// The value of `part` of `variant` of class `style` in `root`.
-std::optional<Value> partIn(const Value& root, std::uint64_t style, std::string_view variant, std::string_view part) {
-    const std::optional<std::size_t> kPlace = placeOf(root, style);
-    if (!kPlace.has_value()) {
-        return std::nullopt;
-    }
-    const Value* look = root.find("styles")->items()[*kPlace].find(variant);
-    const Value* held = look != nullptr ? look->find(part) : nullptr;
-    return held != nullptr ? std::optional<Value>{*held} : std::nullopt;
-}
-
-/// The record of class `style` in `root`, if it has one.
-std::optional<Value> classIn(const Value& root, std::uint64_t style) {
-    const std::optional<std::size_t> kPlace = placeOf(root, style);
-    return kPlace.has_value() ? std::optional<Value>{root.find("styles")->items()[*kPlace]} : std::nullopt;
-}
-
-/// The class's member a whole-member delta sets.
-std::string_view memberOf(const StyleDelta& delta) {
-    return delta.kind == StyleDelta::Kind::SetName ? "name" : "transitions";
-}
-
-/// What `delta`'s slot holds in `root`.
-std::optional<Value> slotIn(const Value& root, const StyleDelta& delta) {
-    switch (delta.kind) {
-    case StyleDelta::Kind::SetPart:
-        return partIn(root, delta.style, delta.variant, delta.part);
-    case StyleDelta::Kind::CreateClass:
-    case StyleDelta::Kind::DestroyClass:
-        return classIn(root, delta.style);
-    case StyleDelta::Kind::SetName:
-    case StyleDelta::Kind::SetTransitions: {
-        const std::optional<Value> kClass = classIn(root, delta.style);
-        const Value* held = kClass.has_value() ? kClass->find(memberOf(delta)) : nullptr;
-        return held != nullptr ? std::optional<Value>{*held} : std::nullopt;
-    }
-    }
-    return std::nullopt;
-}
-
-/// `delta` applied to `root` forward or backward, where its slot holds what
-/// it leaves from.
-result::Status applyTo(Value& root, const StyleDelta& delta, bool forward) {
-    const std::optional<Value>& kFrom = forward ? delta.before : delta.after;
-    const std::optional<Value>& kTo = forward ? delta.after : delta.before;
-    if (!same(slotIn(root, delta), kFrom)) {
-        return refuse(result::ErrorClass::FailedPrecondition,
-                      AuthoringError::DeltaMismatch,
-                      "a class's slot does not hold what its change leaves from");
-    }
-    const Value& kClasses = *root.find("styles");
-    const std::optional<std::size_t> kPlace = placeOf(root, delta.style);
-    Value classes = Value::array();
-    if (delta.kind == StyleDelta::Kind::CreateClass || delta.kind == StyleDelta::Kind::DestroyClass) {
-        // A class comes or goes at its place.
-        const std::size_t kAt = kPlace.value_or(delta.place);
-        if (!kPlace.has_value() && kAt > kClasses.items().size()) {
-            return refuse(result::ErrorClass::FailedPrecondition,
-                          AuthoringError::DeltaMismatch,
-                          "a class's place is past the sheet's classes");
-        }
-        for (std::size_t each = 0; each <= kClasses.items().size(); ++each) {
-            if (each == kAt && kTo.has_value()) {
-                classes.push(*kTo);
-            }
-            if (each < kClasses.items().size() && !(kPlace.has_value() && each == *kPlace)) {
-                classes.push(kClasses.items()[each]);
-            }
-        }
-    } else {
-        if (!kPlace.has_value()) {
-            return refuse(result::ErrorClass::NotFound, AuthoringError::TargetNotFound, "the sheet has no such class");
-        }
-        const Value& kClass = kClasses.items()[*kPlace];
-        Value changed;
-        if (delta.kind == StyleDelta::Kind::SetName || delta.kind == StyleDelta::Kind::SetTransitions) {
-            changed = withMember(kClass, ui::kStyleFields, memberOf(delta), kTo);
-        } else {
-            const Value* look = kClass.find(delta.variant);
-            Value parts = withMember(look != nullptr ? *look : Value::object(), ui::kStyleLookFields, delta.part, kTo);
-            // A look that sets nothing is no variant.
-            const std::optional<Value> kLook =
-                parts.names().empty() ? std::nullopt : std::optional<Value>{std::move(parts)};
-            changed = withMember(kClass, ui::kStyleFields, delta.variant, kLook);
-        }
-        for (std::size_t each = 0; each < kClasses.items().size(); ++each) {
-            classes.push(each == *kPlace ? changed : kClasses.items()[each]);
-        }
-    }
-    root = withMember(root, kDocumentFields, "styles", classes);
+result::Status reads(std::string_view text) {
+    RAWFRAME_TRY(sheetOf(text));
     return {};
 }
 
-/// The delta `operation` makes of `staged`, none where it changes nothing;
-/// refused where it cannot be made.
-result::Result<std::optional<StyleDelta>> deltaOf(const Value& staged, const Operation& operation) {
+std::string hexOf(std::uint64_t id) {
+    std::array<char, 16> digits{};
+    for (std::size_t at = 0; at < digits.size(); ++at) {
+        digits[at] = "0123456789abcdef"[(id >> (60 - 4 * at)) & 0xFU];
+    }
+    return std::string{digits.data(), digits.size()};
+}
+
+/// The path to class `style`, and to its member or part under it.
+JsonPath classPath(std::uint64_t style) {
+    return {JsonStep{.member = "styles", .key = "styleId", .id = hexOf(style)}};
+}
+JsonPath under(std::uint64_t style, std::initializer_list<std::string_view> members) {
+    JsonPath path = classPath(style);
+    for (const std::string_view kMember : members) {
+        path.push_back(JsonStep{.member = std::string{kMember}, .key = {}, .id = {}});
+    }
+    return path;
+}
+
+/// The delta `operation` makes of `staged`; refused where it cannot be
+/// made.
+result::Result<JsonDelta> deltaOf(const Value& staged, const Operation& operation) {
+    const auto kHas = [&staged](std::uint64_t style) {
+        return placeAt(staged, classPath(style)).has_value();
+    };
     const auto kUnknown = [] {
         return refuse(result::ErrorClass::NotFound, AuthoringError::TargetNotFound, "the sheet has no such class");
     };
-    std::optional<StyleDelta> delta;
+    const auto kSet = [&staged](JsonPath path, std::optional<Value> to) {
+        std::optional<Value> before = slotAt(staged, path);
+        return JsonDelta{.path = std::move(path), .place = 0, .before = std::move(before), .after = std::move(to)};
+    };
     if (const auto* set = std::get_if<SetStylePart>(&operation)) {
         if (std::ranges::find(ui::kStyleVariantFields, set->variant) == ui::kStyleVariantFields.end() ||
             std::ranges::find(ui::kStyleLookFields, set->part) == ui::kStyleLookFields.end()) {
@@ -183,17 +93,14 @@ result::Result<std::optional<StyleDelta>> deltaOf(const Value& staged, const Ope
                           AuthoringError::ValidationFailed,
                           "a part is one a look has, of one of a class's variants");
         }
-        if (!placeOf(staged, set->style).has_value()) {
+        if (!kHas(set->style)) {
             return kUnknown();
         }
-        delta = StyleDelta{.style = set->style,
-                           .variant = set->variant,
-                           .part = set->part,
-                           .before = partIn(staged, set->style, set->variant, set->part),
-                           .after = set->value};
-    } else if (const auto* create = std::get_if<CreateStyleClass>(&operation)) {
+        return kSet(under(set->style, {set->variant, set->part}), set->value);
+    }
+    if (const auto* create = std::get_if<CreateStyleClass>(&operation)) {
         const std::size_t kCount = staged.find("styles")->items().size();
-        if (create->style == 0 || placeOf(staged, create->style).has_value()) {
+        if (create->style == 0 || kHas(create->style)) {
             return refuse(result::ErrorClass::AlreadyExists,
                           AuthoringError::Conflict,
                           "a new class's identity is fresh and not nought");
@@ -203,192 +110,107 @@ result::Result<std::optional<StyleDelta>> deltaOf(const Value& staged, const Ope
                           AuthoringError::ValidationFailed,
                           "a new class's place is among the sheet's classes or after them");
         }
-        std::array<char, 16> digits{};
-        for (std::size_t at = 0; at < digits.size(); ++at) {
-            digits[at] = "0123456789abcdef"[(create->style >> (60 - 4 * at)) & 0xFU];
-        }
         Value record = Value::object();
-        record.add("styleId", Value::string(std::string{digits.data(), digits.size()}));
+        record.add("styleId", Value::string(hexOf(create->style)));
         record.add("name", Value::string(create->name));
-        delta = StyleDelta{.kind = StyleDelta::Kind::CreateClass,
-                           .style = create->style,
-                           .place = create->place.value_or(kCount),
-                           .before = std::nullopt,
-                           .after = std::move(record)};
-    } else if (const auto* remove = std::get_if<RemoveStyleClass>(&operation)) {
-        const std::optional<std::size_t> kPlace = placeOf(staged, remove->style);
+        return JsonDelta{.path = classPath(create->style),
+                         .place = create->place.value_or(kCount),
+                         .before = std::nullopt,
+                         .after = std::move(record)};
+    }
+    if (const auto* remove = std::get_if<RemoveStyleClass>(&operation)) {
+        const JsonPath kPath = classPath(remove->style);
+        const std::optional<std::size_t> kPlace = placeAt(staged, kPath);
         if (!kPlace.has_value()) {
             return kUnknown();
         }
-        delta = StyleDelta{.kind = StyleDelta::Kind::DestroyClass,
-                           .style = remove->style,
-                           .place = *kPlace,
-                           .before = classIn(staged, remove->style),
-                           .after = std::nullopt};
-    } else if (const auto* rename = std::get_if<RenameStyleClass>(&operation)) {
-        if (!placeOf(staged, rename->style).has_value()) {
+        return JsonDelta{.path = kPath, .place = *kPlace, .before = slotAt(staged, kPath), .after = std::nullopt};
+    }
+    if (const auto* rename = std::get_if<RenameStyleClass>(&operation)) {
+        if (!kHas(rename->style)) {
             return kUnknown();
         }
-        StyleDelta named{.kind = StyleDelta::Kind::SetName, .style = rename->style};
-        named.before = slotIn(staged, named);
-        named.after = Value::string(rename->name);
-        delta = std::move(named);
-    } else if (const auto* timed = std::get_if<SetStyleTransitions>(&operation)) {
-        if (!placeOf(staged, timed->style).has_value()) {
+        return kSet(under(rename->style, {"name"}), Value::string(rename->name));
+    }
+    if (const auto* timed = std::get_if<SetStyleTransitions>(&operation)) {
+        if (!kHas(timed->style)) {
             return kUnknown();
         }
-        StyleDelta transitions{.kind = StyleDelta::Kind::SetTransitions, .style = timed->style};
-        transitions.before = slotIn(staged, transitions);
-        transitions.after = timed->value;
-        delta = std::move(transitions);
-    } else {
-        return refuse(result::ErrorClass::InvalidArgument,
-                      AuthoringError::ValidationFailed,
-                      "the operation changes a scene, not a style sheet");
+        return kSet(under(timed->style, {"transitions"}), timed->value);
     }
-    if (same(delta->before, delta->after)) {
-        return std::optional<StyleDelta>{};
-    }
-    return delta;
-}
-
-std::size_t bytesOf(const StyleDelta& delta) {
-    const auto kWeigh = [](const std::optional<Value>& value) {
-        return value.has_value() ? document::write(*value).size() : 0;
-    };
-    return sizeof(StyleDelta) + delta.variant.size() + delta.part.size() + kWeigh(delta.before) + kWeigh(delta.after);
+    return refuse(result::ErrorClass::InvalidArgument,
+                  AuthoringError::ValidationFailed,
+                  "the operation changes a scene, not a style sheet");
 }
 
 } // namespace
 
 result::Result<std::unique_ptr<AuthoredStyles>>
 AuthoredStyles::open(base::Bits128 document, std::string_view text, const HistoryLimits& limits) {
-    RAWFRAME_TRY_ASSIGN(ui::StyleSheet sheet, sheetOf(std::string{text}));
-    std::unique_ptr<AuthoredStyles> made{new AuthoredStyles()};
-    made->identity_ = document;
-    // What reads as a sheet is canonical JSON.
-    made->root_ = *document::parse(text);
-    made->sheet_ = std::move(sheet);
-    made->history_ = History<Entry>{limits};
-    return made;
-}
-
-std::string AuthoredStyles::text() const {
-    return document::write(root_);
+    RAWFRAME_TRY_ASSIGN(ui::StyleSheet sheet, sheetOf(text));
+    RAWFRAME_TRY_ASSIGN(JsonDocument opened, JsonDocument::open(text, orderOf, reads, limits));
+    return std::unique_ptr<AuthoredStyles>{new AuthoredStyles(document, std::move(opened), std::move(sheet))};
 }
 
 std::optional<Value> AuthoredStyles::part(std::uint64_t style, std::string_view variant, std::string_view part) const {
-    return partIn(root_, style, variant, part);
+    return slotAt(document_.root(), under(style, {variant, part}));
 }
 
 result::Result<Committed> AuthoredStyles::change(std::uint64_t generation, std::span<const Operation> operations) {
-    if (generation != generation_) {
-        return refuse(result::ErrorClass::FailedPrecondition,
-                      AuthoringError::TargetStale,
-                      "a change is asked against the document's generation");
-    }
+    RAWFRAME_TRY_ASSIGN(JsonDocument::Staged staged, document_.stage(generation));
     if (operations.size() > kMaximumBatchOperations) {
         return refuse(result::ErrorClass::ResourceExhausted,
                       AuthoringError::LimitExceeded,
                       "a batch has more operations than its limit");
     }
-    Value staged = root_;
-    std::vector<StyleDelta> journal;
-    std::size_t bytes = 0;
     for (std::size_t at = 0; at < operations.size(); ++at) {
-        const auto kAt = [at](std::unexpected<result::Error> refused) {
-            return std::unexpected<result::Error>{std::move(refused).error().withContext("index", std::to_string(at))};
-        };
-        auto made = deltaOf(staged, operations[at]);
-        if (!made.has_value()) {
-            return kAt(std::unexpected<result::Error>{std::move(made).error()});
+        auto delta = deltaOf(staged.root, operations[at]);
+        if (!delta.has_value()) {
+            return std::unexpected<result::Error>{std::move(delta).error().withContext("index", std::to_string(at))};
         }
-        if (!made->has_value()) {
-            continue;
+        auto applied = document_.apply(staged, std::move(*delta));
+        if (!applied.has_value()) {
+            return std::unexpected<result::Error>{std::move(applied).error().withContext("index", std::to_string(at))};
         }
-        StyleDelta delta = std::move(**made);
-        RAWFRAME_TRY(applyTo(staged, delta, true));
-        bytes += bytesOf(delta);
-        journal.push_back(std::move(delta));
     }
-    if (journal.empty()) {
-        return Committed{.generation = generation_, .deltas = 0};
-    }
-    if (bytes > history_.limits().maximumJournalBytes) {
-        return refuse(result::ErrorClass::ResourceExhausted,
-                      AuthoringError::LimitExceeded,
-                      "a transaction's journal is past its limits");
-    }
-    RAWFRAME_TRY_ASSIGN(ui::StyleSheet sheet, sheetOf(document::write(staged)));
-    root_ = std::move(staged);
-    sheet_ = std::move(sheet);
-    ++generation_;
-    const std::size_t kDeltas = journal.size();
-    history_.append(Entry{.journal = std::move(journal), .bytes = bytes});
-    return Committed{.generation = generation_, .deltas = kDeltas};
+    return reread(document_.keep(std::move(staged)));
 }
 
-result::Status AuthoredStyles::apply(const std::vector<StyleDelta>& journal, bool forward) {
-    Value root = root_;
-    for (std::size_t at = 0; at < journal.size(); ++at) {
-        RAWFRAME_TRY(applyTo(root, journal[forward ? at : journal.size() - 1 - at], forward));
+result::Result<Committed> AuthoredStyles::reread(result::Result<Committed> done) {
+    if (done.has_value() && done->deltas > 0) {
+        // What the document's reader has just read reads again.
+        sheet_ = *sheetOf(document_.text());
     }
-    RAWFRAME_TRY_ASSIGN(ui::StyleSheet sheet, sheetOf(document::write(root)));
-    root_ = std::move(root);
-    sheet_ = std::move(sheet);
-    return {};
+    return done;
 }
 
-result::Result<Committed> AuthoredStyles::step(std::uint64_t generation, bool undo) {
-    if (generation != generation_) {
-        return refuse(result::ErrorClass::FailedPrecondition,
-                      AuthoringError::TargetStale,
-                      "an undo or redo is asked against the document's generation");
-    }
-    if (undo ? !canUndo() : !canRedo()) {
-        return refuse(result::ErrorClass::NotFound,
-                      AuthoringError::TargetNotFound,
-                      undo ? "there is nothing to undo" : "there is nothing to redo");
-    }
-    const Entry& entry = history_.next(undo);
-    auto applied = apply(entry.journal, !undo);
-    if (!applied.has_value()) {
-        // An entry is only ever applied to the sheet it was made against.
-        return std::unexpected<result::Error>{std::move(applied).error().mappedTo(
-            result::ErrorClass::Internal, kAuthoringDomain, code(AuthoringError::Internal), "a history entry applies")};
-    }
-    const std::size_t kDeltas = entry.journal.size();
-    history_.stepped(undo);
-    ++generation_;
-    return Committed{.generation = generation_, .deltas = kDeltas};
+result::Result<Committed> AuthoredStyles::undo(std::uint64_t generation) {
+    return reread(document_.undo(generation));
 }
 
-std::string summaryOf(std::span<const StyleDelta> journal) {
+result::Result<Committed> AuthoredStyles::redo(std::uint64_t generation) {
+    return reread(document_.redo(generation));
+}
+
+std::string summaryOf(std::span<const JsonDelta> journal) {
     if (journal.empty()) {
         return "no change";
     }
-    const StyleDelta& kFirst = journal.front();
-    const auto kName = [](const std::optional<Value>& value, std::string_view member) {
+    const JsonDelta& kFirst = journal.front();
+    const auto kText = [](const std::optional<Value>& value, std::string_view member) {
         const Value* held = value.has_value() ? (member.empty() ? &*value : value->find(member)) : nullptr;
         return held != nullptr && held->text() != nullptr ? *held->text() : std::string{};
     };
     std::string made;
-    switch (kFirst.kind) {
-    case StyleDelta::Kind::SetPart:
-        made = (kFirst.after.has_value() ? "set " : "unset ") + kFirst.variant + "." + kFirst.part;
-        break;
-    case StyleDelta::Kind::CreateClass:
-        made = "create class " + kName(kFirst.after, "name");
-        break;
-    case StyleDelta::Kind::DestroyClass:
-        made = "delete class " + kName(kFirst.before, "name");
-        break;
-    case StyleDelta::Kind::SetName:
-        made = "rename class to " + kName(kFirst.after, "");
-        break;
-    case StyleDelta::Kind::SetTransitions:
+    if (kFirst.path.size() == 1) {
+        made = kFirst.after.has_value() ? "create class " + kText(kFirst.after, "name")
+                                        : "delete class " + kText(kFirst.before, "name");
+    } else if (kFirst.path.size() == 3) {
+        made = (kFirst.after.has_value() ? "set " : "unset ") + kFirst.path[1].member + "." + kFirst.path[2].member;
+    } else if (kFirst.path[1].member == "name") {
+        made = "rename class to " + kText(kFirst.after, "");
+    } else {
         made = kFirst.after.has_value() ? "set transitions" : "unset transitions";
-        break;
     }
     if (journal.size() > 1) {
         made += " and " + std::to_string(journal.size() - 1) + " more";
@@ -407,14 +229,6 @@ result::Result<Value> answer(const AuthoredStyles& styles, const Query& query) {
     Value made = Value::object();
     made.add("sheet", styles.documentValue());
     return made;
-}
-
-result::Result<Committed> AuthoredStyles::undo(std::uint64_t generation) {
-    return step(generation, true);
-}
-
-result::Result<Committed> AuthoredStyles::redo(std::uint64_t generation) {
-    return step(generation, false);
 }
 
 } // namespace rawframe::authoring

@@ -166,7 +166,7 @@ result::Result<Value> Styling::history(const authoring::SessionRecord& record) {
     const authoring::AuthoredStyles& styles = *open->document;
     Value entries = Value::array();
     for (std::size_t at = 0; at < styles.undoable() + styles.redoable(); ++at) {
-        const std::vector<authoring::StyleDelta>& kJournal = styles.journalAt(at);
+        const std::vector<authoring::JsonDelta>& kJournal = styles.journalAt(at);
         Value entry = Value::object();
         entry.add("summary", Value::string(authoring::summaryOf(kJournal)));
         entry.add("deltas", Value::integer(static_cast<std::int64_t>(kJournal.size())));
