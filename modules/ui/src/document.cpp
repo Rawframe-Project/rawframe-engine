@@ -67,7 +67,7 @@ constexpr std::array<std::string_view, 4> kChecks = {"none", "checkbox", "switch
 constexpr std::array<std::string_view, 6> kPopups = {"none", "below", "above", "start", "end", "center"};
 
 // rawframe.ui.Node's fields in its order.
-constexpr std::array<FieldForm, 62> kFieldForms = {{
+constexpr std::array<FieldForm, 63> kFieldForms = {{
     {"widthScale", offsetof(NodeFields, widthScale), Form::Real, {}},
     {"widthOffset", offsetof(NodeFields, widthOffset), Form::Real, {}},
     {"heightScale", offsetof(NodeFields, heightScale), Form::Real, {}},
@@ -107,6 +107,7 @@ constexpr std::array<FieldForm, 62> kFieldForms = {{
     {"gradientTo", offsetof(NodeFields, gradientTo), Form::Color, {}},
     {"text", offsetof(NodeFields, text), Form::Identity, {}},
     {"textValue", offsetof(NodeFields, textValue), Form::Whole64, {}},
+    {"textSecond", offsetof(NodeFields, textSecond), Form::Whole64, {}},
     {"font", offsetof(NodeFields, font), Form::Identity, {}},
     {"textSize", offsetof(NodeFields, textSize), Form::Real, {}},
     {"textColor", offsetof(NodeFields, textColor), Form::Color, {}},

@@ -40,7 +40,8 @@ module rawframe.ui
 //
 // It may show words (D386): `text` names a label by the identity the game's
 // `label` line gives it, a key of one of its string tables in the player's
-// locale, whose one argument, if its message reads one, is `textValue`. The
+// locale, whose arguments, if its message reads them, are `textValue` and
+// `textSecond`, in the order the label line names them (D647). The
 // words are in `font`, a font by the identity a `font` line gives it (nought
 // for the game's first), `textSize` pixels to the em (nought for 16), of
 // `textColor` (0xRRGGBBAA), their lines at the start, center, or end
@@ -170,6 +171,7 @@ struct Node {
     gradientTo: u32
     text: u64
     textValue: i64
+    textSecond: i64
     font: u64
     textSize: f32
     textColor: u32

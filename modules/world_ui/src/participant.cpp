@@ -156,6 +156,7 @@ settingsOf(const world_kest::GameFiles& files, const kest::Program& program, std
                                 {"gradientTo", offsetof(ui::NodeFields, gradientTo)},
                                 {"text", offsetof(ui::NodeFields, text)},
                                 {"textValue", offsetof(ui::NodeFields, textValue)},
+                                {"textSecond", offsetof(ui::NodeFields, textSecond)},
                                 {"font", offsetof(ui::NodeFields, font)},
                                 {"textSize", offsetof(ui::NodeFields, textSize)},
                                 {"textColor", offsetof(ui::NodeFields, textColor)},
@@ -353,17 +354,22 @@ public:
                                 context.capability(world_localization::kGameText));
             text_ = text;
             reworded_ = text->revision();
-            settings->words =
-                [this, text, labels = files->description().labels](
-                    std::size_t player, std::uint64_t label, std::int64_t value) -> std::optional<std::string> {
+            settings->words = [this, text, labels = files->description().labels](
+                                  std::size_t player,
+                                  std::uint64_t label,
+                                  std::array<std::int64_t, 2> values) -> std::optional<std::string> {
                 const auto kLabel = std::ranges::find(labels, label, &world_kest::GameLabel::id);
                 if (kLabel == labels.end()) {
                     return std::nullopt;
                 }
-                const std::array<localization::Argument, 1> kArguments{
-                    localization::Argument{.name = kLabel->argument, .value = value}};
+                // Its arguments' values the node's `textValue` and
+                // `textSecond`, in its line's order (D647).
+                std::array<localization::Argument, 2> arguments{};
+                for (std::size_t at = 0; at < kLabel->arguments.size(); ++at) {
+                    arguments[at] = localization::Argument{.name = kLabel->arguments[at], .value = values[at]};
+                }
                 auto words = text->format(
-                    player, kLabel->table, kLabel->key, std::span{kArguments}.first(kLabel->argument.empty() ? 0 : 1));
+                    player, kLabel->table, kLabel->key, std::span{arguments}.first(kLabel->arguments.size()));
                 if (words.has_value()) {
                     return std::move(*words);
                 }

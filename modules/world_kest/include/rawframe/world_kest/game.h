@@ -380,13 +380,14 @@ struct GameFont {
 };
 
 /// Words a `rawframe.ui.Node` shows (D386), by the identity its `text` names
-/// them by: a key of a string table a `text` line names, and the name of the
-/// one argument its message may read, which the node's `textValue` gives.
+/// them by: a key of a string table a `text` line names, and the names of
+/// the arguments its message may read, at most two (D647), which the node's
+/// `textValue` and `textSecond` give.
 struct GameLabel {
     std::uint64_t id = 0;
     std::string table;
     std::string key;
-    std::string argument;
+    std::vector<std::string> arguments;
 };
 
 /// When a render texture's view is drawn (ADR-0052's closed set): every

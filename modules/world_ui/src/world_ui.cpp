@@ -405,7 +405,7 @@ bool WorldUi::State::giveFieldLook(Entry& entry) {
     const bool kHeld = focus.has_value() && focus->entry == &entry && focus->keyboard;
     std::optional<std::string> words;
     if (kValue.text != 0 && settings.words) {
-        words = settings.words(entry.player, kValue.text, kValue.textValue);
+        words = settings.words(entry.player, kValue.text, {kValue.textValue, kValue.textSecond});
     }
     entry.placeholder = !kHeld && text.empty() && words.has_value();
     if (entry.placeholder) {
@@ -448,7 +448,7 @@ bool WorldUi::State::giveWords(ui::Node node,
         words = std::string{*shown};
         ++statistics.typedShown;
     } else if (value.text != 0) {
-        words = settings.words ? settings.words(player, value.text, value.textValue) : std::nullopt;
+        words = settings.words ? settings.words(player, value.text, {value.textValue, value.textSecond}) : std::nullopt;
         ++(words.has_value() ? statistics.texts : statistics.textsUnknown);
     }
     // Something to press is read by its words, which name it (D571); a

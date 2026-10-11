@@ -372,11 +372,14 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.fonts.push_back(GameFont{.id = *kId, .path = std::string{kWords[2]}});
         } else if (kKeyword == "label") {
-            const auto kId = kWords.size() == 4 || kWords.size() == 5 ? base::parseHex64(kWords[1]) : std::nullopt;
+            const auto kId = kWords.size() >= 4 && kWords.size() <= 6 ? base::parseHex64(kWords[1]) : std::nullopt;
             if (!kId || *kId == 0) {
                 return badLine(number,
                                WorldKestError::BadGameLine,
-                               "a label line is `label <16 hex digits> <table> <key> [<argument>]`");
+                               "a label line is `label <16 hex digits> <table> <key> [<argument> [<argument>]]`");
+            }
+            if (kWords.size() == 6 && kWords[4] == kWords[5]) {
+                return badLine(number, WorldKestError::BadGameLine, "a label's arguments have two names");
             }
             if (std::ranges::contains(game.labels, *kId, &GameLabel::id)) {
                 return badLine(number, WorldKestError::BadGameLine, "a label's identity is used once");
@@ -385,7 +388,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             game.labels.push_back(GameLabel{.id = *kId,
                                             .table = std::string{kWords[2]},
                                             .key = std::string{kWords[3]},
-                                            .argument = kWords.size() == 5 ? std::string{kWords[4]} : std::string{}});
+                                            .arguments = {kWords.begin() + 4, kWords.end()}});
         } else if (kKeyword == "locale") {
             if (!game.locale.empty() || kWords.size() != 2) {
                 return badLine(number, WorldKestError::BadGameLine, "a game names one default locale, `locale <tag>`");

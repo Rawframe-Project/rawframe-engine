@@ -101,6 +101,7 @@ struct NodeFields {
     std::uint32_t gradientTo = 0;
     std::uint64_t text = 0;
     std::int64_t textValue = 0;
+    std::int64_t textSecond = 0;
     std::uint64_t font = 0;
     float textSize = 0;
     std::uint32_t textColor = 0;

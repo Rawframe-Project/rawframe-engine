@@ -225,12 +225,15 @@ RAWFRAME_TEST(TexturesAreDeclaredByLine) {
 RAWFRAME_TEST(FontsAndLabelsAreDeclaredByLine) {
     const std::string kHead = "program p.kest\ntext hud.strings\n";
     const auto kGame = parseGame(kHead + "font 00000000000000f1 sans.ttf\nlabel 00000000000000a1 hud.strings hud.hit\n"
-                                         "label 00000000000000a2 hud.strings hud.score points\n");
+                                         "label 00000000000000a2 hud.strings hud.score points\n"
+                                         "label 00000000000000a3 hud.strings hud.purse coins goal\n");
     RAWFRAME_EXPECT(kGame.has_value() && kGame->fonts.size() == 1 && kGame->fonts[0].id == 0xF1 &&
-                    kGame->fonts[0].path == "sans.ttf" && kGame->labels.size() == 2 &&
-                    kGame->labels[0].argument.empty() && kGame->labels[1].id == 0xA2 &&
+                    kGame->fonts[0].path == "sans.ttf" && kGame->labels.size() == 3 &&
+                    kGame->labels[0].arguments.empty() && kGame->labels[1].id == 0xA2 &&
                     kGame->labels[1].table == "hud.strings" && kGame->labels[1].key == "hud.score" &&
-                    kGame->labels[1].argument == "points");
+                    kGame->labels[1].arguments == std::vector<std::string>{"points"});
+    // Two arguments at most, each its own name (D647).
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->labels[2].arguments == (std::vector<std::string>{"coins", "goal"}));
     for (const std::string_view kLines :
          {"font 00000000000000f1\n",
           "font 0000000000000000 sans.ttf\n",
@@ -238,7 +241,8 @@ RAWFRAME_TEST(FontsAndLabelsAreDeclaredByLine) {
           "font 00000000000000f1 a.ttf\nfont 00000000000000f2 a.ttf\n",
           "label 00000000000000a1 hud.strings\n",
           "label 0000000000000000 hud.strings hud.hit\n",
-          "label 00000000000000a1 hud.strings hud.hit points more\n",
+          "label 00000000000000a1 hud.strings hud.hit points more most\n",
+          "label 00000000000000a1 hud.strings hud.hit points points\n",
           "label 00000000000000a1 hud.strings a\nlabel 00000000000000a1 hud.strings b\n"}) {
         const std::string kText = kHead + std::string{kLines};
         RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "3") ||
