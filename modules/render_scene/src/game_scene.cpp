@@ -59,6 +59,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
             RAWFRAME_TRY(kOne(loaded.sun, component.id, "a game has at most one sun"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.Sky")) {
             RAWFRAME_TRY(kOne(loaded.sky, component.id, "a game has at most one sky"));
+        } else if (world_kest::ofEngineType(component, "rawframe.model.Placed")) {
+            loaded.placements.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.PointLight")) {
             loaded.points.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.SpotLight")) {
@@ -103,6 +105,13 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"color", offsetof(Model, color)},
                            {"material", offsetof(Model, material)},
                            {"lift", offsetof(Model, lift)}}));
+    RAWFRAME_TRY(kLaidOut(!loaded.placements.empty(),
+                          "rawframe.model.Placed",
+                          sizeof(Placed),
+                          {{"placed", offsetof(Placed, placed)},
+                           {"x", offsetof(Placed, x)},
+                           {"y", offsetof(Placed, y)},
+                           {"z", offsetof(Placed, z)}}));
     RAWFRAME_TRY(kLaidOut(!loaded.cameras.empty(),
                           "rawframe.model.Camera",
                           sizeof(Camera),

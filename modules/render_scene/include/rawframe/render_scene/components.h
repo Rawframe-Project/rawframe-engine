@@ -22,6 +22,15 @@ struct Model {
     float lift = 0;
 };
 
+/// `rawframe.model.Placed` as C++ reads it (D665): where an entity's
+/// models are drawn in place of its pose, while placed.
+struct Placed {
+    bool placed = false;
+    double x = 0;
+    double y = 0;
+    double z = 0;
+};
+
 /// `rawframe.model.Camera` as C++ reads it.
 struct Camera {
     float offsetX = 0;

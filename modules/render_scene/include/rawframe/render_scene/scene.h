@@ -121,13 +121,15 @@ struct SceneMesh {
 
 /// A model as the extract stage copies it out of the World: owned values,
 /// placed where its entity's `rawframe.physics3d.pose` puts it (the origin,
-/// unturned, without one).
+/// unturned, without one), or where its entity is placed (D665).
 struct ModelInstance {
     world::EntityHandle entity;
     /// Which of the game's model components it is, by its place.
     std::uint32_t component = 0;
     Model model;
     std::array<double, 3> position{};
+    /// Drawn where its entity is placed, not at its pose (D665).
+    bool placed = false;
     /// The pose's turn as a unit quaternion, x, y, z, w.
     std::array<float, 4> rotation{0, 0, 0, 1};
     /// A skinned mesh's palette as its entity's animation posed it (D508):
@@ -648,6 +650,8 @@ struct SceneFrame {
     std::vector<SceneDraw> draws;
     std::size_t translucent = 0;
     std::size_t drawn = 0;
+    /// Of those drawn, those where their entity is placed (D665).
+    std::size_t placed = 0;
     /// Outside the view.
     std::size_t culled = 0;
     /// Drawing nothing: mesh nought, alpha nought, or a scale of nought.
@@ -752,6 +756,9 @@ struct SceneSettings {
     /// The game's components of `rawframe.model.Model`'s type, in its order:
     /// an entity may show one of each.
     std::vector<schema::ComponentTypeId> models;
+    /// The game's components of `rawframe.model.Placed`'s type (D665): an
+    /// entity's models are drawn where the first placed one says.
+    std::vector<schema::ComponentTypeId> placements;
     /// The game's sun and sky components, if it declares them.
     std::optional<schema::ComponentTypeId> sun;
     std::optional<schema::ComponentTypeId> sky;
@@ -852,6 +859,7 @@ private:
 /// components, if it has them, and its meshes.
 struct GameScene {
     std::vector<schema::ComponentTypeId> models;
+    std::vector<schema::ComponentTypeId> placements;
     std::vector<schema::ComponentTypeId> cameras;
     /// The views into render textures (D361).
     std::optional<schema::ComponentTypeId> view;

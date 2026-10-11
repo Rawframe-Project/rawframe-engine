@@ -9,6 +9,7 @@ module reach
 import controls
 import rawframe.model
 import rawframe.physics3d
+import rawframe.replication
 import rawframe.sound
 import rawframe.world
 import std.math
@@ -73,6 +74,7 @@ extern fn Hands.has(entity: world.Entity) -> bool
 extern fn Hands.get(entity: world.Entity) -> controls.Hands
 extern fn Seat.has(entity: world.Entity) -> bool
 extern fn Seat.get(entity: world.Entity) -> Seat
+extern fn Block.has(entity: world.Entity) -> bool
 extern fn Block.get(entity: world.Entity) -> Block
 extern fn Block.insert(entity: world.Entity, value: Block)
 extern fn Grip.insert(entity: world.Entity, value: Grip)
@@ -300,6 +302,37 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
             look = model.Model(model.SPHERE, b.width, b.width, b.width, 0xE6C3A5FF, u64(0), 0.0)
         }
         looks[i] = look
+        i = i + 1
+    }
+}
+
+// A client draws its own player's hands where the player holds them now
+// (D665), from its own input, not where the server last put them, a round
+// trip and the interpolation behind; and a block one of them holds with
+// it, as far from the hand as the server keeps it. Every other body is
+// drawn where it is.
+fn placeOwn(count: i32, bodies: [physics3d.Body3D], placed: [model.Placed], entities: [world.Entity]) {
+    let me = replication.player()
+    let i = 0
+    while i < count {
+        placed[i] = model.Placed(false, f64(0.0), f64(0.0), f64(0.0))
+        let hand = entities[i]
+        if Block.has(hand) {
+            let block = Block.get(hand)
+            if block.held {
+                hand = block.holder
+            }
+        }
+        if Hand.has(hand) && Hands.has(me) && Seat.has(me) && Pose3D.has(hand) && Pose3D.has(entities[i]) {
+            let held = Hand.get(hand)
+            if held.player == me {
+                let at = place(Seat.get(me), held.side, Hands.get(me))
+                let from = Pose3D.get(hand)
+                let drawn = Pose3D.get(entities[i])
+                placed[i] = model.Placed(true, at.x + drawn.x - from.x, at.y + drawn.y - from.y,
+                                         at.z + drawn.z - from.z)
+            }
+        }
         i = i + 1
     }
 }

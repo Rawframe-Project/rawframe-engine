@@ -4,8 +4,10 @@
 // when it opens moving, knocking as it lands (D660); a second player sits
 // a quarter turn round; and a player gone takes its hands with it. The test
 // makes the players as admission would and sets their hands between ticks,
-// as their clients' input would.
+// as their clients' input would. A client draws its own hands where its
+// input holds them, and a block one holds with it (D665).
 
+#include "../src/presentation.h"
 #include "game_harness.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/physics3d/registrar.h"
@@ -33,6 +35,7 @@ constexpr auto kHandId = schema::ComponentTypeId::fromText("8c4cd7c9-b5ff-4560-8
 constexpr auto kBlockId = schema::ComponentTypeId::fromText("ea827a4e-3a16-42dc-b120-eb28ea24c609");
 constexpr auto kGripId = schema::ComponentTypeId::fromText("84064735-82e5-4725-90d0-39e682d09191");
 constexpr auto kKnockId = schema::ComponentTypeId::fromText("a0fd2692-1aa3-4429-bca5-5f8b4e743eff");
+constexpr auto kPlacedId = schema::ComponentTypeId::fromText("ef26db88-b0b6-4651-a471-831d28226752");
 
 /// controls.Hands, reach.Seat, reach.Hand, and reach.Block, as the program
 /// lays them out.
@@ -75,11 +78,47 @@ struct Emitter {
     std::uint8_t despawn = 0;
 };
 
+/// rawframe.model.Placed.
+struct Placed {
+    bool placed = false;
+    double x = 0;
+    double y = 0;
+    double z = 0;
+};
+
+/// The loaded game's presentation plan, found as the simulation is.
+world_kest::PresentationPlan* plan = nullptr;
+
+result::Result<composition::ParticipantOwner> makePlanWatcher(composition::ParticipantContext& context) noexcept {
+    RAWFRAME_TRY_ASSIGN(plan, context.capability(world_kest::kPresentationPlan));
+    struct Watcher final : composition::Participant {};
+    return composition::ParticipantOwner{new Watcher{}};
+}
+
+constexpr std::string_view kPlanNeeds[] = {world_kest::kPresentationPlan.name};
+
+void registerPlanWatcher(composition::ParticipantRegistrar& registrar) noexcept {
+    registrar.submit(composition::ParticipantDeclaration{
+        .identity = "test.plan_watcher",
+        .factory = &makePlanWatcher,
+        .scope = composition::LifetimeScope::World,
+        .requiredCapabilities = kPlanNeeds,
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
+    });
+}
+
+const std::array<composition::RegistrarEntry, 5> kReachPresented = {
+    kReach[0],
+    kReach[1],
+    kReach[2],
+    kReach[3],
+    composition::RegistrarEntry{"test_plan", &registerPlanWatcher, world_runtime::kScopes}};
+
 /// Reach, composed and started from its directory.
 class PlayedReach : public PlayedGame {
 public:
-    PlayedReach()
-        : PlayedGame(kReach,
+    explicit PlayedReach(std::span<const composition::RegistrarEntry> registrars = kReach)
+        : PlayedGame(registrars,
                      "kest.game = " + std::string{RAWFRAME_SAMPLE_GAMES} +
                          "reach/reach.game\nworld.tick_rate = 60\nworld.maximum_ticks_per_iteration = 1\n") {
     }
@@ -191,4 +230,84 @@ RAWFRAME_TEST(AHandTakesABlockLiftsItAndThrowsIt) {
     RAWFRAME_EXPECT(world.destroy(kPlayer).has_value());
     played.run(3);
     RAWFRAME_EXPECT(holding(world, kHandId).size() == 2);
+}
+
+RAWFRAME_TEST(AClientDrawsItsOwnHandsWhereItsInputHoldsThem) {
+    // A client presents the World it mirrors; here the server's own, so the
+    // hands' poses are where the server last put them and the player's
+    // input is moved on since, as a client's predicted input is (D665).
+    PlayedReach played{kReachPresented};
+    RAWFRAME_EXPECT(played.started() && plan != nullptr);
+    if (!played.started() || plan == nullptr) {
+        return;
+    }
+    auto presentation = plan->presentation();
+    RAWFRAME_EXPECT(presentation.has_value() && *presentation != nullptr);
+    if (!presentation.has_value() || *presentation == nullptr) {
+        return;
+    }
+    world::World& world = *simulation->world();
+    const world::EntityHandle kPlayer = joined(world);
+    const world::EntityHandle kOther = joined(world);
+    played.run(3);
+    const world::EntityHandle kRight = handOf(world, kPlayer, 1);
+    const world::EntityHandle kLeft = handOf(world, kPlayer, 0);
+    const world::EntityHandle kTheirs = handOf(world, kOther, 1);
+    RAWFRAME_EXPECT(!kRight.isNull() && !kLeft.isNull() && !kTheirs.isNull());
+    if (kRight.isNull() || kLeft.isNull() || kTheirs.isNull()) {
+        return;
+    }
+    const auto kPresent = [&](world::EntityHandle me) {
+        RAWFRAME_EXPECT((*presentation)->present(world, me, {}, *world::TickRate::of(60)).has_value());
+        RAWFRAME_EXPECT((*presentation)->statistics().systemsFailed == 0);
+    };
+    const auto kPlacedAt = [&](world::EntityHandle entity, double x, double y, double z) {
+        const Placed* const kPlaced = valueOf<Placed>(world, entity, kPlacedId);
+        return kPlaced != nullptr && kPlaced->placed && std::abs(kPlaced->x - x) < 1e-5 &&
+               std::abs(kPlaced->y - y) < 1e-5 && std::abs(kPlaced->z - z) < 1e-5;
+    };
+    const auto kUnplaced = [&](world::EntityHandle entity) {
+        const Placed* const kPlaced = valueOf<Placed>(world, entity, kPlacedId);
+        return kPlaced != nullptr && !kPlaced->placed;
+    };
+    // The right hand held above the near row's middle block, not yet
+    // ticked: the server's pose is still at rest, the drawing already there
+    // (the first seat's frame is the World's, 0.9 along +Z).
+    // Presenting attaches the player's view, which moves its components:
+    // its input is found afresh each time.
+    const auto kHandsNow = [&] {
+        return valueOf<Hands>(world, kPlayer, kHandsId);
+    };
+    *kHandsNow() = Hands{.rightX = 0, .rightY = 0.88F, .rightZ = -0.75F};
+    kPresent(kPlayer);
+    RAWFRAME_EXPECT(near(poseOf(world, kRight), 0.2, 0.95, 0.55, 0.01));
+    RAWFRAME_EXPECT(kPlacedAt(kRight, 0, 0.88F, 0.9 - 0.75F));
+    // The left, held nowhere, is drawn at rest; the other player's hands,
+    // and the blocks, where the server puts them.
+    RAWFRAME_EXPECT(kPlacedAt(kLeft, -0.2, 0.95, 0.9 - 0.35));
+    RAWFRAME_EXPECT(kUnplaced(kTheirs));
+    for (const world::EntityHandle kBlock : holding(world, kBlockId)) {
+        RAWFRAME_EXPECT(kUnplaced(kBlock));
+    }
+    // Presented for the other player, its hands are its own.
+    kPresent(kOther);
+    RAWFRAME_EXPECT(kUnplaced(kRight) && valueOf<Placed>(world, kTheirs, kPlacedId)->placed);
+    // Taken: the block the right hand holds is drawn with the hand, as far
+    // from it as the server keeps it.
+    played.run(30);
+    kHandsNow()->rightGrip = 1;
+    played.run(3);
+    const Hand* const kHeld = valueOf<Hand>(world, kRight, kHandId);
+    RAWFRAME_EXPECT(kHeld->holding);
+    const world::EntityHandle kBlock = kHeld->held;
+    kHandsNow()->rightY = 1.3F;
+    kPresent(kPlayer);
+    const physics3d::Pose3D kHand = poseOf(world, kRight);
+    const physics3d::Pose3D kHeldAt = poseOf(world, kBlock);
+    RAWFRAME_EXPECT(kPlacedAt(kRight, 0, 1.3F, 0.9 - 0.75F));
+    RAWFRAME_EXPECT(kPlacedAt(kBlock,
+                              kHeldAt.x - kHand.x,
+                              static_cast<double>(1.3F) + kHeldAt.y - kHand.y,
+                              (0.9 - 0.75F) + kHeldAt.z - kHand.z));
+    plan = nullptr;
 }

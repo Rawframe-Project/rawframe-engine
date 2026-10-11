@@ -24,6 +24,7 @@ inline constexpr auto kSpotId = schema::ComponentTypeId::fromText("ac8e1f52-7d04
 inline constexpr auto kProbeId = schema::ComponentTypeId::fromText("dc8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 inline constexpr auto kDecalId = schema::ComponentTypeId::fromText("4d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 inline constexpr auto kEmitterId = schema::ComponentTypeId::fromText("7d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
+inline constexpr auto kPlacedId = schema::ComponentTypeId::fromText("8d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 inline constexpr std::uint64_t kRock = 0xc1;
 
 /// The registry holds a name as a view: each is a literal.
@@ -43,6 +44,7 @@ inline std::shared_ptr<const schema::SchemaRegistry> registry() {
     builder.add(plain<ReflectionProbe>(kProbeId, "test.probe"));
     builder.add(plain<Decal>(kDecalId, "test.decal"));
     builder.add(plain<particles::ParticleEmitter>(kEmitterId, "test.emitter"));
+    builder.add(plain<Placed>(kPlacedId, "test.placed"));
     builder.add<physics3d::Pose3D>();
     return *builder.freeze();
 }
@@ -63,6 +65,7 @@ struct Rig {
     explicit Rig(SceneLimits limits = {}) {
         scene = *Scene::create(*schema,
                                {.models = {kModelId, kHatId},
+                                .placements = {kPlacedId},
                                 .sun = kSunId,
                                 .sky = kSkyId,
                                 .points = {kPointId},

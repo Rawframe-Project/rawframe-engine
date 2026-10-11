@@ -96,6 +96,8 @@ struct Scene::State {
     std::vector<SceneLine> lines;
     std::vector<LightInstance> punctual;
     std::optional<schema::ComponentRuntimeId> pose;
+    /// The game's placements (D665).
+    std::vector<schema::ComponentRuntimeId> placements;
     std::map<std::uint64_t, Bounded> meshes;
     /// Each game material's place in the frame's materials, and whether
     /// the material at each place is translucent.
@@ -233,6 +235,7 @@ struct Scene::State {
         frame.skinned = 0;
         frame.paletteOverLimit = 0;
         frame.drawn = 0;
+        frame.placed = 0;
         frame.culled = 0;
         frame.hidden = 0;
         frame.malformed = 0;
@@ -463,6 +466,7 @@ struct Scene::State {
             frame.skinned += draw.joints != 0 ? 1 : 0;
             frame.draws.insert(frame.draws.end(), runs.begin(), runs.end());
             ++frame.drawn;
+            frame.placed += instance->placed ? 1 : 0;
         }
         // The translucent after the opaque, farthest first, so each blends
         // over what is behind it (D305); the opaque keep their order.
@@ -641,6 +645,15 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
         RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, kQueryOf(kId, sizeof(Model)));
         state->models.push_back(std::move(query));
     }
+    for (const schema::ComponentTypeId kId : settings.placements) {
+        RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kComponent, registry.find(kId));
+        if (registry.descriptor(kComponent).size != sizeof(Placed)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          RenderSceneError::BadComponents,
+                          "a rawframe.model component is not that module's size");
+        }
+        state->placements.push_back(kComponent);
+    }
     if (settings.sun.has_value()) {
         RAWFRAME_TRY_ASSIGN(state->sun, kQueryOf(*settings.sun, sizeof(Sun)));
     }
@@ -760,6 +773,15 @@ void Scene::extract(world::World& world, const world_animation::AnimationQueries
                             static_cast<const physics3d::Pose3D*>(world.getErased(instance.entity, *state.pose))) {
                         instance.position = {pose->x, pose->y, pose->z};
                         instance.rotation = {pose->qx, pose->qy, pose->qz, pose->qw};
+                    }
+                }
+                // Drawn where it is placed, if it is (D665).
+                for (const schema::ComponentRuntimeId kPlacement : state.placements) {
+                    if (const auto* placed = static_cast<const Placed*>(world.getErased(instance.entity, kPlacement));
+                        placed != nullptr && placed->placed) {
+                        instance.position = {placed->x, placed->y, placed->z};
+                        instance.placed = true;
+                        break;
                     }
                 }
                 // Drawn `lift` along the pose's own up (D514).

@@ -27,6 +27,21 @@ struct Model {
     lift: f32
 }
 
+// Where an entity's models are drawn in place of its pose (D665), while
+// `placed`: at `x`, `y`, and `z` in the World, turned as the pose turns,
+// `lift` still along its up. A client's present system places it, once a
+// tick: a player's own hands drawn where the player holds them now rather
+// than where the server last put them, a round trip behind, and what they
+// hold with them (ADR-0081's local reconstruction). A presentation
+// component only: the World's pose, which the server decides, is
+// untouched.
+struct Placed {
+    placed: bool
+    x: f64
+    y: f64
+    z: f64
+}
+
 // The engine's own meshes, each one meter from its center to its sides,
 // so a Model's scale is the body's (rawframe.physics3d's Body3D) half
 // sides or radius: a box of half sides one; a sphere of radius one; an

@@ -39,6 +39,7 @@ constexpr diagnostics::EventIdentity kViewRefused{"scene", "view_refused"};
 constexpr diagnostics::EventIdentity kViewsSummary{"scene", "scene_views_summary"};
 constexpr diagnostics::EventIdentity kRenderScaleChanged{"scene", "render_scale_changed"};
 constexpr diagnostics::EventIdentity kEyesSummary{"scene", "scene_eyes_summary"};
+constexpr diagnostics::EventIdentity kPlacedSummary{"scene", "scene_placed_summary"};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        game_content::kGameContent.name,
@@ -174,6 +175,7 @@ public:
         gameMaterials_ = materials.size();
         RAWFRAME_TRY(pictures_.read(context, *files, materials, postProcesses));
         settings_ = SceneSettings{.models = std::move(game->models),
+                                  .placements = std::move(game->placements),
                                   .sun = game->sun,
                                   .sky = game->sky,
                                   .points = std::move(game->points),
@@ -243,6 +245,7 @@ public:
             tellViews();
             ++frames_;
             drawn_ += kFrame.drawn;
+            placed_ += kFrame.placed;
             culled_ += kFrame.culled;
             hidden_ += kFrame.hidden;
             malformed_ += kFrame.malformed;
@@ -309,6 +312,14 @@ public:
                           diagnostics::field("eyeFrames", eyeFramesQueued_),
                           diagnostics::field("width", eyeWidth_),
                           diagnostics::field("height", eyeHeight_)});
+        }
+        // Apart from the scene's summary, which holds as many fields as a
+        // record may (D361).
+        if (placed_ != 0) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kPlacedSummary,
+                         "what one client's scene drew where it was placed",
+                         {diagnostics::field("modelsPlaced", placed_)});
         }
         if (!textureViews_.empty()) {
             emitter_.log(diagnostics::Severity::Info,
@@ -926,6 +937,7 @@ private:
     RenderScale renderScale_{100, 100};
     std::uint64_t frames_ = 0;
     std::uint64_t drawn_ = 0;
+    std::uint64_t placed_ = 0;
     std::uint64_t culled_ = 0;
     std::uint64_t hidden_ = 0;
     std::uint64_t malformed_ = 0;

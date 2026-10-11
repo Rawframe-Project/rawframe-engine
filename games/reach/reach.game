@@ -22,9 +22,11 @@ component a65063a9-817e-4430-acf5-f083fad0a263 reach.table Table
 # A block's knock, cued by the server as it strikes something, heard by
 # clients from where the block is (D660).
 component a0fd2692-1aa3-4429-bca5-5f8b4e743eff reach.knock rawframe.sound.Emitter
-# What a client draws and where it looks from; no server carries either.
+# What a client draws, where it looks from, and where it draws its own
+# hands (D665); no server carries any.
 component 5a30e0bb-bf22-49df-b00a-22b24f0980ee reach.look rawframe.model.Model
 component f0992124-ca0d-469d-8379-bfc5880526c8 reach.view rawframe.model.Camera
+component ef26db88-b0b6-4651-a471-831d28226752 reach.placed rawframe.model.Placed
 
 # A player is seated, given two hands; each hand goes where its player
 # holds it; a hand that grips near a block takes it, and lets it go when
@@ -48,10 +50,14 @@ spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.04 height=0.04 depth=0.
 spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.04 height=0.04 depth=0.04 collisionClass=block density=500 friction=0.7 rawframe.physics3d.pose x=0 y=0.79 z=0.15 rawframe.physics3d.velocity rawframe.physics3d.impulse rawframe.physics3d.contact reach.block reach.knock
 spawn 1 rawframe.physics3d.body motion=2 shape=1 width=0.04 height=0.04 depth=0.04 collisionClass=block density=500 friction=0.7 rawframe.physics3d.pose x=0.3 y=0.79 z=0.15 rawframe.physics3d.velocity rawframe.physics3d.impulse rawframe.physics3d.contact reach.block reach.knock
 
-replicate rawframe.physics3d.body rawframe.physics3d.pose reach.block reach.seat reach.knock
+replicate rawframe.physics3d.body rawframe.physics3d.pose reach.block reach.seat reach.knock reach.hand reach.hands
 entity reach.block holder
+entity reach.hand player held
 player reach.hands reach.seat
 input reach.hands
+# A client predicts its own hands' input, so it presents where its player
+# holds them now (D665); nothing else of the World is predicted.
+predict reach.hands
 # A client makes its hands from its player's actions (reach.actions) with
 # sample.kest: a headset's controllers, or keys and the mouse; bots press
 # the same controls.
@@ -71,3 +77,7 @@ presentation reach.look on rawframe.physics3d.body
 present reach.dress dress read rawframe.physics3d.body write reach.look
 presentation reach.view on player
 present reach.frame frame read reach.seat write reach.view
+# The client's own hands, and a block one holds, drawn where its player
+# holds them now (D665).
+presentation reach.placed on rawframe.physics3d.body
+present reach.place placeOwn read rawframe.physics3d.body write reach.placed entities lookup reach.hand lookup reach.block lookup reach.hands lookup reach.seat lookup rawframe.physics3d.pose
