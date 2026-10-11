@@ -9,7 +9,9 @@
 // units (ios_stream.c); the session's category follows them and the
 // host's focus requests (ios_session.m). The session's interruptions
 // hold the streams (maud_suspendPolicy) and are focus states; its route
-// changes give the default devices the forms the route leads to.
+// changes give the default devices the forms the route leads to. A reset
+// of the media services holds the streams too, while every unit is made
+// again.
 
 #include "allocator.h"
 #include "backend.h"
@@ -121,6 +123,7 @@ static maudResult OpenContext(maudContext* context)
     maudIosSessionFormat(&ios->rate, &ios->channels);
     atomic_init(&ios->signals.began, false);
     atomic_init(&ios->signals.interruption, 0);
+    atomic_init(&ios->signals.reset, false);
     atomic_init(&ios->signals.routeChanged, false);
     ios->observer = maudIosSessionObserve(&ios->signals);
     maudResult result = ios->observer != nullptr ? Rescan(ios) : maud_errorPlatform;
@@ -195,9 +198,32 @@ static void Interrupt(maudContext* context, int interruption)
     }
 }
 
+// The media services were reset: every unit went with them and the
+// session forgot its category (QA1749). The streams are held as by an
+// interruption while the session is set up again and every unit made
+// again; they run when the host asks (maudResumeContext, or a focus
+// request), as Apple asks an application not to go active by itself.
+static void Reset(maudContext* context)
+{
+    maudIos* ios = context->native;
+    bool held = context->held;
+    ios->session.configured = false;
+    ios->session.active = false;
+    maudHoldStreams(context, true);
+    maudIosRebuildStreams(context);
+    if (!held)
+    {
+        maudReportFocus(context, maud_focusPaused);
+    }
+}
+
 static void Pump(maudContext* context)
 {
     maudIos* ios = context->native;
+    if (atomic_exchange_explicit(&ios->signals.reset, false, memory_order_acq_rel))
+    {
+        Reset(context);
+    }
     if (atomic_exchange_explicit(&ios->signals.routeChanged, false, memory_order_acq_rel))
     {
         maudResult result = Rescan(ios);
@@ -215,6 +241,7 @@ static void Pump(maudContext* context)
     {
         Interrupt(context, interruption);
     }
+    maudIosResumeStreams(context);
 }
 
 // The host lets streams an interruption held run again.

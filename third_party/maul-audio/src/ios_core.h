@@ -86,7 +86,8 @@ typedef struct maudIosSession
 // What the session reports on the main thread, for the drain: whether
 // an interruption began since the last drain, the last interruption
 // event (0 none since the last drain, 1 began, 2 ended with the hint to
-// resume, 3 ended without it), and a route change. An interruption that
+// resume, 3 ended without it), a route change, and a reset of the media
+// services. An interruption that
 // begins and ends between two drains still holds and releases the
 // streams, as iOS stopped their units meanwhile.
 typedef struct maudIosSignals
@@ -94,6 +95,7 @@ typedef struct maudIosSignals
     atomic_bool began;
     atomic_int interruption;
     atomic_bool routeChanged;
+    atomic_bool reset;
 } maudIosSignals;
 
 // The signals' values.

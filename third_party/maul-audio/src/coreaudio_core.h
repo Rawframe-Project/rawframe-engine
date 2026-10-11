@@ -102,6 +102,9 @@ typedef struct maudCoreAudio
     bool listening;
     // Raised by a change block; the drain rescans.
     atomic_bool changed;
+    // Raised by a change block for a restart of the audio server; the
+    // drain listens again and reopens the streams.
+    atomic_bool restarted;
     // Room for a scan: device objects, endpoints, specs, one read.
     AudioObjectID* objects;
     uint32_t objectCapacity;

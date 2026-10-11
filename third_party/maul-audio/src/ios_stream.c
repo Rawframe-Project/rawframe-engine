@@ -12,9 +12,11 @@
 #include "clock.h"
 #include "context.h"
 #include "device.h"
+#include "follow.h"
 #include "ios_core.h"
 #include "ios_session.h"
 #include "period.h"
+#include "retry.h"
 #include "thread.h"
 #include "voice.h"
 #include "xrun.h"
@@ -532,4 +534,60 @@ void maudIosSetStreamActive(maudContext* context, maudStreamSlot* slot, bool act
     entry->nextSampleTime = -1.0;
     entry->playing =
         maudIosUpdateSession(context, false) && AudioOutputUnitStart(entry->unit) == noErr;
+}
+
+static bool Running(const maudStreamSlot* slot)
+{
+    return atomic_load_explicit(&slot->core.state, memory_order_acquire) == maud_streamRunning;
+}
+
+// Makes the stream's unit again, started if the stream runs; whether it
+// has one.
+static bool Remake(maudContext* context, maudStreamSlot* slot)
+{
+    maudIosDetachStream(context, slot);
+    if (maudIosAttachStream(context, slot) != maud_success)
+    {
+        return false;
+    }
+    if (Running(slot))
+    {
+        maudIosSetStreamActive(context, slot, true);
+    }
+    return true;
+}
+
+void maudIosRebuildStreams(maudContext* context)
+{
+    int64_t now = maudNowNanoseconds();
+    for (uint32_t i = 0; i < context->streams.capacity; ++i)
+    {
+        maudStreamSlot* slot = &context->streams.slots[i];
+        // A voiced output half has no unit; its input half remakes both.
+        if (EntryOf(context, slot)->unit == nullptr)
+        {
+            continue;
+        }
+        bool made = Remake(context, slot);
+        if (maudWantsReopen(slot))
+        {
+            maudReportReopen(context, slot, made, now);
+        }
+    }
+}
+
+void maudIosResumeStreams(maudContext* context)
+{
+    int64_t now = maudNowNanoseconds();
+    for (uint32_t i = 0; i < context->streams.capacity; ++i)
+    {
+        maudStreamSlot* slot = &context->streams.slots[i];
+        bool ownsUnit = !(Voiced(&slot->core) && slot->core.def.direction == maud_directionOutput);
+        maudStreamBinding* binding = &slot->core.binding;
+        if (ownsUnit && maudWantsReopen(slot) && binding->current.index1 != 0 &&
+            EntryOf(context, slot)->unit == nullptr && maudRetryDue(binding, now))
+        {
+            maudReportReopen(context, slot, Remake(context, slot), now);
+        }
+    }
 }

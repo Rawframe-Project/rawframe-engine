@@ -219,7 +219,7 @@ endif()
 # CoreAudio, on macOS, through the system's frameworks.
 if(MAUL_AUDIO_COREAUDIO)
     target_sources(maul-audio PRIVATE src/apple_objects.c src/backend_coreaudio.c
-        src/coreaudio_form.c src/coreaudio_hog.c src/coreaudio_stream.c)
+        src/coreaudio_form.c src/coreaudio_hog.c src/coreaudio_listen.c src/coreaudio_stream.c)
     target_compile_definitions(maul-audio PRIVATE MAUD_HAVE_COREAUDIO=1)
     target_link_libraries(maul-audio PRIVATE "-framework CoreAudio" "-framework AudioToolbox"
         "-framework CoreFoundation")
@@ -578,6 +578,11 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
         maul_add_test(coreaudio_form WHITEBOX)
         target_link_libraries(test_coreaudio_form PRIVATE "-framework CoreAudio"
             "-framework CoreFoundation")
+        # The system listeners and a restart of the audio server, against
+        # a fake HAL.
+        maul_add_test(coreaudio_listen WHITEBOX)
+        target_link_libraries(test_coreaudio_listen PRIVATE "-framework CoreAudio"
+            "-framework CoreFoundation")
     endif()
     # Speaker masks are plain integers, tested on every platform.
     if(NOT MAUL_AUDIO_BUILD_SHARED)
@@ -595,8 +600,9 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
         maul_apply_flags(page_web)
         target_link_options(page_web PRIVATE "--shell-file=${PROJECT_SOURCE_DIR}/test/web/shell.html")
     endif()
-    # The audio-thread trap exists only where invariants are checked.
-    if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT MAUL_AUDIO_BUILD_SHARED)
+    # The audio-thread trap exists only where invariants are checked. In
+    # WebAssembly a trap ends the module, with no signal to catch.
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT MAUL_AUDIO_BUILD_SHARED AND NOT EMSCRIPTEN)
         maul_add_test(trap WHITEBOX POSIX)
     endif()
 endif()

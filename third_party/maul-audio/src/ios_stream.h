@@ -23,4 +23,13 @@ void maudIosSetStreamActive(maudContext* context, maudStreamSlot* slot, bool act
 // input unit only in an active session; false when it refuses.
 bool maudIosUpdateSession(maudContext* context, bool preparing);
 
+// Makes every stream's unit again, after the media services were reset
+// and took the units with them; a started stream whose unit cannot be
+// made is suspended and retried (maudReportReopen).
+void maudIosRebuildStreams(maudContext* context);
+
+// Makes again the unit of every running stream left without one, waiting
+// longer after each failure (retry.h).
+void maudIosResumeStreams(maudContext* context);
+
 #endif // MAUL_AUDIO_SRC_IOS_STREAM_H

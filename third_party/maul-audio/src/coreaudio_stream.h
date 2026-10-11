@@ -24,4 +24,7 @@ void maudCoreAudioRetargetStream(maudContext* context, maudStreamSlot* slot);
 // Opens again every running stream that has no unit.
 void maudCoreAudioResumeStreams(maudContext* context);
 
+// Opens again every stream's unit, after the audio server restarted.
+void maudCoreAudioReopenStreams(maudContext* context);
+
 #endif // MAUL_AUDIO_SRC_COREAUDIO_STREAM_H

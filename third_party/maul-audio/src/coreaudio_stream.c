@@ -712,3 +712,26 @@ void maudCoreAudioResumeStreams(maudContext* context)
         }
     }
 }
+
+// The units the audio server made before it restarted are its state, as
+// its listeners are (AudioHardware.h): each is opened again on its
+// device. A started stream whose unit fails to open is suspended and
+// retried as any reopen.
+void maudCoreAudioReopenStreams(maudContext* context)
+{
+    int64_t now = maudNowNanoseconds();
+    for (uint32_t i = 0; i < context->streams.capacity; ++i)
+    {
+        maudStreamSlot* slot = &context->streams.slots[i];
+        // A voiced output half has no unit; its input half reopens both.
+        if (EntryOf(context, slot)->unit == nullptr)
+        {
+            continue;
+        }
+        maudCoreAudioRetargetStream(context, slot);
+        if (maudWantsReopen(slot))
+        {
+            maudReportReopen(context, slot, EntryOf(context, slot)->unit != nullptr, now);
+        }
+    }
+}

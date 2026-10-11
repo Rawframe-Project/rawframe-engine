@@ -6,35 +6,28 @@
 // keyed by UID. The HAL reports changes to the device list and the
 // defaults through a listener block on a queue the context owns; the
 // block raises a flag and the drain lists devices and defaults again.
+// After the audio server restarts, the drain also adds its listeners
+// again and opens every stream's unit again.
 
 #include "allocator.h"
 #include "backend.h"
 #include "context.h"
 #include "coreaudio_core.h"
 #include "coreaudio_form.h"
+#include "coreaudio_listen.h"
 #include "coreaudio_stream.h"
 #include "device.h"
 #include "layout.h"
 
-#include <Block.h>
 #include <string.h>
 
-// The properties whose changes the context listens to, on the system
-// object.
+// The system's HAL.
 const maudCoreAudioHal maudCoreAudioSystemHal = {
     .getData = AudioObjectGetPropertyData,
     .has = AudioObjectHasProperty,
     .addListener = AudioObjectAddPropertyListenerBlock,
     .removeListener = AudioObjectRemovePropertyListenerBlock,
 };
-
-static const AudioObjectPropertySelector s_watched[] = {
-    kAudioHardwarePropertyDevices,
-    kAudioHardwarePropertyDefaultOutputDevice,
-    kAudioHardwarePropertyDefaultInputDevice,
-};
-
-#define WATCHED_COUNT (sizeof(s_watched) / sizeof(s_watched[0]))
 
 // Copies a string property of object as UTF-8 into out; false when it
 // is missing or does not fit.
@@ -232,52 +225,9 @@ static maudResult Rescan(maudCoreAudio* coreaudio)
     return result;
 }
 
-// Starts listening to the device list and the defaults.
-static void Listen(maudCoreAudio* coreaudio)
-{
-    atomic_bool* changed = &coreaudio->changed;
-    coreaudio->listener = Block_copy(^(UInt32 count, const AudioObjectPropertyAddress* addresses) {
-      (void)count;
-      (void)addresses;
-      atomic_store_explicit(changed, true, memory_order_release);
-    });
-    coreaudio->listening = true;
-    for (size_t i = 0; i < WATCHED_COUNT; ++i)
-    {
-        AudioObjectPropertyAddress address =
-            maudCoreAudioAddress(s_watched[i], kAudioObjectPropertyScopeGlobal);
-        coreaudio->listening =
-            coreaudio->listening &&
-            AudioObjectAddPropertyListenerBlock(kAudioObjectSystemObject, &address,
-                                                coreaudio->queue, coreaudio->listener) == noErr;
-    }
-}
-
-// Removes the listener blocks and waits out one in flight on the queue.
-static void StopListening(maudCoreAudio* coreaudio)
-{
-    if (coreaudio->listener == nullptr)
-    {
-        return;
-    }
-    maudCoreAudioUnwatchSources(coreaudio);
-    for (size_t i = 0; i < WATCHED_COUNT; ++i)
-    {
-        AudioObjectPropertyAddress address =
-            maudCoreAudioAddress(s_watched[i], kAudioObjectPropertyScopeGlobal);
-        OSStatus status = AudioObjectRemovePropertyListenerBlock(
-            kAudioObjectSystemObject, &address, coreaudio->queue, coreaudio->listener);
-        (void)status;
-    }
-    dispatch_sync(coreaudio->queue, ^{
-                  });
-    Block_release(coreaudio->listener);
-    coreaudio->listener = nullptr;
-}
-
 static void Release(maudContext* context, maudCoreAudio* coreaudio)
 {
-    StopListening(coreaudio);
+    maudCoreAudioStopListening(coreaudio);
     if (coreaudio->queue != nullptr)
     {
         dispatch_release(coreaudio->queue);
@@ -339,13 +289,14 @@ static maudResult OpenContext(maudContext* context)
     }
     context->native = coreaudio;
     atomic_init(&coreaudio->changed, false);
+    atomic_init(&coreaudio->restarted, false);
     coreaudio->queue = dispatch_queue_create("maud-coreaudio", DISPATCH_QUEUE_SERIAL);
     if (coreaudio->queue == nullptr)
     {
         Release(context, coreaudio);
         return maud_errorPlatform;
     }
-    Listen(coreaudio);
+    maudCoreAudioListen(coreaudio);
     maudResult result = Rescan(coreaudio);
     if (result != maud_success)
     {
@@ -362,10 +313,15 @@ static void CloseContext(maudContext* context)
 static void Pump(maudContext* context)
 {
     maudCoreAudio* coreaudio = context->native;
-    if (atomic_exchange_explicit(&coreaudio->changed, false, memory_order_acq_rel))
+    bool restarted = maudCoreAudioRelisten(coreaudio);
+    if (atomic_exchange_explicit(&coreaudio->changed, false, memory_order_acq_rel) || restarted)
     {
         maudResult result = Rescan(coreaudio);
         (void)result;
+    }
+    if (restarted)
+    {
+        maudCoreAudioReopenStreams(context);
     }
     maudCoreAudioResumeStreams(context);
 }

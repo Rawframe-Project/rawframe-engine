@@ -8,7 +8,8 @@
 // or brief focus stops or pauses them, brief mixed focus ducks them.
 // Record takes no mixing option and never mixes. With iosSilencedBySwitch, output alone
 // is Ambient (or SoloAmbient with focus), which the silent switch
-// silences. Interruptions and route changes come as notifications,
+// silences. Interruptions, route changes and resets of the media
+// services come as notifications,
 // which the observer turns into the context's signals. Manual retain and
 // release; every call but the observer's from the control thread.
 
@@ -44,6 +45,7 @@ void maudIosSessionFormat(uint32_t* rate, uint32_t* channels)
 }
 - (void)interrupted:(NSNotification*)note;
 - (void)routeChanged:(NSNotification*)note;
+- (void)mediaReset:(NSNotification*)note;
 @end
 
 @implementation MaudAudioSessionObserver
@@ -88,6 +90,18 @@ void maudIosSessionFormat(uint32_t* rate, uint32_t* channels)
     }
 }
 
+- (void)mediaReset:(NSNotification*)note
+{
+    (void)note;
+    @synchronized(self)
+    {
+        if (signals != nullptr)
+        {
+            atomic_store_explicit(&signals->reset, true, memory_order_release);
+        }
+    }
+}
+
 @end
 
 void* maudIosSessionObserve(maudIosSignals* signals)
@@ -109,6 +123,10 @@ void* maudIosSessionObserve(maudIosSignals* signals)
         [center addObserver:observer
                    selector:@selector(routeChanged:)
                        name:AVAudioSessionRouteChangeNotification
+                     object:session];
+        [center addObserver:observer
+                   selector:@selector(mediaReset:)
+                       name:AVAudioSessionMediaServicesWereResetNotification
                      object:session];
         return observer;
     }
