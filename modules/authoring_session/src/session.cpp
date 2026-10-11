@@ -1,9 +1,12 @@
 #include "rawframe/authoring_session/session.h"
 
 #include "cooking.h"
+#include "documents.h"
 #include "handles.h"
 #include "importing.h"
 #include "rawframe/authoring/authored_scene.h"
+#include "rawframe/authoring/authored_styles.h"
+#include "rawframe/authoring/authored_ui.h"
 #include "rawframe/authoring/delta.h"
 #include "rawframe/authoring/operations.h"
 #include "rawframe/authoring/queries.h"
@@ -18,7 +21,6 @@
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world_kest/game_files.h"
 #include "replies.h"
-#include "styling.h"
 #include "viewing.h"
 
 #include <algorithm>
@@ -71,7 +73,7 @@ class Held {
 public:
     Held(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook)
         : game_(std::move(game)), root_(std::filesystem::weakly_canonical(root)), cook_(cook),
-          cooking_(std::move(cook)), styling_(root_) {
+          cooking_(std::move(cook)), sheets_(root_, ".styles", "style sheet"), uis_(root_, ".ui", "UI document") {
     }
     Held(const Held&) = delete;
     Held& operator=(const Held&) = delete;
@@ -317,8 +319,11 @@ private:
     /// how many deltas it holds and whether it is applied (undoable) or
     /// undone (redoable). A read: nothing staged, nothing written.
     result::Result<Value> historyOf(const authoring::SessionRecord& record) {
-        if (Styling::names(record.scene)) {
-            return styling_.history(record);
+        if (sheets_.names(record.scene)) {
+            return sheets_.history(record);
+        }
+        if (uis_.names(record.scene)) {
+            return uis_.history(record);
         }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -403,8 +408,11 @@ private:
     }
 
     result::Result<Value> applied(const authoring::SessionRecord& record) {
-        if (Styling::names(record.scene)) {
-            return styling_.applied(record, failed_);
+        if (sheets_.names(record.scene)) {
+            return sheets_.applied(record, failed_);
+        }
+        if (uis_.names(record.scene)) {
+            return uis_.applied(record, failed_);
         }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -878,8 +886,11 @@ private:
     }
 
     result::Result<Value> answered(const authoring::SessionRecord& record) {
-        if (Styling::names(record.scene)) {
-            return styling_.answered(record, failed_);
+        if (sheets_.names(record.scene)) {
+            return sheets_.answered(record, failed_);
+        }
+        if (uis_.names(record.scene)) {
+            return uis_.answered(record, failed_);
         }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -904,8 +915,11 @@ private:
     }
 
     result::Result<Value> stepped(const authoring::SessionRecord& record, bool undo) {
-        if (Styling::names(record.scene)) {
-            return styling_.stepped(record, undo, failed_);
+        if (sheets_.names(record.scene)) {
+            return sheets_.stepped(record, undo, failed_);
+        }
+        if (uis_.names(record.scene)) {
+            return uis_.stepped(record, undo, failed_);
         }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -961,8 +975,9 @@ private:
     /// runs (D502).
     std::filesystem::path cook_;
     Cooking cooking_;
-    /// The style sheets records name (D636).
-    Styling styling_;
+    /// The style sheets and UI documents records name (D636, D641).
+    Documents<authoring::AuthoredStyles> sheets_;
+    Documents<authoring::AuthoredUi> uis_;
 };
 
 } // namespace
