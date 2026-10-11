@@ -74,6 +74,7 @@
       "rangeMaximum": 140,
       "rangeStep": 10,
       "rangeValue": 100,
+      "kept": true,
       "children": [
         {
           "component": "tycoon.knob",
@@ -98,6 +99,7 @@
       "text": "4d594c1ea35a7c50",
       "style": "99679e6b9ac91a9b",
       "check": "switch",
+      "kept": true,
       "children": [
         {
           "component": "tycoon.flip",

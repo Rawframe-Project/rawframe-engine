@@ -145,21 +145,24 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED tycoon_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "a11y: 2 toggle button Top view\na11y: toggled [^\n]*: b true\na11y: the toggle button reads checked\n.*\"code\":\"ui_summary\"[^\n]*\"changed\":([1-9]|[1-9][0-9]+),[^\n]*\"toggled\":1}")
+                             "a11y: 2 toggle button Top view\na11y: toggled [^\n]*: b true\na11y: the toggle button reads checked\n.*\"code\":\"ui_summary\"[^\n]*\"changed\":([1-9]|[1-9][0-9]+),[^\n]*\"toggled\":1,")
         # Stalls' top view switch clicked (D622): the click checks it, as
         # the summary counts, and the zoom slider, disabled while it is on
-        # (D624), takes nothing of a drag of its knob.
-        add_test(NAME client_toggles_stalls
+        # (D624), takes nothing of a drag of its knob. The switch is kept
+        # (D626): written to the client's settings as it changes, it starts
+        # checked when the client plays again, which disables the slider
+        # from the first frame, so a drag takes nothing again.
+        add_test(NAME client_keeps_stalls
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
-                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/kept.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/stalls_clicked.conf
-                         games/tycoon/tycoon.game 30,221 drag=92,180,132,180
+                         games/tycoon/tycoon.game 30,221 drag=92,180,132,180 then drag=92,180,132,180
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-        set_tests_properties(client_toggles_stalls PROPERTIES
+        set_tests_properties(client_keeps_stalls PROPERTIES
                              FIXTURES_REQUIRED tycoon_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"ui_summary\"[^\n]*\"ranged\":0,\"toggled\":1}")
+                             "kept: [^\n]*\"tycoon.top\":1[,}][^\n]*\n== first run\n.*\"code\":\"ui_summary\"[^\n]*\"ranged\":0,\"toggled\":1,\"kept\":1,\"keptGiven\":0,\"keptWritten\":[1-9].*== second run\n.*\"code\":\"ui_summary\"[^\n]*\"ranged\":0,\"toggled\":0,\"kept\":0,\"keptGiven\":[1-9]")
         # Stalls' purse tooltip (D623): the mouse brought over the purse
         # and away; the tooltip given its words while it is over it and
         # emptied after, as the present system says, beside the purse (a

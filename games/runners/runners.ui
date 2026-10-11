@@ -84,6 +84,7 @@
       "range": "horizontal",
       "rangeMinimum": -40,
       "rangeStep": 2,
+      "kept": true,
       "children": [
         {
           "component": "runners.dial",
