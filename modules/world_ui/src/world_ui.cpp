@@ -87,16 +87,18 @@ ui::Look lookOf(const ui::NodeFields& node) noexcept {
 /// `node`'s part in what presses hit (D421); none for a number past its
 /// constants. Nought passes presses through to its children and past them.
 std::optional<ui::Interaction> interactionOf(const ui::NodeFields& node) noexcept {
-    if (node.hit > 2 || node.layer > 3 || node.edit > 3 || node.range > 2 || node.thumb > 1) {
+    if (node.hit > 2 || node.layer > 3 || node.edit > 3 || node.range > 2 || node.thumb > 1 || node.check > 3 ||
+        node.checked > 1) {
         return std::nullopt;
     }
     constexpr std::array<ui::Interaction::Hits, 3> kHits = {
         ui::Interaction::Hits::Children, ui::Interaction::Hits::Itself, ui::Interaction::Hits::Nothing};
     // A text field takes the presses that land on it (D426), unless it is
     // left out with its children, as a range and its thumb do, which drag
-    // (D621). A node that scrolls is hit, so a wheel over it finds it, and
-    // passes on the presses it leaves, as its hit of nought says (D444).
-    const bool kField = (node.edit != 0 || node.range != 0 || node.thumb != 0) && node.hit != 2;
+    // (D621), and a checkable node (D622). A node that scrolls is hit, so
+    // a wheel over it finds it, and passes on the presses it leaves, as its
+    // hit of nought says (D444).
+    const bool kField = (node.edit != 0 || node.range != 0 || node.thumb != 0 || node.check != 0) && node.hit != 2;
     const bool kScrolls = node.scroll != 0 && node.hit == 0;
     // What navigation reaches, a field and a node that takes presses, holds
     // focus as navigation gives it (D573).
@@ -117,6 +119,10 @@ ui::Role roleOf(const ui::NodeFields& node) noexcept {
     }
     if (node.range != 0) {
         return ui::Role::Slider;
+    }
+    if (node.check != 0) {
+        constexpr std::array<ui::Role, 3> kChecks = {ui::Role::CheckBox, ui::Role::Switch, ui::Role::RadioButton};
+        return kChecks[node.check - 1];
     }
     if (node.press != 0) {
         return ui::Role::Button;
@@ -238,6 +244,15 @@ void WorldUi::State::drop(Entry& entry) {
 
 bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const ui::NodeFields& value) {
     entry.value = value;
+    // What the player checked stays until the node's own `checked` changes
+    // (D622).
+    if (value.check == 0) {
+        entry.checkGiven.reset();
+        entry.checkedNow = false;
+    } else if (entry.checkGiven != value.checked) {
+        entry.checkGiven = value.checked;
+        entry.checkedNow = value.checked != 0;
+    }
     const std::optional<ui::Layout> kLayout = layoutOf(value);
     const std::optional<ui::Interaction> kInteraction = interactionOf(value);
     // A node that becomes a text field, or stops being one, is made
@@ -390,14 +405,14 @@ bool WorldUi::State::giveWords(ui::Node node,
         ++(words.has_value() ? statistics.texts : statistics.textsUnknown);
     }
     // Something to press is read by its words, which name it (D571); a
-    // slider is named by its words and shows them nowhere, its thumb
-    // showing its value (D621).
+    // slider and a checkable node are named by their words and show them
+    // nowhere, a thumb or a look showing their value (D621, D622).
     const ui::Role kRole = roleOf(value);
-    if ((kRole == ui::Role::Button || kRole == ui::Role::Slider) &&
-        !tree->setName(node, words.value_or(std::string{})).has_value()) {
+    const bool kNamedOnly = value.range != 0 || value.check != 0;
+    if ((kRole == ui::Role::Button || kNamedOnly) && !tree->setName(node, words.value_or(std::string{})).has_value()) {
         return false;
     }
-    if (!words.has_value() || kRole == ui::Role::Slider) {
+    if (!words.has_value() || kNamedOnly) {
         return tree->clearText(node).has_value();
     }
     // A font not read yet is shown in the default until it is.
@@ -502,7 +517,7 @@ void WorldUi::State::nest(ViewState& view,
         const auto kFound = view.entries.find(EntryKey{entity, static_cast<std::uint32_t>(component)});
         return kFound != view.entries.end() ? kFound->second.node : std::nullopt;
     };
-    for (const auto& [kKey, kEntry] : view.entries) {
+    for (auto& [kKey, kEntry] : view.entries) {
         if (!kEntry.node.has_value()) {
             continue;
         }
@@ -521,6 +536,7 @@ void WorldUi::State::nest(ViewState& view,
         if (kEntry.value.thumb != 0) {
             thumbs[keyOf(*parent)] = *kEntry.node;
         }
+        kEntry.parent = keyOf(*parent);
         into[keyOf(*parent)].push_back(
             Placed{.order = kEntry.value.order, .entity = kEntity, .component = kComponent, .node = *kEntry.node});
     }

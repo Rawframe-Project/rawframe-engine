@@ -35,6 +35,10 @@ const SIGN: i64 = 2
 // value the player slid it to.
 const ZOOM: i64 = 3
 
+// The top view switch's press code (D622), by which a present system reads
+// whether the player turned it on.
+const TOP: i64 = 4
+
 // What an owner's player wrote on its sign.
 struct Sign {
     typed: ui.Typed

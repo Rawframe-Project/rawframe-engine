@@ -11,10 +11,11 @@
 # interface, and the entry's text is read back. Given `slide <value>`, the
 # first slider found is set to the value as a screen reader sets one
 # (D621), through AT-SPI's Value interface, and its value is read back.
-# Then it is asked to stop.
+# Given `toggle`, the first toggle button found is pressed (D622), and
+# whether it reads as checked after is told. Then it is asked to stop.
 #
 # usage: read_aloud.sh <rawframe-server> <rawframe-client> <configuration> <game>
-#                      [press | type <text> | slide <value>]
+#                      [press | type <text> | slide <value> | toggle]
 set -uo pipefail
 here="$(dirname "$0")"
 log="$(mktemp)"
@@ -48,6 +49,7 @@ name="$(busctl --address="$address" list --no-legend 2>/dev/null | awk '$3 == "r
 button=""
 entry=""
 slider=""
+toggle=""
 walk() {
     local path="$1" depth="$2"
     local role label
@@ -64,6 +66,9 @@ walk() {
     fi
     if [ "$role" = "slider" ] && [ -z "$slider" ]; then
         slider="$path"
+    fi
+    if [ "$role" = "toggle button" ] && [ -z "$toggle" ]; then
+        toggle="$path"
     fi
     [ "$depth" -ge 8 ] && return
     local child
@@ -100,6 +105,19 @@ if [ "${5:-}" = slide ] && [ -n "$slider" ]; then
     value="$(busctl --address="$address" get-property "$name" "$slider" org.a11y.atspi.Value CurrentValue 2>/dev/null |
         sed -n 's/^d \(.*\)$/\1/p')"
     echo "a11y: the slider reads $value"
+fi
+if [ "${5:-}" = toggle ] && [ -n "$toggle" ]; then
+    done="$(busctl --address="$address" call "$name" "$toggle" org.a11y.atspi.Action DoAction i 0 2>&1)"
+    echo "a11y: toggled $toggle: $done"
+    sleep 2
+    # AT-SPI's checked state is the fifth bit of the state set's first word.
+    states="$(busctl --address="$address" call "$name" "$toggle" org.a11y.atspi.Accessible GetState 2>/dev/null |
+        awk '{ print $3 }')"
+    if [ -n "$states" ] && [ $((states & 16)) -ne 0 ]; then
+        echo "a11y: the toggle button reads checked"
+    else
+        echo "a11y: the toggle button reads unchecked"
+    fi
 fi
 
 kill -INT "$(cat "$work/bots-1.pid" 2>/dev/null)" 2>/dev/null

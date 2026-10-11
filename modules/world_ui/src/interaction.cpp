@@ -76,6 +76,22 @@ void WorldUi::State::letGo(bool shown) {
     return nullptr;
 }
 
+void WorldUi::State::toggle(Entry& entry) {
+    ++statistics.toggled;
+    if (entry.value.check != 3) {
+        entry.checkedNow = !entry.checkedNow;
+        return;
+    }
+    entry.checkedNow = true;
+    for (ViewState& view : views) {
+        for (auto& [kKey, other] : view.entries) {
+            if (&other != &entry && other.value.check == 3 && other.parent == entry.parent) {
+                other.checkedNow = false;
+            }
+        }
+    }
+}
+
 void WorldUi::State::point(ui::PointerEvent::Action action, float x, float y, bool holding) {
     if (tree->contains(window) &&
         tree->point(window, ui::PointerEvent{.action = action, .x = x, .y = y, .held = holding, .seconds = seconds})
@@ -96,7 +112,8 @@ void WorldUi::State::giveStates() {
         for (auto& [kKey, entry] : view.entries) {
             const ui::States kNow{.focused = focus.has_value() && focus->entry == &entry,
                                   .hovered = &entry == hovered,
-                                  .pressed = &entry == pressed};
+                                  .pressed = &entry == pressed,
+                                  .checked = entry.checkedNow};
             if (entry.node.has_value() && kNow != entry.states && tree->setStates(*entry.node, kNow).has_value()) {
                 entry.states = kNow;
             }
@@ -258,6 +275,14 @@ void WorldUi::pressAt(float x, float y) {
 
 void WorldUi::release() {
     State& state = *state_;
+    // A checkable node let go of where it was pressed is clicked (D622).
+    if (state.pressed != nullptr && state.pressed->value.check != 0 && state.pressed->node.has_value() &&
+        state.pointer.has_value()) {
+        const auto kHit = state.tree->hit(state.window, (*state.pointer)[0], (*state.pointer)[1]);
+        if (kHit.has_value() && kHit->node == state.pressed->node) {
+            state.toggle(*state.pressed);
+        }
+    }
     state.pressed = nullptr;
     if (state.ranging) {
         state.ranging = false;
@@ -283,7 +308,14 @@ std::optional<float> WorldUi::valueOf(std::size_t player, std::int64_t press) co
         return std::nullopt;
     }
     for (const auto& [kKey, kEntry] : state.views[player].entries) {
-        if (kEntry.value.range == 0 || kEntry.value.press != press) {
+        if (kEntry.value.press != press) {
+            continue;
+        }
+        // A checkable node's: one checked, nought not (D622).
+        if (kEntry.value.check != 0) {
+            return kEntry.checkedNow ? 1.0F : 0.0F;
+        }
+        if (kEntry.value.range == 0) {
             continue;
         }
         if (kEntry.node.has_value()) {
@@ -383,6 +415,9 @@ std::optional<std::int64_t> WorldUi::activate() {
         return std::nullopt;
     }
     ++state.statistics.activated;
+    if (entry.value.check != 0) {
+        state.toggle(entry);
+    }
     return entry.value.press;
 }
 

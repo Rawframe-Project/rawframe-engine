@@ -15,6 +15,10 @@
       "message": "Write your sign",
       "description": "The sign field's placeholder while it is empty."
     },
+    "hud.top": {
+      "message": "Top view",
+      "description": "The name a screen reader reads for the switch that turns the view to look straight down."
+    },
     "hud.won": {
       "message": "You won round {$round :integer}!",
       "description": "Shown to the owner that won a round, when it ends."

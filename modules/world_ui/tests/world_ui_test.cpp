@@ -893,3 +893,53 @@ RAWFRAME_TEST(ARangeIsPagedAndDraggedAndKeepsWhatThePlayerMovedItTo) {
     RAWFRAME_EXPECT(rig.frame(1, 6));
     RAWFRAME_EXPECT(rig.ui->statistics().leftOut > kLeftOut);
 }
+
+RAWFRAME_TEST(ACheckableIsCheckedByPressesAndARadioUnchecksItsGroup) {
+    Rig rig;
+    // In the panel along the view's top: a check box, then two radio
+    // buttons on other entities, each 20 by 20, 10 apart from 105.
+    rig.put(rig.player, kHudId, panel());
+    ui::NodeFields box{.widthOffset = 20, .heightOffset = 20, .shrink = 0, .press = 5};
+    box.check = 1;
+    rig.put(rig.player, kMeterId, box);
+    const world::EntityHandle kFirst = *rig.world.create();
+    const world::EntityHandle kSecond = *rig.world.create();
+    ui::NodeFields radio{.widthOffset = 20, .heightOffset = 20, .shrink = 0, .order = 1, .press = 6};
+    radio.check = 3;
+    rig.put(kFirst, kRowId, radio);
+    radio.order = 2;
+    radio.press = 7;
+    rig.put(kSecond, kRowId, radio);
+    RAWFRAME_EXPECT(rig.frame());
+    const auto kClick = [&rig](float x) {
+        rig.ui->hoverAt(std::array<float, 2>{x, 65});
+        rig.ui->pressAt(x, 65);
+        rig.ui->release();
+        return rig.frame();
+    };
+    RAWFRAME_EXPECT(rig.ui->valueOf(0, 5) == 0.0F && rig.ui->valueOf(0, 6) == 0.0F);
+    // A click checks the box and another unchecks it.
+    RAWFRAME_EXPECT(kClick(115) && rig.ui->valueOf(0, 5) == 1.0F);
+    RAWFRAME_EXPECT(kClick(115) && rig.ui->valueOf(0, 5) == 0.0F);
+    // A press let go elsewhere is no click.
+    rig.ui->hoverAt(std::array<float, 2>{115, 65});
+    rig.ui->pressAt(115, 65);
+    rig.ui->hoverAt(std::array<float, 2>{300, 200});
+    rig.ui->release();
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->valueOf(0, 5) == 0.0F);
+    // A radio checked unchecks the one beside it; checked again, it stays.
+    RAWFRAME_EXPECT(kClick(145) && rig.ui->valueOf(0, 6) == 1.0F && rig.ui->valueOf(0, 7) == 0.0F);
+    RAWFRAME_EXPECT(kClick(175) && rig.ui->valueOf(0, 6) == 0.0F && rig.ui->valueOf(0, 7) == 1.0F);
+    RAWFRAME_EXPECT(kClick(175) && rig.ui->valueOf(0, 7) == 1.0F);
+    // Its own `checked` changed, the box takes it; the player's uncheck then
+    // stays while it is unchanged.
+    box.checked = 1;
+    rig.put(rig.player, kMeterId, box);
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->valueOf(0, 5) == 1.0F);
+    RAWFRAME_EXPECT(kClick(115) && rig.ui->valueOf(0, 5) == 0.0F);
+    rig.put(rig.player, kMeterId, box);
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->valueOf(0, 5) == 0.0F);
+    // Navigation's activation checks it too, and gives its press.
+    RAWFRAME_EXPECT(rig.ui->enterNavigation() && rig.ui->activate() == std::optional<std::int64_t>{5});
+    RAWFRAME_EXPECT(rig.ui->valueOf(0, 5) == 1.0F && rig.ui->statistics().toggled == 7);
+}

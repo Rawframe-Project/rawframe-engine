@@ -97,6 +97,17 @@ module rawframe.ui
 // `ui.value(press)` and places the thumb and sizes a fill from it: a
 // thumb `absolute` at `xScale` and `anchorX` both the value's share of
 // the range lies on the track as the drag expects.
+//
+// A node whose `check` is not NO_CHECK is checked and unchecked (D622): a
+// CHECKBOX or a SWITCH by each press on it (a screen reader's, or
+// navigation's activation, too), a RADIO checked by a press and unchecked
+// as another RADIO beside it, under the same parent, is checked. It
+// starts as `checked` (one for checked) says, and what the player made it
+// stays until `checked` is written anew. `ui.value(press)` reads one for
+// checked and nought for not; its style class's `checked` look shows it,
+// and assistive technology reads it as a check box, a switch, or a radio
+// button. A checkable node and a slider are named to assistive technology
+// by their label's words, which they do not draw.
 struct Node {
     widthScale: f32
     widthOffset: f32
@@ -155,6 +166,8 @@ struct Node {
     rangeStep: f32
     rangeValue: f32
     thumb: u32
+    check: u32
+    checked: u32
 }
 
 // A node's `scroll`.
@@ -167,6 +180,12 @@ const SCROLL_BOTH: u32 = 3
 const NO_RANGE: u32 = 0
 const RANGE_HORIZONTAL: u32 = 1
 const RANGE_VERTICAL: u32 = 2
+
+// A node's `check`.
+const NO_CHECK: u32 = 0
+const CHECKBOX: u32 = 1
+const SWITCH: u32 = 2
+const RADIO: u32 = 3
 
 // A node's `direction`.
 const ROW: u32 = 0
@@ -239,7 +258,8 @@ fn hovered() -> i64 {
 }
 
 // The value of the slider whose `press` is `press` in the client's view,
-// as the player moved it (D621), or nought for none. Nought in every
+// as the player moved it (D621), or one if the checkable node whose
+// `press` it is is checked (D622); nought for neither, and in every
 // simulation.
 fn value(press: i64) -> f32 {
     return UI.value(press)

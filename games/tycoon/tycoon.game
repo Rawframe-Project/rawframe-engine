@@ -38,6 +38,8 @@ component 3efabfb3-083d-491e-8aea-23c41ec92868 tycoon.board rawframe.ui.Node
 component 9547d96d-27fb-4ec0-950c-a990145d2d97 tycoon.sign rawframe.ui.Node
 component 3b8cfcc3-d5fb-4d4c-9649-e25056a0124f tycoon.zoom rawframe.ui.Node
 component 3729cefe-e029-4f14-ad9f-8a89f0a30ac9 tycoon.knob rawframe.ui.Node
+component 3128607a-7d0b-4df5-bd60-434ded311b7d tycoon.top rawframe.ui.Node
+component 080d4691-174c-45b3-8772-0a56699ad064 tycoon.flip rawframe.ui.Node
 system tycoon.join simulation join write tycoon.owner
 system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities lookup tycoon.stall after tycoon.join after rawframe.physics3d.step
 # Customers (D392): through the gate, walking before the step moves their
@@ -109,10 +111,11 @@ label afcb66432b6d2152 tycoon.strings hud.won round
 label b777d548435986ab tycoon.strings hud.lost round
 label bdb5be7acb84d040 tycoon.strings hud.sign
 label 553f856290bb3e9f tycoon.strings hud.zoom
+label 4d594c1ea35a7c50 tycoon.strings hud.top
 presentation tycoon.look on rawframe.physics3d.body
 present tycoon.dress dress read rawframe.physics3d.body write tycoon.look
 present tycoon.tint tint read tycoon.stall write tycoon.look
-presentation tycoon.mark tycoon.view tycoon.purse tycoon.cheer tycoon.banner tycoon.sign tycoon.board tycoon.zoom tycoon.knob on player
+presentation tycoon.mark tycoon.view tycoon.purse tycoon.cheer tycoon.banner tycoon.sign tycoon.board tycoon.zoom tycoon.knob tycoon.top tycoon.flip on player
 present tycoon.mark mark read tycoon.owner write tycoon.mark
 present tycoon.frame frame read rawframe.physics3d.pose write tycoon.view
 present tycoon.purse purse read tycoon.owner write tycoon.purse
@@ -123,3 +126,5 @@ present tycoon.field field write tycoon.sign
 present tycoon.board board read tycoon.named write tycoon.board
 # The view's zoom, a slider under the board (D621).
 present tycoon.zoom zoom write tycoon.zoom write tycoon.knob
+# The top view switch under it (D622).
+present tycoon.top top write tycoon.top write tycoon.flip

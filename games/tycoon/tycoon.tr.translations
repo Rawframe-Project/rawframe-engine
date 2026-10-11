@@ -16,6 +16,10 @@
       "message": "Tabelanı yaz",
       "sourceHash": "3511f0fa2ae796db"
     },
+    "hud.top": {
+      "message": "Üstten bak",
+      "sourceHash": "5d7ff318f955fab2"
+    },
     "hud.won": {
       "message": "{$round :integer}. turu kazandın!",
       "sourceHash": "b3c52e859e3e7df1"

@@ -51,6 +51,14 @@ struct Entry {
     std::size_t player = 0;
     /// The range its node was last given (D621): none for no range.
     std::optional<RangeGiven> ranged;
+    /// A checkable node's `checked` as it last read (D622), none for one
+    /// not checkable; and whether it is checked now, which the player's
+    /// presses change until `checked` itself does.
+    std::optional<std::uint32_t> checkGiven;
+    bool checkedNow = false;
+    /// The node it is inside, by its key, as the last frame nested it: a
+    /// radio's group is those inside the same one.
+    std::uint64_t parent = 0;
 };
 
 /// The node holding focus (D430): a text field given the keyboard, its
@@ -133,6 +141,11 @@ struct WorldUi::State {
     /// value the player moved kept unless its own changed; a node no
     /// longer a range cleared (D621).
     void giveRanges();
+
+    /// `entry` checked or unchecked as a press does it (D622): a box or a
+    /// switch turned over, a radio checked and the radios beside it
+    /// unchecked.
+    void toggle(Entry& entry);
 
     /// The pointer's event given to the ranges under it (D621), counted
     /// where one took it.

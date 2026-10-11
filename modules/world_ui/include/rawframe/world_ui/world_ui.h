@@ -116,6 +116,8 @@ struct UiStatistics {
     std::uint64_t activated = 0;
     /// Presses, moves, and releases of the pointer a range took (D621).
     std::uint64_t ranged = 0;
+    /// Checkable nodes checked or unchecked by the player (D622).
+    std::uint64_t toggled = 0;
 };
 
 class WorldUi {
@@ -181,8 +183,8 @@ public:
     /// on is dragged there (D621).
     void hoverAt(std::optional<std::array<float, 2>> pointer);
     /// The value of the range whose press code is `press` in local player
-    /// `player`'s view, as the player moved it (D621); none for no such
-    /// range.
+    /// `player`'s view, as the player moved it (D621), or of the checkable
+    /// node's, one checked and nought not (D622); none for no such node.
     [[nodiscard]] std::optional<float> valueOf(std::size_t player, std::int64_t press) const;
     /// What was typed, to the field holding the keyboard; nothing while
     /// none does. Enter gives a single line's text, Escape lets go.

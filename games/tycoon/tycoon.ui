@@ -72,6 +72,29 @@
       ]
     },
     {
+      "component": "tycoon.top",
+      "widthOffset": 36,
+      "heightOffset": 18,
+      "margin": 12,
+      "border": 1,
+      "order": 4,
+      "text": "4d594c1ea35a7c50",
+      "style": "99679e6b9ac91a9b",
+      "check": "switch",
+      "children": [
+        {
+          "component": "tycoon.flip",
+          "widthOffset": 14,
+          "heightOffset": 14,
+          "absolute": true,
+          "yScale": 0.5,
+          "anchorY": 0.5,
+          "fill": "#f4e9c8ff",
+          "radius": 7
+        }
+      ]
+    },
+    {
       "component": "tycoon.banner",
       "padding": 16,
       "absolute": true,

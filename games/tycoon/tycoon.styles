@@ -61,6 +61,40 @@
           "easing": "ease_out"
         }
       ]
+    },
+    {
+      "styleId": "99679e6b9ac91a9b",
+      "name": "switch",
+      "base": {
+        "fill": "#101820c0",
+        "borderColor": "#f4e9c880",
+        "radius": 9
+      },
+      "checked": {
+        "fill": "#3c8a4aff"
+      },
+      "focused": {
+        "borderColor": "#ffd24aff"
+      },
+      "hovered": {
+        "borderColor": "#f4e9c8ff"
+      },
+      "transitions": [
+        {
+          "parts": [
+            "fill"
+          ],
+          "seconds": 0.15,
+          "easing": "ease_out"
+        },
+        {
+          "parts": [
+            "borderColor"
+          ],
+          "seconds": 0.12,
+          "easing": "ease_out"
+        }
+      ]
     }
   ]
 }

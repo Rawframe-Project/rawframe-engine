@@ -164,7 +164,9 @@ settingsOf(const world_kest::GameFiles& files, const kest::Program& program, std
                                 {"rangeMaximum", offsetof(ui::NodeFields, rangeMaximum)},
                                 {"rangeStep", offsetof(ui::NodeFields, rangeStep)},
                                 {"rangeValue", offsetof(ui::NodeFields, rangeValue)},
-                                {"thumb", offsetof(ui::NodeFields, thumb)}})) {
+                                {"thumb", offsetof(ui::NodeFields, thumb)},
+                                {"check", offsetof(ui::NodeFields, check)},
+                                {"checked", offsetof(ui::NodeFields, checked)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());
@@ -695,7 +697,8 @@ public:
                                          drawn_ != nullptr && drawn_->atlas != nullptr ? drawn_->atlas->revision : 0),
                       diagnostics::field("pressesMissed", missed_),
                       diagnostics::field("framesPointed", pointedFrames_),
-                      diagnostics::field("ranged", kStatistics.ranged)});
+                      diagnostics::field("ranged", kStatistics.ranged),
+                      diagnostics::field("toggled", kStatistics.toggled)});
     }
 
     /// The host told where the caret of the field holding the keyboard is

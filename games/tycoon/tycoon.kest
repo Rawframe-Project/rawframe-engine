@@ -599,7 +599,8 @@ fn mark(count: i32, owners: [Owner], marks: [model.Model]) {
 
 // The client's view: from a fixed point forty-two meters up and thirty-six
 // south of the lot's middle, looking down at it, the whole lot in sight, wherever the
-// owner's cursor is, nearer or further as the zoom slider says (D621). The
+// owner's cursor is, nearer or further as the zoom slider says (D621), and
+// from nearly straight above while the top view switch is on (D622). The
 // eye is fixed in the World (D520): placed back from the player's pose, the
 // cursor's plot, it lurched for a frame whenever the cursor crossed into
 // another plot between two ticks.
@@ -612,6 +613,12 @@ fn frame(count: i32, poses: [physics3d.Pose3D], views: [model.Camera]) {
         views[i].offsetY = 42.0 * distance
         views[i].offsetZ = 36.0 * distance
         views[i].pitch = -0.92
+        // Turned to look nearly straight down by the top view switch.
+        if ui.value(controls.TOP) == 1.0 {
+            views[i].offsetY = 60.0 * distance
+            views[i].offsetZ = 6.0 * distance
+            views[i].pitch = -1.45
+        }
         views[i].fovY = 1.0
         views[i].near = 0.5
         views[i].exposure = 14.0
@@ -639,6 +646,20 @@ fn zoom(count: i32, zooms: [ui.Node], knobs: [ui.Node]) {
         zooms[i].press = controls.ZOOM
         knobs[i].xScale = share
         knobs[i].anchorX = share
+        i = i + 1
+    }
+}
+
+// The top view switch under the zoom slider (D622), as tycoon.ui starts it:
+// a pill that turns green when on, its knob at its left end when off and
+// at its right when on; a press on it is the controls' TOP.
+fn top(count: i32, tops: [ui.Node], flips: [ui.Node]) {
+    let on = ui.value(controls.TOP)
+    let i = 0
+    while i < count {
+        tops[i].press = controls.TOP
+        flips[i].xScale = on
+        flips[i].anchorX = on
         i = i + 1
     }
 }
