@@ -18,3 +18,4 @@ if(TARGET rawframe_world_ui_tests)
     target_compile_definitions(rawframe_world_ui_tests PRIVATE
         RAWFRAME_UI_FONTS="${RAWFRAME_TEST_FILES}/modules/ui/tests/fonts/")
 endif()
+rawframe_module_fuzz(NAME world_ui TARGET kept RUNS 20000 SEEDS tests/seeds/kept SOURCES tests/fuzz_kept.cpp)
