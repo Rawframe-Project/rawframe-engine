@@ -143,7 +143,8 @@ std::string hexOf(const base::Sha256Digest& digest) {
 /// Runs a tool to its end and returns what it printed, or nothing (with why
 /// said) when it did not end with code 0.
 std::optional<std::string> runTool(const fs::path& program, std::vector<std::string> arguments, const fs::path& log) {
-    auto child = process::Child::start({.program = program, .arguments = std::move(arguments), .output = log});
+    auto child = process::Child::start(
+        {.program = program, .arguments = std::move(arguments), .output = log, .stopsWithThis = true});
     if (!child.has_value()) {
         std::fprintf(stderr, "rawframe-export: %s cannot be started\n", program.string().c_str());
         return std::nullopt;

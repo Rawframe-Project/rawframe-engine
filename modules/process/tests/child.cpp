@@ -2,7 +2,8 @@
 // that code; `say <words>...` writes its words to its standard output, then
 // "said" to its standard error, and ends; `wait` says "waiting", waits for
 // a stop request (SIGTERM, or Ctrl+Break on Windows), and ends with code 3,
-// or with code 4 after ten seconds without one.
+// or with code 4 after ten seconds without one; `parent` writes the parent
+// it was told to stop with (D646), or "none".
 
 #include <atomic>
 #include <chrono>
@@ -55,6 +56,11 @@ int main(int argc, char** argv) {
         }
         std::fflush(stdout);
         std::fputs("said\n", stderr);
+        return 0;
+    }
+    if (kMode == "parent") {
+        const char* parent = std::getenv("RAWFRAME_PARENT");
+        std::fputs(parent != nullptr ? parent : "none", stdout);
         return 0;
     }
     if (kMode == "wait") {

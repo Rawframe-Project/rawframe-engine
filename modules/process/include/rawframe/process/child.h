@@ -29,7 +29,17 @@ struct ChildSettings {
     /// Where its standard output and standard error go, the file made
     /// afresh; empty for nowhere.
     std::filesystem::path output;
+    /// Whether it stops when this process ends, however this process ends
+    /// (D646): it is told this process's identity in `RAWFRAME_PARENT`, and
+    /// a Host so told asks the system for a stop signal when its parent
+    /// goes, which it takes as any stop, in order. On Linux; elsewhere the
+    /// variable is set and nothing asks yet.
+    bool stopsWithThis = false;
 };
+
+/// The environment variable a child that stops with its parent is told
+/// its parent's identity in.
+inline constexpr const char* kParentVariable = "RAWFRAME_PARENT";
 
 class Child {
 public:

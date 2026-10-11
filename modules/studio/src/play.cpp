@@ -224,7 +224,8 @@ result::Status Play::launch() {
     RAWFRAME_TRY_ASSIGN(server_,
                         process::Child::start({.program = settings_.server,
                                                .arguments = {"--config", (kAt / "server.conf").string()},
-                                               .output = kAt / "server.log"}));
+                                               .output = kAt / "server.log",
+                                               .stopsWithThis = true}));
     return {};
 }
 
@@ -245,7 +246,8 @@ result::Status Play::advance() {
     RAWFRAME_TRY_ASSIGN(client_,
                         process::Child::start({.program = settings_.client,
                                                .arguments = {"--config", (directory_ / "client.conf").string()},
-                                               .output = directory_ / "client.log"}));
+                                               .output = directory_ / "client.log",
+                                               .stopsWithThis = true}));
     return {};
 }
 

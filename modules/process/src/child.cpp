@@ -240,10 +240,28 @@ result::Result<Child> Child::start(const ChildSettings& settings) {
     if (failed == 0) {
         failed = posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK);
     }
+    // This process's environment, with its identity for a child that stops
+    // with it (D646) in place of any it was given itself.
+    std::vector<std::string> told;
+    const std::string kParentPrefix = std::string{kParentVariable} + "=";
+    for (char** each = environ; *each != nullptr; ++each) {
+        if (std::string_view{*each}.substr(0, kParentPrefix.size()) != kParentPrefix) {
+            told.emplace_back(*each);
+        }
+    }
+    if (settings.stopsWithThis) {
+        told.push_back(kParentPrefix + std::to_string(::getpid()));
+    }
+    std::vector<char*> envp;
+    envp.reserve(told.size() + 1);
+    for (std::string& each : told) {
+        envp.push_back(each.data());
+    }
+    envp.push_back(nullptr);
     pid_t pid = 0;
     if (failed == 0) {
         // posix_spawn, not posix_spawnp: the program as it is named.
-        failed = posix_spawn(&pid, argv[0], &actions, &attributes, argv.data(), environ);
+        failed = posix_spawn(&pid, argv[0], &actions, &attributes, argv.data(), envp.data());
     }
     posix_spawnattr_destroy(&attributes);
     posix_spawn_file_actions_destroy(&actions);

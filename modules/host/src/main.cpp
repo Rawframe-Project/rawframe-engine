@@ -15,6 +15,10 @@
 
 #if defined(_WIN32)
 #include <windows.h>
+#elif defined(__linux__)
+#include <cstdlib>
+#include <sys/prctl.h>
+#include <unistd.h>
 #endif
 
 namespace rawframe::host {
@@ -79,6 +83,16 @@ void installStopBridge() {
     sigemptyset(&action.sa_mask);
     sigaction(SIGINT, &action, nullptr);
     sigaction(SIGTERM, &action, nullptr);
+#if defined(__linux__)
+    // A program started to stop with its parent (D646) is sent a stop
+    // signal when the parent goes, and stops at once if it has already.
+    if (const char* parent = std::getenv("RAWFRAME_PARENT"); parent != nullptr) {
+        ::prctl(PR_SET_PDEATHSIG, SIGTERM);
+        if (std::to_string(::getppid()) != parent) {
+            requestStop(SIGTERM);
+        }
+    }
+#endif
 #else
     std::signal(SIGINT, &requestStop);
     std::signal(SIGTERM, &requestStop);

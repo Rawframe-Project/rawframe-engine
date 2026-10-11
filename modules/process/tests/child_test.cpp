@@ -14,6 +14,11 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+
+#if !defined(_WIN32)
+#include <cstdlib>
+#include <unistd.h>
+#endif
 #include <string_view>
 #include <thread>
 
@@ -88,6 +93,30 @@ RAWFRAME_TEST(AChildEndsWithItsCodeAndSaysWhatItWasGiven) {
         RAWFRAME_EXPECT(test::readFile(kSaid.string()) == "two words|a \"quote\"|back\\slash\\||said\n");
     }
 }
+
+#if !defined(_WIN32)
+RAWFRAME_TEST(AChildThatStopsWithThisIsToldWhoThisIs) {
+    // Told this process's identity, and only when it is to stop with it
+    // (D646); one this process was told itself is not passed on.
+    const std::filesystem::path kTold = scratch("told.txt");
+    auto told = Child::start(
+        {.program = RAWFRAME_PROCESS_CHILD, .arguments = {"parent"}, .output = kTold, .stopsWithThis = true});
+    RAWFRAME_EXPECT(startedAll(told));
+    if (told.has_value()) {
+        RAWFRAME_EXPECT(waitFor(*told) == 0);
+        RAWFRAME_EXPECT(test::readFile(kTold.string()) == std::to_string(::getpid()));
+    }
+    ::setenv(process::kParentVariable, "1", 1);
+    const std::filesystem::path kUntold = scratch("untold.txt");
+    auto untold = Child::start({.program = RAWFRAME_PROCESS_CHILD, .arguments = {"parent"}, .output = kUntold});
+    ::unsetenv(process::kParentVariable);
+    RAWFRAME_EXPECT(startedAll(untold));
+    if (untold.has_value()) {
+        RAWFRAME_EXPECT(waitFor(*untold) == 0);
+        RAWFRAME_EXPECT(test::readFile(kUntold.string()) == "none");
+    }
+}
+#endif
 
 RAWFRAME_TEST(AChildStopsWhenAskedAndIsKilledOtherwise) {
     const std::filesystem::path kHeard = scratch("heard.txt");

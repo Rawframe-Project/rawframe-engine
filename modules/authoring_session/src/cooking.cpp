@@ -99,7 +99,8 @@ result::Status Cooking::start(const document::Value& id,
         arguments.push_back(cache->string());
     }
     log_ = output / "cook.log";
-    auto child = process::Child::start({.program = program_, .arguments = std::move(arguments), .output = log_});
+    auto child = process::Child::start(
+        {.program = program_, .arguments = std::move(arguments), .output = log_, .stopsWithThis = true});
     if (!child.has_value()) {
         return std::unexpected{failure(authoring::AuthoringError::Internal,
                                        result::ErrorClass::Unavailable,
