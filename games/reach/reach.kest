@@ -9,6 +9,7 @@ module reach
 import controls
 import rawframe.model
 import rawframe.physics3d
+import rawframe.sound
 import rawframe.world
 import std.math
 
@@ -25,8 +26,13 @@ const REACH: f32 = 0.1
 // A hand grips past this.
 const GRIPPED: f32 = 0.5
 
+// The knock (reach.game's `sound` line), and the closing speed, meters a
+// second, a strike must have to be heard.
+const KNOCK: u64 = 0x3494a617bc371640
+const HEARD: f32 = 0.4
+
 // Where a player sits, facing the table's middle: a quarter turn round
-// from the seat before for each player seated, a fifth where the first is.
+// from the seat before for each player seated, a fifth where the first was.
 struct Seat {
     x: f64
     z: f64
@@ -57,6 +63,10 @@ struct Grip {
 }
 
 extern fn Hand.insert(entity: world.Entity, value: Hand)
+extern fn Table.count() -> i32
+extern fn Table.entity(index: i32) -> world.Entity
+extern fn Table.get(entity: world.Entity) -> Table
+extern fn Table.insert(entity: world.Entity, value: Table)
 extern fn Hand.has(entity: world.Entity) -> bool
 extern fn Hand.get(entity: world.Entity) -> Hand
 extern fn Hands.has(entity: world.Entity) -> bool
@@ -69,33 +79,39 @@ extern fn Grip.insert(entity: world.Entity, value: Grip)
 extern fn Body3D.insert(entity: world.Entity, value: physics3d.Body3D)
 extern fn Pose3D.insert(entity: world.Entity, value: physics3d.Pose3D)
 extern fn Pose3D.get(entity: world.Entity) -> physics3d.Pose3D
+extern fn Pose3D.has(entity: world.Entity) -> bool
 extern fn Velocity3D.insert(entity: world.Entity, value: physics3d.Velocity3D)
 extern fn Target3D.insert(entity: world.Entity, value: physics3d.Target3D)
 extern fn Joint3D.insert(entity: world.Entity, value: physics3d.Joint3D)
 
+// The table: how many players have been seated at it, which places the
+// next a quarter turn round. A system sees its entities a group of alike
+// ones at a time, so the count is kept here, not counted from them.
+struct Table {
+    seated: u32
+}
+
 // A player's entity arrives with its components zeroed: it is seated at
 // the next place round the table and given its two hands.
 fn join(count: i32, seats: [Seat], entities: [world.Entity]) {
-    let placed = 0
+    if Table.count() == 0 {
+        return
+    }
+    let table = Table.entity(0)
+    let seated = Table.get(table).seated
     let i = 0
     while i < count {
-        if seats[i].placed {
-            placed = placed + 1
-        }
-        i = i + 1
-    }
-    i = 0
-    while i < count {
         if !seats[i].placed {
-            let heading = f64(placed % 4) * f64(1.5707963267948966)
+            let heading = f64(seated % u32(4)) * f64(1.5707963267948966)
             seats[i] = Seat(math.sin(heading) * f64(SEAT_DISTANCE), math.cos(heading) * f64(SEAT_DISTANCE), heading,
                             true)
             give(entities[i], u8(0), seats[i])
             give(entities[i], u8(1), seats[i])
-            placed = placed + 1
+            seated = seated + u32(1)
         }
         i = i + 1
     }
+    Table.insert(table, Table(seated))
 }
 
 // One of a player's hands, made at rest.
@@ -144,6 +160,7 @@ fn gripOf(hands: controls.Hands, side: u8) -> f32 {
 }
 
 // Each hand to where its player holds it; a hand whose player is gone goes.
+// Its player is placed where it hears from.
 fn reach(count: i32, hands: [Hand], targets: [physics3d.Target3D], entities: [world.Entity]) {
     let i = 0
     while i < count {
@@ -151,8 +168,16 @@ fn reach(count: i32, hands: [Hand], targets: [physics3d.Target3D], entities: [wo
         if !Hands.has(player) || !Seat.has(player) {
             world.destroy(entities[i])
         } else {
-            let at = place(Seat.get(player), hands[i].side, Hands.get(player))
+            let seat = Seat.get(player)
+            let at = place(seat, hands[i].side, Hands.get(player))
             targets[i] = physics3d.Target3D(at.x, at.y, at.z, 0.0, 0.0, 0.0, 0.0, true)
+            // Where its player hears from (D660): a seated eye, facing the
+            // table, given once its seat is.
+            if seat.placed && !Pose3D.has(player) {
+                Pose3D.insert(player, physics3d.Pose3D(seat.x, f64(1.2), seat.z, 0.0,
+                                                       f32(math.sin(seat.heading * f64(0.5))), 0.0,
+                                                       f32(math.cos(seat.heading * f64(0.5)))))
+            }
         }
         i = i + 1
     }
@@ -222,6 +247,18 @@ fn local(pose: physics3d.Pose3D, x: f64, y: f64, z: f64) -> vec3 {
     let tz = 2.0 * (ux * py - uy * px)
     return vec3(px + pose.qw * tx + (uy * tz - uz * ty), py + pose.qw * ty + (uz * tx - ux * tz),
                 pz + pose.qw * tz + (ux * ty - uy * tx))
+}
+
+// A block that began to touch something this step, hard enough, knocks.
+fn knock(count: i32, contacts: [physics3d.Contact3D], knocks: [sound.Emitter]) {
+    let i = 0
+    while i < count {
+        if contacts[i].began > u32(0) && contacts[i].hitSpeed > HEARD {
+            knocks[i].sound = KNOCK
+            knocks[i].cue = knocks[i].cue + u32(1)
+        }
+        i = i + 1
+    }
 }
 
 // A grip whose hand opens, or is gone, is let go the tick it does: its

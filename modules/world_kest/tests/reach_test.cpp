@@ -1,10 +1,10 @@
 // Reach's hands (D656): a player joined is seated round the table and given
 // two hands, kinematic balls that go where its input holds them; a hand
 // that grips above a block takes it on a joint, lifts it, and throws it
-// when it opens moving; a second player sits a quarter turn round; and a
-// player gone takes its hands with it. The test makes the players as
-// admission would and sets their hands between ticks, as their clients'
-// input would.
+// when it opens moving, knocking as it lands (D660); a second player sits
+// a quarter turn round; and a player gone takes its hands with it. The test
+// makes the players as admission would and sets their hands between ticks,
+// as their clients' input would.
 
 #include "game_harness.h"
 #include "rawframe/physics3d/components.h"
@@ -32,6 +32,7 @@ constexpr auto kSeatId = schema::ComponentTypeId::fromText("aa174e17-8efd-4de0-b
 constexpr auto kHandId = schema::ComponentTypeId::fromText("8c4cd7c9-b5ff-4560-8edd-1dc2b3795509");
 constexpr auto kBlockId = schema::ComponentTypeId::fromText("ea827a4e-3a16-42dc-b120-eb28ea24c609");
 constexpr auto kGripId = schema::ComponentTypeId::fromText("84064735-82e5-4725-90d0-39e682d09191");
+constexpr auto kKnockId = schema::ComponentTypeId::fromText("a0fd2692-1aa3-4429-bca5-5f8b4e743eff");
 
 /// controls.Hands, reach.Seat, reach.Hand, and reach.Block, as the program
 /// lays them out.
@@ -64,6 +65,14 @@ struct Block {
     bool held = false;
     world::EntityHandle holder;
     std::uint32_t grips = 0;
+};
+
+/// rawframe.sound.Emitter.
+struct Emitter {
+    std::uint64_t sound = 0;
+    std::uint32_t cue = 0;
+    bool playing = false;
+    std::uint8_t despawn = 0;
 };
 
 /// Reach, composed and started from its directory.
@@ -129,6 +138,8 @@ RAWFRAME_TEST(AHandTakesABlockLiftsItAndThrowsIt) {
         return;
     }
     RAWFRAME_EXPECT(near(poseOf(world, kRight), 0.2, 0.95, 0.55, 0.01));
+    // It hears from a seated eye above its seat (D660).
+    RAWFRAME_EXPECT(near(poseOf(world, kPlayer), 0, 1.2, 0.9, 1e-6));
     // The right hand just above the middle block of the near row: 0.15
     // from the table's middle, 0.75 ahead of the seat.
     Hands* const kHands = valueOf<Hands>(world, kPlayer, kHandsId);
@@ -164,8 +175,12 @@ RAWFRAME_TEST(AHandTakesABlockLiftsItAndThrowsIt) {
     RAWFRAME_EXPECT(!valueOf<Block>(world, kBlock, kBlockId)->held);
     const auto* kFlying = valueOf<physics3d::Velocity3D>(world, kBlock, physics3d::Velocity3D::kComponentTypeId);
     RAWFRAME_EXPECT(kFlying->z < -4.0F);
+    const std::uint32_t kKnocked = valueOf<Emitter>(world, kBlock, kKnockId)->cue;
     played.run(90);
     RAWFRAME_EXPECT(poseOf(world, kBlock).z < -0.6);
+    // It knocked as it landed (D660).
+    const Emitter* const kKnock = valueOf<Emitter>(world, kBlock, kKnockId);
+    RAWFRAME_EXPECT(kKnock->sound == 0x3494a617bc371640 && kKnock->cue > kKnocked);
     // A second player sits a quarter turn round, at the table's +X side.
     const world::EntityHandle kSecond = joined(world);
     played.run(3);
