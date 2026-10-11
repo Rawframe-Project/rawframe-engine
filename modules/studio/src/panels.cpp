@@ -228,13 +228,20 @@ void ShellParticipant::showScene(std::size_t at) {
     sceneAt_ = at;
     if (kChanged) {
         // A scene's view is the session's, unknown here until it says,
-        // and its search starts empty.
+        // and its search starts empty. A style sheet has neither, nor a
+        // preview (D637).
         view_.reset();
         find_.clear();
         static_cast<void>(tree_->scrollTo(entitiesColumn_, 0, 0));
-        showView();
-        if (preview_.has_value()) {
-            attachPreview();
+        if (sheetChosen()) {
+            clear(viewRows_);
+            viewFields_.clear();
+            showHistoryList();
+        } else {
+            showView();
+            if (preview_.has_value()) {
+                attachPreview();
+            }
         }
     }
     for (std::size_t each = 0; each < sceneRows_.size(); ++each) {
@@ -253,6 +260,10 @@ void ShellParticipant::showScene(std::size_t at) {
     entity_.clear();
     components_ = 0;
     findField_.reset();
+    if (sheetChosen()) {
+        showSheet();
+        return;
+    }
     const std::optional<Value> kList = entitiesShown();
     const Value* listed = kList.has_value() ? kList->find("entities") : nullptr;
     if (listed == nullptr || listed->kind() != Value::Kind::Array) {
@@ -341,6 +352,10 @@ std::optional<Value> ShellParticipant::entitiesShown() {
 }
 
 void ShellParticipant::showEntity(std::size_t at) {
+    if (sheetChosen()) {
+        showClass(at);
+        return;
+    }
     endEdit();
     fields_.clear();
     entityAt_ = at;
@@ -520,7 +535,8 @@ void ShellParticipant::showView() {
 void ShellParticipant::showHistoryList() {
     clear(historyRows_);
     entryRows_.clear();
-    if (scene_.empty()) {
+    // A style sheet's history is undone and redone, not listed (D637).
+    if (scene_.empty() || sheetChosen()) {
         return;
     }
     auto heading = row(scenesColumn_, "History", kQuiet, kPanel);

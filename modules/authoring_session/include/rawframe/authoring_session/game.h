@@ -46,4 +46,8 @@ std::optional<base::Bits128> sidecarIdentity(const std::filesystem::path& source
 /// sidecar gives it.
 std::vector<std::pair<base::Bits128, std::filesystem::path>> scenesBeside(const std::filesystem::path& game);
 
+/// Every style sheet (`.styles`) under the game description's directory,
+/// in path order (D637).
+std::vector<std::filesystem::path> sheetsBeside(const std::filesystem::path& game);
+
 } // namespace rawframe::authoring_session

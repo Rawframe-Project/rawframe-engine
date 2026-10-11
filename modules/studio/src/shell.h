@@ -92,7 +92,10 @@ struct FieldRow {
         /// The path of a new scene (D449).
         NewScene,
         /// What the entity column shows of the scene (D473).
-        Find
+        Find,
+        /// A part of a style class's look: `component` its variant, `field`
+        /// the part (D637).
+        Part
     };
     ui::Node value{};
     Role role = Role::Field;
@@ -291,6 +294,21 @@ private:
     /// `why` in the header, nothing asked, the entity shown as it stands.
     void refuse(const std::string& why);
 
+    /// Whether the chosen document is a style sheet (D637).
+    [[nodiscard]] bool sheetChosen() const noexcept {
+        return !scene_.empty() && sceneAt_ < sheets_.size() && sheets_[sceneAt_];
+    }
+    /// The chosen style sheet's classes in the entity column, read whole
+    /// from the session (`styles.read_sheet`).
+    void showSheet();
+    /// The class at `at`: each variant's look, every part a field showing
+    /// what the sheet sets.
+    void showClass(std::size_t at);
+    /// `text` set as the part `row` names (`styles.set_part`): nothing
+    /// unsets it, JSON is taken as it reads, and anything else as text, so
+    /// a color is typed as `#rrggbbaa`.
+    void setPart(const FieldRow& row, const std::string& text);
+
     /// One operation asked of the session for the chosen scene; `done` or
     /// the session's message said; the scene shown again with `choose`
     /// chosen if it stands.
@@ -379,6 +397,10 @@ private:
     ui::Node retryNode_{};
     std::uint64_t opened_ = 0;
     std::vector<std::string> scenes_;
+    /// Whether each document listed with the scenes is a style sheet
+    /// (D637), and the chosen sheet as the session last read it.
+    std::vector<bool> sheets_;
+    std::optional<Value> sheet_;
     /// The assets the game declares, read as it opens (D455).
     std::vector<Asset> assets_;
     /// Each scene's identity, from its sidecar, as 32 hex digits.

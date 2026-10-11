@@ -85,6 +85,14 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (node == undoNode_ || node == redoNode_) {
         endEdit();
         step(node == undoNode_ ? "authoring.undo" : "authoring.redo");
+    } else if (sheetChosen() &&
+               (node == newNode_ || node == deleteNode_ || node == duplicateNode_ || node == moveNode_ ||
+                node == upNode_ || node == downNode_ || node == restoreNode_ || node == uninstanceNode_)) {
+        // A sheet's classes are as the sheet has them; their looks change
+        // part by part (D637).
+        endEdit();
+        ++refused_;
+        say("a style class changes part by part");
     } else if (node == newNode_ && !scene_.empty()) {
         endEdit();
         create();
@@ -265,6 +273,10 @@ Value ShellParticipant::operationOn(std::string_view operation) const {
 }
 
 void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
+    if (row.role == FieldRow::Role::Part) {
+        setPart(row, text);
+        return;
+    }
     Value operation;
     std::string done;
     if (row.role == FieldRow::Role::Name) {
@@ -436,6 +448,11 @@ ShellParticipant::copyOf(const Value& components, const std::string& entity, con
 }
 
 void ShellParticipant::moveTo(std::size_t sceneAt) {
+    if (sceneAt < sheets_.size() && sheets_[sceneAt]) {
+        ++refused_;
+        say("an entity moves to a scene");
+        return;
+    }
     const std::string kTarget = sceneAt < scenes_.size() ? scenes_[sceneAt] : std::string{};
     const bool kBrought = entityAt_ < brought_.size() && brought_[entityAt_];
     const std::optional<Value> kRead = read(scene_, "scene.read_entity", entity_);
