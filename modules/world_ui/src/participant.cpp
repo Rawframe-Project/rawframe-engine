@@ -47,15 +47,15 @@ constexpr diagnostics::EventIdentity kAccessible{"ui", "accessibility_ready"};
 constexpr diagnostics::EventIdentity kInaccessible{"ui", "accessibility_unavailable"};
 constexpr diagnostics::EventIdentity kKeyUnknown{"ui", "label_unformatted"};
 constexpr diagnostics::EventIdentity kKeptUnread{"ui", "kept_unread"};
-constexpr diagnostics::EventIdentity kRestyled{"ui", "ui_restyled"};
-constexpr diagnostics::EventIdentity kStylesUnread{"ui", "styles_unread"};
 #if RAWFRAME_FILE_SYSTEM
 constexpr diagnostics::EventIdentity kKeptUnwritten{"ui", "kept_unwritten"};
+constexpr diagnostics::EventIdentity kRestyled{"ui", "ui_restyled"};
+constexpr diagnostics::EventIdentity kStylesUnread{"ui", "styles_unread"};
+/// A styles document's most bytes read again as an author edits it (D634).
+constexpr std::size_t kMostStylesBytes = std::size_t{4} * 1024 * 1024;
 #endif
 /// The decoded levels each image may hold.
 constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
-/// A styles document's most bytes read again as an author edits it (D634).
-constexpr std::size_t kMostStylesBytes = std::size_t{4} * 1024 * 1024;
 /// The fonts' bytes, all together (D386).
 constexpr std::uint64_t kFontBudgetBytes = std::uint64_t{64} * 1024 * 1024;
 constexpr std::string_view kProvided[] = {
@@ -282,8 +282,8 @@ public:
         // game is: a game without UI, and the web, keep none.
         [[maybe_unused]] const std::optional<std::string> kKept = context.configuration().path("ui.kept");
         // How often a game read from its directory has its styles read again
-        // (D634), in Host iterations; nought never.
-        RAWFRAME_TRY_ASSIGN(const std::uint64_t kReloadEvery,
+        // (D634), in Host iterations; nought never, and never on the web.
+        RAWFRAME_TRY_ASSIGN([[maybe_unused]] const std::uint64_t kReloadEvery,
                             context.configuration().unsignedInteger("ui.reload_every", 0));
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
             return {};
