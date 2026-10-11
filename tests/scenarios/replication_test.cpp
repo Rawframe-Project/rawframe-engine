@@ -167,6 +167,8 @@ RAWFRAME_TEST(ReplicationHoldsThroughLossAndReordering) {
     // Redundant input windows survive a quarter of datagrams lost.
     const auto kServer = scenario.server->statistics();
     RAWFRAME_EXPECT(kServer.inputsConsumed > kServer.inputsNeutral);
+    // Every window read is counted with its bytes (D655).
+    RAWFRAME_EXPECT(kServer.inputWindows > 0 && kServer.inputBytes >= kServer.inputWindows);
     RAWFRAME_EXPECT(scenario.client->statistics().recordsStale > 0 || scenario.client->statistics().stateDatagrams > 0);
 }
 

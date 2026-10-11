@@ -151,6 +151,10 @@ struct ServerReplicationStatistics {
     std::uint64_t acknowledgementsRefused = 0;
     /// Mappings retired because the entity left a connection's interest.
     std::uint64_t interestLeft = 0;
+    /// Input windows read, and their payload bytes, all connections
+    /// together (D655).
+    std::uint64_t inputWindows = 0;
+    std::uint64_t inputBytes = 0;
     std::uint64_t inputsConsumed = 0;
     std::uint64_t inputsHeld = 0;
     std::uint64_t inputsNeutral = 0;

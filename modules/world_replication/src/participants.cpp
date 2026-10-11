@@ -220,6 +220,8 @@ public:
                       diagnostics::field("recordsHeld", kStatistics.recordsHeld),
                       diagnostics::field("recordsDeferred", kStatistics.recordsDeferred),
                       diagnostics::field("interestLeft", kStatistics.interestLeft),
+                      diagnostics::field("inputWindows", kStatistics.inputWindows),
+                      diagnostics::field("inputBytes", kStatistics.inputBytes),
                       diagnostics::field("inputsConsumed", kStatistics.inputsConsumed),
                       diagnostics::field("inputsHeld", kStatistics.inputsHeld),
                       diagnostics::field("inputsNeutral", kStatistics.inputsNeutral),

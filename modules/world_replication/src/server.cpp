@@ -163,6 +163,8 @@ void ReplicationServer::State::onInput(Peer& peer, const network::SessionEvent& 
         strike(peer);
         return;
     }
+    ++statistics.inputWindows;
+    statistics.inputBytes += event.payload.size();
     peer.newestHeard = std::max(peer.newestHeard, kWindow->newestInputTick);
     // What the lead was since the window before counts if this one came
     // within a command's age of it; a longer silence was a stall, and
