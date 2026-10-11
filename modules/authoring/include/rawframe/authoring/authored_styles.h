@@ -3,10 +3,16 @@
 // A game's style sheet open for authoring (D636): a `ui.styles` document
 // (rawframe/ui/styles.h) as AuthoredScene is a scene, each change a journal
 // of deltas kept in its history (history.h), which undo and redo walk. A
-// delta names one slot of one class by the class's identity: one part of
-// one variant's look (`set_field`, its field `hovered.fill` say), from its
-// value as the document holds it, or none, to another. A change is kept
-// only where the whole sheet still reads, so every generation is in form.
+// delta names one slot of one class by the class's identity, from what the
+// document holds there, or none, to another:
+//
+//   set_field     one part of one variant's look, `hovered.fill` say
+//   create_node   a class, from none to its record at its place (D638)
+//   destroy_node  a class, from its record at its place to none
+//   set_name      a class's name
+//
+// A change is kept only where the whole sheet still reads, so every
+// generation is in form.
 
 #include "rawframe/authoring/history.h"
 #include "rawframe/authoring/operations.h"
@@ -26,12 +32,22 @@
 
 namespace rawframe::authoring {
 
-/// One part of one variant of one class, from its value to another; none
-/// is the part not set.
+/// One slot of one class, from what it holds to another; none is the slot
+/// empty: a part not set, a class not there.
 struct StyleDelta {
+    enum class Kind : std::uint8_t {
+        SetPart,
+        CreateClass,
+        DestroyClass,
+        SetName,
+    };
+    Kind kind = Kind::SetPart;
     std::uint64_t style = 0;
+    /// A part's.
     std::string variant;
     std::string part;
+    /// A class made or destroyed: where it stands among the sheet's.
+    std::size_t place = 0;
     std::optional<document::Value> before;
     std::optional<document::Value> after;
 };
@@ -128,6 +144,11 @@ private:
     ui::StyleSheet sheet_;
     History<Entry> history_;
 };
+
+/// What a sheet's journal does, in a line an author reads in a history, as
+/// a scene's (D454, D638): its first delta, as `set hovered.fill`,
+/// and how many more there are; `no change` for an empty one.
+[[nodiscard]] std::string summaryOf(std::span<const StyleDelta> journal);
 
 /// A style sheet's query answered (`styles.read_sheet`: `{"sheet": ...}`, the
 /// document whole); refuses (`ValidationFailed`) a scene's.

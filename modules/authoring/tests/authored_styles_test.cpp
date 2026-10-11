@@ -2,7 +2,8 @@
 // a variant made and gone with its first and last part, each change one
 // entry that undo and redo walk exactly back to the bytes before, the
 // clean place kept, a batch one entry or nothing, changes the sheet does
-// not read refused with the document as it was, and the sheet read whole.
+// not read refused with the document as it was, and the sheet read whole;
+// classes made, removed, and renamed (D638).
 
 #include "rawframe/authoring/authored_styles.h"
 #include "rawframe/authoring/errors.h"
@@ -146,6 +147,51 @@ RAWFRAME_TEST(AStyleSheetsBatchIsOneEntryOrNothing) {
         indexed = indexed || (kField.key == "index" && kField.value == "0");
     }
     RAWFRAME_EXPECT(indexed);
+}
+
+RAWFRAME_TEST(AStyleSheetsClassesAreMadeRemovedAndRenamed) {
+    auto opened = AuthoredStyles::open(kDocument, kSheet);
+    RAWFRAME_EXPECT(opened.has_value());
+    if (!opened.has_value()) {
+        return;
+    }
+    AuthoredStyles& styles = **opened;
+    constexpr std::uint64_t kTip = 0x00000000000000a1;
+    // Made first among the classes, then given a look and a new name, in
+    // one entry.
+    const std::array<Operation, 3> kMade = {
+        CreateStyleClass{.style = kTip, .name = "tip", .place = 0},
+        SetStylePart{.style = kTip, .variant = "base", .part = "radius", .value = Value::integer(4)},
+        RenameStyleClass{.style = kTip, .name = "tooltip"}};
+    RAWFRAME_EXPECT(styles.change(0, kMade).has_value());
+    RAWFRAME_EXPECT(styles.sheet().styles.size() == 3 && styles.sheet().styles[0].id == kTip &&
+                    styles.sheet().styles[0].name == "tooltip" && styles.sheet().styles[0].looks[0].look.radius == 4);
+    RAWFRAME_EXPECT(styles.text().find("\"styleId\": \"00000000000000a1\"") != std::string::npos);
+    RAWFRAME_EXPECT(summaryOf(styles.journalAt(0)) == "create class tip and 2 more");
+    // The button removed, its looks and transitions with it; undone, it is
+    // back where it stood.
+    const std::array<Operation, 1> kRemoved = {RemoveStyleClass{.style = kButton}};
+    RAWFRAME_EXPECT(styles.change(1, kRemoved).has_value() && styles.sheet().styles.size() == 2 &&
+                    !styles.sheet().styleWithId(kButton).has_value());
+    RAWFRAME_EXPECT(summaryOf(styles.journalAt(1)) == "delete class button");
+    RAWFRAME_EXPECT(styles.undo(2).has_value() && styles.sheet().styleWithId(kButton) == 1);
+    RAWFRAME_EXPECT(styles.undo(3).has_value() && styles.text() == kSheet);
+    // Refused: an identity the sheet holds or nought, a place past the
+    // classes, an unknown class removed or renamed; nothing kept.
+    const std::array<Operation, 1> kTaken = {CreateStyleClass{.style = kButton, .name = "again"}};
+    const std::array<Operation, 1> kNought = {CreateStyleClass{.style = 0, .name = "none"}};
+    const std::array<Operation, 1> kPast = {CreateStyleClass{.style = kTip, .name = "tip", .place = 3}};
+    const std::array<Operation, 1> kGone = {RemoveStyleClass{.style = kTip}};
+    const std::array<Operation, 1> kNamed = {RenameStyleClass{.style = kTip, .name = "x"}};
+    RAWFRAME_EXPECT(refusedWith(styles.change(4, kTaken), AuthoringError::Conflict));
+    RAWFRAME_EXPECT(refusedWith(styles.change(4, kNought), AuthoringError::Conflict));
+    RAWFRAME_EXPECT(refusedWith(styles.change(4, kPast), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(styles.change(4, kGone), AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(refusedWith(styles.change(4, kNamed), AuthoringError::TargetNotFound));
+    // A name the sheet does not read: past its 64 characters.
+    const std::array<Operation, 1> kLong = {RenameStyleClass{.style = kButton, .name = std::string(65, 'a')}};
+    RAWFRAME_EXPECT(refusedWith(styles.change(4, kLong), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(styles.text() == kSheet);
 }
 
 RAWFRAME_TEST(AStyleSheetRefusesWhatItDoesNotRead) {

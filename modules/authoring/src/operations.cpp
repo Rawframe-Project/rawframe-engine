@@ -44,7 +44,13 @@ constexpr std::array<InputDeclaration, 4> kStylePartInputs = {{{"style", InputTy
                                                                {"part", InputType::Text},
                                                                {"value", InputType::StyleValue}}};
 
-constexpr std::array<OperationDeclaration, 19> kDeclarations = {{
+constexpr std::array<InputDeclaration, 3> kCreateClassInputs = {
+    {{"style", InputType::Style}, {"name", InputType::Text}, {"place", InputType::OptionalPlace}}};
+constexpr std::array<InputDeclaration, 1> kClassInputs = {{{"style", InputType::Style}}};
+constexpr std::array<InputDeclaration, 2> kRenameClassInputs = {
+    {{"style", InputType::Style}, {"name", InputType::Text}}};
+
+constexpr std::array<OperationDeclaration, 22> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -60,6 +66,9 @@ constexpr std::array<OperationDeclaration, 19> kDeclarations = {{
     {.name = "scene.add_instance", .targets = "rawframe.scene instance", .inputs = kAddInstanceInputs},
     {.name = "scene.remove_instance", .targets = "rawframe.scene instance", .inputs = kEntityInputs},
     {.name = "styles.set_part", .targets = "ui.styles part", .inputs = kStylePartInputs},
+    {.name = "styles.create_class", .targets = "ui.styles class", .inputs = kCreateClassInputs},
+    {.name = "styles.remove_class", .targets = "ui.styles class", .inputs = kClassInputs},
+    {.name = "styles.rename_class", .targets = "ui.styles class", .inputs = kRenameClassInputs},
     {.name = "scene.list_entities", .history = HistoryClass::ReadOnly, .targets = "rawframe.scene", .inputs = {}},
     {.name = "scene.read_entity",
      .history = HistoryClass::ReadOnly,
@@ -168,7 +177,7 @@ result::Result<Journal> derive(const scene::Scene& scene,
                                const ComponentCatalog& catalog,
                                const scene::SceneSource* sources,
                                base::Bits128 document) {
-    if (std::holds_alternative<SetStylePart>(operation)) {
+    if (changesStyles(operation)) {
         return result::fail(result::ErrorClass::InvalidArgument,
                             kAuthoringDomain,
                             code(AuthoringError::ValidationFailed),

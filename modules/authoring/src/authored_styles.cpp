@@ -87,35 +87,155 @@ std::optional<Value> partIn(const Value& root, std::uint64_t style, std::string_
     return held != nullptr ? std::optional<Value>{*held} : std::nullopt;
 }
 
+/// The record of class `style` in `root`, if it has one.
+std::optional<Value> classIn(const Value& root, std::uint64_t style) {
+    const std::optional<std::size_t> kPlace = placeOf(root, style);
+    return kPlace.has_value() ? std::optional<Value>{root.find("styles")->items()[*kPlace]} : std::nullopt;
+}
+
+/// What `delta`'s slot holds in `root`.
+std::optional<Value> slotIn(const Value& root, const StyleDelta& delta) {
+    switch (delta.kind) {
+    case StyleDelta::Kind::SetPart:
+        return partIn(root, delta.style, delta.variant, delta.part);
+    case StyleDelta::Kind::CreateClass:
+    case StyleDelta::Kind::DestroyClass:
+        return classIn(root, delta.style);
+    case StyleDelta::Kind::SetName: {
+        const std::optional<Value> kClass = classIn(root, delta.style);
+        const Value* name = kClass.has_value() ? kClass->find("name") : nullptr;
+        return name != nullptr ? std::optional<Value>{*name} : std::nullopt;
+    }
+    }
+    return std::nullopt;
+}
+
 /// `delta` applied to `root` forward or backward, where its slot holds what
 /// it leaves from.
 result::Status applyTo(Value& root, const StyleDelta& delta, bool forward) {
-    const std::optional<std::size_t> kPlace = placeOf(root, delta.style);
-    if (!kPlace.has_value()) {
-        return refuse(result::ErrorClass::NotFound, AuthoringError::TargetNotFound, "the sheet has no such class");
-    }
-    if (!same(partIn(root, delta.style, delta.variant, delta.part), forward ? delta.before : delta.after)) {
+    const std::optional<Value>& kFrom = forward ? delta.before : delta.after;
+    const std::optional<Value>& kTo = forward ? delta.after : delta.before;
+    if (!same(slotIn(root, delta), kFrom)) {
         return refuse(result::ErrorClass::FailedPrecondition,
                       AuthoringError::DeltaMismatch,
-                      "a class's part does not hold what its change leaves from");
+                      "a class's slot does not hold what its change leaves from");
     }
     const Value& kClasses = *root.find("styles");
-    const Value& kClass = kClasses.items()[*kPlace];
-    const Value* look = kClass.find(delta.variant);
-    Value changed = withMember(look != nullptr ? *look : Value::object(),
-                               ui::kStyleLookFields,
-                               delta.part,
-                               forward ? delta.after : delta.before);
-    // A look that sets nothing is no variant.
-    const std::optional<Value> kLook =
-        changed.names().empty() ? std::nullopt : std::optional<Value>{std::move(changed)};
+    const std::optional<std::size_t> kPlace = placeOf(root, delta.style);
     Value classes = Value::array();
-    for (std::size_t each = 0; each < kClasses.items().size(); ++each) {
-        classes.push(each == *kPlace ? withMember(kClass, ui::kStyleFields, delta.variant, kLook)
-                                     : kClasses.items()[each]);
+    if (delta.kind == StyleDelta::Kind::CreateClass || delta.kind == StyleDelta::Kind::DestroyClass) {
+        // A class comes or goes at its place.
+        const std::size_t kAt = kPlace.value_or(delta.place);
+        if (!kPlace.has_value() && kAt > kClasses.items().size()) {
+            return refuse(result::ErrorClass::FailedPrecondition,
+                          AuthoringError::DeltaMismatch,
+                          "a class's place is past the sheet's classes");
+        }
+        for (std::size_t each = 0; each <= kClasses.items().size(); ++each) {
+            if (each == kAt && kTo.has_value()) {
+                classes.push(*kTo);
+            }
+            if (each < kClasses.items().size() && !(kPlace.has_value() && each == *kPlace)) {
+                classes.push(kClasses.items()[each]);
+            }
+        }
+    } else {
+        if (!kPlace.has_value()) {
+            return refuse(result::ErrorClass::NotFound, AuthoringError::TargetNotFound, "the sheet has no such class");
+        }
+        const Value& kClass = kClasses.items()[*kPlace];
+        Value changed;
+        if (delta.kind == StyleDelta::Kind::SetName) {
+            changed = withMember(kClass, ui::kStyleFields, "name", kTo);
+        } else {
+            const Value* look = kClass.find(delta.variant);
+            Value parts = withMember(look != nullptr ? *look : Value::object(), ui::kStyleLookFields, delta.part, kTo);
+            // A look that sets nothing is no variant.
+            const std::optional<Value> kLook =
+                parts.names().empty() ? std::nullopt : std::optional<Value>{std::move(parts)};
+            changed = withMember(kClass, ui::kStyleFields, delta.variant, kLook);
+        }
+        for (std::size_t each = 0; each < kClasses.items().size(); ++each) {
+            classes.push(each == *kPlace ? changed : kClasses.items()[each]);
+        }
     }
     root = withMember(root, kDocumentFields, "styles", classes);
     return {};
+}
+
+/// The delta `operation` makes of `staged`, none where it changes nothing;
+/// refused where it cannot be made.
+result::Result<std::optional<StyleDelta>> deltaOf(const Value& staged, const Operation& operation) {
+    const auto kUnknown = [] {
+        return refuse(result::ErrorClass::NotFound, AuthoringError::TargetNotFound, "the sheet has no such class");
+    };
+    std::optional<StyleDelta> delta;
+    if (const auto* set = std::get_if<SetStylePart>(&operation)) {
+        if (std::ranges::find(ui::kStyleVariantFields, set->variant) == ui::kStyleVariantFields.end() ||
+            std::ranges::find(ui::kStyleLookFields, set->part) == ui::kStyleLookFields.end()) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          AuthoringError::ValidationFailed,
+                          "a part is one a look has, of one of a class's variants");
+        }
+        if (!placeOf(staged, set->style).has_value()) {
+            return kUnknown();
+        }
+        delta = StyleDelta{.style = set->style,
+                           .variant = set->variant,
+                           .part = set->part,
+                           .before = partIn(staged, set->style, set->variant, set->part),
+                           .after = set->value};
+    } else if (const auto* create = std::get_if<CreateStyleClass>(&operation)) {
+        const std::size_t kCount = staged.find("styles")->items().size();
+        if (create->style == 0 || placeOf(staged, create->style).has_value()) {
+            return refuse(result::ErrorClass::AlreadyExists,
+                          AuthoringError::Conflict,
+                          "a new class's identity is fresh and not nought");
+        }
+        if (create->place.value_or(kCount) > kCount) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          AuthoringError::ValidationFailed,
+                          "a new class's place is among the sheet's classes or after them");
+        }
+        std::array<char, 16> digits{};
+        for (std::size_t at = 0; at < digits.size(); ++at) {
+            digits[at] = "0123456789abcdef"[(create->style >> (60 - 4 * at)) & 0xFU];
+        }
+        Value record = Value::object();
+        record.add("styleId", Value::string(std::string{digits.data(), digits.size()}));
+        record.add("name", Value::string(create->name));
+        delta = StyleDelta{.kind = StyleDelta::Kind::CreateClass,
+                           .style = create->style,
+                           .place = create->place.value_or(kCount),
+                           .before = std::nullopt,
+                           .after = std::move(record)};
+    } else if (const auto* remove = std::get_if<RemoveStyleClass>(&operation)) {
+        const std::optional<std::size_t> kPlace = placeOf(staged, remove->style);
+        if (!kPlace.has_value()) {
+            return kUnknown();
+        }
+        delta = StyleDelta{.kind = StyleDelta::Kind::DestroyClass,
+                           .style = remove->style,
+                           .place = *kPlace,
+                           .before = classIn(staged, remove->style),
+                           .after = std::nullopt};
+    } else if (const auto* rename = std::get_if<RenameStyleClass>(&operation)) {
+        if (!placeOf(staged, rename->style).has_value()) {
+            return kUnknown();
+        }
+        StyleDelta named{.kind = StyleDelta::Kind::SetName, .style = rename->style};
+        named.before = slotIn(staged, named);
+        named.after = Value::string(rename->name);
+        delta = std::move(named);
+    } else {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      AuthoringError::ValidationFailed,
+                      "the operation changes a scene, not a style sheet");
+    }
+    if (same(delta->before, delta->after)) {
+        return std::optional<StyleDelta>{};
+    }
+    return delta;
 }
 
 std::size_t bytesOf(const StyleDelta& delta) {
@@ -165,30 +285,14 @@ result::Result<Committed> AuthoredStyles::change(std::uint64_t generation, std::
         const auto kAt = [at](std::unexpected<result::Error> refused) {
             return std::unexpected<result::Error>{std::move(refused).error().withContext("index", std::to_string(at))};
         };
-        const auto* set = std::get_if<SetStylePart>(&operations[at]);
-        if (set == nullptr) {
-            return kAt(refuse(result::ErrorClass::InvalidArgument,
-                              AuthoringError::ValidationFailed,
-                              "the operation changes a scene, not a style sheet"));
+        auto made = deltaOf(staged, operations[at]);
+        if (!made.has_value()) {
+            return kAt(std::unexpected<result::Error>{std::move(made).error()});
         }
-        if (std::ranges::find(ui::kStyleVariantFields, set->variant) == ui::kStyleVariantFields.end() ||
-            std::ranges::find(ui::kStyleLookFields, set->part) == ui::kStyleLookFields.end()) {
-            return kAt(refuse(result::ErrorClass::InvalidArgument,
-                              AuthoringError::ValidationFailed,
-                              "a part is one a look has, of one of a class's variants"));
-        }
-        if (!placeOf(staged, set->style).has_value()) {
-            return kAt(
-                refuse(result::ErrorClass::NotFound, AuthoringError::TargetNotFound, "the sheet has no such class"));
-        }
-        StyleDelta delta{.style = set->style,
-                         .variant = set->variant,
-                         .part = set->part,
-                         .before = partIn(staged, set->style, set->variant, set->part),
-                         .after = set->value};
-        if (same(delta.before, delta.after)) {
+        if (!made->has_value()) {
             continue;
         }
+        StyleDelta delta = std::move(**made);
         RAWFRAME_TRY(applyTo(staged, delta, true));
         bytes += bytesOf(delta);
         journal.push_back(std::move(delta));
@@ -243,6 +347,36 @@ result::Result<Committed> AuthoredStyles::step(std::uint64_t generation, bool un
     history_.stepped(undo);
     ++generation_;
     return Committed{.generation = generation_, .deltas = kDeltas};
+}
+
+std::string summaryOf(std::span<const StyleDelta> journal) {
+    if (journal.empty()) {
+        return "no change";
+    }
+    const StyleDelta& kFirst = journal.front();
+    const auto kName = [](const std::optional<Value>& value, std::string_view member) {
+        const Value* held = value.has_value() ? (member.empty() ? &*value : value->find(member)) : nullptr;
+        return held != nullptr && held->text() != nullptr ? *held->text() : std::string{};
+    };
+    std::string made;
+    switch (kFirst.kind) {
+    case StyleDelta::Kind::SetPart:
+        made = (kFirst.after.has_value() ? "set " : "unset ") + kFirst.variant + "." + kFirst.part;
+        break;
+    case StyleDelta::Kind::CreateClass:
+        made = "create class " + kName(kFirst.after, "name");
+        break;
+    case StyleDelta::Kind::DestroyClass:
+        made = "delete class " + kName(kFirst.before, "name");
+        break;
+    case StyleDelta::Kind::SetName:
+        made = "rename class to " + kName(kFirst.after, "");
+        break;
+    }
+    if (journal.size() > 1) {
+        made += " and " + std::to_string(journal.size() - 1) + " more";
+    }
+    return made;
 }
 
 result::Result<Value> answer(const AuthoredStyles& styles, const Query& query) {

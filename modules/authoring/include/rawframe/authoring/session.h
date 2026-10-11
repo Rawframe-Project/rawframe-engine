@@ -26,18 +26,18 @@
 // before any public stability promise only the tool's own is accepted
 // (SPEC-0040's capability exchange, exact match). `id` is the client's, any
 // JSON value, given back in the reply; `scene` is a scene's path under the
-// game's directory, or for apply, read, undo, and redo a style sheet's
-// (`.styles`, D636: `styles.set_part`, `styles.read_sheet`); `expects`, on
-// undo and redo, is the generation the client last saw, as a request's
-// is. `select` chooses the scene's entities
-// by their SourceEntityIds, in place of what was chosen: no change to the
-// document, but what undo and redo put back with it (D417). `apply_together`
-// is SPEC-0040's multi-document transaction (D497): each part an atomic
-// request to its scene, all kept or none, each scene's part one entry in
-// its own history. `cook` is SPEC-0040's long-running operation (D502): it
-// cooks the game's directory into `output` (an absolute path, outside it),
-// reusing what `cache` holds if it names one, and answers when it ends,
-// other records answered meanwhile, telling how far it is as it goes:
+// game's directory, or for apply, read, undo, redo, and history a style
+// sheet's (`.styles`, D636, D638); `expects`, on undo and redo, is the
+// generation the client last saw, as a request's is. `select` chooses the
+// scene's entities by their SourceEntityIds, in place of what was chosen:
+// no change to the document, but what undo and redo put back with it
+// (D417). `apply_together` is SPEC-0040's multi-document transaction
+// (D497): each part an atomic request to its scene, all kept or none, each
+// scene's part one entry in its own history. `cook` is SPEC-0040's
+// long-running operation (D502): it cooks the game's directory into
+// `output` (an absolute path, outside it), reusing what `cache` holds if it
+// names one, and answers when it ends, other records answered meanwhile,
+// telling how far it is as it goes:
 //
 //   {"kind":"authoring.progress","id":9,"step":3,"steps":21,"source":"gate.scene"}
 //

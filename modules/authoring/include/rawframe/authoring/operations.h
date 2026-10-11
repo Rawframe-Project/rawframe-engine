@@ -208,6 +208,23 @@ struct SetStylePart {
     std::string part;
     std::optional<document::Value> value;
 };
+/// A new class at `place` among the sheet's, or after them all (D638):
+/// `style` its identity, fresh, as the caller makes one (16 hex digits,
+/// not all nought), and `name` its name; it sets no look yet.
+struct CreateStyleClass {
+    std::uint64_t style = 0;
+    std::string name;
+    std::optional<std::size_t> place;
+};
+/// A class gone, with its looks and transitions. A node naming it is
+/// unstyled until a class of its identity comes again.
+struct RemoveStyleClass {
+    std::uint64_t style = 0;
+};
+struct RenameStyleClass {
+    std::uint64_t style = 0;
+    std::string name;
+};
 
 /// The id an instantiation named `instance` gives the source's entity
 /// `source`: a version 8 UUID from their SHA-256 (D156).
@@ -227,7 +244,15 @@ using Operation = std::variant<CreateEntity,
                                RestoreEntity,
                                AddInstance,
                                RemoveInstance,
-                               SetStylePart>;
+                               SetStylePart,
+                               CreateStyleClass,
+                               RemoveStyleClass,
+                               RenameStyleClass>;
+
+/// Whether `operation` is a style sheet's rather than a scene's (D636).
+[[nodiscard]] constexpr bool changesStyles(const Operation& operation) noexcept {
+    return operation.index() >= std::variant_size_v<Operation> - 4;
+}
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the
 /// scene holds, one entity whole, and the entities a typed search finds

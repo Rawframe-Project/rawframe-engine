@@ -191,10 +191,24 @@ result::Result<Operation> operationOf(const Value& value) {
         }
         return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
     }
-    if (kIndex == 14) {
+    if (kIndex >= 14) {
         const std::string* style = textOf(value.find("style"));
         const std::optional<std::uint64_t> kStyle =
             style != nullptr && style->size() == 16 ? base::parseHex64(*style) : std::nullopt;
+        if (kIndex > 14) {
+            const Value* place = value.find("place");
+            const std::optional<std::size_t> kPlace = place != nullptr ? placeOf(place) : std::nullopt;
+            if (!kStyle.has_value() || (kIndex != 16 && text == nullptr) || (place != nullptr && !kPlace.has_value())) {
+                return kBad();
+            }
+            if (kIndex == 15) {
+                return Operation{CreateStyleClass{.style = *kStyle, .name = *text, .place = kPlace}};
+            }
+            if (kIndex == 16) {
+                return Operation{RemoveStyleClass{.style = *kStyle}};
+            }
+            return Operation{RenameStyleClass{.style = *kStyle, .name = *text}};
+        }
         const std::string* variant = textOf(value.find("variant"));
         const std::string* part = textOf(value.find("part"));
         const Value& given = *value.find("value");
