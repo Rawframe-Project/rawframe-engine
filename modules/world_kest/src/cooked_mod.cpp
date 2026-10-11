@@ -46,7 +46,8 @@ const std::string* textOf(const Value& object, std::size_t members, std::string_
         return nullptr;
     }
     const Value* member = object.find(name);
-    return member == nullptr ? nullptr : member->text();
+    // A string's: a number's text is not one (D668).
+    return member == nullptr || member->kind() != Value::Kind::String ? nullptr : member->text();
 }
 
 } // namespace
