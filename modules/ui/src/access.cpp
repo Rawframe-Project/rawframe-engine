@@ -57,6 +57,8 @@ muiRole roleOf(Role role) noexcept {
         return mui_roleGroup;
     case Role::Slider:
         return mui_roleSlider;
+    case Role::Tooltip:
+        return mui_roleTooltip;
     case Role::CheckBox:
         return mui_roleCheckBox;
     case Role::Switch:

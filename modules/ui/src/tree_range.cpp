@@ -1,5 +1,6 @@
 // Ranges (SPEC-0030's UiRangeValue and UiDragValue, D621): Maul UI's value
-// ranges, and the pointer's events that move them.
+// ranges, and the pointer's events that move them; and popups placed
+// beside their anchors (UiPopup, D623).
 
 #include "rawframe/ui/tree.h"
 #include "tree_state.h"
@@ -8,6 +9,7 @@
 #include <cstdint>
 #include <maul-ui/event.h>
 #include <maul-ui/pointer.h>
+#include <maul-ui/popup.h>
 #include <maul-ui/range.h>
 
 namespace rawframe::ui {
@@ -64,6 +66,23 @@ bool Tree::stepRange(Node node, bool up) {
     }
     const std::optional<Range> kMoved = rangeOf(node);
     return kMoved.has_value() && kMoved->value != kRange->value;
+}
+
+result::Status Tree::setPopup(Node node, const Popup& popup) {
+    constexpr muiPopupSide kSides[] = {mui_popupBelow, mui_popupAbove, mui_popupStart, mui_popupEnd, mui_popupCenter};
+    muiPopup made = muiDefaultPopup();
+    made.anchor = idOf(popup.anchor);
+    made.side = kSides[static_cast<std::size_t>(popup.side)];
+    made.align = mui_popupAlignCenter;
+    made.gap = popup.gap;
+    made.margin = popup.margin;
+    // Opened and closed by its owner, never by a press or a key.
+    made.lightDismiss = false;
+    return checked(muiNode_SetPopup(state_->context, idOf(node), &made), "a UI node's popup was refused");
+}
+
+result::Status Tree::clearPopup(Node node) {
+    return checked(muiNode_ClearPopup(state_->context, idOf(node)), "a UI node's popup could not be cleared");
 }
 
 result::Result<bool> Tree::point(Node root, const PointerEvent& event) {

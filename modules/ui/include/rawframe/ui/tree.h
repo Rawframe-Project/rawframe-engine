@@ -503,6 +503,27 @@ struct Range {
     std::optional<Node> thumb;
 };
 
+/// Where a node goes beside another, its anchor (SPEC-0030's `UiPopup`,
+/// D623): below, above, at its start or end, or on its center, centered
+/// along that side, `gap` pixels from it, then flipped to the other side
+/// where it would overflow the root and that side has more room, and kept
+/// `margin` pixels inside the root. Placed after each layout, wherever the
+/// node is in the tree; it takes no room there. Maul UI's popups, which
+/// the owner opens and closes.
+struct Popup {
+    enum class Side : std::uint8_t {
+        Below,
+        Above,
+        Start,
+        End,
+        Center
+    };
+    Node anchor;
+    Side side = Side::Below;
+    float gap = 0;
+    float margin = 0;
+};
+
 /// A pointer's event for `Tree::point` (D621): the primary button pressed
 /// or released, a move, the pointer cancelled, or gone from the window,
 /// at a point in the root's space; whether the button is held after it.
@@ -541,6 +562,8 @@ enum class Role : std::uint8_t {
     Group,
     /// A range the user moves (D621).
     Slider,
+    /// Words beside a node that tell about it (D623).
+    Tooltip,
     /// What the user checks and unchecks: a box, an on and off switch, or
     /// one of a group of which one is checked (D622). Its checked state is
     /// read from its states.
@@ -719,6 +742,12 @@ public:
     /// hundredth of its span for one of any value. Whether its value moved;
     /// false for a node that is not a range, or one at its end.
     [[nodiscard]] bool stepRange(Node node, bool up);
+    /// `node` placed beside an anchor from the next layout on (D623);
+    /// refused for an anchor not in the tree, a gap or margin negative or
+    /// not finite, or past the tree's popups.
+    [[nodiscard]] result::Status setPopup(Node node, const Popup& popup);
+    /// `node` no longer placed beside another, whether or not it was.
+    [[nodiscard]] result::Status clearPopup(Node node);
     /// The pointer's event in `root`'s space (D621), for the ranges under
     /// it: a press on a range pages its value toward the point, and a drag
     /// moves it. Whether a range took it. Only a press the owner gives a

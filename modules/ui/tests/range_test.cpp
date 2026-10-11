@@ -2,7 +2,8 @@
 // and on a step; a press on its track pages the value toward the point,
 // a drag past the threshold moves it with the pointer, from where its
 // thumb was grabbed, and what the pointer did is taken; a press elsewhere
-// is not; a range refused where its numbers are wrong, and cleared.
+// is not; a range refused where its numbers are wrong, and cleared; and a
+// popup placed beside its anchor, flipped where it has no room (D623).
 
 #include "rawframe/test/test.h"
 #include "rawframe/ui/tree.h"
@@ -105,4 +106,38 @@ RAWFRAME_TEST(ARangeKeepsItsValueOnAStepAndIsRefusedWhereItIsWrong) {
     RAWFRAME_EXPECT(!ui.setRange(made.track, Range{.value = std::numeric_limits<float>::quiet_NaN()}).has_value());
     RAWFRAME_EXPECT(ui.clearRange(made.track).has_value() && !ui.rangeOf(made.track).has_value());
     RAWFRAME_EXPECT(ui.clearRange(made.track).has_value());
+}
+
+RAWFRAME_TEST(APopupIsPlacedBesideItsAnchorAndFlipsWhereItHasNoRoom) {
+    auto made = Tree::create(8);
+    if (!made.has_value()) {
+        RAWFRAME_EXPECT(false);
+        return;
+    }
+    Tree& ui = **made;
+    const Node kRoot = *ui.add(1);
+    const Node kAnchor = *ui.add(2);
+    const Node kTip = *ui.add(3);
+    RAWFRAME_EXPECT(ui.setLayout(kRoot, Layout{.width = pixels(200), .height = pixels(200)}).has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kAnchor,
+                                 Layout{.width = pixels(40),
+                                        .height = pixels(20),
+                                        .placement = Placement{.absolute = true, .x = pixels(70), .y = pixels(10)}})
+                        .has_value());
+    RAWFRAME_EXPECT(
+        ui.setLayout(kTip, Layout{.width = pixels(60), .height = pixels(30), .placement = {.absolute = true}})
+            .has_value());
+    RAWFRAME_EXPECT(ui.attach(kRoot, kAnchor).has_value() && ui.attach(kAnchor, kTip).has_value());
+    // Below it, centered, 4 apart.
+    RAWFRAME_EXPECT(ui.setPopup(kTip, Popup{.anchor = kAnchor, .side = Popup::Side::Below, .gap = 4}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kRoot, 200, 200).has_value());
+    const auto kBelow = ui.placeOf(kRoot, kTip);
+    RAWFRAME_EXPECT(kBelow.has_value() && kBelow->x == 60 && kBelow->y == 34);
+    // Above, where the root leaves too little room: flipped below.
+    RAWFRAME_EXPECT(ui.setPopup(kTip, Popup{.anchor = kAnchor, .side = Popup::Side::Above, .gap = 4}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kRoot, 200, 200).has_value());
+    const auto kFlipped = ui.placeOf(kRoot, kTip);
+    RAWFRAME_EXPECT(kFlipped.has_value() && kFlipped->y == 34);
+    RAWFRAME_EXPECT(!ui.setPopup(kTip, Popup{.anchor = kAnchor, .gap = -1}).has_value());
+    RAWFRAME_EXPECT(ui.clearPopup(kTip).has_value() && ui.clearPopup(kTip).has_value());
 }
