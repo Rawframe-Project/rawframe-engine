@@ -224,23 +224,28 @@ assert attached["success"], attached
 editor.until(lambda m: m.get("event") == "initialized", "initialized")
 broken = editor.answer(editor.send("setFunctionBreakpoints", {"breakpoints": [{"name": "stroll"}, {"name": "nowhere"}]}))
 assert [each["verified"] for each in broken["body"]["breakpoints"]] == [True, False], broken
-lines = editor.answer(editor.send("setBreakpoints", {"source": {"path": "plaza.kest"}, "breakpoints": [{"line": 160}]}))
-assert lines["body"]["breakpoints"][0]["verified"] is False, lines
+# A line of the stroll's loop, and a line with no code (D630).
+lines = editor.answer(editor.send("setBreakpoints", {"source": {"path": "plaza.kest"},
+                                                     "breakpoints": [{"line": 262}, {"line": 1}]}))
+assert [each["verified"] for each in lines["body"]["breakpoints"]] == [True, False], lines
 assert editor.answer(editor.send("configurationDone"))["success"]
 stopped = editor.until(lambda m: m.get("event") == "stopped", "stopped")
-assert stopped["body"]["reason"] == "function breakpoint", stopped
+assert stopped["body"]["reason"] == "breakpoint", stopped
 assert editor.answer(editor.send("threads"))["body"]["threads"] == [{"id": 1, "name": "game"}]
 stack = editor.answer(editor.send("stackTrace", {"threadId": 1}))
 frame = stack["body"]["stackFrames"][0]
-assert frame["name"] == "plaza.stroll", stack
+assert frame["name"] == "plaza.stroll" and frame["source"]["name"] == "plaza.kest" and frame["line"] > 0, stack
 scopes = editor.answer(editor.send("scopes", {"frameId": frame["id"]}))
 reference = scopes["body"]["scopes"][0]["variablesReference"]
 variables = editor.answer(editor.send("variables", {"variablesReference": reference}))["body"]["variables"]
 assert variables[0]["name"] == "count" and int(variables[0]["value"]) > 0, variables
 assert editor.answer(editor.send("next", {"threadId": 1}))["success"] is False
 assert editor.answer(editor.send("continue", {"threadId": 1}))["success"]
-# Stopped again at the next tick's stroll: the editor is told again.
+# Stopped again, at the line in the stroll's loop: the editor is told
+# again, and the frame stands at the line.
 editor.until(lambda m: m.get("event") == "stopped", "stopped again")
+stack = editor.answer(editor.send("stackTrace", {"threadId": 1}))
+assert stack["body"]["stackFrames"][0]["line"] == 262, stack
 editor.leave()
 print("stroll stopped with count", variables[0]["value"], flush=True)
 
@@ -249,9 +254,14 @@ by_game = Editor()
 attached = by_game.attach({"game": game})
 assert attached["success"], attached
 by_game.until(lambda m: m.get("event") == "initialized", "initialized")
-broken = by_game.answer(by_game.send("setFunctionBreakpoints", {"breakpoints": [{"name": "plaza.stroll"}]}))
-assert broken["body"]["breakpoints"][0]["verified"], broken
+broken = by_game.answer(by_game.send("setFunctionBreakpoints", {"breakpoints": []}))
+script = os.path.join(os.path.dirname(os.path.abspath(game)), "plaza.kest")
+lines = by_game.answer(by_game.send("setBreakpoints", {"source": {"path": script}, "breakpoints": [{"line": 262}]}))
+assert lines["body"]["breakpoints"][0]["verified"], lines
 by_game.until(lambda m: m.get("event") == "stopped", "stopped through the game")
+# The frame's file is the game's own, where the editor opens it.
+stack = by_game.answer(by_game.send("stackTrace", {"threadId": 1}))
+assert os.path.samefile(stack["body"]["stackFrames"][0]["source"]["path"], script), stack
 by_game.leave()
 print("attached by the game through its play directory")
 PY

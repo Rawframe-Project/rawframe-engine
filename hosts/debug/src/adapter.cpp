@@ -1,6 +1,9 @@
 #include "adapter.h"
 
+#include <filesystem>
+#include <span>
 #include <string_view>
+#include <system_error>
 #include <utility>
 
 namespace rawframe::debug_adapter {
@@ -71,6 +74,47 @@ std::optional<Value> Adapter::ask(Value record, std::string& why) {
     return *kAnswer;
 }
 
+std::optional<Value> Adapter::breakAll(std::string& why) {
+    Value record = Value::object();
+    record.add("kind", Value::string("debug.break"));
+    Value functions = Value::array();
+    for (const std::string& kName : functions_) {
+        functions.push(Value::string(kName));
+    }
+    record.add("functions", std::move(functions));
+    Value lines = Value::array();
+    for (const auto& [kFile, kLines] : lines_) {
+        for (const std::int64_t kLine : kLines) {
+            Value line = Value::object();
+            line.add("file", Value::string(kFile));
+            line.add("line", Value::integer(kLine));
+            lines.push(std::move(line));
+        }
+    }
+    record.add("lines", std::move(lines));
+    return ask(std::move(record), why);
+}
+
+std::string Adapter::builtName(const std::string& path) const {
+    const std::filesystem::path kPath{path};
+    if (!gameDirectory_.empty()) {
+        const std::filesystem::path kRelative = kPath.lexically_normal().lexically_relative(gameDirectory_);
+        if (!kRelative.empty() && *kRelative.begin() != "..") {
+            return kRelative.generic_string();
+        }
+    }
+    return kPath.filename().generic_string();
+}
+
+std::optional<std::filesystem::path> Adapter::editorPath(const std::string& built) const {
+    // The build reads a game's files under `game/` (world_kest's GameFiles).
+    constexpr std::string_view kGameRoot = "game/";
+    if (gameDirectory_.empty() || !built.starts_with(kGameRoot)) {
+        return std::nullopt;
+    }
+    return (gameDirectory_ / built.substr(kGameRoot.size())).lexically_normal();
+}
+
 std::vector<Value> Adapter::handle(const Value& request) {
     std::vector<Value> out;
     const std::string kCommand = textOf(request, "command");
@@ -97,6 +141,10 @@ std::vector<Value> Adapter::handle(const Value& request) {
             if (kRecorded.has_value()) {
                 record = *kRecorded;
             }
+            // Where its scripts are, so a line's file is named as the
+            // build names it, and a frame's opened where it is (D630).
+            std::error_code absolute;
+            gameDirectory_ = std::filesystem::absolute(kGame, absolute).lexically_normal().parent_path();
         } else if (record.endpoint.empty() || record.pinFile.empty() || record.tokenFile.empty()) {
             refusal = "attach names the game, or its endpoint, pinFile, and tokenFile";
         }
@@ -126,7 +174,7 @@ std::vector<Value> Adapter::handle(const Value& request) {
             out.push_back(event("initialized", {}));
         }
     } else if (kCommand == "setFunctionBreakpoints") {
-        // Each name asked alone, to say which are functions, then all.
+        // Each name asked alone, to say which are functions.
         std::vector<std::string> names;
         const Value* kBreakpoints = arguments.find("breakpoints");
         for (const Value& each : kBreakpoints != nullptr && kBreakpoints->kind() == Value::Kind::Array
@@ -151,33 +199,59 @@ std::vector<Value> Adapter::handle(const Value& request) {
             }
             verified.push(std::move(breakpoint));
         }
-        Value all = Value::object();
-        all.add("kind", Value::string("debug.break"));
-        Value functions = Value::array();
-        for (const std::string& kName : names) {
-            functions.push(Value::string(kName));
-        }
-        all.add("functions", std::move(functions));
-        if (reached && !ask(std::move(all), why).has_value()) {
+        // Then all of them, with every source's lines.
+        functions_ = names;
+        if (reached && !breakAll(why).has_value()) {
             reached = false;
         }
         Value body = Value::object();
         body.add("breakpoints", std::move(verified));
         out.push_back(response(request, reached, std::move(body), reached ? std::string{} : why));
     } else if (kCommand == "setBreakpoints") {
-        // A line is a place Kest's public header cannot yet name (D460).
+        // A source's lines, in place of those it had (D630); every
+        // breakpoint written again, and each of this source's verified
+        // where code comes from its line.
+        const Value* kSource = arguments.find("source");
+        const std::string kFile = builtName(kSource != nullptr ? textOf(*kSource, "path") : std::string{});
         const Value* kBreakpoints = arguments.find("breakpoints");
-        Value refused = Value::array();
-        for (std::size_t each = 0; kBreakpoints != nullptr && kBreakpoints->kind() == Value::Kind::Array &&
-                                   each < kBreakpoints->items().size();
-             ++each) {
+        std::vector<std::int64_t> asked;
+        for (const Value& each : kBreakpoints != nullptr && kBreakpoints->kind() == Value::Kind::Array
+                                     ? kBreakpoints->items()
+                                     : std::span<const Value>{}) {
+            const Value* kLine = each.kind() == Value::Kind::Object ? each.find("line") : nullptr;
+            asked.push_back(kLine != nullptr ? kLine->integer().value_or(0) : 0);
+        }
+        if (asked.empty()) {
+            lines_.erase(kFile);
+        } else {
+            lines_[kFile] = asked;
+        }
+        // Where this source's lines are among all the game is sent.
+        std::size_t first = 0;
+        for (const auto& [kOther, kLines] : lines_) {
+            if (kOther == kFile) {
+                break;
+            }
+            first += kLines.size();
+        }
+        const std::optional<Value> kBroken = kFile.empty() ? std::nullopt : breakAll(why);
+        const Value* kPlaced = kBroken.has_value() ? kBroken->find("lines") : nullptr;
+        Value verified = Value::array();
+        for (std::size_t each = 0; each < asked.size(); ++each) {
+            const bool kVerified = kPlaced != nullptr && kPlaced->kind() == Value::Kind::Array &&
+                                   first + each < kPlaced->items().size() &&
+                                   kPlaced->items()[first + each].truth().value_or(false);
             Value breakpoint = Value::object();
-            breakpoint.add("verified", Value::boolean(false));
-            breakpoint.add("message", Value::string("a game breaks at functions for now: add a function breakpoint"));
-            refused.push(std::move(breakpoint));
+            breakpoint.add("verified", Value::boolean(kVerified));
+            breakpoint.add("line", Value::integer(asked[each]));
+            if (!kVerified) {
+                breakpoint.add("message",
+                               Value::string(kBroken.has_value() ? "no code of the game comes from this line" : why));
+            }
+            verified.push(std::move(breakpoint));
         }
         Value body = Value::object();
-        body.add("breakpoints", std::move(refused));
+        body.add("breakpoints", std::move(verified));
         out.push_back(response(request, true, std::move(body)));
     } else if (kCommand == "setExceptionBreakpoints" || kCommand == "configurationDone") {
         out.push_back(response(request, true));
@@ -202,8 +276,19 @@ std::vector<Value> Adapter::handle(const Value& request) {
             Value frame = Value::object();
             frame.add("id", Value::integer(static_cast<std::int64_t>(frames_.size())));
             frame.add("name", Value::string(textOf(each, "function")));
-            frame.add("line", Value::integer(0));
-            frame.add("column", Value::integer(0));
+            // Where it stands, its file opened where the game's is (D630).
+            const std::string kBuilt = textOf(each, "file");
+            const Value* kLine = each.find("line");
+            if (!kBuilt.empty()) {
+                Value source = Value::object();
+                source.add("name", Value::string(std::filesystem::path{kBuilt}.filename().generic_string()));
+                if (const std::optional<std::filesystem::path> kPath = editorPath(kBuilt); kPath.has_value()) {
+                    source.add("path", Value::string(kPath->string()));
+                }
+                frame.add("source", std::move(source));
+            }
+            frame.add("line", Value::integer(kLine != nullptr ? kLine->integer().value_or(0) : 0));
+            frame.add("column", Value::integer(kLine != nullptr ? 1 : 0));
             stack.push(std::move(frame));
         }
         Value body = Value::object();
@@ -255,6 +340,7 @@ std::vector<Value> Adapter::handle(const Value& request) {
             Value none = Value::object();
             none.add("kind", Value::string("debug.break"));
             none.add("functions", Value::array());
+            none.add("lines", Value::array());
             static_cast<void>(ask(std::move(none), why));
             Value carry = Value::object();
             carry.add("kind", Value::string("debug.continue"));
@@ -264,11 +350,7 @@ std::vector<Value> Adapter::handle(const Value& request) {
         done_ = true;
         out.push_back(response(request, true));
     } else if (kCommand == "next" || kCommand == "stepIn" || kCommand == "stepOut" || kCommand == "pause") {
-        out.push_back(response(request,
-                               false,
-                               {},
-                               "a game is stepped once Kest's public header says where code was written; continue "
-                               "to the next function breakpoint"));
+        out.push_back(response(request, false, {}, "a game is not stepped yet; continue to the next breakpoint"));
     } else {
         out.push_back(response(request, false, {}, "this adapter does not answer " + kCommand));
     }
@@ -300,7 +382,7 @@ std::vector<Value> Adapter::poll() {
     if (kIsStopped && !told_) {
         told_ = true;
         Value body = Value::object();
-        body.add("reason", Value::string("function breakpoint"));
+        body.add("reason", Value::string("breakpoint"));
         body.add("threadId", Value::integer(kGameThread));
         body.add("allThreadsStopped", Value::boolean(true));
         out.push_back(event("stopped", std::move(body)));

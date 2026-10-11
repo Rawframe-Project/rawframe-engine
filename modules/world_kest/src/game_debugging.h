@@ -26,7 +26,8 @@ public:
     void tellStood(const execution::MonotonicSource& clock,
                    std::function<void(execution::MonotonicDuration)> stood) noexcept;
 
-    [[nodiscard]] std::size_t breakAt(std::vector<std::string> functions) noexcept override;
+    [[nodiscard]] world_runtime::DebugBroken breakAt(std::vector<std::string> functions,
+                                                     std::vector<world_runtime::DebugLine> lines) noexcept override;
     void whileStopped(std::function<bool()> serve) noexcept override;
     [[nodiscard]] bool stopped() const noexcept override;
     [[nodiscard]] std::uint64_t stops() const noexcept override;
@@ -37,6 +38,7 @@ private:
 
     kest::Machine* machine_ = nullptr;
     std::vector<std::string> functions_;
+    std::vector<kest::SourceLine> lines_;
     std::function<bool()> serve_;
     const execution::MonotonicSource* clock_ = nullptr;
     std::function<void(execution::MonotonicDuration)> stood_;

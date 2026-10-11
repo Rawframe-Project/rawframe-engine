@@ -24,6 +24,22 @@
     }
   },
   "contributes": {
+    "languages": [
+      {
+        "id": "kest",
+        "aliases": [
+          "Kest"
+        ],
+        "extensions": [
+          ".kest"
+        ]
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "kest"
+      }
+    ],
     "configuration": {
       "title": "Rawframe",
       "properties": {

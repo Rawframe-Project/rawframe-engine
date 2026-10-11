@@ -39,12 +39,12 @@ Debugs a running game's Kest scripts (ADR-0066's debugger bridge, D461, D462). V
    }
    ```
 
-4. Add function breakpoints in the Breakpoints view, by name, with the module or without it (`plaza.stroll` or `stroll`).
+4. Click in the gutter of a `.kest` file for a line breakpoint, or add function breakpoints in the Breakpoints view, by name, with the module or without it (`plaza.stroll` or `stroll`). A line with no code is shown unverified. Attached by the game, a line is matched by its path under the game's directory; attached by an endpoint, by its file's name.
 
 The endpoint must be on this machine, a loopback address: a configuration a cloned workspace brings never sends a token elsewhere.
 
-When a breakpoint is hit, the server waits inside its tick. The call stack shows the functions, and each frame its arguments. Continue lets the game run to the next one, and disconnecting takes the breakpoints out and lets the game run.
+When a breakpoint is hit, the server waits inside its tick. The call stack shows the functions, the line each stands at (opened in the editor when attached by the game), and each frame its arguments. Continue lets the game run to the next breakpoint, which may be the same one again later in the tick, and disconnecting takes the breakpoints out and lets the game run.
 
 ## Not yet
 
-Line breakpoints, stepping, source positions, and locals other than arguments wait for Kest's public header to say where code was written and which locals a stop has written (`/home/rawframe/kest-debugger-requests.md`).
+Stepping, and locals other than arguments: Kest now proves which locals a stop has written, which the engine takes up next.

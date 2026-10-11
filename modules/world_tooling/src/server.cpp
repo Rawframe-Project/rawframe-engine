@@ -8,6 +8,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <optional>
 #include <span>
@@ -204,9 +205,34 @@ struct Client {
     std::optional<execution::MonotonicInstant> closingSince;
 };
 
-/// What `debug.break` takes at most: names, and a name's bytes.
+/// What `debug.break` takes at most: names or lines, and a name's or a
+/// file's bytes.
 constexpr std::size_t kMostBreakpoints = 64;
 constexpr std::size_t kMostFunctionName = 256;
+
+/// `debug.break`'s lines (D630): absent for none, else up to 64 of a
+/// `file`, a path's bytes, and a `line` from one; none for anything else.
+std::optional<std::vector<world_runtime::DebugLine>> linesOf(const Value* lines) {
+    std::vector<world_runtime::DebugLine> read;
+    if (lines == nullptr) {
+        return read;
+    }
+    if (lines->kind() != Value::Kind::Array || lines->items().size() > kMostBreakpoints) {
+        return std::nullopt;
+    }
+    for (const Value& each : lines->items()) {
+        const Value* const kFile = each.kind() == Value::Kind::Object ? each.find("file") : nullptr;
+        const Value* const kLine = each.kind() == Value::Kind::Object ? each.find("line") : nullptr;
+        const std::optional<std::int64_t> kNumber = kLine != nullptr ? kLine->integer() : std::nullopt;
+        if (kFile == nullptr || kFile->kind() != Value::Kind::String || kFile->text()->empty() ||
+            kFile->text()->size() > kMostFunctionName || !kNumber.has_value() || *kNumber < 1 ||
+            *kNumber > std::numeric_limits<std::uint32_t>::max()) {
+            return std::nullopt;
+        }
+        read.push_back(world_runtime::DebugLine{.file = *kFile->text(), .line = static_cast<std::uint32_t>(*kNumber)});
+    }
+    return read;
+}
 
 constexpr execution::MonotonicDuration kLastReplyWithin = execution::MonotonicDuration::fromSeconds(1);
 
@@ -641,8 +667,9 @@ struct ToolingServer::State {
         send(connection, client, errorLine(id, ToolingError::Unsupported, "this endpoint has no such verb"));
     }
 
-    /// `debug.break` (`functions`, names), `debug.status`, and
-    /// `debug.continue`, under the debug grant (D460).
+    /// `debug.break` (`functions`, names, and `lines`, each a `file` and a
+    /// `line`, D630), `debug.status`, and `debug.continue`, under the debug
+    /// grant (D460).
     void debug(
         network::ConnectionId connection, Client& client, const Value& id, std::string_view kind, const Value& record) {
         if (!settings.grants.debug || settings.debugging == nullptr) {
@@ -669,8 +696,22 @@ struct ToolingServer::State {
                      errorLine(id, ToolingError::Malformed, "functions is a list of up to 64 function names"));
                 return;
             }
+            const std::optional<std::vector<world_runtime::DebugLine>> kLines = linesOf(record.find("lines"));
+            if (!kLines.has_value()) {
+                send(connection,
+                     client,
+                     errorLine(
+                         id, ToolingError::Malformed, "lines is a list of up to 64 of a file and a line from one"));
+                return;
+            }
+            const world_runtime::DebugBroken kBroken = debugging.breakAt(std::move(names), *kLines);
+            Value placed = Value::array();
+            for (const bool kPlaced : kBroken.lines) {
+                placed.push(Value::boolean(kPlaced));
+            }
             made.add("kind", Value::string("debug.broken"));
-            made.add("found", Value::integer(static_cast<std::int64_t>(debugging.breakAt(std::move(names)))));
+            made.add("found", Value::integer(static_cast<std::int64_t>(kBroken.functions)));
+            made.add("lines", std::move(placed));
         } else if (kind == "debug.status") {
             made.add("kind", Value::string("debug.status"));
             made.add("stopped", Value::boolean(debugging.stopped()));
@@ -686,6 +727,10 @@ struct ToolingServer::State {
                 }
                 Value frame = Value::object();
                 frame.add("function", Value::string(each.function));
+                if (each.at.has_value()) {
+                    frame.add("file", Value::string(each.at->file));
+                    frame.add("line", Value::integer(each.at->line));
+                }
                 frame.add("locals", std::move(locals));
                 frames.push(std::move(frame));
             }

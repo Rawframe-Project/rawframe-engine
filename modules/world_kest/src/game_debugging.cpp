@@ -17,14 +17,23 @@ void GameDebugging::attach(kest::Machine& machine) noexcept {
     machine.whenStopped([this] {
         stop();
     });
-    if (!functions_.empty()) {
-        static_cast<void>(machine.breakAt(functions_));
+    if (!functions_.empty() || !lines_.empty()) {
+        static_cast<void>(machine.breakAt(functions_, lines_));
     }
 }
 
-std::size_t GameDebugging::breakAt(std::vector<std::string> functions) noexcept {
+world_runtime::DebugBroken GameDebugging::breakAt(std::vector<std::string> functions,
+                                                  std::vector<world_runtime::DebugLine> lines) noexcept {
     functions_ = std::move(functions);
-    return machine_ != nullptr ? machine_->breakAt(functions_) : 0;
+    lines_.clear();
+    for (world_runtime::DebugLine& each : lines) {
+        lines_.push_back(kest::SourceLine{.file = std::move(each.file), .line = each.line});
+    }
+    if (machine_ == nullptr) {
+        return world_runtime::DebugBroken{.functions = 0, .lines = std::vector<bool>(lines_.size(), false)};
+    }
+    kest::Breaks broken = machine_->breakAt(functions_, lines_);
+    return world_runtime::DebugBroken{.functions = broken.functions, .lines = std::move(broken.lines)};
 }
 
 void GameDebugging::tellStood(const execution::MonotonicSource& clock,
@@ -51,8 +60,12 @@ std::vector<world_runtime::DebugFrame> GameDebugging::stack() const {
         return frames;
     }
     for (kest::StoppedFrame& each : machine_->stack()) {
-        frames.push_back(
-            world_runtime::DebugFrame{.function = std::move(each.function), .locals = std::move(each.locals)});
+        std::optional<world_runtime::DebugLine> at;
+        if (each.at.has_value()) {
+            at = world_runtime::DebugLine{.file = std::move(each.at->file), .line = each.at->line};
+        }
+        frames.push_back(world_runtime::DebugFrame{
+            .function = std::move(each.function), .at = std::move(at), .locals = std::move(each.locals)});
     }
     return frames;
 }
