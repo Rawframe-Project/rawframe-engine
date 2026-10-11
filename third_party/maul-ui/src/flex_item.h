@@ -136,7 +136,12 @@ static inline muiMeasureAxis muiFlexCrossConstraint(const muiFlexFrame* frame,
         float space = frame->crossIn.size - frame->boxCross - margin;
         return (muiMeasureAxis){fmaxf(space, 0.0f), mui_measureAtMost};
     }
-    return (muiMeasureAxis){0.0f, frame->crossIn.mode};
+    // A height's min-content size is its max-content one (CSS Sizing 3):
+    // a row asked it lays its items out at theirs.
+    muiMeasureMode mode = frame->row && frame->crossIn.mode == mui_measureMinContent
+                              ? mui_measureMaxContent
+                              : frame->crossIn.mode;
+    return (muiMeasureAxis){0.0f, mode};
 }
 
 // CSS Flexbox section 4.5: for any item but a scroll container, the
