@@ -285,10 +285,12 @@ try {
     let unread = [];
     let read = [];
     if (!plaza) {
-        const ready = stalls ? /^textbox "/ : / points"$/;
+        // Stalls' HUD is whole once its purse and its sign's field are read.
+        const wanted = stalls ? [/^button "\d+ coins"$/, /^textbox "/] : [/ points"$/];
+        const ready = () => wanted.every((pattern) => read.some((line) => pattern.test(line)));
         unread = await readUnder(tab, host);
         await tab.evaluate((selector) => document.querySelector(`${selector} button`)?.click(), host);
-        for (let waited = 0; waited < 5000 && !read.some((line) => ready.test(line)); waited += 100) {
+        for (let waited = 0; waited < 5000 && !ready(); waited += 100) {
             await sleep(100);
             read = await readUnder(tab, host);
         }
