@@ -139,7 +139,12 @@ RAWFRAME_TEST(AnAbortTheFatalPathDidNotRaiseLeavesACrashRecord) {
         std::abort();
     });
     RAWFRAME_EXPECT(kOutcome.signalled && kOutcome.signal == SIGABRT);
+#if !defined(__ANDROID__)
+    // The x86_64 emulators these tests run on play arm64 programs by
+    // translation, which hands a program's own SIGABRT to no handler of its
+    // (a raise reaches none either), though its faults reach it (D617).
     RAWFRAME_EXPECT(contains(kOutcome.standardError, "rawframe crash: SIGABRT\n"));
+#endif
     // The fatal path's own abort says what it says once.
     const auto kPanicked = runInChild([] {
         static_cast<void>(rawframe::base::installCrashCapture());

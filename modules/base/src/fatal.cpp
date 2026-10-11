@@ -25,6 +25,7 @@
 #include <csignal>
 #include <unwind.h>
 #if defined(__APPLE__)
+#include <execinfo.h>
 #include <mach-o/dyld.h>
 #else
 #include <link.h>
@@ -288,6 +289,19 @@ alignas(16) constinit std::array<char, 64 * 1024> crashStack{};
     }
 }
 
+#if defined(__APPLE__)
+/// The return addresses on the stack, by Darwin's frame-pointer walk: its
+/// unwinder finds none from a signal handler.
+void gatherFrames(CrashFrames& frames) noexcept {
+    std::array<void*, kCrashFrames> walked{};
+    const int kWalked = backtrace(walked.data(), static_cast<int>(walked.size()));
+    for (int at = 0; at < kWalked; ++at) {
+        frames.addresses.at(static_cast<std::size_t>(at)) =
+            reinterpret_cast<std::uint64_t>(walked.at(static_cast<std::size_t>(at)));
+    }
+    frames.count = kWalked > 0 ? static_cast<std::size_t>(kWalked) : 0;
+}
+#else
 _Unwind_Reason_Code collectFrame(struct _Unwind_Context* context, void* into) {
     auto& frames = *static_cast<CrashFrames*>(into);
     if (frames.count >= frames.addresses.size()) {
@@ -298,13 +312,19 @@ _Unwind_Reason_Code collectFrame(struct _Unwind_Context* context, void* into) {
     return _URC_NO_REASON;
 }
 
+/// The return addresses on the stack, by the platform's unwinder.
+void gatherFrames(CrashFrames& frames) noexcept {
+    _Unwind_Backtrace(&collectFrame, &frames);
+}
+#endif
+
 void crashed(int signal, siginfo_t* info, void*) {
     const auto kSlot = static_cast<std::size_t>(std::ranges::find(kCrashSignals, signal) - kCrashSignals.begin());
     // The fatal path's own abort has said everything already, and a fault in
     // this handler says nothing more.
     if (!fatalPathEntered.exchange(true, std::memory_order_acq_rel)) {
         CrashFrames frames;
-        _Unwind_Backtrace(&collectFrame, &frames);
+        gatherFrames(frames);
         writeCrashRecord(signalText(signal),
                          static_cast<std::uint64_t>(signal),
                          info != nullptr ? reinterpret_cast<std::uint64_t>(info->si_addr) : 0,
@@ -378,7 +398,7 @@ bool installCrashCapture() noexcept {
     // The unwinder loads what it needs on its first walk, which a signal
     // handler may not: it walks once here.
     CrashFrames warm;
-    _Unwind_Backtrace(&collectFrame, &warm);
+    gatherFrames(warm);
     // A thread whose stack overflowed has none left for the handler; this
     // one gets a stack of its own (other threads' overflows end unrecorded).
     stack_t alternate{};
