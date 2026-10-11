@@ -10,9 +10,9 @@ rawframe_module(NAME world_ui
 
 # The player's settings are kept in a file where there are files (D626).
 if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
-    rawframe_module_tests(NAME world_ui SOURCES tests/world_ui_test.cpp)
+    rawframe_module_tests(NAME world_ui SOURCES tests/world_ui_test.cpp tests/restyle_test.cpp)
 else()
-    rawframe_module_tests(NAME world_ui SOURCES tests/world_ui_test.cpp tests/kept_test.cpp)
+    rawframe_module_tests(NAME world_ui SOURCES tests/world_ui_test.cpp tests/kept_test.cpp tests/restyle_test.cpp)
 endif()
 if(TARGET rawframe_world_ui_tests)
     target_compile_definitions(rawframe_world_ui_tests PRIVATE

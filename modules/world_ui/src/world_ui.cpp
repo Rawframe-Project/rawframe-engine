@@ -761,6 +761,43 @@ result::Status WorldUi::addFont(std::uint64_t id, std::span<const std::byte> byt
     return {};
 }
 
+result::Status WorldUi::restyle(ui::StyleSheet styles) {
+    State& state = *state_;
+    // The old classes taken from every node and gone before the new ones
+    // are made, which the tree holds only so many of with their
+    // transitions; then every node given its own again.
+    for (ViewState& view : state.views) {
+        for (auto& [kKey, entry] : view.entries) {
+            if (entry.node.has_value()) {
+                static_cast<void>(state.tree->setClasses(*entry.node, {}));
+            }
+        }
+    }
+    for (const auto& [kId, kOld] : state.classes) {
+        static_cast<void>(state.tree->removeStyle(kOld));
+    }
+    state.classes.clear();
+    auto made = ui::addStyles(*state.tree, styles);
+    if (made.has_value()) {
+        for (std::size_t at = 0; at < made->size(); ++at) {
+            state.classes.emplace(styles.styles[at].id, (*made)[at]);
+        }
+        state.settings.styles = std::move(styles);
+        ++state.statistics.restyled;
+    }
+    for (ViewState& view : state.views) {
+        for (auto& [kKey, entry] : view.entries) {
+            if (entry.node.has_value() && !state.give(entry, kKey.first, entry.value)) {
+                ++state.statistics.leftOut;
+            }
+        }
+    }
+    if (!made.has_value()) {
+        return std::unexpected<result::Error>{std::move(made).error()};
+    }
+    return {};
+}
+
 void WorldUi::reword() {
     // A field's label is a placeholder in the locale too.
     state_->giveWordsAgain([](const Entry& entry) {

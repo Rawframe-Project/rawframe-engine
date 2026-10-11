@@ -79,23 +79,35 @@ Keeper::~Keeper() {
     finish(nullptr);
 }
 
-result::Result<KeptValues> Keeper::read() const {
-    std::FILE* file = std::fopen(path_.string().c_str(), "rb");
+std::optional<std::string> fileText(const std::filesystem::path& path, std::size_t most) {
+    std::FILE* file = std::fopen(path.string().c_str(), "rb");
     if (file == nullptr) {
-        return KeptValues{};
+        return std::nullopt;
     }
     std::string text;
     std::array<char, 4096> chunk{};
     std::size_t got = 0;
-    while ((got = std::fread(chunk.data(), 1, chunk.size(), file)) != 0 && text.size() <= kMostKeptBytes) {
+    while ((got = std::fread(chunk.data(), 1, chunk.size(), file)) != 0 && text.size() <= most) {
         text.append(chunk.data(), got);
     }
     const bool kFailed = std::ferror(file) != 0;
     std::fclose(file);
-    if (kFailed || text.size() > kMostKeptBytes) {
+    if (kFailed || text.size() > most) {
+        return std::nullopt;
+    }
+    return text;
+}
+
+result::Result<KeptValues> Keeper::read() const {
+    std::error_code error;
+    if (!std::filesystem::exists(path_, error)) {
+        return KeptValues{};
+    }
+    const std::optional<std::string> kText = fileText(path_, kMostKeptBytes);
+    if (!kText.has_value()) {
         return document::invalid("$", "the player's settings cannot be read whole");
     }
-    return readKept(text);
+    return readKept(*kText);
 }
 
 void Keeper::keep(const KeptValues& values, execution::Executor* io, execution::OwnerId owner) noexcept {

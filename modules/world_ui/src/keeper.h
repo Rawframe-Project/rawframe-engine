@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -49,6 +50,10 @@ inline constexpr std::size_t kMostKeptValues = 1024;
 [[nodiscard]] std::string writeKept(const KeptValues& values);
 
 #if RAWFRAME_FILE_SYSTEM
+
+/// A small file's whole text, at most `most` bytes: none where it cannot be
+/// read whole (D626, D634).
+[[nodiscard]] std::optional<std::string> fileText(const std::filesystem::path& path, std::size_t most);
 
 /// The file the player's settings are kept in, written one at a time on the
 /// blocking-I/O executor, each whole or not at all.

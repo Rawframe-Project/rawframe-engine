@@ -121,6 +121,9 @@ struct UiStatistics {
     std::uint64_t ranged = 0;
     /// Checkable nodes checked or unchecked by the player (D622).
     std::uint64_t toggled = 0;
+    /// The game's style classes made again as their document changed
+    /// (D634).
+    std::uint64_t restyled = 0;
     /// Changes to the values of kept nodes, and kept nodes started as kept
     /// (D626).
     std::uint64_t kept = 0;
@@ -156,6 +159,12 @@ public:
     /// The nodes that show the game's words are given them again (D539):
     /// the locale they are formatted in changed.
     void reword();
+    /// The game's style classes made again from `styles` (D634), as an
+    /// author edits them while the game plays: every node given its class
+    /// anew, one the sheet no longer has leaving its node unstyled. Refused
+    /// where the tree takes no class of the sheet: the nodes are unstyled
+    /// until a sheet it takes comes.
+    [[nodiscard]] result::Status restyle(ui::StyleSheet styles);
 
     /// The window's UI, every view's, seated where assistive technology
     /// reads it (D571); what its access answered, if one was made.
