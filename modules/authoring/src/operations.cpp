@@ -57,7 +57,7 @@ constexpr std::array<InputDeclaration, 2> kTransitionsInputs = {
 constexpr std::array<InputDeclaration, 2> kRenameClassInputs = {
     {{"style", InputType::Style}, {"name", InputType::Text}}};
 
-constexpr std::array<OperationDeclaration, 27> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 28> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -80,6 +80,7 @@ constexpr std::array<OperationDeclaration, 27> kDeclarations = {{
     {.name = "ui.set_field", .targets = "ui.document field", .inputs = kUiFieldInputs},
     {.name = "ui.create_node", .targets = "ui.document node", .inputs = kUiCreateInputs},
     {.name = "ui.remove_node", .targets = "ui.document node", .inputs = kUiNodeInputs},
+    {.name = "ui.move_node", .targets = "ui.document node", .inputs = kUiCreateInputs},
     {.name = "scene.list_entities", .history = HistoryClass::ReadOnly, .targets = "rawframe.scene", .inputs = {}},
     {.name = "scene.read_entity",
      .history = HistoryClass::ReadOnly,

@@ -209,7 +209,7 @@ result::Result<Operation> operationOf(const Value& value) {
             return Operation{SetUiField{
                 .node = *node, .field = *field, .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
         }
-        if (kIndex == 20) {
+        if (kIndex == 20 || kIndex == 22) {
             const Value* parent = value.find("parent");
             const Value* place = value.find("place");
             const std::optional<std::size_t> kPlace = place != nullptr ? placeOf(place) : std::nullopt;
@@ -218,8 +218,11 @@ result::Result<Operation> operationOf(const Value& value) {
                 (place != nullptr && !kPlace.has_value())) {
                 return kBad();
             }
-            return Operation{CreateUiNode{
-                .node = *node, .parent = named != nullptr ? std::optional{*named} : std::nullopt, .place = kPlace}};
+            const std::optional<std::string> kParent = named != nullptr ? std::optional{*named} : std::nullopt;
+            if (kIndex == 22) {
+                return Operation{MoveUiNode{.node = *node, .parent = kParent, .place = kPlace}};
+            }
+            return Operation{CreateUiNode{.node = *node, .parent = kParent, .place = kPlace}};
         }
         return Operation{RemoveUiNode{.node = *node}};
     }

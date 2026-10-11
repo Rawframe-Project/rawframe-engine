@@ -4,8 +4,8 @@
 // (rawframe/ui/document.h), a JsonDocument (D640) whose slots are a node,
 // known by its component's name wherever it stands (`nodes`, or a node's
 // `children`), whole at its place; and one of its fields. Its operations
-// are `ui.set_field`, `ui.create_node`, and `ui.remove_node`, and its query
-// `ui.read_document`, in operations.h.
+// are `ui.set_field`, `ui.create_node`, `ui.remove_node`, and
+// `ui.move_node` (D644), and its query `ui.read_document`, in operations.h.
 
 #include "rawframe/authoring/json_document.h"
 #include "rawframe/authoring/operations.h"
@@ -102,6 +102,8 @@ private:
     }
 
     [[nodiscard]] result::Result<Committed> reread(result::Result<Committed> done);
+    /// `move` staged: the node taken out, then put where it goes (D644).
+    [[nodiscard]] result::Status stageMove(JsonDocument::Staged& staged, const MoveUiNode& move) const;
 
     base::Bits128 identity_{};
     JsonDocument document_;

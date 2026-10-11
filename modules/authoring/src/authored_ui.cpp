@@ -3,6 +3,7 @@
 #include "rawframe/authoring/errors.h"
 
 #include <algorithm>
+#include <array>
 #include <string>
 #include <utility>
 #include <variant>
@@ -72,6 +73,35 @@ std::optional<JsonPath> nodeIn(const Value& root, std::string_view node) {
     return found(root, "nodes", node, path);
 }
 
+/// `record`, the node `node`, put inside `parent` or among the roots, at
+/// `place` among its siblings or after them.
+result::Result<JsonDelta> insertion(const Value& staged,
+                                    Value record,
+                                    const std::string& node,
+                                    const std::optional<std::string>& parent,
+                                    std::optional<std::size_t> place) {
+    JsonPath path;
+    if (parent.has_value()) {
+        std::optional<JsonPath> held = nodeIn(staged, *parent);
+        if (!held.has_value()) {
+            return refuse(
+                result::ErrorClass::NotFound, AuthoringError::TargetNotFound, "the document has no such node");
+        }
+        path = std::move(*held);
+    }
+    const std::optional<Value> kHolder = slotAt(staged, path);
+    const Value* siblings = kHolder.has_value() ? kHolder->find(path.empty() ? "nodes" : "children") : nullptr;
+    const std::size_t kCount = siblings != nullptr ? siblings->items().size() : 0;
+    if (place.value_or(kCount) > kCount) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      AuthoringError::ValidationFailed,
+                      "a node's place is among its siblings or after them");
+    }
+    path.push_back(JsonStep{.member = path.empty() ? "nodes" : "children", .key = "component", .id = node});
+    return JsonDelta{
+        .path = std::move(path), .place = place.value_or(kCount), .before = std::nullopt, .after = std::move(record)};
+}
+
 /// The delta `operation` makes of `staged`; refused where it cannot be
 /// made.
 result::Result<JsonDelta> deltaOf(const Value& staged, const Operation& operation) {
@@ -99,27 +129,9 @@ result::Result<JsonDelta> deltaOf(const Value& staged, const Operation& operatio
             return refuse(
                 result::ErrorClass::AlreadyExists, AuthoringError::Conflict, "a component is one node's in a document");
         }
-        JsonPath path;
-        if (create->parent.has_value()) {
-            std::optional<JsonPath> parent = nodeIn(staged, *create->parent);
-            if (!parent.has_value()) {
-                return kUnknown();
-            }
-            path = std::move(*parent);
-        }
-        const std::optional<Value> kHolder = slotAt(staged, path);
-        const Value* siblings = kHolder.has_value() ? kHolder->find(path.empty() ? "nodes" : "children") : nullptr;
-        const std::size_t kCount = siblings != nullptr ? siblings->items().size() : 0;
-        if (create->place.value_or(kCount) > kCount) {
-            return refuse(result::ErrorClass::InvalidArgument,
-                          AuthoringError::ValidationFailed,
-                          "a new node's place is among its siblings or after them");
-        }
-        path.push_back(JsonStep{.member = path.empty() ? "nodes" : "children", .key = "component", .id = create->node});
         Value record = Value::object();
         record.add("component", Value::string(create->node));
-        return JsonDelta{
-            .path = std::move(path), .place = create->place.value_or(kCount), .before = std::nullopt, .after = record};
+        return insertion(staged, std::move(record), create->node, create->parent, create->place);
     }
     if (const auto* remove = std::get_if<RemoveUiNode>(&operation)) {
         std::optional<JsonPath> path = nodeIn(staged, remove->node);
@@ -156,6 +168,16 @@ result::Result<Committed> AuthoredUi::change(std::uint64_t generation, std::span
                       "a batch has more operations than its limit");
     }
     for (std::size_t at = 0; at < operations.size(); ++at) {
+        if (const auto* move = std::get_if<MoveUiNode>(&operations[at])) {
+            // Taken out, then put where it goes in what is left: two deltas,
+            // each found in the document as the one before left it.
+            auto moved = stageMove(staged, *move);
+            if (!moved.has_value()) {
+                return std::unexpected<result::Error>{
+                    std::move(moved).error().withContext("index", std::to_string(at))};
+            }
+            continue;
+        }
         auto delta = deltaOf(staged.root, operations[at]);
         if (!delta.has_value()) {
             return std::unexpected<result::Error>{std::move(delta).error().withContext("index", std::to_string(at))};
@@ -166,6 +188,23 @@ result::Result<Committed> AuthoredUi::change(std::uint64_t generation, std::span
         }
     }
     return reread(document_.keep(std::move(staged)));
+}
+
+result::Status AuthoredUi::stageMove(JsonDocument::Staged& staged, const MoveUiNode& move) const {
+    const std::array<Operation, 1> kTaken = {RemoveUiNode{.node = move.node}};
+    RAWFRAME_TRY_ASSIGN(JsonDelta taken, deltaOf(staged.root, kTaken[0]));
+    if (move.parent.has_value()) {
+        const std::optional<JsonPath> kParent = nodeIn(staged.root, *move.parent);
+        if (kParent.has_value() && std::ranges::find(*kParent, move.node, &JsonStep::id) != kParent->end()) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          AuthoringError::ValidationFailed,
+                          "a node is not moved inside itself");
+        }
+    }
+    Value record = *taken.before;
+    RAWFRAME_TRY(document_.apply(staged, std::move(taken)));
+    RAWFRAME_TRY_ASSIGN(JsonDelta put, insertion(staged.root, std::move(record), move.node, move.parent, move.place));
+    return document_.apply(staged, std::move(put));
 }
 
 result::Result<Committed> AuthoredUi::reread(result::Result<Committed> done) {
@@ -191,14 +230,20 @@ std::string AuthoredUi::summaryAt(std::size_t entry) const {
     }
     const JsonDelta& kFirst = journal.front();
     std::string made;
-    if (!kFirst.path.back().key.empty()) {
+    std::size_t more = journal.size() - 1;
+    if (journal.size() > 1 && !kFirst.after.has_value() && !journal[1].before.has_value() &&
+        !kFirst.path.back().key.empty() && kFirst.path.back().id == journal[1].path.back().id) {
+        // Taken out and put back elsewhere: a move (D644).
+        made = "move node " + kFirst.path.back().id;
+        --more;
+    } else if (!kFirst.path.back().key.empty()) {
         made = (kFirst.after.has_value() ? "create node " : "delete node ") + kFirst.path.back().id;
     } else {
         const std::string& kNode = kFirst.path[kFirst.path.size() - 2].id;
         made = (kFirst.after.has_value() ? "set " : "unset ") + kFirst.path.back().member + " of " + kNode;
     }
-    if (journal.size() > 1) {
-        made += " and " + std::to_string(journal.size() - 1) + " more";
+    if (more > 0) {
+        made += " and " + std::to_string(more) + " more";
     }
     return made;
 }

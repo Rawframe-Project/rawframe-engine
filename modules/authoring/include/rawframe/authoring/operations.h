@@ -250,6 +250,13 @@ struct CreateUiNode {
 struct RemoveUiNode {
     std::string node;
 };
+/// A node, with what is inside it, moved to `parent`, or among the roots
+/// for none, at `place` among its new siblings or after them (D644).
+struct MoveUiNode {
+    std::string node;
+    std::optional<std::string> parent;
+    std::optional<std::size_t> place;
+};
 
 /// The id an instantiation named `instance` gives the source's entity
 /// `source`: a version 8 UUID from their SHA-256 (D156).
@@ -276,12 +283,13 @@ using Operation = std::variant<CreateEntity,
                                SetStyleTransitions,
                                SetUiField,
                                CreateUiNode,
-                               RemoveUiNode>;
+                               RemoveUiNode,
+                               MoveUiNode>;
 
 /// Whether `operation` changes a scene, rather than a style sheet (D636) or
 /// a UI document (D641), which follow the scene's in `Operation`.
 [[nodiscard]] constexpr bool changesScene(const Operation& operation) noexcept {
-    return operation.index() < std::variant_size_v<Operation> - 8;
+    return operation.index() < std::variant_size_v<Operation> - 9;
 }
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the

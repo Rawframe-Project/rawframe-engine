@@ -1,8 +1,8 @@
 // A UI document open for authoring (D641): a node's field set and unset
-// wherever the node stands, nodes made inside others and removed with
-// what is inside them, each batch one entry undone exactly, what the
-// document's reader refuses refused with the document as it was, and the
-// document read whole.
+// wherever the node stands, nodes made inside others and removed with what
+// is inside them, moved with what is inside them (D644), each batch one
+// entry undone exactly, what the document's reader refuses refused with
+// the document as it was, and the document read whole.
 
 #include "rawframe/authoring/authored_ui.h"
 #include "rawframe/authoring/errors.h"
@@ -79,6 +79,36 @@ RAWFRAME_TEST(AUiDocumentsNodesChangeAndUndoExactly) {
     const auto kRead = answer(hud, Query{ReadUiDocument{}});
     RAWFRAME_EXPECT(kRead.has_value() && document::write(*kRead->find("document")) == kHud);
     RAWFRAME_EXPECT(refusedWith(answer(hud, Query{ReadSheet{}}), AuthoringError::ValidationFailed));
+}
+
+RAWFRAME_TEST(AUiDocumentsNodesMoveWithWhatIsInsideThem) {
+    auto opened = AuthoredUi::open(kDocument, kHud);
+    RAWFRAME_EXPECT(opened.has_value());
+    if (!opened.has_value()) {
+        return;
+    }
+    AuthoredUi& hud = **opened;
+    // The points out of the hud, first among the roots, its field with it.
+    const std::array<Operation, 1> kOut = {MoveUiNode{.node = "game.points", .parent = std::nullopt, .place = 0}};
+    RAWFRAME_EXPECT(hud.change(0, kOut).has_value());
+    RAWFRAME_EXPECT(hud.read().nodes.size() == 2 && hud.read().nodes[0].component == "game.points" &&
+                    !hud.read().nodes[0].parent.has_value() && hud.read().nodes[0].fields.textSize == 14);
+    RAWFRAME_EXPECT(hud.text().find("\"children\"") == std::string::npos);
+    RAWFRAME_EXPECT(hud.summaryAt(0) == "move node game.points");
+    // The hud, and so the coin made in it, into the points.
+    const std::array<Operation, 2> kIn = {CreateUiNode{.node = "game.coin", .parent = "game.hud"},
+                                          MoveUiNode{.node = "game.hud", .parent = "game.points"}};
+    RAWFRAME_EXPECT(hud.change(1, kIn).has_value());
+    RAWFRAME_EXPECT(hud.pathOf("game.coin")->size() == 3 && hud.summaryAt(1) == "create node game.coin and 2 more");
+    // Not inside itself, nor anywhere it is not.
+    const std::array<Operation, 1> kSelf = {MoveUiNode{.node = "game.points", .parent = "game.coin"}};
+    const std::array<Operation, 1> kGone = {MoveUiNode{.node = "game.gone", .parent = std::nullopt}};
+    const std::array<Operation, 1> kNowhere = {MoveUiNode{.node = "game.coin", .parent = "game.gone"}};
+    RAWFRAME_EXPECT(refusedWith(hud.change(2, kSelf), AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(hud.change(2, kGone), AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(refusedWith(hud.change(2, kNowhere), AuthoringError::TargetNotFound));
+    // Back exactly.
+    RAWFRAME_EXPECT(hud.undo(2).has_value() && hud.undo(3).has_value() && hud.text() == kHud);
 }
 
 RAWFRAME_TEST(AUiDocumentRefusesWhatItDoesNotRead) {

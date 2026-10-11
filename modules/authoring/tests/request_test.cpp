@@ -71,6 +71,7 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
         R"({"operation": "ui.create_node", "node": "game.coin", "parent": "game.hud", "place": 0})",
         R"({"operation": "ui.create_node", "node": "game.menu"})",
         R"({"operation": "ui.remove_node", "node": "game.hud"})",
+        R"({"operation": "ui.move_node", "node": "game.coin", "parent": null, "place": 1})",
     };
     std::string joined;
     for (const std::string& each : kAll) {
@@ -109,7 +110,9 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
                     std::get<CreateUiNode>(kRead->operations[26]).parent == "game.hud" &&
                     std::get<CreateUiNode>(kRead->operations[26]).place == 0 &&
                     !std::get<CreateUiNode>(kRead->operations[27]).parent.has_value() &&
-                    std::get<RemoveUiNode>(kRead->operations[28]).node == "game.hud");
+                    std::get<RemoveUiNode>(kRead->operations[28]).node == "game.hud" &&
+                    !std::get<MoveUiNode>(kRead->operations[29]).parent.has_value() &&
+                    std::get<MoveUiNode>(kRead->operations[29]).place == 1);
     RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "ui.create_node", "node": "game.coin",
         "parent": 3})")),
                                 AuthoringError::ValidationFailed));
