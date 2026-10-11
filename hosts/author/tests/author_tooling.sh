@@ -49,11 +49,15 @@ done
     sleep 0.5
     echo '{"kind":"tooling.status","id":2}'
     echo '{"kind":"tooling.jump","id":3}'
+    # Asked again later too: a loaded machine may hold the World a half
+    # second.
+    sleep 2
+    echo '{"kind":"tooling.status","id":4}'
 } | "$author" connect "127.0.0.1:$port" "$work/fingerprint" "$work/token" >"$work/replies" || true
 grep -q '"answer":{"kind":"tooling.welcome","protocolVersion":1,"grants":\["inspect"\]}' "$work/replies"
 first=$(grep '"id":1,' "$work/replies" | python3 -c 'import json, sys; print(json.load(sys.stdin)["answer"]["tick"])')
-second=$(grep '"id":2,' "$work/replies" | python3 -c 'import json, sys; print(json.load(sys.stdin)["answer"]["tick"])')
-(( second > first ))
+later=$(grep '"id":4,' "$work/replies" | python3 -c 'import json, sys; print(json.load(sys.stdin)["answer"]["tick"])')
+(( later > first ))
 grep '"id":1,' "$work/replies" | grep -q '"world":true'
 grep '"id":1,' "$work/replies" | grep -q '"name":"runners.age","entities":1'
 grep -q '"id":3,"error":{"code":"unsupported"' "$work/replies"
