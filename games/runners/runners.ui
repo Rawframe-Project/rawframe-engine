@@ -98,6 +98,36 @@
           "thumb": true
         }
       ]
+    },
+    {
+      "component": "runners.tune",
+      "widthOffset": 140,
+      "heightOffset": 14,
+      "absolute": true,
+      "xScale": 1,
+      "xOffset": -12,
+      "yOffset": 34,
+      "anchorX": 1,
+      "fill": "#101820c0",
+      "radius": 7,
+      "text": "5b0e2d7c9a41f863",
+      "range": "horizontal",
+      "rangeMinimum": -40,
+      "rangeStep": 2,
+      "kept": true,
+      "children": [
+        {
+          "component": "runners.peg",
+          "widthOffset": 14,
+          "heightOffset": 14,
+          "absolute": true,
+          "xScale": 1,
+          "anchorX": 1,
+          "fill": "#ffd27aff",
+          "radius": 7,
+          "thumb": true
+        }
+      ]
     }
   ]
 }

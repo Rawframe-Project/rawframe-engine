@@ -15,6 +15,12 @@
     ],
     "children": [
       {
+        "busId": "72d352d73ed19e64",
+        "name": "music",
+        "role": "music",
+        "volume": -12
+      },
+      {
         "busId": "691c5abeb88d55ee",
         "name": "effects",
         "role": "sfx",

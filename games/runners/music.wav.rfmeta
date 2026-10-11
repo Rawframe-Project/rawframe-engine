@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "resourceId": "ae80b1a3574967c646cab21387eb36f5",
+  "importer": "rawframe.audio",
+  "settings": {
+    "tier": "opus",
+    "bitrate": 48000
+  }
+}

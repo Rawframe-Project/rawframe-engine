@@ -12,6 +12,10 @@
       "message": "Efekt sesi",
       "sourceHash": "ccc5c6641208c47c"
     },
+    "hud.music": {
+      "message": "Müzik sesi",
+      "sourceHash": "d8773f37c57e87ea"
+    },
     "hud.score": {
       "message": "{$points} puan",
       "sourceHash": "92a0315619079782"

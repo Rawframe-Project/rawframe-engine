@@ -24,6 +24,9 @@ const SHOT: u64 = 0x950e09337d03de69
 // A hit's sound, heard by the runner hit (runners.game's `sound` line).
 const HURT: u64 = 0x81012dde2ad3952f
 
+// The music, streamed round and round (runners.game's `sound` line).
+const MUSIC: u64 = 0x8998b3d2073c4a8a
+
 // What a runner looks like (runners.game's `texture` line): a sheet of six
 // cells in a row, standing, four strides, and in the air.
 const RUNNER_LOOK: u64 = 0xeddbc014cab63eb2
@@ -146,27 +149,49 @@ fn gauge(count: i32, scores: [Score], landed: [ui.Node], taken: [ui.Node], point
     }
 }
 
-// The effects' volume slider's press code (D625), by which the present
-// system reads the value the player slid it to.
+// The volume sliders' press codes (D625, D629), by which the present
+// systems read the values the player slid them to.
 const LOUDNESS: i64 = 1
+const TUNE: i64 = 2
 
-// The effects' volume at the top right of the view (D625), as runners.ui
-// starts it: a dark track from -40 decibels to nought by twos, at nought
-// to begin, its dial at the value's share of it; the player's volume for
-// the mixer's effects bus, silent at its least.
-fn loudness(count: i32, tracks: [ui.Node], dials: [ui.Node]) {
-    let decibels = ui.value(LOUDNESS)
-    let share = (decibels + 40.0) / 40.0
+// A volume slider as runners.ui starts it: a dark track from -40 decibels
+// to nought by twos, at nought to begin. Its value is the player's volume
+// for the mixer's buses of `role`, silent at its least; given back is its
+// dial's share of the track.
+fn slid(press: i64, role: u32) -> f32 {
+    let decibels = ui.value(press)
     if decibels <= -40.0 {
-        sound.volume(sound.EFFECTS, -80.0)
+        sound.volume(role, -80.0)
     } else {
-        sound.volume(sound.EFFECTS, decibels)
+        sound.volume(role, decibels)
     }
+    return (decibels + 40.0) / 40.0
+}
+
+// The effects' volume at the top right of the view (D625), its dial at
+// the value's share of it.
+fn loudness(count: i32, tracks: [ui.Node], dials: [ui.Node]) {
+    let share = slid(LOUDNESS, sound.EFFECTS)
     let i = 0
     while i < count {
         tracks[i].press = LOUDNESS
         dials[i].xScale = share
         dials[i].anchorX = share
+        i = i + 1
+    }
+}
+
+// The music's volume under it (D629), and the music, played on from the
+// player's own emitter.
+fn tune(count: i32, tracks: [ui.Node], pegs: [ui.Node], players: [sound.Emitter]) {
+    let share = slid(TUNE, sound.MUSIC)
+    let i = 0
+    while i < count {
+        tracks[i].press = TUNE
+        pegs[i].xScale = share
+        pegs[i].anchorX = share
+        players[i].sound = MUSIC
+        players[i].playing = true
         i = i + 1
     }
 }

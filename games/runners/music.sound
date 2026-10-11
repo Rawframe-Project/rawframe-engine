@@ -1,0 +1,12 @@
+{
+  "kind": "audio.sound",
+  "formatVersion": 1,
+  "variants": [
+    {
+      "resource": "ae80b1a3574967c646cab21387eb36f5"
+    }
+  ],
+  "loop": {},
+  "bus": "72d352d73ed19e64",
+  "loading": "stream"
+}
