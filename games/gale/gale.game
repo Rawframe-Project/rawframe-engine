@@ -1,0 +1,34 @@
+# Gale (D681), the small ship game: each player sails a ship of its own on a
+# sea whose waves roll by, Maul3D bodies all, the server deciding. A ship
+# floats by the water it displaces under its hull, computed by the game's
+# program each tick, and goes where its throttle and rudder take it. The
+# game is Keelstorm's class among the constitution's reference games:
+# moving physical entities on water, authoritative online play.
+program gale.kest
+physics3d gravity 0 -9.81 0
+
+collision class ship 9063f6d926412ea4
+
+component 787f081f-15a5-42fc-bbeb-06b230674c63 gale.helm Helm
+component 81e1d987-0cc4-4374-a8fd-39cd1e9e8dbe gale.berth Berth
+component b71d9c3f-8a0e-4a92-824d-73479a820d53 gale.ship Ship
+component 8c9ece20-a6b4-4a66-9623-035fc0f16d3a gale.sea Sea
+
+# The sea's clock runs a tick at a time; a player is given a ship; each
+# ship floats, and sails as its player's helm says.
+system gale.tide simulation tide write gale.sea before rawframe.physics3d.step
+system gale.launch simulation launch write gale.berth entities lookup gale.sea before rawframe.physics3d.step
+system gale.float simulation float read gale.ship read rawframe.physics3d.pose read rawframe.physics3d.velocity write rawframe.physics3d.impulse entities lookup gale.sea lookup gale.helm after gale.tide before rawframe.physics3d.step
+
+# The sea: its clock, and how many ships it has been given.
+spawn 1 gale.sea
+
+replicate rawframe.physics3d.body rawframe.physics3d.pose gale.ship gale.sea
+entity gale.ship player
+player gale.helm gale.berth
+input gale.helm
+# A client makes its helm from its player's actions (gale.actions) with
+# sample.kest; bots press the same controls.
+actions gale.actions
+sample sample.kest sample
+interpolate rawframe.physics3d.pose

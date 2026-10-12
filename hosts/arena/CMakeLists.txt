@@ -60,6 +60,13 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(crates_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bodiesMade\":27,\"bodiesRemoved\":0,\"bodiesRefused\":0")
+    # Eight bots sail Gale (D681): a ship for each, floated and pushed by the
+    # sea every tick, and each bot's helm made by the game's sample.
+    add_test(NAME gale_bots
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/gale.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(gale_bots PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8,[^\n]*\"sourceFailures\":0,.*\"bodiesMade\":8,\"bodiesRemoved\":0,\"bodiesRefused\":0,\"teleports\":0,\"velocitiesSet\":0,\"impulses\":[1-9][0-9][0-9][0-9]+,")
     # Stalls' sources cooked into the build tree: its customers' figure,
     # which every run plays from them (D512), and its font and text, read
     # by the drawn run (D389).

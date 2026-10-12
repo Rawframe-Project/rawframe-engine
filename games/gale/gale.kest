@@ -1,0 +1,222 @@
+module gale
+
+// Gale (D681): each player sails a ship of its own on a rolling sea. A ship
+// is a dynamic box on Maul3D; the sea is the program's: each tick it finds
+// how deep below the waves six points under the hull are, and pushes each
+// up by the weight of the water it displaces there, so a ship floats at
+// its draft, rides the waves, and rights itself as it rolls. Its throttle
+// drives it ahead from the stern, its rudder turns it as it goes, and its
+// keel keeps it from sliding sideways.
+
+import controls
+import rawframe.physics3d
+import rawframe.world
+import std.math
+
+// The game's collision class (gale.game).
+const SHIP: u64 = 0x9063f6d926412ea4
+
+// A tick, in seconds (the World's 60 Hz), and gravity.
+const DT: f32 = 0.016666668
+const GRAVITY: f32 = 9.81
+
+// Kilograms a cubic meter of sea water.
+const WATER: f32 = 1000.0
+
+// A hull's half beam, half height, and half length, in meters, and its
+// density: a box 2.4 by 1 by 6 meters of 300 kilograms a cubic meter
+// floats 0.3 meters deep.
+const BEAM: f32 = 1.2
+const HEIGHT: f32 = 0.5
+const LENGTH: f32 = 3.0
+const DENSITY: f32 = 300.0
+const MASS: f32 = 4320.0
+
+// Newtons of thrust at full throttle, newton meters of turn at full
+// rudder, and the share of its sideways speed the keel takes off a tick.
+const THRUST: f32 = 30000.0
+const TURN: f32 = 8000.0
+const KEEL: f32 = 0.08
+
+// Meters between ships launched side by side, and between their rows.
+const SPACING: f64 = 14.0
+const ROWS: f64 = 20.0
+
+// The sea: the ticks it has rolled, and how many ships it has launched.
+struct Sea {
+    ticks: u32
+    launched: u32
+}
+
+// A player's berth: whether its ship has been launched.
+struct Berth {
+    launched: bool
+}
+
+// A ship: the player who sails it.
+struct Ship {
+    player: world.Entity
+}
+
+// A direction or an offset, in meters.
+struct Offset {
+    x: f32
+    y: f32
+    z: f32
+}
+
+extern fn Sea.count() -> i32
+extern fn Sea.entity(index: i32) -> world.Entity
+extern fn Sea.get(entity: world.Entity) -> Sea
+extern fn Sea.insert(entity: world.Entity, value: Sea)
+extern fn Helm.has(entity: world.Entity) -> bool
+extern fn Helm.get(entity: world.Entity) -> controls.Helm
+extern fn Ship.insert(entity: world.Entity, value: Ship)
+extern fn Body3D.insert(entity: world.Entity, value: physics3d.Body3D)
+extern fn Pose3D.insert(entity: world.Entity, value: physics3d.Pose3D)
+extern fn Velocity3D.insert(entity: world.Entity, value: physics3d.Velocity3D)
+extern fn Impulse3D.insert(entity: world.Entity, value: physics3d.Impulse3D)
+
+// The sea rolls on a tick.
+fn tide(count: i32, seas: [Sea]) {
+    let i = 0
+    while i < count {
+        seas[i].ticks = seas[i].ticks + u32(1)
+        i = i + 1
+    }
+}
+
+// The water's height at `x`, `z` after `time` seconds: two swells crossing,
+// a quarter meter and fifteen centimeters high.
+fn height(x: f32, z: f32, time: f32) -> f32 {
+    let one = f64(0.25) * math.sin(f64(0.3 * x + 1.1 * time))
+    let two = f64(0.15) * math.sin(f64(0.23 * z + 0.8 * time + 1.3))
+    return f32(one + two)
+}
+
+// A player's entity arrives with its components zeroed: its ship is
+// launched beside the last, four to a row.
+fn launch(count: i32, berths: [Berth], entities: [world.Entity]) {
+    if Sea.count() == 0 {
+        return
+    }
+    let sea = Sea.entity(0)
+    let state = Sea.get(sea)
+    let launched = state.launched
+    let i = 0
+    while i < count {
+        if !berths[i].launched {
+            let x = f64(launched % u32(4)) * SPACING - f64(1.5) * SPACING
+            let z = f64(launched / u32(4)) * ROWS
+            let ship = world.create()
+            Ship.insert(ship, Ship(entities[i]))
+            Body3D.insert(ship, physics3d.Body3D(physics3d.DYNAMIC, physics3d.BOX, false, false, false, SHIP, BEAM,
+                                                 HEIGHT, LENGTH, DENSITY, 0.4, 0.0, 0.4, 1.5))
+            Pose3D.insert(ship, physics3d.Pose3D(x, f64(0.2), z, 0.0, 0.0, 0.0, 1.0))
+            Velocity3D.insert(ship, physics3d.Velocity3D(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+            Impulse3D.insert(ship, physics3d.Impulse3D(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+            berths[i].launched = true
+            launched = launched + u32(1)
+        }
+        i = i + 1
+    }
+    Sea.insert(sea, Sea(state.ticks, launched))
+}
+
+// `offset` turned by the pose's rotation.
+fn turned(pose: physics3d.Pose3D, offset: Offset) -> Offset {
+    let w = pose.qw
+    let qx = pose.qx
+    let qy = pose.qy
+    let qz = pose.qz
+    if w == 0.0 && qx == 0.0 && qy == 0.0 && qz == 0.0 {
+        return offset
+    }
+    // v + 2w(q x v) + 2q x (q x v)
+    let cx = qy * offset.z - qz * offset.y
+    let cy = qz * offset.x - qx * offset.z
+    let cz = qx * offset.y - qy * offset.x
+    let dx = qy * cz - qz * cy
+    let dy = qz * cx - qx * cz
+    let dz = qx * cy - qy * cx
+    return Offset(offset.x + 2.0 * (w * cx + dx), offset.y + 2.0 * (w * cy + dy), offset.z + 2.0 * (w * cz + dz))
+}
+
+fn dot(a: Offset, b: Offset) -> f32 {
+    return a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+// Each ship pushed by the water under it and by its helm, for the step to
+// apply; a ship whose player is gone sinks from the World.
+fn float(count: i32, ships: [Ship], poses: [physics3d.Pose3D], velocities: [physics3d.Velocity3D],
+         impulses: [physics3d.Impulse3D], entities: [world.Entity]) {
+    if Sea.count() == 0 {
+        return
+    }
+    let time = f32(Sea.get(Sea.entity(0)).ticks) * DT
+    // The water under one of the six points carries a sixth of the hull's
+    // bottom.
+    let area = 4.0 * BEAM * LENGTH / 6.0
+    let i = 0
+    while i < count {
+        if !Helm.has(ships[i].player) {
+            world.destroy(entities[i])
+        } else {
+            let pose = poses[i]
+            // The pushes up, and their turns about x and z, summed over
+            // the points under water.
+            let up = 0.0
+            let aboutX = 0.0
+            let aboutZ = 0.0
+            let yaw = 0.0
+            let wet = 0
+            let point = 0
+            while point < 6 {
+                let side = BEAM
+                if point % 2 == 0 {
+                    side = 0.0 - BEAM
+                }
+                let along = f32(point / 2 - 1) * LENGTH * 0.8
+                let at = turned(pose, Offset(side, 0.0 - HEIGHT, along))
+                let x = f32(pose.x) + at.x
+                let z = f32(pose.z) + at.z
+                let depth = height(x, z, time) - (f32(pose.y) + at.y)
+                if depth > 0.0 {
+                    if depth > 2.0 * HEIGHT {
+                        depth = 2.0 * HEIGHT
+                    }
+                    let lift = WATER * GRAVITY * area * depth * DT
+                    up = up + lift
+                    // An upward push at `at` from the middle turns the hull
+                    // by `at` crossed with it.
+                    aboutX = aboutX - at.z * lift
+                    aboutZ = aboutZ + at.x * lift
+                    wet = wet + 1
+                }
+                point = point + 1
+            }
+            let push = Offset(0.0, up, 0.0)
+            if wet > 0 {
+                let ahead = turned(pose, Offset(0.0, 0.0, -1.0))
+                let beam = turned(pose, Offset(1.0, 0.0, 0.0))
+                let velocity = Offset(velocities[i].x, velocities[i].y, velocities[i].z)
+                let speed = dot(velocity, ahead)
+                let sideways = dot(velocity, beam)
+                let helm = Helm.get(ships[i].player)
+                let thrust = THRUST * helm.throttle * DT
+                // The keel takes a share of the sideways speed off.
+                let keel = 0.0 - MASS * KEEL * sideways
+                push = Offset(ahead.x * thrust + beam.x * keel, up + ahead.y * thrust + beam.y * keel,
+                              ahead.z * thrust + beam.z * keel)
+                // A rudder bites harder the faster the water runs past it.
+                let bite = 0.3 + math.abs(speed) / 6.0
+                if bite > 1.0 {
+                    bite = 1.0
+                }
+                yaw = yaw - helm.rudder * TURN * DT * bite
+            }
+            impulses[i] = physics3d.Impulse3D(push.x, push.y, push.z, aboutX, yaw, aboutZ)
+        }
+        i = i + 1
+    }
+}
