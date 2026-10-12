@@ -885,11 +885,18 @@ Lit shaded(Corner corner, bool decaled, bool front)
         const float4 there = mul(frame.viewProjection, float4(leaves, 1.0));
         uint width;
         uint height;
-        behindTexture.GetDimensions(width, height);
+        uint levels;
+        behindTexture.GetDimensions(0, width, height, levels);
         const float2 size = float2(float(width), float(height));
-        const float2 place = (there.xy / max(there.w, 1e-6) * float2(0.5, -0.5) + 0.5) * size;
-        const int2 behind = int2(clamp(place, float2(0.0), size - 1.0));
-        const float3 seen = behindTexture.Load(int3(behind, 0)).rgb / max(exposure[0].value.y, 1e-12);
+        const float2 place = there.xy / max(there.w, 1e-6) * float2(0.5, -0.5) + 0.5;
+        // A rough model blurs it (D723): read at the level whose texels are
+        // as wide as its lobe, its roughness squared, is on the screen's
+        // height, the copy's levels each halved from the one before.
+        const float lobe = roughness * roughness * size.y;
+        const float level = clamp(log2(1.0 + lobe), 0.0, float(levels - 1));
+        const float3 seen =
+            behindTexture.SampleLevel(environmentSampler, clamp(place, float2(0.0), float2(1.0)), level).rgb /
+            max(exposure[0].value.y, 1e-12);
         const float3 through = evaluated.transmissionDepth > 0.0 && travelled > 0.0
                                    ? pow(evaluated.transmissionColor, float3(travelled / evaluated.transmissionDepth))
                                    : float3(1.0);

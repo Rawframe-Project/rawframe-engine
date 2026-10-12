@@ -83,6 +83,12 @@ if(TARGET rawframe_material_tests)
     rawframe_embedded_file(TARGET rawframe_material_tests
                            FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/glass_graph.slang"
                            HEADER "glass_graph.h" SYMBOL "kGlassGraph")
+    # A frosted glass (D723), and its Slang.
+    rawframe_embedded_file(TARGET rawframe_material_tests FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/seeds/frosted.material"
+                           HEADER "frosted_material.h" SYMBOL "kFrostedMaterial")
+    rawframe_embedded_file(TARGET rawframe_material_tests
+                           FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/frosted_graph.slang"
+                           HEADER "frosted_graph.h" SYMBOL "kFrostedGraph")
 endif()
 rawframe_module_fuzz(NAME material TARGET documents RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_material.cpp)
 rawframe_module_fuzz(NAME material TARGET post_processes RUNS 10000 SEEDS tests/post_seeds SOURCES tests/fuzz_post_process.cpp)

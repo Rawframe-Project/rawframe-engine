@@ -12,14 +12,31 @@ namespace rawframe::render_scene_gpu {
 ModelPasses::ModelPasses(mrhiDevice* native) noexcept : native_(native) {
 }
 
-result::Status
-ModelPasses::declare(std::uint32_t width, std::uint32_t height, std::uint32_t samples, bool surfaced, bool transmits) {
+namespace {
+
+/// The most levels the copy behind transmitting models halves into, the
+/// first its own size (D723).
+constexpr std::uint32_t kMostBehindLevels = 7;
+
+} // namespace
+
+result::Status ModelPasses::declare(
+    std::uint32_t width, std::uint32_t height, std::uint32_t samples, bool surfaced, bool transmits, bool blurred) {
     samples_ = samples;
     surfaced_ = surfaced;
     transmits_ = transmits;
     width_ = width;
     height_ = height;
     behind_ = {};
+    halving_.clear();
+    // Halved while both sides stay at least four texels, as the bloom's
+    // chain is.
+    behindLevels_ = 1;
+    for (std::uint32_t across = width, down = height;
+         blurred && behindLevels_ < kMostBehindLevels && across >= 8 && down >= 8;
+         across /= 2, down /= 2) {
+        ++behindLevels_;
+    }
     surfaces_ = {};
     sampledScene_ = {};
     sampledMotion_ = {};
@@ -46,6 +63,7 @@ ModelPasses::declare(std::uint32_t width, std::uint32_t height, std::uint32_t sa
         def.width = width;
         def.height = height;
         def.sampleCount = kSamples;
+        def.mipLevels = kMade == &behind_ ? behindLevels_ : 1;
         if (const mrhiResult kDeclared = mrhiDeclareTexture(native_, &def, kMade); kDeclared != mrhi_success) {
             return failed("a target of the models' passes could not be declared", kDeclared);
         }
@@ -153,11 +171,29 @@ result::Status ModelPasses::addLitPass(const std::vector<mrhiAccess>& reads) {
     if (const mrhiResult kAdded = mrhiAddPass(native_, &copy, &copying_); kAdded != mrhi_success) {
         return failed("the copy of the opaque models' light could not be added", kAdded);
     }
+    // Each level after the first halved from the one before (D723).
+    for (std::uint32_t level = 1; level < behindLevels_; ++level) {
+        const mrhiAccess kRead{
+            .resource = behind_,
+            .kind = mrhi_accessSampled,
+            .range = {.baseMip = level - 1, .mipCount = 1, .baseLayer = 0, .layerCount = 1, .aspect = {}}};
+        mrhiPassDef halved = mrhiDefaultPassDef();
+        halved.colorTargets[0].resource = behind_;
+        halved.colorTargets[0].mip = level;
+        halved.colorTargets[0].load = mrhi_loadDiscard;
+        halved.colorTargets[0].store = mrhi_storeKeep;
+        halved.colorTargetCount = 1;
+        halved.accesses = &kRead;
+        halved.accessCount = 1;
+        if (const mrhiResult kAdded = mrhiAddPass(native_, &halved, &halving_.emplace_back()); kAdded != mrhi_success) {
+            return failed("the levels of the opaque models' light could not be added", kAdded);
+        }
+    }
     std::vector<mrhiAccess> glassReads = reads;
     glassReads.push_back(
         mrhiAccess{.resource = behind_,
                    .kind = mrhi_accessSampled,
-                   .range = {.baseMip = 0, .mipCount = 1, .baseLayer = 0, .layerCount = 1, .aspect = {}}});
+                   .range = {.baseMip = 0, .mipCount = behindLevels_, .baseLayer = 0, .layerCount = 1, .aspect = {}}});
     mrhiPassDef glass = def;
     glass.accesses = glassReads.data();
     glass.accessCount = static_cast<std::uint32_t>(glassReads.size());
@@ -329,11 +365,28 @@ result::Status ModelPasses::recordLit(const Drawing& with, bool decaled, std::sp
         const mrhiExtent3d kExtent{.width = width_, .height = height_, .depthOrLayers = 1};
         if (mrhiBeginPass(native_, copying_) != mrhi_success ||
             mrhiCopyTexture(native_, copying_, &kFrom, &kTo, &kExtent) != mrhi_success ||
-            mrhiEndPass(native_, copying_) != mrhi_success || mrhiBeginPass(native_, glass_) != mrhi_success) {
+            mrhiEndPass(native_, copying_) != mrhi_success) {
             return failed("the opaque models' light could not be copied", mrhi_errorState);
+        }
+        for (std::size_t at = 0; at < halving_.size(); ++at) {
+            mrhiBinding before = textureAt(0, behind_);
+            before.range.baseMip = static_cast<std::uint32_t>(at);
+            before.range.mipCount = 1;
+            const std::array<mrhiBinding, 2> kBindings = {before, samplerAt(1, pipelines.filteredSampler)};
+            if (mrhiBeginPass(native_, halving_[at]) != mrhi_success ||
+                mrhiSetGraphicsPipeline(native_, halving_[at], pipelines.bloomDown.pipeline) != mrhi_success ||
+                mrhiSetBindings(native_, halving_[at], 0, kBindings.data(), kBindings.size()) != mrhi_success ||
+                mrhiDraw(native_, halving_[at], 3, 1, 0, 0) != mrhi_success ||
+                mrhiEndPass(native_, halving_[at]) != mrhi_success) {
+                return failed("the opaque models' light could not be halved", mrhi_errorState);
+            }
+        }
+        if (mrhiBeginPass(native_, glass_) != mrhi_success) {
+            return failed("a scene pass could not begin", mrhi_errorState);
         }
         translucent = glass_;
         table[28] = textureAt(28, behind_);
+        table[28].range.mipCount = behindLevels_;
     }
     RAWFRAME_TRY(
         decaled

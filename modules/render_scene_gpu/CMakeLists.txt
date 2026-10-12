@@ -91,4 +91,11 @@ if(TARGET rawframe_render_scene_gpu_tests)
     rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
                            FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/glass_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
                            HEADER "glass_graph_shadow_container.h" SYMBOL "kGlassGraphShadow")
+    # A frosted glass, its roughness blurring what it lets through (D723).
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/frosted_graph.scene${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "frosted_graph_scene_container.h" SYMBOL "kFrostedGraphScene")
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/frosted_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "frosted_graph_shadow_container.h" SYMBOL "kFrostedGraphShadow")
 endif()

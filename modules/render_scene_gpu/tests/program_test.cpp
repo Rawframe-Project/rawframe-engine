@@ -17,6 +17,8 @@
 #include "generated/faded_graph_shadow_container.h"
 #include "generated/faded_scene_container.h"
 #include "generated/faded_shadow_container.h"
+#include "generated/frosted_graph_scene_container.h"
+#include "generated/frosted_graph_shadow_container.h"
 #include "generated/glass_graph_scene_container.h"
 #include "generated/glass_graph_shadow_container.h"
 #include "generated/rising_graph_scene_container.h"
@@ -743,4 +745,60 @@ RAWFRAME_TEST(AGlassShowsWhatLiesBehindIt) {
                 kSeen[2]);
     RAWFRAME_EXPECT(std::abs(kHidden[0] - kHidden[1]) < 30);
     RAWFRAME_EXPECT(kSeen[0] > kSeen[1] + 60 && kSeen[0] > kSeen[2] + 60);
+}
+
+RAWFRAME_TEST(AFrostedGlassBlursWhatLiesBehindIt) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A red box and a blue one six meters ahead, meeting in the middle,
+    // and a ball between: through clear glass (glass_graph.slang) the two
+    // stand apart on either side of the middle; through frosted glass,
+    // rough (frosted_graph.slang, D723), the copy is read at a level its
+    // roughness picks, and the two run into each other there.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    SceneDraw red = box(6, 2, {1, 0, 0, 1});
+    red.model[12] = -2;
+    SceneDraw blue = box(6, 2, {0, 0, 1, 1});
+    blue.model[12] = 2;
+    SceneDraw ball = box(3, 0.8F, {1, 1, 1, 1}, render_scene::kSphere);
+    ball.material = 1;
+    frame.draws = {red, blue, ball};
+    frame.translucent = 1;
+    frame.materials = {render_scene::noMaterial(), render_scene::noMaterial()};
+    const auto kThrough = [&](std::span<const std::uint8_t> scene, std::span<const std::uint8_t> shadow) {
+        auto glass = std::make_shared<material::ProgramMaterial>(*programOf(scene, shadow, material::Shading::Lit));
+        glass->transmits = true;
+        frame.programs = {nullptr, glass};
+        return drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
+    };
+    const auto kClear = kThrough(kGlassGraphScene, kGlassGraphShadow);
+    const auto kFrosted = kThrough(kFrostedGraphScene, kFrostedGraphShadow);
+    RAWFRAME_EXPECT(kClear.has_value() && kFrosted.has_value());
+    if (!kClear.has_value() || !kFrosted.has_value()) {
+        return;
+    }
+    // How much redder than blue the left of the middle is than its right.
+    const auto kApart = [](const std::vector<std::byte>& pixels) {
+        const std::array<int, 3> kLeft = at(pixels, 28, 32);
+        const std::array<int, 3> kRight = at(pixels, 36, 32);
+        std::printf("left %d %d %d, right %d %d %d\n", kLeft[0], kLeft[1], kLeft[2], kRight[0], kRight[1], kRight[2]);
+        return (kLeft[0] - kLeft[2]) - (kRight[0] - kRight[2]);
+    };
+    const int kClearApart = kApart(*kClear);
+    const int kFrostedApart = kApart(*kFrosted);
+    std::printf("through clear glass the sides are %d apart, through frosted %d\n", kClearApart, kFrostedApart);
+    RAWFRAME_EXPECT(kClearApart > 150);
+    RAWFRAME_EXPECT(kFrostedApart * 2 < kClearApart);
 }

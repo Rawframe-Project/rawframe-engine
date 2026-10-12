@@ -7,6 +7,8 @@
 #include "generated/brushed_material.h"
 #include "generated/coated_graph.h"
 #include "generated/coated_material.h"
+#include "generated/frosted_graph.h"
+#include "generated/frosted_material.h"
 #include "generated/glass_graph.h"
 #include "generated/glass_material.h"
 #include "rawframe/material/errors.h"
@@ -154,4 +156,15 @@ RAWFRAME_TEST(AGlassIsWrittenAsTheSlangTheScenesTestsDraw) {
     const auto kWritten = generateSlang(*kRead);
     const std::string_view kGolden{reinterpret_cast<const char*>(kGlassGraph.data()), kGlassGraph.size()};
     RAWFRAME_EXPECT(kWritten.has_value() && kWritten->transmits && kWritten->source == kGolden);
+    // frosted.material is the same glass but rough (D723), written as
+    // frosted_graph.slang.
+    const std::string_view kFrosted{reinterpret_cast<const char*>(kFrostedMaterial.data()), kFrostedMaterial.size()};
+    const auto kRough = readMaterial(kFrosted);
+    RAWFRAME_EXPECT(kRough.has_value());
+    if (!kRough.has_value()) {
+        return;
+    }
+    const auto kRoughWritten = generateSlang(*kRough);
+    const std::string_view kRoughGolden{reinterpret_cast<const char*>(kFrostedGraph.data()), kFrostedGraph.size()};
+    RAWFRAME_EXPECT(kRoughWritten.has_value() && kRoughWritten->transmits && kRoughWritten->source == kRoughGolden);
 }

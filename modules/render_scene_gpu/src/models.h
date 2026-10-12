@@ -47,9 +47,9 @@ public:
     /// The targets declared for a frame of `width` by `height`, taking
     /// `samples` a pixel, with surfaces when `surfaced`, and the copy of
     /// what the opaque models made when one of its models `transmits`
-    /// (D720).
-    result::Status
-    declare(std::uint32_t width, std::uint32_t height, std::uint32_t samples, bool surfaced, bool transmits);
+    /// (D720), halved into its levels when `blurred` (D723).
+    result::Status declare(
+        std::uint32_t width, std::uint32_t height, std::uint32_t samples, bool surfaced, bool transmits, bool blurred);
 
     /// The prepass and the depth's resolve, the prepass reading `reads`.
     result::Status addPrepass(const std::vector<mrhiAccess>& reads);
@@ -63,8 +63,9 @@ public:
     result::Status recordPrepass(const Drawing& with);
     /// The lit pass recorded: the opaque runs, the masked, the sky with
     /// `sky`'s table, then the translucent over them (D305), those that
-    /// transmit reading the copy made between (D720); by the twins that
-    /// lay decals when `decaled` (D339).
+    /// transmit reading the copy made between (D720) and its levels, each
+    /// halved from the one before by the bloom's halving (D723); by the
+    /// twins that lay decals when `decaled` (D339).
     result::Status recordLit(const Drawing& with, bool decaled, std::span<const mrhiBinding> sky);
 
     [[nodiscard]] mrhiResourceId scene() const noexcept;
@@ -117,6 +118,10 @@ private:
     mrhiResourceId behind_{};
     mrhiPassId copying_{};
     mrhiPassId glass_{};
+    /// The copy's levels, the first its own size, and the passes halving
+    /// each into the next, which a rough model reads blurred (D723).
+    std::uint32_t behindLevels_ = 1;
+    std::vector<mrhiPassId> halving_;
 };
 
 } // namespace rawframe::render_scene_gpu

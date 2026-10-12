@@ -433,11 +433,15 @@ struct SceneRenderer::State {
         const bool kTransmits = std::ranges::any_of(now.placed.translucentRuns, [](const Run& run) {
             return run.program != nullptr && run.program->transmits;
         });
+        // Its levels halved by the bloom's halving, once its pipelines are
+        // made, so a rough model blurs what it lets through (D723).
+        RAWFRAME_TRY_ASSIGN(const bool kHalving, made(kTransmits, Effect::Bloom));
         RAWFRAME_TRY(models->declare(open.width,
                                      open.height,
                                      kSampling ? frame->samples : 1,
                                      occlusion->enabled() || reflecting->enabled(),
-                                     kTransmits));
+                                     kTransmits,
+                                     kHalving));
         // Each material's own program's pipelines, as this frame draws its
         // models; until they are made, the engine's own draw them (D485,
         // D487). A model is drawn by its program when every pass it is
