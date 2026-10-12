@@ -347,11 +347,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # Gale's sources cooked, so the client reads its HUD's words and font
         # (D688) and the server plays the same content.
         set(GALE_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/gale_content)
+        # A machine without the shader toolchain skips it (D701).
         add_test(NAME gale_cooked
-                 COMMAND rawframe_host_cook_tool ${PROJECT_SOURCE_DIR}/games/gale ${GALE_CONTENT}
-                         ${CMAKE_CURRENT_BINARY_DIR}/gale_cook_cache)
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cooked.sh $<TARGET_FILE:rawframe_host_cook_tool>
+                         ${PROJECT_SOURCE_DIR}/games/gale ${GALE_CONTENT} ${CMAKE_CURRENT_BINARY_DIR}/gale_cook_cache)
         set_tests_properties(gale_cooked PROPERTIES
                              FIXTURES_SETUP gale_content
+                             SKIP_REGULAR_EXPRESSION "skip: no shader toolchain"
                              PASS_REGULAR_EXPRESSION "failed 0")
         file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/gale_server.conf "content.root = ${GALE_CONTENT}\n")
         configure_file(tests/gale_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/gale_drawn.conf @ONLY)
