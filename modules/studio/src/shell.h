@@ -330,6 +330,9 @@ private:
     /// The chosen node moved one place earlier (`by` -1) or later (+1)
     /// among its siblings (`ui.move_node`, D644).
     void moveNode(int by);
+    /// The chosen node moved into `parent`, or to the document's top where
+    /// there is none, last there (`ui.move_node`, D671).
+    void moveNodeInto(const std::optional<std::string>& parent);
 
     /// One operation asked of the session for the chosen scene; `done` or
     /// the session's message said; the scene shown again with `choose`

@@ -112,6 +112,11 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (uiChosen() && (node == upNode_ || node == downNode_) && !entity_.empty()) {
         endEdit();
         moveNode(node == upNode_ ? -1 : 1);
+    } else if (uiChosen() && node == moveNode_ && !entity_.empty()) {
+        // Into the node pressed next, or to the document's top (D671).
+        endEdit();
+        moving_ = true;
+        say("choose the node to move it into, or the document for its top");
     } else if (documentChosen() &&
                (node == newNode_ || node == deleteNode_ || node == duplicateNode_ || node == moveNode_ ||
                 node == upNode_ || node == downNode_ || node == restoreNode_ || node == uninstanceNode_)) {
@@ -170,13 +175,22 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         endEdit();
         stepTo(static_cast<std::size_t>(kEntry - entryRows_.begin()));
     } else if (const auto kScene = std::ranges::find(sceneRows_, node); kScene != sceneRows_.end()) {
-        if (moving) {
+        if (moving && uiChosen() && static_cast<std::size_t>(kScene - sceneRows_.begin()) == sceneAt_) {
+            moveNodeInto(std::nullopt);
+        } else if (moving && uiChosen()) {
+            ++refused_;
+            say("a node moves within its document");
+        } else if (moving) {
             moveTo(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         } else {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         }
     } else if (const auto kEntity = std::ranges::find(entityRows_, node); kEntity != entityRows_.end()) {
-        showEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
+        if (moving && uiChosen()) {
+            moveNodeInto(entities_[static_cast<std::size_t>(kEntity - entityRows_.begin())]);
+        } else {
+            showEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
+        }
     } else if (const auto kFieldAt = std::ranges::find(fields_, node, &FieldRow::value); kFieldAt != fields_.end()) {
         beginEdit(*kFieldAt);
     } else if (const auto kViewAt = std::ranges::find(viewFields_, node, &FieldRow::value);

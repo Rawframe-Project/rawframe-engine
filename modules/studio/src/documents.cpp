@@ -5,8 +5,9 @@
 // session's `styles.set_part` (D636), then its transitions as one (D639).
 // A UI document (D643): its nodes in the entity column, indented by how
 // deep each stands, deleted with Delete, and a chosen node's fields, each
-// set through `ui.set_field` (D641), and Up and Down moving it among its
-// siblings (D644).
+// set through `ui.set_field` (D641), Up and Down moving it among its
+// siblings (D644), and Move to moving it into the node pressed next, or to
+// the document's top where the document's row is (D671).
 
 #include "rawframe/ui/document.h"
 #include "rawframe/ui/styles.h"
@@ -283,6 +284,25 @@ void ShellParticipant::moveNode(int by) {
     operation.add("parent", kAt->parent.has_value() ? Value::string(*kAt->parent) : Value{});
     operation.add("place", Value::integer(static_cast<std::int64_t>(kAt->place) + by));
     commit(std::move(operation), by < 0 ? "moved up" : "moved down", entity_);
+}
+
+void ShellParticipant::moveNodeInto(const std::optional<std::string>& parent) {
+    const std::optional<NodePlace> kAt =
+        placeOf(sheet_.has_value() ? sheet_->find("nodes") : nullptr, entity_, std::nullopt);
+    // Last among its new siblings; the session refuses a node moved into
+    // one inside it.
+    if (!kAt.has_value() || parent == entity_ || (kAt->parent == parent && kAt->place + 1 == kAt->siblings)) {
+        ++refused_;
+        say(!kAt.has_value()    ? "nothing to move"
+            : parent == entity_ ? "a node is not moved inside itself"
+                                : "already there");
+        return;
+    }
+    Value operation = Value::object();
+    operation.add("operation", Value::string("ui.move_node"));
+    operation.add("node", Value::string(entity_));
+    operation.add("parent", parent.has_value() ? Value::string(*parent) : Value{});
+    commit(std::move(operation), parent.has_value() ? "moved into " + *parent : "moved to the top", entity_);
 }
 
 } // namespace rawframe::studio
