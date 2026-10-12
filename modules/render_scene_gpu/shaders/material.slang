@@ -51,8 +51,8 @@ public float channelOf(float4 texel, float channel)
 // surface's normal, normalized, and its tangent with the bitangent's sign;
 // the model's color; the draw's material among the frame's; the point in
 // the World's axes, and the presented World's time in seconds (D691), its
-// whole seconds and the fraction left (D702); and the way to the eye from
-// it, a unit vector (D696).
+// whole seconds and the fraction left (D702); the way to the eye from it,
+// a unit vector (D696); and whether the face drawn is its front (D705).
 public struct Point
 {
     public float2 uv;
@@ -65,6 +65,7 @@ public struct Point
     public float3 position;
     public float2 time;
     public float3 view;
+    public bool front;
 }
 
 // Where a material moves a vertex (SPEC-0026's position offset, D691): the

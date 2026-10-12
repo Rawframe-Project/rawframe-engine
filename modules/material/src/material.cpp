@@ -463,7 +463,7 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
             RAWFRAME_TRY(timeIn(node));
         } else if (typeOf(node) == kWorldPositionType || typeOf(node) == kWorldNormalType ||
                    typeOf(node) == kVertexColorType || typeOf(node) == kViewDirectionType ||
-                   typeOf(node) == kWorldTangentType) {
+                   typeOf(node) == kWorldTangentType || typeOf(node) == kFrontFacingType) {
             RAWFRAME_TRY(streamIn(node));
         } else {
             RAWFRAME_TRY(sampleIn(surface, node));

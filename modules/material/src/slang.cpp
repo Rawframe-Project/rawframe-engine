@@ -135,6 +135,13 @@ public:
             RAWFRAME_TRY_ASSIGN(const std::string kInText, operandText(kSwizzle.in));
             return "(" + kInText + ")." + kSwizzle.pattern;
         }
+        if (kType == kFrontFacingType) {
+            // A vertex has no face yet.
+            if (at_ == "placed") {
+                return unsupported("a material's vertex stage reads no face in generation 1");
+            }
+            return std::string{"point.front"};
+        }
         if (kType == kConstantType) {
             RAWFRAME_TRY_ASSIGN(const surface_graph::Operand kConstant, surface_graph::constantIn(*kNode));
             return operandText(kConstant);

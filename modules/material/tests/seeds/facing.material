@@ -1,0 +1,46 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {},
+  "graph": {
+    "2f00000000000031": {
+      "type": "rawframe/front_facing@1",
+      "params": {},
+      "inputs": {}
+    },
+    "2f00000000000032": {
+      "type": "rawframe/select@1",
+      "params": {},
+      "inputs": {
+        "a": [
+          0,
+          1,
+          0
+        ],
+        "b": [
+          1,
+          0,
+          0
+        ],
+        "condition": {
+          "node": "2f00000000000031",
+          "output": "front"
+        }
+      }
+    },
+    "2f00000000000033": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "base_color": {
+          "node": "2f00000000000032",
+          "output": "out"
+        }
+      }
+    }
+  },
+  "states": {
+    "shading": "unlit",
+    "double_sided": true
+  }
+}

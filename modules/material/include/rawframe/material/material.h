@@ -255,6 +255,8 @@ inline constexpr std::string_view kWorldTangentType = "rawframe/world_tangent@1"
 inline constexpr std::string_view kCompareType = "rawframe/compare@1";
 /// A typed constant (D704).
 inline constexpr std::string_view kConstantType = "rawframe/constant@1";
+/// Whether the face drawn is the front, the fragment stage's alone (D705).
+inline constexpr std::string_view kFrontFacingType = "rawframe/front_facing@1";
 
 /// What a surface compiles to at each quality, by `Quality`: the same
 /// material at each where its graph does not differ (D318).

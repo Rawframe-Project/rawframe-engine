@@ -58,7 +58,7 @@ DRAWN_WITH = {"scene": ("vs", ("fs", "fsDecaled", "cut", "normal", "cutNormal"))
 # built from tests/materials/NAME.slang with each linked container, as
 # `--material` builds a game's, into tests/generated/NAME.CONTAINER.
 TEST_MATERIALS = (("render_scene_gpu", "checker"), ("render_scene_gpu", "faded"), ("render_scene_gpu", "faded_graph"),
-                  ("render_scene_gpu", "rising_graph"))
+                  ("render_scene_gpu", "rising_graph"), ("render_scene_gpu", "facing_graph"))
 # Each container: its module and its name.
 CONTAINERS = (
     ("render", "display"),
@@ -112,15 +112,22 @@ def signature(dxil, which):
     return rows
 
 
+# What a pixel shader reads from the rasterizer, not from the vertex shader.
+RASTERIZED = ("SV_IsFrontFace", "SV_PrimitiveID", "SV_SampleIndex")
+
+
 def checkDrawnWith(dxil, name):
     # D3D12 refuses a pipeline whose pixel shader's inputs are not the
     # first of its vertex shader's outputs, element for element, where
     # Vulkan, Metal, and WebGPU draw it; those it leaves off the end it
     # need not read.
+    # The values the rasterizer makes (the face drawn, D705) are no vertex
+    # shader's to give, and are left out of the comparison.
     vertex, fragments = DRAWN_WITH[name]
     outputs = signature(os.path.join(dxil, f"{vertex}.dxil"), "Output")
     for fragment in fragments:
-        inputs = signature(os.path.join(dxil, f"{fragment}.dxil"), "Input")
+        inputs = [row for row in signature(os.path.join(dxil, f"{fragment}.dxil"), "Input")
+                  if row[0] not in RASTERIZED]
         if inputs != outputs[: len(inputs)]:
             sys.exit(f"{name}: {fragment} reads {inputs}, where {vertex} gives {outputs}: D3D12 refuses the pair")
 

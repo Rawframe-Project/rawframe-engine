@@ -7,6 +7,8 @@
 #include "fixture.h"
 #include "generated/checker_container.h"
 #include "generated/checker_shadow_container.h"
+#include "generated/facing_graph_scene_container.h"
+#include "generated/facing_graph_shadow_container.h"
 #include "generated/faded_graph_scene_container.h"
 #include "generated/faded_graph_shadow_container.h"
 #include "generated/faded_scene_container.h"
@@ -439,4 +441,44 @@ RAWFRAME_TEST(AMovingMaterialRisesWithThePresentedWorldsTimeAndItsShadowWithIt) 
     RAWFRAME_EXPECT(kRow(*kNow) > 0 && kRow(*kLater) > 0 && kRow(*kLater) + 3 < kRow(*kNow));
     RAWFRAME_EXPECT(kRow(*kAbove) < 0 && kShade(*kNow) + 200 < kShade(*kAbove));
     RAWFRAME_EXPECT(kStatistics.programsRefused == 0);
+}
+
+RAWFRAME_TEST(AMaterialKnowsTheFaceItIsDrawnOn) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // facing.material as rawframe.material writes it (facing_graph.slang,
+    // D705), unlit: green where the face drawn is the front, red where it
+    // is the back. A box ahead shows its fronts; a box round the eye, its
+    // backs alone.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    render_scene::MaterialBlob states = render_scene::noMaterial();
+    states[15] = 1;
+    frame.materials = {render_scene::noMaterial(), states};
+    frame.programs = {nullptr, programOf(kFacingGraphScene, kFacingGraphShadow, material::Shading::Unlit)};
+    const auto kCenter = [&](SceneDraw draw) -> std::array<int, 3> {
+        draw.material = 1;
+        frame.draws = {draw};
+        const auto kPixels =
+            drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
+        return kPixels.has_value() ? at(*kPixels, 32, 32) : std::array<int, 3>{};
+    };
+    const std::array<int, 3> kAhead = kCenter(box(4, 1.5F, {1, 1, 1, 1}));
+    const std::array<int, 3> kAround = kCenter(box(0, 3, {1, 1, 1, 1}));
+    std::printf(
+        "ahead %d %d %d, around %d %d %d\n", kAhead[0], kAhead[1], kAhead[2], kAround[0], kAround[1], kAround[2]);
+    // Tone mapped, so neither is pure: each well past its other channels.
+    RAWFRAME_EXPECT(kAhead[1] > kAhead[0] + 50 && kAhead[1] > kAhead[2] + 50);
+    RAWFRAME_EXPECT(kAround[0] > kAround[1] + 50 && kAround[0] > kAround[2] + 50);
 }

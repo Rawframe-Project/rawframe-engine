@@ -89,11 +89,12 @@ Cut vsCut(Caster caster)
 }
 
 [shader("fragment")]
-void cut(Cut cut)
+void cut(Cut cut, bool front: SV_IsFrontFace)
 {
     // A caster carries no normal: the material's opacity is read facing
-    // the sun and seen along that normal (D696), the coordinates'
-    // derivatives taken before anything branches.
+    // the sun and seen along that normal (D696), its front the face the
+    // sun sees (D705), the coordinates' derivatives taken before anything
+    // branches.
     Point point;
     point.uv = cut.uv;
     point.dx = ddx(cut.uv);
@@ -105,6 +106,7 @@ void cut(Cut cut)
     point.position = float3(0.0);
     point.time = cascade.time.xy;
     point.view = float3(0.0, 0.0, 1.0);
+    point.front = front;
     const Evaluated evaluated = Material.evaluate(point);
     if (evaluated.opacity < materials[blobOf(cut.material) + 3u].z)
     {

@@ -49,4 +49,11 @@ if(TARGET rawframe_render_scene_gpu_tests)
     rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
                            FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/rising_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
                            HEADER "rising_graph_shadow_container.h" SYMBOL "kRisingGraphShadow")
+    # A graph's material green on its front and red on its back (D705).
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/facing_graph.scene${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "facing_graph_scene_container.h" SYMBOL "kFacingGraphScene")
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/facing_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "facing_graph_shadow_container.h" SYMBOL "kFacingGraphShadow")
 endif()

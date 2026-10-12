@@ -4,6 +4,8 @@
 // the fragment and the vertex stage, and what each refuses.
 
 #include "generated/arithmetic_material.h"
+#include "generated/facing_graph.h"
+#include "generated/facing_material.h"
 #include "generated/rising_graph.h"
 #include "generated/rising_material.h"
 #include "rawframe/material/errors.h"
@@ -387,4 +389,29 @@ RAWFRAME_TEST(AConstantIsWrittenAsItsTypedValue) {
                         objectOf({{"specular_roughness", from(kWave, "out")}}),
                         {nodeOf(kWave, kConstantType, objectOf({{"type", Value::string("float")}}), Value::object())})),
                     MaterialError::Invalid));
+}
+
+RAWFRAME_TEST(AGraphColoredByItsFaceIsWrittenAsTheSlangTheScenesTestsDraw) {
+    // facing.material is green on its front and red on its back (D705);
+    // the scene's tests draw what it is written as, facing_graph.slang,
+    // word for word. A vertex has no face to read.
+    const std::string_view kDocument{reinterpret_cast<const char*>(kFacingMaterial.data()), kFacingMaterial.size()};
+    const auto kRead = readMaterial(kDocument);
+    RAWFRAME_EXPECT(kRead.has_value());
+    if (!kRead.has_value()) {
+        return;
+    }
+    const auto kWritten = generateSlang(*kRead);
+    const std::string_view kGolden{reinterpret_cast<const char*>(kFacingGraph.data()), kFacingGraph.size()};
+    RAWFRAME_EXPECT(kWritten.has_value() && !kWritten->moves && kWritten->source == kGolden);
+    const graph::Document kLiftedByFace = surfaceOf(
+        objectOf({{"position_offset", from(kLifted, "out")}}),
+        {nodeOf(kPhase, kFrontFacingType, Value::object(), Value::object()),
+         nodeOf(kWave,
+                "rawframe/select@1",
+                Value::object(),
+                objectOf({{"a", Value::real(1)}, {"b", Value::real(0)}, {"condition", from(kPhase, "front")}})),
+         combineOf(kLifted, Value::real(0), from(kWave, "out"), Value::real(0))});
+    RAWFRAME_EXPECT(validateSurface(kLiftedByFace).has_value());
+    RAWFRAME_EXPECT(refusedWith(generateSlang(kLiftedByFace), MaterialError::Unsupported));
 }

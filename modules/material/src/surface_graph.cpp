@@ -260,7 +260,7 @@ bool known(const graph::Node& node) {
             *kText == kWorldPositionType || *kText == kWorldNormalType || *kText == kCombine3Type ||
             *kText == kCombine2Type || *kText == kSeparate2Type || *kText == kSwizzleType ||
             *kText == kVertexColorType || *kText == kViewDirectionType || *kText == kWorldTangentType ||
-            *kText == kCompareType || *kText == kConstantType || math(*kText));
+            *kText == kCompareType || *kText == kConstantType || *kText == kFrontFacingType || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -712,6 +712,10 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
     }
     if (kType == kCompareType && from.output == "out") {
         RAWFRAME_TRY(compareIn(surface, *kSource));
+        return std::optional{Carried::Bool};
+    }
+    if (kType == kFrontFacingType && from.output == "front") {
+        RAWFRAME_TRY(streamIn(*kSource));
         return std::optional{Carried::Bool};
     }
     if (kType == kConstantType && from.output == "out") {

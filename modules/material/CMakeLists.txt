@@ -28,6 +28,13 @@ if(TARGET rawframe_material_tests)
     rawframe_embedded_file(TARGET rawframe_material_tests
                            FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/rising_graph.slang"
                            HEADER "rising_graph.h" SYMBOL "kRisingGraph")
+    # A graph whose color is its face's (D705), and the Slang written from
+    # it, which the scene's tests draw.
+    rawframe_embedded_file(TARGET rawframe_material_tests FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/seeds/facing.material"
+                           HEADER "facing_material.h" SYMBOL "kFacingMaterial")
+    rawframe_embedded_file(TARGET rawframe_material_tests
+                           FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/facing_graph.slang"
+                           HEADER "facing_graph.h" SYMBOL "kFacingGraph")
 endif()
 rawframe_module_fuzz(NAME material TARGET documents RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_material.cpp)
 rawframe_module_fuzz(NAME material TARGET post_processes RUNS 10000 SEEDS tests/post_seeds SOURCES tests/fuzz_post_process.cpp)

@@ -263,8 +263,9 @@ bool unreadable(Corner corner)
 }
 
 // Where the material is evaluated at `corner` (D482): the coordinates'
-// derivatives taken before anything branches.
-Point pointOf(Corner corner)
+// derivatives taken before anything branches; `front` whether the face
+// drawn is the front (D705).
+Point pointOf(Corner corner, bool front)
 {
     Point point;
     point.uv = corner.uv;
@@ -277,6 +278,7 @@ Point pointOf(Corner corner)
     point.position = corner.placed + frame.eye.xyz;
     point.time = frame.time.xy;
     point.view = normalize(-corner.placed);
+    point.front = front;
     return point;
 }
 
@@ -303,12 +305,12 @@ float4 surfaceOf(Corner corner, Evaluated evaluated)
 // needs no cut of its own, and the lit entries never discard, which would
 // cost every model its early depth test.
 [shader("fragment")]
-void cut(Corner corner)
+void cut(Corner corner, bool front: SV_IsFrontFace)
 {
     // Sampled before anything branches: WGSL samples a texture with
     // implicit derivatives only in uniform control flow, which a
     // short-circuit would leave.
-    const bool away = cutAway(corner, Material.evaluate(pointOf(corner)));
+    const bool away = cutAway(corner, Material.evaluate(pointOf(corner, front)));
     if (unreadable(corner) || away)
     {
         discard;
@@ -318,9 +320,9 @@ void cut(Corner corner)
 // The models in the depth prepass when a screen-space effect asks for
 // their surfaces (ADR-0051, D327), into the normal-roughness target.
 [shader("fragment")]
-float4 normal(Corner corner) : SV_Target0
+float4 normal(Corner corner, bool front: SV_IsFrontFace) : SV_Target0
 {
-    const Evaluated evaluated = Material.evaluate(pointOf(corner));
+    const Evaluated evaluated = Material.evaluate(pointOf(corner, front));
     if (unreadable(corner))
     {
         discard;
@@ -332,9 +334,9 @@ float4 normal(Corner corner) : SV_Target0
 // for their surfaces (D310, D327): cut as "cut" cuts them, and where they
 // stand, their normal and roughness as "normal" gives them.
 [shader("fragment")]
-float4 cutNormal(Corner corner) : SV_Target0
+float4 cutNormal(Corner corner, bool front: SV_IsFrontFace) : SV_Target0
 {
-    const Evaluated evaluated = Material.evaluate(pointOf(corner));
+    const Evaluated evaluated = Material.evaluate(pointOf(corner, front));
     const bool away = cutAway(corner, evaluated);
     if (unreadable(corner) || away)
     {
@@ -707,7 +709,7 @@ struct Lit
     float2 motion : SV_Target1;
 }
 
-Lit shaded(Corner corner, bool decaled)
+Lit shaded(Corner corner, bool decaled, bool front)
 {
     const float2 pixel = corner.position.xy;
     const float3 toEye = normalize(-corner.placed);
@@ -733,6 +735,7 @@ Lit shaded(Corner corner, bool decaled)
     point.position = corner.placed + frame.eye.xyz;
     point.time = frame.time.xy;
     point.view = toEye;
+    point.front = front;
     const Evaluated evaluated = Material.evaluate(point);
     float3 color = evaluated.color;
     float3 normal = evaluated.normal;
@@ -846,21 +849,21 @@ Lit shaded(Corner corner, bool decaled)
 // whose inputs are not its vertex shader's outputs (D418, D501). Chosen
 // after the shading, so nothing it samples is behind a branch, and with no
 // discard, which would cost an opaque model its early depth test.
-Lit shade(Corner corner, bool decaled)
+Lit shade(Corner corner, bool decaled, bool front)
 {
-    Lit lit = shaded(corner, decaled);
+    Lit lit = shaded(corner, decaled, front);
     lit.color = unreadable(corner) ? float4(0.0) : lit.color;
     return lit;
 }
 
 [shader("fragment")]
-Lit fs(Corner corner)
+Lit fs(Corner corner, bool front: SV_IsFrontFace)
 {
-    return shade(corner, false);
+    return shade(corner, false, front);
 }
 
 [shader("fragment")]
-Lit fsDecaled(Corner corner)
+Lit fsDecaled(Corner corner, bool front: SV_IsFrontFace)
 {
-    return shade(corner, true);
+    return shade(corner, true, front);
 }
