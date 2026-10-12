@@ -114,6 +114,11 @@ struct Settings {
     execution::MonotonicDuration stall = execution::MonotonicDuration::fromSeconds(10);
     std::optional<execution::MonotonicDuration> supervisorGrace;
     Severity minimumSeverity = Severity::Info;
+    /// Development builds only (D678): how long each iteration waits after
+    /// its Worlds ran and before it presents, as a slow frame's drawing
+    /// holds a client, so a test plays one whose frames are long inside
+    /// them; nought for none.
+    execution::MonotonicDuration drawing{};
 };
 
 /// The longest a normal stop can take: the drain and the composition's stop
@@ -169,6 +174,11 @@ readSettings(const composition::Configuration& configuration, Settings& settings
         return "host.stall_ms";
     }
     settings.stall = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(*kStall));
+    const auto kDrawing = configuration.unsignedInteger("host.drawing_ms", 0);
+    if (!kDrawing.has_value() || *kDrawing > 10'000 || (RAWFRAME_SHIPPING != 0 && *kDrawing != 0)) {
+        return "host.drawing_ms";
+    }
+    settings.drawing = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(*kDrawing));
     if (configuration.text("host.supervisor_grace_ms")) {
         const auto kGrace = configuration.unsignedInteger("host.supervisor_grace_ms", 0);
         if (!kGrace.has_value() || *kGrace > 3'600'000) {
@@ -468,6 +478,12 @@ struct Host::State {
                                             .suspended = request.suspended != nullptr &&
                                                          request.suspended->load(std::memory_order_acquire)};
         for (std::size_t phase = 0; phase < composition::kHostPhaseCount; ++phase) {
+#if RAWFRAME_THREADS
+            if (static_cast<composition::HostPhase>(phase) == composition::HostPhase::PresentationExtract &&
+                settings.drawing.nanoseconds > 0) {
+                std::this_thread::sleep_for(std::chrono::nanoseconds{settings.drawing.nanoseconds});
+            }
+#endif
             composition->runHostPhase(static_cast<composition::HostPhase>(phase), kFrame);
             if (static_cast<composition::HostPhase>(phase) == composition::HostPhase::Maintenance) {
                 drainLog();
