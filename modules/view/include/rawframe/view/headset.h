@@ -93,4 +93,33 @@ private:
 
 inline constexpr composition::Capability<HeadsetHands> kHeadsetHands{"rawframe.view.headset_hands"};
 
+/// Whether a headset the client shows on shows the person nothing now
+/// (D679): its session made and neither visible nor focused, as when it is
+/// taken off, or before the runtime first shows it. SPEC-0025's
+/// `suspending` in the runtime's words (ADR-0081, section 2): the program
+/// that runs the Host lends it as `rawframe.view.headset_away`, the XR
+/// module tells it as its session's state changes, and the program counts
+/// its frames suspended while it is, as it does from the platform's
+/// `suspending` until `resumed` (D565). Main thread only.
+class HeadsetAway {
+public:
+    HeadsetAway() = default;
+    HeadsetAway(const HeadsetAway&) = delete;
+    HeadsetAway& operator=(const HeadsetAway&) = delete;
+
+    /// The XR module's side.
+    void tell(bool away) noexcept {
+        away_ = away;
+    }
+    /// The program's side.
+    [[nodiscard]] bool away() const noexcept {
+        return away_;
+    }
+
+private:
+    bool away_ = false;
+};
+
+inline constexpr composition::Capability<HeadsetAway> kHeadsetAway{"rawframe.view.headset_away"};
+
 } // namespace rawframe::view

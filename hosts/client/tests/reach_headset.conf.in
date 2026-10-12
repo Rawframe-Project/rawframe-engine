@@ -4,9 +4,13 @@
 # window's devices are; a flat bot plays beside it in the same World.
 bots.player = true
 render.device = any
+content.root = @REACH_CONTENT@
 input.gamepads = false
 render.frame_rate = 30
 xr.headset = true
+# Heard through the null output, so its sound is seen to stop while the
+# headset shows nothing, before its session is first visible (D679).
+audio.play = null
 @RAWFRAME_TEST_XR_RUNTIME@
 xr.panel_width = 320
 xr.panel_height = 180

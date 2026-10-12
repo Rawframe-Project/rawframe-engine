@@ -155,6 +155,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     lent_.push_back(composition::LentCapability{view::kUiTyping.name, composition::provideAs(typing_)});
     lent_.push_back(composition::LentCapability{view::kUiNavigation.name, composition::provideAs(navigation_)});
     lent_.push_back(composition::LentCapability{ui::kAccessSeat.name, composition::provideAs(access_)});
+    lent_.push_back(composition::LentCapability{view::kHeadsetAway.name, composition::provideAs(away_)});
     lent_.insert(lent_.end(), settings_.lent.begin(), settings_.lent.end());
     request_.lent = lent_;
     request_.suspended = &suspended_;
@@ -239,7 +240,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         }
         closing = closing || event->kind == window::EventKind::CloseRequested;
         if (event->kind == window::EventKind::Suspending || event->kind == window::EventKind::Resumed) {
-            suspended_.store(event->kind == window::EventKind::Suspending, std::memory_order_release);
+            platformSuspended_ = event->kind == window::EventKind::Suspending;
         }
         accessAsked_ = accessAsked_ || event->kind == window::EventKind::AccessibilityRequested;
         // Whether a field takes text, told among the keys (D430): a key
@@ -364,12 +365,16 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     }
     // The platform's `suspending` comes in a frame of its own, after which
     // frames pause (Maul Window's mobile backends): the Host runs in it,
-    // due or not, so its participants hear of it before then (D565).
+    // due or not, so its participants hear of it before then (D565). A
+    // headset's session tells its own as an iteration runs (D679), heard
+    // from the next.
+    suspended_.store(platformSuspended_ || away_.away(), std::memory_order_release);
     const bool kTold = suspended_.load(std::memory_order_relaxed) != kWasSuspended;
     for (int ran = 0; ran < kMostIterationsPerFrame && (clock_.now() >= host_->due() || (kTold && ran == 0)); ++ran) {
         if (!host_->iterate()) {
             return end();
         }
+        suspended_.store(platformSuspended_ || away_.away(), std::memory_order_release);
         if (awaitingRead_ && (feed_.waiting() == 0 || ++iterationsAwaited_ >= kMostIterationsAwaited)) {
             awaitingRead_ = false;
         }

@@ -99,8 +99,9 @@ struct HostRequest {
     /// stop: the Host drains, then stops. Setting it again changes nothing.
     const std::atomic<bool>* stopRequested = nullptr;
     /// Set by a program whose platform suspends it, from `suspending` until
-    /// `resumed` (SPEC-0025, D565): each iteration's frame says so
-    /// (`HostFrame::suspended`). Null where nothing suspends a program.
+    /// `resumed` (SPEC-0025, D565), and while its headset shows nothing
+    /// (D679): each iteration's frame says so (`HostFrame::suspended`).
+    /// Null where nothing suspends a program.
     const std::atomic<bool>* suspended = nullptr;
     StatusObserver status;
     /// The files the Host holds, from which every configured path is read

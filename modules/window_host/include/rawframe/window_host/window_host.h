@@ -24,6 +24,7 @@
 #include "rawframe/input_window/bridge.h"
 #include "rawframe/result/result.h"
 #include "rawframe/ui/access.h"
+#include "rawframe/view/headset.h"
 #include "rawframe/view/navigation.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
@@ -122,8 +123,11 @@ private:
     /// it was not asked.
     std::optional<view::UiTyping::Caret> textInput_;
     window::WindowId window_;
-    /// From the platform's `suspending` until its `resumed`, as the Host's
-    /// frames tell its participants (D565).
+    /// From the platform's `suspending` until its `resumed` (D565), and
+    /// while a headset shows the person nothing (D679).
+    bool platformSuspended_ = false;
+    view::HeadsetAway away_;
+    /// Either, as the Host's frames tell its participants.
     std::atomic<bool> suspended_{false};
     std::vector<composition::LentCapability> lent_;
     std::optional<input_window::Bridge> bridge_;

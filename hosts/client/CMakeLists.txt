@@ -394,7 +394,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                                  FIXTURES_REQUIRED plaza_content
                                  PROCESSORS 2
                                  PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+}.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":[1-9][0-9]+,\"handsPointing\":[1-9][0-9]+,\"hapticsFelt\":0,\"hapticsUnfelt\":0,\"failed\":false}.*\"code\":\"input_summary\"[^\n]*\"player\":0,[^\n]*\"controllerEvents\":[1-9][0-9]+,")
+                                 "\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+}.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":[1-9][0-9]+,\"handsPointing\":[1-9][0-9]+,\"hapticsFelt\":0,\"hapticsUnfelt\":0,\"away\":[1-9][0-9]*,\"failed\":false}.*\"code\":\"input_summary\"[^\n]*\"player\":0,[^\n]*\"controllerEvents\":[1-9][0-9]+,")
         endif()
         # Stalls on a headset (D605): its HUD on the panel, the hands' aims
         # the UI's pointer, a cursor drawn where they point.
@@ -418,19 +418,32 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         endif()
         # Reach on a headset (D657): the room drawn for both eyes from the
         # player's seat, the controllers its hands, and a flat bot seated
-        # at the table beside it in one World (ADR-0081's cross-play).
+        # at the table beside it in one World (ADR-0081's cross-play). Its
+        # sound stops until the session is first shown (D679).
         if(RAWFRAME_CLIENT_HEADSET AND RAWFRAME_MONADO_SERVICE AND NOT WIN32)
+            # Reach's sources cooked, so the client hears it (D679) and the
+            # server plays the same content.
+            set(REACH_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/reach_content)
+            add_test(NAME reach_cooked
+                     COMMAND rawframe_host_cook_tool ${PROJECT_SOURCE_DIR}/games/reach ${REACH_CONTENT}
+                             ${CMAKE_CURRENT_BINARY_DIR}/reach_cook_cache)
+            set_tests_properties(reach_cooked PROPERTIES
+                                 FIXTURES_SETUP reach_content
+                                 PASS_REGULAR_EXPRESSION "failed 0")
+            file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/reach_server.conf "content.root = ${REACH_CONTENT}\n")
             configure_file(tests/reach_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/reach_headset.conf @ONLY)
             add_test(NAME client_reach_headset
                      COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                              ${PROJECT_SOURCE_DIR}/tools/xr_run.sh ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh
                              $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                             ${CMAKE_CURRENT_BINARY_DIR}/reach_headset.conf games/reach/reach.game /dev/null 1
+                             ${CMAKE_CURRENT_BINARY_DIR}/reach_headset.conf games/reach/reach.game
+                             ${CMAKE_CURRENT_BINARY_DIR}/reach_server.conf 1
                      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
             set_tests_properties(client_reach_headset PROPERTIES
+                                 FIXTURES_REQUIRED reach_content
                                  PROCESSORS 2
                                  PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+}.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":[1-9][0-9]+,[^\n]*\"failed\":false}.*\"code\":\"input_summary\"[^\n]*\"controllerEvents\":[1-9][0-9]+")
+                                 "\"code\":\"output_suspended\".*\"code\":\"output_resumed\".*\"code\":\"playing_summary\"[^\n]*\"suspensions\":1,.*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+}.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":[1-9][0-9]+,[^\n]*\"failed\":false}.*\"code\":\"input_summary\"[^\n]*\"controllerEvents\":[1-9][0-9]+")
             # Blocks taken and thrown from the headset end to end: Monado's
             # remote driver's Index controllers, the right one moved by
             # reach_hands.py, gripping one block with its trigger (D662)
@@ -443,9 +456,11 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              ${PROJECT_SOURCE_DIR}/tools/xr_run.sh --hands ${CMAKE_CURRENT_SOURCE_DIR}/tests/reach_hands.py
                              ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh
                              $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
-                             ${CMAKE_CURRENT_BINARY_DIR}/reach_headset.conf games/reach/reach.game /dev/null 0
+                             ${CMAKE_CURRENT_BINARY_DIR}/reach_headset.conf games/reach/reach.game
+                             ${CMAKE_CURRENT_BINARY_DIR}/reach_server.conf 0
                      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
             set_tests_properties(client_reach_takes PROPERTIES
+                                 FIXTURES_REQUIRED reach_content
                                  PROCESSORS 2
                                  PASS_REGULAR_EXPRESSION
                                  "\"domain\":\"physics3d\",\"code\":\"summary\"[^\n]*\"jointsMade\":([2-9]|[1-9][0-9]+),\"jointsRemoved\":([2-9]|[1-9][0-9]+),.*\"code\":\"scene_placed_summary\"[^\n]*\"modelsPlaced\":[0-9]+,\"modelsTracked\":[1-9][0-9]*}.*\"code\":\"xr_summary\"[^\n]*\"framesHandTracked\":[1-9][0-9]*,[^\n]*\"failed\":false}")

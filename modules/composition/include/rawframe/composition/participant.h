@@ -39,7 +39,8 @@ struct HostFrame {
     /// Sampled once per iteration, in `advance_clocks`.
     execution::MonotonicInstant now;
     /// The platform suspended the program (SPEC-0025's `suspending` until
-    /// `resumed`, D565): it runs on, but nothing reaches a person, neither
+    /// `resumed`, D565), or the headset it shows on shows the person
+    /// nothing (D679): it runs on, but nothing reaches a person, neither
     /// pictures nor sound.
     bool suspended = false;
 };

@@ -26,7 +26,7 @@ constexpr diagnostics::EventIdentity kFailed{"xr", "xr_failed"};
 constexpr diagnostics::EventIdentity kSummary{"xr", "xr_summary"};
 constexpr std::string_view kProvided[] = {
     render::kHeadset.name, view::kHeadsetEyes.name, view::kHeadsetHands.name, input_kest::kTrackedHands.name};
-constexpr std::string_view kMayUse[] = {input_kest::kFeed.name, view::kUiPointing.name};
+constexpr std::string_view kMayUse[] = {input_kest::kFeed.name, view::kUiPointing.name, view::kHeadsetAway.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 /// The headset's controllers, both hands one device of the controller
@@ -102,6 +102,9 @@ public:
         if (context.has(view::kUiPointing.name)) {
             RAWFRAME_TRY_ASSIGN(pointing_, context.capability(view::kUiPointing));
         }
+        if (context.has(view::kHeadsetAway.name)) {
+            RAWFRAME_TRY_ASSIGN(away_, context.capability(view::kHeadsetAway));
+        }
         // The system's active runtime, or one a trusted configuration names
         // (D654); never one an environment variable names.
         const std::string kManifest = context.configuration().path("xr.runtime").value_or("");
@@ -172,6 +175,7 @@ public:
                       diagnostics::field("handsPointing", handsPointing_),
                       diagnostics::field("hapticsFelt", hapticsFelt_),
                       diagnostics::field("hapticsUnfelt", hapticsUnfelt_),
+                      diagnostics::field("away", timesAway_),
                       diagnostics::field("failed", failed_)});
     }
 
@@ -271,6 +275,7 @@ public:
         totals_.framesHandTracked += kSession.framesHandTracked;
         session_.reset();
         told_ = SessionState::Unknown;
+        tellAway(false);
     }
 
 private:
@@ -467,6 +472,19 @@ private:
                      kState,
                      "the headset's session changed state",
                      {diagnostics::field("state", std::string{kStateNames.at(static_cast<std::size_t>(told_))})});
+        tellAway(told_ != SessionState::Visible && told_ != SessionState::Focused);
+    }
+
+    /// Whether the headset shows the person nothing (D679), told the
+    /// program where it lends a place for it.
+    void tellAway(bool away) noexcept {
+        if (away && !awayTold_) {
+            ++timesAway_;
+        }
+        awayTold_ = away;
+        if (away_ != nullptr) {
+            away_->tell(away);
+        }
     }
 
     /// The session failed: said once, and shown no more.
@@ -494,6 +512,11 @@ private:
     /// told it (D605).
     view::UiPointing* pointing_ = nullptr;
     bool hovering_ = false;
+    /// Where the host lends it, what tells the program the headset shows
+    /// nothing (D679); what it was last told, and how often it went away.
+    view::HeadsetAway* away_ = nullptr;
+    bool awayTold_ = false;
+    std::uint64_t timesAway_ = 0;
     std::array<float, 2> hovered_{};
     /// Hands' frames pointing at the panel.
     std::uint64_t handsPointing_ = 0;
