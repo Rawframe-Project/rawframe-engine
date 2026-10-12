@@ -107,11 +107,11 @@ RAWFRAME_TEST(WhatCannotCompileYetIsRefusedNotGuessed) {
     using document::Value;
     // A node of the standard library's, not built yet, feeding the surface.
     graph::Document fed = documentOf({}, kNode);
-    Value constant = Value::object();
-    constant.add("type", Value::string("rawframe/constant@1"));
-    constant.add("params", Value::object());
-    constant.add("inputs", Value::object());
-    fed.nodes.insert(fed.nodes.begin(), {.id = 0x1f00000000000001ULL, .record = constant});
+    Value unbuilt = Value::object();
+    unbuilt.add("type", Value::string("rawframe/transform@1"));
+    unbuilt.add("params", Value::object());
+    unbuilt.add("inputs", Value::object());
+    fed.nodes.insert(fed.nodes.begin(), {.id = 0x1f00000000000001ULL, .record = unbuilt});
     Value inputs = Value::object();
     inputs.add("base_metalness", graph::connectionValue({.node = 0x1f00000000000001ULL, .output = "out"}));
     fed.nodes.back().record = [&inputs] {

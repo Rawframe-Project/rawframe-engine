@@ -254,12 +254,13 @@ const MathNode* mathNodeOf(std::string_view type) {
 bool known(const graph::Node& node) {
     const Value* kType = node.record.find("type");
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
-    return kText != nullptr && (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType ||
-                                *kText == kSeparate3Type || *kText == kNormalMapType || *kText == kQualitySwitchType ||
-                                *kText == kTimeType || *kText == kWorldPositionType || *kText == kWorldNormalType ||
-                                *kText == kCombine3Type || *kText == kCombine2Type || *kText == kSeparate2Type ||
-                                *kText == kSwizzleType || *kText == kVertexColorType || *kText == kViewDirectionType ||
-                                *kText == kWorldTangentType || *kText == kCompareType || math(*kText));
+    return kText != nullptr &&
+           (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType || *kText == kSeparate3Type ||
+            *kText == kNormalMapType || *kText == kQualitySwitchType || *kText == kTimeType ||
+            *kText == kWorldPositionType || *kText == kWorldNormalType || *kText == kCombine3Type ||
+            *kText == kCombine2Type || *kText == kSeparate2Type || *kText == kSwizzleType ||
+            *kText == kVertexColorType || *kText == kViewDirectionType || *kText == kWorldTangentType ||
+            *kText == kCompareType || *kText == kConstantType || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -495,6 +496,40 @@ result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::N
     return made;
 }
 
+result::Result<Operand> constantIn(const graph::Node& node) {
+    constexpr std::array<std::string_view, 2> kParams = {"type", "value"};
+    constexpr std::array<std::pair<std::string_view, Carried>, 5> kTypes = {{{"float", Carried::Float},
+                                                                             {"bool", Carried::Bool},
+                                                                             {"vec2", Carried::Vec2},
+                                                                             {"vec3", Carried::Vec3},
+                                                                             {"color3", Carried::Color3}}};
+    constexpr std::array<std::string_view, 3> kWaiting = {"int", "vec4", "color4"};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, {}));
+    const Value* kType = kParts.first->find("type");
+    const Value* kValue = kParts.first->find("value");
+    if (kType == nullptr || kType->text() == nullptr || kValue == nullptr) {
+        return invalid("a constant node declares its type and its value");
+    }
+    const std::string_view kName = *kType->text();
+    if (std::ranges::find(kWaiting, kName) != kWaiting.end()) {
+        return unsupported("a constant of an int, a vec4, or a color4 waits for those types in generation 1");
+    }
+    const auto kFound = std::ranges::find(kTypes, kName, &std::pair<std::string_view, Carried>::first);
+    if (kFound == kTypes.end()) {
+        return invalid("a constant's type is one of the graph's types");
+    }
+    // Its value read as an input's literal is, then held to the declared
+    // shape: a literal of three numbers reads as a color3 either way.
+    const graph::Document kNone;
+    RAWFRAME_TRY_ASSIGN(Operand made, operandOf(kNone, *kValue));
+    const bool kThree = kFound->second == Carried::Vec3 || kFound->second == Carried::Color3;
+    if (made.carried != (kThree ? Carried::Color3 : kFound->second)) {
+        return invalid("a constant's value is of its declared type");
+    }
+    made.carried = kFound->second;
+    return made;
+}
+
 result::Result<Compare> compareIn(const graph::Document& surface, const graph::Node& node) {
     constexpr std::array<std::string_view, 1> kParams = {"operator"};
     constexpr std::array<std::string_view, 2> kInputs = {"a", "b"};
@@ -678,6 +713,10 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
     if (kType == kCompareType && from.output == "out") {
         RAWFRAME_TRY(compareIn(surface, *kSource));
         return std::optional{Carried::Bool};
+    }
+    if (kType == kConstantType && from.output == "out") {
+        RAWFRAME_TRY_ASSIGN(const Operand kConstant, constantIn(*kSource));
+        return kConstant.carried;
     }
     if (kType == kSwizzleType && from.output == "out") {
         RAWFRAME_TRY_ASSIGN(const Swizzle kSwizzle, swizzleIn(surface, *kSource));

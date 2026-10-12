@@ -253,6 +253,8 @@ inline constexpr std::string_view kViewDirectionType = "rawframe/view_direction@
 inline constexpr std::string_view kWorldTangentType = "rawframe/world_tangent@1";
 /// A comparison of two floats, by its declared operator (D697).
 inline constexpr std::string_view kCompareType = "rawframe/compare@1";
+/// A typed constant (D704).
+inline constexpr std::string_view kConstantType = "rawframe/constant@1";
 
 /// What a surface compiles to at each quality, by `Quality`: the same
 /// material at each where its graph does not differ (D318).

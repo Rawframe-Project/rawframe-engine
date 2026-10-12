@@ -152,6 +152,11 @@ struct Swizzle {
 
 [[nodiscard]] result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::Node& node);
 
+/// A `constant` node's declared type and value, checked (D704): a float, a
+/// bool, a vec2, a vec3, or a color3, its value of that shape; an int, a
+/// vec4, or a color4 waits for those types. Its `out` is the value.
+[[nodiscard]] result::Result<Operand> constantIn(const graph::Node& node);
+
 /// A `compare` node's operator and inputs, checked (D697): `less`,
 /// `less_equal`, `greater`, `greater_equal`, `equal`, or `not_equal`, over
 /// two floats; a bool out.

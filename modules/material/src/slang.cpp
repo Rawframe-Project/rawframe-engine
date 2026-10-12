@@ -135,6 +135,10 @@ public:
             RAWFRAME_TRY_ASSIGN(const std::string kInText, operandText(kSwizzle.in));
             return "(" + kInText + ")." + kSwizzle.pattern;
         }
+        if (kType == kConstantType) {
+            RAWFRAME_TRY_ASSIGN(const surface_graph::Operand kConstant, surface_graph::constantIn(*kNode));
+            return operandText(kConstant);
+        }
         if (kType == kTimeType) {
             // Whole seconds and the fraction left (D702): wrapped at a
             // whole period before they are added, so a material reads a

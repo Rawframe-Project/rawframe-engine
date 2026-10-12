@@ -335,3 +335,56 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
     RAWFRAME_EXPECT(kRefused("rawframe/clamp@1", {{"in", from(kTime, "seconds")}, {"low", Value::real(0)}}));
     RAWFRAME_EXPECT(kRefused("rawframe/abs@1", {{"a", from(kTime, "seconds")}}));
 }
+
+RAWFRAME_TEST(AConstantIsWrittenAsItsTypedValue) {
+    // D704: a constant of each type the graph carries in generation 1, its
+    // value inline wherever it is read; one of a type yet to come waits for
+    // it, and one whose value is not of its type, or not one of the graph's
+    // types, is refused.
+    const auto kConstant = [](graph::NodeId id, std::string_view type, Value value) {
+        return nodeOf(id,
+                      kConstantType,
+                      objectOf({{"type", Value::string(std::string{type})}, {"value", std::move(value)}}),
+                      Value::object());
+    };
+    const auto kColored = [&kConstant](std::string_view type, Value value) {
+        return surfaceOf(objectOf({{"base_color", from(kPhase, "out")}, {"specular_roughness", from(kWave, "out")}}),
+                         {kConstant(kPhase, type, std::move(value)), kConstant(kWave, "float", Value::real(0.375))});
+    };
+    const auto kThree = [](double x, double y, double z) {
+        return Value::array({Value::real(x), Value::real(y), Value::real(z)});
+    };
+    const graph::Document kColor = kColored("color3", kThree(0.25, 0.5, 0.75));
+    RAWFRAME_EXPECT(validateSurface(kColor).has_value());
+    const auto kMade = generateSlang(kColor);
+    RAWFRAME_EXPECT(kMade.has_value() && kMade->source.contains("float3(0.25, 0.5, 0.75)") &&
+                    kMade->source.contains("made.roughness = 0.375;"));
+    // A bool selecting, a vec2 swizzled.
+    const graph::Document kChosen = surfaceOf(
+        objectOf({{"specular_roughness", from(kWave, "out")}}),
+        {kConstant(kAxes, "vec2", pair(0.125, 0.625)),
+         kConstant(kPhase, "bool", Value::boolean(false)),
+         nodeOf(kWave,
+                "rawframe/select@1",
+                Value::object(),
+                objectOf({{"a", Value::real(1)}, {"b", from(kSlope, "out")}, {"condition", from(kPhase, "out")}})),
+         nodeOf(kSlope,
+                kSwizzleType,
+                objectOf({{"pattern", Value::string("y")}}),
+                objectOf({{"in", from(kAxes, "out")}}))});
+    const auto kSelected = generateSlang(kChosen);
+    RAWFRAME_EXPECT(kSelected.has_value() && kSelected->source.contains("(false) ? (1.0) : (") &&
+                    kSelected->source.contains("(float2(0.125, 0.625)).y"));
+    // A vec3 feeds no color; a value not of its type; no such type; a type
+    // generation 1 does not carry yet; the type or the value left out.
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("vec3", kThree(0.25, 0.5, 0.75))), MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("color3", pair(0.25, 0.5))), MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("color3", Value::boolean(true))), MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("matrix3", kThree(0, 0, 0))), MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("color4", kThree(0, 0, 0))), MaterialError::Unsupported));
+    RAWFRAME_EXPECT(
+        refusedWith(validateSurface(surfaceOf(
+                        objectOf({{"specular_roughness", from(kWave, "out")}}),
+                        {nodeOf(kWave, kConstantType, objectOf({{"type", Value::string("float")}}), Value::object())})),
+                    MaterialError::Invalid));
+}
