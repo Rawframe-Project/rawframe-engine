@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstring>
+#include <vector>
 
 using namespace rawframe;
 using namespace rawframe::world_replication;
@@ -30,7 +31,8 @@ public:
         std::memcpy(component == kCount ? &count_ : &mark_, value.data(), sizeof count_);
         return {};
     }
-    result::Status step(std::span<const std::byte> input) override {
+    result::Status step(std::span<const std::byte> input, world::TickIndex tick) override {
+        ticks.push_back(tick.value);
         std::int32_t add = 0;
         std::memcpy(&add, input.data(), sizeof add);
         count_ += add;
@@ -42,6 +44,9 @@ public:
     result::Status place(std::span<const NeighborValue>) override {
         return {};
     }
+
+    /// The tick each step was told it runs, in order.
+    std::vector<std::uint64_t> ticks;
 
 private:
     bool faulty_;
@@ -99,4 +104,19 @@ RAWFRAME_TEST(AWholeStateComparesWhatItLeavesOut) {
     RAWFRAME_EXPECT(kept.countOnly(true) && kept.prediction.statistics().rollbacks == 0);
     const auto& kConfirmed = kept.prediction.confirmed();
     RAWFRAME_EXPECT(kConfirmed.size() == 2 && valueOf(kConfirmed[0]) == 3 && valueOf(kConfirmed[1]) == 0);
+}
+
+RAWFRAME_TEST(EachStepRunsAsTheServerNumbersItsTick) {
+    // D685: the command labelled L is taken in the server's run numbered
+    // L - 1, so the predictor is told that, resimulating too.
+    Run run{false};
+    RAWFRAME_EXPECT((run.predictor.ticks == std::vector<std::uint64_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
+    run.predictor.ticks.clear();
+    // The server's count after input 3 is five, not three: back to it, and
+    // inputs 4 to 10 run again as runs 3 to 9.
+    const std::int32_t kFive = 5;
+    const std::int32_t kNought = 0;
+    const std::array<std::span<const std::byte>, 2> kValues = {bytesOf(kFive), bytesOf(kNought)};
+    RAWFRAME_EXPECT(!run.prediction.authoritative(3, kValues, true));
+    RAWFRAME_EXPECT((run.predictor.ticks == std::vector<std::uint64_t>{3, 4, 5, 6, 7, 8, 9}));
 }

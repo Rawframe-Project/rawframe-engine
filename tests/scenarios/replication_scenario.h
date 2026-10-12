@@ -122,7 +122,7 @@ public:
         }
         return {};
     }
-    result::Status step(std::span<const std::byte> input) override {
+    result::Status step(std::span<const std::byte> input, world::TickIndex /*tick*/) override {
         std::memcpy(&steer_, input.data(), sizeof steer_);
         position_.x += steer_.dx;
         position_.y += steer_.dy;

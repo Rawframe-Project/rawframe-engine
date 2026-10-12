@@ -220,11 +220,13 @@ public:
         return {};
     }
 
-    result::Status step(std::span<const std::byte> input) override {
+    result::Status step(std::span<const std::byte> input, world::TickIndex tick) override {
         effects_->clear();
         RAWFRAME_TRY(set(registry_->descriptor(input_).id, input));
         // A system that fails leaves the tick to the server's correction.
-        RAWFRAME_TRY_ASSIGN(const world::TickReport kReport, schedule_->runTick(*world_, tick_, rate_));
+        // Run as the tick it predicts, resimulated or not (D685).
+        world::TickIndex running = tick;
+        RAWFRAME_TRY_ASSIGN(const world::TickReport kReport, schedule_->runTick(*world_, running, rate_));
         if (!kReport.failures.empty()) {
             return result::fail(result::ErrorClass::Internal,
                                 kWorldKestDomain,
@@ -294,7 +296,6 @@ private:
     /// Never set: prediction plays no animation.
     AnimationDoorContext animationDoors_;
     std::optional<world::Schedule> schedule_;
-    world::TickIndex tick_;
     world::TickRate rate_;
     /// The entities standing for other entities the client mirrors.
     std::map<std::uint32_t, world::EntityHandle> neighbors_;

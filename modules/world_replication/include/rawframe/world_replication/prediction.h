@@ -81,9 +81,10 @@ public:
     /// The player's value of `component`; empty if the player has none.
     [[nodiscard]] virtual std::span<const std::byte> get(schema::ComponentTypeId component) const noexcept = 0;
     [[nodiscard]] virtual result::Status set(schema::ComponentTypeId component, std::span<const std::byte> value) = 0;
-    /// One tick: `input` into the input component, then every predicted
-    /// system in schedule order, as the server runs that tick.
-    [[nodiscard]] virtual result::Status step(std::span<const std::byte> input) = 0;
+    /// Tick `tick`: `input` into the input component, then every predicted
+    /// system in schedule order, as the server runs that tick, numbered as
+    /// it numbers it (D685), so a system reading the tick reads the same.
+    [[nodiscard]] virtual result::Status step(std::span<const std::byte> input, world::TickIndex tick) = 0;
     /// The server's tick rate, told on admission before any step: what a
     /// tick's length is, for systems that integrate over time.
     virtual void rate(world::TickRate rate) noexcept = 0;

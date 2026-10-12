@@ -52,7 +52,10 @@ void Prediction::advance(std::uint64_t through) {
             return;
         }
         const std::uint64_t kTick = predictedTick_ + 1;
-        if (!settings_.predictor->step(commandFor(kTick)).has_value()) {
+        // The command labelled `kTick` is the one the server's World takes
+        // in the run it numbers `kTick - 1`: a label names the tick a run
+        // completes, a run is numbered by the ticks before it (D685).
+        if (!settings_.predictor->step(commandFor(kTick), world::TickIndex{kTick - 1}).has_value()) {
             ++statistics_.failedSteps;
             return;
         }

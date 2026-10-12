@@ -28,7 +28,7 @@ public:
         std::memcpy(&value_, value.data(), sizeof value_);
         return {};
     }
-    result::Status step(std::span<const std::byte> input) override {
+    result::Status step(std::span<const std::byte> input, world::TickIndex /*tick*/) override {
         std::int32_t add = 0;
         std::memcpy(&add, input.data(), sizeof add);
         value_ += add;
