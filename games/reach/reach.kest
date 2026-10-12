@@ -337,6 +337,35 @@ fn placeOwn(count: i32, bodies: [physics3d.Body3D], placed: [model.Placed], enti
     }
 }
 
+// A headset player's own hands drawn each frame where the headset has them
+// then (D676), and a block one holds as far from it as the server keeps
+// it; the engine draws them where they are placed for frames whose hand
+// is not located, and for a flat player always.
+fn followOwn(count: i32, bodies: [physics3d.Body3D], tracked: [model.Tracked], entities: [world.Entity]) {
+    let me = replication.player()
+    let i = 0
+    while i < count {
+        tracked[i] = model.Tracked(u32(0), f64(0.0), f64(0.0), f64(0.0))
+        let hand = entities[i]
+        if Block.has(hand) {
+            let block = Block.get(hand)
+            if block.held {
+                hand = block.holder
+            }
+        }
+        if Hand.has(hand) && Pose3D.has(hand) && Pose3D.has(entities[i]) {
+            let held = Hand.get(hand)
+            if held.player == me {
+                let from = Pose3D.get(hand)
+                let drawn = Pose3D.get(entities[i])
+                tracked[i] = model.Tracked(model.LEFT_HAND + u32(held.side), drawn.x - from.x, drawn.y - from.y,
+                                           drawn.z - from.z)
+            }
+        }
+        i = i + 1
+    }
+}
+
 // A client's view from its seat: a seated eye's height above the floor,
 // looking toward the table's middle and down at it. A headset's eyes are
 // placed from here, its play space (D595).

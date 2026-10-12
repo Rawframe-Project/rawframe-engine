@@ -23,10 +23,12 @@ component a65063a9-817e-4430-acf5-f083fad0a263 reach.table Table
 # clients from where the block is (D660).
 component a0fd2692-1aa3-4429-bca5-5f8b4e743eff reach.knock rawframe.sound.Emitter
 # What a client draws, where it looks from, and where it draws its own
-# hands (D665); no server carries any.
+# hands (D665), each frame a headset's hands where they are then (D676);
+# no server carries any.
 component 5a30e0bb-bf22-49df-b00a-22b24f0980ee reach.look rawframe.model.Model
 component f0992124-ca0d-469d-8379-bfc5880526c8 reach.view rawframe.model.Camera
 component ef26db88-b0b6-4651-a471-831d28226752 reach.placed rawframe.model.Placed
+component 4c81e2f7-3a95-4d60-b7e8-19d4f6a2c053 reach.tracked rawframe.model.Tracked
 
 # A player is seated, given two hands; each hand goes where its player
 # holds it; a hand that grips near a block takes it, and lets it go when
@@ -85,3 +87,7 @@ present reach.frame frame read reach.seat write reach.view
 # holds them now (D665).
 presentation reach.placed on rawframe.physics3d.body
 present reach.place placeOwn read rawframe.physics3d.body write reach.placed entities lookup reach.hand lookup reach.block lookup reach.hands lookup reach.seat lookup rawframe.physics3d.pose
+# And, where a headset shows, where its hands are each frame between the
+# ticks (D676).
+presentation reach.tracked on rawframe.physics3d.body
+present reach.follow followOwn read rawframe.physics3d.body write reach.tracked entities lookup reach.hand lookup reach.block lookup rawframe.physics3d.pose

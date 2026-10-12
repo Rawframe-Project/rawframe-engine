@@ -437,7 +437,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
             # and another with its tracked hand closed (D664), and no other
             # player, so the server's two welds made and let go are the
             # headset's; and its own hands drawn where it holds them
-            # (D665).
+            # (D665), each frame where the headset has them then (D676).
             add_test(NAME client_reach_takes
                      COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                              ${PROJECT_SOURCE_DIR}/tools/xr_run.sh --hands ${CMAKE_CURRENT_SOURCE_DIR}/tests/reach_hands.py
@@ -448,7 +448,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
             set_tests_properties(client_reach_takes PROPERTIES
                                  PROCESSORS 2
                                  PASS_REGULAR_EXPRESSION
-                                 "\"domain\":\"physics3d\",\"code\":\"summary\"[^\n]*\"jointsMade\":([2-9]|[1-9][0-9]+),\"jointsRemoved\":([2-9]|[1-9][0-9]+),.*\"code\":\"scene_placed_summary\"[^\n]*\"modelsPlaced\":[1-9][0-9]*}.*\"code\":\"xr_summary\"[^\n]*\"framesHandTracked\":[1-9][0-9]*,[^\n]*\"failed\":false}")
+                                 "\"domain\":\"physics3d\",\"code\":\"summary\"[^\n]*\"jointsMade\":([2-9]|[1-9][0-9]+),\"jointsRemoved\":([2-9]|[1-9][0-9]+),.*\"code\":\"scene_placed_summary\"[^\n]*\"modelsPlaced\":[0-9]+,\"modelsTracked\":[1-9][0-9]*}.*\"code\":\"xr_summary\"[^\n]*\"framesHandTracked\":[1-9][0-9]*,[^\n]*\"failed\":false}")
         endif()
         # Each draws a window on lavapipe beside a server, and bots or a
         # second client in some: two of a preset's processors each, so a full
