@@ -580,3 +580,62 @@ RAWFRAME_TEST(AGraphColoredByItsParameterIsWrittenAsTheSlangTheScenesTestsDraw) 
     const std::string_view kGolden{reinterpret_cast<const char*>(kTintedGraph.data()), kTintedGraph.size()};
     RAWFRAME_EXPECT(kWritten.has_value() && kWritten->source == kGolden && kWritten->parameters[1] == 1);
 }
+
+RAWFRAME_TEST(ATextureInputGivesWhatASampledTextureSamples) {
+    // D710: a texture_2d input defaulting to the game's texture a44e...,
+    // sampled through a parameter_texture_2d node at its own slot, apart
+    // from the same texture fixed, so an instance can change one alone.
+    const auto kStone =
+        [](Value input, Value sampled, Value second = objectOf({{"texture", Value::string("a44ecb4a39ac5cc8")}})) {
+            graph::Document made = surfaceOf(
+                objectOf({{"base_color", from(kPhase, "out")}}),
+                {nodeOf(kTime, kParameterTexture2dType, objectOf({{"name", Value::string("stone")}}), Value::object()),
+                 nodeOf(kWorld, kSampleTexture2dType, std::move(sampled), std::move(input)),
+                 nodeOf(kAxes, kSampleTexture2dType, std::move(second), Value::object()),
+                 nodeOf(kPhase,
+                        "rawframe/multiply@1",
+                        Value::object(),
+                        objectOf({{"a", from(kWorld, "color")}, {"b", from(kAxes, "color")}}))});
+            made.interface = objectOf({{"inputs",
+                                        objectOf({{"stone",
+                                                   objectOf({{"default", Value::string("a44ecb4a39ac5cc8")},
+                                                             {"type", Value::string("texture_2d")}})}})}});
+            return made;
+        };
+    const graph::Document kMade = kStone(objectOf({{"texture", from(kTime, "texture")}}), Value::object());
+    RAWFRAME_EXPECT(validateSurface(kMade).has_value());
+    RAWFRAME_EXPECT(refusedWith(compileQualities(kMade), MaterialError::Unsupported));
+    const auto kWritten = generateSlang(kMade);
+    RAWFRAME_EXPECT(kWritten.has_value() && kWritten->textures.size() == 2 &&
+                    kWritten->textures[0].id == 0xa44ecb4a39ac5cc8ULL &&
+                    kWritten->textures[1].id == 0xa44ecb4a39ac5cc8ULL && kWritten->textureInputs[0] == 1 &&
+                    kWritten->textureInputs[1] == 0);
+    // A sampled texture with both a texture param and input, or neither; a
+    // texture input read by a parameter node, multiplied, or swizzled.
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kStone(objectOf({{"texture", from(kTime, "texture")}}),
+                                                       objectOf({{"texture", Value::string("a44ecb4a39ac5cc8")}}))),
+                                MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kStone(Value::object(), Value::object())), MaterialError::Invalid));
+    graph::Document read = kMade;
+    read.nodes[1] = nodeOf(kTime, kParameterType, objectOf({{"name", Value::string("stone")}}), Value::object());
+    RAWFRAME_EXPECT(refusedWith(validateSurface(read), MaterialError::Invalid));
+    graph::Document computed = kMade;
+    computed.nodes[4] = nodeOf(kPhase,
+                               "rawframe/multiply@1",
+                               Value::object(),
+                               objectOf({{"a", from(kTime, "texture")}, {"b", from(kAxes, "color")}}));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(computed), MaterialError::Invalid));
+    graph::Document swizzled = kMade;
+    swizzled.nodes[4] = nodeOf(kPhase,
+                               kSwizzleType,
+                               objectOf({{"pattern", Value::string("xyz")}}),
+                               objectOf({{"in", from(kTime, "texture")}}));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(swizzled), MaterialError::Invalid));
+    // A texture input's default names a texture.
+    graph::Document unnamed = kMade;
+    unnamed.interface = objectOf(
+        {{"inputs",
+          objectOf(
+              {{"stone", objectOf({{"default", Value::string("stone")}, {"type", Value::string("texture_2d")}})}})}});
+    RAWFRAME_EXPECT(refusedWith(validateSurface(unnamed), MaterialError::Invalid));
+}

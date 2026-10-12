@@ -145,7 +145,8 @@ result::Result<Artifact> cookProgram(const graph::Document& document, const Shad
                                    .doubleSided = kGenerated.doubleSided,
                                    .moves = kGenerated.moves,
                                    .parameters = kGenerated.parameters,
-                                   .textures = kGenerated.textures};
+                                   .textures = kGenerated.textures,
+                                   .textureInputs = kGenerated.textureInputs};
     // The scene's containers and the shadow's (D488), a backend each.
     constexpr std::array<std::string_view, material::kProgramContainers> kSuffixes = {
         ".mrsc", ".metal.mrsc", ".d3d12.mrsc"};
@@ -186,10 +187,11 @@ result::Result<Artifact> cookInstance(std::string_view text, Reads& reads) {
     RAWFRAME_TRY_ASSIGN(
         const content::Sidecar kSidecar,
         content::readSidecar({reinterpret_cast<const char*>(kSidecarBytes.data()), kSidecarBytes.size()}));
-    RAWFRAME_TRY_ASSIGN(const auto kParameters, material::instanceParameters(kBase, kInstance.overrides));
+    RAWFRAME_TRY_ASSIGN(const material::InstanceValues kValues, material::instanceValues(kBase, kInstance.overrides));
     return Artifact{.type = content::ResourceTypeId{material::kMaterialType},
                     .representation = *content::RepresentationId::parse(material::kInstanceRepresentation),
-                    .bytes = material::encodeInstance({.base = kSidecar.id.value, .parameters = kParameters}),
+                    .bytes = material::encodeInstance(
+                        {.base = kSidecar.id.value, .parameters = kValues.parameters, .textures = kValues.textures}),
                     .subassets = {},
                     .report = {{"variants", 0}, {"axes", 0}, {"variantsHeadroom", kVariantsPerMaterial}}};
 }

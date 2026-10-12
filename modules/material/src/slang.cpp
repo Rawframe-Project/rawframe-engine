@@ -53,6 +53,8 @@ std::string_view slangType(Carried carried) {
     case Carried::Vec4:
     case Carried::Color4:
         return "float4";
+    case Carried::Texture2d:
+        return "Texture2D";
     }
     return "float";
 }
@@ -275,6 +277,12 @@ public:
         return helpers_;
     }
 
+    /// Which interface input gives each slot's texture, one more than its
+    /// slot among the inputs, nought for a fixed texture (D710).
+    [[nodiscard]] const std::array<std::uint8_t, 4>& textureInputs() const noexcept {
+        return inputs_;
+    }
+
     [[nodiscard]] std::vector<SampledTexture> takeTextures() {
         return std::move(textures_);
     }
@@ -302,7 +310,11 @@ private:
             RAWFRAME_TRY_ASSIGN(uv, outputOf(*kSampling.uv));
         }
         std::size_t slot = 0;
-        while (slot < textures_.size() && !(textures_[slot] == kSampling.texture)) {
+        // One slot a texture and sampler state, a fixed texture's apart from
+        // an input's, which an instance may change (D710).
+        const std::uint8_t kInput =
+            kSampling.input.has_value() ? static_cast<std::uint8_t>(*kSampling.input + 1) : std::uint8_t{0};
+        while (slot < textures_.size() && !(textures_[slot] == kSampling.texture && inputs_.at(slot) == kInput)) {
             ++slot;
         }
         if (slot == textures_.size()) {
@@ -310,6 +322,7 @@ private:
                 return unsupported("a generated material samples at most four textures");
             }
             textures_.push_back(kSampling.texture);
+            inputs_.at(slot) = kInput;
         }
         const std::string kSlot{kSlots.at(slot)};
         const std::string kName = name();
@@ -330,6 +343,7 @@ private:
     std::string statements_;
     std::map<graph::NodeId, std::string> made_;
     std::vector<SampledTexture> textures_;
+    std::array<std::uint8_t, 4> inputs_{};
     std::vector<std::string_view> helpers_;
     std::size_t next_ = 0;
 };
@@ -418,6 +432,7 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
                   "    }\n"
                   "}\n\n"
                   "export struct Material : IMaterial = Generated;\n";
+    made.textureInputs = writer.textureInputs();
     made.textures = writer.takeTextures();
     made.moves = kInputs.find("position_offset") != nullptr;
     made.shading = kStates.shading;

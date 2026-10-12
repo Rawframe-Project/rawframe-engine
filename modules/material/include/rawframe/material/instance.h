@@ -17,6 +17,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <string>
 #include <string_view>
@@ -43,24 +44,36 @@ struct InstanceDocument {
 /// eight `overrides`, in that order. Refuses (`Invalid`) anything else.
 [[nodiscard]] result::Result<InstanceDocument> readInstance(std::string_view text);
 
-/// The parameters an instance's overrides make of its base's: each names
-/// one of the base's interface inputs, is of its type, and differs from its
-/// default, which an override equal to it would only repeat (SPEC-0028).
-/// Refuses (`Invalid`) any other, and a base `validateSurface` refuses.
-[[nodiscard]] result::Result<std::array<float, kParameterFloats>> instanceParameters(const graph::Document& base,
-                                                                                     const document::Value& overrides);
+/// What an instance's overrides make of its base: its parameters, and the
+/// texture each of its base's program's texture slots samples where an
+/// override of a texture input changes it (D710), nought where not.
+struct InstanceValues {
+    std::array<float, kParameterFloats> parameters{};
+    std::array<std::uint64_t, 4> textures{};
+};
 
-/// A cooked instance: its base's identity and its parameters.
+/// An instance's overrides made into its base's values: each names one of
+/// the base's interface inputs, is of its type (a texture input's the
+/// game's texture by 16 lowercase hex digits), and differs from its
+/// default, which an override equal to it would only repeat (SPEC-0028).
+/// Refuses (`Invalid`) any other, and a base `validateSurface` refuses; a
+/// texture override, a base `generateSlang` refuses.
+[[nodiscard]] result::Result<InstanceValues> instanceValues(const graph::Document& base,
+                                                            const document::Value& overrides);
+
+/// A cooked instance: its base's identity and its values.
 struct MaterialInstance {
     base::Bits128 base;
     std::array<float, kParameterFloats> parameters{};
+    std::array<std::uint64_t, 4> textures{};
 
     friend bool operator==(const MaterialInstance&, const MaterialInstance&) = default;
 };
 
-/// A cooked instance's bytes: `RFMI`, format 1, its base's identity (its
-/// high word, then its low, eight bytes each), then its parameters.
-/// Little-endian.
+/// A cooked instance's bytes: `RFMI`, format 2 (D709, D710), its base's
+/// identity (its high word, then its low, eight bytes each), its
+/// parameters, then its four texture slots' identities (eight bytes each,
+/// nought for the base's). Little-endian.
 [[nodiscard]] std::vector<std::byte> encodeInstance(const MaterialInstance& made);
 /// Refuses (`Invalid`) bytes `encodeInstance` would not write, a base of
 /// nought, and a parameter not finite.

@@ -239,7 +239,7 @@ std::vector<std::byte> encodeProgram(const ProgramMaterial& made) {
     for (const char kLetter : {'R', 'F', 'M', 'P'}) {
         bytes.push_back(static_cast<std::byte>(kLetter));
     }
-    putWord(bytes, 3);
+    putWord(bytes, 4);
     bytes.push_back(static_cast<std::byte>(made.shading));
     bytes.push_back(static_cast<std::byte>(made.blend));
     bytes.push_back(static_cast<std::byte>(made.doubleSided ? 1 : 0));
@@ -249,12 +249,13 @@ std::vector<std::byte> encodeProgram(const ProgramMaterial& made) {
         putWord(bytes, std::bit_cast<std::uint32_t>(kNumber));
     }
     putWord(bytes, static_cast<std::uint32_t>(made.textures.size()));
-    for (const SampledTexture& kTexture : made.textures) {
+    for (std::size_t at = 0; at < made.textures.size(); ++at) {
+        const SampledTexture& kTexture = made.textures[at];
         putWord(bytes, static_cast<std::uint32_t>(kTexture.id));
         putWord(bytes, static_cast<std::uint32_t>(kTexture.id >> 32U));
         bytes.push_back(static_cast<std::byte>(kTexture.filter));
         bytes.push_back(static_cast<std::byte>(kTexture.address));
-        bytes.push_back(std::byte{0});
+        bytes.push_back(static_cast<std::byte>(at < made.textureInputs.size() ? made.textureInputs.at(at) : 0));
         bytes.push_back(std::byte{0});
     }
     for (const auto* kContainers : {&made.containers, &made.shadows}) {
@@ -288,8 +289,8 @@ result::Result<ProgramMaterial> decodeProgram(std::span<const std::byte> bytes) 
                    return each == static_cast<std::byte>(letter);
                });
     };
-    if (!kIs(kTake(4), "RFMP") || kWord() != 3) {
-        return invalid("a program material is RFMP, format 3");
+    if (!kIs(kTake(4), "RFMP") || kWord() != 4) {
+        return invalid("a program material is RFMP, format 4");
     }
     ProgramMaterial made;
     const std::span<const std::byte> kStates = kTake(4);
@@ -320,10 +321,12 @@ result::Result<ProgramMaterial> decodeProgram(std::span<const std::byte> bytes) 
         texture.id |= static_cast<std::uint64_t>(kWord()) << 32U;
         const std::span<const std::byte> kSampler = kTake(4);
         if (!fits || texture.id == 0 || std::to_integer<std::uint8_t>(kSampler[0]) > 1 ||
-            std::to_integer<std::uint8_t>(kSampler[1]) > 1 || kSampler[2] != std::byte{0} ||
+            std::to_integer<std::uint8_t>(kSampler[1]) > 1 || std::to_integer<std::uint8_t>(kSampler[2]) > 8 ||
             kSampler[3] != std::byte{0}) {
-            return invalid("a program material's texture names one, its sampler state in its sets");
+            return invalid("a program material's texture names one, its sampler state in its sets, its input one of "
+                           "eight or none");
         }
+        made.textureInputs.at(each) = std::to_integer<std::uint8_t>(kSampler[2]);
         texture.filter = static_cast<Filter>(kSampler[0]);
         texture.address = static_cast<Address>(kSampler[1]);
         made.textures.push_back(texture);

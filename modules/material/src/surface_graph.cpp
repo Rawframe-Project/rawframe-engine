@@ -254,14 +254,14 @@ const MathNode* mathNodeOf(std::string_view type) {
 bool known(const graph::Node& node) {
     const Value* kType = node.record.find("type");
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
-    return kText != nullptr &&
-           (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType || *kText == kSeparate3Type ||
-            *kText == kNormalMapType || *kText == kQualitySwitchType || *kText == kTimeType ||
-            *kText == kWorldPositionType || *kText == kWorldNormalType || *kText == kCombine3Type ||
-            *kText == kCombine2Type || *kText == kSeparate2Type || *kText == kSwizzleType ||
-            *kText == kVertexColorType || *kText == kViewDirectionType || *kText == kWorldTangentType ||
-            *kText == kCompareType || *kText == kConstantType || *kText == kFrontFacingType ||
-            *kText == kCombine4Type || *kText == kSeparate4Type || *kText == kParameterType || math(*kText));
+    return kText != nullptr && (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType ||
+                                *kText == kSeparate3Type || *kText == kNormalMapType || *kText == kQualitySwitchType ||
+                                *kText == kTimeType || *kText == kWorldPositionType || *kText == kWorldNormalType ||
+                                *kText == kCombine3Type || *kText == kCombine2Type || *kText == kSeparate2Type ||
+                                *kText == kSwizzleType || *kText == kVertexColorType || *kText == kViewDirectionType ||
+                                *kText == kWorldTangentType || *kText == kCompareType || *kText == kConstantType ||
+                                *kText == kFrontFacingType || *kText == kCombine4Type || *kText == kSeparate4Type ||
+                                *kText == kParameterType || *kText == kParameterTexture2dType || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -360,6 +360,11 @@ result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const gr
         if (!each.from.has_value() && each.carried == Carried::Color4 && kVector4) {
             each.carried = Carried::Vec4;
         }
+    }
+    if (std::ranges::any_of(kIn, [](const Operand& each) {
+            return each.carried == Carried::Texture2d;
+        })) {
+        return invalid("a texture input's texture is sampled, never computed with");
     }
     const bool kKnown = std::ranges::all_of(kIn, [](const Operand& each) {
         return each.carried.has_value();
@@ -492,11 +497,11 @@ result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::N
     RAWFRAME_TRY_ASSIGN(made.in, operandOf(surface, *kIn));
     const std::optional<Carried>& kFrom = made.in.carried;
     const bool kFour = kFrom == Carried::Vec4 || kFrom == Carried::Color4;
-    const std::size_t kWidth = !kFrom.has_value()                                  ? 4
-                               : kFrom == Carried::Vec2                            ? 2
-                               : kFrom == Carried::Float || kFrom == Carried::Bool ? 0
-                               : kFour                                             ? 4
-                                                                                   : 3;
+    const std::size_t kWidth = !kFrom.has_value()                                                                 ? 4
+                               : kFrom == Carried::Vec2                                                           ? 2
+                               : kFrom == Carried::Float || kFrom == Carried::Bool || kFrom == Carried::Texture2d ? 0
+                               : kFour                                                                            ? 4
+                                                                                                                  : 3;
     // x, y, z, and w: the channel each letter names.
     const auto kChannel = [](char letter) -> std::size_t {
         return letter == 'w' ? 3 : letter >= 'x' && letter <= 'z' ? static_cast<std::size_t>(letter - 'x') : 4;
@@ -590,6 +595,15 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& s
             kInput.names().size() != 2 || kInput.names()[0] != "default") {
             return invalid("an interface input is named in lower case, its default and its type given");
         }
+        if (*kType->text() == "texture_2d") {
+            const std::optional<std::uint64_t> kId =
+                kDefault->text() != nullptr ? graph::nodeIdOf(*kDefault->text()) : std::nullopt;
+            if (!kId.has_value() || *kId == 0) {
+                return invalid("a texture input's default names the game's texture by 16 lowercase hex digits");
+            }
+            made.push_back(InterfaceInput{.name = kName, .carried = Carried::Texture2d, .slot = at, .texture = *kId});
+            continue;
+        }
         const auto kFound =
             std::ranges::find(kTypes, std::string_view{*kType->text()}, &std::pair<std::string_view, Carried>::first);
         if (kFound == kTypes.end()) {
@@ -622,6 +636,9 @@ result::Result<InterfaceInput> parameterIn(const graph::Document& surface, const
     const auto kFound = std::ranges::find(kInputs, std::string_view{*kName->text()}, &InterfaceInput::name);
     if (kFound == kInputs.end()) {
         return invalid("a parameter node names one of the surface's interface inputs");
+    }
+    if ((kFound->carried == Carried::Texture2d) != (typeOf(node) == kParameterTexture2dType)) {
+        return invalid("a texture input is a parameter_texture_2d node's, any other a parameter node's");
     }
     return *kFound;
 }
@@ -757,16 +774,33 @@ result::Result<NormalMap> normalMapIn(const graph::Document& surface, const grap
 
 result::Result<Sampling> sampleIn(const graph::Document& surface, const graph::Node& node) {
     constexpr std::array<std::string_view, 3> kParams = {"address", "filter", "texture"};
-    constexpr std::array<std::string_view, 1> kInputs = {"uv"};
+    constexpr std::array<std::string_view, 2> kInputs = {"texture", "uv"};
     RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, kInputs));
     Sampling made;
     const Value* kTexture = kParts.first->find("texture");
-    const std::optional<std::uint64_t> kId =
-        kTexture != nullptr && kTexture->text() != nullptr ? graph::nodeIdOf(*kTexture->text()) : std::nullopt;
-    if (!kId.has_value() || *kId == 0) {
-        return invalid("a sampled texture names the game's texture by 16 lowercase hex digits, never nought");
+    const Value* kGiven = kParts.second->find("texture");
+    if ((kTexture == nullptr) == (kGiven == nullptr)) {
+        return invalid("a sampled texture's texture is its texture param's or a texture input's, one of them");
     }
-    made.texture.id = *kId;
+    if (kGiven != nullptr) {
+        // A texture input's, by a parameter_texture_2d node (D710).
+        const std::optional<graph::Connection> kFrom = graph::connectionOf(*kGiven);
+        const graph::Node* kSource = kFrom.has_value() ? nodeOf(surface, kFrom->node) : nullptr;
+        if (kSource == nullptr || !known(*kSource) || typeOf(*kSource) != kParameterTexture2dType ||
+            kFrom->output != "texture") {
+            return invalid("a sampled texture's texture input is a parameter_texture_2d node's texture");
+        }
+        RAWFRAME_TRY_ASSIGN(const InterfaceInput kInput, parameterIn(surface, *kSource));
+        made.texture.id = kInput.texture;
+        made.input = kInput.slot;
+    } else {
+        const std::optional<std::uint64_t> kId =
+            kTexture->text() != nullptr ? graph::nodeIdOf(*kTexture->text()) : std::nullopt;
+        if (!kId.has_value() || *kId == 0) {
+            return invalid("a sampled texture names the game's texture by 16 lowercase hex digits, never nought");
+        }
+        made.texture.id = *kId;
+    }
     if (const Value* kAddress = kParts.first->find("address"); kAddress != nullptr) {
         if (kAddress->text() == nullptr || *kAddress->text() != "clamp") {
             return invalid("a sampled texture's address is clamp, when not the default");
@@ -830,6 +864,10 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
     if (kType == kCompareType && from.output == "out") {
         RAWFRAME_TRY(compareIn(surface, *kSource));
         return std::optional{Carried::Bool};
+    }
+    if (kType == kParameterTexture2dType && from.output == "texture") {
+        RAWFRAME_TRY(parameterIn(surface, *kSource));
+        return std::optional{Carried::Texture2d};
     }
     if (kType == kParameterType && from.output == "out") {
         RAWFRAME_TRY_ASSIGN(const InterfaceInput kInput, parameterIn(surface, *kSource));

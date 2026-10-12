@@ -564,6 +564,7 @@ RAWFRAME_TEST(AProgramMaterialRoundTripsAndRefusesWhatItWouldNotWrite) {
     made.textures = {{.id = 0xa44ecb4a39ac5cc8ULL}, {.id = 7, .filter = Filter::Nearest, .address = Address::Clamp}};
     made.parameters[0] = 2;
     made.parameters[31] = -0.5F;
+    made.textureInputs = {0, 3, 0, 0};
     for (std::size_t at = 0; at < made.containers.size(); ++at) {
         made.containers.at(at) = {std::byte{'M'}, std::byte{'R'}, std::byte{'S'}, std::byte{'C'}, std::byte(at)};
         made.shadows.at(at) = {std::byte{'M'}, std::byte{'R'}, std::byte{'S'}, std::byte{'C'}, std::byte(at + 3)};
@@ -585,13 +586,17 @@ RAWFRAME_TEST(AProgramMaterialRoundTripsAndRefusesWhatItWouldNotWrite) {
     bad = made;
     bad.shadows[2].clear();
     RAWFRAME_EXPECT(refusedWith(decodeProgram(encodeProgram(bad)), MaterialError::Invalid));
-    // Formats 1 and 2, without the shadow's or the parameters, are read no
-    // more; nor a parameter not finite.
+    // Formats 1 to 3, without the shadow's, the parameters, or the texture
+    // inputs, are read no more; nor a parameter not finite, nor a texture
+    // given by a ninth input.
     std::vector<std::byte> older = kBytes;
-    older[4] = std::byte{1};
-    RAWFRAME_EXPECT(refusedWith(decodeProgram(older), MaterialError::Invalid));
-    older[4] = std::byte{2};
-    RAWFRAME_EXPECT(refusedWith(decodeProgram(older), MaterialError::Invalid));
+    for (const std::byte kFormat : {std::byte{1}, std::byte{2}, std::byte{3}}) {
+        older[4] = kFormat;
+        RAWFRAME_EXPECT(refusedWith(decodeProgram(older), MaterialError::Invalid));
+    }
+    bad = made;
+    bad.textureInputs[0] = 9;
+    RAWFRAME_EXPECT(refusedWith(decodeProgram(encodeProgram(bad)), MaterialError::Invalid));
     bad = made;
     bad.parameters[3] = std::numeric_limits<float>::infinity();
     RAWFRAME_EXPECT(refusedWith(decodeProgram(encodeProgram(bad)), MaterialError::Invalid));

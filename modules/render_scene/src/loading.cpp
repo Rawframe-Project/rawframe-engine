@@ -78,6 +78,15 @@ result::Result<SceneMaterial> readMaterial(content::ContentStore& store,
         RAWFRAME_TRY_ASSIGN(SceneMaterial made,
                             readMaterial(store, identity, kInstance.base, quality, programs, false));
         std::ranges::copy(kInstance.parameters, made.blob.begin() + material::kBlobFloats);
+        // The textures its texture inputs' overrides give, each at its
+        // base's slot, its sampler state the base's (D710).
+        const std::array<SceneTexture*, 4> kSlots = {
+            &made.textures.base, &made.textures.packed, &made.textures.emission, &made.textures.normal};
+        for (std::size_t slot = 0; slot < kSlots.size(); ++slot) {
+            if (kInstance.textures.at(slot) != 0) {
+                kSlots.at(slot)->id = kInstance.textures.at(slot);
+            }
+        }
         return made;
     }
     if (kRead.descriptor().representation.text() == material::kProgramRepresentation) {

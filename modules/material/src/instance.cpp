@@ -8,6 +8,7 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <optional>
 #include <utility>
 
 namespace rawframe::material {
@@ -55,14 +56,15 @@ result::Result<InstanceDocument> readInstance(std::string_view text) {
     return InstanceDocument{.base = *kPath, .overrides = kOverrides};
 }
 
-result::Result<std::array<float, kParameterFloats>> instanceParameters(const graph::Document& base,
-                                                                       const Value& overrides) {
+result::Result<InstanceValues> instanceValues(const graph::Document& base, const Value& overrides) {
     RAWFRAME_TRY(validateSurface(base));
     RAWFRAME_TRY_ASSIGN(const std::vector<surface_graph::InterfaceInput> kInputs, surface_graph::interfaceOf(base));
     std::array<double, kParameterFloats> values{};
     for (const surface_graph::InterfaceInput& kInput : kInputs) {
         std::ranges::copy(kInput.initial, values.begin() + static_cast<std::ptrdiff_t>(kInput.slot * 4));
     }
+    // The texture each input gives where an override changes it.
+    std::array<std::uint64_t, 8> textures{};
     const graph::Document kNone;
     for (std::size_t at = 0; at < overrides.names().size(); ++at) {
         const auto kFound =
@@ -70,8 +72,22 @@ result::Result<std::array<float, kParameterFloats>> instanceParameters(const gra
         if (kFound == kInputs.end()) {
             return invalid("a material instance overrides its base's interface inputs alone");
         }
-        RAWFRAME_TRY_ASSIGN(const surface_graph::Operand kValue,
-                            surface_graph::operandOf(kNone, overrides.items()[at]));
+        const Value& kOverride = overrides.items()[at];
+        if (kFound->carried == surface_graph::Carried::Texture2d) {
+            const std::optional<std::uint64_t> kId =
+                kOverride.text() != nullptr ? graph::nodeIdOf(*kOverride.text()) : std::nullopt;
+            if (!kId.has_value() || *kId == 0) {
+                return invalid("a material instance's texture override names the game's texture by 16 lowercase hex "
+                               "digits");
+            }
+            if (*kId == kFound->texture) {
+                return invalid("a material instance's override differs from its input's default, which it would "
+                               "repeat");
+            }
+            textures.at(kFound->slot) = *kId;
+            continue;
+        }
+        RAWFRAME_TRY_ASSIGN(const surface_graph::Operand kValue, surface_graph::operandOf(kNone, kOverride));
         const surface_graph::Carried kRead =
             kFound->carried == surface_graph::Carried::Vec3   ? surface_graph::Carried::Color3
             : kFound->carried == surface_graph::Carried::Vec4 ? surface_graph::Carried::Color4
@@ -84,10 +100,20 @@ result::Result<std::array<float, kParameterFloats>> instanceParameters(const gra
         }
         std::ranges::copy(kValue.literal, values.begin() + static_cast<std::ptrdiff_t>(kFound->slot * 4));
     }
-    std::array<float, kParameterFloats> made{};
-    std::ranges::transform(values, made.begin(), [](double each) {
+    InstanceValues made;
+    std::ranges::transform(values, made.parameters.begin(), [](double each) {
         return static_cast<float>(each);
     });
+    // The program's texture slots each input's texture is bound at.
+    if (std::ranges::any_of(textures, [](std::uint64_t each) {
+            return each != 0;
+        })) {
+        RAWFRAME_TRY_ASSIGN(const GeneratedSlang kProgram, generateSlang(base));
+        for (std::size_t slot = 0; slot < kProgram.textureInputs.size(); ++slot) {
+            const std::uint8_t kInput = kProgram.textureInputs.at(slot);
+            made.textures.at(slot) = kInput == 0 ? 0 : textures.at(kInput - 1U);
+        }
+    }
     return made;
 }
 
@@ -96,7 +122,7 @@ std::vector<std::byte> encodeInstance(const MaterialInstance& made) {
     for (const char kLetter : {'R', 'F', 'M', 'I'}) {
         bytes.push_back(static_cast<std::byte>(kLetter));
     }
-    putWord(bytes, 1);
+    putWord(bytes, 2);
     for (const std::uint64_t kWord : {made.base.high, made.base.low}) {
         putWord(bytes, static_cast<std::uint32_t>(kWord));
         putWord(bytes, static_cast<std::uint32_t>(kWord >> 32U));
@@ -104,11 +130,15 @@ std::vector<std::byte> encodeInstance(const MaterialInstance& made) {
     for (const float kNumber : made.parameters) {
         putWord(bytes, std::bit_cast<std::uint32_t>(kNumber));
     }
+    for (const std::uint64_t kTexture : made.textures) {
+        putWord(bytes, static_cast<std::uint32_t>(kTexture));
+        putWord(bytes, static_cast<std::uint32_t>(kTexture >> 32U));
+    }
     return bytes;
 }
 
 result::Result<MaterialInstance> decodeInstance(std::span<const std::byte> bytes) {
-    constexpr std::size_t kSize = 4 + 4 + 16 + (4 * kParameterFloats);
+    constexpr std::size_t kSize = 4 + 4 + 16 + (4 * kParameterFloats) + (8 * 4);
     if (bytes.size() != kSize || bytes[0] != std::byte{'R'} || bytes[1] != std::byte{'F'} ||
         bytes[2] != std::byte{'M'} || bytes[3] != std::byte{'I'}) {
         return invalid("a material instance is RFMI, its base and its parameters");
@@ -122,8 +152,8 @@ result::Result<MaterialInstance> decodeInstance(std::span<const std::byte> bytes
         at += 4;
         return word;
     };
-    if (kWord() != 1) {
-        return invalid("a material instance is of format 1");
+    if (kWord() != 2) {
+        return invalid("a material instance is of format 2");
     }
     MaterialInstance made;
     for (std::uint64_t* word : {&made.base.high, &made.base.low}) {
@@ -138,6 +168,10 @@ result::Result<MaterialInstance> decodeInstance(std::span<const std::byte> bytes
         if (!std::isfinite(number)) {
             return invalid("a material instance's parameters are finite");
         }
+    }
+    for (std::uint64_t& texture : made.textures) {
+        texture = kWord();
+        texture |= static_cast<std::uint64_t>(kWord()) << 32U;
     }
     return made;
 }

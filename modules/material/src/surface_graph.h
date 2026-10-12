@@ -28,7 +28,10 @@ enum class Carried : std::uint8_t {
     Bool,
     /// The four-wide types (D706).
     Vec4,
-    Color4
+    Color4,
+    /// A texture an interface input gives, which only a sampled texture
+    /// takes (D710).
+    Texture2d
 };
 
 /// SPEC-0026's states' words, in their enumerations' order.
@@ -173,15 +176,21 @@ struct InterfaceInput {
     Carried carried = Carried::Float;
     std::array<double, 4> initial{};
     std::size_t slot = 0;
+    /// A texture input's default, the game's texture by its identity (D710);
+    /// nought for any other.
+    std::uint64_t texture = 0;
 };
 
 /// The document's interface, checked: none, or `inputs`, each named as a
 /// Kest name is, eight at most, its `default` and its `type` (a float, a
-/// vector, or a color), in name order, a slot each in that order.
+/// vector, a color, or a `texture_2d` defaulting to a game's texture by 16
+/// lowercase hex digits, D710), in name order, a slot each in that order.
 [[nodiscard]] result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& surface);
 
 /// A `parameter` node's input, checked: the interface input its `name`
-/// param names, its `out` of that input's type.
+/// param names, its `out` of that input's type; or a
+/// `parameter_texture_2d` node's, a texture input, its `texture` that
+/// texture.
 [[nodiscard]] result::Result<InterfaceInput> parameterIn(const graph::Document& surface, const graph::Node& node);
 
 /// A `compare` node's operator and inputs, checked (D697): `less`,
@@ -230,10 +239,13 @@ struct NormalMap {
 [[nodiscard]] result::Result<NormalMap> normalMapIn(const graph::Document& surface, const graph::Node& node);
 
 /// What a `sample_texture_2d` node's params say, and what its `uv` comes
-/// from, if connected.
+/// from, if connected. Its texture is its `texture` param's, or the
+/// texture input its `texture` input is connected to (D710), then `input`
+/// that input's slot and the texture its default.
 struct Sampling {
     SampledTexture texture;
     std::optional<graph::Connection> uv;
+    std::optional<std::size_t> input;
 };
 
 [[nodiscard]] result::Result<Sampling> sampleIn(const graph::Document& surface, const graph::Node& node);

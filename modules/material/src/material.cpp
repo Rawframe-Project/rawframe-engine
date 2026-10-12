@@ -454,7 +454,7 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
             RAWFRAME_TRY(switchIn(surface, node));
         } else if (typeOf(node) == kCombine3Type || typeOf(node) == kCombine2Type || typeOf(node) == kCombine4Type) {
             RAWFRAME_TRY(combineIn(surface, node));
-        } else if (typeOf(node) == kParameterType) {
+        } else if (typeOf(node) == kParameterType || typeOf(node) == kParameterTexture2dType) {
             RAWFRAME_TRY(parameterIn(surface, node));
         } else if (typeOf(node) == kSeparate4Type) {
             RAWFRAME_TRY(separate4In(surface, node));
@@ -657,6 +657,9 @@ result::Result<Material> compiled(const graph::Document& surface) {
             continue;
         }
         RAWFRAME_TRY_ASSIGN(const Sampling kSampling, sampleIn(surface, *nodeOf(surface, *samplers[kSlot])));
+        if (kSampling.input.has_value()) {
+            return unsupported("a texture an interface input gives is sampled by a program material (D710)");
+        }
         SampledTexture& texture = *kTexture;
         texture = kSampling.texture;
         if (kSampling.uv.has_value()) {

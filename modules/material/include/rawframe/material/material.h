@@ -257,8 +257,10 @@ inline constexpr std::string_view kCompareType = "rawframe/compare@1";
 inline constexpr std::string_view kConstantType = "rawframe/constant@1";
 /// Whether the face drawn is the front, the fragment stage's alone (D705).
 inline constexpr std::string_view kFrontFacingType = "rawframe/front_facing@1";
-/// An interface input's value, by the name its `name` param gives (D708).
+/// An interface input's value, by the name its `name` param gives (D708),
+/// and a texture input's texture, which a sampled texture samples (D710).
 inline constexpr std::string_view kParameterType = "rawframe/parameter@1";
+inline constexpr std::string_view kParameterTexture2dType = "rawframe/parameter_texture_2d@1";
 /// The four-wide channel nodes, combine4 the post-process and canvas
 /// families' too (D348, D706).
 inline constexpr std::string_view kCombine4Type = "rawframe/combine4@1";
@@ -319,6 +321,9 @@ struct GeneratedSlang {
     bool doubleSided = false;
     /// Its interface inputs' defaults (D708).
     std::array<float, kParameterFloats> parameters{};
+    /// Which interface input gives each texture slot's texture, one more
+    /// than the input's slot, nought for a fixed texture (D710).
+    std::array<std::uint8_t, 4> textureInputs{};
 };
 
 /// The surface written as Slang at a quality, for a graph the blob cannot
@@ -348,21 +353,25 @@ struct ProgramMaterial {
     /// Its interface inputs' values (D708), which an instance overrides.
     std::array<float, kParameterFloats> parameters{};
     std::vector<SampledTexture> textures;
+    /// Which interface input gives each texture's, as GeneratedSlang's
+    /// (D710): an instance's override of that input replaces it.
+    std::array<std::uint8_t, 4> textureInputs{};
     std::array<std::vector<std::byte>, kProgramContainers> containers;
     std::array<std::vector<std::byte>, kProgramContainers> shadows;
 
     friend bool operator==(const ProgramMaterial&, const ProgramMaterial&) = default;
 };
 
-/// A program material's bytes: `RFMP`, format 3 (D488, D708); its states
-/// (shading, blend, double sided, a byte each, and one that is one where
-/// its vertices move, nought before D691) and alpha
+/// A program material's bytes: `RFMP`, format 4 (D488, D708, D710); its
+/// states (shading, blend, double sided, a byte each, and one that is one
+/// where its vertices move, nought before D691) and alpha
 /// cutoff; its parameters' numbers; the count of its textures, then each
-/// one's identity (low word first), filter, address, and two bytes of
+/// one's identity (low word first), filter, address, the interface input
+/// giving it (one more than its slot, nought for none), and a byte of
 /// nought; then each scene container's length and bytes, then each shadow
-/// container's. Little-endian. Formats 1 and 2, which carried no shadow's
-/// and no parameters, are read no more: a cook's key changes with its
-/// toolchain, so what was cooked so is cooked again.
+/// container's. Little-endian. Formats 1 to 3, which carried no shadow's,
+/// no parameters, or no texture inputs, are read no more: a cook's key
+/// changes with its toolchain, so what was cooked so is cooked again.
 [[nodiscard]] std::vector<std::byte> encodeProgram(const ProgramMaterial& made);
 /// Refuses (`Invalid`) bytes `encodeProgram` would not write: states out of
 /// their sets, more than four textures or one naming none, a container
