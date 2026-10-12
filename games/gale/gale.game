@@ -28,6 +28,9 @@ component 664ccd7d-20b0-45e5-83c6-a91a614b13cf gale.view rawframe.model.Camera
 # Where a client hears another ship's broadsides from (D687): an emitter of
 # its own on each ship.
 component 95079b36-b81f-4629-8fa5-de5ef7425d12 gale.report rawframe.sound.Emitter
+# The player's HUD (D688): a panel with its ship's hull and hits in words.
+component 90bcc31f-27ec-496b-9287-c33df14ecc7d gale.hud rawframe.ui.Node
+component 0d04321d-cd64-4e5b-ad89-1d1b800a9b9c gale.tally rawframe.ui.Node
 
 # A player's ship is launched, and launched again once abandoned; its guns
 # reload and fire the broadsides its helm asks, which its client predicts
@@ -85,3 +88,16 @@ present gale.frame frame read gale.ship write gale.view entities lookup rawframe
 # them (D687); a client's own are its predicted effect.
 presentation gale.report on gale.ship
 present gale.report report read gale.ship write gale.report entities
+
+# The player's HUD (D688): a panel at the top left of its view telling its
+# ship's hull and the hits its broadsides made, in words from gale.strings,
+# in Inter 4.1 (Inter-Regular.ttf, from its release archive, SIL Open Font
+# License 1.1 in Inter-LICENSE.txt); gale.ui lays it out, the tally writes
+# what changes. A server never reads them.
+text gale.strings
+locale en
+font 317d67e92a7a8052 Inter-Regular.ttf
+label 62a7d6a7aface65d gale.strings hud.ship hull hits
+presentation gale.hud gale.tally on player
+ui gale.ui
+present gale.tally tally read gale.ship read gale.guns write gale.tally

@@ -16,6 +16,7 @@ import rawframe.model
 import rawframe.physics3d
 import rawframe.replication
 import rawframe.sound
+import rawframe.ui
 import rawframe.world
 import std.math
 
@@ -451,6 +452,17 @@ fn report(count: i32, ships: [Ship], emitters: [sound.Emitter], entities: [world
         if entities[i] == me {
             emitters[i] = sound.Emitter(u64(0), u32(0), false, sound.STOP)
         }
+        i = i + 1
+    }
+}
+
+// The player's HUD (D688): its ship's hull and the hits its broadsides
+// made, the label's two arguments.
+fn tally(count: i32, ships: [Ship], guns: [Guns], tallies: [ui.Node]) {
+    let i = 0
+    while i < count {
+        tallies[i].textValue = i64(ships[i].hull)
+        tallies[i].textSecond = i64(guns[i].hits)
         i = i + 1
     }
 }

@@ -1,0 +1,29 @@
+{
+  "kind": "ui.document",
+  "formatVersion": 1,
+  "nodes": [
+    {
+      "component": "gale.hud",
+      "alignItems": "center",
+      "padding": 8,
+      "absolute": true,
+      "xOffset": 12,
+      "yOffset": 12,
+      "fill": "#101820c0",
+      "radius": 6,
+      "shadowColor": "#00000080",
+      "shadowY": 2,
+      "shadowBlur": 8,
+      "children": [
+        {
+          "component": "gale.tally",
+          "text": "62a7d6a7aface65d",
+          "font": "317d67e92a7a8052",
+          "textSize": 22,
+          "textColor": "#e8eef8ff",
+          "textWrap": "no_wrap"
+        }
+      ]
+    }
+  ]
+}

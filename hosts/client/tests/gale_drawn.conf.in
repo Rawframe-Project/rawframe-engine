@@ -1,8 +1,10 @@
 # The client's own ship on Gale's sea (D682), drawn in 3D on the one device
 # and shown in its window: the hulls and the sea round its ship, seen from
-# behind and above it, its bot at the helm. A software rasterizer allowed.
+# behind and above it, its bot at the helm, and its HUD (D688), from the
+# game cooked into the build tree. A software rasterizer allowed.
 bots.player = true
 render.device = any
+content.root = @GALE_CONTENT@
 scene.shadow_side = 256
 input.gamepads = false
 render.frame_rate = 30
