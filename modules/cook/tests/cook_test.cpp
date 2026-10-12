@@ -584,10 +584,15 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     writeText(kGame / "hud.tr.translations", kTurkish);
     RAWFRAME_EXPECT(kCook().failures.empty());
 
-    // A UI document that does not read is refused (D619).
+    // A UI document that does not read is refused (D619), its reader's
+    // reason told after the cook's (D689).
     const std::string kUi = readText(kGame / "runners.ui");
     writeText(kGame / "runners.ui", kUi.substr(0, kUi.find("\"nodes\"")) + "\"nodes\": 3\n}\n");
-    RAWFRAME_EXPECT(!kCook().failures.empty());
+    const auto kUnread = kCook();
+    RAWFRAME_EXPECT(std::ranges::any_of(kUnread.failures, [](const result::Error& each) {
+        return each.description().starts_with("a UI document does not read: ") &&
+               each.description().size() > std::string_view{"a UI document does not read: "}.size();
+    }));
     writeText(kGame / "runners.ui", kUi);
     RAWFRAME_EXPECT(kCook().failures.empty());
 

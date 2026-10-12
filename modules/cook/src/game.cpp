@@ -14,6 +14,7 @@
 #include "rawframe/world_kest/game_files.h"
 
 #include <algorithm>
+#include <string>
 
 namespace rawframe::cook {
 
@@ -24,6 +25,12 @@ std::unexpected<result::Error> refuse(std::string_view why, std::string_view nam
         result::fail(result::ErrorClass::InvalidArgument, kCookDomain, code(CookError::BadReference), why)
             .error()
             .withContext("name", name)};
+}
+
+/// A document that does not read as its owner reads it: `why`, and the
+/// reader's own reason, so an author learns which field to mend (D689).
+std::unexpected<result::Error> unreadable(std::string_view why, std::string_view name, const result::Error& reason) {
+    return refuse(std::string{why} + ": " + std::string{reason.description()}, name);
 }
 
 std::string_view textOf(std::span<const std::byte> bytes) {
@@ -224,32 +231,32 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
     // Each document, read as its owner reads it.
     if (kDescription.controls) {
         RAWFRAME_TRY_ASSIGN(const std::string_view kActions, keep(reads, game, kDescription.controls->actions));
-        if (!input::readActionSet(kActions).has_value()) {
-            return refuse("an actions document does not read", kDescription.controls->actions);
+        if (const auto kRead = input::readActionSet(kActions); !kRead.has_value()) {
+            return unreadable("an actions document does not read", kDescription.controls->actions, kRead.error());
         }
     }
     if (!kDescription.styles.empty()) {
         RAWFRAME_TRY_ASSIGN(const std::string_view kStyles, keep(reads, game, kDescription.styles));
-        if (!ui::readStyles(kStyles).has_value()) {
-            return refuse("a styles document does not read", kDescription.styles);
+        if (const auto kRead = ui::readStyles(kStyles); !kRead.has_value()) {
+            return unreadable("a styles document does not read", kDescription.styles, kRead.error());
         }
     }
     if (!kDescription.ui.empty()) {
         RAWFRAME_TRY_ASSIGN(const std::string_view kUi, keep(reads, game, kDescription.ui));
-        if (!ui::readDocument(kUi).has_value()) {
-            return refuse("a UI document does not read", kDescription.ui);
+        if (const auto kRead = ui::readDocument(kUi); !kRead.has_value()) {
+            return unreadable("a UI document does not read", kDescription.ui, kRead.error());
         }
     }
     if (kDescription.audio) {
         RAWFRAME_TRY_ASSIGN(const std::string_view kMixer, keep(reads, game, kDescription.audio->mixer));
         const auto kLayout = audio::readLayout(kMixer);
         if (!kLayout.has_value()) {
-            return refuse("a mixer document does not read", kDescription.audio->mixer);
+            return unreadable("a mixer document does not read", kDescription.audio->mixer, kLayout.error());
         }
         for (const world_kest::GameSound& sound : kDescription.audio->sounds) {
             RAWFRAME_TRY_ASSIGN(const std::string_view kSound, keep(reads, game, sound.path));
-            if (!audio::readSound(kSound, *kLayout).has_value()) {
-                return refuse("a sound document does not read against the mixer", sound.path);
+            if (const auto kRead = audio::readSound(kSound, *kLayout); !kRead.has_value()) {
+                return unreadable("a sound document does not read against the mixer", sound.path, kRead.error());
             }
         }
     }
