@@ -1,0 +1,12 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "base": "rock.rfmaterial",
+  "overrides": {
+    "tint": [
+      0.3,
+      0.29,
+      0.28
+    ]
+  }
+}

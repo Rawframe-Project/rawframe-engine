@@ -101,6 +101,11 @@ interpolate rawframe.physics3d.pose
 # The rolling sea is the engine's grid, its material written by
 # tools/make_waves.py; a server reads neither.
 material 04b83dddccb26127 waves.rfmaterial
+# The islands' rock (D709): sand by its tint's default, grained by noise
+# over the ground, and its instance, grey shore rock, the same program
+# drawn with another tint.
+material d42b8d7ca0f22201 rock.rfmaterial
+material a1e844c906888b94 shore.rfmaterial
 presentation gale.look on rawframe.physics3d.body
 present gale.dress dress read rawframe.physics3d.body write gale.look entities lookup gale.ship
 presentation gale.water on gale.sea

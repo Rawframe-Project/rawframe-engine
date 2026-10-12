@@ -512,6 +512,11 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     get_property(window_tests DIRECTORY PROPERTY TESTS)
     list(FILTER window_tests INCLUDE REGEX "^client_")
     set_tests_properties(${window_tests} PROPERTIES LABELS window FAIL_REGULAR_EXPRESSION "never saw")
+    # Gale's islands draw a material and its instance (D709): one unread
+    # fails it.
+    if(TEST client_gale_drawn)
+        set_property(TEST client_gale_drawn APPEND PROPERTY FAIL_REGULAR_EXPRESSION "\"code\":\"material_unread\"")
+    endif()
     if(TEST client_turns_plaza)
         set_tests_properties(client_turns_plaza PROPERTIES LABELS "window;alone" RUN_SERIAL TRUE)
     endif()

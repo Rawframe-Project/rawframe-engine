@@ -310,6 +310,9 @@ const REACH: f32 = 300.0
 const SWELL: f32 = 100.0
 const STEP: f64 = 1.5625
 const WAVES: u64 = 0x04b83dddccb26127
+// The islands' materials (D709): rock.rfmaterial and its instance.
+const ROCK: u64 = 0xd42b8d7ca0f22201
+const SHORE: u64 = 0xa1e844c906888b94
 const BEHIND: f32 = 16.0
 const ABOVE: f32 = 7.0
 
@@ -327,9 +330,14 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model], entities:
         if b.shape == physics3d.SPHERE {
             looks[i] = model.Model(model.SPHERE, b.width, b.width, b.width, 0x202020FF, u64(0), 0.0)
         }
-        // An island's rock (D693).
+        // An island's rock (D693): a small one grey shore rock, a broad
+        // one sand, one material and its instance (D709).
         if b.shape == physics3d.CYLINDER {
-            looks[i] = model.Model(model.CYLINDER, b.width, b.height, b.width, 0x7D7262FF, u64(0), 0.0)
+            let rock = ROCK
+            if b.width < 12.0 {
+                rock = SHORE
+            }
+            looks[i] = model.Model(model.CYLINDER, b.width, b.height, b.width, 0xFFFFFFFF, rock, 0.0)
         }
         i = i + 1
     }

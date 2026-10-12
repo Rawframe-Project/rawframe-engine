@@ -1,0 +1,112 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {
+    "inputs": {
+      "tint": {
+        "default": [
+          0.55,
+          0.47,
+          0.33
+        ],
+        "type": "color3"
+      }
+    }
+  },
+  "graph": {
+    "60c0000000000001": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "tint"
+      },
+      "inputs": {}
+    },
+    "60c0000000000002": {
+      "type": "rawframe/world_position@1",
+      "params": {},
+      "inputs": {}
+    },
+    "60c0000000000003": {
+      "type": "rawframe/separate3@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "60c0000000000002",
+          "output": "position"
+        }
+      }
+    },
+    "60c0000000000004": {
+      "type": "rawframe/combine2@1",
+      "params": {},
+      "inputs": {
+        "x": {
+          "node": "60c0000000000003",
+          "output": "r"
+        },
+        "y": {
+          "node": "60c0000000000003",
+          "output": "b"
+        }
+      }
+    },
+    "60c0000000000005": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "60c0000000000004",
+          "output": "out"
+        },
+        "b": 0.6
+      }
+    },
+    "60c0000000000006": {
+      "type": "rawframe/value_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "60c0000000000005",
+          "output": "out"
+        }
+      }
+    },
+    "60c0000000000007": {
+      "type": "rawframe/mix@1",
+      "params": {},
+      "inputs": {
+        "a": 0.75,
+        "b": 1.1,
+        "t": {
+          "node": "60c0000000000006",
+          "output": "out"
+        }
+      }
+    },
+    "60c0000000000008": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "60c0000000000001",
+          "output": "out"
+        },
+        "b": {
+          "node": "60c0000000000007",
+          "output": "out"
+        }
+      }
+    },
+    "60c0000000000009": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "base_color": {
+          "node": "60c0000000000008",
+          "output": "out"
+        },
+        "specular_roughness": 0.9
+      }
+    }
+  }
+}
