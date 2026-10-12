@@ -7,6 +7,7 @@
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/test/test.h"
 
+#include <array>
 #include <cmath>
 #include <memory>
 #include <optional>
@@ -98,6 +99,16 @@ struct Rig {
 
 inline bool near(float value, float expected, float within = 1e-4F) {
     return std::abs(value - expected) < within;
+}
+
+/// Where `matrix` puts an eye-relative point, x, y, and depth.
+inline std::array<float, 3> clipOf(const Matrix& matrix, const std::array<float, 3>& point) {
+    std::array<float, 3> out{};
+    for (std::size_t row = 0; row < 3; ++row) {
+        out[row] =
+            (matrix[row] * point[0]) + (matrix[4 + row] * point[1]) + (matrix[8 + row] * point[2]) + matrix[12 + row];
+    }
+    return out;
 }
 
 } // namespace rawframe::render_scene::test_rig
