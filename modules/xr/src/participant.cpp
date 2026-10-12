@@ -25,7 +25,7 @@ constexpr diagnostics::EventIdentity kState{"xr", "xr_session_state"};
 constexpr diagnostics::EventIdentity kFailed{"xr", "xr_failed"};
 constexpr diagnostics::EventIdentity kSummary{"xr", "xr_summary"};
 constexpr std::string_view kProvided[] = {
-    render::kHeadset.name, view::kHeadsetEyes.name, input_kest::kTrackedHands.name};
+    render::kHeadset.name, view::kHeadsetEyes.name, view::kHeadsetHands.name, input_kest::kTrackedHands.name};
 constexpr std::string_view kMayUse[] = {input_kest::kFeed.name, view::kUiPointing.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
@@ -182,6 +182,9 @@ public:
         if (capability == view::kHeadsetEyes.name) {
             return composition::provideAs(eyes_);
         }
+        if (capability == view::kHeadsetHands.name) {
+            return composition::provideAs(held_);
+        }
         if (capability == input_kest::kTrackedHands.name) {
             return composition::provideAs(hands_);
         }
@@ -275,6 +278,7 @@ private:
     /// images acquired and its eyes told; or none, and no eyes.
     void begin() noexcept {
         eyes_.tell({});
+        held_.tell({});
         hands_.tell({});
         if (session_ == nullptr || failed_ || over_ || open_) {
             return;
@@ -321,6 +325,19 @@ private:
                             .height = session_->images()[at].height});
         }
         eyes_.tell(eyes);
+        // Where each hand is for the frame's display time (D676): its
+        // controller's grip, else its tracked palm.
+        std::array<std::optional<view::HeadsetHand>, 2> held;
+        for (std::size_t side = 0; side < held.size(); ++side) {
+            const SpacePose& kGrip = frame->hands[side].grip;
+            const input::HandJoint& kPalm = frame->joints[side].joints[0];
+            if (frame->hands[side].active && kGrip.located) {
+                held[side] = view::HeadsetHand{.position = kGrip.position, .orientation = kGrip.orientation};
+            } else if (frame->joints[side].tracked && kPalm.located) {
+                held[side] = view::HeadsetHand{.position = kPalm.position, .orientation = kPalm.orientation};
+            }
+        }
+        held_.tell(held);
     }
 
     /// The hands, as the client's controller device (D596): connected to
@@ -463,6 +480,8 @@ private:
     }
 
     view::HeadsetEyes eyes_;
+    /// Where the hands are each frame shown (D676).
+    view::HeadsetHands held_;
     /// The hands the runtime tracks, told each frame (D663).
     input::TrackedHands hands_;
     /// The client's devices, where its host lends them, and what the hands

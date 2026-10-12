@@ -1,3 +1,4 @@
+#include "camera.h"
 #include "cameras.h"
 #include "loading.h"
 #include "pictures.h"
@@ -47,7 +48,8 @@ constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        view::kPlayerViews.name,
                                        view::kPreviewCamera.name,
                                        world_animation::kPresentedPoses.name,
-                                       view::kHeadsetEyes.name};
+                                       view::kHeadsetEyes.name,
+                                       view::kHeadsetHands.name};
 
 /// Draws one client's mirrored World in 3D each frame through its player's
 /// camera: the extract stage in `presentation_extract`, the queue stage in
@@ -109,6 +111,10 @@ public:
         if (!client.has_value() && context.has(view::kHeadsetEyes.name)) {
             RAWFRAME_TRY_ASSIGN(eyes_, context.capability(view::kHeadsetEyes));
         }
+        // And its hands, which what the player holds follows (D676).
+        if (!client.has_value() && context.has(view::kHeadsetHands.name)) {
+            RAWFRAME_TRY_ASSIGN(held_, context.capability(view::kHeadsetHands));
+        }
         // The poses its skinned models are drawn in (D508).
         if (context.has(world_animation::kPresentedPoses.name)) {
             RAWFRAME_TRY_ASSIGN(poses_, context.capability(world_animation::kPresentedPoses));
@@ -163,6 +169,7 @@ public:
         RAWFRAME_TRY(pictures_.read(context, *files, materials, postProcesses));
         settings_ = SceneSettings{.models = std::move(game->models),
                                   .placements = std::move(game->placements),
+                                  .tracking = std::move(game->tracking),
                                   .sun = game->sun,
                                   .sky = game->sky,
                                   .points = std::move(game->points),
@@ -233,6 +240,7 @@ public:
             ++frames_;
             drawn_ += kFrame.drawn;
             placed_ += kFrame.placed;
+            tracked_ += kFrame.tracked;
             culled_ += kFrame.culled;
             hidden_ += kFrame.hidden;
             malformed_ += kFrame.malformed;
@@ -302,11 +310,11 @@ public:
         }
         // Apart from the scene's summary, which holds as many fields as a
         // record may (D361).
-        if (placed_ != 0) {
+        if (placed_ != 0 || tracked_ != 0) {
             emitter_.log(diagnostics::Severity::Info,
                          kPlacedSummary,
-                         "what one client's scene drew where it was placed",
-                         {diagnostics::field("modelsPlaced", placed_)});
+                         "what one client's scene drew where it was placed, and where a headset's hand was",
+                         {diagnostics::field("modelsPlaced", placed_), diagnostics::field("modelsTracked", tracked_)});
         }
         if (!textureViews_.empty()) {
             emitter_.log(diagnostics::Severity::Info,
@@ -431,24 +439,35 @@ private:
             scene_ = std::move(*made);
             scene_->show(lines_);
         }
-        scene_->extract(*kView.world, posesOf(*kView.world));
-        extracted_ = true;
-        extractEyes(*kView.world);
-        if (kView.owned.isNull() || !kView.world->alive(kView.owned)) {
-            return;
-        }
-        if (cameras_.read(*kView.world, kView.owned, camera_)) {
+        // The camera first: a headset's hands are placed in the World by
+        // it before the models that follow them are extracted (D676).
+        const bool kOwned = !kView.owned.isNull() && kView.world->alive(kView.owned);
+        if (kOwned && cameras_.read(*kView.world, kView.owned, camera_)) {
             ++viewed_;
         }
         // Seen from where the preview looks, exposed as the player's camera
         // says (D432).
-        if (preview_ != nullptr && preview_->looking().has_value()) {
+        if (kOwned && preview_ != nullptr && preview_->looking().has_value()) {
             const view::Perspective& kLook = *preview_->looking();
             camera_.eye = kLook.eye;
             camera_.yaw = kLook.yaw;
             camera_.pitch = kLook.pitch;
             camera_.fovY = kLook.fovY;
             ++previewed_;
+        }
+        HandsInWorld hands;
+        if (kOwned && held_ != nullptr) {
+            for (std::size_t side = 0; side < hands.size(); ++side) {
+                if (const auto& kHand = held_->hands()[side]; kHand.has_value()) {
+                    hands[side] = inPlaySpace(camera_, kHand->position);
+                }
+            }
+        }
+        scene_->extract(*kView.world, posesOf(*kView.world), &hands);
+        extracted_ = true;
+        extractEyes(*kView.world, hands);
+        if (!kOwned) {
+            return;
         }
         // What the preview marks, as three axes a meter long, red along X,
         // green along Y, blue along Z, and a ring about it, drawn over
@@ -510,7 +529,7 @@ private:
 
     /// The first player's World extracted again into each headset eye's
     /// scene (D595), each eye keeping its own frames' history.
-    void extractEyes(world::World& world) {
+    void extractEyes(world::World& world, const HandsInWorld& hands) {
         eyesSeen_ = eyes_ != nullptr ? eyes_->eyes().size() : 0;
         for (std::size_t at = 0; at < eyesSeen_; ++at) {
             if (at == eyeScenes_.size()) {
@@ -522,7 +541,7 @@ private:
                 eyeScenes_.push_back(std::move(*made));
                 eyeScenes_.back()->show(lines_);
             }
-            eyeScenes_[at]->extract(world, posesOf(world));
+            eyeScenes_[at]->extract(world, posesOf(world), &hands);
         }
     }
 
@@ -780,6 +799,8 @@ private:
     /// A headset's eyes (D595): where they are told, their scenes, the
     /// eyes extracted for, and their frames.
     view::HeadsetEyes* eyes_ = nullptr;
+    /// Where its hands are each frame (D676).
+    view::HeadsetHands* held_ = nullptr;
     std::vector<std::unique_ptr<Scene>> eyeScenes_;
     std::size_t eyesSeen_ = 0;
     std::vector<EyeFrame> eyeFrames_;
@@ -857,6 +878,7 @@ private:
     std::uint64_t frames_ = 0;
     std::uint64_t drawn_ = 0;
     std::uint64_t placed_ = 0;
+    std::uint64_t tracked_ = 0;
     std::uint64_t culled_ = 0;
     std::uint64_t hidden_ = 0;
     std::uint64_t malformed_ = 0;

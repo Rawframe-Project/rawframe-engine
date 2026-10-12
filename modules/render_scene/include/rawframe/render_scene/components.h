@@ -31,6 +31,16 @@ struct Placed {
     double z = 0;
 };
 
+/// `rawframe.model.Tracked` as C++ reads it (D676): where an entity's
+/// models are drawn each frame the headset shows its `hand` (1 the left,
+/// 2 the right), moved by `x`, `y`, and `z`.
+struct Tracked {
+    std::uint32_t hand = 0;
+    double x = 0;
+    double y = 0;
+    double z = 0;
+};
+
 /// `rawframe.model.Camera` as C++ reads it.
 struct Camera {
     float offsetX = 0;

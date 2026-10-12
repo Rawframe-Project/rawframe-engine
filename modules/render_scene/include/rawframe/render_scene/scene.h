@@ -130,6 +130,8 @@ struct ModelInstance {
     std::array<double, 3> position{};
     /// Drawn where its entity is placed, not at its pose (D665).
     bool placed = false;
+    /// Drawn where a headset's hand is this frame (D676).
+    bool tracked = false;
     /// The pose's turn as a unit quaternion, x, y, z, w.
     std::array<float, 4> rotation{0, 0, 0, 1};
     /// A skinned mesh's palette as its entity's animation posed it (D508):
@@ -193,6 +195,10 @@ struct CameraMatrices {
     Matrix projection{};
 };
 [[nodiscard]] CameraMatrices matricesOf(const SceneCamera& camera) noexcept;
+
+/// Where a headset's hands are in the World this frame (D676), the left
+/// then the right; none for one not located.
+using HandsInWorld = std::array<std::optional<std::array<double, 3>>, 2>;
 
 /// A headset's eye's view of a player's camera (D595): the camera the eye
 /// sees through, the size its picture is drawn at, and where that picture
@@ -650,8 +656,10 @@ struct SceneFrame {
     std::vector<SceneDraw> draws;
     std::size_t translucent = 0;
     std::size_t drawn = 0;
-    /// Of those drawn, those where their entity is placed (D665).
+    /// Of those drawn, those where their entity is placed (D665), and
+    /// those where a headset's hand is this frame (D676).
     std::size_t placed = 0;
+    std::size_t tracked = 0;
     /// Outside the view.
     std::size_t culled = 0;
     /// Drawing nothing: mesh nought, alpha nought, or a scale of nought.
@@ -759,6 +767,10 @@ struct SceneSettings {
     /// The game's components of `rawframe.model.Placed`'s type (D665): an
     /// entity's models are drawn where the first placed one says.
     std::vector<schema::ComponentTypeId> placements;
+    /// The game's components of `rawframe.model.Tracked`'s type (D676): an
+    /// entity's models are drawn where the first one's hand is, where it
+    /// is this frame, before any placement.
+    std::vector<schema::ComponentTypeId> tracking;
     /// The game's sun and sky components, if it declares them.
     std::optional<schema::ComponentTypeId> sun;
     std::optional<schema::ComponentTypeId> sky;
@@ -823,7 +835,11 @@ public:
     /// matched). Nothing of it is kept. A skinned model whose entity
     /// `poses` played is posed as it left it (D508), its palette among
     /// `extractedPalette`; one it did not is drawn as its mesh was bound.
-    void extract(world::World& world, const world_animation::AnimationQueries* poses = nullptr);
+    /// A model whose `rawframe.model.Tracked` names a hand in `hands` is
+    /// drawn there, moved as it says (D676).
+    void extract(world::World& world,
+                 const world_animation::AnimationQueries* poses = nullptr,
+                 const HandsInWorld* hands = nullptr);
 
     /// The view and queue stages, in `present`: the extracted models seen
     /// through `camera` and culled to its view, those in view in the order
@@ -860,6 +876,7 @@ private:
 struct GameScene {
     std::vector<schema::ComponentTypeId> models;
     std::vector<schema::ComponentTypeId> placements;
+    std::vector<schema::ComponentTypeId> tracking;
     std::vector<schema::ComponentTypeId> cameras;
     /// The views into render textures (D361).
     std::optional<schema::ComponentTypeId> view;

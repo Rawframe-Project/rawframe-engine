@@ -148,13 +148,7 @@ std::optional<EyeView> eyeViewOf(const SceneCamera& player, const view::HeadsetE
     const float kWide = 2 * kAcross / (kRight - kLeft) * kWidth;
     const float kTall = 2 * kHigh / (kUp - kDown) * kHeight;
     EyeView view{.camera = player};
-    // The headset's place about the play space's origin, turned by its
-    // heading.
-    const auto& [kX, kY, kZ] = eye.position;
-    const float kCos = std::cos(player.yaw);
-    const float kSin = std::sin(player.yaw);
-    view.camera.eye = {
-        player.eye[0] + (kCos * kX) + (kSin * kZ), player.eye[1] + kY, player.eye[2] - (kSin * kX) + (kCos * kZ)};
+    view.camera.eye = inPlaySpace(player, eye.position);
     const std::array<float, 4> kHeading{0, std::sin(player.yaw / 2), 0, std::cos(player.yaw / 2)};
     view.camera.orientation = multiplied(kHeading, eye.orientation);
     view.camera.fovY = 2 * std::atan(kHigh);
@@ -164,6 +158,14 @@ std::optional<EyeView> eyeViewOf(const SceneCamera& player, const view::HeadsetE
     view.viewport = {
         (-kAcross - kLeft) / (kRight - kLeft) * kWidth, (kUp - kHigh) / (kUp - kDown) * kHeight, kWide, kTall};
     return view;
+}
+
+std::array<double, 3> inPlaySpace(const SceneCamera& player, const std::array<float, 3>& local) noexcept {
+    // The place about the play space's origin, turned by its heading.
+    const auto& [kX, kY, kZ] = local;
+    const float kCos = std::cos(player.yaw);
+    const float kSin = std::sin(player.yaw);
+    return {player.eye[0] + (kCos * kX) + (kSin * kZ), player.eye[1] + kY, player.eye[2] - (kSin * kX) + (kCos * kZ)};
 }
 
 std::optional<std::array<double, 3>> eyeOf(const Camera& camera, const physics3d::Pose3D* pose) noexcept {

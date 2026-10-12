@@ -1,7 +1,11 @@
 // A model drawn where its entity is placed in place of its pose (D665):
 // at the place, turned as the pose turns, its lift still along the pose's
-// up; at the pose again once it is not placed.
+// up; at the pose again once it is not placed. And where a headset's hand
+// is this frame, moved as it says, before its place, and placed again
+// where the hand is not located (D676); a headset's hand placed in the
+// World by the player's camera as its eyes are.
 
+#include "../src/camera.h"
 #include "rawframe/render_scene/components.h"
 #include "rawframe/test/test.h"
 #include "scene_rig.h"
@@ -41,4 +45,42 @@ RAWFRAME_TEST(AModelIsDrawnWhereItsEntityIsPlaced) {
     placed.placed = false;
     RAWFRAME_EXPECT(rig.world.insertErased(kBoxed, *rig.schema->find(kPlacedId), &placed).has_value());
     kDrawnAt(1, 0.5F, -5);
+}
+
+RAWFRAME_TEST(AModelFollowsAHeadsetsHandBeforeItsPlace) {
+    Rig rig;
+    const world::EntityHandle kBall =
+        rig.spawn(Model{.mesh = kBox, .color = 0xFF0000FF}, physics3d::Pose3D{.x = 1, .z = -5, .qw = 1});
+    Placed placed{.placed = true, .x = -1, .y = 2, .z = -4};
+    Tracked tracked{.hand = 2, .x = 0, .y = 0.5, .z = 0};
+    RAWFRAME_EXPECT(rig.world.insertErased(kBall, *rig.schema->find(kPlacedId), &placed).has_value());
+    RAWFRAME_EXPECT(rig.world.insertErased(kBall, *rig.schema->find(kTrackedId), &tracked).has_value());
+    const auto kDrawnAt = [&rig](const HandsInWorld* hands, float x, float y, float z, bool followed) {
+        const SceneFrame& kFrame = rig.frame({.eye = {0, 0, 0}}, hands);
+        RAWFRAME_EXPECT(kFrame.draws.size() == 1);
+        if (kFrame.draws.size() != 1) {
+            return;
+        }
+        RAWFRAME_EXPECT(kFrame.tracked == (followed ? 1U : 0U) && kFrame.placed == (followed ? 0U : 1U));
+        RAWFRAME_EXPECT(near(kFrame.draws[0].model[12], x) && near(kFrame.draws[0].model[13], y) &&
+                        near(kFrame.draws[0].model[14], z));
+    };
+    // No headset: placed.
+    kDrawnAt(nullptr, -1, 2, -4, false);
+    // The right hand located: there, half a meter up.
+    const HandsInWorld kRight{std::nullopt, std::array<double, 3>{0.5, 1, -3}};
+    kDrawnAt(&kRight, 0.5F, 1.5F, -3, true);
+    // Only the left located: placed again.
+    const HandsInWorld kLeft{std::array<double, 3>{0.5, 1, -3}, std::nullopt};
+    kDrawnAt(&kLeft, -1, 2, -4, false);
+    // A hand of nought follows none.
+    tracked.hand = 0;
+    RAWFRAME_EXPECT(rig.world.insertErased(kBall, *rig.schema->find(kTrackedId), &tracked).has_value());
+    kDrawnAt(&kRight, -1, 2, -4, false);
+    // The play space: the player's eye its origin, turned a quarter by its
+    // yaw, so the headset's -Z ahead is the World's -X.
+    const SceneCamera kSeated{.eye = {2, 1.2, 3}, .yaw = 1.5707963F};
+    const std::array<double, 3> kAhead = inPlaySpace(kSeated, {0, -0.3F, -0.5F});
+    RAWFRAME_EXPECT(near(static_cast<float>(kAhead[0]), 1.5F) && near(static_cast<float>(kAhead[1]), 0.9F) &&
+                    near(static_cast<float>(kAhead[2]), 3));
 }

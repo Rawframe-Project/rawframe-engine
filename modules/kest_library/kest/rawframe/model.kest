@@ -42,6 +42,26 @@ struct Placed {
     z: f64
 }
 
+// Where an entity's models are drawn each frame a headset shows (D676):
+// where its `hand` is for the frame's display time (LEFT_HAND or
+// RIGHT_HAND; nought for none), moved by `x`, `y`, and `z` in the World,
+// turned as the pose turns. A hand is where its controller is held, else
+// its tracked palm, in the play space the player's camera places. Where
+// the hand is not located that frame, or no headset shows, the model is
+// drawn as its Placed or its pose says. ADR-0081's pose resolved at
+// presentation time: a player's own hands, and what they hold, follow
+// every frame between the ticks their input makes. Presentation only.
+struct Tracked {
+    hand: u32
+    x: f64
+    y: f64
+    z: f64
+}
+
+// The hands a Tracked model follows.
+const LEFT_HAND: u32 = 1
+const RIGHT_HAND: u32 = 2
+
 // The engine's own meshes, each one meter from its center to its sides,
 // so a Model's scale is the body's (rawframe.physics3d's Body3D) half
 // sides or radius: a box of half sides one; a sphere of radius one; an

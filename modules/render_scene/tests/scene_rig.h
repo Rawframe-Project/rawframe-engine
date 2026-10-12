@@ -25,6 +25,7 @@ inline constexpr auto kProbeId = schema::ComponentTypeId::fromText("dc8e1f52-7d0
 inline constexpr auto kDecalId = schema::ComponentTypeId::fromText("4d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 inline constexpr auto kEmitterId = schema::ComponentTypeId::fromText("7d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
 inline constexpr auto kPlacedId = schema::ComponentTypeId::fromText("8d8e1f52-7d04-4a2b-9e61-0f5a2c7d3b18");
+inline constexpr auto kTrackedId = schema::ComponentTypeId::fromText("2f6c9a41-8b3e-4d17-a5c2-7e90d1b4f863");
 inline constexpr std::uint64_t kRock = 0xc1;
 
 /// The registry holds a name as a view: each is a literal.
@@ -45,6 +46,7 @@ inline std::shared_ptr<const schema::SchemaRegistry> registry() {
     builder.add(plain<Decal>(kDecalId, "test.decal"));
     builder.add(plain<particles::ParticleEmitter>(kEmitterId, "test.emitter"));
     builder.add(plain<Placed>(kPlacedId, "test.placed"));
+    builder.add(plain<Tracked>(kTrackedId, "test.tracked"));
     builder.add<physics3d::Pose3D>();
     return *builder.freeze();
 }
@@ -66,6 +68,7 @@ struct Rig {
         scene = *Scene::create(*schema,
                                {.models = {kModelId, kHatId},
                                 .placements = {kPlacedId},
+                                .tracking = {kTrackedId},
                                 .sun = kSunId,
                                 .sky = kSkyId,
                                 .points = {kPointId},
@@ -87,8 +90,8 @@ struct Rig {
         return kEntity;
     }
 
-    const SceneFrame& frame(const SceneCamera& camera) {
-        scene->extract(world);
+    const SceneFrame& frame(const SceneCamera& camera, const HandsInWorld* hands = nullptr) {
+        scene->extract(world, nullptr, hands);
         return scene->queue(camera);
     }
 };

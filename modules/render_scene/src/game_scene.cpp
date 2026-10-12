@@ -61,6 +61,8 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
             RAWFRAME_TRY(kOne(loaded.sky, component.id, "a game has at most one sky"));
         } else if (world_kest::ofEngineType(component, "rawframe.model.Placed")) {
             loaded.placements.push_back(component.id);
+        } else if (world_kest::ofEngineType(component, "rawframe.model.Tracked")) {
+            loaded.tracking.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.PointLight")) {
             loaded.points.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.model.SpotLight")) {
@@ -112,6 +114,13 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                            {"x", offsetof(Placed, x)},
                            {"y", offsetof(Placed, y)},
                            {"z", offsetof(Placed, z)}}));
+    RAWFRAME_TRY(kLaidOut(!loaded.tracking.empty(),
+                          "rawframe.model.Tracked",
+                          sizeof(Tracked),
+                          {{"hand", offsetof(Tracked, hand)},
+                           {"x", offsetof(Tracked, x)},
+                           {"y", offsetof(Tracked, y)},
+                           {"z", offsetof(Tracked, z)}}));
     RAWFRAME_TRY(kLaidOut(!loaded.cameras.empty(),
                           "rawframe.model.Camera",
                           sizeof(Camera),

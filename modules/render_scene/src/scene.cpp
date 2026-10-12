@@ -96,8 +96,9 @@ struct Scene::State {
     std::vector<SceneLine> lines;
     std::vector<LightInstance> punctual;
     std::optional<schema::ComponentRuntimeId> pose;
-    /// The game's placements (D665).
+    /// The game's placements (D665), and its tracking (D676).
     std::vector<schema::ComponentRuntimeId> placements;
+    std::vector<schema::ComponentRuntimeId> tracking;
     std::map<std::uint64_t, Bounded> meshes;
     /// Each game material's place in the frame's materials, and whether
     /// the material at each place is translucent.
@@ -236,6 +237,7 @@ struct Scene::State {
         frame.paletteOverLimit = 0;
         frame.drawn = 0;
         frame.placed = 0;
+        frame.tracked = 0;
         frame.culled = 0;
         frame.hidden = 0;
         frame.malformed = 0;
@@ -467,6 +469,7 @@ struct Scene::State {
             frame.draws.insert(frame.draws.end(), runs.begin(), runs.end());
             ++frame.drawn;
             frame.placed += instance->placed ? 1 : 0;
+            frame.tracked += instance->tracked ? 1 : 0;
         }
         // The translucent after the opaque, farthest first, so each blends
         // over what is behind it (D305); the opaque keep their order.
@@ -654,6 +657,15 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
         }
         state->placements.push_back(kComponent);
     }
+    for (const schema::ComponentTypeId kId : settings.tracking) {
+        RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kComponent, registry.find(kId));
+        if (registry.descriptor(kComponent).size != sizeof(Tracked)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          RenderSceneError::BadComponents,
+                          "a rawframe.model component is not that module's size");
+        }
+        state->tracking.push_back(kComponent);
+    }
     if (settings.sun.has_value()) {
         RAWFRAME_TRY_ASSIGN(state->sun, kQueryOf(*settings.sun, sizeof(Sun)));
     }
@@ -758,7 +770,7 @@ void extractRibbons(world::World& world,
 
 } // namespace
 
-void Scene::extract(world::World& world, const world_animation::AnimationQueries* poses) {
+void Scene::extract(world::World& world, const world_animation::AnimationQueries* poses, const HandsInWorld* hands) {
     State& state = *state_;
     state.extracted.clear();
     state.posed.clear();
@@ -781,6 +793,20 @@ void Scene::extract(world::World& world, const world_animation::AnimationQueries
                         placed != nullptr && placed->placed) {
                         instance.position = {placed->x, placed->y, placed->z};
                         instance.placed = true;
+                        break;
+                    }
+                }
+                // Drawn where its hand is this frame, if it is (D676).
+                for (const schema::ComponentRuntimeId kTracking : state.tracking) {
+                    const auto* tracked = static_cast<const Tracked*>(world.getErased(instance.entity, kTracking));
+                    if (tracked == nullptr || hands == nullptr || tracked->hand == 0 || tracked->hand > hands->size()) {
+                        continue;
+                    }
+                    if (const auto& kHand = (*hands)[tracked->hand - 1]; kHand.has_value()) {
+                        instance.position = {
+                            (*kHand)[0] + tracked->x, (*kHand)[1] + tracked->y, (*kHand)[2] + tracked->z};
+                        instance.placed = false;
+                        instance.tracked = true;
                         break;
                     }
                 }

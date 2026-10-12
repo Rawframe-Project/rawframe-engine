@@ -16,6 +16,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -56,5 +57,40 @@ private:
 };
 
 inline constexpr composition::Capability<HeadsetEyes> kHeadsetEyes{"rawframe.view.headset_eyes"};
+
+/// Where a hand is at the frame's display time (D676), in the eyes' local
+/// space: its controller's grip where one is located, else its tracked
+/// palm; none where neither is.
+struct HeadsetHand {
+    std::array<float, 3> position{};
+    /// A unit quaternion, x, y, z, w.
+    std::array<float, 4> orientation{0, 0, 0, 1};
+};
+
+/// The hands as the scene draws a model held in them each frame
+/// (`rawframe.model.Tracked`, ADR-0081 section 4's pose resolved at
+/// presentation time), told with the eyes and lent as
+/// `rawframe.view.headset_hands`. Presentation data only, as the eyes are.
+class HeadsetHands {
+public:
+    HeadsetHands() = default;
+    HeadsetHands(const HeadsetHands&) = delete;
+    HeadsetHands& operator=(const HeadsetHands&) = delete;
+
+    /// The XR module's side, once a Host iteration: the left hand, then
+    /// the right; neither while the headset shows nothing.
+    void tell(const std::array<std::optional<HeadsetHand>, 2>& hands) {
+        hands_ = hands;
+    }
+    /// The scene's side: the left hand, then the right.
+    [[nodiscard]] const std::array<std::optional<HeadsetHand>, 2>& hands() const noexcept {
+        return hands_;
+    }
+
+private:
+    std::array<std::optional<HeadsetHand>, 2> hands_;
+};
+
+inline constexpr composition::Capability<HeadsetHands> kHeadsetHands{"rawframe.view.headset_hands"};
 
 } // namespace rawframe::view

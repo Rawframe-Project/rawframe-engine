@@ -27,6 +27,10 @@ namespace rawframe::render_scene {
 /// The camera's axes: its orientation's where it has one (D595), else its
 /// yaw's and pitch's.
 [[nodiscard]] std::array<Vector, 3> axesOf(const SceneCamera& camera) noexcept;
+/// Where `local`, a point in a headset's local space, is in the World: the
+/// play space's origin the player's eye and its heading the player's yaw
+/// (D595, D676).
+[[nodiscard]] std::array<double, 3> inPlaySpace(const SceneCamera& player, const std::array<float, 3>& local) noexcept;
 /// Whether the camera's orientation, if it has one, is a quaternion of
 /// finite parts and about unit length.
 [[nodiscard]] bool orientationSound(const SceneCamera& camera) noexcept;
