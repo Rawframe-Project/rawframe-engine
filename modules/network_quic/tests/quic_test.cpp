@@ -8,6 +8,7 @@
 #include "rawframe/network_quic/quic.h"
 #include "rawframe/test/test.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <functional>
@@ -417,7 +418,8 @@ RAWFRAME_TEST(ABrowserReachesTheServerOverWebTransport) {
     const std::uint16_t kPort = freePort();
     RAWFRAME_EXPECT(server->listen({endpointAt(kPort)}).has_value());
     std::string said;
-    std::thread browser{[&said, kPort] {
+    std::atomic<bool> browserDone = false;
+    std::thread browser{[&said, &browserDone, kPort] {
         const std::string kCommand =
             RAWFRAME_PYTHON " " RAWFRAME_WEBTRANSPORT_CLIENT " " + std::to_string(kPort) + " 2>&1";
         if (std::FILE* output = ::popen(kCommand.c_str(), "r")) {
@@ -427,13 +429,17 @@ RAWFRAME_TEST(ABrowserReachesTheServerOverWebTransport) {
             }
             said += ::pclose(output) == 0 ? "" : "(failed)";
         }
+        browserDone = true;
     }};
     std::vector<Event> events;
     ConnectionId browserSide;
     bool answeredStream = false;
     bool answeredDatagram = false;
-    const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
-    while (std::chrono::steady_clock::now() < kDeadline && !(answeredStream && answeredDatagram)) {
+    // The server answers for as long as the browser plays: Python and
+    // aioquic may take seconds to start on a busy runner, and a server that
+    // stopped first left the browser unanswered (Windows, D690).
+    const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds{60};
+    while (std::chrono::steady_clock::now() < kDeadline && !browserDone && !(answeredStream && answeredDatagram)) {
         events.clear();
         server->poll(events, 64);
         for (const Event& event : events) {
