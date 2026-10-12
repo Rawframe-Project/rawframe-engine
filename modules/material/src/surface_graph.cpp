@@ -151,10 +151,11 @@ const MathNode* mathNodeOf(std::string_view type) {
 bool known(const graph::Node& node) {
     const Value* kType = node.record.find("type");
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
-    return kText != nullptr &&
-           (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType || *kText == kSeparate3Type ||
-            *kText == kNormalMapType || *kText == kQualitySwitchType || *kText == kTimeType ||
-            *kText == kWorldPositionType || *kText == kWorldNormalType || *kText == kCombine3Type || math(*kText));
+    return kText != nullptr && (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType ||
+                                *kText == kSeparate3Type || *kText == kNormalMapType || *kText == kQualitySwitchType ||
+                                *kText == kTimeType || *kText == kWorldPositionType || *kText == kWorldNormalType ||
+                                *kText == kCombine3Type || *kText == kCombine2Type || *kText == kSeparate2Type ||
+                                *kText == kSwizzleType || *kText == kVertexColorType || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -294,19 +295,63 @@ result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& n
     return Math{.a = kInputs.inputs[0], .b = kInputs.inputs[1], .out = kInputs.out};
 }
 
-result::Result<std::array<Operand, 3>> combine3In(const graph::Document& surface, const graph::Node& node) {
+result::Result<Combined> combineIn(const graph::Document& surface, const graph::Node& node) {
     constexpr std::array<std::string_view, 3> kInputs = {"x", "y", "z"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kInputs));
-    std::array<Operand, 3> made;
-    for (std::size_t at = 0; at < kInputs.size(); ++at) {
+    Combined made{.count = typeOf(node) == kCombine2Type ? 2U : 3U};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, std::span{kInputs.data(), made.count}));
+    for (std::size_t at = 0; at < made.count; ++at) {
         const Value* kInput = kParts.second->find(kInputs.at(at));
         if (kInput == nullptr) {
-            return invalid("a combine3 node's inputs are x, y, and z, all given");
+            return invalid("a combine node's inputs are x, y, and for three z, all given");
         }
-        RAWFRAME_TRY_ASSIGN(made.at(at), operandOf(surface, *kInput));
-        if (made.at(at).carried.has_value() && *made.at(at).carried != Carried::Float) {
-            return invalid("a combine3 node's inputs are floats");
+        RAWFRAME_TRY_ASSIGN(made.parts.at(at), operandOf(surface, *kInput));
+        if (made.parts.at(at).carried.has_value() && *made.parts.at(at).carried != Carried::Float) {
+            return invalid("a combine node's inputs are floats");
         }
+    }
+    return made;
+}
+
+result::Result<Operand> separate2In(const graph::Document& surface, const graph::Node& node) {
+    constexpr std::array<std::string_view, 1> kInputs = {"in"};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kInputs));
+    const Value* kIn = kParts.second->find("in");
+    if (kIn == nullptr) {
+        return invalid("a separate2 node's input is in, given");
+    }
+    RAWFRAME_TRY_ASSIGN(Operand made, operandOf(surface, *kIn));
+    if (made.carried.has_value() && *made.carried != Carried::Vec2) {
+        return invalid("a separate2 node's input is a vec2");
+    }
+    return made;
+}
+
+result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::Node& node) {
+    constexpr std::array<std::string_view, 1> kParams = {"pattern"};
+    constexpr std::array<std::string_view, 1> kInputs = {"in"};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, kInputs));
+    const Value* kPattern = kParts.first->find("pattern");
+    const Value* kIn = kParts.second->find("in");
+    if (kPattern == nullptr || kPattern->text() == nullptr || kIn == nullptr) {
+        return invalid("a swizzle node's pattern and input are given");
+    }
+    Swizzle made{.pattern = *kPattern->text()};
+    RAWFRAME_TRY_ASSIGN(made.in, operandOf(surface, *kIn));
+    const std::size_t kWidth = !made.in.carried.has_value()         ? 3
+                               : *made.in.carried == Carried::Vec2  ? 2
+                               : *made.in.carried == Carried::Float ? 0
+                                                                    : 3;
+    if (made.pattern.empty() || made.pattern.size() > 3 || kWidth == 0 ||
+        !std::ranges::all_of(made.pattern, [kWidth](char letter) {
+            return letter >= 'x' && letter <= 'z' && static_cast<std::size_t>(letter - 'x') < kWidth;
+        })) {
+        return invalid("a swizzle's pattern is one to three of x, y, and z, within its input's width");
+    }
+    if (made.in.carried.has_value()) {
+        made.out = made.pattern.size() == 1              ? Carried::Float
+                   : made.pattern.size() == 2            ? Carried::Vec2
+                   : *made.in.carried == Carried::Color3 ? Carried::Color3
+                                                         : Carried::Vec3;
     }
     return made;
 }
@@ -441,9 +486,21 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
         RAWFRAME_TRY_ASSIGN(const MathInputs kMath, mathInputsOf(surface, *kSource));
         return kMath.out;
     }
-    if (kType == kCombine3Type && from.output == "out") {
-        RAWFRAME_TRY(combine3In(surface, *kSource));
-        return std::optional{Carried::Vec3};
+    if ((kType == kCombine3Type || kType == kCombine2Type) && from.output == "out") {
+        RAWFRAME_TRY_ASSIGN(const Combined kCombined, combineIn(surface, *kSource));
+        return std::optional{kCombined.count == 2 ? Carried::Vec2 : Carried::Vec3};
+    }
+    if (kType == kSeparate2Type && (from.output == "x" || from.output == "y")) {
+        RAWFRAME_TRY(separate2In(surface, *kSource));
+        return std::optional{Carried::Float};
+    }
+    if (kType == kSwizzleType && from.output == "out") {
+        RAWFRAME_TRY_ASSIGN(const Swizzle kSwizzle, swizzleIn(surface, *kSource));
+        return kSwizzle.out;
+    }
+    if (kType == kVertexColorType && (from.output == "color" || from.output == "alpha")) {
+        RAWFRAME_TRY(streamIn(*kSource));
+        return std::optional{from.output == "color" ? Carried::Color3 : Carried::Float};
     }
     if (kType == kTimeType && from.output == "seconds") {
         RAWFRAME_TRY(timeIn(*kSource));

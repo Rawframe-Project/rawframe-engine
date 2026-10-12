@@ -23,7 +23,7 @@ namespace {
 using document::Value;
 using surface_graph::Carried;
 using surface_graph::carriedBy;
-using surface_graph::combine3In;
+using surface_graph::combineIn;
 using surface_graph::kBlends;
 using surface_graph::known;
 using surface_graph::kShadings;
@@ -37,6 +37,7 @@ using surface_graph::Operand;
 using surface_graph::operandOf;
 using surface_graph::sampleIn;
 using surface_graph::Sampling;
+using surface_graph::separate2In;
 using surface_graph::separate3In;
 using surface_graph::statesIn;
 using surface_graph::statesOf;
@@ -44,6 +45,7 @@ using surface_graph::streamIn;
 using surface_graph::surfaceNode;
 using surface_graph::Switch;
 using surface_graph::switchIn;
+using surface_graph::swizzleIn;
 using surface_graph::timeIn;
 using surface_graph::typeOf;
 using surface_graph::uvIn;
@@ -445,11 +447,16 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
             RAWFRAME_TRY(normalMapIn(surface, node));
         } else if (typeOf(node) == kQualitySwitchType) {
             RAWFRAME_TRY(switchIn(surface, node));
-        } else if (typeOf(node) == kCombine3Type) {
-            RAWFRAME_TRY(combine3In(surface, node));
+        } else if (typeOf(node) == kCombine3Type || typeOf(node) == kCombine2Type) {
+            RAWFRAME_TRY(combineIn(surface, node));
+        } else if (typeOf(node) == kSeparate2Type) {
+            RAWFRAME_TRY(separate2In(surface, node));
+        } else if (typeOf(node) == kSwizzleType) {
+            RAWFRAME_TRY(swizzleIn(surface, node));
         } else if (typeOf(node) == kTimeType) {
             RAWFRAME_TRY(timeIn(node));
-        } else if (typeOf(node) == kWorldPositionType || typeOf(node) == kWorldNormalType) {
+        } else if (typeOf(node) == kWorldPositionType || typeOf(node) == kWorldNormalType ||
+                   typeOf(node) == kVertexColorType) {
             RAWFRAME_TRY(streamIn(node));
         } else {
             RAWFRAME_TRY(sampleIn(surface, node));

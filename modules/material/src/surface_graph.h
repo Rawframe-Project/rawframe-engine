@@ -108,17 +108,37 @@ struct Math {
 
 [[nodiscard]] result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& node);
 
-/// A `combine3` node's inputs, x, y, and z, checked: each a float, all
-/// given (D691).
-[[nodiscard]] result::Result<std::array<Operand, 3>> combine3In(const graph::Document& surface,
-                                                                const graph::Node& node);
+/// A `combine2` or `combine3` node's inputs, `x`, `y`, and for three `z`,
+/// checked: each a float, all given (D691, D695).
+struct Combined {
+    std::array<Operand, 3> parts;
+    std::size_t count = 0;
+};
+
+[[nodiscard]] result::Result<Combined> combineIn(const graph::Document& surface, const graph::Node& node);
+
+/// A `separate2` node's input, checked: a vec2, its outputs `x` and `y`
+/// (D695).
+[[nodiscard]] result::Result<Operand> separate2In(const graph::Document& surface, const graph::Node& node);
+
+/// A `swizzle` node's input and its declared pattern, checked (D695): one
+/// to three of `x`, `y`, and `z`, each within the input's width, a vec2 or
+/// a vec3 or a color3; its `out` a float, a vec2, or a vec3 by the
+/// pattern's length, a color3 for three of a color3.
+struct Swizzle {
+    Operand in;
+    std::string pattern;
+    std::optional<Carried> out;
+};
+
+[[nodiscard]] result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::Node& node);
 
 /// A `time` node's params, checked (D691): its timeline, the simulation's,
 /// the presented World's ticks over its tick rate in seconds (ADR-0010).
 [[nodiscard]] result::Status timeIn(const graph::Node& node);
 
-/// A stream node, `world_position` or `world_normal`, checked: no params
-/// and no inputs (D691, D694).
+/// A stream node, `world_position`, `world_normal`, or `vertex_color`,
+/// checked: no params and no inputs (D691, D694, D695).
 [[nodiscard]] result::Status streamIn(const graph::Node& node);
 
 /// A `quality_switch` node's inputs, checked, and what its `out` carries

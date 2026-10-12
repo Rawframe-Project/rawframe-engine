@@ -242,6 +242,11 @@ inline constexpr std::string_view kSinType = "rawframe/sin@1";
 inline constexpr std::string_view kCosType = "rawframe/cos@1";
 inline constexpr std::string_view kNormalizeType = "rawframe/normalize@1";
 inline constexpr std::string_view kCombine3Type = "rawframe/combine3@1";
+/// The rest of the channel nodes and the vertex's color stream (D695).
+inline constexpr std::string_view kCombine2Type = "rawframe/combine2@1";
+inline constexpr std::string_view kSeparate2Type = "rawframe/separate2@1";
+inline constexpr std::string_view kSwizzleType = "rawframe/swizzle@1";
+inline constexpr std::string_view kVertexColorType = "rawframe/vertex_color@1";
 
 /// What a surface compiles to at each quality, by `Quality`: the same
 /// material at each where its graph does not differ (D318).

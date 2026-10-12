@@ -109,6 +109,19 @@ public:
         if (kType == kWorldNormalType) {
             return at_ + ".normal";
         }
+        if (kType == kVertexColorType) {
+            return at_ + (from.output == "alpha" ? ".color.a" : ".color.rgb");
+        }
+        if (kType == kSeparate2Type) {
+            RAWFRAME_TRY_ASSIGN(const surface_graph::Operand kIn, surface_graph::separate2In(surface_, *kNode));
+            RAWFRAME_TRY_ASSIGN(const std::string kInText, operandText(kIn));
+            return "(" + kInText + ")." + from.output;
+        }
+        if (kType == kSwizzleType) {
+            RAWFRAME_TRY_ASSIGN(const surface_graph::Swizzle kSwizzle, surface_graph::swizzleIn(surface_, *kNode));
+            RAWFRAME_TRY_ASSIGN(const std::string kInText, operandText(kSwizzle.in));
+            return "(" + kInText + ")." + kSwizzle.pattern;
+        }
         if (kType == kTimeType) {
             return at_ + ".time";
         }
@@ -152,15 +165,15 @@ public:
                     expression.replace(found, kPlace.size(), text);
                 }
             }
-        } else if (kType == kCombine3Type) {
-            RAWFRAME_TRY_ASSIGN(const auto kParts, surface_graph::combine3In(surface_, *kNode));
-            expression = "float3(";
-            for (std::size_t at = 0; at < kParts.size(); ++at) {
-                RAWFRAME_TRY_ASSIGN(const std::string kPart, operandText(kParts.at(at)));
+        } else if (kType == kCombine3Type || kType == kCombine2Type) {
+            RAWFRAME_TRY_ASSIGN(const surface_graph::Combined kParts, surface_graph::combineIn(surface_, *kNode));
+            expression = kParts.count == 2 ? "float2(" : "float3(";
+            for (std::size_t at = 0; at < kParts.count; ++at) {
+                RAWFRAME_TRY_ASSIGN(const std::string kPart, operandText(kParts.parts.at(at)));
                 expression += (at == 0 ? "" : ", ") + kPart;
             }
             expression += ")";
-            carried = Carried::Vec3;
+            carried = kParts.count == 2 ? Carried::Vec2 : Carried::Vec3;
         } else if (kType == kQualitySwitchType) {
             RAWFRAME_TRY_ASSIGN(const surface_graph::Switch kSwitch, surface_graph::switchIn(surface_, *kNode));
             const std::optional<surface_graph::Operand>& kChosen = kSwitch.inputs.at(switchInputOf(quality_));

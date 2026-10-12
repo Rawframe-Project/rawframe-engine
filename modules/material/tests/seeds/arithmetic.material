@@ -570,51 +570,164 @@
       }
     },
     "a700000000000033": {
-      "type": "rawframe/saturate@1",
+      "type": "rawframe/vertex_color@1",
+      "params": {},
+      "inputs": {}
+    },
+    "a700000000000034": {
+      "type": "rawframe/combine2@1",
       "params": {},
       "inputs": {
-        "in": {
+        "x": {
           "node": "a700000000000029",
           "output": "out"
+        },
+        "y": {
+          "node": "a700000000000001",
+          "output": "seconds"
         }
       }
     },
-    "a700000000000034": {
-      "type": "rawframe/combine3@1",
-      "params": {},
-      "inputs": {
-        "x": 0,
-        "y": {
-          "node": "a700000000000033",
-          "output": "out"
-        },
-        "z": 0
-      }
-    },
     "a700000000000035": {
-      "type": "rawframe/saturate@1",
+      "type": "rawframe/separate2@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a700000000000029",
+          "node": "a700000000000034",
           "output": "out"
         }
       }
     },
     "a700000000000036": {
+      "type": "rawframe/swizzle@1",
+      "params": {
+        "pattern": "zx"
+      },
+      "inputs": {
+        "in": {
+          "node": "a700000000000002",
+          "output": "position"
+        }
+      }
+    },
+    "a700000000000037": {
+      "type": "rawframe/dot@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000036",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000034",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000038": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000029",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000037",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000039": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000038",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000035",
+          "output": "y"
+        }
+      }
+    },
+    "a70000000000003a": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000039",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000033",
+          "output": "alpha"
+        }
+      }
+    },
+    "a70000000000003b": {
+      "type": "rawframe/swizzle@1",
+      "params": {
+        "pattern": "zyx"
+      },
+      "inputs": {
+        "in": {
+          "node": "a700000000000033",
+          "output": "color"
+        }
+      }
+    },
+    "a70000000000003c": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000003a",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000003d": {
+      "type": "rawframe/combine3@1",
+      "params": {},
+      "inputs": {
+        "x": 0,
+        "y": {
+          "node": "a70000000000003c",
+          "output": "out"
+        },
+        "z": 0
+      }
+    },
+    "a70000000000003e": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000003a",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000003f": {
       "type": "rawframe/surface@1",
       "params": {},
       "inputs": {
+        "base_color": {
+          "node": "a70000000000003b",
+          "output": "out"
+        },
         "geometry_normal": {
           "node": "a700000000000032",
           "output": "out"
         },
         "position_offset": {
-          "node": "a700000000000034",
+          "node": "a70000000000003d",
           "output": "out"
         },
         "specular_roughness": {
-          "node": "a700000000000035",
+          "node": "a70000000000003e",
           "output": "out"
         }
       }

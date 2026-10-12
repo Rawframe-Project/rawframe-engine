@@ -800,8 +800,9 @@ RAWFRAME_TEST(AGraphRisingWithTimeIsWrittenAsTheSlangTheScenesTestsDraw) {
 
 RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
     // D694: arithmetic.material uses every math node of SPEC-0026's atomic
-    // core and both World streams, in the fragment and the vertex stage;
-    // the cook's test builds it through the shader toolchain.
+    // core and both World streams, and the channel nodes and the vertex's
+    // color (D695), in the fragment and the vertex stage; the cook's test
+    // builds it through the shader toolchain.
     const std::string_view kDocument{reinterpret_cast<const char*>(kArithmeticMaterial.data()),
                                      kArithmeticMaterial.size()};
     const auto kRead = readMaterial(kDocument);
@@ -857,7 +858,13 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
                                          "placed.normal",
                                          "min(v",
                                          "float3(1.0))",
-                                         "float3(1.0, 2.0, 3.0)"}) {
+                                         "float3(1.0, 2.0, 3.0)",
+                                         "float2(",
+                                         ").zx",
+                                         ").zyx",
+                                         ").y",
+                                         "point.color.rgb",
+                                         "placed.color.a"}) {
         RAWFRAME_EXPECT(kMade->source.contains(kCode));
         if (!kMade->source.contains(kCode)) {
             std::printf("not written: %s\n", std::string{kCode}.c_str());
@@ -880,6 +887,27 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
     RAWFRAME_EXPECT(kRefused(
         "rawframe/refract@1",
         {{"eta", from(kWorld, "position")}, {"in", from(kWorld, "position")}, {"normal", from(kWorld, "position")}}));
+    // A swizzle past its input's width, of a float, or of no letters.
+    const auto kSwizzled = [](Value pattern, Value in) {
+        return refusedWith(
+            validateSurface(surfaceOf(objectOf({{"specular_roughness", from(kPhase, "out")}}),
+                                      {timeOf(Value::string("simulation")),
+                                       nodeOf(kWorld, kWorldPositionType, Value::object(), Value::object()),
+                                       nodeOf(kAxes,
+                                              kCombine2Type,
+                                              Value::object(),
+                                              objectOf({{"x", from(kTime, "seconds")}, {"y", Value::real(1)}})),
+                                       nodeOf(kPhase,
+                                              kSwizzleType,
+                                              objectOf({{"pattern", std::move(pattern)}}),
+                                              objectOf({{"in", std::move(in)}}))})),
+            MaterialError::Invalid);
+    };
+    RAWFRAME_EXPECT(kSwizzled(Value::string("z"), from(kAxes, "out")));
+    RAWFRAME_EXPECT(kSwizzled(Value::string("x"), from(kTime, "seconds")));
+    RAWFRAME_EXPECT(kSwizzled(Value::string(""), from(kWorld, "position")));
+    RAWFRAME_EXPECT(kSwizzled(Value::string("xyzx"), from(kWorld, "position")));
+    RAWFRAME_EXPECT(!kSwizzled(Value::string("y"), from(kAxes, "out")));
     // An input left out, or one the node has not.
     RAWFRAME_EXPECT(kRefused("rawframe/clamp@1", {{"in", from(kTime, "seconds")}, {"low", Value::real(0)}}));
     RAWFRAME_EXPECT(kRefused("rawframe/abs@1", {{"a", from(kTime, "seconds")}}));
