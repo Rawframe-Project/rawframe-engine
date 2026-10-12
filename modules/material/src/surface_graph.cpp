@@ -255,15 +255,16 @@ const MathNode* mathNodeOf(std::string_view type) {
 bool known(const graph::Node& node) {
     const Value* kType = node.record.find("type");
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
-    return kText != nullptr && (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType ||
-                                *kText == kSeparate3Type || *kText == kNormalMapType || *kText == kQualitySwitchType ||
-                                *kText == kTimeType || *kText == kWorldPositionType || *kText == kWorldNormalType ||
-                                *kText == kCombine3Type || *kText == kCombine2Type || *kText == kSeparate2Type ||
-                                *kText == kSwizzleType || *kText == kVertexColorType || *kText == kViewDirectionType ||
-                                *kText == kWorldTangentType || *kText == kCompareType || *kText == kConstantType ||
-                                *kText == kFrontFacingType || *kText == kCombine4Type || *kText == kSeparate4Type ||
-                                *kText == kParameterType || *kText == kParameterTexture2dType ||
-                                *kText == kOutputType || functions::isFunction(*kText) || math(*kText));
+    return kText != nullptr &&
+           (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType || *kText == kSeparate3Type ||
+            *kText == kNormalMapType || *kText == kQualitySwitchType || *kText == kTimeType ||
+            *kText == kWorldPositionType || *kText == kWorldNormalType || *kText == kCombine3Type ||
+            *kText == kCombine2Type || *kText == kSeparate2Type || *kText == kSwizzleType ||
+            *kText == kVertexColorType || *kText == kViewDirectionType || *kText == kWorldTangentType ||
+            *kText == kCompareType || *kText == kConstantType || *kText == kFrontFacingType ||
+            *kText == kCombine4Type || *kText == kSeparate4Type || *kText == kParameterType ||
+            *kText == kParameterTexture2dType || *kText == kTransformType || *kText == kOutputType ||
+            functions::isFunction(*kText) || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -762,6 +763,46 @@ result::Result<Switch> switchIn(const graph::Document& surface, const graph::Nod
     return made;
 }
 
+result::Result<Transform> transformIn(const graph::Document& surface, const graph::Node& node) {
+    constexpr std::array<std::string_view, 3> kParams = {"from", "kind", "to"};
+    constexpr std::array<std::string_view, 1> kInputs = {"in"};
+    constexpr std::array<std::string_view, 5> kSpaces = {"object", "world", "view", "tangent", "clip"};
+    constexpr std::array<std::string_view, 3> kKinds = {"point", "vector", "normal"};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, kInputs));
+    const auto kOneOf = [&kParts](std::string_view name, std::span<const std::string_view> among) {
+        const Value* kValue = kParts.first->find(name);
+        const auto kFound = kValue != nullptr && kValue->text() != nullptr
+                                ? std::ranges::find(among, std::string_view{*kValue->text()})
+                                : among.end();
+        return kFound != among.end() ? *kFound : std::string_view{};
+    };
+    Transform made{.from = kOneOf("from", kSpaces), .to = kOneOf("to", kSpaces), .kind = kOneOf("kind", kKinds)};
+    const Value* kIn = kParts.second->find("in");
+    if (made.from.empty() || made.to.empty() || made.kind.empty() || kIn == nullptr) {
+        return invalid("a transform declares its spaces, from and to, and its kind, and its input in is given");
+    }
+    if (made.from == made.to) {
+        return invalid("a transform's spaces differ");
+    }
+    if (made.kind == "point" && (made.from == "tangent" || made.to == "tangent")) {
+        return invalid("a point has no place in the tangent frame");
+    }
+    if (made.to == "clip" && made.kind != "point") {
+        return invalid("only a point goes to the clip's space");
+    }
+    if (made.from == "clip") {
+        return unsupported("a transform from the clip's space waits in generation 1");
+    }
+    RAWFRAME_TRY_ASSIGN(made.in, operandOf(surface, *kIn));
+    if (!made.in.from.has_value() && made.in.carried == Carried::Color3) {
+        made.in.carried = Carried::Vec3;
+    }
+    if (made.in.carried.has_value() && *made.in.carried != Carried::Vec3) {
+        return invalid("a transform's input is a vec3");
+    }
+    return made;
+}
+
 result::Result<Operand> separate3In(const graph::Document& surface, const graph::Node& node) {
     constexpr std::array<std::string_view, 1> kInputs = {"in"};
     RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kInputs));
@@ -887,6 +928,8 @@ result::Status nodeChecked(const graph::Document& surface, const graph::Node& no
         RAWFRAME_TRY(separate4In(surface, node));
     } else if (typeOf(node) == kCompareType) {
         RAWFRAME_TRY(compareIn(surface, node));
+    } else if (typeOf(node) == kTransformType) {
+        RAWFRAME_TRY(transformIn(surface, node));
     } else if (typeOf(node) == kConstantType) {
         RAWFRAME_TRY(constantIn(node));
     } else if (typeOf(node) == kSeparate2Type) {
@@ -942,6 +985,10 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
     if (kType == kSeparate2Type && (from.output == "x" || from.output == "y")) {
         RAWFRAME_TRY(separate2In(surface, *kSource));
         return std::optional{Carried::Float};
+    }
+    if (kType == kTransformType && from.output == "out") {
+        RAWFRAME_TRY_ASSIGN(const Transform kTransform, transformIn(surface, *kSource));
+        return std::optional{kTransform.to == "clip" ? Carried::Vec4 : Carried::Vec3};
     }
     if (kType == kCompareType && from.output == "out") {
         RAWFRAME_TRY(compareIn(surface, *kSource));

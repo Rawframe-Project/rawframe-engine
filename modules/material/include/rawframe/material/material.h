@@ -268,6 +268,10 @@ inline constexpr std::string_view kOutputType = "rawframe/output@1";
 /// families' too (D348, D706).
 inline constexpr std::string_view kCombine4Type = "rawframe/combine4@1";
 inline constexpr std::string_view kSeparate4Type = "rawframe/separate4@1";
+/// A point, a vector, or a normal taken from one space to another: the
+/// model's, the World's, the eye's, the surface's tangent frame, or the
+/// clip's (D714).
+inline constexpr std::string_view kTransformType = "rawframe/transform@1";
 
 /// What a surface compiles to at each quality, by `Quality`: the same
 /// material at each where its graph does not differ (D318).

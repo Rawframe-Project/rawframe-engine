@@ -25,7 +25,7 @@ foreach(function IN ITEMS checkerboard fractal_noise_2d fresnel polar_coordinate
 endforeach()
 
 rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/functions_test.cpp tests/instance_test.cpp tests/material_test.cpp tests/nodes_test.cpp
-                                           tests/post_process_test.cpp)
+                                           tests/post_process_test.cpp tests/transform_test.cpp)
 if(TARGET rawframe_material_tests)
     # ADR-0026's proof (D490): a graph and the Slang written from it, which
     # the scene's tests build beside its handwritten twin.
@@ -57,6 +57,13 @@ if(TARGET rawframe_material_tests)
     rawframe_embedded_file(TARGET rawframe_material_tests
                            FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/tinted_graph.slang"
                            HEADER "tinted_graph.h" SYMBOL "kTintedGraph")
+    # A graph colored by its model's and its eye's spaces (D714), and its
+    # Slang.
+    rawframe_embedded_file(TARGET rawframe_material_tests FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/seeds/spaced.material"
+                           HEADER "spaced_material.h" SYMBOL "kSpacedMaterial")
+    rawframe_embedded_file(TARGET rawframe_material_tests
+                           FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/spaced_graph.slang"
+                           HEADER "spaced_graph.h" SYMBOL "kSpacedGraph")
 endif()
 rawframe_module_fuzz(NAME material TARGET documents RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_material.cpp)
 rawframe_module_fuzz(NAME material TARGET post_processes RUNS 10000 SEEDS tests/post_seeds SOURCES tests/fuzz_post_process.cpp)

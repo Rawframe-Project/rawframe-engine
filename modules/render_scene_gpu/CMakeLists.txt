@@ -63,4 +63,11 @@ if(TARGET rawframe_render_scene_gpu_tests)
     rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
                            FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/tinted_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
                            HEADER "tinted_graph_shadow_container.h" SYMBOL "kTintedGraphShadow")
+    # A graph's material colored by its model's and its eye's spaces (D714).
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/spaced_graph.scene${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "spaced_graph_scene_container.h" SYMBOL "kSpacedGraphScene")
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/spaced_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "spaced_graph_shadow_container.h" SYMBOL "kSpacedGraphShadow")
 endif()

@@ -1,0 +1,152 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {},
+  "graph": {
+    "2f00000000000071": {
+      "type": "rawframe/world_position@1",
+      "params": {},
+      "inputs": {}
+    },
+    "2f00000000000072": {
+      "type": "rawframe/transform@1",
+      "params": {
+        "from": "world",
+        "kind": "point",
+        "to": "object"
+      },
+      "inputs": {
+        "in": {
+          "node": "2f00000000000071",
+          "output": "position"
+        }
+      }
+    },
+    "2f00000000000073": {
+      "type": "rawframe/abs@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "2f00000000000072",
+          "output": "out"
+        }
+      }
+    },
+    "2f00000000000074": {
+      "type": "rawframe/separate3@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "2f00000000000073",
+          "output": "out"
+        }
+      }
+    },
+    "2f00000000000075": {
+      "type": "rawframe/world_normal@1",
+      "params": {},
+      "inputs": {}
+    },
+    "2f00000000000076": {
+      "type": "rawframe/transform@1",
+      "params": {
+        "from": "world",
+        "kind": "normal",
+        "to": "view"
+      },
+      "inputs": {
+        "in": {
+          "node": "2f00000000000075",
+          "output": "normal"
+        }
+      }
+    },
+    "2f00000000000077": {
+      "type": "rawframe/separate3@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "2f00000000000076",
+          "output": "out"
+        }
+      }
+    },
+    "2f00000000000078": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "2f00000000000077",
+          "output": "b"
+        }
+      }
+    },
+    "2f00000000000079": {
+      "type": "rawframe/mix@1",
+      "params": {},
+      "inputs": {
+        "a": [
+          0,
+          0,
+          0
+        ],
+        "b": [
+          1,
+          0,
+          0
+        ],
+        "t": {
+          "node": "2f00000000000074",
+          "output": "b"
+        }
+      }
+    },
+    "2f0000000000007a": {
+      "type": "rawframe/mix@1",
+      "params": {},
+      "inputs": {
+        "a": [
+          0,
+          0,
+          0
+        ],
+        "b": [
+          0,
+          1,
+          0
+        ],
+        "t": {
+          "node": "2f00000000000078",
+          "output": "out"
+        }
+      }
+    },
+    "2f0000000000007b": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "2f00000000000079",
+          "output": "out"
+        },
+        "b": {
+          "node": "2f0000000000007a",
+          "output": "out"
+        }
+      }
+    },
+    "2f0000000000007c": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "base_color": {
+          "node": "2f0000000000007b",
+          "output": "out"
+        }
+      }
+    }
+  },
+  "states": {
+    "shading": "unlit"
+  }
+}

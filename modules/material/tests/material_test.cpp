@@ -106,10 +106,11 @@ RAWFRAME_TEST(TheSurfaceContractIsHeld) {
 
 RAWFRAME_TEST(WhatCannotCompileYetIsRefusedNotGuessed) {
     using document::Value;
-    // A node of the standard library's, not built yet, feeding the surface.
+    // A node of the standard library's, not built for a surface, feeding
+    // it.
     graph::Document fed = documentOf({}, kNode);
     Value unbuilt = Value::object();
-    unbuilt.add("type", Value::string("rawframe/transform@1"));
+    unbuilt.add("type", Value::string("rawframe/screen_uv@1"));
     unbuilt.add("params", Value::object());
     unbuilt.add("inputs", Value::object());
     fed.nodes.insert(fed.nodes.begin(), {.id = 0x1f00000000000001ULL, .record = unbuilt});

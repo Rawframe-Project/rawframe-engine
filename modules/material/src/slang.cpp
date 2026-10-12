@@ -269,6 +269,41 @@ public:
             RAWFRAME_TRY_ASSIGN(const std::string kB, operandText(kCompare.b));
             expression = kA + " " + std::string{kCompare.symbol} + " " + kB;
             carried = Carried::Bool;
+        } else if (kType == kTransformType) {
+            RAWFRAME_TRY_ASSIGN(const surface_graph::Transform kTransform,
+                                surface_graph::transformIn(surface_, *kNode));
+            // A vertex has no tangent frame yet.
+            if (at_ == "placed" && (kTransform.from == "tangent" || kTransform.to == "tangent")) {
+                return unsupported("a material's vertex stage reads no tangent in generation 1");
+            }
+            RAWFRAME_TRY_ASSIGN(const std::string kIn, operandText(kTransform.in));
+            // Through the World's axes (D714): from the space given, then to
+            // the one asked.
+            const std::string kKind = kTransform.kind == "point"    ? "kPoint"
+                                      : kTransform.kind == "vector" ? "kVector"
+                                                                    : "kNormal";
+            const std::string kSpaces = at_ + ".spaces";
+            const std::string kFrame = at_ + ".normal, " + at_ + ".tangent";
+            std::string world = kIn;
+            if (kTransform.from == "object") {
+                world = "fromObject(" + kSpaces + ", " + kIn + ", " + kKind + ")";
+            } else if (kTransform.from == "view") {
+                world = "fromView(" + kSpaces + ", " + kIn + ", " + kKind + ")";
+            } else if (kTransform.from == "tangent") {
+                world = "fromTangent(" + kFrame + ", " + kIn + ", " + kKind + ")";
+            }
+            expression = world;
+            carried = Carried::Vec3;
+            if (kTransform.to == "object") {
+                expression = "toObject(" + kSpaces + ", " + world + ", " + kKind + ")";
+            } else if (kTransform.to == "view") {
+                expression = "toView(" + kSpaces + ", " + world + ", " + kKind + ")";
+            } else if (kTransform.to == "tangent") {
+                expression = "toTangent(" + kFrame + ", " + world + ", " + kKind + ")";
+            } else if (kTransform.to == "clip") {
+                expression = "toClip(" + kSpaces + ", " + world + ")";
+                carried = Carried::Vec4;
+            }
         } else if (kType == kCombine3Type || kType == kCombine2Type || kType == kCombine4Type) {
             RAWFRAME_TRY_ASSIGN(const surface_graph::Combined kParts, surface_graph::combineIn(surface_, *kNode));
             expression = "float" + std::to_string(kParts.count) + "(";

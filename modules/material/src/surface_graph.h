@@ -231,6 +231,21 @@ inline constexpr std::array<std::string_view, 4> kSwitchInputs = {"default", "hi
 
 [[nodiscard]] result::Result<Switch> switchIn(const graph::Document& surface, const graph::Node& node);
 
+/// A `transform` node's spaces, what it takes, and its input, checked
+/// (D714): `from` and `to` two of `object`, `world`, `view`, `tangent`,
+/// and `clip`, which differ; `kind` a `point`, a `vector`, or a `normal`;
+/// `in` a vec3. A point has no place in the tangent frame, and only a
+/// point goes to the clip's space, where its `out` is a vec4, any other a
+/// vec3; a transform from the clip's space waits (`Unsupported`).
+struct Transform {
+    std::string_view from;
+    std::string_view to;
+    std::string_view kind;
+    Operand in;
+};
+
+[[nodiscard]] result::Result<Transform> transformIn(const graph::Document& surface, const graph::Node& node);
+
 /// A `separate3` node's input, checked: a color3 (D312), or a vec3, a
 /// place's axes r, g, and b (D691).
 [[nodiscard]] result::Result<Operand> separate3In(const graph::Document& surface, const graph::Node& node);

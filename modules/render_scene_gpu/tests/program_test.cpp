@@ -15,6 +15,8 @@
 #include "generated/faded_shadow_container.h"
 #include "generated/rising_graph_scene_container.h"
 #include "generated/rising_graph_shadow_container.h"
+#include "generated/spaced_graph_scene_container.h"
+#include "generated/spaced_graph_shadow_container.h"
 #include "generated/tinted_graph_scene_container.h"
 #include "generated/tinted_graph_shadow_container.h"
 #include "rawframe/material/material.h"
@@ -527,4 +529,48 @@ RAWFRAME_TEST(AMaterialReadsItsParametersFromItsBlob) {
     // Tone mapped, so neither is pure: each well past its other channels.
     RAWFRAME_EXPECT(kGreen[1] > kGreen[0] + 50 && kGreen[1] > kGreen[2] + 50);
     RAWFRAME_EXPECT(kRed[0] > kRed[1] + 50 && kRed[0] > kRed[2] + 50);
+}
+
+RAWFRAME_TEST(AMaterialReadsItsModelsAndItsEyesSpaces) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // spaced.material as rawframe.material writes it (spaced_graph.slang,
+    // D714), unlit: red by how far its point lies along its model's z, one
+    // on the engine box's face toward the eye, green by how squarely its
+    // normal faces the eye in the eye's axes. Two boxes, near and small,
+    // far and large, show the same yellow at the middle of the view, though
+    // the World's place of that face differs.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    render_scene::MaterialBlob states = render_scene::noMaterial();
+    states[15] = 1;
+    frame.materials = {render_scene::noMaterial(), states};
+    frame.programs = {nullptr, programOf(kSpacedGraphScene, kSpacedGraphShadow, material::Shading::Unlit)};
+    const auto kCenter = [&](SceneDraw draw) -> std::array<int, 3> {
+        draw.material = 1;
+        frame.draws = {draw};
+        const auto kPixels =
+            drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
+        return kPixels.has_value() ? at(*kPixels, 32, 32) : std::array<int, 3>{};
+    };
+    const std::array<int, 3> kNear = kCenter(box(4, 1.5F, {1, 1, 1, 1}));
+    const std::array<int, 3> kFar = kCenter(box(9, 3, {1, 1, 1, 1}));
+    std::printf("near %d %d %d, far %d %d %d\n", kNear[0], kNear[1], kNear[2], kFar[0], kFar[1], kFar[2]);
+    for (const std::array<int, 3>& kSeen : {kNear, kFar}) {
+        RAWFRAME_EXPECT(std::abs(kSeen[0] - kSeen[1]) < 20 && kSeen[0] > kSeen[2] + 80);
+    }
+    for (std::size_t channel = 0; channel < 3; ++channel) {
+        RAWFRAME_EXPECT(std::abs(kNear.at(channel) - kFar.at(channel)) <= 6);
+    }
 }
