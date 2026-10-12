@@ -127,10 +127,14 @@ public:
     }
 
     /// A function's writer, adding to `caller`'s code, each of the
-    /// function's inputs the expression `bindings` gives it (D711).
-    Writer(const graph::Document& function, Writer& caller, std::map<std::string, std::string, std::less<>> bindings)
+    /// function's inputs the expression `bindings` gives it (D711), each
+    /// texture input the texture `textures` does (D713).
+    Writer(const graph::Document& function,
+           Writer& caller,
+           std::map<std::string, std::string, std::less<>> bindings,
+           std::vector<functions::GivenTexture> textures)
         : surface_(function), quality_(caller.quality_), at_(caller.at_), code_(caller.code_),
-          bindings_(std::move(bindings)), bound_(true) {
+          bindings_(std::move(bindings)), textures_(std::move(textures)), bound_(true) {
     }
 
     /// The expression of the output a connection names, its node's code
@@ -342,7 +346,15 @@ private:
         if (const auto kMade = made_.find(id); kMade != made_.end()) {
             return kMade->second;
         }
-        RAWFRAME_TRY_ASSIGN(const surface_graph::Sampling kSampling, surface_graph::sampleIn(surface_, node));
+        RAWFRAME_TRY_ASSIGN(surface_graph::Sampling sampling, surface_graph::sampleIn(surface_, node));
+        if (bound_ && sampling.input.has_value()) {
+            // A function's texture input: the texture its call gives it
+            // (D713).
+            const functions::GivenTexture& kGiven = textures_.at(*sampling.input);
+            sampling.texture.id = kGiven.id;
+            sampling.input = kGiven.input;
+        }
+        const surface_graph::Sampling& kSampling = sampling;
         std::string uv = at_ + ".uv";
         if (kSampling.uv.has_value()) {
             RAWFRAME_TRY_ASSIGN(uv, outputOf(*kSampling.uv));
@@ -382,6 +394,9 @@ private:
             for (std::size_t at = 0; at < call.function.inputs.size(); ++at) {
                 const surface_graph::InterfaceInput& kInput = call.function.inputs[at];
                 std::string text;
+                if (kInput.carried == Carried::Texture2d) {
+                    continue;
+                }
                 if (call.given[at].has_value()) {
                     RAWFRAME_TRY_ASSIGN(text, operandText(*call.given[at]));
                 } else if (!kInput.stream.empty()) {
@@ -400,7 +415,8 @@ private:
                 bindings.emplace(std::string{kInput.name}, std::move(text));
             }
             called = std::make_unique<Called>(Called{.call = std::move(call)});
-            called->writer = std::make_unique<Writer>(called->call.function.document, *this, std::move(bindings));
+            called->writer = std::make_unique<Writer>(
+                called->call.function.document, *this, std::move(bindings), called->call.textures);
         }
         const auto kOutput = std::ranges::find(called->call.function.outputs, from.output, &functions::Output::name);
         if (kOutput == called->call.function.outputs.end()) {
@@ -424,6 +440,8 @@ private:
     /// A function's writer's inputs: each interface input's expression in
     /// its caller's code.
     std::map<std::string, std::string, std::less<>> bindings_;
+    /// A function's writer's texture inputs' textures, by input slot.
+    std::vector<functions::GivenTexture> textures_;
     bool bound_ = false;
     /// Each call's function and its writer, by the calling node.
     std::map<graph::NodeId, std::unique_ptr<Called>> calls_;

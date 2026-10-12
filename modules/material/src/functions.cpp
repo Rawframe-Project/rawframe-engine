@@ -7,6 +7,7 @@
 #include "generated/polar_coordinates_function.h"
 #include "generated/rotate_uv_function.h"
 #include "generated/tile_and_offset_function.h"
+#include "generated/triplanar_projection_function.h"
 #include "generated/voronoi_2d_function.h"
 #include "rawframe/material/material.h"
 
@@ -26,13 +27,14 @@ namespace {
 
 /// The engine's functions by their node types, each its document's text
 /// (modules/material/library, written by tools/make_functions.py).
-const std::array<std::pair<std::string_view, std::span<const std::uint8_t>>, 7> kLibrary = {{
+const std::array<std::pair<std::string_view, std::span<const std::uint8_t>>, 8> kLibrary = {{
     {"rawframe/checkerboard@1", kCheckerboardFunction},
     {"rawframe/fractal_noise_2d@1", kFractalNoise2dFunction},
     {"rawframe/fresnel@1", kFresnelFunction},
     {"rawframe/polar_coordinates@1", kPolarCoordinatesFunction},
     {"rawframe/rotate_uv@1", kRotateUvFunction},
     {"rawframe/tile_and_offset@1", kTileAndOffsetFunction},
+    {"rawframe/triplanar_projection@1", kTriplanarProjectionFunction},
     {"rawframe/voronoi_2d@1", kVoronoi2dFunction},
 }};
 
@@ -67,6 +69,27 @@ result::Result<std::vector<Output>> outputsOf(const graph::Document& function) {
     return made;
 }
 
+/// What a call gives a texture input (D713): the game's texture by 16
+/// lowercase hex digits, or the caller's texture input.
+result::Result<GivenTexture> textureGiven(const graph::Document& surface, const Value* given) {
+    if (given != nullptr && given->text() != nullptr) {
+        const std::optional<std::uint64_t> kId = graph::nodeIdOf(*given->text());
+        if (!kId.has_value() || *kId == 0) {
+            return invalid("a call gives a texture input the game's texture by 16 lowercase hex digits, never nought");
+        }
+        return GivenTexture{.id = *kId};
+    }
+    const std::optional<graph::Connection> kFrom =
+        given != nullptr ? graph::connectionOf(*given) : std::optional<graph::Connection>{};
+    const graph::Node* kSource = kFrom.has_value() ? nodeOf(surface, kFrom->node) : nullptr;
+    if (kSource == nullptr || !surface_graph::known(*kSource) ||
+        surface_graph::typeOf(*kSource) != kParameterTexture2dType || kFrom->output != "texture") {
+        return invalid("a call gives each texture input a texture, or a parameter_texture_2d node's texture");
+    }
+    RAWFRAME_TRY_ASSIGN(const surface_graph::InterfaceInput kInput, surface_graph::parameterIn(surface, *kSource));
+    return GivenTexture{.id = kInput.texture, .input = kInput.slot};
+}
+
 } // namespace
 
 bool isFunction(std::string_view type) {
@@ -96,20 +119,14 @@ result::Result<Function> readFunction(std::string_view text) {
     const graph::Document& kDocument = made.document;
     RAWFRAME_TRY_ASSIGN(made.inputs, surface_graph::interfaceOf(kDocument));
     RAWFRAME_TRY_ASSIGN(made.outputs, outputsOf(kDocument));
-    if (std::ranges::any_of(made.inputs, [](const surface_graph::InterfaceInput& each) {
-            return each.carried == Carried::Texture2d;
-        })) {
-        return invalid("a function's inputs are values or streams, no texture in generation 1");
-    }
     std::vector<bool> fed(made.outputs.size(), false);
     for (const graph::Node& node : kDocument.nodes) {
         if (!surface_graph::known(node)) {
             return invalid("a function's nodes are of the atomic core");
         }
         const std::string_view kType = surface_graph::typeOf(node);
-        if (kType == kSurfaceType || kType == kQualitySwitchType || kType == kSampleTexture2dType ||
-            kType == kParameterTexture2dType || isFunction(kType)) {
-            return invalid("a function has no surface, quality switch, texture, or call of another function");
+        if (kType == kSurfaceType || kType == kQualitySwitchType || isFunction(kType)) {
+            return invalid("a function has no surface, quality switch, or call of another function");
         }
         if (kType != kOutputType) {
             RAWFRAME_TRY(surface_graph::nodeChecked(kDocument, node));
@@ -155,9 +172,14 @@ result::Result<Call> callIn(const graph::Document& surface, const graph::Node& n
         names.push_back(kInput.name);
     }
     RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, names));
-    Call made{.given = std::vector<std::optional<surface_graph::Operand>>(function.inputs.size())};
+    Call made{.given = std::vector<std::optional<surface_graph::Operand>>(function.inputs.size()),
+              .textures = std::vector<GivenTexture>(function.inputs.size())};
     for (std::size_t at = 0; at < function.inputs.size(); ++at) {
         const Value* kGiven = kParts.second->find(function.inputs[at].name);
+        if (function.inputs[at].carried == Carried::Texture2d) {
+            RAWFRAME_TRY_ASSIGN(made.textures[at], textureGiven(surface, kGiven));
+            continue;
+        }
         if (kGiven == nullptr) {
             continue;
         }

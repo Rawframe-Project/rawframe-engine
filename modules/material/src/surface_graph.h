@@ -188,6 +188,8 @@ struct InterfaceInput {
 /// Kest name is, eight at most, its `default` and its `type` (a float, a
 /// vector, a color, or a `texture_2d` defaulting to a game's texture by 16
 /// lowercase hex digits, D710), in name order, a slot each in that order.
+/// A function's texture input is its type alone, each call giving it a
+/// texture (D713).
 [[nodiscard]] result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& surface);
 
 /// A `parameter` node's input, checked: the interface input its `name`

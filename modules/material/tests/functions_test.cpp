@@ -178,3 +178,63 @@ RAWFRAME_TEST(AFunctionSaysOnlyWhatAFunctionMay) {
                     MaterialError::Invalid));
     RAWFRAME_EXPECT(refusedWith(readFunction(kText(kIn(), Value::object(), {kRead()})), MaterialError::Invalid));
 }
+
+RAWFRAME_TEST(AFunctionSamplesTheTextureItsCallGives) {
+    // Triplanar projection twice: of the surface's texture input, and of
+    // a fixed texture with an alpha read too.
+    constexpr graph::NodeId kRock = 0x2f00000000000056ULL;
+    constexpr graph::NodeId kLaid = 0x2f00000000000057ULL;
+    constexpr graph::NodeId kMoss = 0x2f00000000000058ULL;
+    const auto kSurface = [](Value laid, Value moss) {
+        graph::Document made = surfaceOf(
+            objectOf({{"base_color", from(kLaid, "color")}, {"geometry_opacity", from(kMoss, "alpha")}}),
+            {nodeOf(kRock, kParameterTexture2dType, objectOf({{"name", Value::string("rock")}}), Value::object()),
+             nodeOf(kLaid, "rawframe/triplanar_projection@1", Value::object(), std::move(laid)),
+             nodeOf(kMoss, "rawframe/triplanar_projection@1", Value::object(), std::move(moss))});
+        made.interface = objectOf({{"inputs",
+                                    objectOf({{"rock",
+                                               objectOf({{"default", Value::string("a44ecb4a39ac5cc8")},
+                                                         {"type", Value::string("texture_2d")}})}})}});
+        return made;
+    };
+    const graph::Document kMade = kSurface(objectOf({{"texture", from(kRock, "texture")}, {"tile", Value::real(0.25)}}),
+                                           objectOf({{"texture", Value::string("00000000000b0551")}}));
+    RAWFRAME_EXPECT(validateSurface(kMade).has_value());
+    const auto kWritten = generateSlang(kMade);
+    RAWFRAME_EXPECT(kWritten.has_value());
+    if (!kWritten.has_value()) {
+        return;
+    }
+    // Each texture bound once at its slot, sampled three ways: the input's
+    // given by the surface's input, the fixed one by none.
+    RAWFRAME_EXPECT(kWritten->textures.size() == 2 && kWritten->textures[0].id == 0xa44ecb4a39ac5cc8ULL &&
+                    kWritten->textures[1].id == 0xb0551ULL);
+    RAWFRAME_EXPECT(kWritten->textureInputs[0] == 1 && kWritten->textureInputs[1] == 0);
+    std::size_t sampled = 0;
+    for (std::size_t at = kWritten->source.find(".Sample("); at != std::string::npos;
+         at = kWritten->source.find(".Sample(", at + 1)) {
+        ++sampled;
+    }
+    RAWFRAME_EXPECT(sampled == 6);
+    RAWFRAME_EXPECT(kWritten->source.contains("(0.25)") && kWritten->source.contains("(point.position)"));
+    // A texture input left out, given a number, given nought, or given
+    // another node's output.
+    const auto kRefused = [&kSurface](Value moss) {
+        return refusedWith(validateSurface(kSurface(objectOf({{"texture", from(kRock, "texture")}}), std::move(moss))),
+                           MaterialError::Invalid);
+    };
+    RAWFRAME_EXPECT(kRefused(Value::object()));
+    RAWFRAME_EXPECT(kRefused(objectOf({{"texture", Value::real(1)}})));
+    RAWFRAME_EXPECT(kRefused(objectOf({{"texture", Value::string("0000000000000000")}})));
+    RAWFRAME_EXPECT(kRefused(objectOf({{"texture", from(kLaid, "color")}})));
+    // Sampled in the vertex stage, which samples no texture.
+    graph::Document moved = kMade;
+    moved.nodes[0] = nodeOf(kNode, kSurfaceType, Value::object(), objectOf({{"position_offset", from(kShine, "out")}}));
+    // In id order, before the texture input.
+    moved.nodes.insert(moved.nodes.begin() + 1,
+                       nodeOf(kShine,
+                              "rawframe/combine3@1",
+                              Value::object(),
+                              objectOf({{"x", Value::real(0)}, {"y", from(kMoss, "alpha")}, {"z", Value::real(0)}})));
+    RAWFRAME_EXPECT(refusedWith(generateSlang(moved), MaterialError::Unsupported));
+}

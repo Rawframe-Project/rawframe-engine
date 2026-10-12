@@ -623,6 +623,15 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& s
                                           .stream = kOf->first});
             continue;
         }
+        // A function's texture input has no default: a function knows no
+        // game's texture, and each call gives it one (D713).
+        if (kFunction && kType != nullptr && kType->text() != nullptr && *kType->text() == "texture_2d") {
+            if (!kNamed || kInput.names().size() != 1) {
+                return invalid("a function's texture input is named in lower case, its type alone given");
+            }
+            made.push_back(InterfaceInput{.name = kName, .carried = Carried::Texture2d, .slot = at});
+            continue;
+        }
         if (!kNamed || kDefault == nullptr || kType == nullptr || kType->text() == nullptr ||
             kInput.names().size() != 2 || kInput.names()[0] != "default") {
             return invalid("an interface input is named in lower case, its default and its type given");

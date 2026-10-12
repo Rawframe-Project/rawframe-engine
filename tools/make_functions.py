@@ -29,6 +29,9 @@ class Function:
     def input(self, name):
         return out(self.node("parameter", {"name": name}))
 
+    def texture(self, name):
+        return out(self.node("parameter_texture_2d", {"name": name}), "texture")
+
     def output(self, name, value):
         self.node("output", {"name": name}, {"in": value})
 
@@ -181,12 +184,41 @@ def voronoi_2d():
     return f.text({"jitter": value("float", 1), "uv": stream("vec2", "uv")}, {"out": {"type": "float"}})
 
 
+def triplanar_projection():
+    # A texture laid on the place along each world axis and the three
+    # blended by how squarely the surface faces each, Unity's Triplanar
+    # node's shape: `tile` repeats a world unit holds, `blend` the power
+    # each facing's raised to before they are weighed.
+    f = Function("f7e500000110")
+    texture = f.texture("texture")
+    position, normal = f.input("position"), f.input("normal")
+    place = f.node("separate3", inputs={"in": out(f.node("multiply", inputs={"a": position, "b": f.input("tile")}))})
+    raised = out(f.node("power", inputs={"a": out(f.node("abs", inputs={"in": normal})), "b": f.input("blend")}))
+    weights = f.node("separate3", inputs={"in": out(f.node("divide", inputs={
+        "a": raised, "b": out(f.node("dot", inputs={"a": raised, "b": [1, 1, 1]}))}))})
+    color = alpha = None
+    for across, up, weight in (("g", "b", "r"), ("r", "b", "g"), ("r", "g", "b")):
+        uv = out(f.node("combine2", inputs={"x": out(place, across), "y": out(place, up)}))
+        sampled = f.node("sample_texture_2d", inputs={"texture": texture, "uv": uv})
+        share = out(weights, weight)
+        part = out(f.node("multiply", inputs={"a": out(sampled, "color"), "b": share}))
+        clear = out(f.node("multiply", inputs={"a": out(sampled, "alpha"), "b": share}))
+        color = part if color is None else out(f.node("add", inputs={"a": color, "b": part}))
+        alpha = clear if alpha is None else out(f.node("add", inputs={"a": alpha, "b": clear}))
+    f.output("alpha", alpha)
+    f.output("color", color)
+    return f.text({"blend": value("float", 1), "normal": stream("vec3", "world_normal"),
+                   "position": stream("vec3", "world_position"), "texture": {"type": "texture_2d"},
+                   "tile": value("float", 1)}, {"alpha": {"type": "float"}, "color": {"type": "color3"}})
+
+
 def main():
     if len(sys.argv) != 2:
         sys.exit("usage: tools/make_functions.py <modules/material/library>")
     for name, make in (("checkerboard", checkerboard), ("fractal_noise_2d", fractal_noise_2d),
                        ("fresnel", fresnel), ("polar_coordinates", polar_coordinates), ("rotate_uv", rotate_uv),
-                       ("tile_and_offset", tile_and_offset), ("voronoi_2d", voronoi_2d)):
+                       ("tile_and_offset", tile_and_offset), ("triplanar_projection", triplanar_projection),
+                       ("voronoi_2d", voronoi_2d)):
         with open(os.path.join(sys.argv[1], name + ".function"), "w", encoding="utf-8") as file:
             file.write(make())
 
