@@ -24,6 +24,7 @@ component 3db5d1a4-0e23-4e70-9405-ad7b76af7640 gale.shot Shot
 component 9684570e-9361-40cc-9327-f56bc11db3ae gale.look rawframe.model.Model
 component f1709939-d7eb-4a52-9acf-8f59734cea9e gale.water rawframe.model.Model
 component 61c67757-1adb-4e63-93c0-5cbbc82656bc gale.waters rawframe.model.Placed
+component 7e0a1180-417d-4fa2-a085-d094457c5bb2 gale.swell rawframe.model.Model
 component 664ccd7d-20b0-45e5-83c6-a91a614b13cf gale.view rawframe.model.Camera
 # Where a client hears another ship's broadsides from (D687): an emitter of
 # its own on each ship.
@@ -82,14 +83,19 @@ sample sample.kest sample
 interpolate rawframe.physics3d.pose
 
 # What a client draws (D682): every hull and ball by its shape, a hull
-# darker for each hole in it (D687); the sea as a broad
-# plane of water round its own ship, wherever that sails; and its view
-# from behind and above its ship, along its heading.
+# darker for each hole in it (D687); the sea round its own ship, wherever
+# that sails, its waves rolled by their material as the float system
+# floats the ships on them (D691), over a broad still plane out to the
+# horizon; and its view from behind and above its ship, along its heading.
+# The rolling sea is the engine's grid, its material written by
+# tools/make_waves.py; a server reads neither.
+material 04b83dddccb26127 waves.rfmaterial
 presentation gale.look on rawframe.physics3d.body
 present gale.dress dress read rawframe.physics3d.body write gale.look entities lookup gale.ship
 presentation gale.water on gale.sea
 presentation gale.waters on gale.sea
-present gale.flood flood read gale.sea write gale.water write gale.waters entities lookup rawframe.physics3d.pose
+presentation gale.swell on gale.sea
+present gale.flood flood read gale.sea write gale.water write gale.swell write gale.waters entities lookup rawframe.physics3d.pose
 presentation gale.view on player
 present gale.frame frame read gale.ship write gale.view entities lookup rawframe.physics3d.pose
 # Every other ship's broadsides heard from it as the server's state counts

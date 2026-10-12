@@ -154,7 +154,9 @@ extern fn Pose3D.get(entity: world.Entity) -> physics3d.Pose3D
 
 // The water's height at `x`, `z` after `time` seconds: two swells crossing,
 // a quarter meter and fifteen centimeters high. The time is the World's
-// tick's (D684), so a client predicting a tick finds the same sea.
+// tick's (D684), so a client predicting a tick finds the same sea. The
+// drawn sea's material rolls the same waves (D691): change them together
+// in tools/make_waves.py.
 fn height(x: f32, z: f32, time: f32) -> f32 {
     let one = f64(0.25) * math.sin(f64(0.3 * x + 1.1 * time))
     let two = f64(0.15) * math.sin(f64(0.23 * z + 0.8 * time + 1.3))
@@ -298,6 +300,12 @@ fn float(count: i32, ships: [Ship], helms: [controls.Helm], poses: [physics3d.Po
 // Meters of sea a client draws round its ship, each way, and how far
 // behind and above the ship its view is.
 const REACH: f32 = 300.0
+// The rolling sea (D691): the engine's grid, SWELL meters each way, a
+// vertex every STEP meters, and its waves' material, written by
+// tools/make_waves.py.
+const SWELL: f32 = 100.0
+const STEP: f64 = 1.5625
+const WAVES: u64 = 0x04b83dddccb26127
 const BEHIND: f32 = 16.0
 const ABOVE: f32 = 7.0
 
@@ -322,15 +330,20 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model], entities:
 // The sea, a broad plane of water whose top is the still sea's, drawn
 // round the client's own ship wherever it sails; at the World's origin
 // before it has one.
-fn flood(count: i32, seas: [Sea], waters: [model.Model], placed: [model.Placed], entities: [world.Entity]) {
+fn flood(count: i32, seas: [Sea], waters: [model.Model], swells: [model.Model], placed: [model.Placed],
+         entities: [world.Entity]) {
     let me = replication.player()
     let i = 0
     while i < count {
-        waters[i] = model.Model(model.BOX, REACH, 0.05, REACH, 0x1E5A7AFF, u64(0), -0.05)
+        // The still plane below the lowest trough, the rolling sea over it.
+        waters[i] = model.Model(model.BOX, REACH, 0.05, REACH, 0x1E5A7AFF, u64(0), -0.5)
+        swells[i] = model.Model(model.GRID, SWELL, 1.0, SWELL, 0xFFFFFFFF, WAVES, 0.0)
         placed[i] = model.Placed(false, f64(0.0), f64(0.0), f64(0.0))
         if Pose3D.has(me) {
+            // Moved a whole step at a time, so each vertex is where one was
+            // and the waves do not swim as the ship sails.
             let at = Pose3D.get(me)
-            placed[i] = model.Placed(true, at.x, f64(0.0), at.z)
+            placed[i] = model.Placed(true, math.floor(at.x / STEP) * STEP, f64(0.0), math.floor(at.z / STEP) * STEP)
         }
         i = i + 1
     }
