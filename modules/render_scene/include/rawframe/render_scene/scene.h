@@ -38,11 +38,15 @@
 namespace rawframe::render_scene {
 
 /// The engine's own meshes (`rawframe.model`'s BOX, SPHERE, CYLINDER, and
-/// CAPSULE), each one meter from its center to its sides.
+/// CAPSULE), each one meter from its center to its sides; and GRID, a flat
+/// square of half sides one facing up, a vertex every `kGridCells`th of
+/// its side, for a surface its material moves (D691).
 inline constexpr std::uint64_t kBox = 0x3ff8cd61f01cf46bULL;
 inline constexpr std::uint64_t kSphere = 0x2c6b82d75f7be712ULL;
 inline constexpr std::uint64_t kCylinder = 0xaee26a717a3a62a0ULL;
 inline constexpr std::uint64_t kCapsule = 0x63ed148327123836ULL;
+inline constexpr std::uint64_t kGrid = 0x69141af91800441eULL;
+inline constexpr std::uint32_t kGridCells = 128;
 
 /// One of the engine's own meshes, made anew; none for another identity.
 [[nodiscard]] std::shared_ptr<const mesh::Mesh> engineMesh(std::uint64_t id);

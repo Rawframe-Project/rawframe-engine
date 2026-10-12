@@ -76,6 +76,48 @@ RAWFRAME_TEST(TheEnginesMeshesAreClosedAndFaceOut) {
     RAWFRAME_EXPECT(engineMesh(kBox) != engineMesh(kBox) && *engineMesh(kBox) == *engineMesh(kBox));
 }
 
+RAWFRAME_TEST(TheEnginesGridIsAFlatSquareFacingUp) {
+    // For a surface its material moves (D691): every vertex on the square
+    // of half sides one, a cell a 128th of its side, every face up.
+    const auto kGridMesh = engineMesh(kGrid);
+    RAWFRAME_EXPECT(kGridMesh != nullptr && mesh::validate(*kGridMesh).has_value());
+    if (kGridMesh == nullptr) {
+        return;
+    }
+    constexpr std::size_t kAcross = kGridCells + 1;
+    RAWFRAME_EXPECT(kGridMesh->positions.size() == kAcross * kAcross &&
+                    kGridMesh->indices.size() == 6 * std::size_t{kGridCells} * kGridCells);
+    for (std::size_t vertex = 0; vertex < kGridMesh->positions.size(); ++vertex) {
+        const mesh::Vector3& kAt = kGridMesh->positions[vertex];
+        RAWFRAME_EXPECT(kAt[1] == 0 && std::abs(kAt[0]) <= 1 && std::abs(kAt[2]) <= 1 &&
+                        (kGridMesh->normals[vertex] == mesh::Vector3{0, 1, 0}));
+    }
+    RAWFRAME_EXPECT((kGridMesh->positions.front() == mesh::Vector3{-1, 0, -1}) &&
+                    (kGridMesh->positions.back() == mesh::Vector3{1, 0, 1}));
+    for (std::size_t at = 0; at + 2 < kGridMesh->indices.size(); at += 3) {
+        const mesh::Vector3& kA = kGridMesh->positions[kGridMesh->indices[at]];
+        const mesh::Vector3& kB = kGridMesh->positions[kGridMesh->indices[at + 1]];
+        const mesh::Vector3& kC = kGridMesh->positions[kGridMesh->indices[at + 2]];
+        // The face's normal's height: (B - A) x (C - A), its y.
+        const float kUp = ((kB[2] - kA[2]) * (kC[0] - kA[0])) - ((kB[0] - kA[0]) * (kC[2] - kA[2]));
+        RAWFRAME_EXPECT(kUp > 0);
+    }
+}
+
+RAWFRAME_TEST(AFrameShowsThePresentedWorldsTimeAndTheOneBefore) {
+    // What a material moving its vertices reads (D691): the time a scene
+    // was told, and the one its frame before showed; the eye's place.
+    Rig rig;
+    rig.scene->shownAt(2.5);
+    const SceneFrame& kFirst = rig.frame({.eye = {4, 5, 6}});
+    RAWFRAME_EXPECT(kFirst.time == (std::array<double, 2>{2.5, 2.5}) && kFirst.eye == (std::array<double, 3>{4, 5, 6}));
+    rig.scene->shownAt(2.75);
+    const SceneFrame& kNext = rig.frame({});
+    RAWFRAME_EXPECT(kNext.time == (std::array<double, 2>{2.75, 2.5}));
+    rig.scene->shownAt(std::numeric_limits<double>::quiet_NaN());
+    RAWFRAME_EXPECT(rig.frame({}).time == (std::array<double, 2>{0, 2.75}));
+}
+
 RAWFRAME_TEST(AModelIsPlacedRelativeToTheEye) {
     Rig rig;
     // A quarter turn about +Y, far from the origin: a box two meters long

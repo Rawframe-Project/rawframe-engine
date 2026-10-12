@@ -67,11 +67,14 @@ const RIGHT_HAND: u32 = 2
 // sides or radius: a box of half sides one; a sphere of radius one; an
 // upright cylinder of radius one and half height one; an upright capsule
 // of radius one whose two centers are one above and below its center (a
-// scale along its axis stretches its caps too).
+// scale along its axis stretches its caps too); and a flat square of half
+// sides one facing up, its side cut in 128, which a material moving its
+// vertices bends (water, cloth; D691).
 const BOX: u64 = 0x3ff8cd61f01cf46b
 const SPHERE: u64 = 0x2c6b82d75f7be712
 const CYLINDER: u64 = 0xaee26a717a3a62a0
 const CAPSULE: u64 = 0x63ed148327123836
+const GRID: u64 = 0x69141af91800441e
 
 // A client's view of the 3D World (ADR-0052's camera), on the client's
 // own player: a presentation component (`presentation <camera> on

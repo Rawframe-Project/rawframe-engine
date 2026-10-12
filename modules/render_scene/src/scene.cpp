@@ -708,7 +708,7 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
         RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, kQueryOf(kId, sizeof(Beam)));
         state->beamQueries.push_back(std::move(query));
     }
-    for (const std::uint64_t kId : {kBox, kSphere, kCylinder, kCapsule}) {
+    for (const std::uint64_t kId : {kBox, kSphere, kCylinder, kCapsule, kGrid}) {
         state->meshes.emplace(kId, bounded(engineMesh(kId)));
     }
     // A game's mesh of an engine mesh's identity is the game's.

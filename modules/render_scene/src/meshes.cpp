@@ -173,6 +173,28 @@ mesh::Mesh cylinder() {
     return made;
 }
 
+/// A flat square of half sides one at the middle's height, facing up, its
+/// side cut in `kGridCells`.
+mesh::Mesh grid() {
+    mesh::Mesh made;
+    constexpr std::uint32_t kAcross = kGridCells + 1;
+    for (std::uint32_t row = 0; row < kAcross; ++row) {
+        for (std::uint32_t column = 0; column < kAcross; ++column) {
+            const float kU = static_cast<float>(column) / kGridCells;
+            const float kV = static_cast<float>(row) / kGridCells;
+            vertex(made, {(2 * kU) - 1, 0, (2 * kV) - 1}, {0, 1, 0}, kU, kV);
+        }
+    }
+    for (std::uint32_t row = 0; row < kGridCells; ++row) {
+        for (std::uint32_t column = 0; column < kGridCells; ++column) {
+            const std::uint32_t kA = (row * kAcross) + column;
+            triangle(made, kA, kA + kAcross, kA + 1);
+            triangle(made, kA + 1, kA + kAcross, kA + kAcross + 1);
+        }
+    }
+    return made;
+}
+
 std::shared_ptr<const mesh::Mesh> finished(mesh::Mesh made) {
     made.parts.push_back({.firstIndex = 0, .indexCount = static_cast<std::uint32_t>(made.indices.size())});
     return std::make_shared<const mesh::Mesh>(std::move(made));
@@ -190,6 +212,8 @@ std::shared_ptr<const mesh::Mesh> engineMesh(std::uint64_t id) {
         return finished(cylinder());
     case kCapsule:
         return finished(capsule());
+    case kGrid:
+        return finished(grid());
     default:
         return nullptr;
     }
