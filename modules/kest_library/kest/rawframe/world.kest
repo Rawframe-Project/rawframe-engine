@@ -14,12 +14,21 @@ struct Entity {
 
 extern fn World.create() -> Entity
 extern fn World.destroy(entity: Entity)
+extern fn World.tick() -> u64
 
 // Records the creation of an entity, which exists from the next barrier.
 // Until then what comes back names it only inside the system run that made
 // it: to insert its components, not to keep.
 fn create() -> Entity {
     return World.create()
+}
+
+// The tick the running system simulates: the World's on a server, and on a
+// client the tick it predicts, run again as often as it is (D684). Time a
+// system makes of it, such as a wave's phase, is the same wherever the
+// tick is simulated, where a count kept in a component lags on a client.
+fn tick() -> u64 {
+    return World.tick()
 }
 
 // Records that an entity is destroyed at the next barrier. Destroying one

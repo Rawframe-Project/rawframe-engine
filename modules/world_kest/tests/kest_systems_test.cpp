@@ -77,6 +77,16 @@ constexpr std::string_view kProgram = "module game\n"
                                       "    }\n"
                                       "}\n"
                                       "\n"
+                                      "extern fn World.tick() -> u64\n"
+                                      "\n"
+                                      "fn stamp(count: i32, positions: [Position]) {\n"
+                                      "    let i = 0\n"
+                                      "    while i < count {\n"
+                                      "        positions[i].y = f32(World.tick())\n"
+                                      "        i = i + 1\n"
+                                      "    }\n"
+                                      "}\n"
+                                      "\n"
                                       "fn fragile(count: i32, positions: [Position]) {\n"
                                       "    let i = 0\n"
                                       "    while i < count {\n"
@@ -178,6 +188,27 @@ RAWFRAME_TEST(AKestSystemMovesEveryMatchingArchetype) {
     RAWFRAME_EXPECT(world.get(kMovers.plain[2], kPosition)->x == 5);
     RAWFRAME_EXPECT(world.get(kMovers.plain[2], kPosition)->y == 6);
     RAWFRAME_EXPECT(world.get(kMovers.marked[1], kPosition)->x == 53);
+}
+
+RAWFRAME_TEST(ASystemReadsTheTickItSimulates) {
+    // World.tick (D684): the tick each run simulates, as the schedule
+    // numbers them.
+    const auto kRegistry = registry();
+    world::World world{kRegistry};
+    const Movers kMovers = spawn(world);
+    const std::array<KestSystemDeclaration, 1> kDeclarations = {
+        KestSystemDeclaration{.identity = "game.stamp", .entry = "stamp", .columns = kFragile}};
+    auto kest = systems(kDeclarations);
+    world::Schedule ticks = schedule(*kest, *kRegistry);
+    world::TickIndex tick{.value = 40};
+    const auto kPosition = *world.registry().key<Position>();
+    for (int round = 0; round < 3; ++round) {
+        const std::uint64_t kSimulated = tick.value;
+        auto report = ticks.runTick(world, tick, *world::TickRate::of(60));
+        RAWFRAME_EXPECT(report.has_value() && report->failures.empty());
+        RAWFRAME_EXPECT(world.get(kMovers.plain[0], kPosition)->y == static_cast<float>(kSimulated));
+        RAWFRAME_EXPECT(world.get(kMovers.marked[1], kPosition)->y == static_cast<float>(kSimulated));
+    }
 }
 
 RAWFRAME_TEST(ARefusedSystemChangesNothing) {

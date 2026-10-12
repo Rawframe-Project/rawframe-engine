@@ -43,6 +43,7 @@ namespace {
 constexpr std::array<kest::Parameter, 2> kStreamAndBound = {kest::Slot::I32, kest::Slot::U32};
 constexpr std::array<kest::Parameter, 1> kStream = {kest::Slot::I32};
 constexpr std::array<kest::Parameter, 1> kU32 = {kest::Slot::U32};
+constexpr std::array<kest::Parameter, 1> kU64 = {kest::Slot::U64};
 constexpr std::array<kest::Parameter, 1> kF64 = {kest::Slot::F64};
 constexpr std::array<kest::Parameter, 1> kBool = {kest::Slot::Bool};
 constexpr std::array<kest::Parameter, 1> kI32 = {kest::Slot::I32};
@@ -433,6 +434,13 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
                                       .context = doorway.get(),
                                       .takes = kPrefabParameter,
                                       .gives = kEntityParameter}));
+    // The tick the running system simulates, the server's or the one a
+    // client predicts (D684): nothing a program may not know.
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "World.tick",
+                                      .function = &tickDoor,
+                                      .context = doorway.get(),
+                                      .gives = kU64,
+                                      .safeForUntrusted = true}));
     RAWFRAME_TRY(doors.add(kest::Door{.name = "Random.below",
                                       .function = &belowDoor,
                                       .context = doorway.get(),

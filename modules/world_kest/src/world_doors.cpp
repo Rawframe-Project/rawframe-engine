@@ -113,6 +113,15 @@ world::Pcg32* streamOf(kest::DoorCall& call, Doorway& doorway) {
 
 } // namespace
 
+void tickDoor(kest::DoorCall& call, void* context) noexcept {
+    const Doorway& doorway = *static_cast<const Doorway*>(context);
+    if (doorway.context == nullptr) {
+        call.fail("the tick is read only while a system runs");
+        return;
+    }
+    call.answerInteger(static_cast<std::int64_t>(doorway.context->tick.value));
+}
+
 void belowDoor(kest::DoorCall& call, void* context) noexcept {
     Doorway& doorway = *static_cast<Doorway*>(context);
     world::Pcg32* const kStream = streamOf(call, doorway);

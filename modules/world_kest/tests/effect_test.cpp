@@ -50,11 +50,13 @@ void unused(kest::DoorCall& call, void*) noexcept {
 }
 
 constexpr std::array<kest::Parameter, 1> kEntity = {kest::Parameter{kest::Slot::Value, kEntityType}};
+constexpr std::array<kest::Parameter, 1> kU64 = {kest::Slot::U64};
 constexpr std::array<kest::Parameter, 2> kInsert = {kest::Parameter{kest::Slot::Value, kEntityType},
                                                     kest::Parameter{kest::Slot::Value, "rawframe.world.Persistent"}};
-const std::array<kest::Door, 3> kWorldDoors = {
+const std::array<kest::Door, 4> kWorldDoors = {
     kest::Door{.name = "World.create", .function = &unused, .takes = {}, .gives = kEntity},
     kest::Door{.name = "World.destroy", .function = &unused, .takes = kEntity},
+    kest::Door{.name = "World.tick", .function = &unused, .gives = kU64},
     kest::Door{.name = "Persistent.insert", .function = &unused, .takes = kInsert}};
 
 } // namespace
