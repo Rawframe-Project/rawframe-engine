@@ -43,10 +43,11 @@ struct Ship {
     bool launched = false;
     std::uint32_t hull = 0;
     std::uint32_t sinking = 0;
+    std::uint32_t reload = 0;
+    std::uint32_t fired = 0;
 };
 
 struct Guns {
-    std::uint32_t reload = 0;
     std::uint32_t hits = 0;
 };
 

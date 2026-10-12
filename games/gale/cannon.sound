@@ -1,0 +1,20 @@
+{
+  "kind": "audio.sound",
+  "formatVersion": 1,
+  "variants": [
+    {
+      "resource": "f8d22e173cfcd7ba4e1609cb2f85365b"
+    }
+  ],
+  "pitch": {
+    "minimum": 0.9,
+    "maximum": 1.1
+  },
+  "bus": "ea6becb8d979a17b",
+  "concurrency": "broadsides",
+  "attenuation": {
+    "minimumDistance": 4,
+    "maximumDistance": 120,
+    "falloff": "linear"
+  }
+}

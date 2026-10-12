@@ -102,13 +102,14 @@ if(RAWFRAME_BUILD_TESTS)
                          PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9],\"rollbacks\":[0-9][0-9]?,")
     # One bot predicts its own ship on Gale's sea (D685): hundreds of ticks
-    # confirmed, a ship floated in Kest and resimulated alike.
+    # confirmed, a ship floated in Kest and resimulated alike, and its
+    # broadsides heard as it fires them (D686).
     add_test(NAME gale_prediction
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/gale_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(gale_prediction PROPERTIES
                          PROCESSORS 6
-                         PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9],\"rollbacks\":[0-9][0-9]?,")
+                         PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9],\"rollbacks\":[0-9][0-9]?,[^\n]*\"effectsDelivered\":[1-9][0-9]*,")
     # Sixteen bots play the sample platformer: nine bodies of the level and
     # one runner for each player are made, and the runners move as
     # characters.

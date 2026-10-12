@@ -72,18 +72,23 @@ struct Sea {
 }
 
 // A ship, its player's own entity (D685): whether it has been launched,
-// the holes it can still take, and the ticks it has foundered for; a client
-// predicts all three for its own.
+// the holes it can still take, the ticks it has foundered for, the ticks
+// until its guns are loaded, and the sides it fires to this tick (PORT,
+// STARBOARD, D686); a client predicts all of it for its own.
 struct Ship {
     launched: bool
     hull: u32
     sinking: u32
+    reload: u32
+    fired: u32
 }
 
-// A ship's guns, the server's alone: the ticks until they are loaded, and
-// the hits their balls have made.
+// The sides a ship fires to.
+const PORT: u32 = 1
+const STARBOARD: u32 = 2
+
+// A ship's tally, the server's alone: the hits its balls have made.
 struct Guns {
-    reload: u32
     hits: u32
 }
 
@@ -108,6 +113,7 @@ extern fn Ship.insert(entity: world.Entity, value: Ship)
 extern fn Ship.has(entity: world.Entity) -> bool
 extern fn Ship.get(entity: world.Entity) -> Ship
 extern fn Shot.insert(entity: world.Entity, value: Shot)
+extern fn Effects.broadside(entity: world.Entity)
 extern fn Guns.has(entity: world.Entity) -> bool
 extern fn Guns.get(entity: world.Entity) -> Guns
 extern fn Guns.insert(entity: world.Entity, value: Guns)
@@ -142,7 +148,7 @@ fn launch(count: i32, ships: [Ship], bodies: [physics3d.Body3D], poses: [physics
         if !ships[i].launched {
             let x = f64(launched % u32(4)) * SPACING - f64(1.5) * SPACING
             let z = f64(launched / u32(4)) * ROWS
-            ships[i] = Ship(true, HULL, u32(0))
+            ships[i] = Ship(true, HULL, u32(0), u32(0), u32(0))
             bodies[i] = physics3d.Body3D(physics3d.DYNAMIC, physics3d.BOX, false, false, false, SHIP, BEAM, HEIGHT,
                                          LENGTH, DENSITY, 0.4, 0.0, 0.4, 1.5)
             poses[i] = physics3d.Pose3D(x, f64(0.2), z, 0.0, 0.0, 0.0, 1.0)
@@ -316,32 +322,47 @@ fn frame(count: i32, ships: [Ship], views: [model.Camera], entities: [world.Enti
     }
 }
 
-// Each ship's crew: its guns reload, and fire to the sides its player
-// asks once loaded; a ship holed through floods, and once it has gone
-// down it is abandoned, to be launched again.
-fn crew(count: i32, guns: [Guns], ships: [Ship], helms: [controls.Helm], poses: [physics3d.Pose3D],
-        velocities: [physics3d.Velocity3D], entities: [world.Entity]) {
+// Each ship's guns: they reload, and once loaded fire to the sides its
+// player asks, a broadside its client predicts and hears at once (D686);
+// the balls are the crew's to send.
+fn aim(count: i32, helms: [controls.Helm], ships: [Ship], entities: [world.Entity]) {
     let i = 0
     while i < count {
-        if ships[i].launched {
-            if guns[i].reload > u32(0) {
-                guns[i].reload = guns[i].reload - u32(1)
-            }
-            if ships[i].hull == u32(0) {
-                if ships[i].sinking > ABANDONED {
-                    ships[i].launched = false
-                }
-            } else if guns[i].reload == u32(0) {
+        ships[i].fired = u32(0)
+        if ships[i].launched && ships[i].hull > u32(0) {
+            if ships[i].reload > u32(0) {
+                ships[i].reload = ships[i].reload - u32(1)
+            } else if helms[i].port || helms[i].starboard {
                 if helms[i].port {
-                    fire(entities[i], poses[i], velocities[i], 0.0 - 1.0)
+                    ships[i].fired = ships[i].fired | PORT
                 }
                 if helms[i].starboard {
-                    fire(entities[i], poses[i], velocities[i], 1.0)
+                    ships[i].fired = ships[i].fired | STARBOARD
                 }
-                if helms[i].port || helms[i].starboard {
-                    guns[i].reload = RELOAD
-                }
+                ships[i].reload = RELOAD
+                Effects.broadside(entities[i])
             }
+        }
+        i = i + 1
+    }
+}
+
+// Each ship's crew, on the server: the balls of the broadside its guns
+// fired this tick sent; a ship holed through floods, and once it has gone
+// down it is abandoned, to be launched again.
+fn crew(count: i32, ships: [Ship], poses: [physics3d.Pose3D], velocities: [physics3d.Velocity3D],
+        entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let afloat = ships[i].launched && ships[i].hull > u32(0)
+        if afloat && (ships[i].fired & PORT) != u32(0) {
+            fire(entities[i], poses[i], velocities[i], 0.0 - 1.0)
+        }
+        if afloat && (ships[i].fired & STARBOARD) != u32(0) {
+            fire(entities[i], poses[i], velocities[i], 1.0)
+        }
+        if ships[i].launched && ships[i].hull == u32(0) && ships[i].sinking > ABANDONED {
+            ships[i].launched = false
         }
         i = i + 1
     }

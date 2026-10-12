@@ -1,0 +1,31 @@
+{
+  "kind": "audio.mixer",
+  "formatVersion": 1,
+  "master": {
+    "busId": "23b79408458e923a",
+    "name": "master",
+    "role": "master",
+    "effects": [
+      {
+        "type": "rawframe/dynamics@1",
+        "processor": "limiter",
+        "threshold": -1,
+        "attack": 0.001
+      }
+    ],
+    "children": [
+      {
+        "busId": "ea6becb8d979a17b",
+        "name": "effects",
+        "role": "sfx",
+        "volume": -6
+      }
+    ]
+  },
+  "concurrency": [
+    {
+      "name": "broadsides",
+      "maximumInstances": 8
+    }
+  ]
+}

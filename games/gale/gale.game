@@ -26,17 +26,26 @@ component f1709939-d7eb-4a52-9acf-8f59734cea9e gale.water rawframe.model.Model
 component 61c67757-1adb-4e63-93c0-5cbbc82656bc gale.waters rawframe.model.Placed
 component 664ccd7d-20b0-45e5-83c6-a91a614b13cf gale.view rawframe.model.Camera
 
-# A player's ship is launched, and launched again once abandoned; its crew
-# reloads, fires, and abandons a ship that founders (D683); each ship
-# floats, and sails as its player's helm says, which a client predicts for
-# its own (D685).
-system gale.launch simulation launch write gale.ship write rawframe.physics3d.body write rawframe.physics3d.pose write rawframe.physics3d.velocity lookup gale.sea before rawframe.physics3d.step
-system gale.crew simulation crew write gale.guns write gale.ship read gale.helm read rawframe.physics3d.pose read rawframe.physics3d.velocity entities after gale.launch before gale.float
+# A player's ship is launched, and launched again once abandoned; its guns
+# reload and fire the broadsides its helm asks, which its client predicts
+# and hears at once (D686); its crew sends the balls and abandons a ship
+# that founders (D683); each ship floats, and sails as its player's helm
+# says, which a client predicts for its own (D685).
+system gale.launch simulation launch write gale.ship write rawframe.physics3d.body write rawframe.physics3d.pose write rawframe.physics3d.velocity lookup gale.sea before gale.aim
+system gale.aim simulation aim read gale.helm write gale.ship entities before rawframe.physics3d.step predicted emits broadside
+system gale.crew simulation crew write gale.ship read rawframe.physics3d.pose read rawframe.physics3d.velocity entities after gale.aim before gale.float
 system gale.float simulation float write gale.ship read gale.helm read rawframe.physics3d.pose read rawframe.physics3d.velocity write rawframe.physics3d.impulse before rawframe.physics3d.step predicted
 
 # A ball strikes what it meets: another ship is holed by it, and the ship
 # that fired it counts the hit.
 system gale.strike simulation strike write gale.shot read rawframe.physics3d.contact read rawframe.physics3d.pose entities lookup gale.ship lookup gale.guns after rawframe.physics3d.step
+
+# A broadside is a presentation effect its ship's player predicts: heard at
+# once, and once (D219), as cannon.sound (made by tools/make_cannon.py), on
+# the mixer's effects bus.
+effect broadside predicted sound 0032340b6117b8fd
+mixer gale.mixer
+sound 0032340b6117b8fd cannon.sound
 
 # The sea: how many ships it has been given, at the World's origin, the
 # still water's height. Its waves roll by the World's tick (D684).
