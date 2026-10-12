@@ -124,6 +124,10 @@ RAWFRAME_TEST(AShipFloatsSailsAndTurnsAtItsHelm) {
         played.run(60);
         RAWFRAME_EXPECT(afloat(poseOf(world, kShip)));
     }
+    // Its player is where it is, so its client's view follows it (D682).
+    const auto* const kAboard = valueOf<physics3d::Pose3D>(world, kPlayer, physics3d::Pose3D::kComponentTypeId);
+    RAWFRAME_EXPECT(kAboard != nullptr && std::abs(kAboard->x - poseOf(world, kShip).x) < 0.5 &&
+                    std::abs(kAboard->z - poseOf(world, kShip).z) < 0.5);
     // Given a list, it rights itself.
     auto* const kSpin = valueOf<physics3d::Velocity3D>(world, kShip, physics3d::Velocity3D::kComponentTypeId);
     kSpin->angularZ = 1.0F;

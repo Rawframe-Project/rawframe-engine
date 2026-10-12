@@ -9,7 +9,9 @@ module gale
 // keel keeps it from sliding sideways.
 
 import controls
+import rawframe.model
 import rawframe.physics3d
+import rawframe.replication
 import rawframe.world
 import std.math
 
@@ -76,6 +78,8 @@ extern fn Body3D.insert(entity: world.Entity, value: physics3d.Body3D)
 extern fn Pose3D.insert(entity: world.Entity, value: physics3d.Pose3D)
 extern fn Velocity3D.insert(entity: world.Entity, value: physics3d.Velocity3D)
 extern fn Impulse3D.insert(entity: world.Entity, value: physics3d.Impulse3D)
+extern fn Pose3D.has(entity: world.Entity) -> bool
+extern fn Pose3D.get(entity: world.Entity) -> physics3d.Pose3D
 
 // The sea rolls on a tick.
 fn tide(count: i32, seas: [Sea]) {
@@ -147,7 +151,8 @@ fn dot(a: Offset, b: Offset) -> f32 {
 }
 
 // Each ship pushed by the water under it and by its helm, for the step to
-// apply; a ship whose player is gone sinks from the World.
+// apply, and its player put where it is; a ship whose player is gone sinks
+// from the World.
 fn float(count: i32, ships: [Ship], poses: [physics3d.Pose3D], velocities: [physics3d.Velocity3D],
          impulses: [physics3d.Impulse3D], entities: [world.Entity]) {
     if Sea.count() == 0 {
@@ -163,6 +168,8 @@ fn float(count: i32, ships: [Ship], poses: [physics3d.Pose3D], velocities: [phys
             world.destroy(entities[i])
         } else {
             let pose = poses[i]
+            // Its player is where it is, so its client's view follows it.
+            Pose3D.insert(ships[i].player, pose)
             // The pushes up, and their turns about x and z, summed over
             // the points under water.
             let up = 0.0
@@ -217,6 +224,62 @@ fn float(count: i32, ships: [Ship], poses: [physics3d.Pose3D], velocities: [phys
             }
             impulses[i] = physics3d.Impulse3D(push.x, push.y, push.z, aboutX, yaw, aboutZ)
         }
+        i = i + 1
+    }
+}
+
+// Meters of sea a client draws round its ship, each way, and how far
+// behind and above the ship its view is.
+const REACH: f32 = 300.0
+const BEHIND: f32 = 16.0
+const ABOVE: f32 = 7.0
+
+// Every hull, as the box its body is.
+fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
+    let i = 0
+    while i < count {
+        let b = bodies[i]
+        looks[i] = model.Model(model.BOX, b.width, b.height, b.depth, 0x6B4A2BFF, u64(0), 0.0)
+        i = i + 1
+    }
+}
+
+// The sea, a broad plane of water whose top is the still sea's, drawn
+// round the client's own ship wherever it sails; at the World's origin
+// before it has one.
+fn flood(count: i32, seas: [Sea], waters: [model.Model], placed: [model.Placed], entities: [world.Entity]) {
+    let me = replication.player()
+    let i = 0
+    while i < count {
+        waters[i] = model.Model(model.BOX, REACH, 0.05, REACH, 0x1E5A7AFF, u64(0), -0.05)
+        placed[i] = model.Placed(false, f64(0.0), f64(0.0), f64(0.0))
+        if Pose3D.has(me) {
+            let at = Pose3D.get(me)
+            placed[i] = model.Placed(true, at.x, f64(0.0), at.z)
+        }
+        i = i + 1
+    }
+}
+
+// A player's view from behind and above its ship, looking along its
+// heading and a little down.
+fn frame(count: i32, berths: [Berth], views: [model.Camera], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let ahead = Offset(0.0, 0.0, -1.0)
+        if Pose3D.has(entities[i]) {
+            ahead = turned(Pose3D.get(entities[i]), Offset(0.0, 0.0, -1.0))
+        }
+        let flat = f32(math.sqrt(f64(ahead.x * ahead.x + ahead.z * ahead.z)))
+        if flat < 0.01 {
+            ahead = Offset(0.0, 0.0, -1.0)
+            flat = 1.0
+        }
+        let x = ahead.x / flat
+        let z = ahead.z / flat
+        let yaw = f32(math.atan2(f64(0.0 - x), f64(0.0 - z)))
+        views[i] = model.Camera(0.0 - x * BEHIND, ABOVE, 0.0 - z * BEHIND, yaw, -0.35, 1.0, 0.1, 15.0, u32(0),
+                                model.FOLLOW)
         i = i + 1
     }
 }

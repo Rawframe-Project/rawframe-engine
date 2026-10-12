@@ -13,17 +13,25 @@ component 787f081f-15a5-42fc-bbeb-06b230674c63 gale.helm Helm
 component 81e1d987-0cc4-4374-a8fd-39cd1e9e8dbe gale.berth Berth
 component b71d9c3f-8a0e-4a92-824d-73479a820d53 gale.ship Ship
 component 8c9ece20-a6b4-4a66-9623-035fc0f16d3a gale.sea Sea
+# What a client draws: the hulls, the sea round its own ship, and its view
+# from behind that ship (D682); no server carries any.
+component 9684570e-9361-40cc-9327-f56bc11db3ae gale.look rawframe.model.Model
+component f1709939-d7eb-4a52-9acf-8f59734cea9e gale.water rawframe.model.Model
+component 61c67757-1adb-4e63-93c0-5cbbc82656bc gale.waters rawframe.model.Placed
+component 664ccd7d-20b0-45e5-83c6-a91a614b13cf gale.view rawframe.model.Camera
 
 # The sea's clock runs a tick at a time; a player is given a ship; each
-# ship floats, and sails as its player's helm says.
+# ship floats, and sails as its player's helm says, its player put where it
+# is, so its client's view follows it (D682).
 system gale.tide simulation tide write gale.sea before rawframe.physics3d.step
 system gale.launch simulation launch write gale.berth entities lookup gale.sea before rawframe.physics3d.step
 system gale.float simulation float read gale.ship read rawframe.physics3d.pose read rawframe.physics3d.velocity write rawframe.physics3d.impulse entities lookup gale.sea lookup gale.helm after gale.tide before rawframe.physics3d.step
 
-# The sea: its clock, and how many ships it has been given.
-spawn 1 gale.sea
+# The sea: its clock, and how many ships it has been given, at the World's
+# origin, the still water's height.
+spawn 1 gale.sea rawframe.physics3d.pose
 
-replicate rawframe.physics3d.body rawframe.physics3d.pose gale.ship gale.sea
+replicate rawframe.physics3d.body rawframe.physics3d.pose gale.ship gale.sea gale.berth
 entity gale.ship player
 player gale.helm gale.berth
 input gale.helm
@@ -32,3 +40,14 @@ input gale.helm
 actions gale.actions
 sample sample.kest sample
 interpolate rawframe.physics3d.pose
+
+# What a client draws (D682): every hull by its shape; the sea as a broad
+# plane of water round its own ship, wherever that sails; and its view
+# from behind and above its ship, along its heading.
+presentation gale.look on rawframe.physics3d.body
+present gale.dress dress read rawframe.physics3d.body write gale.look
+presentation gale.water on gale.sea
+presentation gale.waters on gale.sea
+present gale.flood flood read gale.sea write gale.water write gale.waters entities lookup rawframe.physics3d.pose
+presentation gale.view on player
+present gale.frame frame read gale.berth write gale.view entities lookup rawframe.physics3d.pose
