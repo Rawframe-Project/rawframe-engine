@@ -48,8 +48,9 @@ INVARIANT = ("scene",)
 # Containers whose shading reads its surface through a material
 # (D481, D482): the scene declares its material extern and is linked with
 # the module that exports it, the blob's for the containers the engine
-# ships, beside the module of what a material is.
-LINKED = {"scene": ("blob_material", "material"), "shadow": ("blob_material", "material")}
+# ships, beside the module of what a material is, and the scene's also with
+# its lighting model (D727).
+LINKED = {"scene": ("blob_material", "material", "lighting"), "shadow": ("blob_material", "material")}
 # Each linked container's vertex entry and the fragment entries drawn with
 # it, whose inputs D3D12 asks be exactly its outputs: a material may leave
 # an input unread, which Slang drops from the entry (D418, D501).

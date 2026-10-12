@@ -196,6 +196,11 @@ struct InterfaceInput {
     std::string_view stream;
 };
 
+/// A Kest name's shape: lower case letters, digits, and underscores, a
+/// letter first, at most 64; an interface input's, a switch's, and an
+/// inline node's pin's.
+[[nodiscard]] bool kestNamed(std::string_view name);
+
 /// What an interface input's default or an instance's override of it
 /// says, of the input's type (D708, D715): numbers, three or four a vector
 /// or a color alike; an int a whole number within 2^24 either way of

@@ -18,7 +18,7 @@ else()
     target_compile_definitions(rawframe_render_scene_gpu PRIVATE RAWFRAME_PROGRAM_CONTAINER=0)
 endif()
 
-rawframe_module_tests(NAME render_scene_gpu SOURCES tests/bloom_test.cpp tests/capture_test.cpp tests/contact_test.cpp tests/decal_test.cpp tests/environment_test.cpp tests/focus_test.cpp tests/grading_test.cpp tests/metering_test.cpp tests/motion_test.cpp tests/multisample_test.cpp tests/occlusion_test.cpp tests/particle_test.cpp tests/post_process_test.cpp tests/program_test.cpp tests/reflection_test.cpp tests/renderer_test.cpp tests/shadow_test.cpp tests/skinning_test.cpp tests/surface_test.cpp tests/view_test.cpp)
+rawframe_module_tests(NAME render_scene_gpu SOURCES tests/bloom_test.cpp tests/capture_test.cpp tests/contact_test.cpp tests/decal_test.cpp tests/environment_test.cpp tests/features_test.cpp tests/focus_test.cpp tests/grading_test.cpp tests/metering_test.cpp tests/motion_test.cpp tests/multisample_test.cpp tests/occlusion_test.cpp tests/particle_test.cpp tests/post_process_test.cpp tests/program_test.cpp tests/reflection_test.cpp tests/renderer_test.cpp tests/shadow_test.cpp tests/skinning_test.cpp tests/surface_test.cpp tests/view_test.cpp)
 if(TARGET rawframe_render_scene_gpu_tests)
     # The material written for the tests, built by tools/gen_shaders.py
     # with the scene (D485), in the container the build's driver reads.
