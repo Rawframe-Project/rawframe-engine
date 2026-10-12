@@ -47,13 +47,118 @@ public float channelOf(float4 texel, float channel)
     return channel < 0.5 ? 1.0 : channel < 1.5 ? texel.r : channel < 2.5 ? texel.g : channel < 3.5 ? texel.b : texel.a;
 }
 
+// The spaces a material's transform reads (D714): the eye in the World's
+// axes; the model's rows, which place a point of the model's own relative
+// to the eye; the view, which turns the World's axes to the eye's (x to
+// its right, y up, z toward it); and the view and projection, unjittered,
+// which take a point relative to the eye to the clip's.
+public struct Spaces
+{
+    public float3 eye;
+    public float4 model0;
+    public float4 model1;
+    public float4 model2;
+    public float4x4 view;
+    public float4x4 clip;
+}
+
+// How a transform takes what it is given: a point, placed by every part of
+// a space; a vector, turned and scaled but never moved; or a normal, kept
+// across the surface it is normal to and made a unit again (D714).
+public static const uint kPoint = 0u;
+public static const uint kVector = 1u;
+public static const uint kNormal = 2u;
+
+// The model's turn and scale, its rows, and their inverse.
+float3x3 linearOf(Spaces spaces)
+{
+    return float3x3(spaces.model0.xyz, spaces.model1.xyz, spaces.model2.xyz);
+}
+
+float3x3 inverseOf(float3x3 rows)
+{
+    const float3 a = cross(rows[1], rows[2]);
+    const float3 b = cross(rows[2], rows[0]);
+    const float3 c = cross(rows[0], rows[1]);
+    return transpose(float3x3(a, b, c)) / dot(rows[0], a);
+}
+
+// From the model's own axes to the World's.
+public float3 fromObject(Spaces spaces, float3 value, uint kind)
+{
+    const float3x3 rows = linearOf(spaces);
+    if (kind == kNormal)
+    {
+        return normalize(mul(transpose(inverseOf(rows)), value));
+    }
+    const float3 turned = mul(rows, value);
+    return kind == kPoint
+               ? turned + float3(spaces.model0.w, spaces.model1.w, spaces.model2.w) + spaces.eye
+               : turned;
+}
+
+// From the World's axes to the model's own.
+public float3 toObject(Spaces spaces, float3 value, uint kind)
+{
+    const float3x3 rows = linearOf(spaces);
+    if (kind == kNormal)
+    {
+        return normalize(mul(transpose(rows), value));
+    }
+    const float3 moved =
+        kind == kPoint ? value - spaces.eye - float3(spaces.model0.w, spaces.model1.w, spaces.model2.w) : value;
+    return mul(inverseOf(rows), moved);
+}
+
+// From the eye's axes to the World's: the view only turns.
+public float3 fromView(Spaces spaces, float3 value, uint kind)
+{
+    const float3 turned = mul(float4(value, 0.0), spaces.view).xyz;
+    return kind == kPoint ? turned + spaces.eye : kind == kNormal ? normalize(turned) : turned;
+}
+
+// From the World's axes to the eye's.
+public float3 toView(Spaces spaces, float3 value, uint kind)
+{
+    const float3 turned = mul(spaces.view, float4(kind == kPoint ? value - spaces.eye : value, 0.0)).xyz;
+    return kind == kNormal ? normalize(turned) : turned;
+}
+
+// From the surface's tangent frame (its tangent, bitangent, and normal) to
+// the World's axes, and back: vectors and normals alone, where a point has
+// no place.
+float3x3 tangentFrameOf(float3 normal, float4 tangent)
+{
+    const float3 across = normalize(tangent.xyz - normal * dot(normal, tangent.xyz));
+    return float3x3(across, cross(normal, across) * tangent.w, normal);
+}
+
+public float3 fromTangent(float3 normal, float4 tangent, float3 value, uint kind)
+{
+    const float3 turned = mul(value, tangentFrameOf(normal, tangent));
+    return kind == kNormal ? normalize(turned) : turned;
+}
+
+public float3 toTangent(float3 normal, float4 tangent, float3 value, uint kind)
+{
+    const float3 turned = mul(tangentFrameOf(normal, tangent), value);
+    return kind == kNormal ? normalize(turned) : turned;
+}
+
+// A point in the World's axes to the clip's, before the divide.
+public float4 toClip(Spaces spaces, float3 value)
+{
+    return mul(spaces.clip, float4(value - spaces.eye, 1.0));
+}
+
 // Where a material is evaluated: the mesh's texture coordinates and their
 // derivatives across the pixel, taken before anything branches; the
 // surface's normal, normalized, and its tangent with the bitangent's sign;
 // the model's color; the draw's material among the frame's; the point in
 // the World's axes, and the presented World's time in seconds (D691), its
 // whole seconds and the fraction left (D702); the way to the eye from it,
-// a unit vector (D696); and whether the face drawn is its front (D705).
+// a unit vector (D696); whether the face drawn is its front (D705); and
+// the spaces a transform reads (D714).
 public struct Point
 {
     public float2 uv;
@@ -67,14 +172,16 @@ public struct Point
     public float2 time;
     public float3 view;
     public bool front;
+    public Spaces spaces;
 }
 
 // Where a material moves a vertex (SPEC-0026's position offset, D691): the
 // vertex placed by its model in the World's axes, its normal there, its
 // texture coordinates, the model's color, the presented World's time in
 // seconds, now or the frame before, its whole seconds and the fraction left
-// (D702), the way to the eye, a unit vector (D696), and the draw's material
-// among the frame's, whose parameters it reads (D708).
+// (D702), the way to the eye, a unit vector (D696), the draw's material
+// among the frame's, whose parameters it reads (D708), and the spaces a
+// transform reads (D714).
 public struct Placed
 {
     public float3 position;
@@ -84,6 +191,7 @@ public struct Placed
     public float2 time;
     public float3 view;
     public uint material;
+    public Spaces spaces;
 }
 
 // What a material gives the lit shading model (ADR-0031's Surface, D299):

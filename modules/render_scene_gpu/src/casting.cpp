@@ -145,8 +145,11 @@ ShadowPasses::declare(const render_scene::SceneFrame& frame, const FrameBlock& b
     cascadeCount_ = frame.shadows.count;
     side_ = cascadeCount_ > 0 ? frame.shadows.side : 1;
     for (std::size_t at = 0; at < cascadeBlocks_.size(); ++at) {
-        cascadeBlocks_.at(at) =
-            CasterBlock{.viewProjection = block.cascades.at(at), .eye = block.eye, .time = block.time};
+        cascadeBlocks_.at(at) = CasterBlock{.viewProjection = block.cascades.at(at),
+                                            .eye = block.eye,
+                                            .time = block.time,
+                                            .view = block.view,
+                                            .clip = block.unjittered};
     }
     mrhiTextureDef sunDef = mrhiDefaultTextureDef();
     sunDef.format = kShadowFormat;
@@ -190,7 +193,11 @@ ShadowPasses::declare(const render_scene::SceneFrame& frame, const FrameBlock& b
             return failed("a shadow square's view could not be declared", mrhi_errorCapacity);
         }
         writes.push_back(wholeOf(slotViews_.back(), mrhi_accessCopyDestination));
-        slotBlocks_.push_back({.viewProjection = slot.viewProjection, .eye = block.eye, .time = block.time});
+        slotBlocks_.push_back({.viewProjection = slot.viewProjection,
+                               .eye = block.eye,
+                               .time = block.time,
+                               .view = block.view,
+                               .clip = block.unjittered});
         slotViewports_.push_back({.x = static_cast<float>(slot.x),
                                   .y = static_cast<float>(slot.y),
                                   .width = static_cast<float>(slot.side),

@@ -12,12 +12,16 @@ import material;
 extern struct Material : IMaterial;
 
 // The square's view, and the frame's eye in the World's axes and time,
-// now and the frame before (D691).
+// now and the frame before (D691); and the frame's view and its view and
+// projection, unjittered, which a material's transform reads as the
+// scene's does, so a caster moves as its model is drawn (D714).
 struct Cascade
 {
     float4x4 viewProjection;
     float4 eye;
     float4 time;
+    float4x4 view;
+    float4x4 clip;
 }
 
 [[vk::binding(0, 0)]] ConstantBuffer<Cascade> cascade;
@@ -40,6 +44,18 @@ struct Caster
     [[vk::location(13)]] float2 uv;
 }
 
+Spaces spacesOf(float4 model0, float4 model1, float4 model2)
+{
+    Spaces spaces;
+    spaces.eye = cascade.eye.xyz;
+    spaces.model0 = model0;
+    spaces.model1 = model1;
+    spaces.model2 = model2;
+    spaces.view = cascade.view;
+    spaces.clip = cascade.clip;
+    return spaces;
+}
+
 float4 placed(Caster caster)
 {
     const float4 vertex = float4(caster.position, 1.0);
@@ -52,6 +68,7 @@ float4 placed(Caster caster)
     here.time = cascade.time.xy;
     here.view = normalize(-there);
     here.material = uint(caster.material);
+    here.spaces = spacesOf(caster.model0, caster.model1, caster.model2);
     return mul(cascade.viewProjection, float4(there + Material.offset(here), 1.0));
 }
 
@@ -94,8 +111,8 @@ void cut(Cut cut, bool front: SV_IsFrontFace)
 {
     // A caster carries no normal: the material's opacity is read facing
     // the sun and seen along that normal (D696), its front the face the
-    // sun sees (D705), the coordinates' derivatives taken before anything
-    // branches.
+    // sun sees (D705), its model the World's axes at the eye (D714), the
+    // coordinates' derivatives taken before anything branches.
     Point point;
     point.uv = cut.uv;
     point.dx = ddx(cut.uv);
@@ -108,6 +125,7 @@ void cut(Cut cut, bool front: SV_IsFrontFace)
     point.time = cascade.time.xy;
     point.view = float3(0.0, 0.0, 1.0);
     point.front = front;
+    point.spaces = spacesOf(float4(1.0, 0.0, 0.0, 0.0), float4(0.0, 1.0, 0.0, 0.0), float4(0.0, 0.0, 1.0, 0.0));
     const Evaluated evaluated = Material.evaluate(point);
     if (evaluated.opacity < materials[blobOf(cut.material) + 3u].z)
     {

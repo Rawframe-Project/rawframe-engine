@@ -81,6 +81,9 @@ struct Frame
     // vertices reads them.
     float4 eye;
     float4 time;
+    // The view's turn from the World's axes to the eye's, which a
+    // material's transform reads (D714).
+    float4x4 view;
 }
 
 // A point or spot light (D290): its place relative to the eye and its
@@ -182,6 +185,10 @@ struct Corner
     [[vk::location(5)]] nointerpolation uint material;
     [[vk::location(6)]] float2 uv;
     [[vk::location(7)]] float4 tangent;
+    // The model's rows, which a material's transform reads (D714).
+    [[vk::location(8)]] nointerpolation float4 model0;
+    [[vk::location(9)]] nointerpolation float4 model1;
+    [[vk::location(10)]] nointerpolation float4 model2;
 }
 
 // A mesh's vertex and its instance's rows.
@@ -208,6 +215,20 @@ struct Vertex
     [[vk::location(15)]] float3 before;
 }
 
+// The spaces a material's transform reads (D714): the model's rows given,
+// the frame's eye, view, and its view and projection unjittered.
+Spaces spacesOf(float4 model0, float4 model1, float4 model2)
+{
+    Spaces spaces;
+    spaces.eye = frame.eye.xyz;
+    spaces.model0 = model0;
+    spaces.model1 = model1;
+    spaces.model2 = model2;
+    spaces.view = frame.view;
+    spaces.clip = frame.unjittered;
+    return spaces;
+}
+
 [shader("vertex")]
 Corner vs(Vertex vertex)
 {
@@ -227,6 +248,7 @@ Corner vs(Vertex vertex)
     here.time = frame.time.xy;
     here.view = normalize(-still);
     here.material = uint(vertex.material);
+    here.spaces = spacesOf(vertex.model0, vertex.model1, vertex.model2);
     const float3 placed = still + Material.offset(here);
     Corner corner;
     corner.position = mul(frame.viewProjection, float4(placed, 1.0));
@@ -239,6 +261,10 @@ Corner vs(Vertex vertex)
     there.position = stillThen + frame.eye.xyz;
     there.time = frame.time.zw;
     there.view = normalize(-stillThen);
+    // The model's rows the frame before's; the view the frame's own.
+    there.spaces.model0 = vertex.previous0;
+    there.spaces.model1 = vertex.previous1;
+    there.spaces.model2 = vertex.previous2;
     const float3 was = stillThen + Material.offset(there);
     corner.now = mul(frame.unjittered, float4(placed, 1.0)).xyw;
     corner.before = mul(frame.previous, float4(was, 1.0)).xyw;
@@ -250,6 +276,9 @@ Corner vs(Vertex vertex)
                                  dot(vertex.model2.xyz, vertex.tangent.xyz));
     const float mirror = dot(vertex.model0.xyz, cross(vertex.model1.xyz, vertex.model2.xyz)) < 0.0 ? -1.0 : 1.0;
     corner.tangent = float4(turned, vertex.tangent.w * mirror);
+    corner.model0 = vertex.model0;
+    corner.model1 = vertex.model1;
+    corner.model2 = vertex.model2;
     return corner;
 }
 
@@ -260,7 +289,8 @@ Corner vs(Vertex vertex)
 bool unreadable(Corner corner)
 {
     return isnan(corner.normal.x + corner.color.x + corner.placed.x + corner.now.x + corner.before.x +
-                 float(corner.material) + corner.uv.x + corner.tangent.x);
+                 float(corner.material) + corner.uv.x + corner.tangent.x + corner.model0.x + corner.model1.x +
+                 corner.model2.x);
 }
 
 // Where the material is evaluated at `corner` (D482): the coordinates'
@@ -280,6 +310,7 @@ Point pointOf(Corner corner, bool front)
     point.time = frame.time.xy;
     point.view = normalize(-corner.placed);
     point.front = front;
+    point.spaces = spacesOf(corner.model0, corner.model1, corner.model2);
     return point;
 }
 
@@ -737,6 +768,7 @@ Lit shaded(Corner corner, bool decaled, bool front)
     point.time = frame.time.xy;
     point.view = toEye;
     point.front = front;
+    point.spaces = spacesOf(corner.model0, corner.model1, corner.model2);
     const Evaluated evaluated = Material.evaluate(point);
     float3 color = evaluated.color;
     float3 normal = evaluated.normal;

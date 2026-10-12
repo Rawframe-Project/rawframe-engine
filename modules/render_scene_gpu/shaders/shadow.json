@@ -36,7 +36,7 @@
      "outputs": []}
   ],
   "bindings": [
-    {"table": 0, "slot": 0, "kind": "uniform_buffer", "stages": ["vertex", "fragment"], "min_size": 96},
+    {"table": 0, "slot": 0, "kind": "uniform_buffer", "stages": ["vertex", "fragment"], "min_size": 224},
     {"table": 0, "slot": 9, "kind": "read_only_storage_buffer", "stages": ["fragment"], "min_size": 144},
     {"table": 0, "slot": 10, "kind": "sampled_texture", "stages": ["fragment"],
      "sample_type": "float", "view_dimension": "2d", "multisampled": false},

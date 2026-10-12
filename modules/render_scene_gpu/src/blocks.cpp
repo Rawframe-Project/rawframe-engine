@@ -102,6 +102,7 @@ FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, s
     const std::array<float, 2> kNow = split(frame.time[0]);
     const std::array<float, 2> kBefore = split(frame.time[1]);
     block.time = {kNow[0], kNow[1], kBefore[0], kBefore[1]};
+    block.view = frame.view;
     const render_scene::SceneShadows& kShadows = frame.shadows;
     for (std::size_t at = 0; at < kShadows.count; ++at) {
         block.cascadeFar[at] = kShadows.cascades[at].far;
