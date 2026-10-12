@@ -881,13 +881,116 @@
       }
     },
     "a70000000000004e": {
+      "type": "rawframe/constant@1",
+      "params": {
+        "type": "vec4",
+        "value": [
+          0.25,
+          0.5,
+          0.75,
+          1
+        ]
+      },
+      "inputs": {}
+    },
+    "a70000000000004f": {
+      "type": "rawframe/combine4@1",
+      "params": {},
+      "inputs": {
+        "w": 1,
+        "x": {
+          "node": "a70000000000004d",
+          "output": "out"
+        },
+        "y": {
+          "node": "a700000000000001",
+          "output": "seconds"
+        },
+        "z": 0.5
+      }
+    },
+    "a700000000000050": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a70000000000004f",
+          "output": "out"
+        },
+        "b": {
+          "node": "a70000000000004e",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000051": {
+      "type": "rawframe/separate4@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000050",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000052": {
+      "type": "rawframe/swizzle@1",
+      "params": {
+        "pattern": "wzyx"
+      },
+      "inputs": {
+        "in": {
+          "node": "a700000000000050",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000053": {
+      "type": "rawframe/length@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000052",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000054": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a70000000000004d",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000053",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000055": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000054",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000051",
+          "output": "a"
+        }
+      }
+    },
+    "a700000000000056": {
       "type": "rawframe/compare@1",
       "params": {
         "operator": "less"
       },
       "inputs": {
         "a": {
-          "node": "a70000000000004d",
+          "node": "a700000000000055",
           "output": "out"
         },
         "b": {
@@ -896,34 +999,34 @@
         }
       }
     },
-    "a70000000000004f": {
+    "a700000000000057": {
       "type": "rawframe/compare@1",
       "params": {
         "operator": "greater_equal"
       },
       "inputs": {
         "a": {
-          "node": "a70000000000004d",
+          "node": "a700000000000055",
           "output": "out"
         },
         "b": 0.5
       }
     },
-    "a700000000000050": {
+    "a700000000000058": {
       "type": "rawframe/and@1",
       "params": {},
       "inputs": {
         "a": {
-          "node": "a70000000000004e",
+          "node": "a700000000000056",
           "output": "out"
         },
         "b": {
-          "node": "a70000000000004f",
+          "node": "a700000000000057",
           "output": "out"
         }
       }
     },
-    "a700000000000051": {
+    "a700000000000059": {
       "type": "rawframe/constant@1",
       "params": {
         "type": "bool",
@@ -931,60 +1034,60 @@
       },
       "inputs": {}
     },
-    "a700000000000052": {
+    "a70000000000005a": {
       "type": "rawframe/or@1",
       "params": {},
       "inputs": {
         "a": {
-          "node": "a700000000000050",
+          "node": "a700000000000058",
           "output": "out"
         },
         "b": {
-          "node": "a700000000000051",
+          "node": "a700000000000059",
           "output": "out"
         }
       }
     },
-    "a700000000000053": {
+    "a70000000000005b": {
       "type": "rawframe/xor@1",
       "params": {},
       "inputs": {
         "a": {
-          "node": "a700000000000052",
+          "node": "a70000000000005a",
           "output": "out"
         },
         "b": {
-          "node": "a70000000000004e",
+          "node": "a700000000000056",
           "output": "out"
         }
       }
     },
-    "a700000000000054": {
+    "a70000000000005c": {
       "type": "rawframe/not@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a700000000000053",
+          "node": "a70000000000005b",
           "output": "out"
         }
       }
     },
-    "a700000000000055": {
+    "a70000000000005d": {
       "type": "rawframe/select@1",
       "params": {},
       "inputs": {
         "a": {
-          "node": "a70000000000004d",
+          "node": "a700000000000055",
           "output": "out"
         },
         "b": 0.25,
         "condition": {
-          "node": "a700000000000054",
+          "node": "a70000000000005c",
           "output": "out"
         }
       }
     },
-    "a700000000000056": {
+    "a70000000000005e": {
       "type": "rawframe/select@1",
       "params": {},
       "inputs": {
@@ -994,12 +1097,12 @@
         },
         "b": 1,
         "condition": {
-          "node": "a70000000000004e",
+          "node": "a700000000000056",
           "output": "out"
         }
       }
     },
-    "a700000000000057": {
+    "a70000000000005f": {
       "type": "rawframe/swizzle@1",
       "params": {
         "pattern": "zyx"
@@ -1011,7 +1114,7 @@
         }
       }
     },
-    "a700000000000058": {
+    "a700000000000060": {
       "type": "rawframe/constant@1",
       "params": {
         "type": "color3",
@@ -1023,120 +1126,120 @@
       },
       "inputs": {}
     },
-    "a700000000000059": {
+    "a700000000000061": {
       "type": "rawframe/multiply@1",
       "params": {},
       "inputs": {
         "a": {
-          "node": "a700000000000057",
+          "node": "a70000000000005f",
           "output": "out"
         },
         "b": {
-          "node": "a700000000000058",
+          "node": "a700000000000060",
           "output": "out"
         }
       }
     },
-    "a70000000000005a": {
+    "a700000000000062": {
       "type": "rawframe/rgb_to_hsv@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a700000000000059",
+          "node": "a700000000000061",
           "output": "out"
         }
       }
     },
-    "a70000000000005b": {
+    "a700000000000063": {
       "type": "rawframe/hsv_to_rgb@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a70000000000005a",
+          "node": "a700000000000062",
           "output": "out"
         }
       }
     },
-    "a70000000000005c": {
+    "a700000000000064": {
       "type": "rawframe/rgb_to_hsv@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a70000000000005b",
+          "node": "a700000000000063",
           "output": "out"
         }
       }
     },
-    "a70000000000005d": {
+    "a700000000000065": {
       "type": "rawframe/hsv_to_rgb@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a70000000000005c",
+          "node": "a700000000000064",
           "output": "out"
         }
       }
     },
-    "a70000000000005e": {
+    "a700000000000066": {
       "type": "rawframe/luminance@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a70000000000005d",
+          "node": "a700000000000065",
           "output": "out"
         }
       }
     },
-    "a70000000000005f": {
+    "a700000000000067": {
       "type": "rawframe/multiply@1",
       "params": {},
       "inputs": {
         "a": {
-          "node": "a700000000000055",
+          "node": "a70000000000005d",
           "output": "out"
         },
         "b": {
-          "node": "a70000000000005e",
+          "node": "a700000000000066",
           "output": "out"
         }
       }
     },
-    "a700000000000060": {
+    "a700000000000068": {
       "type": "rawframe/saturate@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a70000000000005f",
+          "node": "a700000000000067",
           "output": "out"
         }
       }
     },
-    "a700000000000061": {
+    "a700000000000069": {
       "type": "rawframe/combine3@1",
       "params": {},
       "inputs": {
         "x": 0,
         "y": {
-          "node": "a700000000000060",
+          "node": "a700000000000068",
           "output": "out"
         },
         "z": 0
       }
     },
-    "a700000000000062": {
+    "a70000000000006a": {
       "type": "rawframe/surface@1",
       "params": {},
       "inputs": {
         "base_color": {
-          "node": "a70000000000005d",
+          "node": "a700000000000065",
           "output": "out"
         },
         "geometry_normal": {
-          "node": "a700000000000056",
+          "node": "a70000000000005e",
           "output": "out"
         },
         "position_offset": {
-          "node": "a700000000000061",
+          "node": "a700000000000069",
           "output": "out"
         },
         "specular_roughness": {

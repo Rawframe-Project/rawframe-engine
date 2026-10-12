@@ -24,7 +24,10 @@ enum class Carried : std::uint8_t {
     Vec2,
     Vec3,
     /// What the logic nodes take and give (D697).
-    Bool
+    Bool,
+    /// The four-wide types (D706).
+    Vec4,
+    Color4
 };
 
 /// SPEC-0026's states' words, in their enumerations' order.
@@ -53,7 +56,7 @@ inline constexpr std::array<std::string_view, 3> kBlends = {"opaque", "masked", 
 /// what it carries when that is known.
 struct Operand {
     std::optional<graph::Connection> from;
-    std::array<double, 3> literal{};
+    std::array<double, 4> literal{};
     std::optional<Carried> carried;
 };
 
@@ -127,10 +130,11 @@ struct Math {
 
 [[nodiscard]] result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& node);
 
-/// A `combine2` or `combine3` node's inputs, `x`, `y`, and for three `z`,
-/// checked: each a float, all given (D691, D695).
+/// A `combine2`, `combine3`, or `combine4` node's inputs, `x`, `y`, and
+/// for three `z`, for four `w` too, checked: each a float, all given (D691,
+/// D695, D706).
 struct Combined {
-    std::array<Operand, 3> parts;
+    std::array<Operand, 4> parts;
     std::size_t count = 0;
 };
 
@@ -140,10 +144,14 @@ struct Combined {
 /// (D695).
 [[nodiscard]] result::Result<Operand> separate2In(const graph::Document& surface, const graph::Node& node);
 
+/// A `separate4` node's input, checked: a vec4 or a color4, its outputs
+/// `r`, `g`, `b`, and `a`, as a separate3's are (D706).
+[[nodiscard]] result::Result<Operand> separate4In(const graph::Document& surface, const graph::Node& node);
+
 /// A `swizzle` node's input and its declared pattern, checked (D695): one
-/// to three of `x`, `y`, and `z`, each within the input's width, a vec2 or
-/// a vec3 or a color3; its `out` a float, a vec2, or a vec3 by the
-/// pattern's length, a color3 for three of a color3.
+/// to four of `x`, `y`, `z`, and `w`, each within the input's width, a
+/// vector or a color; its `out` a float or a vector by the pattern's
+/// length, a color3 or a color4 for three or four of a color (D706).
 struct Swizzle {
     Operand in;
     std::string pattern;

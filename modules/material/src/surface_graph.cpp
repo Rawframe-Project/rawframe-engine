@@ -260,7 +260,8 @@ bool known(const graph::Node& node) {
             *kText == kWorldPositionType || *kText == kWorldNormalType || *kText == kCombine3Type ||
             *kText == kCombine2Type || *kText == kSeparate2Type || *kText == kSwizzleType ||
             *kText == kVertexColorType || *kText == kViewDirectionType || *kText == kWorldTangentType ||
-            *kText == kCompareType || *kText == kConstantType || *kText == kFrontFacingType || math(*kText));
+            *kText == kCompareType || *kText == kConstantType || *kText == kFrontFacingType ||
+            *kText == kCombine4Type || *kText == kSeparate4Type || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -308,17 +309,17 @@ result::Result<Operand> operandOf(const graph::Document& surface, const Value& v
         return made;
     }
     const std::size_t kCount = value.kind() == Value::Kind::Array ? value.items().size() : 0;
-    if (kCount != 2 && kCount != 3) {
-        return invalid("a math node's literal is a number, two or three of them, or a bool");
+    if (kCount < 2 || kCount > 4) {
+        return invalid("a math node's literal is a number, two to four of them, or a bool");
     }
     for (std::size_t at = 0; at < kCount; ++at) {
         const std::optional<double> kChannel = kFinite(value.items()[at]);
         if (!kChannel.has_value()) {
-            return invalid("a math node's literal is a number, or two or three of them");
+            return invalid("a math node's literal is a number, or two to four of them");
         }
-        made.literal[at] = *kChannel;
+        made.literal.at(at) = *kChannel;
     }
-    made.carried = kCount == 2 ? Carried::Vec2 : Carried::Color3;
+    made.carried = kCount == 2 ? Carried::Vec2 : kCount == 3 ? Carried::Color3 : Carried::Color4;
     return made;
 }
 
@@ -343,13 +344,21 @@ result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const gr
         RAWFRAME_TRY_ASSIGN(made.inputs.at(at), operandOf(surface, *kInput));
     }
     const std::span<Operand> kIn{made.inputs.data(), kNode.count};
-    // Three numbers are a color3 or a vec3, as a connected input is.
-    const bool kVector = std::ranges::any_of(kIn, [](const Operand& each) {
-        return each.carried == Carried::Vec3;
-    });
+    // Three numbers are a color3 or a vec3, and four a color4 or a vec4, as
+    // a connected input is.
+    const auto kAny = [&kIn](Carried carried) {
+        return std::ranges::any_of(kIn, [carried](const Operand& each) {
+            return each.carried == carried;
+        });
+    };
+    const bool kVector3 = kAny(Carried::Vec3);
+    const bool kVector4 = kAny(Carried::Vec4);
     for (Operand& each : kIn) {
-        if (!each.from.has_value() && each.carried == Carried::Color3 && kVector) {
+        if (!each.from.has_value() && each.carried == Carried::Color3 && kVector3) {
             each.carried = Carried::Vec3;
+        }
+        if (!each.from.has_value() && each.carried == Carried::Color4 && kVector4) {
+            each.carried = Carried::Vec4;
         }
     }
     const bool kKnown = std::ranges::all_of(kIn, [](const Operand& each) {
@@ -359,7 +368,7 @@ result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const gr
         return made;
     }
     const auto kIsVector = [](Carried carried) {
-        return carried == Carried::Vec2 || carried == Carried::Vec3;
+        return carried == Carried::Vec2 || carried == Carried::Vec3 || carried == Carried::Vec4;
     };
     switch (kNode.rule) {
     case Logical:
@@ -409,7 +418,7 @@ result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const gr
     case Measure:
     case Unit:
         if (!kIsVector(*kIn[0].carried)) {
-            return invalid("a length or normalize node's input is a vec2 or a vec3");
+            return invalid("a length or normalize node's input is a vector");
         }
         made.out = kNode.rule == Measure ? Carried::Float : *kIn[0].carried;
         break;
@@ -436,13 +445,17 @@ result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& n
 }
 
 result::Result<Combined> combineIn(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 3> kInputs = {"x", "y", "z"};
-    Combined made{.count = typeOf(node) == kCombine2Type ? 2U : 3U};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, std::span{kInputs.data(), made.count}));
+    // In name order: w before x.
+    constexpr std::array<std::string_view, 4> kInputs = {"x", "y", "z", "w"};
+    constexpr std::array<std::string_view, 4> kNamed = {"w", "x", "y", "z"};
+    Combined made{.count = typeOf(node) == kCombine2Type ? 2U : typeOf(node) == kCombine3Type ? 3U : 4U};
+    RAWFRAME_TRY_ASSIGN(const auto kParts,
+                        made.count == 4 ? partsOf(node, {}, kNamed)
+                                        : partsOf(node, {}, std::span{kInputs.data(), made.count}));
     for (std::size_t at = 0; at < made.count; ++at) {
         const Value* kInput = kParts.second->find(kInputs.at(at));
         if (kInput == nullptr) {
-            return invalid("a combine node's inputs are x, y, and for three z, all given");
+            return invalid("a combine node's inputs are x, y, for three z, for four w too, all given");
         }
         RAWFRAME_TRY_ASSIGN(made.parts.at(at), operandOf(surface, *kInput));
         if (made.parts.at(at).carried.has_value() && *made.parts.at(at).carried != Carried::Float) {
@@ -477,33 +490,43 @@ result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::N
     }
     Swizzle made{.pattern = *kPattern->text()};
     RAWFRAME_TRY_ASSIGN(made.in, operandOf(surface, *kIn));
-    const std::size_t kWidth = !made.in.carried.has_value()         ? 3
-                               : *made.in.carried == Carried::Vec2  ? 2
-                               : *made.in.carried == Carried::Float ? 0
-                                                                    : 3;
-    if (made.pattern.empty() || made.pattern.size() > 3 || kWidth == 0 ||
-        !std::ranges::all_of(made.pattern, [kWidth](char letter) {
-            return letter >= 'x' && letter <= 'z' && static_cast<std::size_t>(letter - 'x') < kWidth;
+    const std::optional<Carried>& kFrom = made.in.carried;
+    const bool kFour = kFrom == Carried::Vec4 || kFrom == Carried::Color4;
+    const std::size_t kWidth = !kFrom.has_value()                                  ? 4
+                               : kFrom == Carried::Vec2                            ? 2
+                               : kFrom == Carried::Float || kFrom == Carried::Bool ? 0
+                               : kFour                                             ? 4
+                                                                                   : 3;
+    // x, y, z, and w: the channel each letter names.
+    const auto kChannel = [](char letter) -> std::size_t {
+        return letter == 'w' ? 3 : letter >= 'x' && letter <= 'z' ? static_cast<std::size_t>(letter - 'x') : 4;
+    };
+    if (made.pattern.empty() || made.pattern.size() > 4 || kWidth == 0 ||
+        !std::ranges::all_of(made.pattern, [&kChannel, kWidth](char letter) {
+            return kChannel(letter) < kWidth;
         })) {
-        return invalid("a swizzle's pattern is one to three of x, y, and z, within its input's width");
+        return invalid("a swizzle's pattern is one to four of x, y, z, and w, within its input's width");
     }
-    if (made.in.carried.has_value()) {
-        made.out = made.pattern.size() == 1              ? Carried::Float
-                   : made.pattern.size() == 2            ? Carried::Vec2
-                   : *made.in.carried == Carried::Color3 ? Carried::Color3
-                                                         : Carried::Vec3;
+    if (kFrom.has_value()) {
+        const bool kColor = kFrom == Carried::Color3 || kFrom == Carried::Color4;
+        made.out = made.pattern.size() == 1   ? Carried::Float
+                   : made.pattern.size() == 2 ? Carried::Vec2
+                   : made.pattern.size() == 3 ? (kColor ? Carried::Color3 : Carried::Vec3)
+                                              : (kColor ? Carried::Color4 : Carried::Vec4);
     }
     return made;
 }
 
 result::Result<Operand> constantIn(const graph::Node& node) {
     constexpr std::array<std::string_view, 2> kParams = {"type", "value"};
-    constexpr std::array<std::pair<std::string_view, Carried>, 5> kTypes = {{{"float", Carried::Float},
+    constexpr std::array<std::pair<std::string_view, Carried>, 7> kTypes = {{{"float", Carried::Float},
                                                                              {"bool", Carried::Bool},
                                                                              {"vec2", Carried::Vec2},
                                                                              {"vec3", Carried::Vec3},
-                                                                             {"color3", Carried::Color3}}};
-    constexpr std::array<std::string_view, 3> kWaiting = {"int", "vec4", "color4"};
+                                                                             {"color3", Carried::Color3},
+                                                                             {"vec4", Carried::Vec4},
+                                                                             {"color4", Carried::Color4}}};
+    constexpr std::array<std::string_view, 1> kWaiting = {"int"};
     RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, {}));
     const Value* kType = kParts.first->find("type");
     const Value* kValue = kParts.first->find("value");
@@ -512,18 +535,20 @@ result::Result<Operand> constantIn(const graph::Node& node) {
     }
     const std::string_view kName = *kType->text();
     if (std::ranges::find(kWaiting, kName) != kWaiting.end()) {
-        return unsupported("a constant of an int, a vec4, or a color4 waits for those types in generation 1");
+        return unsupported("a constant of an int waits for the int type in generation 1");
     }
     const auto kFound = std::ranges::find(kTypes, kName, &std::pair<std::string_view, Carried>::first);
     if (kFound == kTypes.end()) {
         return invalid("a constant's type is one of the graph's types");
     }
     // Its value read as an input's literal is, then held to the declared
-    // shape: a literal of three numbers reads as a color3 either way.
+    // shape: a literal of three or four numbers reads as a color either way.
     const graph::Document kNone;
     RAWFRAME_TRY_ASSIGN(Operand made, operandOf(kNone, *kValue));
-    const bool kThree = kFound->second == Carried::Vec3 || kFound->second == Carried::Color3;
-    if (made.carried != (kThree ? Carried::Color3 : kFound->second)) {
+    const Carried kRead = kFound->second == Carried::Vec3   ? Carried::Color3
+                          : kFound->second == Carried::Vec4 ? Carried::Color4
+                                                            : kFound->second;
+    if (made.carried != kRead) {
         return invalid("a constant's value is of its declared type");
     }
     made.carried = kFound->second;
@@ -622,6 +647,20 @@ result::Result<Operand> separate3In(const graph::Document& surface, const graph:
     return made;
 }
 
+result::Result<Operand> separate4In(const graph::Document& surface, const graph::Node& node) {
+    constexpr std::array<std::string_view, 1> kInputs = {"in"};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kInputs));
+    const Value* kIn = kParts.second->find("in");
+    if (kIn == nullptr) {
+        return invalid("a separate4 node's input is in, given");
+    }
+    RAWFRAME_TRY_ASSIGN(Operand made, operandOf(surface, *kIn));
+    if (made.carried.has_value() && *made.carried != Carried::Color4 && *made.carried != Carried::Vec4) {
+        return invalid("a separate4 node's input is a color4 or a vec4");
+    }
+    return made;
+}
+
 result::Result<NormalMap> normalMapIn(const graph::Document& surface, const graph::Node& node) {
     constexpr std::array<std::string_view, 1> kParams = {"scale"};
     constexpr std::array<std::string_view, 1> kInputs = {"in"};
@@ -702,9 +741,16 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
         RAWFRAME_TRY_ASSIGN(const MathInputs kMath, mathInputsOf(surface, *kSource));
         return kMath.out;
     }
-    if ((kType == kCombine3Type || kType == kCombine2Type) && from.output == "out") {
+    if ((kType == kCombine3Type || kType == kCombine2Type || kType == kCombine4Type) && from.output == "out") {
         RAWFRAME_TRY_ASSIGN(const Combined kCombined, combineIn(surface, *kSource));
-        return std::optional{kCombined.count == 2 ? Carried::Vec2 : Carried::Vec3};
+        return std::optional{kCombined.count == 2   ? Carried::Vec2
+                             : kCombined.count == 3 ? Carried::Vec3
+                                                    : Carried::Vec4};
+    }
+    if (kType == kSeparate4Type &&
+        (from.output == "r" || from.output == "g" || from.output == "b" || from.output == "a")) {
+        RAWFRAME_TRY(separate4In(surface, *kSource));
+        return std::optional{Carried::Float};
     }
     if (kType == kSeparate2Type && (from.output == "x" || from.output == "y")) {
         RAWFRAME_TRY(separate2In(surface, *kSource));

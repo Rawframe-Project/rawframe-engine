@@ -377,13 +377,15 @@ RAWFRAME_TEST(AConstantIsWrittenAsItsTypedValue) {
     const auto kSelected = generateSlang(kChosen);
     RAWFRAME_EXPECT(kSelected.has_value() && kSelected->source.contains("(false) ? (1.0) : (") &&
                     kSelected->source.contains("(float2(0.125, 0.625)).y"));
-    // A vec3 feeds no color; a value not of its type; no such type; a type
-    // generation 1 does not carry yet; the type or the value left out.
+    // A vec3 feeds no color; a value not of its type; no such type; the
+    // int, which generation 1 does not carry yet; the type or the value left
+    // out.
     RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("vec3", kThree(0.25, 0.5, 0.75))), MaterialError::Invalid));
     RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("color3", pair(0.25, 0.5))), MaterialError::Invalid));
     RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("color3", Value::boolean(true))), MaterialError::Invalid));
     RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("matrix3", kThree(0, 0, 0))), MaterialError::Invalid));
-    RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("color4", kThree(0, 0, 0))), MaterialError::Unsupported));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("color4", kThree(0, 0, 0))), MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("int", Value::integer(1))), MaterialError::Unsupported));
     RAWFRAME_EXPECT(
         refusedWith(validateSurface(surfaceOf(
                         objectOf({{"specular_roughness", from(kWave, "out")}}),
@@ -414,4 +416,82 @@ RAWFRAME_TEST(AGraphColoredByItsFaceIsWrittenAsTheSlangTheScenesTestsDraw) {
          combineOf(kLifted, Value::real(0), from(kWave, "out"), Value::real(0))});
     RAWFRAME_EXPECT(validateSurface(kLiftedByFace).has_value());
     RAWFRAME_EXPECT(refusedWith(generateSlang(kLiftedByFace), MaterialError::Unsupported));
+}
+
+RAWFRAME_TEST(AFourWideValueIsCombinedSeparatedAndSwizzled) {
+    // D706: a vec4 combined from floats, measured, swizzled back to three
+    // and to four with w, and a color4 constant separated into its alpha.
+    const auto kFourOf = [](Value w) {
+        return nodeOf(
+            kAxes,
+            kCombine4Type,
+            Value::object(),
+            objectOf(
+                {{"w", std::move(w)}, {"x", from(kTime, "seconds")}, {"y", Value::real(1)}, {"z", Value::real(2)}}));
+    };
+    const auto kSwizzled = [&kFourOf](std::string_view pattern) {
+        return surfaceOf(
+            objectOf({{"base_color", from(kSlope, "out")}, {"specular_roughness", from(kWave, "a")}}),
+            {timeOf(Value::string("simulation")),
+             kFourOf(Value::real(3)),
+             nodeOf(kWave, kSeparate4Type, Value::object(), objectOf({{"in", from(kFacing, "out")}})),
+             nodeOf(kSlope,
+                    "rawframe/multiply@1",
+                    Value::object(),
+                    objectOf({{"a", from(kLifted, "out")}, {"b", from(kTilted, "out")}})),
+             nodeOf(kLifted,
+                    kConstantType,
+                    objectOf({{"type", Value::string("color3")},
+                              {"value", Value::array({Value::real(1), Value::real(1), Value::real(1)})}}),
+                    Value::object()),
+             nodeOf(kTilted,
+                    kSwizzleType,
+                    objectOf({{"pattern", Value::string(std::string{pattern})}}),
+                    objectOf({{"in", from(kAxes, "out")}})),
+             nodeOf(kFacing,
+                    kConstantType,
+                    objectOf(
+                        {{"type", Value::string("color4")},
+                         {"value",
+                          Value::array({Value::real(0.5), Value::real(0.25), Value::real(0.125), Value::real(0.75)})}}),
+                    Value::object())});
+    };
+    // A vec3 swizzle of a vec4 multiplies no color3: refused; a four-letter
+    // one feeds no color3 either.
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kSwizzled("wzy")), MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kSwizzled("wzyx")), MaterialError::Invalid));
+    // Swizzled from a color4, three of its channels are a color3.
+    graph::Document colored = kSwizzled("wzy");
+    colored.nodes[6] = nodeOf(
+        kTilted, kSwizzleType, objectOf({{"pattern", Value::string("wzy")}}), objectOf({{"in", from(kFacing, "out")}}));
+    RAWFRAME_EXPECT(validateSurface(colored).has_value());
+    const auto kMade = generateSlang(colored);
+    RAWFRAME_EXPECT(kMade.has_value() && kMade->source.contains("float4(0.5, 0.25, 0.125, 0.75)") &&
+                    kMade->source.contains(").wzy") && kMade->source.contains(").a"));
+    // A combine4 left without w, a separate4 of a vec3, a swizzle past a
+    // vec3's width, and the length of a vec4.
+    graph::Document unfinished = colored;
+    unfinished.nodes[2] = nodeOf(kAxes,
+                                 kCombine4Type,
+                                 Value::object(),
+                                 objectOf({{"x", Value::real(0)}, {"y", Value::real(1)}, {"z", Value::real(2)}}));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(unfinished), MaterialError::Invalid));
+    graph::Document narrow = colored;
+    narrow.nodes[3] = nodeOf(kWave, kSeparate4Type, Value::object(), objectOf({{"in", from(kLifted, "out")}}));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(narrow), MaterialError::Invalid));
+    const graph::Document kPast = surfaceOf(objectOf({{"specular_roughness", from(kPhase, "out")}}),
+                                            {nodeOf(kWorld, kWorldPositionType, Value::object(), Value::object()),
+                                             nodeOf(kPhase,
+                                                    kSwizzleType,
+                                                    objectOf({{"pattern", Value::string("w")}}),
+                                                    objectOf({{"in", from(kWorld, "position")}}))});
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kPast), MaterialError::Invalid));
+    const graph::Document kMeasured =
+        surfaceOf(objectOf({{"specular_roughness", from(kPhase, "out")}}),
+                  {timeOf(Value::string("simulation")),
+                   kFourOf(Value::real(3)),
+                   nodeOf(kPhase, "rawframe/length@1", Value::object(), objectOf({{"in", from(kAxes, "out")}}))});
+    const auto kLength = generateSlang(kMeasured);
+    RAWFRAME_EXPECT(kLength.has_value() && kLength->source.contains("length(") &&
+                    kLength->source.contains("float4((point.time.x + point.time.y), 1.0, 2.0, 3.0)"));
 }

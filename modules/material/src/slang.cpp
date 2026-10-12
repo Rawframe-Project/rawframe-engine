@@ -50,16 +50,19 @@ std::string_view slangType(Carried carried) {
         return "float3";
     case Carried::Bool:
         return "bool";
+    case Carried::Vec4:
+    case Carried::Color4:
+        return "float4";
     }
     return "float";
 }
 
 /// A literal of `count` numbers, a float for one.
-std::string literalText(const std::array<double, 3>& literal, std::size_t count) {
+std::string literalText(const std::array<double, 4>& literal, std::size_t count) {
     if (count == 1) {
         return numberText(literal[0]);
     }
-    std::string made = count == 2 ? "float2(" : "float3(";
+    std::string made = "float" + std::to_string(count) + "(";
     for (std::size_t at = 0; at < count; ++at) {
         made += (at == 0 ? "" : ", ") + numberText(literal.at(at));
     }
@@ -67,7 +70,10 @@ std::string literalText(const std::array<double, 3>& literal, std::size_t count)
 }
 
 std::size_t channelsOf(Carried carried) {
-    return carried == Carried::Float ? 1 : carried == Carried::Vec2 ? 2 : 3;
+    return carried == Carried::Float                                ? 1
+           : carried == Carried::Vec2                               ? 2
+           : carried == Carried::Vec4 || carried == Carried::Color4 ? 4
+                                                                    : 3;
 }
 
 /// The slots a generated material binds its textures at, in order.
@@ -160,6 +166,11 @@ public:
             RAWFRAME_TRY_ASSIGN(const std::string kTexel, texelOf(*kNode, from.node));
             return kTexel + (from.output == "alpha" ? ".a" : ".rgb");
         }
+        if (kType == kSeparate4Type) {
+            RAWFRAME_TRY_ASSIGN(const surface_graph::Operand kIn, surface_graph::separate4In(surface_, *kNode));
+            RAWFRAME_TRY_ASSIGN(const std::string kInText, operandText(kIn));
+            return "(" + kInText + ")." + from.output;
+        }
         if (kType == kSeparate3Type) {
             RAWFRAME_TRY_ASSIGN(const surface_graph::Operand kIn, surface_graph::separate3In(surface_, *kNode));
             RAWFRAME_TRY_ASSIGN(const std::string kInText, operandText(kIn));
@@ -207,15 +218,15 @@ public:
             RAWFRAME_TRY_ASSIGN(const std::string kB, operandText(kCompare.b));
             expression = kA + " " + std::string{kCompare.symbol} + " " + kB;
             carried = Carried::Bool;
-        } else if (kType == kCombine3Type || kType == kCombine2Type) {
+        } else if (kType == kCombine3Type || kType == kCombine2Type || kType == kCombine4Type) {
             RAWFRAME_TRY_ASSIGN(const surface_graph::Combined kParts, surface_graph::combineIn(surface_, *kNode));
-            expression = kParts.count == 2 ? "float2(" : "float3(";
+            expression = "float" + std::to_string(kParts.count) + "(";
             for (std::size_t at = 0; at < kParts.count; ++at) {
                 RAWFRAME_TRY_ASSIGN(const std::string kPart, operandText(kParts.parts.at(at)));
                 expression += (at == 0 ? "" : ", ") + kPart;
             }
             expression += ")";
-            carried = kParts.count == 2 ? Carried::Vec2 : Carried::Vec3;
+            carried = kParts.count == 2 ? Carried::Vec2 : kParts.count == 3 ? Carried::Vec3 : Carried::Vec4;
         } else if (kType == kQualitySwitchType) {
             RAWFRAME_TRY_ASSIGN(const surface_graph::Switch kSwitch, surface_graph::switchIn(surface_, *kNode));
             const std::optional<surface_graph::Operand>& kChosen = kSwitch.inputs.at(switchInputOf(quality_));
@@ -329,7 +340,7 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
     // default.
     std::map<std::string_view, std::string> inputs;
     for (const Parameter& kParameter : kParameters) {
-        std::array<double, 3> initial{};
+        std::array<double, 4> initial{};
         initial.fill(kParameter.initial);
         inputs.emplace(kParameter.name, literalText(initial, kParameter.channels));
     }
@@ -346,7 +357,7 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
             RAWFRAME_TRY_ASSIGN(expression, writer.outputOf(*kFrom));
         } else {
             const Parameter& kParameter = *parameterNamed(kName);
-            std::array<double, 3> literal{};
+            std::array<double, 4> literal{};
             for (std::size_t channel = 0; channel < kParameter.channels; ++channel) {
                 literal.at(channel) = *(kParameter.channels == 1 ? kValue.real() : kValue.items()[channel].real());
             }

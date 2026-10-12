@@ -257,6 +257,10 @@ inline constexpr std::string_view kCompareType = "rawframe/compare@1";
 inline constexpr std::string_view kConstantType = "rawframe/constant@1";
 /// Whether the face drawn is the front, the fragment stage's alone (D705).
 inline constexpr std::string_view kFrontFacingType = "rawframe/front_facing@1";
+/// The four-wide channel nodes, combine4 the post-process and canvas
+/// families' too (D348, D706).
+inline constexpr std::string_view kCombine4Type = "rawframe/combine4@1";
+inline constexpr std::string_view kSeparate4Type = "rawframe/separate4@1";
 
 /// What a surface compiles to at each quality, by `Quality`: the same
 /// material at each where its graph does not differ (D318).

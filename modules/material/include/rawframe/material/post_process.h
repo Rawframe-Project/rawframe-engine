@@ -106,7 +106,6 @@ inline constexpr std::string_view kPostProcessOutputType = "rawframe/post_proces
 inline constexpr std::string_view kSceneColorType = "rawframe/scene_color@1";
 inline constexpr std::string_view kSceneDepthType = "rawframe/scene_depth@1";
 inline constexpr std::string_view kScreenUvType = "rawframe/screen_uv@1";
-inline constexpr std::string_view kCombine4Type = "rawframe/combine4@1";
 
 /// Refuses (`Invalid`) a document out of the domain's contract: kind
 /// `post_process`, an empty interface, one output node, its `color` a

@@ -41,6 +41,7 @@ using surface_graph::sampleIn;
 using surface_graph::Sampling;
 using surface_graph::separate2In;
 using surface_graph::separate3In;
+using surface_graph::separate4In;
 using surface_graph::statesIn;
 using surface_graph::statesOf;
 using surface_graph::streamIn;
@@ -449,8 +450,10 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
             RAWFRAME_TRY(normalMapIn(surface, node));
         } else if (typeOf(node) == kQualitySwitchType) {
             RAWFRAME_TRY(switchIn(surface, node));
-        } else if (typeOf(node) == kCombine3Type || typeOf(node) == kCombine2Type) {
+        } else if (typeOf(node) == kCombine3Type || typeOf(node) == kCombine2Type || typeOf(node) == kCombine4Type) {
             RAWFRAME_TRY(combineIn(surface, node));
+        } else if (typeOf(node) == kSeparate4Type) {
+            RAWFRAME_TRY(separate4In(surface, node));
         } else if (typeOf(node) == kCompareType) {
             RAWFRAME_TRY(compareIn(surface, node));
         } else if (typeOf(node) == kConstantType) {
