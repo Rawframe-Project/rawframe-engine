@@ -79,7 +79,11 @@ enum class Rule : std::uint8_t {
     /// A color3 in, a float out: luminance (D698).
     Tone,
     /// A color3 in, a color3 out: rgb_to_hsv, hsv_to_rgb (D698).
-    Recolor
+    Recolor,
+    /// A vec2 in, a float out: the 2D noise kernels (D699).
+    Noise2,
+    /// A vec3 in, a float out: the 3D noise kernel (D699).
+    Noise3
 };
 
 /// One of the atomic core's math nodes (SPEC-0026, D694): its type, its
@@ -94,9 +98,10 @@ struct MathNode {
     Rule rule = Rule::Componentwise;
     std::string_view code;
     bool call = false;
-    /// A function its code calls, written once before the material where
-    /// any node uses it (D698); none for most.
-    std::string_view helper;
+    /// The functions its code calls, those they call first, each written
+    /// once before the material where any node uses it (D698, D699); none
+    /// for most.
+    std::array<std::string_view, 3> helpers;
 };
 
 /// The math node of `type`; none for another type.

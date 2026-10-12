@@ -878,7 +878,11 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
                                          "const bool ",
                                          "rawframeRgbToHsv(v",
                                          "rawframeHsvToRgb(v",
-                                         "float3(0.2126, 0.7152, 0.0722)"}) {
+                                         "float3(0.2126, 0.7152, 0.0722)",
+                                         "rawframeValueNoise2(",
+                                         "rawframeSimplex2(",
+                                         "rawframeSimplex3(",
+                                         "rawframeCell2(int2(floor("}) {
         RAWFRAME_EXPECT(kMade->source.contains(kCode));
         if (!kMade->source.contains(kCode)) {
             std::printf("not written: %s\n", std::string{kCode}.c_str());
@@ -886,11 +890,17 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
     }
     // Each helper a color node calls is written once, before the material
     // (D698).
-    for (const std::string_view kHelper : {"float3 rawframeRgbToHsv(float3 c)", "float3 rawframeHsvToRgb(float3 c)"}) {
+    for (const std::string_view kHelper : {"float3 rawframeRgbToHsv(float3 c)",
+                                           "float3 rawframeHsvToRgb(float3 c)",
+                                           "uint rawframeHash(uint x)",
+                                           "float rawframeSimplex3(float3 p)"}) {
         const std::size_t kFirst = kMade->source.find(kHelper);
         RAWFRAME_EXPECT(kFirst != std::string::npos && kFirst < kMade->source.find("struct Generated") &&
                         kMade->source.find(kHelper, kFirst + 1) == std::string::npos);
     }
+    // The noise kernels' hash before the kernels that call it (D699).
+    RAWFRAME_EXPECT(kMade->source.find("uint rawframeHash(uint x)") <
+                    kMade->source.find("float rawframeValueNoise2(float2 p)"));
     // Types: a length of a float, a dot of a vec3 and a float, a cross of a
     // float, inputs of two vector types, and a refraction's vector ratio.
     const auto kRefused = [](std::string_view type, std::vector<std::pair<std::string, Value>> inputs) {
@@ -903,6 +913,8 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
     };
     RAWFRAME_EXPECT(kRefused("rawframe/length@1", {{"in", from(kTime, "seconds")}}));
     RAWFRAME_EXPECT(kRefused("rawframe/luminance@1", {{"in", from(kWorld, "position")}}));
+    RAWFRAME_EXPECT(kRefused("rawframe/value_noise_2d@1", {{"in", from(kWorld, "position")}}));
+    RAWFRAME_EXPECT(kRefused("rawframe/simplex_noise_3d@1", {{"in", from(kTime, "seconds")}}));
     RAWFRAME_EXPECT(kRefused("rawframe/dot@1", {{"a", from(kWorld, "position")}, {"b", from(kTime, "seconds")}}));
     RAWFRAME_EXPECT(kRefused("rawframe/cross@1", {{"a", from(kTime, "seconds")}, {"b", from(kWorld, "position")}}));
     RAWFRAME_EXPECT(kRefused("rawframe/min@1", {{"a", from(kWorld, "position")}, {"b", pair(1, 2)}}));

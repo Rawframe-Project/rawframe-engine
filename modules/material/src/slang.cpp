@@ -9,13 +9,13 @@
 #include "rawframe/material/material.h"
 #include "surface_graph.h"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <map>
 #include <optional>
-#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -166,8 +166,10 @@ public:
             RAWFRAME_TRY_ASSIGN(const surface_graph::MathInputs kMath, surface_graph::mathInputsOf(surface_, *kNode));
             carried = kMath.out.value_or(Carried::Float);
             expression = std::string{kShape.code};
-            if (!kShape.helper.empty()) {
-                helpers_.insert(kShape.helper);
+            for (const std::string_view kHelper : kShape.helpers) {
+                if (!kHelper.empty() && std::ranges::find(helpers_, kHelper) == helpers_.end()) {
+                    helpers_.push_back(kHelper);
+                }
             }
             for (std::size_t at = 0; at < kMath.count; ++at) {
                 const surface_graph::Operand& kInput = kMath.inputs.at(at);
@@ -230,8 +232,9 @@ public:
         return statements_;
     }
 
-    /// The functions the written code calls (D698).
-    [[nodiscard]] const std::set<std::string_view>& helpers() const noexcept {
+    /// The functions the written code calls, each before those that call
+    /// it (D698, D699).
+    [[nodiscard]] const std::vector<std::string_view>& helpers() const noexcept {
         return helpers_;
     }
 
@@ -290,7 +293,7 @@ private:
     std::string statements_;
     std::map<graph::NodeId, std::string> made_;
     std::vector<SampledTexture> textures_;
-    std::set<std::string_view> helpers_;
+    std::vector<std::string_view> helpers_;
     std::size_t next_ = 0;
 };
 
@@ -339,8 +342,12 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
     }
     GeneratedSlang made;
     // The functions either stage calls, once each, before the material.
-    std::set<std::string_view> helpers = writer.helpers();
-    helpers.insert(placing.helpers().begin(), placing.helpers().end());
+    std::vector<std::string_view> helpers = writer.helpers();
+    for (const std::string_view kHelper : placing.helpers()) {
+        if (std::ranges::find(helpers, kHelper) == helpers.end()) {
+            helpers.push_back(kHelper);
+        }
+    }
     std::string helped;
     for (const std::string_view kHelper : helpers) {
         helped += std::string{kHelper} + "\n";

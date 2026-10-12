@@ -729,13 +729,109 @@
       }
     },
     "a700000000000041": {
+      "type": "rawframe/value_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000036",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000042": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a70000000000003e",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000041",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000043": {
+      "type": "rawframe/simplex_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000034",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000044": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000042",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000043",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000045": {
+      "type": "rawframe/simplex_noise_3d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000002",
+          "output": "position"
+        }
+      }
+    },
+    "a700000000000046": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000044",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000045",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000047": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000036",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000048": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000046",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000047",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000049": {
       "type": "rawframe/compare@1",
       "params": {
         "operator": "less"
       },
       "inputs": {
         "a": {
-          "node": "a70000000000003e",
+          "node": "a700000000000048",
           "output": "out"
         },
         "b": {
@@ -744,84 +840,84 @@
         }
       }
     },
-    "a700000000000042": {
+    "a70000000000004a": {
       "type": "rawframe/compare@1",
       "params": {
         "operator": "greater_equal"
       },
       "inputs": {
         "a": {
-          "node": "a70000000000003e",
+          "node": "a700000000000048",
           "output": "out"
         },
         "b": 0.5
       }
     },
-    "a700000000000043": {
+    "a70000000000004b": {
       "type": "rawframe/and@1",
       "params": {},
       "inputs": {
         "a": {
-          "node": "a700000000000041",
+          "node": "a700000000000049",
           "output": "out"
         },
         "b": {
-          "node": "a700000000000042",
+          "node": "a70000000000004a",
           "output": "out"
         }
       }
     },
-    "a700000000000044": {
+    "a70000000000004c": {
       "type": "rawframe/or@1",
       "params": {},
       "inputs": {
         "a": {
-          "node": "a700000000000043",
+          "node": "a70000000000004b",
           "output": "out"
         },
         "b": true
       }
     },
-    "a700000000000045": {
+    "a70000000000004d": {
       "type": "rawframe/xor@1",
       "params": {},
       "inputs": {
         "a": {
-          "node": "a700000000000044",
+          "node": "a70000000000004c",
           "output": "out"
         },
         "b": {
-          "node": "a700000000000041",
+          "node": "a700000000000049",
           "output": "out"
         }
       }
     },
-    "a700000000000046": {
+    "a70000000000004e": {
       "type": "rawframe/not@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a700000000000045",
+          "node": "a70000000000004d",
           "output": "out"
         }
       }
     },
-    "a700000000000047": {
+    "a70000000000004f": {
       "type": "rawframe/select@1",
       "params": {},
       "inputs": {
         "a": {
-          "node": "a70000000000003e",
+          "node": "a700000000000048",
           "output": "out"
         },
         "b": 0.25,
         "condition": {
-          "node": "a700000000000046",
+          "node": "a70000000000004e",
           "output": "out"
         }
       }
     },
-    "a700000000000048": {
+    "a700000000000050": {
       "type": "rawframe/select@1",
       "params": {},
       "inputs": {
@@ -831,12 +927,12 @@
         },
         "b": 1,
         "condition": {
-          "node": "a700000000000041",
+          "node": "a700000000000049",
           "output": "out"
         }
       }
     },
-    "a700000000000049": {
+    "a700000000000051": {
       "type": "rawframe/swizzle@1",
       "params": {
         "pattern": "zyx"
@@ -848,106 +944,106 @@
         }
       }
     },
-    "a70000000000004a": {
+    "a700000000000052": {
       "type": "rawframe/rgb_to_hsv@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a700000000000049",
+          "node": "a700000000000051",
           "output": "out"
         }
       }
     },
-    "a70000000000004b": {
+    "a700000000000053": {
       "type": "rawframe/hsv_to_rgb@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a70000000000004a",
+          "node": "a700000000000052",
           "output": "out"
         }
       }
     },
-    "a70000000000004c": {
+    "a700000000000054": {
       "type": "rawframe/rgb_to_hsv@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a70000000000004b",
+          "node": "a700000000000053",
           "output": "out"
         }
       }
     },
-    "a70000000000004d": {
+    "a700000000000055": {
       "type": "rawframe/hsv_to_rgb@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a70000000000004c",
+          "node": "a700000000000054",
           "output": "out"
         }
       }
     },
-    "a70000000000004e": {
+    "a700000000000056": {
       "type": "rawframe/luminance@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a70000000000004d",
+          "node": "a700000000000055",
           "output": "out"
         }
       }
     },
-    "a70000000000004f": {
+    "a700000000000057": {
       "type": "rawframe/multiply@1",
       "params": {},
       "inputs": {
         "a": {
-          "node": "a700000000000047",
+          "node": "a70000000000004f",
           "output": "out"
         },
         "b": {
-          "node": "a70000000000004e",
+          "node": "a700000000000056",
           "output": "out"
         }
       }
     },
-    "a700000000000050": {
+    "a700000000000058": {
       "type": "rawframe/saturate@1",
       "params": {},
       "inputs": {
         "in": {
-          "node": "a70000000000004f",
+          "node": "a700000000000057",
           "output": "out"
         }
       }
     },
-    "a700000000000051": {
+    "a700000000000059": {
       "type": "rawframe/combine3@1",
       "params": {},
       "inputs": {
         "x": 0,
         "y": {
-          "node": "a700000000000050",
+          "node": "a700000000000058",
           "output": "out"
         },
         "z": 0
       }
     },
-    "a700000000000052": {
+    "a70000000000005a": {
       "type": "rawframe/surface@1",
       "params": {},
       "inputs": {
         "base_color": {
-          "node": "a70000000000004d",
+          "node": "a700000000000055",
           "output": "out"
         },
         "geometry_normal": {
-          "node": "a700000000000048",
+          "node": "a700000000000050",
           "output": "out"
         },
         "position_offset": {
-          "node": "a700000000000051",
+          "node": "a700000000000059",
           "output": "out"
         },
         "specular_roughness": {
