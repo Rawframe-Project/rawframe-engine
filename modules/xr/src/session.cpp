@@ -117,6 +117,8 @@ struct Session::State {
     XrAction aim = XR_NULL_HANDLE;
     XrAction haptic = XR_NULL_HANDLE;
     std::array<XrPath, 2> hands{};
+    /// The profile each hand's controller is presented as (D680).
+    std::array<std::string, 2> profiles;
     std::array<std::array<XrSpace, 2>, 2> spaces{};
     /// Each hand's tracker, where the system tracks hands (D663), and the
     /// extension's functions.
@@ -178,6 +180,8 @@ struct Session::State {
                 RAWFRAME_TRY(became(kChanged.state));
             } else if (event.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING) {
                 over = true;
+            } else if (event.type == XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED) {
+                readProfiles();
             }
             event = {XR_TYPE_EVENT_DATA_BUFFER};
         }
@@ -186,6 +190,27 @@ struct Session::State {
             return failed("the runtime's events could not be read", polled);
         }
         return {};
+    }
+
+    /// Each hand's profile as the runtime presents it now; a hand whose
+    /// profile cannot be read has none, and its controller is read as
+    /// before.
+    void readProfiles() noexcept {
+        for (std::size_t hand = 0; hand < hands.size(); ++hand) {
+            profiles.at(hand).clear();
+            XrInteractionProfileState current{XR_TYPE_INTERACTION_PROFILE_STATE};
+            if (XR_FAILED(xrGetCurrentInteractionProfile(session, hands.at(hand), &current)) ||
+                current.interactionProfile == XR_NULL_PATH) {
+                continue;
+            }
+            std::array<char, XR_MAX_PATH_LENGTH> path{};
+            std::uint32_t length = 0;
+            if (XR_SUCCEEDED(
+                    xrPathToString(runtime->instance, current.interactionProfile, path.size(), &length, path.data())) &&
+                length > 0) {
+                profiles.at(hand).assign(path.data(), length - 1);
+            }
+        }
     }
 
     result::Status became(XrSessionState next) {
@@ -792,6 +817,10 @@ std::optional<ViewSize> Session::panel() const noexcept {
 
 SessionState Session::state() const noexcept {
     return state_->state;
+}
+
+const std::array<std::string, 2>& Session::profiles() const noexcept {
+    return state_->profiles;
 }
 
 bool Session::over() const noexcept {

@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace rawframe::xr {
@@ -192,6 +193,12 @@ public:
     [[nodiscard]] result::Status requestExit();
 
     [[nodiscard]] SessionState state() const noexcept;
+    /// The interaction profile the runtime presents each hand's controller
+    /// as, the left hand's first (ADR-0081 section 5's device identity,
+    /// D680): its path, such as `/interaction_profiles/valve/index_controller`,
+    /// read again as the runtime says it changed; empty where it binds no
+    /// controller. It may be one the runtime emulates for another.
+    [[nodiscard]] const std::array<std::string, 2>& profiles() const noexcept;
     /// The runtime ended it, or is losing it: no frame comes again.
     [[nodiscard]] bool over() const noexcept;
     [[nodiscard]] const SessionStatistics& statistics() const noexcept;

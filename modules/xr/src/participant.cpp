@@ -22,6 +22,7 @@ constexpr diagnostics::EventIdentity kReady{"xr", "xr_ready"};
 constexpr diagnostics::EventIdentity kUnavailable{"xr", "xr_unavailable"};
 constexpr diagnostics::EventIdentity kIgnored{"xr", "xr_overrides_ignored"};
 constexpr diagnostics::EventIdentity kState{"xr", "xr_session_state"};
+constexpr diagnostics::EventIdentity kProfiles{"xr", "xr_profiles"};
 constexpr diagnostics::EventIdentity kFailed{"xr", "xr_failed"};
 constexpr diagnostics::EventIdentity kSummary{"xr", "xr_summary"};
 constexpr std::string_view kProvided[] = {
@@ -275,6 +276,7 @@ public:
         totals_.framesHandTracked += kSession.framesHandTracked;
         session_.reset();
         told_ = SessionState::Unknown;
+        profiles_ = {};
         tellAway(false);
     }
 
@@ -290,6 +292,7 @@ private:
         }
         auto frame = session_->begin();
         told();
+        profiled();
         if (!frame.has_value()) {
             fail(frame.error());
             return;
@@ -475,6 +478,19 @@ private:
         tellAway(told_ != SessionState::Visible && told_ != SessionState::Focused);
     }
 
+    /// The profiles the runtime presents the hands' controllers as, said
+    /// when they changed (D680).
+    void profiled() noexcept {
+        if (session_ == nullptr || session_->profiles() == profiles_) {
+            return;
+        }
+        profiles_ = session_->profiles();
+        emitter_.log(diagnostics::Severity::Info,
+                     kProfiles,
+                     "the runtime presents the hands' controllers as these",
+                     {diagnostics::field("left", profiles_[0]), diagnostics::field("right", profiles_[1])});
+    }
+
     /// Whether the headset shows the person nothing (D679), told the
     /// program where it lends a place for it.
     void tellAway(bool away) noexcept {
@@ -537,6 +553,7 @@ private:
     std::unique_ptr<Runtime> runtime_;
     std::unique_ptr<Session> session_;
     SessionState told_ = SessionState::Unknown;
+    std::array<std::string, 2> profiles_;
     SessionStatistics totals_;
     std::uint64_t sessions_ = 0;
     bool failed_ = false;

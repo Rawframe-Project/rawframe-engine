@@ -380,7 +380,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # mapper as the client's controller device, both aiming at the
         # panel (D598). A flat bot plays beside it in the client's process:
         # ADR-0081's cross-play, one World and one admission path for both
-        # (D606).
+        # (D606). The runtime presents the controllers as the simple
+        # controller, which it says (D680).
         if(RAWFRAME_CLIENT_HEADSET AND RAWFRAME_MONADO_SERVICE AND NOT WIN32)
             configure_file(tests/plaza_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf @ONLY)
             add_test(NAME client_plaza_headset
@@ -394,7 +395,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                                  FIXTURES_REQUIRED plaza_content
                                  PROCESSORS 2
                                  PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+}.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":[1-9][0-9]+,\"handsPointing\":[1-9][0-9]+,\"hapticsFelt\":0,\"hapticsUnfelt\":0,\"away\":[1-9][0-9]*,\"failed\":false}.*\"code\":\"input_summary\"[^\n]*\"player\":0,[^\n]*\"controllerEvents\":[1-9][0-9]+,")
+                                 "\"code\":\"xr_profiles\"[^\n]*\"right\":\"/interaction_profiles/khr/simple_controller\".*\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+}.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":[1-9][0-9]+,\"handsPointing\":[1-9][0-9]+,\"hapticsFelt\":0,\"hapticsUnfelt\":0,\"away\":[1-9][0-9]*,\"failed\":false}.*\"code\":\"input_summary\"[^\n]*\"player\":0,[^\n]*\"controllerEvents\":[1-9][0-9]+,")
         endif()
         # Stalls on a headset (D605): its HUD on the panel, the hands' aims
         # the UI's pointer, a cursor drawn where they point.
@@ -450,7 +451,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
             # and another with its tracked hand closed (D664), and no other
             # player, so the server's two welds made and let go are the
             # headset's; and its own hands drawn where it holds them
-            # (D665), each frame where the headset has them then (D676).
+            # (D665), each frame where the headset has them then (D676);
+            # the runtime presents them as Index controllers (D680).
             add_test(NAME client_reach_takes
                      COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                              ${PROJECT_SOURCE_DIR}/tools/xr_run.sh --hands ${CMAKE_CURRENT_SOURCE_DIR}/tests/reach_hands.py
@@ -463,7 +465,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                                  FIXTURES_REQUIRED reach_content
                                  PROCESSORS 2
                                  PASS_REGULAR_EXPRESSION
-                                 "\"domain\":\"physics3d\",\"code\":\"summary\"[^\n]*\"jointsMade\":([2-9]|[1-9][0-9]+),\"jointsRemoved\":([2-9]|[1-9][0-9]+),.*\"code\":\"scene_placed_summary\"[^\n]*\"modelsPlaced\":[0-9]+,\"modelsTracked\":[1-9][0-9]*}.*\"code\":\"xr_summary\"[^\n]*\"framesHandTracked\":[1-9][0-9]*,[^\n]*\"failed\":false}")
+                                 "\"domain\":\"physics3d\",\"code\":\"summary\"[^\n]*\"jointsMade\":([2-9]|[1-9][0-9]+),\"jointsRemoved\":([2-9]|[1-9][0-9]+),.*\"code\":\"xr_profiles\"[^\n]*\"right\":\"/interaction_profiles/valve/index_controller\".*\"code\":\"scene_placed_summary\"[^\n]*\"modelsPlaced\":[0-9]+,\"modelsTracked\":[1-9][0-9]*}.*\"code\":\"xr_summary\"[^\n]*\"framesHandTracked\":[1-9][0-9]*,[^\n]*\"failed\":false}")
         endif()
         # Each draws a window on lavapipe beside a server, and bots or a
         # second client in some: two of a preset's processors each, so a full
