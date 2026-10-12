@@ -25,21 +25,20 @@ component f1709939-d7eb-4a52-9acf-8f59734cea9e gale.water rawframe.model.Model
 component 61c67757-1adb-4e63-93c0-5cbbc82656bc gale.waters rawframe.model.Placed
 component 664ccd7d-20b0-45e5-83c6-a91a614b13cf gale.view rawframe.model.Camera
 
-# The sea's clock runs a tick at a time; a player is given a ship; its
+# A player is given a ship; its
 # crew reloads, fires, and abandons a ship that founders (D683); each ship
 # floats, and sails as its player's helm says, its player put where it is,
 # so its client's view follows it (D682).
-system gale.tide simulation tide write gale.sea before rawframe.physics3d.step
 system gale.launch simulation launch write gale.berth entities lookup gale.sea before rawframe.physics3d.step
-system gale.crew simulation crew write gale.ship entities lookup gale.helm lookup gale.berth lookup rawframe.physics3d.pose lookup rawframe.physics3d.velocity after gale.tide before gale.float
-system gale.float simulation float read gale.ship read rawframe.physics3d.pose read rawframe.physics3d.velocity write rawframe.physics3d.impulse entities lookup gale.sea lookup gale.helm after gale.tide before rawframe.physics3d.step
+system gale.crew simulation crew write gale.ship entities lookup gale.helm lookup gale.berth lookup rawframe.physics3d.pose lookup rawframe.physics3d.velocity before gale.float
+system gale.float simulation float read gale.ship read rawframe.physics3d.pose read rawframe.physics3d.velocity write rawframe.physics3d.impulse entities lookup gale.helm before rawframe.physics3d.step
 
 # A ball strikes what it meets: another ship is holed by it, and the ship
 # that fired it counts the hit.
 system gale.strike simulation strike write gale.shot read rawframe.physics3d.contact read rawframe.physics3d.pose entities lookup gale.ship after rawframe.physics3d.step
 
-# The sea: its clock, and how many ships it has been given, at the World's
-# origin, the still water's height.
+# The sea: how many ships it has been given, at the World's origin, the
+# still water's height. Its waves roll by the World's tick (D684).
 spawn 1 gale.sea rawframe.physics3d.pose
 
 replicate rawframe.physics3d.body rawframe.physics3d.pose gale.ship gale.sea gale.berth

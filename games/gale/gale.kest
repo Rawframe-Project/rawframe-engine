@@ -65,9 +65,8 @@ const FLIGHT: u32 = 240
 const SPACING: f64 = 14.0
 const ROWS: f64 = 20.0
 
-// The sea: the ticks it has rolled, and how many ships it has launched.
+// The sea: how many ships it has launched.
 struct Sea {
-    ticks: u32
     launched: u32
 }
 
@@ -120,17 +119,9 @@ extern fn Impulse3D.insert(entity: world.Entity, value: physics3d.Impulse3D)
 extern fn Pose3D.has(entity: world.Entity) -> bool
 extern fn Pose3D.get(entity: world.Entity) -> physics3d.Pose3D
 
-// The sea rolls on a tick.
-fn tide(count: i32, seas: [Sea]) {
-    let i = 0
-    while i < count {
-        seas[i].ticks = seas[i].ticks + u32(1)
-        i = i + 1
-    }
-}
-
 // The water's height at `x`, `z` after `time` seconds: two swells crossing,
-// a quarter meter and fifteen centimeters high.
+// a quarter meter and fifteen centimeters high. The time is the World's
+// tick's (D684), so a client predicting a tick finds the same sea.
 fn height(x: f32, z: f32, time: f32) -> f32 {
     let one = f64(0.25) * math.sin(f64(0.3 * x + 1.1 * time))
     let two = f64(0.15) * math.sin(f64(0.23 * z + 0.8 * time + 1.3))
@@ -163,7 +154,7 @@ fn launch(count: i32, berths: [Berth], entities: [world.Entity]) {
         }
         i = i + 1
     }
-    Sea.insert(sea, Sea(state.ticks, launched))
+    Sea.insert(sea, Sea(launched))
 }
 
 // `offset` turned by the pose's rotation.
@@ -194,10 +185,7 @@ fn dot(a: Offset, b: Offset) -> f32 {
 // from the World.
 fn float(count: i32, ships: [Ship], poses: [physics3d.Pose3D], velocities: [physics3d.Velocity3D],
          impulses: [physics3d.Impulse3D], entities: [world.Entity]) {
-    if Sea.count() == 0 {
-        return
-    }
-    let time = f32(Sea.get(Sea.entity(0)).ticks) * DT
+    let time = f32(world.tick() % u64(1000000)) * DT
     // The water under one of the six points carries a sixth of the hull's
     // bottom.
     let area = 4.0 * BEAM * LENGTH / 6.0
