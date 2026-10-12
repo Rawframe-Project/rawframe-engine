@@ -161,6 +161,9 @@ spawn 1 plaza.stroller left=30 rawframe.physics3d.pose x=-2 y=1.4 z=-20 qw=1 raw
 replicate plaza.stroller plaza.hall plaza.spring plaza.monitor plaza.lamp rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick rawframe.animation.animator rawframe.animation.root_motion plaza.gait
 player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.gait rawframe.animation.animator rawframe.animation.root_motion
 input plaza.stick
+# The stick, a headset's hand in it, goes to its own player's client alone
+# (D673, ADR-0081): the others see the lamp the server places.
+own plaza.stick
 # A client makes its stick from its player's actions (plaza.actions) with
 # sample.kest, from keys, a gamepad, or a touch screen (the left half's
 # stick to move, the right half to jump; D387); bots press the same

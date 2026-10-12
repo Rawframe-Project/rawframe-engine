@@ -55,6 +55,10 @@ entity reach.block holder
 entity reach.hand player held
 player reach.hands reach.seat
 input reach.hands
+# The hands' input, a headset's tracked poses in it, goes to its own
+# player's client alone (D673, ADR-0081): the others see the hands the
+# server moves, never the poses.
+own reach.hands
 # A client predicts its own hands' input, so it presents where its player
 # holds them now (D665); nothing else of the World is predicted.
 predict reach.hands
