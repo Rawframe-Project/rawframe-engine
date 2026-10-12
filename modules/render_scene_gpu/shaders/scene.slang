@@ -400,6 +400,11 @@ struct Surface
     float anisotropy;
     float3 along;
     float3 across;
+    // What a transmitting model lets through (D720), and the color it is
+    // tinted as it passes, its base's and its volume's (D724).
+    float transmission;
+    float3 tint;
+    float ior;
 }
 
 // What a coat reflects head on: a dielectric's of index 1.6, OpenPBR's
@@ -482,6 +487,26 @@ float3 reflected(Surface surface, float3 normal, float3 toEye, float3 toward)
                                ? lobe(surface.coatNormal, toEye, toward, halfway, surface.coatRoughness)
                                : 0.0;
     return under * (1.0 - surface.coat * coatFresnel) + surface.coat * coatFresnel * coatLobe;
+}
+
+// Of the light arriving from `toward` behind a transmitting surface, per
+// unit of illuminance, what passes through it toward the eye (D724), as
+// KHR_materials_transmission's sample renderer has it: the way to the
+// light mirrored through the surface's plane, GGX's lobe about the normal
+// at the roughness its index of refraction spreads, by what the Fresnel
+// does not reflect, tinted, times the cosine the mirrored light arrives at.
+float3 passed(Surface surface, float3 normal, float3 toEye, float3 toward)
+{
+    const float behind = -dot(normal, toward);
+    if (surface.transmission <= 0.0 || behind <= 0.0)
+    {
+        return float3(0.0);
+    }
+    const float3 mirrored = toward + 2.0 * behind * normal;
+    const float3 halfway = normalize(mirrored + toEye);
+    const float3 fresnel = surface.headOn + (1.0 - surface.headOn) * pow(1.0 - max(dot(toEye, halfway), 0.0), 5.0);
+    const float spread = surface.roughness * clamp(surface.ior * 2.0 - 2.0, 0.0, 1.0);
+    return surface.transmission * (1.0 - fresnel) * surface.tint * lobe(normal, toEye, mirrored, halfway, spread);
 }
 
 // The irradiance over π the sky's picture gives a surface facing `normal`,
@@ -734,7 +759,8 @@ float3 punctual(uint4 range, float3 placed, float3 normal, Surface surface, floa
             }
             falloff *= lightShadow(slots[slot], placed, normal);
         }
-        sum += light.intensity.rgb * falloff * reflected(surface, normal, toEye, toward);
+        sum += light.intensity.rgb * falloff *
+               (reflected(surface, normal, toEye, toward) + passed(surface, normal, toEye, toward));
     }
     return sum;
 }
@@ -878,6 +904,7 @@ Lit shaded(Corner corner, bool decaled, bool front)
         discard;
     }
     float3 transmitted = float3(0.0);
+    float3 through = float3(1.0);
     if (transmission > 0.0)
     {
         const float travelled = evaluated.thinWalled ? 0.0 : evaluated.thickness;
@@ -897,9 +924,9 @@ Lit shaded(Corner corner, bool decaled, bool front)
         const float3 seen =
             behindTexture.SampleLevel(environmentSampler, clamp(place, float2(0.0), float2(1.0)), level).rgb /
             max(exposure[0].value.y, 1e-12);
-        const float3 through = evaluated.transmissionDepth > 0.0 && travelled > 0.0
-                                   ? pow(evaluated.transmissionColor, float3(travelled / evaluated.transmissionDepth))
-                                   : float3(1.0);
+        through = evaluated.transmissionDepth > 0.0 && travelled > 0.0
+                      ? pow(evaluated.transmissionColor, float3(travelled / evaluated.transmissionDepth))
+                      : float3(1.0);
         transmitted = seen * through * color;
     }
     Surface surface;
@@ -923,6 +950,9 @@ Lit shaded(Corner corner, bool decaled, bool front)
         surface.along = normalize(turned - normal * dot(normal, turned));
         surface.across = cross(normal, surface.along);
     }
+    surface.transmission = transmission;
+    surface.tint = color * through;
+    surface.ior = evaluated.ior;
     const int2 texel = int2(pixel);
     // What of the sun's light the contact shadows let through (D338), for
     // an opaque model the prepass saw, which a transmitting one is not
@@ -930,7 +960,8 @@ Lit shaded(Corner corner, bool decaled, bool front)
     const bool prepassed = opacity >= 0.999 && transmission <= 0.0;
     const float contact = frame.contact.x > 0.5 && prepassed ? contactTexture.Load(int3(texel, 0)).r : 1.0;
     const float3 direct = frame.sun.rgb * sunlit(corner.placed, normal, pixel) * contact *
-                              reflected(surface, normal, toEye, frame.toSun.xyz) +
+                              (reflected(surface, normal, toEye, frame.toSun.xyz) +
+                               passed(surface, normal, toEye, frame.toSun.xyz)) +
                           punctual(range, corner.placed, normal, surface, toEye);
     // The sky above and the ground below (D304): their light across the
     // normal's side, diffused, and along the reflection, the Fresnel of a

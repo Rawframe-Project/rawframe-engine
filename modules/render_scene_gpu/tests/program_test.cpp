@@ -802,3 +802,74 @@ RAWFRAME_TEST(AFrostedGlassBlursWhatLiesBehindIt) {
     RAWFRAME_EXPECT(kClearApart > 150);
     RAWFRAME_EXPECT(kFrostedApart * 2 < kClearApart);
 }
+
+RAWFRAME_TEST(AGlassLetsTheSunThroughFromBehindIt) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A glass ball alone, in the dark but for the sun straight behind it:
+    // its light passes through the glass toward the eye (D724), brightest
+    // where the way to the eye and the way to the sun meet, the ball's
+    // middle, and dark toward its edge; with no sun, the ball shows only
+    // the dark behind it.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    frame.lights.sky = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
+    frame.lights.toSun = {0, 0, -1};
+    SceneDraw ball = box(3, 0.8F, {1, 1, 1, 1}, render_scene::kSphere);
+    ball.material = 1;
+    frame.draws = {ball};
+    frame.translucent = 1;
+    frame.materials = {render_scene::noMaterial()};
+    auto glass = std::make_shared<material::ProgramMaterial>(
+        *programOf(kGlassGraphScene, kGlassGraphShadow, material::Shading::Lit));
+    glass->transmits = true;
+    frame.programs = {glass};
+    frame.lights.sun = {0, 0, 0};
+    const auto kDark =
+        drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
+    frame.lights.sun = {100000, 100000, 100000};
+    const auto kLit =
+        drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
+    RAWFRAME_EXPECT(kDark.has_value() && kLit.has_value());
+    if (!kDark.has_value() || !kLit.has_value()) {
+        return;
+    }
+    // The brightest pixel about the middle: a lobe this smooth is narrower
+    // than a pixel.
+    std::array<int, 3> kThrough{};
+    for (std::uint32_t y = 30; y < 35; ++y) {
+        for (std::uint32_t x = 30; x < 35; ++x) {
+            const std::array<int, 3> kAt = at(*kLit, x, y);
+            if (kAt[0] + kAt[1] + kAt[2] > kThrough[0] + kThrough[1] + kThrough[2]) {
+                kThrough = kAt;
+            }
+        }
+    }
+    const std::array<int, 3> kUnlit = at(*kDark, 32, 32);
+    const std::array<int, 3> kEdge = at(*kLit, 32, 26);
+    std::printf("the ball's middle: no sun %d %d %d, sun behind %d %d %d; toward its edge %d %d %d\n",
+                kUnlit[0],
+                kUnlit[1],
+                kUnlit[2],
+                kThrough[0],
+                kThrough[1],
+                kThrough[2],
+                kEdge[0],
+                kEdge[1],
+                kEdge[2]);
+    RAWFRAME_EXPECT(kUnlit[0] + kUnlit[1] + kUnlit[2] < 30);
+    RAWFRAME_EXPECT(kThrough[0] > 100 && kThrough[1] > 100 && kThrough[2] > 100);
+    RAWFRAME_EXPECT(kEdge[0] + kEdge[1] + kEdge[2] + 150 < kThrough[0] + kThrough[1] + kThrough[2]);
+}
