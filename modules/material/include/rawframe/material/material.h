@@ -38,8 +38,11 @@
 // left out for the mesh's normal (D313). The coat's feature group
 // (`KHR_materials_clearcoat`, D716): `coat_weight` and `coat_roughness`,
 // each from nought to one, nought by default, and `coat_normal`, connected
-// or left out for the mesh's normal; a material whose coat is given is a
-// program material.
+// or left out for the mesh's normal. The anisotropy's
+// (`KHR_materials_anisotropy`, D717): `specular_roughness_anisotropy`,
+// from nought to one, and `specular_anisotropy_rotation`, radians from the
+// mesh's tangent toward its bitangent, each nought by default. A material
+// whose coat or anisotropy is given is a program material.
 //
 // The optional `states` (SPEC-0026's declared material states, in this
 // order, each left out at its default): `shading` `lit` or `unlit`;

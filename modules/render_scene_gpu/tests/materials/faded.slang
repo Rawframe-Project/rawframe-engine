@@ -24,6 +24,8 @@ struct Faded : IMaterial
         made.coat = 0.0;
         made.coatRoughness = 0.0;
         made.coatNormal = point.normal;
+        made.anisotropy = 0.0;
+        made.anisotropyRotation = 0.0;
         made.unlit = false;
         return made;
     }

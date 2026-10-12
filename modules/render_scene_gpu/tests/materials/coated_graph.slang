@@ -18,6 +18,8 @@ struct Generated : IMaterial
         made.coat = 1.0;
         made.coatRoughness = 0.1;
         made.coatNormal = point.normal;
+        made.anisotropy = 0.0;
+        made.anisotropyRotation = 0.0;
         made.unlit = false;
         return made;
     }

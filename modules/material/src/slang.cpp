@@ -529,6 +529,9 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
     // given.
     inputs.emplace("coat_weight", "0.0");
     inputs.emplace("coat_roughness", "0.0");
+    // The anisotropy's (D717): none, along the tangent, unless given.
+    inputs.emplace("specular_roughness_anisotropy", "0.0");
+    inputs.emplace("specular_anisotropy_rotation", "0.0");
     std::string coatNormal = "point.normal";
     for (std::size_t at = 0; at < kInputs.names().size(); ++at) {
         const std::string& kName = kInputs.names()[at];
@@ -590,6 +593,8 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
                   ";\n        made.normal = " + normal + ";\n        made.coat = " + inputs.at("coat_weight") +
                   ";\n        made.coatRoughness = " + inputs.at("coat_roughness") +
                   ";\n        made.coatNormal = " + coatNormal +
+                  ";\n        made.anisotropy = " + inputs.at("specular_roughness_anisotropy") +
+                  ";\n        made.anisotropyRotation = " + inputs.at("specular_anisotropy_rotation") +
                   ";\n        made.unlit = " + (kStates.shading == Shading::Unlit ? "true" : "false") +
                   ";\n"
                   "        return made;\n"

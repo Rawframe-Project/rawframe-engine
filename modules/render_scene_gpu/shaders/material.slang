@@ -200,7 +200,9 @@ public struct Placed
 // refraction; the opacity, the model's alpha applied; the occlusion; the
 // normal, bent as the material bends it; the coat's weight, its roughness,
 // and its normal (KHR_materials_clearcoat, D716), a weight of nought for
-// none; and whether it stands unlit.
+// none; the anisotropy's strength, nought for none, and its rotation in
+// radians from the tangent toward the bitangent (KHR_materials_anisotropy,
+// D717); and whether it stands unlit.
 public struct Evaluated
 {
     public float3 color;
@@ -215,6 +217,8 @@ public struct Evaluated
     public float coat;
     public float coatRoughness;
     public float3 coatNormal;
+    public float anisotropy;
+    public float anisotropyRotation;
     public bool unlit;
 }
 

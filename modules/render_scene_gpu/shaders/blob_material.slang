@@ -79,6 +79,9 @@ struct BlobMaterial : IMaterial
         made.coat = 0.0;
         made.coatRoughness = 0.0;
         made.coatNormal = point.normal;
+        // Nor any anisotropy (D717).
+        made.anisotropy = 0.0;
+        made.anisotropyRotation = 0.0;
         // Unlit (KHR_materials_unlit).
         made.unlit = (flags & 1u) != 0u;
         return made;

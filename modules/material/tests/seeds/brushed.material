@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {
+    "inputs": {
+      "turn": {
+        "default": 0,
+        "type": "float"
+      }
+    }
+  },
+  "graph": {
+    "2f000000000000a1": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "turn"
+      },
+      "inputs": {}
+    },
+    "2f000000000000a2": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "specular_anisotropy_rotation": {
+          "node": "2f000000000000a1",
+          "output": "out"
+        },
+        "specular_roughness": 0.4,
+        "specular_roughness_anisotropy": 0.9
+      }
+    }
+  }
+}

@@ -111,7 +111,8 @@ result::Result<bool> inputsIn(const graph::Node& node, Surface& into) {
     for (std::size_t at = 0; at < inputs->names().size(); ++at) {
         const Parameter* kParameter = parameterNamed(inputs->names()[at]);
         const GroupInput* kGroup = groupInputNamed(inputs->names()[at]);
-        const bool kNormal = inputs->names()[at] == "geometry_normal" || (kGroup != nullptr && kGroup->normal);
+        const bool kNormal =
+            inputs->names()[at] == "geometry_normal" || (kGroup != nullptr && kGroup->kind == GroupKind::Normal);
         const bool kOffset = inputs->names()[at] == "position_offset";
         if ((kParameter == nullptr && kGroup == nullptr && !kNormal && !kOffset) ||
             (at > 0 && !(inputs->names()[at - 1] < inputs->names()[at]))) {
@@ -125,11 +126,14 @@ result::Result<bool> inputsIn(const graph::Node& node, Surface& into) {
             return invalid("a surface's geometry or coat normal is connected: a stream or a map, never a literal");
         }
         if (kGroup != nullptr) {
-            // A feature group's number, from nought to one, never its
-            // default of nought (D716).
+            // A feature group's number, from nought to one, or an angle,
+            // never its default of nought (D716, D717).
             const std::optional<double> kNumber = inputs->items()[at].real();
-            if (!kNumber.has_value() || !(*kNumber > 0 && *kNumber <= 1)) {
-                return invalid("a feature group's number is above nought and at most one, left out at nought");
+            const bool kFits = kNumber.has_value() && *kNumber != 0 && std::isfinite(*kNumber) &&
+                               (kGroup->kind == GroupKind::Angle || (*kNumber > 0 && *kNumber <= 1));
+            if (!kFits) {
+                return invalid("a feature group's number is above nought and at most one, or an angle, left out at "
+                               "nought");
             }
             continue;
         }
@@ -463,10 +467,10 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
         RAWFRAME_TRY_ASSIGN(const std::optional<Carried> kCarried, carriedBy(surface, *kFrom));
         const Parameter* kParameter = parameterNamed(kInputs.names()[at]);
         const GroupInput* kGroup = groupInputNamed(kInputs.names()[at]);
-        const Carried kWanted = kGroup != nullptr && !kGroup->normal ? Carried::Float
-                                : kParameter == nullptr              ? Carried::Vec3
-                                : kParameter->channels == 3          ? Carried::Color3
-                                                                     : Carried::Float;
+        const Carried kWanted = kGroup != nullptr && kGroup->kind != GroupKind::Normal ? Carried::Float
+                                : kParameter == nullptr                                ? Carried::Vec3
+                                : kParameter->channels == 3                            ? Carried::Color3
+                                                                                       : Carried::Float;
         if (kCarried.has_value() && *kCarried != kWanted) {
             return invalid("a surface input is connected to an output of its type");
         }
@@ -563,7 +567,7 @@ result::Result<Material> compiled(const graph::Document& surface) {
     if (std::ranges::any_of(kGiven.names(), [](const std::string& name) {
             return groupInputNamed(name) != nullptr;
         })) {
-        return unsupported("a material whose coat is active is a program material (D716)");
+        return unsupported("a material whose coat or anisotropy is active is a program material (D716, D717)");
     }
     // Generation 1 (D312): the base, packed, and emission textures, one
     // sampler each, each input fed directly or times a factor.

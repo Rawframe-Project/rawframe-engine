@@ -1,7 +1,10 @@
-// The coat's feature group (D716): its inputs given as literals or
-// connected, the material then a program material written with them, and
-// what the group's inputs refuse.
+// The Surface contract's feature groups: the coat's (D716) and the
+// anisotropy's (D717), their inputs given as literals or connected, the
+// material then a program material written with them, and what the
+// groups' inputs refuse.
 
+#include "generated/brushed_graph.h"
+#include "generated/brushed_material.h"
 #include "generated/coated_graph.h"
 #include "generated/coated_material.h"
 #include "rawframe/material/errors.h"
@@ -76,4 +79,27 @@ RAWFRAME_TEST(AGraphCoatedOverItsBaseIsWrittenAsTheSlangTheScenesTestsDraw) {
     const auto kWritten = generateSlang(*kRead);
     const std::string_view kGolden{reinterpret_cast<const char*>(kCoatedGraph.data()), kCoatedGraph.size()};
     RAWFRAME_EXPECT(kWritten.has_value() && kWritten->source == kGolden);
+}
+
+RAWFRAME_TEST(AnAnisotropyIsWrittenAlongItsTurn) {
+    // brushed.material stretches its roughness along the tangent turned by
+    // its turn parameter (D717); the scene's tests draw what it is written
+    // as, brushed_graph.slang, word for word.
+    const std::string_view kDocument{reinterpret_cast<const char*>(kBrushedMaterial.data()), kBrushedMaterial.size()};
+    const auto kRead = readMaterial(kDocument);
+    RAWFRAME_EXPECT(kRead.has_value());
+    if (!kRead.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(refusedWith(compile(*kRead), MaterialError::Unsupported));
+    const auto kWritten = generateSlang(*kRead);
+    const std::string_view kGolden{reinterpret_cast<const char*>(kBrushedGraph.data()), kBrushedGraph.size()};
+    RAWFRAME_EXPECT(kWritten.has_value() && kWritten->source == kGolden);
+    // A turn is any angle but nought; a strength from nought to one.
+    const auto kValid = [](Value inputs) {
+        return validateSurface(coated(std::move(inputs))).has_value();
+    };
+    RAWFRAME_EXPECT(kValid(objectOf({{"specular_anisotropy_rotation", Value::real(-2.5)}})));
+    RAWFRAME_EXPECT(!kValid(objectOf({{"specular_anisotropy_rotation", Value::real(0)}})));
+    RAWFRAME_EXPECT(!kValid(objectOf({{"specular_roughness_anisotropy", Value::real(-0.5)}})));
 }

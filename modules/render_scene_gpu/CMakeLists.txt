@@ -77,4 +77,11 @@ if(TARGET rawframe_render_scene_gpu_tests)
     rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
                            FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/coated_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
                            HEADER "coated_graph_shadow_container.h" SYMBOL "kCoatedGraphShadow")
+    # A graph's material brushed along a turn its parameter gives (D717).
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/brushed_graph.scene${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "brushed_graph_scene_container.h" SYMBOL "kBrushedGraphScene")
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/brushed_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "brushed_graph_shadow_container.h" SYMBOL "kBrushedGraphShadow")
 endif()

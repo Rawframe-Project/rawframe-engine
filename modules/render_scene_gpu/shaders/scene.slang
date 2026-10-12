@@ -382,8 +382,10 @@ static const float kPi = 3.14159265;
 // A point's surface as the BRDF takes it: the diffuse color (the base
 // color less what metal takes), what it reflects head on (a dielectric's
 // by its index of refraction and specular color, or a metal's base color),
-// and its roughness; and the coat over it, its weight, nought for none, its
-// roughness, and its normal (D716).
+// and its roughness; the coat over it, its weight, nought for none, its
+// roughness, and its normal (D716); and its anisotropy, nought for none,
+// and the directions across the surface its roughness stretches along and
+// stays across (D717).
 struct Surface
 {
     float3 diffuse;
@@ -392,6 +394,9 @@ struct Surface
     float coat;
     float coatRoughness;
     float3 coatNormal;
+    float anisotropy;
+    float3 along;
+    float3 across;
 }
 
 // What a coat reflects head on: a dielectric's of index 1.6, OpenPBR's
@@ -415,6 +420,23 @@ float lobe(float3 normal, float3 toEye, float3 toward, float3 halfway, float rou
     return distribution * visibility * nl;
 }
 
+// An anisotropic surface's GGX distribution times its height-correlated
+// visibility, as KHR_materials_anisotropy states them: the roughness
+// stretched along `surface.along` toward one by the anisotropy squared.
+float anisotropic(Surface surface, float3 toEye, float3 toward, float3 halfway, float nl, float nv, float nh)
+{
+    const float alpha = max(surface.roughness * surface.roughness, 1e-3);
+    const float stretched = lerp(alpha, 1.0, surface.anisotropy * surface.anisotropy);
+    const float both = stretched * alpha;
+    const float3 spread = float3(alpha * dot(surface.along, halfway), stretched * dot(surface.across, halfway), both * nh);
+    const float weight = both / dot(spread, spread);
+    const float distribution = both * weight * weight / kPi;
+    const float fromEye = nl * length(float3(stretched * dot(surface.along, toEye), alpha * dot(surface.across, toEye), nv));
+    const float fromLight =
+        nv * length(float3(stretched * dot(surface.along, toward), alpha * dot(surface.across, toward), nl));
+    return distribution * saturate(0.5 / (fromEye + fromLight));
+}
+
 // The BRDF beneath any coat.
 float3 beneath(Surface surface, float3 normal, float3 toEye, float3 toward)
 {
@@ -433,7 +455,9 @@ float3 beneath(Surface surface, float3 normal, float3 toEye, float3 toward)
     const float distribution = alpha2 / (kPi * spread * spread);
     const float visibility =
         0.5 / (nl * sqrt(nv * nv * (1.0 - alpha2) + alpha2) + nv * sqrt(nl * nl * (1.0 - alpha2) + alpha2));
-    return ((1.0 - fresnel) * surface.diffuse / kPi + fresnel * (distribution * visibility)) * nl;
+    const float specular =
+        surface.anisotropy > 0.0 ? anisotropic(surface, toEye, toward, halfway, nl, nv, nh) : distribution * visibility;
+    return ((1.0 - fresnel) * surface.diffuse / kPi + fresnel * specular) * nl;
 }
 
 // Of the light arriving from `toward`, per unit of illuminance, what leaves
@@ -842,6 +866,20 @@ Lit shaded(Corner corner, bool decaled, bool front)
     surface.coat = evaluated.coat;
     surface.coatRoughness = evaluated.coatRoughness;
     surface.coatNormal = normalize(evaluated.coatNormal);
+    // The anisotropy's directions (D717): the mesh's tangent turned by its
+    // rotation toward the bitangent, about the normal the material gives.
+    surface.anisotropy = evaluated.anisotropy;
+    surface.along = float3(0.0);
+    surface.across = float3(0.0);
+    if (surface.anisotropy > 0.0)
+    {
+        const float3 tangent = normalize(corner.tangent.xyz - normal * dot(normal, corner.tangent.xyz));
+        const float3 bitangent = cross(normal, tangent) * corner.tangent.w;
+        const float3 turned =
+            tangent * cos(evaluated.anisotropyRotation) + bitangent * sin(evaluated.anisotropyRotation);
+        surface.along = normalize(turned - normal * dot(normal, turned));
+        surface.across = cross(normal, surface.along);
+    }
     const int2 texel = int2(pixel);
     // What of the sun's light the contact shadows let through (D338), for
     // an opaque model the prepass saw.
@@ -856,7 +894,15 @@ Lit shaded(Corner corner, bool decaled, bool front)
     const float nv = max(dot(normal, toEye), 0.0);
     const float3 sheen =
         surface.headOn + (max(float3(1.0 - surface.roughness), surface.headOn) - surface.headOn) * pow(1.0 - nv, 5.0);
-    const float3 mirrored = reflect(-toEye, normal);
+    // An anisotropic surface reflects about a normal bent toward the
+    // stretch, as KHR_materials_anisotropy's sample renderer bends it.
+    float3 mirrored = reflect(-toEye, normal);
+    if (surface.anisotropy > 0.0)
+    {
+        const float3 grain = cross(cross(surface.across, toEye), surface.across);
+        const float bend = pow(1.0 - surface.anisotropy * (1.0 - surface.roughness), 4.0);
+        mirrored = reflect(-toEye, normalize(lerp(grain, normal, bend)));
+    }
     // With the sky's picture (D322), its irradiance across the normal's
     // side.
     float3 around = lerp(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * normal.y);

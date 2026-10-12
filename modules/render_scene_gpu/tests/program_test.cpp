@@ -5,6 +5,8 @@
 // RAWFRAME_REQUIRE_GPU is set.
 
 #include "fixture.h"
+#include "generated/brushed_graph_scene_container.h"
+#include "generated/brushed_graph_shadow_container.h"
 #include "generated/checker_container.h"
 #include "generated/checker_shadow_container.h"
 #include "generated/coated_graph_scene_container.h"
@@ -625,4 +627,67 @@ RAWFRAME_TEST(ACoatShinesOverARoughBase) {
     const int kShining = kBrightest(*kCoated);
     std::printf("highlight rough %d, coated %d\n", kRough, kShining);
     RAWFRAME_EXPECT(kShining > kRough + 30);
+}
+
+RAWFRAME_TEST(AnAnisotropyStretchesTheHighlightAlongItsTurn) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // brushed.material as rawframe.material writes it (brushed_graph.slang,
+    // D717) on a black ball under the default sun, no sky or ground: its
+    // roughness stretched
+    // along the mesh's tangent turned by its turn parameter. The sun's
+    // highlight, the pixels at least half as red as the brightest, is
+    // drawn out one way unturned and the other way turned a quarter.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    frame.lights.sky = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
+    SceneDraw ball = box(4, 1.5F, {0, 0, 0, 1}, render_scene::kSphere);
+    ball.material = 1;
+    frame.draws = {ball};
+    frame.programs = {nullptr, programOf(kBrushedGraphScene, kBrushedGraphShadow, material::Shading::Lit)};
+    const auto kSpread = [&](float turn) -> std::array<int, 2> {
+        render_scene::MaterialBlob states = render_scene::noMaterial();
+        states[material::kBlobFloats] = turn;
+        frame.materials = {render_scene::noMaterial(), states};
+        const auto kPixels =
+            drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
+        if (!kPixels.has_value()) {
+            return {};
+        }
+        int most = 0;
+        for (std::uint32_t y = 0; y < kSide; ++y) {
+            for (std::uint32_t x = 0; x < kSide; ++x) {
+                most = std::max(most, at(*kPixels, x, y)[0]);
+            }
+        }
+        std::array<int, 4> bounds = {static_cast<int>(kSide), static_cast<int>(kSide), -1, -1};
+        for (std::uint32_t y = 0; y < kSide; ++y) {
+            for (std::uint32_t x = 0; x < kSide; ++x) {
+                if (at(*kPixels, x, y)[0] * 2 >= most && most > 0) {
+                    bounds = {std::min(bounds[0], static_cast<int>(x)),
+                              std::min(bounds[1], static_cast<int>(y)),
+                              std::max(bounds[2], static_cast<int>(x)),
+                              std::max(bounds[3], static_cast<int>(y))};
+                }
+            }
+        }
+        return {bounds[2] - bounds[0] + 1, bounds[3] - bounds[1] + 1};
+    };
+    const std::array<int, 2> kAlong = kSpread(0);
+    const std::array<int, 2> kTurned = kSpread(1.5707964F);
+    std::printf("highlight unturned %d by %d, turned %d by %d\n", kAlong[0], kAlong[1], kTurned[0], kTurned[1]);
+    RAWFRAME_EXPECT((kAlong[0] > kAlong[1]) != (kTurned[0] > kTurned[1]));
+    RAWFRAME_EXPECT(std::max(kAlong[0], kAlong[1]) >= 2 * std::min(kAlong[0], kAlong[1]));
 }
