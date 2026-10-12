@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -165,6 +166,9 @@ public:
             RAWFRAME_TRY_ASSIGN(const surface_graph::MathInputs kMath, surface_graph::mathInputsOf(surface_, *kNode));
             carried = kMath.out.value_or(Carried::Float);
             expression = std::string{kShape.code};
+            if (!kShape.helper.empty()) {
+                helpers_.insert(kShape.helper);
+            }
             for (std::size_t at = 0; at < kMath.count; ++at) {
                 const surface_graph::Operand& kInput = kMath.inputs.at(at);
                 RAWFRAME_TRY_ASSIGN(std::string text, operandText(kInput));
@@ -226,6 +230,11 @@ public:
         return statements_;
     }
 
+    /// The functions the written code calls (D698).
+    [[nodiscard]] const std::set<std::string_view>& helpers() const noexcept {
+        return helpers_;
+    }
+
     [[nodiscard]] std::vector<SampledTexture> takeTextures() {
         return std::move(textures_);
     }
@@ -281,6 +290,7 @@ private:
     std::string statements_;
     std::map<graph::NodeId, std::string> made_;
     std::vector<SampledTexture> textures_;
+    std::set<std::string_view> helpers_;
     std::size_t next_ = 0;
 };
 
@@ -328,8 +338,16 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
         }
     }
     GeneratedSlang made;
+    // The functions either stage calls, once each, before the material.
+    std::set<std::string_view> helpers = writer.helpers();
+    helpers.insert(placing.helpers().begin(), placing.helpers().end());
+    std::string helped;
+    for (const std::string_view kHelper : helpers) {
+        helped += std::string{kHelper} + "\n";
+    }
     made.source = "// A surface material written by rawframe.material (D483); generated, never edited.\n"
-                  "import material;\n\n"
+                  "import material;\n\n" +
+                  helped +
                   "struct Generated : IMaterial\n"
                   "{\n"
                   "    static Evaluated evaluate(Point point)\n"

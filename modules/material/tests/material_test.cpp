@@ -875,11 +875,21 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
                                          " != ",
                                          "!(",
                                          ") ? (",
-                                         "const bool "}) {
+                                         "const bool ",
+                                         "rawframeRgbToHsv(v",
+                                         "rawframeHsvToRgb(v",
+                                         "float3(0.2126, 0.7152, 0.0722)"}) {
         RAWFRAME_EXPECT(kMade->source.contains(kCode));
         if (!kMade->source.contains(kCode)) {
             std::printf("not written: %s\n", std::string{kCode}.c_str());
         }
+    }
+    // Each helper a color node calls is written once, before the material
+    // (D698).
+    for (const std::string_view kHelper : {"float3 rawframeRgbToHsv(float3 c)", "float3 rawframeHsvToRgb(float3 c)"}) {
+        const std::size_t kFirst = kMade->source.find(kHelper);
+        RAWFRAME_EXPECT(kFirst != std::string::npos && kFirst < kMade->source.find("struct Generated") &&
+                        kMade->source.find(kHelper, kFirst + 1) == std::string::npos);
     }
     // Types: a length of a float, a dot of a vec3 and a float, a cross of a
     // float, inputs of two vector types, and a refraction's vector ratio.
@@ -892,6 +902,7 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
             MaterialError::Invalid);
     };
     RAWFRAME_EXPECT(kRefused("rawframe/length@1", {{"in", from(kTime, "seconds")}}));
+    RAWFRAME_EXPECT(kRefused("rawframe/luminance@1", {{"in", from(kWorld, "position")}}));
     RAWFRAME_EXPECT(kRefused("rawframe/dot@1", {{"a", from(kWorld, "position")}, {"b", from(kTime, "seconds")}}));
     RAWFRAME_EXPECT(kRefused("rawframe/cross@1", {{"a", from(kTime, "seconds")}, {"b", from(kWorld, "position")}}));
     RAWFRAME_EXPECT(kRefused("rawframe/min@1", {{"a", from(kWorld, "position")}, {"b", pair(1, 2)}}));

@@ -92,7 +92,28 @@ using enum Rule;
 /// `fract` is Slang's `frac`, `mix` its `lerp`; `modulo` is floored, as
 /// MaterialX's is, never C's truncated remainder; `remap` takes `in` from
 /// between `in_low` and `in_high` to between `out_low` and `out_high`.
-constexpr std::array<MathNode, 46> kMathNodes = {{
+/// HSV with hue, saturation, and value each from nought to one, as
+/// MaterialX's color nodes take it (D698).
+constexpr std::string_view kRgbToHsv = "float3 rawframeRgbToHsv(float3 c)\n"
+                                       "{\n"
+                                       "    const float4 k = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);\n"
+                                       "    const float4 p = c.g < c.b ? float4(c.bg, k.wz) : float4(c.gb, k.xy);\n"
+                                       "    const float4 q = c.r < p.x ? float4(p.xyw, c.r) : float4(c.r, p.yzx);\n"
+                                       "    const float d = q.x - min(q.w, q.y);\n"
+                                       "    return float3(abs(q.z + (q.w - q.y) / (6.0 * d + 1.0e-10)), d / (q.x + "
+                                       "1.0e-10), q.x);\n"
+                                       "}\n";
+constexpr std::string_view kHsvToRgb = "float3 rawframeHsvToRgb(float3 c)\n"
+                                       "{\n"
+                                       "    const float3 p = abs(frac(c.xxx + float3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 "
+                                       "- 3.0);\n"
+                                       "    return c.z * lerp(float3(1.0), saturate(p - 1.0), c.y);\n"
+                                       "}\n";
+
+constexpr std::array<MathNode, 49> kMathNodes = {{
+    {"rawframe/luminance@1", {"in"}, 1, Tone, "dot($0, float3(0.2126, 0.7152, 0.0722))", false, {}},
+    {"rawframe/rgb_to_hsv@1", {"in"}, 1, Recolor, "rawframeRgbToHsv($0)", false, kRgbToHsv},
+    {"rawframe/hsv_to_rgb@1", {"in"}, 1, Recolor, "rawframeHsvToRgb($0)", false, kHsvToRgb},
     {"rawframe/and@1", {"a", "b"}, 2, Logical, "$0 && $1", false},
     {"rawframe/or@1", {"a", "b"}, 2, Logical, "$0 || $1", false},
     {"rawframe/xor@1", {"a", "b"}, 2, Logical, "$0 != $1", false},
@@ -293,6 +314,13 @@ result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const gr
         made.out = kind.value_or(Carried::Float);
         break;
     }
+    case Tone:
+    case Recolor:
+        if (*kIn[0].carried != Carried::Color3) {
+            return invalid("a luminance or HSV node's input is a color3");
+        }
+        made.out = kNode.rule == Tone ? Carried::Float : Carried::Color3;
+        break;
     case Measure:
     case Unit:
         if (!kIsVector(*kIn[0].carried)) {

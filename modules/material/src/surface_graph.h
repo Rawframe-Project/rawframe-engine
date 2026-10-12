@@ -75,7 +75,11 @@ enum class Rule : std::uint8_t {
     Logical,
     /// A bool, then two inputs of one type or floats; one of them out:
     /// select (D697).
-    Choice
+    Choice,
+    /// A color3 in, a float out: luminance (D698).
+    Tone,
+    /// A color3 in, a color3 out: rgb_to_hsv, hsv_to_rgb (D698).
+    Recolor
 };
 
 /// One of the atomic core's math nodes (SPEC-0026, D694): its type, its
@@ -90,6 +94,9 @@ struct MathNode {
     Rule rule = Rule::Componentwise;
     std::string_view code;
     bool call = false;
+    /// A function its code calls, written once before the material where
+    /// any node uses it (D698); none for most.
+    std::string_view helper;
 };
 
 /// The math node of `type`; none for another type.
