@@ -54,6 +54,12 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_styles.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_styles)
     set_tests_properties(author_styles PROPERTIES PASS_REGULAR_EXPRESSION "authored stalls' styles in a session")
+    # A material instance authored (D721): Gale's shore, with its base's
+    # interface read beside it.
+    add_test(NAME author_material
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_material.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_material)
+    set_tests_properties(author_material PROPERTIES PASS_REGULAR_EXPRESSION "authored gale's shore in a session")
     add_test(NAME author_ui
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_ui.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_ui)

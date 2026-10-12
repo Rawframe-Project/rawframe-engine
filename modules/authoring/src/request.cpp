@@ -155,6 +155,9 @@ result::Result<Query> queryOf(const Value& value) {
     if (kIndex == kChanging + 4) {
         return Query{ReadUiDocument{}};
     }
+    if (kIndex == kChanging + 5) {
+        return Query{ReadMaterialInstance{}};
+    }
     if (kIndex == kChanging + 2) {
         const std::string* named = textOf(value.find("named"));
         const Value* having = value.find("having");
@@ -194,6 +197,16 @@ result::Result<Operation> operationOf(const Value& value) {
             return kBad();
         }
         return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
+    }
+    if (kIndex == 23) {
+        // A material instance's override, by its input's name (D721).
+        const std::string* input = textOf(value.find("input"));
+        const Value& given = *value.find("value");
+        if (input == nullptr) {
+            return kBad();
+        }
+        return Operation{
+            SetMaterialOverride{.input = *input, .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
     }
     if (kIndex >= 19) {
         // A UI document's node, by its component's name (D641).

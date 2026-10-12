@@ -1,9 +1,11 @@
-// Coverage-guided fuzzing of a request applied to a game's UI document and
-// style sheet (D640, D641), seeded with every operation of both kinds.
+// Coverage-guided fuzzing of a request applied to a game's UI document,
+// style sheet, and material instance (D640, D641, D721), seeded with every
+// operation of each kind.
 // Whatever a request holds, a document it changes still reads, its text
 // opens again to the very same bytes, undo gives back the text it had, and
 // redo the text the change made.
 
+#include "rawframe/authoring/authored_material.h"
 #include "rawframe/authoring/authored_styles.h"
 #include "rawframe/authoring/authored_ui.h"
 #include "rawframe/authoring/request.h"
@@ -70,6 +72,20 @@ constexpr std::string_view kSheet = R"({
 }
 )";
 
+constexpr std::string_view kShore = R"({
+  "formatVersion": 1,
+  "kind": "surface",
+  "base": "rock.rfmaterial",
+  "overrides": {
+    "tint": [
+      0.3,
+      0.29,
+      0.28
+    ]
+  }
+}
+)";
+
 /// `document` changed by `request`, undone, and redone, or aborted where
 /// any step breaks the properties above.
 template <class Authored> void exercise(std::string_view text, const authoring::Request& request) {
@@ -108,5 +124,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     }
     exercise<authoring::AuthoredUi>(kHud, *kRequest);
     exercise<authoring::AuthoredStyles>(kSheet, *kRequest);
+    exercise<authoring::AuthoredMaterial>(kShore, *kRequest);
     return 0;
 }

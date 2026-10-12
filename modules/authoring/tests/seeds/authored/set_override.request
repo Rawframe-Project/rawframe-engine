@@ -1,0 +1,1 @@
+{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[{"operation":"materials.set_override","input":"stone","value":"ea9d135c1c4e2806"},{"operation":"materials.set_override","input":"tint","value":null}]}

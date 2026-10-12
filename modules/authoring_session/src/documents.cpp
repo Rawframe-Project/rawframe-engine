@@ -1,10 +1,12 @@
 #include "documents.h"
 
+#include "rawframe/authoring/authored_material.h"
 #include "rawframe/authoring/authored_styles.h"
 #include "rawframe/authoring/authored_ui.h"
 #include "rawframe/authoring/errors.h"
 #include "rawframe/authoring_session/game.h"
 #include "rawframe/base/files.h"
+#include "rawframe/material/material.h"
 #include "replies.h"
 
 #include <algorithm>
@@ -38,6 +40,25 @@ Value outcomeOf(const Authored& authored, bool written, bool reopened, Value res
     made.add("results", std::move(results));
     made.add("skipped", Value::integer(static_cast<std::int64_t>(skipped)));
     return made;
+}
+
+/// What an answer holds besides the document's own: nothing, but for a
+/// material instance its base's interface, `null` where the base does not
+/// read as a material, which says what each override may be (D721).
+template <class Authored>
+void addTo(Value& /*answer*/, const Authored& /*authored*/, const std::filesystem::path& /*root*/) {
+}
+void addTo(Value& answer, const authoring::AuthoredMaterial& material, const std::filesystem::path& root) {
+    const std::filesystem::path kPath = std::filesystem::weakly_canonical(root / material.base());
+    const auto [kRootEnd, kPathAt] = std::ranges::mismatch(root, kPath);
+    const auto kText = kRootEnd == root.end() ? readFile(kPath) : std::nullopt;
+    Value interface;
+    if (kText.has_value() && material::readMaterial(*kText).has_value()) {
+        if (auto read = document::parse(*kText); read.has_value() && read->find("interface") != nullptr) {
+            interface = *read->find("interface");
+        }
+    }
+    answer.add("interface", std::move(interface));
 }
 
 } // namespace
@@ -158,6 +179,7 @@ result::Result<Value> Documents<Authored>::answered(const authoring::SessionReco
         auto answer = authoring::answer(*open->document, query);
         Value made = Value::object();
         if (answer.has_value()) {
+            addTo(*answer, *open->document, root_);
             made.add("answer", std::move(*answer));
         } else {
             failed = true;
@@ -193,6 +215,7 @@ template <class Authored> result::Result<Value> Documents<Authored>::history(con
     return made;
 }
 
+template class Documents<authoring::AuthoredMaterial>;
 template class Documents<authoring::AuthoredStyles>;
 template class Documents<authoring::AuthoredUi>;
 

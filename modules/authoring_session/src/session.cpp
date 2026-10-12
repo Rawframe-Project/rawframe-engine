@@ -5,6 +5,7 @@
 #include "handles.h"
 #include "importing.h"
 #include "previewing.h"
+#include "rawframe/authoring/authored_material.h"
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/authored_styles.h"
 #include "rawframe/authoring/authored_ui.h"
@@ -59,7 +60,8 @@ class Held {
 public:
     Held(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook)
         : game_(std::move(game)), root_(std::filesystem::weakly_canonical(root)), cook_(cook),
-          cooking_(std::move(cook)), sheets_(root_, ".styles", "style sheet"), uis_(root_, ".ui", "UI document") {
+          cooking_(std::move(cook)), sheets_(root_, ".styles", "style sheet"), uis_(root_, ".ui", "UI document"),
+          materials_(root_, ".rfmaterial", "material instance") {
     }
     Held(const Held&) = delete;
     Held& operator=(const Held&) = delete;
@@ -321,6 +323,9 @@ private:
         if (uis_.names(record.scene)) {
             return uis_.history(record);
         }
+        if (materials_.names(record.scene)) {
+            return materials_.history(record);
+        }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
         const authoring::AuthoredScene& scene = *open->document;
@@ -404,6 +409,9 @@ private:
     }
 
     result::Result<Value> applied(const authoring::SessionRecord& record) {
+        if (materials_.names(record.scene)) {
+            return materials_.applied(record, failed_);
+        }
         if (sheets_.names(record.scene) || uis_.names(record.scene)) {
             // A node names a class the sheet has (D642).
             RAWFRAME_TRY(referencesKept(
@@ -564,6 +572,9 @@ private:
         if (uis_.names(record.scene)) {
             return uis_.answered(record, failed_);
         }
+        if (materials_.names(record.scene)) {
+            return materials_.answered(record, failed_);
+        }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
         Value answers = Value::array();
@@ -587,6 +598,9 @@ private:
     }
 
     result::Result<Value> stepped(const authoring::SessionRecord& record, bool undo) {
+        if (materials_.names(record.scene)) {
+            return materials_.stepped(record, undo, failed_);
+        }
         if (sheets_.names(record.scene) || uis_.names(record.scene)) {
             // A step that would leave a node naming a class the sheet no
             // longer has is stepped back and refused (D642).
@@ -649,9 +663,11 @@ private:
     /// runs (D502).
     std::filesystem::path cook_;
     Cooking cooking_;
-    /// The style sheets and UI documents records name (D636, D641).
+    /// The style sheets, UI documents, and material instances records name
+    /// (D636, D641, D721).
     Documents<authoring::AuthoredStyles> sheets_;
     Documents<authoring::AuthoredUi> uis_;
+    Documents<authoring::AuthoredMaterial> materials_;
     GameDocuments gameDocuments_;
 };
 

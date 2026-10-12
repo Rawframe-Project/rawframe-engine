@@ -261,6 +261,14 @@ struct MoveUiNode {
     std::optional<std::size_t> place;
 };
 
+/// One override of a material instance (D709, D721): its base's
+/// interface input or static switch `input`, set to `value` as the
+/// instance document holds it, or unset for its base's default.
+struct SetMaterialOverride {
+    std::string input;
+    std::optional<document::Value> value;
+};
+
 /// The id an instantiation named `instance` gives the source's entity
 /// `source`: a version 8 UUID from their SHA-256 (D156).
 [[nodiscard]] base::Bits128 instanceEntityId(base::Bits128 instance, base::Bits128 source) noexcept;
@@ -287,12 +295,14 @@ using Operation = std::variant<CreateEntity,
                                SetUiField,
                                CreateUiNode,
                                RemoveUiNode,
-                               MoveUiNode>;
+                               MoveUiNode,
+                               SetMaterialOverride>;
 
-/// Whether `operation` changes a scene, rather than a style sheet (D636) or
-/// a UI document (D641), which follow the scene's in `Operation`.
+/// Whether `operation` changes a scene, rather than a style sheet (D636), a
+/// UI document (D641), or a material instance (D721), which follow the
+/// scene's in `Operation`.
 [[nodiscard]] constexpr bool changesScene(const Operation& operation) noexcept {
-    return operation.index() < std::variant_size_v<Operation> - 9;
+    return operation.index() < std::variant_size_v<Operation> - 10;
 }
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the
@@ -314,8 +324,10 @@ struct FindEntities {
 struct ReadSheet {};
 /// A UI document whole (D641), as it holds itself: a UI document's query.
 struct ReadUiDocument {};
+/// A material instance whole (D721): its base and its overrides.
+struct ReadMaterialInstance {};
 
-using Query = std::variant<ListEntities, ReadEntity, FindEntities, ReadSheet, ReadUiDocument>;
+using Query = std::variant<ListEntities, ReadEntity, FindEntities, ReadSheet, ReadUiDocument, ReadMaterialInstance>;
 
 /// SPEC-0040's history classes: every operation that changes a scene is
 /// `Undoable`, and every query `ReadOnly`.

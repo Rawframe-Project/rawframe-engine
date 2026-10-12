@@ -72,6 +72,8 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
         R"({"operation": "ui.create_node", "node": "game.menu"})",
         R"({"operation": "ui.remove_node", "node": "game.hud"})",
         R"({"operation": "ui.move_node", "node": "game.coin", "parent": null, "place": 1})",
+        R"({"operation": "materials.set_override", "input": "tint", "value": [1, 0, 0]})",
+        R"({"operation": "materials.set_override", "input": "wet", "value": null})",
     };
     std::string joined;
     for (const std::string& each : kAll) {
@@ -113,6 +115,13 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
                     std::get<RemoveUiNode>(kRead->operations[28]).node == "game.hud" &&
                     !std::get<MoveUiNode>(kRead->operations[29]).parent.has_value() &&
                     std::get<MoveUiNode>(kRead->operations[29]).place == 1);
+    // A material instance's (D721): its value as the instance holds it,
+    // or null to unset.
+    const auto& kTint = std::get<SetMaterialOverride>(kRead->operations[30]);
+    RAWFRAME_EXPECT(kTint.input == "tint" && kTint.value.has_value() && kTint.value->items().size() == 3 &&
+                    !std::get<SetMaterialOverride>(kRead->operations[31]).value.has_value());
+    RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "materials.set_override", "input": "tint"})")),
+                                AuthoringError::ValidationFailed));
     RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "ui.create_node", "node": "game.coin",
         "parent": 3})")),
                                 AuthoringError::ValidationFailed));

@@ -87,12 +87,13 @@ bool holdsComponent(const scene::Scene& scene, const EntityEntry& entry, std::st
 } // namespace
 
 result::Result<Answer> answer(const scene::Scene& scene, const Query& query, const ComponentCatalog& catalog) {
-    if (std::holds_alternative<ReadSheet>(query) || std::holds_alternative<ReadUiDocument>(query)) {
+    if (std::holds_alternative<ReadSheet>(query) || std::holds_alternative<ReadUiDocument>(query) ||
+        std::holds_alternative<ReadMaterialInstance>(query)) {
         return std::unexpected<result::Error>{
             result::fail(result::ErrorClass::InvalidArgument,
                          kAuthoringDomain,
                          code(AuthoringError::ValidationFailed),
-                         "the query reads a style sheet or a UI document, not a scene")
+                         "the query reads a style sheet, a UI document, or a material, not a scene")
                 .error()
                 .withContext("operation", declarationOf(query).name)};
     }

@@ -2,7 +2,11 @@
 
 #include "rawframe/authoring/errors.h"
 
+#include <algorithm>
+#include <span>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace rawframe::authoring {
 
@@ -42,8 +46,19 @@ Value withMember(const Value& object,
     const bool kEmpty = rebuilt && !root && value.has_value() &&
                         ((value->kind() == Value::Kind::Object && value->names().empty()) ||
                          (value->kind() == Value::Kind::Array && value->items().empty()));
+    // A holder whose kind gives no order holds members of its own names, in
+    // name order (an instance's overrides, D721).
+    std::vector<std::string> named;
+    if (order.empty()) {
+        named.assign(object.names().begin(), object.names().end());
+        if (std::ranges::find(named, name) == named.end()) {
+            named.emplace_back(name);
+        }
+        std::ranges::sort(named);
+    }
+    std::vector<std::string_view> owned{named.begin(), named.end()};
     Value made = Value::object();
-    for (const std::string_view kField : order) {
+    for (const std::string_view kField : order.empty() ? std::span<const std::string_view>{owned} : order) {
         if (kField == name) {
             if (value.has_value() && !kEmpty) {
                 made.add(std::string{kField}, *value);

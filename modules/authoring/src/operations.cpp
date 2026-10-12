@@ -54,10 +54,12 @@ constexpr std::array<InputDeclaration, 3> kUiCreateInputs = {
 constexpr std::array<InputDeclaration, 1> kUiNodeInputs = {{{"node", InputType::Text}}};
 constexpr std::array<InputDeclaration, 2> kTransitionsInputs = {
     {{"style", InputType::Style}, {"value", InputType::DocumentValue}}};
+constexpr std::array<InputDeclaration, 2> kOverrideInputs = {
+    {{"input", InputType::Text}, {"value", InputType::DocumentValue}}};
 constexpr std::array<InputDeclaration, 2> kRenameClassInputs = {
     {{"style", InputType::Style}, {"name", InputType::Text}}};
 
-constexpr std::array<OperationDeclaration, 28> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 30> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -81,6 +83,7 @@ constexpr std::array<OperationDeclaration, 28> kDeclarations = {{
     {.name = "ui.create_node", .targets = "ui.document node", .inputs = kUiCreateInputs},
     {.name = "ui.remove_node", .targets = "ui.document node", .inputs = kUiNodeInputs},
     {.name = "ui.move_node", .targets = "ui.document node", .inputs = kUiCreateInputs},
+    {.name = "materials.set_override", .targets = "rawframe.material override", .inputs = kOverrideInputs},
     {.name = "scene.list_entities", .history = HistoryClass::ReadOnly, .targets = "rawframe.scene", .inputs = {}},
     {.name = "scene.read_entity",
      .history = HistoryClass::ReadOnly,
@@ -92,6 +95,10 @@ constexpr std::array<OperationDeclaration, 28> kDeclarations = {{
      .inputs = kFindInputs},
     {.name = "styles.read_sheet", .history = HistoryClass::ReadOnly, .targets = "ui.styles", .inputs = {}},
     {.name = "ui.read_document", .history = HistoryClass::ReadOnly, .targets = "ui.document", .inputs = {}},
+    {.name = "materials.read_instance",
+     .history = HistoryClass::ReadOnly,
+     .targets = "rawframe.material instance",
+     .inputs = {}},
 }};
 static_assert(kDeclarations.size() == std::variant_size_v<Operation> + std::variant_size_v<Query>);
 

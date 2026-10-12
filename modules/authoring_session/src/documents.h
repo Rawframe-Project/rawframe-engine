@@ -1,7 +1,8 @@
 #pragma once
 
 // A session's JSON documents of one kind (D636, D641): style sheets
-// (`.styles`, AuthoredStyles) or UI documents (`.ui`, AuthoredUi), under
+// (`.styles`, AuthoredStyles), UI documents (`.ui`, AuthoredUi), or
+// material instances (`.rfmaterial`, AuthoredMaterial, D721), under
 // its root, opened as records name them and kept open with their histories
 // as its scenes are, reopened when their file changes under it, and
 // written through base::replaceFile when a change is kept. A record names

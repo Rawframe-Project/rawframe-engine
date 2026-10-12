@@ -4,5 +4,5 @@
 # hold one; no client or server closure contains it.
 rawframe_module(NAME authoring_session
     SOURCES src/attach.cpp src/cooking.cpp src/documents.cpp src/game.cpp src/handles.cpp src/importing.cpp src/link.cpp src/previewing.cpp src/references.cpp src/replies.cpp src/session.cpp src/viewing.cpp
-    DEPS authoring ui process world_tooling view network_quic network world_kest kest content scene schema document execution result base
+    DEPS authoring material graph ui process world_tooling view network_quic network world_kest kest content scene schema document execution result base
 )
