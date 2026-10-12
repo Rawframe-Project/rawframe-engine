@@ -7,7 +7,6 @@
 // as their clients' input would. A client draws its own hands where its
 // input holds them, and a block one holds with it (D665).
 
-#include "../src/presentation.h"
 #include "game_harness.h"
 #include "rawframe/physics3d/components.h"
 #include "rawframe/physics3d/registrar.h"
@@ -85,27 +84,6 @@ struct Placed {
     double y = 0;
     double z = 0;
 };
-
-/// The loaded game's presentation plan, found as the simulation is.
-world_kest::PresentationPlan* plan = nullptr;
-
-result::Result<composition::ParticipantOwner> makePlanWatcher(composition::ParticipantContext& context) noexcept {
-    RAWFRAME_TRY_ASSIGN(plan, context.capability(world_kest::kPresentationPlan));
-    struct Watcher final : composition::Participant {};
-    return composition::ParticipantOwner{new Watcher{}};
-}
-
-constexpr std::string_view kPlanNeeds[] = {world_kest::kPresentationPlan.name};
-
-void registerPlanWatcher(composition::ParticipantRegistrar& registrar) noexcept {
-    registrar.submit(composition::ParticipantDeclaration{
-        .identity = "test.plan_watcher",
-        .factory = &makePlanWatcher,
-        .scope = composition::LifetimeScope::World,
-        .requiredCapabilities = kPlanNeeds,
-        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
-    });
-}
 
 const std::array<composition::RegistrarEntry, 5> kReachPresented = {
     kReach[0],
@@ -237,11 +215,11 @@ RAWFRAME_TEST(AClientDrawsItsOwnHandsWhereItsInputHoldsThem) {
     // hands' poses are where the server last put them and the player's
     // input is moved on since, as a client's predicted input is (D665).
     PlayedReach played{kReachPresented};
-    RAWFRAME_EXPECT(played.started() && plan != nullptr);
-    if (!played.started() || plan == nullptr) {
+    RAWFRAME_EXPECT(played.started() && presentationPlan != nullptr);
+    if (!played.started() || presentationPlan == nullptr) {
         return;
     }
-    auto presentation = plan->presentation();
+    auto presentation = presentationPlan->presentation();
     RAWFRAME_EXPECT(presentation.has_value() && *presentation != nullptr);
     if (!presentation.has_value() || *presentation == nullptr) {
         return;
@@ -309,5 +287,5 @@ RAWFRAME_TEST(AClientDrawsItsOwnHandsWhereItsInputHoldsThem) {
                               kHeldAt.x - kHand.x,
                               static_cast<double>(1.3F) + kHeldAt.y - kHand.y,
                               (0.9 - 0.75F) + kHeldAt.z - kHand.z));
-    plan = nullptr;
+    presentationPlan = nullptr;
 }

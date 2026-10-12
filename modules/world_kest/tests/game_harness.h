@@ -2,10 +2,11 @@
 
 // What the game tests share: a composition of the game and the World
 // runtime, a participant that finds the simulation the game was loaded
-// into, a game played tick by tick on a manual clock, reading and writing
+// into and one that finds its presentation plan, a game played tick by tick on a manual clock, reading and writing
 // its components, the test games held as a host holds files, and small file
 // helpers.
 
+#include "../src/presentation.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/execution/time.h"
@@ -55,6 +56,29 @@ inline void registerWatcher(composition::ParticipantRegistrar& registrar) noexce
         .factory = &makeWatcher,
         .scope = composition::LifetimeScope::World,
         .requiredCapabilities = kNeeds,
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
+    });
+}
+
+/// The loaded game's presentation plan, found as the simulation is, for a
+/// test that presents its World as a client would.
+inline world_kest::PresentationPlan* presentationPlan = nullptr;
+
+inline result::Result<composition::ParticipantOwner>
+makePlanWatcher(composition::ParticipantContext& context) noexcept {
+    RAWFRAME_TRY_ASSIGN(presentationPlan, context.capability(world_kest::kPresentationPlan));
+    struct Watcher final : composition::Participant {};
+    return composition::ParticipantOwner{new Watcher{}};
+}
+
+inline constexpr std::string_view kPlanNeeds[] = {world_kest::kPresentationPlan.name};
+
+inline void registerPlanWatcher(composition::ParticipantRegistrar& registrar) noexcept {
+    registrar.submit(composition::ParticipantDeclaration{
+        .identity = "test.plan_watcher",
+        .factory = &makePlanWatcher,
+        .scope = composition::LifetimeScope::World,
+        .requiredCapabilities = kPlanNeeds,
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
     });
 }
