@@ -137,8 +137,9 @@ struct Swizzle {
 /// the presented World's ticks over its tick rate in seconds (ADR-0010).
 [[nodiscard]] result::Status timeIn(const graph::Node& node);
 
-/// A stream node, `world_position`, `world_normal`, or `vertex_color`,
-/// checked: no params and no inputs (D691, D694, D695).
+/// A stream node, `world_position`, `world_normal`, `vertex_color`,
+/// `view_direction`, or `world_tangent`, checked: no params and no inputs
+/// (D691, D694 to D696).
 [[nodiscard]] result::Status streamIn(const graph::Node& node);
 
 /// A `quality_switch` node's inputs, checked, and what its `out` carries

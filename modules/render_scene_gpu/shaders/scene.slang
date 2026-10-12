@@ -224,6 +224,7 @@ Corner vs(Vertex vertex)
     here.uv = vertex.uv;
     here.color = vertex.color;
     here.time = frame.time.x;
+    here.view = normalize(-still);
     const float3 placed = still + Material.offset(here);
     Corner corner;
     corner.position = mul(frame.viewProjection, float4(placed, 1.0));
@@ -235,6 +236,7 @@ Corner vs(Vertex vertex)
     Placed there = here;
     there.position = stillThen + frame.eye.xyz;
     there.time = frame.time.y;
+    there.view = normalize(-stillThen);
     const float3 was = stillThen + Material.offset(there);
     corner.now = mul(frame.unjittered, float4(placed, 1.0)).xyw;
     corner.before = mul(frame.previous, float4(was, 1.0)).xyw;
@@ -273,6 +275,7 @@ Point pointOf(Corner corner)
     point.material = corner.material;
     point.position = corner.placed + frame.eye.xyz;
     point.time = frame.time.x;
+    point.view = normalize(-corner.placed);
     return point;
 }
 
@@ -728,6 +731,7 @@ Lit shaded(Corner corner, bool decaled)
     point.material = corner.material;
     point.position = corner.placed + frame.eye.xyz;
     point.time = frame.time.x;
+    point.view = toEye;
     const Evaluated evaluated = Material.evaluate(point);
     float3 color = evaluated.color;
     float3 normal = evaluated.normal;

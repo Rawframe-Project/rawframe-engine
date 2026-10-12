@@ -50,6 +50,7 @@ float4 placed(Caster caster)
     here.uv = caster.uv;
     here.color = caster.color;
     here.time = cascade.time.x;
+    here.view = normalize(-there);
     return mul(cascade.viewProjection, float4(there + Material.offset(here), 1.0));
 }
 
@@ -91,7 +92,8 @@ Cut vsCut(Caster caster)
 void cut(Cut cut)
 {
     // A caster carries no normal: the material's opacity is read facing
-    // the sun, the coordinates' derivatives taken before anything branches.
+    // the sun and seen along that normal (D696), the coordinates'
+    // derivatives taken before anything branches.
     Point point;
     point.uv = cut.uv;
     point.dx = ddx(cut.uv);
@@ -102,6 +104,7 @@ void cut(Cut cut)
     point.material = cut.material;
     point.position = float3(0.0);
     point.time = cascade.time.x;
+    point.view = float3(0.0, 0.0, 1.0);
     const Evaluated evaluated = Material.evaluate(point);
     if (evaluated.opacity < materials[blobOf(cut.material) + 3u].z)
     {

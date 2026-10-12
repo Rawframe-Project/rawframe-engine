@@ -247,6 +247,10 @@ inline constexpr std::string_view kCombine2Type = "rawframe/combine2@1";
 inline constexpr std::string_view kSeparate2Type = "rawframe/separate2@1";
 inline constexpr std::string_view kSwizzleType = "rawframe/swizzle@1";
 inline constexpr std::string_view kVertexColorType = "rawframe/vertex_color@1";
+/// The way to the eye, a unit vector, and the surface's tangent in the
+/// World's axes, the fragment stage's alone (D696).
+inline constexpr std::string_view kViewDirectionType = "rawframe/view_direction@1";
+inline constexpr std::string_view kWorldTangentType = "rawframe/world_tangent@1";
 
 /// What a surface compiles to at each quality, by `Quality`: the same
 /// material at each where its graph does not differ (D318).
@@ -301,8 +305,8 @@ struct GeneratedSlang {
 /// The surface written as Slang at a quality, for a graph the blob cannot
 /// fold. Refuses (`Unsupported`) a node of a type this family does not
 /// know, a mesh's coordinates past its first, more than four textures, and
-/// a texture or a normal map in the vertex stage (D691); (`Invalid`) what
-/// `validateSurface` refuses.
+/// a texture, a normal map (D691), or a tangent (D696) in the vertex stage;
+/// (`Invalid`) what `validateSurface` refuses.
 [[nodiscard]] result::Result<GeneratedSlang> generateSlang(const graph::Document& surface,
                                                            Quality quality = Quality::High);
 

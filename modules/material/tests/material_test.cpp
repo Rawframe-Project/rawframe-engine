@@ -864,7 +864,10 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
                                          ").zyx",
                                          ").y",
                                          "point.color.rgb",
-                                         "placed.color.a"}) {
+                                         "placed.color.a",
+                                         "point.view",
+                                         "placed.view",
+                                         "point.tangent.xyz"}) {
         RAWFRAME_EXPECT(kMade->source.contains(kCode));
         if (!kMade->source.contains(kCode)) {
             std::printf("not written: %s\n", std::string{kCode}.c_str());

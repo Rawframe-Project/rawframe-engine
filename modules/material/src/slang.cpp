@@ -109,6 +109,16 @@ public:
         if (kType == kWorldNormalType) {
             return at_ + ".normal";
         }
+        if (kType == kViewDirectionType) {
+            return at_ + ".view";
+        }
+        if (kType == kWorldTangentType) {
+            // A vertex is placed before its tangent is turned with it.
+            if (at_ == "placed") {
+                return unsupported("a material's vertex stage reads no tangent in generation 1");
+            }
+            return std::string{"point.tangent.xyz"};
+        }
         if (kType == kVertexColorType) {
             return at_ + (from.output == "alpha" ? ".color.a" : ".color.rgb");
         }

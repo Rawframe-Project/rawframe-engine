@@ -151,11 +151,12 @@ const MathNode* mathNodeOf(std::string_view type) {
 bool known(const graph::Node& node) {
     const Value* kType = node.record.find("type");
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
-    return kText != nullptr && (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType ||
-                                *kText == kSeparate3Type || *kText == kNormalMapType || *kText == kQualitySwitchType ||
-                                *kText == kTimeType || *kText == kWorldPositionType || *kText == kWorldNormalType ||
-                                *kText == kCombine3Type || *kText == kCombine2Type || *kText == kSeparate2Type ||
-                                *kText == kSwizzleType || *kText == kVertexColorType || math(*kText));
+    return kText != nullptr &&
+           (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType || *kText == kSeparate3Type ||
+            *kText == kNormalMapType || *kText == kQualitySwitchType || *kText == kTimeType ||
+            *kText == kWorldPositionType || *kText == kWorldNormalType || *kText == kCombine3Type ||
+            *kText == kCombine2Type || *kText == kSeparate2Type || *kText == kSwizzleType ||
+            *kText == kVertexColorType || *kText == kViewDirectionType || *kText == kWorldTangentType || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -507,7 +508,9 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
         return std::optional{Carried::Float};
     }
     if ((kType == kWorldPositionType && from.output == "position") ||
-        (kType == kWorldNormalType && from.output == "normal")) {
+        (kType == kWorldNormalType && from.output == "normal") ||
+        (kType == kViewDirectionType && from.output == "direction") ||
+        (kType == kWorldTangentType && from.output == "tangent")) {
         RAWFRAME_TRY(streamIn(*kSource));
         return std::optional{Carried::Vec3};
     }
