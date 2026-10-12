@@ -6,6 +6,7 @@
 # moving physical entities on water, authoritative online play. A ship
 # fires its guns to either side; a ball that strikes another ship holes
 # it, and a ship holed enough founders, its player given another (D683).
+# A player's entity is its ship, which its client predicts (D685).
 program gale.kest
 physics3d gravity 0 -9.81 0
 
@@ -14,8 +15,8 @@ collision class shot db78660fee00708e
 collision rule shot shot ignore
 
 component 787f081f-15a5-42fc-bbeb-06b230674c63 gale.helm Helm
-component 81e1d987-0cc4-4374-a8fd-39cd1e9e8dbe gale.berth Berth
 component b71d9c3f-8a0e-4a92-824d-73479a820d53 gale.ship Ship
+component 91c03597-33c6-4c73-9ec6-5bdc9e4b356b gale.guns Guns
 component 8c9ece20-a6b4-4a66-9623-035fc0f16d3a gale.sea Sea
 component 3db5d1a4-0e23-4e70-9405-ad7b76af7640 gale.shot Shot
 # What a client draws: the hulls, the sea round its own ship, and its view
@@ -25,27 +26,32 @@ component f1709939-d7eb-4a52-9acf-8f59734cea9e gale.water rawframe.model.Model
 component 61c67757-1adb-4e63-93c0-5cbbc82656bc gale.waters rawframe.model.Placed
 component 664ccd7d-20b0-45e5-83c6-a91a614b13cf gale.view rawframe.model.Camera
 
-# A player is given a ship; its
-# crew reloads, fires, and abandons a ship that founders (D683); each ship
-# floats, and sails as its player's helm says, its player put where it is,
-# so its client's view follows it (D682).
-system gale.launch simulation launch write gale.berth entities lookup gale.sea before rawframe.physics3d.step
-system gale.crew simulation crew write gale.ship entities lookup gale.helm lookup gale.berth lookup rawframe.physics3d.pose lookup rawframe.physics3d.velocity before gale.float
-system gale.float simulation float read gale.ship read rawframe.physics3d.pose read rawframe.physics3d.velocity write rawframe.physics3d.impulse entities lookup gale.helm before rawframe.physics3d.step
+# A player's ship is launched, and launched again once abandoned; its crew
+# reloads, fires, and abandons a ship that founders (D683); each ship
+# floats, and sails as its player's helm says, which a client predicts for
+# its own (D685).
+system gale.launch simulation launch write gale.ship write rawframe.physics3d.body write rawframe.physics3d.pose write rawframe.physics3d.velocity lookup gale.sea before rawframe.physics3d.step
+system gale.crew simulation crew write gale.guns write gale.ship read gale.helm read rawframe.physics3d.pose read rawframe.physics3d.velocity entities after gale.launch before gale.float
+system gale.float simulation float write gale.ship read gale.helm read rawframe.physics3d.pose read rawframe.physics3d.velocity write rawframe.physics3d.impulse before rawframe.physics3d.step predicted
 
 # A ball strikes what it meets: another ship is holed by it, and the ship
 # that fired it counts the hit.
-system gale.strike simulation strike write gale.shot read rawframe.physics3d.contact read rawframe.physics3d.pose entities lookup gale.ship after rawframe.physics3d.step
+system gale.strike simulation strike write gale.shot read rawframe.physics3d.contact read rawframe.physics3d.pose entities lookup gale.ship lookup gale.guns after rawframe.physics3d.step
 
 # The sea: how many ships it has been given, at the World's origin, the
 # still water's height. Its waves roll by the World's tick (D684).
 spawn 1 gale.sea rawframe.physics3d.pose
 
-replicate rawframe.physics3d.body rawframe.physics3d.pose gale.ship gale.sea gale.berth
-entity gale.ship player
+replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity gale.ship gale.guns gale.sea gale.helm
 entity gale.shot ship
-player gale.helm gale.berth
+player gale.helm gale.ship gale.guns rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.impulse
 input gale.helm
+# A player's helm goes to its own client alone (D673): it predicts with it.
+own gale.helm
+# A client predicts its own ship (D685): its body, helm, and hull, floated,
+# steered, and flooded by the predicted float system, which reads nothing
+# else; its guns are the server's alone. Every other ship is interpolated.
+predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity gale.helm gale.ship
 # A client makes its helm from its player's actions (gale.actions) with
 # sample.kest; bots press the same controls.
 actions gale.actions
@@ -61,4 +67,4 @@ presentation gale.water on gale.sea
 presentation gale.waters on gale.sea
 present gale.flood flood read gale.sea write gale.water write gale.waters entities lookup rawframe.physics3d.pose
 presentation gale.view on player
-present gale.frame frame read gale.berth write gale.view entities lookup rawframe.physics3d.pose
+present gale.frame frame read gale.ship write gale.view entities lookup rawframe.physics3d.pose
