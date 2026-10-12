@@ -7,7 +7,9 @@
 // deep each stands, deleted with Delete, and a chosen node's fields, each
 // set through `ui.set_field` (D641), Up and Down moving it among its
 // siblings (D644), and Move to moving it into the node pressed next, or to
-// the document's top where the document's row is (D671).
+// the document's top where the document's row is (D671). New offers the
+// game's node components the document does not hold, one made at its top
+// as its row is pressed (D672).
 
 #include "rawframe/ui/document.h"
 #include "rawframe/ui/styles.h"
@@ -303,6 +305,37 @@ void ShellParticipant::moveNodeInto(const std::optional<std::string>& parent) {
     operation.add("node", Value::string(entity_));
     operation.add("parent", parent.has_value() ? Value::string(*parent) : Value{});
     commit(std::move(operation), parent.has_value() ? "moved into " + *parent : "moved to the top", entity_);
+}
+
+void ShellParticipant::showNodeForm() {
+    endEdit();
+    fields_.clear();
+    clear(componentRows_);
+    actions_.clear();
+    components_ = 0;
+    const Value* nodes = sheet_.has_value() ? sheet_->find("nodes") : nullptr;
+    std::size_t offered = 0;
+    for (const Catalog::Component& kComponent : catalog_.components) {
+        if (!kComponent.uiNode || nodeOf(nodes, kComponent.name) != nullptr) {
+            continue;
+        }
+        if (offered == 0) {
+            auto heading = row(componentsColumn_, "make a node of", kQuiet, kPanel);
+            if (!heading.has_value()) {
+                return;
+            }
+            componentRows_.push_back(*heading);
+        }
+        auto line = row(componentsColumn_, kComponent.name, kText, kRow, true);
+        if (!line.has_value()) {
+            return;
+        }
+        componentRows_.push_back(*line);
+        actions_.push_back(ActionButton{
+            .node = *line, .component = kComponent.name, .done = kComponent.name + " made", .makesNode = true});
+        ++offered;
+    }
+    say(offered == 0 ? "every node component the game declares is in the document" : "choose the node's component");
 }
 
 } // namespace rawframe::studio

@@ -270,6 +270,9 @@ struct Catalog {
         std::string name;
         /// Its fields in the catalog's order.
         std::vector<Field> fields;
+        /// Of `rawframe.ui.Node`: a UI document's node may be made of it
+        /// (D672).
+        bool uiNode = false;
     };
     std::vector<std::string> operations;
     std::vector<Component> components;

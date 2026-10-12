@@ -73,6 +73,15 @@ referencesKept(const GameDocuments& game, const std::filesystem::path& path, con
                                            .withContext("style", *named)};
             }
         }
+        if (const auto* create = std::get_if<authoring::CreateUiNode>(&kOperation);
+            kUi && create != nullptr && !game.nodes.contains(create->node)) {
+            return std::unexpected{result::fail(result::ErrorClass::InvalidArgument,
+                                                authoring::kAuthoringDomain,
+                                                code(authoring::AuthoringError::ValidationFailed),
+                                                "a node is of a component the game declares a rawframe.ui.Node")
+                                       .error()
+                                       .withContext("node", create->node)};
+        }
         if (const auto* remove = std::get_if<authoring::RemoveStyleClass>(&kOperation);
             kStyles && remove != nullptr && kDocument.has_value()) {
             for (const ui::DocumentNode& kNode : kDocument->nodes) {

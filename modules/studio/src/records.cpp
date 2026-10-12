@@ -629,7 +629,11 @@ Catalog catalogOf(std::string_view reply) {
         if (id == nullptr || id->text() == nullptr || name == nullptr || name->text() == nullptr) {
             continue;
         }
-        Catalog::Component made{.id = *id->text(), .name = *name->text(), .fields = {}};
+        const Value* uiNode = each.find("uiNode");
+        Catalog::Component made{.id = *id->text(),
+                                .name = *name->text(),
+                                .fields = {},
+                                .uiNode = uiNode != nullptr && uiNode->truth() == true};
         const Value* fields = each.find("fields");
         for (const Value& field :
              fields != nullptr && fields->kind() == Value::Kind::Array ? fields->items() : std::span<const Value>{}) {

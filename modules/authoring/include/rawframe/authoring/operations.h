@@ -78,6 +78,9 @@ struct ComponentSchema {
     std::string name;
     std::uint64_t mark = 0;
     std::vector<FieldSchema> fields;
+    /// Of `rawframe.ui.Node`: a node of the game's UI document may be it
+    /// (D672).
+    bool uiNode = false;
 };
 
 class ComponentCatalog {

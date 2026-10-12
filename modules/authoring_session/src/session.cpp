@@ -220,6 +220,11 @@ private:
             return std::unexpected<result::Error>{std::move(files).error()};
         }
         RAWFRAME_TRY_ASSIGN(catalog_, catalogOf(*files));
+        for (const authoring::ComponentSchema& kComponent : catalog_->components()) {
+            if (kComponent.uiNode) {
+                gameDocuments_.nodes.insert(kComponent.name);
+            }
+        }
         beside_ = scenesBeside(game_);
         assets_ = assetsOf(files->description());
         // The documents whose references the session keeps (D642).

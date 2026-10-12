@@ -119,6 +119,8 @@ struct ActionButton {
     std::string done;
     /// The scene's operation, naming no entity: a component's remark.
     bool whole = false;
+    /// A UI node of `component` made (D672), not an operation.
+    bool makesNode = false;
 };
 
 /// The shell: a session on the game, and the UI that shows it.
@@ -333,6 +335,10 @@ private:
     /// The chosen node moved into `parent`, or to the document's top where
     /// there is none, last there (`ui.move_node`, D671).
     void moveNodeInto(const std::optional<std::string>& parent);
+    /// The form New shows with a UI document chosen (D672): a row for each
+    /// of the game's node components the document does not hold, pressed
+    /// to make a node of it at the document's top (`ui.create_node`).
+    void showNodeForm();
 
     /// One operation asked of the session for the chosen scene; `done` or
     /// the session's message said; the scene shown again with `choose`

@@ -101,9 +101,12 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         operation.add("operation", Value::string("styles.remove_class"));
         operation.add("style", Value::string(entity_));
         commit(std::move(operation), "class deleted", std::nullopt);
+    } else if (uiChosen() && node == newNode_) {
+        // Of a component the game declares a node, not one the document
+        // holds (D672).
+        showNodeForm();
     } else if (uiChosen() && node == deleteNode_ && !entity_.empty()) {
-        // A node is removed with what is inside it (D643); one is made in
-        // the game's own words, its component declared, so not here.
+        // A node is removed with what is inside it (D643).
         endEdit();
         Value operation = Value::object();
         operation.add("operation", Value::string("ui.remove_node"));
@@ -160,6 +163,13 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (const auto kAction = std::ranges::find(actions_, node, &ActionButton::node); kAction != actions_.end()) {
         endEdit();
         const ActionButton kAsked = *kAction;
+        if (kAsked.makesNode) {
+            Value operation = Value::object();
+            operation.add("operation", Value::string("ui.create_node"));
+            operation.add("node", Value::string(kAsked.component));
+            commit(std::move(operation), kAsked.done, kAsked.component);
+            return;
+        }
         Value operation = Value::object();
         if (kAsked.whole) {
             operation.add("operation", Value::string(kAsked.operation));

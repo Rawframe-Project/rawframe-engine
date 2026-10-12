@@ -4,6 +4,9 @@
 # sheet lacks is refused, to one it has kept; a class a node names is not
 # removed; a class made and named by a node is not undone while the node
 # names it, its history as it was, and is once the node's change is undone.
+# The game's node components are told as such, and a node is made only of
+# one (D672): of the owner's component it is refused, and the tip, removed,
+# is made again.
 #
 # usage: author_references.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -37,6 +40,10 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.undo","id":7,"scene":"tycoon.styles"}'
     echo '{"kind":"authoring.undo","id":8,"scene":"tycoon.ui"}'
     echo '{"kind":"authoring.undo","id":9,"scene":"tycoon.styles"}'
+    echo '{"kind":"authoring.describe","id":10}'
+    echo '{"kind":"authoring.apply","id":11,"scene":"tycoon.ui","request":'"$(request '{"operation":"ui.create_node","node":"tycoon.owner"}')"'}'
+    echo '{"kind":"authoring.apply","id":12,"scene":"tycoon.ui","request":'"$(request '{"operation":"ui.remove_node","node":"tycoon.tip"}')"'}'
+    echo '{"kind":"authoring.apply","id":13,"scene":"tycoon.ui","request":'"$(request '{"operation":"ui.create_node","node":"tycoon.tip"}')"'}'
 } | "$author" session "$game" "$work/game" >"$work/replies" || true
 reply 2 | grep -q '"code":"validation_failed".*"message":"a node.s style is a class the game.s style sheet has"'
 reply 3 | grep -q '"written":true'
@@ -48,6 +55,13 @@ reply 8 | grep -q '"written":true'
 # Stepped back, the sheet's history is as it was: the class's making is
 # what the next undo takes back, and nothing is left to redo but it.
 reply 9 | grep -q '"written":true,"reopened":false,"undoable":0,"redoable":1'
+reply 10 | grep -q '"name":"tycoon.purse","mark":"[0-9a-f]*","uiNode":true'
+if reply 10 | grep -q '"name":"tycoon.owner","mark":"[0-9a-f]*","uiNode"'; then
+    exit 1
+fi
+reply 11 | grep -q '"code":"validation_failed".*"message":"a node is of a component the game declares a rawframe.ui.Node"'
+reply 12 | grep -q '"written":true'
+reply 13 | grep -q '"written":true'
 if grep -q '00000000000000a1' "$work/game/tycoon.styles" "$work/game/tycoon.ui"; then
     exit 1
 fi

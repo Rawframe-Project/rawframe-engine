@@ -581,6 +581,9 @@ std::string writeDiscovery(const ComponentCatalog* catalog) {
             each.add("id", Value::string(idText(component.id.value)));
             each.add("name", Value::string(component.name));
             each.add("mark", Value::string(markText(component.mark)));
+            if (component.uiNode) {
+                each.add("uiNode", Value::boolean(true));
+            }
             each.add("fields", std::move(fields));
             components.push(std::move(each));
         }
