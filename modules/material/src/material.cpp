@@ -126,14 +126,25 @@ result::Result<bool> inputsIn(const graph::Node& node, Surface& into) {
             return invalid("a surface's geometry or coat normal is connected: a stream or a map, never a literal");
         }
         if (kGroup != nullptr) {
-            // A feature group's number, from nought to one, or an angle,
-            // never its default of nought (D716, D717).
-            const std::optional<double> kNumber = inputs->items()[at].real();
-            const bool kFits = kNumber.has_value() && *kNumber != 0 && std::isfinite(*kNumber) &&
-                               (kGroup->kind == GroupKind::Angle || (*kNumber > 0 && *kNumber <= 1));
-            if (!kFits) {
-                return invalid("a feature group's number is above nought and at most one, or an angle, left out at "
-                               "nought");
+            // A feature group's number, from nought to one, an angle, or a
+            // distance; its color; or its flag; never at its default
+            // (D716, D717, D720).
+            const Value& kGiven = inputs->items()[at];
+            bool fits = false;
+            if (kGroup->kind == GroupKind::Flag) {
+                fits = kGiven.truth() == std::optional{true};
+            } else if (kGroup->kind == GroupKind::Color) {
+                const Parameter kWhite{.name = "", .channels = 3, .lowest = 0, .highest = 1, .initial = 1};
+                const std::optional<std::array<double, 3>> kColor = literalOf(kWhite, kGiven);
+                fits = kColor.has_value() && *kColor != std::array<double, 3>{1, 1, 1};
+            } else {
+                const std::optional<double> kNumber = kGiven.real();
+                fits = kNumber.has_value() && *kNumber != 0 && std::isfinite(*kNumber) &&
+                       (kGroup->kind == GroupKind::Angle ||
+                        (*kNumber > 0 && (kGroup->kind == GroupKind::Distance || *kNumber <= 1)));
+            }
+            if (!fits) {
+                return invalid("a feature group's input is of its kind and in its range, left out at its default");
             }
             continue;
         }
@@ -467,10 +478,12 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
         RAWFRAME_TRY_ASSIGN(const std::optional<Carried> kCarried, carriedBy(surface, *kFrom));
         const Parameter* kParameter = parameterNamed(kInputs.names()[at]);
         const GroupInput* kGroup = groupInputNamed(kInputs.names()[at]);
-        const Carried kWanted = kGroup != nullptr && kGroup->kind != GroupKind::Normal ? Carried::Float
-                                : kParameter == nullptr                                ? Carried::Vec3
-                                : kParameter->channels == 3                            ? Carried::Color3
-                                                                                       : Carried::Float;
+        const Carried kWanted = kGroup != nullptr && kGroup->kind == GroupKind::Color    ? Carried::Color3
+                                : kGroup != nullptr && kGroup->kind == GroupKind::Flag   ? Carried::Bool
+                                : kGroup != nullptr && kGroup->kind != GroupKind::Normal ? Carried::Float
+                                : kParameter == nullptr                                  ? Carried::Vec3
+                                : kParameter->channels == 3                              ? Carried::Color3
+                                                                                         : Carried::Float;
         if (kCarried.has_value() && *kCarried != kWanted) {
             return invalid("a surface input is connected to an output of its type");
         }
@@ -582,7 +595,8 @@ result::Result<Material> compiled(const graph::Document& surface) {
     if (std::ranges::any_of(kGiven.names(), [](const std::string& name) {
             return groupInputNamed(name) != nullptr;
         })) {
-        return unsupported("a material whose coat or anisotropy is active is a program material (D716, D717)");
+        return unsupported("a material whose coat, anisotropy, or transmission is active is a program material "
+                           "(D716, D717, D720)");
     }
     // Generation 1 (D312): the base, packed, and emission textures, one
     // sampler each, each input fed directly or times a factor.

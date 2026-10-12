@@ -17,6 +17,8 @@
 #include "generated/faded_graph_shadow_container.h"
 #include "generated/faded_scene_container.h"
 #include "generated/faded_shadow_container.h"
+#include "generated/glass_graph_scene_container.h"
+#include "generated/glass_graph_shadow_container.h"
 #include "generated/rising_graph_scene_container.h"
 #include "generated/rising_graph_shadow_container.h"
 #include "generated/spaced_graph_scene_container.h"
@@ -690,4 +692,55 @@ RAWFRAME_TEST(AnAnisotropyStretchesTheHighlightAlongItsTurn) {
     std::printf("highlight unturned %d by %d, turned %d by %d\n", kAlong[0], kAlong[1], kTurned[0], kTurned[1]);
     RAWFRAME_EXPECT((kAlong[0] > kAlong[1]) != (kTurned[0] > kTurned[1]));
     RAWFRAME_EXPECT(std::max(kAlong[0], kAlong[1]) >= 2 * std::min(kAlong[0], kAlong[1]));
+}
+
+RAWFRAME_TEST(AGlassShowsWhatLiesBehindIt) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A red box six meters ahead and a ball between, drawn after it as the
+    // translucent are: white and plain, it hides the box; of glass.material
+    // as rawframe.material writes it (glass_graph.slang, D720), it shows
+    // the box through itself, a copy of what the opaque models made.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    SceneDraw back = box(6, 2, {1, 0, 0, 1});
+    SceneDraw ball = box(3, 0.8F, {1, 1, 1, 1}, render_scene::kSphere);
+    ball.material = 1;
+    frame.draws = {back, ball};
+    frame.translucent = 1;
+    frame.materials = {render_scene::noMaterial(), render_scene::noMaterial()};
+    const auto kPlain = drawn(**framer, **made, frame, kMeshes);
+    // Its program transmits, as the cook says of it.
+    auto glass = std::make_shared<material::ProgramMaterial>(
+        *programOf(kGlassGraphScene, kGlassGraphShadow, material::Shading::Lit));
+    glass->transmits = true;
+    frame.programs = {nullptr, glass};
+    const auto kGlass =
+        drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
+    RAWFRAME_EXPECT(kPlain.has_value() && kGlass.has_value());
+    if (!kPlain.has_value() || !kGlass.has_value()) {
+        return;
+    }
+    const std::array<int, 3> kHidden = at(*kPlain, 32, 32);
+    const std::array<int, 3> kSeen = at(*kGlass, 32, 32);
+    std::printf("through the ball: plain %d %d %d, glass %d %d %d\n",
+                kHidden[0],
+                kHidden[1],
+                kHidden[2],
+                kSeen[0],
+                kSeen[1],
+                kSeen[2]);
+    RAWFRAME_EXPECT(std::abs(kHidden[0] - kHidden[1]) < 30);
+    RAWFRAME_EXPECT(kSeen[0] > kSeen[1] + 60 && kSeen[0] > kSeen[2] + 60);
 }

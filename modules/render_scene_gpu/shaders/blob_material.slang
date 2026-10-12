@@ -82,6 +82,12 @@ struct BlobMaterial : IMaterial
         // Nor any anisotropy (D717).
         made.anisotropy = 0.0;
         made.anisotropyRotation = 0.0;
+        // Nor any transmission (D720).
+        made.transmission = 0.0;
+        made.transmissionColor = float3(1.0, 1.0, 1.0);
+        made.transmissionDepth = 0.0;
+        made.thickness = 0.0;
+        made.thinWalled = false;
         // Unlit (KHR_materials_unlit).
         made.unlit = (flags & 1u) != 0u;
         return made;

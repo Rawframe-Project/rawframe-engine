@@ -356,6 +356,9 @@ struct GeneratedSlang {
     std::vector<SampledTexture> textures;
     /// Whether its vertices move: its position offset is connected (D691).
     bool moves = false;
+    /// Whether it transmits what is behind it: its transmission weight is
+    /// given (D720).
+    bool transmits = false;
     /// The material's declared states, which its program does not say.
     Shading shading = Shading::Lit;
     Blend blend = Blend::Opaque;
@@ -392,6 +395,9 @@ struct ProgramMaterial {
     /// Whether its vertices move (D691): its own program then places them
     /// in every pass, the depth prepass's and the shadows' too.
     bool moves = false;
+    /// Whether it transmits what is behind it (D720): drawn after the
+    /// opaque models, reading a copy of what they made.
+    bool transmits = false;
     /// Its interface inputs' values (D708), which an instance overrides.
     std::array<float, kParameterFloats> parameters{};
     std::vector<SampledTexture> textures;
@@ -404,16 +410,17 @@ struct ProgramMaterial {
     friend bool operator==(const ProgramMaterial&, const ProgramMaterial&) = default;
 };
 
-/// A program material's bytes: `RFMP`, format 4 (D488, D708, D710); its
-/// states (shading, blend, double sided, a byte each, and one that is one
-/// where its vertices move, nought before D691) and alpha
+/// A program material's bytes: `RFMP`, format 5 (D488, D708, D710, D720);
+/// its states (shading, blend, double sided, a byte each, and its flags,
+/// one where its vertices move, two where it transmits) and alpha
 /// cutoff; its parameters' numbers; the count of its textures, then each
 /// one's identity (low word first), filter, address, the interface input
 /// giving it (one more than its slot, nought for none), and a byte of
 /// nought; then each scene container's length and bytes, then each shadow
-/// container's. Little-endian. Formats 1 to 3, which carried no shadow's,
-/// no parameters, or no texture inputs, are read no more: a cook's key
-/// changes with its toolchain, so what was cooked so is cooked again.
+/// container's. Little-endian. Formats 1 to 4, which carried no shadow's,
+/// no parameters, no texture inputs, or no flag of transmission, are read
+/// no more: a cook's key changes with its toolchain, so what was cooked so
+/// is cooked again.
 [[nodiscard]] std::vector<std::byte> encodeProgram(const ProgramMaterial& made);
 /// Refuses (`Invalid`) bytes `encodeProgram` would not write: states out of
 /// their sets, more than four textures or one naming none, a container

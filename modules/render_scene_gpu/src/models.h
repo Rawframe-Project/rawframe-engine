@@ -19,7 +19,7 @@
 namespace rawframe::render_scene_gpu {
 
 /// The slots of the scene's table, as the lit shaders read it.
-inline constexpr std::size_t kTableSlots = 28;
+inline constexpr std::size_t kTableSlots = 29;
 
 /// What a frame's models' passes draw with: the pipelines, the meshes and
 /// textures held, the frame's placements and their runs, and the scene's
@@ -45,20 +45,26 @@ public:
     explicit ModelPasses(mrhiDevice* native) noexcept;
 
     /// The targets declared for a frame of `width` by `height`, taking
-    /// `samples` a pixel, with surfaces when `surfaced`.
-    result::Status declare(std::uint32_t width, std::uint32_t height, std::uint32_t samples, bool surfaced);
+    /// `samples` a pixel, with surfaces when `surfaced`, and the copy of
+    /// what the opaque models made when one of its models `transmits`
+    /// (D720).
+    result::Status
+    declare(std::uint32_t width, std::uint32_t height, std::uint32_t samples, bool surfaced, bool transmits);
 
     /// The prepass and the depth's resolve, the prepass reading `reads`.
     result::Status addPrepass(const std::vector<mrhiAccess>& reads);
-    /// The lit pass, reading `reads`.
+    /// The lit pass, reading `reads`; where a model transmits, split in two
+    /// about the copy of what the opaque models made, which the second,
+    /// the translucent models', reads (D720).
     result::Status addLitPass(const std::vector<mrhiAccess>& reads);
 
     /// The prepass recorded, the masked runs cut (D310), and the depth
     /// resolved unless nothing reads it.
     result::Status recordPrepass(const Drawing& with);
     /// The lit pass recorded: the opaque runs, the masked, the sky with
-    /// `sky`'s table, then the translucent over them (D305); by the twins
-    /// that lay decals when `decaled` (D339).
+    /// `sky`'s table, then the translucent over them (D305), those that
+    /// transmit reading the copy made between (D720); by the twins that
+    /// lay decals when `decaled` (D339).
     result::Status recordLit(const Drawing& with, bool decaled, std::span<const mrhiBinding> sky);
 
     [[nodiscard]] mrhiResourceId scene() const noexcept;
@@ -103,6 +109,14 @@ private:
     mrhiPassId prepass_{};
     mrhiPassId resolve_{};
     mrhiPassId lit_{};
+    /// Where a model transmits (D720): the copy of what the opaque models
+    /// made, the pass copying it, and the translucent models' pass after.
+    bool transmits_ = false;
+    std::uint32_t width_ = 0;
+    std::uint32_t height_ = 0;
+    mrhiResourceId behind_{};
+    mrhiPassId copying_{};
+    mrhiPassId glass_{};
 };
 
 } // namespace rawframe::render_scene_gpu

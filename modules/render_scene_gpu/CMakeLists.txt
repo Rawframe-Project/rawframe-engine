@@ -84,4 +84,11 @@ if(TARGET rawframe_render_scene_gpu_tests)
     rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
                            FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/brushed_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
                            HEADER "brushed_graph_shadow_container.h" SYMBOL "kBrushedGraphShadow")
+    # A graph's material of clear glass, seen through (D720).
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/glass_graph.scene${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "glass_graph_scene_container.h" SYMBOL "kGlassGraphScene")
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/glass_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "glass_graph_shadow_container.h" SYMBOL "kGlassGraphShadow")
 endif()

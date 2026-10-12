@@ -428,8 +428,16 @@ struct SceneRenderer::State {
                             made(frame->samples > 1 && frame->samples == pipelines->samples, Effect::Multisampled));
         // With the ambient occlusion or the reflections, each point's
         // surface beside its depth (D327, D331).
-        RAWFRAME_TRY(models->declare(
-            open.width, open.height, kSampling ? frame->samples : 1, occlusion->enabled() || reflecting->enabled()));
+        // Where a translucent model transmits, a copy of what the opaque made
+        // for it to read (D720).
+        const bool kTransmits = std::ranges::any_of(now.placed.translucentRuns, [](const Run& run) {
+            return run.program != nullptr && run.program->transmits;
+        });
+        RAWFRAME_TRY(models->declare(open.width,
+                                     open.height,
+                                     kSampling ? frame->samples : 1,
+                                     occlusion->enabled() || reflecting->enabled(),
+                                     kTransmits));
         // Each material's own program's pipelines, as this frame draws its
         // models; until they are made, the engine's own draw them (D485,
         // D487). A model is drawn by its program when every pass it is
@@ -729,7 +737,10 @@ struct SceneRenderer::State {
         // their atlas, or white seen as an array where none is drawn
         // (D339); 26 the probes' atlas, or the dark cube seen as an array
         // where none is drawn (D340); 27 the decals' normals' atlas, or
-        // white seen as an array where none bends the normals (D342).
+        // white seen as an array where none bends the normals (D342); 28
+        // what the opaque models made, which a transmitting model reads
+        // (D720), the model passes' own copy where one is drawn, white
+        // here.
         const mrhiBinding kPicture = cubeAt(18, resourceOf(textures->resource(now.environment)));
         const mrhiBinding kPictureSampler =
             samplerAt(19, pipelines->materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)]);
@@ -761,7 +772,8 @@ struct SceneRenderer::State {
             bufferAt(24, decalAtlas->blocks(), decalAtlas->blockBytes()),
             arrayAt(25, decalAtlas->drawn() > 0 ? decalAtlas->colors() : resourceOf(textures->resource(0))),
             cubesAt(26, probeAtlas->drawn() > 0 ? probeAtlas->atlas() : resourceOf(textures->resource(kNoEnvironment))),
-            arrayAt(27, decalAtlas->bent() > 0 ? decalAtlas->normals() : resourceOf(textures->resource(0)))};
+            arrayAt(27, decalAtlas->bent() > 0 ? decalAtlas->normals() : resourceOf(textures->resource(0))),
+            textureAt(28, resourceOf(textures->resource(0)))};
         std::array<mrhiBinding, 4> skyBinding = {bufferAt(0, now.skyResource, sizeof(SkyBlock)),
                                                  bufferAt(1, metering->exposure(), sizeof(ExposureBlock)),
                                                  kPicture,

@@ -595,6 +595,12 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
     // The anisotropy's (D717): none, along the tangent, unless given.
     inputs.emplace("specular_roughness_anisotropy", "0.0");
     inputs.emplace("specular_anisotropy_rotation", "0.0");
+    // The transmission's (D720): none, untinted, thin.
+    inputs.emplace("transmission_weight", "0.0");
+    inputs.emplace("transmission_color", "float3(1.0, 1.0, 1.0)");
+    inputs.emplace("transmission_depth", "0.0");
+    inputs.emplace("geometry_thickness", "0.0");
+    inputs.emplace("geometry_thin_walled", "false");
     std::string coatNormal = "point.normal";
     for (std::size_t at = 0; at < kInputs.names().size(); ++at) {
         const std::string& kName = kInputs.names()[at];
@@ -606,8 +612,13 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
         }
         if (const std::optional<graph::Connection> kFrom = graph::connectionOf(kValue); kFrom.has_value()) {
             RAWFRAME_TRY_ASSIGN(expression, writer.outputOf(*kFrom));
-        } else if (groupInputNamed(kName) != nullptr) {
-            expression = numberText(*kValue.real());
+        } else if (const GroupInput* kGroup = groupInputNamed(kName); kGroup != nullptr) {
+            expression =
+                kGroup->kind == GroupKind::Flag ? std::string{"true"}
+                : kGroup->kind == GroupKind::Color
+                    ? literalText({*kValue.items()[0].real(), *kValue.items()[1].real(), *kValue.items()[2].real(), 0},
+                                  3)
+                    : numberText(*kValue.real());
         } else {
             const Parameter& kParameter = *parameterNamed(kName);
             std::array<double, 4> literal{};
@@ -668,6 +679,11 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
                   ";\n        made.coatNormal = " + coatNormal +
                   ";\n        made.anisotropy = " + inputs.at("specular_roughness_anisotropy") +
                   ";\n        made.anisotropyRotation = " + inputs.at("specular_anisotropy_rotation") +
+                  ";\n        made.transmission = " + inputs.at("transmission_weight") +
+                  ";\n        made.transmissionColor = " + inputs.at("transmission_color") +
+                  ";\n        made.transmissionDepth = " + inputs.at("transmission_depth") +
+                  ";\n        made.thickness = " + inputs.at("geometry_thickness") +
+                  ";\n        made.thinWalled = " + inputs.at("geometry_thin_walled") +
                   ";\n        made.unlit = " + (kStates.shading == Shading::Unlit ? "true" : "false") +
                   ";\n"
                   "        return made;\n"
@@ -682,6 +698,7 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
     made.textureInputs = writer.textureInputs();
     made.textures = writer.takeTextures();
     made.moves = kInputs.find("position_offset") != nullptr;
+    made.transmits = kInputs.find("transmission_weight") != nullptr;
     made.shading = kStates.shading;
     made.blend = kStates.blend;
     made.alphaCutoff = kStates.alphaCutoff;

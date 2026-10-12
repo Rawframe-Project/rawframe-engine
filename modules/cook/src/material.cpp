@@ -148,6 +148,7 @@ result::Result<Artifact> cookProgram(const graph::Document& document,
                                    .alphaCutoff = kGenerated.alphaCutoff,
                                    .doubleSided = kGenerated.doubleSided,
                                    .moves = kGenerated.moves,
+                                   .transmits = kGenerated.transmits,
                                    .parameters = kGenerated.parameters,
                                    .textures = kGenerated.textures,
                                    .textureInputs = kGenerated.textureInputs};

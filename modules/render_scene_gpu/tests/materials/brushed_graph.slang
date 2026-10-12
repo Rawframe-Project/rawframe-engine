@@ -20,6 +20,11 @@ struct Generated : IMaterial
         made.coatNormal = point.normal;
         made.anisotropy = 0.9;
         made.anisotropyRotation = materials[blobOf(point.material) + 9u].x;
+        made.transmission = 0.0;
+        made.transmissionColor = float3(1.0, 1.0, 1.0);
+        made.transmissionDepth = 0.0;
+        made.thickness = 0.0;
+        made.thinWalled = false;
         made.unlit = false;
         return made;
     }

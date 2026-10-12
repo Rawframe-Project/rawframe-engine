@@ -239,11 +239,13 @@ std::vector<std::byte> encodeProgram(const ProgramMaterial& made) {
     for (const char kLetter : {'R', 'F', 'M', 'P'}) {
         bytes.push_back(static_cast<std::byte>(kLetter));
     }
-    putWord(bytes, 4);
+    putWord(bytes, 5);
     bytes.push_back(static_cast<std::byte>(made.shading));
     bytes.push_back(static_cast<std::byte>(made.blend));
     bytes.push_back(static_cast<std::byte>(made.doubleSided ? 1 : 0));
-    bytes.push_back(static_cast<std::byte>(made.moves ? 1 : 0));
+    // Its flags (format 5, D720): one where it moves, two where it
+    // transmits.
+    bytes.push_back(static_cast<std::byte>((made.moves ? 1 : 0) | (made.transmits ? 2 : 0)));
     putWord(bytes, std::bit_cast<std::uint32_t>(made.alphaCutoff));
     for (const float kNumber : made.parameters) {
         putWord(bytes, std::bit_cast<std::uint32_t>(kNumber));
@@ -289,21 +291,22 @@ result::Result<ProgramMaterial> decodeProgram(std::span<const std::byte> bytes) 
                    return each == static_cast<std::byte>(letter);
                });
     };
-    if (!kIs(kTake(4), "RFMP") || kWord() != 4) {
-        return invalid("a program material is RFMP, format 4");
+    if (!kIs(kTake(4), "RFMP") || kWord() != 5) {
+        return invalid("a program material is RFMP, format 5");
     }
     ProgramMaterial made;
     const std::span<const std::byte> kStates = kTake(4);
     const float kCutoff = std::bit_cast<float>(kWord());
     if (!fits || std::to_integer<std::uint8_t>(kStates[0]) > 1 || std::to_integer<std::uint8_t>(kStates[1]) > 2 ||
-        std::to_integer<std::uint8_t>(kStates[2]) > 1 || std::to_integer<std::uint8_t>(kStates[3]) > 1 ||
+        std::to_integer<std::uint8_t>(kStates[2]) > 1 || std::to_integer<std::uint8_t>(kStates[3]) > 3 ||
         !(kCutoff >= 0) || !(kCutoff <= 1)) {
         return invalid("a program material's states are in their sets, its cutoff from nought to one");
     }
     made.shading = static_cast<Shading>(kStates[0]);
     made.blend = static_cast<Blend>(kStates[1]);
     made.doubleSided = kStates[2] != std::byte{0};
-    made.moves = kStates[3] != std::byte{0};
+    made.moves = (std::to_integer<std::uint8_t>(kStates[3]) & 1U) != 0;
+    made.transmits = (std::to_integer<std::uint8_t>(kStates[3]) & 2U) != 0;
     made.alphaCutoff = kCutoff;
     for (float& number : made.parameters) {
         number = std::bit_cast<float>(kWord());

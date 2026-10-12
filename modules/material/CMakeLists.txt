@@ -77,6 +77,12 @@ if(TARGET rawframe_material_tests)
     rawframe_embedded_file(TARGET rawframe_material_tests
                            FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/brushed_graph.slang"
                            HEADER "brushed_graph.h" SYMBOL "kBrushedGraph")
+    # A clear glass (D720), and its Slang.
+    rawframe_embedded_file(TARGET rawframe_material_tests FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/seeds/glass.material"
+                           HEADER "glass_material.h" SYMBOL "kGlassMaterial")
+    rawframe_embedded_file(TARGET rawframe_material_tests
+                           FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/glass_graph.slang"
+                           HEADER "glass_graph.h" SYMBOL "kGlassGraph")
 endif()
 rawframe_module_fuzz(NAME material TARGET documents RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_material.cpp)
 rawframe_module_fuzz(NAME material TARGET post_processes RUNS 10000 SEEDS tests/post_seeds SOURCES tests/fuzz_post_process.cpp)

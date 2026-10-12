@@ -171,6 +171,9 @@ struct Decal
 [[vk::binding(26, 0)]] TextureCubeArray probeAtlas;
 // The decals' normal textures (D342), linear.
 [[vk::binding(27, 0)]] Texture2DArray decalNormals;
+// What the opaque models and the sky made, exposed, which a transmitting
+// model sees through itself (D720); white where none transmits.
+[[vk::binding(28, 0)]] Texture2D behindTexture;
 
 // What the vertex half passes on.
 struct Corner
@@ -859,8 +862,41 @@ Lit shaded(Corner corner, bool decaled, bool front)
         return lit;
     }
     const float reflectance = (evaluated.ior - 1.0) / (evaluated.ior + 1.0);
+    // What a transmitting model lets through of what lies behind it
+    // (KHR_materials_transmission and KHR_materials_volume, D720): the copy
+    // of the opaque models' light where the way to the eye, bent into the
+    // model at its normal by its index, leaves it its thickness on, or
+    // where it enters for a thin wall; dimmed toward its volume's color by
+    // the distance it travels over the depth that color is reached at, and
+    // tinted by its base color. Its diffuse gives way to it.
+    const float transmission = evaluated.transmission * (1.0 - metalness);
+    // Drawn after the opaque without writing depth, a volume's far side
+    // would be drawn over its near: it is seen by its near faces alone, a
+    // thin wall by both.
+    if (transmission > 0.0 && !evaluated.thinWalled && !front)
+    {
+        discard;
+    }
+    float3 transmitted = float3(0.0);
+    if (transmission > 0.0)
+    {
+        const float travelled = evaluated.thinWalled ? 0.0 : evaluated.thickness;
+        const float3 leaves = corner.placed + refract(-toEye, normal, 1.0 / evaluated.ior) * travelled;
+        const float4 there = mul(frame.viewProjection, float4(leaves, 1.0));
+        uint width;
+        uint height;
+        behindTexture.GetDimensions(width, height);
+        const float2 size = float2(float(width), float(height));
+        const float2 place = (there.xy / max(there.w, 1e-6) * float2(0.5, -0.5) + 0.5) * size;
+        const int2 behind = int2(clamp(place, float2(0.0), size - 1.0));
+        const float3 seen = behindTexture.Load(int3(behind, 0)).rgb / max(exposure[0].value.y, 1e-12);
+        const float3 through = evaluated.transmissionDepth > 0.0 && travelled > 0.0
+                                   ? pow(evaluated.transmissionColor, float3(travelled / evaluated.transmissionDepth))
+                                   : float3(1.0);
+        transmitted = seen * through * color;
+    }
     Surface surface;
-    surface.diffuse = color * (1.0 - metalness);
+    surface.diffuse = color * (1.0 - metalness) * (1.0 - transmission);
     surface.headOn = lerp(reflectance * reflectance * evaluated.specular, color, metalness);
     surface.roughness = roughness;
     surface.coat = evaluated.coat;
@@ -882,9 +918,10 @@ Lit shaded(Corner corner, bool decaled, bool front)
     }
     const int2 texel = int2(pixel);
     // What of the sun's light the contact shadows let through (D338), for
-    // an opaque model the prepass saw.
-    const float contact =
-        frame.contact.x > 0.5 && opacity >= 0.999 ? contactTexture.Load(int3(texel, 0)).r : 1.0;
+    // an opaque model the prepass saw, which a transmitting one is not
+    // (D720).
+    const bool prepassed = opacity >= 0.999 && transmission <= 0.0;
+    const float contact = frame.contact.x > 0.5 && prepassed ? contactTexture.Load(int3(texel, 0)).r : 1.0;
     const float3 direct = frame.sun.rgb * sunlit(corner.placed, normal, pixel) * contact *
                               reflected(surface, normal, toEye, frame.toSun.xyz) +
                           punctual(range, corner.placed, normal, surface, toEye);
@@ -952,7 +989,7 @@ Lit shaded(Corner corner, bool decaled, bool front)
     }
     // Over it, what the screen-space reflection met, as much as it found
     // (D331), for an opaque model the prepass saw.
-    if (frame.reflections.x > 0.5 && opacity >= 0.999)
+    if (frame.reflections.x > 0.5 && prepassed)
     {
         const float4 met = reflectionTexture.Load(int3(texel, 0));
         const float3 weight = left < 1.0 || frame.environment.w > 0.5 ? split : sheen;
@@ -963,8 +1000,10 @@ Lit shaded(Corner corner, bool decaled, bool front)
     // takes all of it. An opaque model's alpha, interpolated, can fall a
     // hair short of one.
     const float reaches =
-        frame.occlusion.x > 0.5 && opacity >= 0.999 ? occlusionTexture.Load(int3(texel / 2, 0)).r : 1.0;
+        frame.occlusion.x > 0.5 && prepassed ? occlusionTexture.Load(int3(texel / 2, 0)).r : 1.0;
     float3 sky = occlusion * reaches * ((1.0 - sheen) * surface.diffuse * around + alongReflection);
+    // What it lets through, under the reflection's Fresnel (D720).
+    sky += (1.0 - sheen) * transmission * transmitted;
     // Under a coat (D716): what it lets through of that by its Fresnel to
     // the eye, and what it reflects along its own normal's reflection at
     // its roughness, by the split sum, of the sky's picture, or of the sky

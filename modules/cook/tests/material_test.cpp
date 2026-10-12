@@ -228,11 +228,15 @@ RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
               "  \"overrides\": {\n    \"tint\": [\n      1,\n      0,\n      0\n    ]\n  }\n}\n");
     writeText(kProject.sources / "reddened.rfmaterial.rfmeta",
               sidecar("000000000000000000000000000000c7", "", "rawframe.material"));
+    // And a clear glass, which transmits (D720).
+    fs::copy_file(fs::path{RAWFRAME_SURFACE_SEEDS} / "glass.material", kProject.sources / "glass.rfmaterial");
+    writeText(kProject.sources / "glass.rfmaterial.rfmeta",
+              sidecar("000000000000000000000000000000c8", "", "rawframe.material"));
     // Without the shader toolchain they are refused, saying it is needed.
     const std::array<Importer, 2> kBare = {audioImporter(), materialImporter()};
     const auto kRefused =
         cookSources(CookRequest{.sources = kProject.sources, .output = kProject.output, .importers = kBare});
-    RAWFRAME_EXPECT(kRefused.has_value() && kRefused->failures.size() == 4 &&
+    RAWFRAME_EXPECT(kRefused.has_value() && kRefused->failures.size() == 5 &&
                     kRefused->failures[0].code() == code(CookError::ToolFailed));
     const std::optional<ShaderTools> kTools = shaderTools();
     if (!kTools.has_value()) {
@@ -244,7 +248,7 @@ RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
     const std::array<Importer, 2> kTooled = {audioImporter(), materialImporter(kTools)};
     const auto kReport =
         cookSources(CookRequest{.sources = kProject.sources, .output = kProject.output, .importers = kTooled});
-    RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.empty() && kReport->variants == 4);
+    RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.empty() && kReport->variants == 5);
     if (kReport.has_value() && !kReport->failures.empty()) {
         std::printf("%s\n", std::string{kReport->failures[0].description()}.c_str());
     }
@@ -253,6 +257,7 @@ RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
     bool rising = false;
     bool tinted = false;
     bool reddened = false;
+    bool transmitting = false;
     for (const content::ManifestEntry& each :
          kManifest.has_value() ? *kManifest : std::vector<content::ManifestEntry>{}) {
         if (each.type.value == material::kMaterialType &&
@@ -270,6 +275,7 @@ RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
                               kRead->textures[0].id == 0xa44ecb4a39ac5cc8ULL &&
                               kRead->shading == material::Shading::Lit && !kRead->moves);
             rising = rising || (kRead.has_value() && kRead->textures.empty() && kRead->moves);
+            transmitting = transmitting || (kRead.has_value() && kRead->transmits && !kRead->moves);
             tinted = tinted || (kRead.has_value() && kRead->parameters[0] == 0 && kRead->parameters[1] == 1 &&
                                 kRead->parameters[2] == 0 && kRead->shading == material::Shading::Unlit);
             std::printf("program material: %zu bytes, containers %zu %zu %zu, shadows %zu %zu %zu\n",
@@ -282,7 +288,7 @@ RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
                         kRead.has_value() ? kRead->shadows[2].size() : 0);
         }
     }
-    RAWFRAME_EXPECT(found && rising && tinted && reddened);
+    RAWFRAME_EXPECT(found && rising && tinted && reddened && transmitting);
 }
 
 RAWFRAME_TEST(AnInstanceCooksOnlyAgainstABaseItFits) {

@@ -12,9 +12,14 @@ namespace rawframe::render_scene_gpu {
 ModelPasses::ModelPasses(mrhiDevice* native) noexcept : native_(native) {
 }
 
-result::Status ModelPasses::declare(std::uint32_t width, std::uint32_t height, std::uint32_t samples, bool surfaced) {
+result::Status
+ModelPasses::declare(std::uint32_t width, std::uint32_t height, std::uint32_t samples, bool surfaced, bool transmits) {
     samples_ = samples;
     surfaced_ = surfaced;
+    transmits_ = transmits;
+    width_ = width;
+    height_ = height;
+    behind_ = {};
     surfaces_ = {};
     sampledScene_ = {};
     sampledMotion_ = {};
@@ -31,7 +36,8 @@ result::Status ModelPasses::declare(std::uint32_t width, std::uint32_t height, s
           std::tuple{kSceneFormat, &sampledScene_, samples, samples > 1},
           std::tuple{kMotionFormat, &sampledMotion_, samples, samples > 1},
           std::tuple{kDepthFormat, &sampledDepth_, samples, samples > 1},
-          std::tuple{kSurfaceFormat, &sampledSurfaces_, samples, samples > 1 && surfaced}}) {
+          std::tuple{kSurfaceFormat, &sampledSurfaces_, samples, samples > 1 && surfaced},
+          std::tuple{kSceneFormat, &behind_, 1U, transmits}}) {
         if (!kWanted) {
             continue;
         }
@@ -118,8 +124,48 @@ result::Status ModelPasses::addLitPass(const std::vector<mrhiAccess>& reads) {
     def.depthTarget = depthTarget();
     def.depthTarget.depthLoad = mrhi_loadKeep;
     def.depthTarget.readOnly = true;
+    if (!transmits_) {
+        if (const mrhiResult kAdded = mrhiAddPass(native_, &def, &lit_); kAdded != mrhi_success) {
+            return failed("the models' pass could not be added", kAdded);
+        }
+        return {};
+    }
+    // Where a model transmits (D720): the opaque models and the sky, kept,
+    // and resolved where multisampled; their light copied; then the
+    // translucent models over it, reading the copy.
+    for (mrhiColorTarget& kept : std::span{def.colorTargets, def.colorTargetCount}) {
+        kept.store = mrhi_storeKeep;
+    }
     if (const mrhiResult kAdded = mrhiAddPass(native_, &def, &lit_); kAdded != mrhi_success) {
         return failed("the models' pass could not be added", kAdded);
+    }
+    const std::array<mrhiAccess, 2> kCopied = {
+        mrhiAccess{.resource = scene_,
+                   .kind = mrhi_accessCopySource,
+                   .range = {.baseMip = 0, .mipCount = 1, .baseLayer = 0, .layerCount = 1, .aspect = {}}},
+        mrhiAccess{.resource = behind_,
+                   .kind = mrhi_accessCopyDestination,
+                   .range = {.baseMip = 0, .mipCount = 1, .baseLayer = 0, .layerCount = 1, .aspect = {}}}};
+    mrhiPassDef copy = mrhiDefaultPassDef();
+    copy.passClass = mrhi_passTransfer;
+    copy.accesses = kCopied.data();
+    copy.accessCount = static_cast<std::uint32_t>(kCopied.size());
+    if (const mrhiResult kAdded = mrhiAddPass(native_, &copy, &copying_); kAdded != mrhi_success) {
+        return failed("the copy of the opaque models' light could not be added", kAdded);
+    }
+    std::vector<mrhiAccess> glassReads = reads;
+    glassReads.push_back(
+        mrhiAccess{.resource = behind_,
+                   .kind = mrhi_accessSampled,
+                   .range = {.baseMip = 0, .mipCount = 1, .baseLayer = 0, .layerCount = 1, .aspect = {}}});
+    mrhiPassDef glass = def;
+    glass.accesses = glassReads.data();
+    glass.accessCount = static_cast<std::uint32_t>(glassReads.size());
+    for (mrhiColorTarget& loaded : std::span{glass.colorTargets, glass.colorTargetCount}) {
+        loaded.load = mrhi_loadKeep;
+    }
+    if (const mrhiResult kAdded = mrhiAddPass(native_, &glass, &glass_); kAdded != mrhi_success) {
+        return failed("the translucent models' pass could not be added", kAdded);
     }
     return {};
 }
@@ -270,12 +316,36 @@ result::Status ModelPasses::recordLit(const Drawing& with, bool decaled, std::sp
         mrhiDraw(native_, lit_, 3, 1, 0, 0) != mrhi_success) {
         return failed("the sky could not be drawn", mrhi_errorState);
     }
+    // Where a model transmits, the translucent are drawn in a pass of their
+    // own, over a copy of what came before, which their table's slot 28
+    // reads (D720).
+    mrhiPassId translucent = lit_;
+    if (transmits_) {
+        if (mrhiEndPass(native_, lit_) != mrhi_success) {
+            return failed("a scene pass could not end", mrhi_errorState);
+        }
+        const mrhiTextureCopy kFrom{.resource = scene_};
+        const mrhiTextureCopy kTo{.resource = behind_};
+        const mrhiExtent3d kExtent{.width = width_, .height = height_, .depthOrLayers = 1};
+        if (mrhiBeginPass(native_, copying_) != mrhi_success ||
+            mrhiCopyTexture(native_, copying_, &kFrom, &kTo, &kExtent) != mrhi_success ||
+            mrhiEndPass(native_, copying_) != mrhi_success || mrhiBeginPass(native_, glass_) != mrhi_success) {
+            return failed("the opaque models' light could not be copied", mrhi_errorState);
+        }
+        translucent = glass_;
+        table[28] = textureAt(28, behind_);
+    }
     RAWFRAME_TRY(
         decaled
-            ? drawRuns(
-                  with, table, lit_, pipelines.glassDecaled, kMany.glassDecaled, with.placed->translucentRuns, kGlass)
-            : drawRuns(with, table, lit_, pipelines.glass, kMany.glass, with.placed->translucentRuns, kGlass));
-    if (mrhiEndPass(native_, lit_) != mrhi_success) {
+            ? drawRuns(with,
+                       table,
+                       translucent,
+                       pipelines.glassDecaled,
+                       kMany.glassDecaled,
+                       with.placed->translucentRuns,
+                       kGlass)
+            : drawRuns(with, table, translucent, pipelines.glass, kMany.glass, with.placed->translucentRuns, kGlass));
+    if (mrhiEndPass(native_, translucent) != mrhi_success) {
         return failed("a scene pass could not end", mrhi_errorState);
     }
     return {};

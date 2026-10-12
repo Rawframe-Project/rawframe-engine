@@ -610,13 +610,17 @@ RAWFRAME_TEST(AProgramMaterialRoundTripsAndRefusesWhatItWouldNotWrite) {
     std::vector<std::byte> blended = kBytes;
     blended[9] = std::byte{3};
     RAWFRAME_EXPECT(refusedWith(decodeProgram(blended), MaterialError::Invalid));
-    // Moving is one or nought (D691); nought, as before it was said.
+    // The flags are moving (D691) and transmitting (D720), no other bit;
+    // none, as before either was said.
     std::vector<std::byte> moving = kBytes;
-    moving[11] = std::byte{2};
+    moving[11] = std::byte{4};
     RAWFRAME_EXPECT(refusedWith(decodeProgram(moving), MaterialError::Invalid));
+    moving[11] = std::byte{2};
+    const auto kClear = decodeProgram(moving);
+    RAWFRAME_EXPECT(kClear.has_value() && !kClear->moves && kClear->transmits);
     moving[11] = std::byte{0};
     const auto kStill = decodeProgram(moving);
-    RAWFRAME_EXPECT(kStill.has_value() && !kStill->moves);
+    RAWFRAME_EXPECT(kStill.has_value() && !kStill->moves && !kStill->transmits);
 }
 
 RAWFRAME_TEST(AGraphIsWrittenAsTheSlangItsHandwrittenTwinIsCheckedAgainst) {

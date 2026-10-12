@@ -202,7 +202,10 @@ public struct Placed
 // and its normal (KHR_materials_clearcoat, D716), a weight of nought for
 // none; the anisotropy's strength, nought for none, and its rotation in
 // radians from the tangent toward the bitangent (KHR_materials_anisotropy,
-// D717); and whether it stands unlit.
+// D717); the transmission's weight, nought for none, the color its volume
+// tints toward and the depth it reaches there, its thickness, and whether
+// it is thin walled (KHR_materials_transmission and KHR_materials_volume,
+// D720); and whether it stands unlit.
 public struct Evaluated
 {
     public float3 color;
@@ -219,6 +222,11 @@ public struct Evaluated
     public float3 coatNormal;
     public float anisotropy;
     public float anisotropyRotation;
+    public float transmission;
+    public float3 transmissionColor;
+    public float transmissionDepth;
+    public float thickness;
+    public bool thinWalled;
     public bool unlit;
 }
 

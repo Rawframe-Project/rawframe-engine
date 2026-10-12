@@ -33,11 +33,15 @@ extern const std::array<Parameter, 10> kContractOrder;
 [[nodiscard]] const Parameter* parameterNamed(std::string_view name);
 
 /// What a feature group's input is: a number from nought to one, an angle
-/// in radians, or a normal.
+/// in radians, a normal, a distance in meters above nought, a color whose
+/// default is white, or a flag whose default is false (D720).
 enum class GroupKind : std::uint8_t {
     Unit,
     Angle,
-    Normal
+    Normal,
+    Distance,
+    Color,
+    Flag
 };
 
 /// A feature group's input (SPEC-0026's Surface contract, D716): its name
@@ -49,13 +53,20 @@ struct GroupInput {
     GroupKind kind;
 };
 
-/// The coat's (`KHR_materials_clearcoat`'s, D716) and the anisotropy's
-/// (`KHR_materials_anisotropy`'s, D717), in name order.
-inline constexpr std::array<GroupInput, 5> kGroupInputs = {{{"coat_normal", GroupKind::Normal},
-                                                            {"coat_roughness", GroupKind::Unit},
-                                                            {"coat_weight", GroupKind::Unit},
-                                                            {"specular_anisotropy_rotation", GroupKind::Angle},
-                                                            {"specular_roughness_anisotropy", GroupKind::Unit}}};
+/// The coat's (`KHR_materials_clearcoat`'s, D716), the anisotropy's
+/// (`KHR_materials_anisotropy`'s, D717), and the transmission's
+/// (`KHR_materials_transmission`'s and `KHR_materials_volume`'s, D720), in
+/// name order.
+inline constexpr std::array<GroupInput, 10> kGroupInputs = {{{"coat_normal", GroupKind::Normal},
+                                                             {"coat_roughness", GroupKind::Unit},
+                                                             {"coat_weight", GroupKind::Unit},
+                                                             {"geometry_thickness", GroupKind::Distance},
+                                                             {"geometry_thin_walled", GroupKind::Flag},
+                                                             {"specular_anisotropy_rotation", GroupKind::Angle},
+                                                             {"specular_roughness_anisotropy", GroupKind::Unit},
+                                                             {"transmission_color", GroupKind::Color},
+                                                             {"transmission_depth", GroupKind::Distance},
+                                                             {"transmission_weight", GroupKind::Unit}}};
 
 /// The group input named `name`; none for another name.
 [[nodiscard]] const GroupInput* groupInputNamed(std::string_view name);

@@ -106,7 +106,9 @@ result::Result<SceneMaterial> readMaterial(content::ContentStore& store,
         return SceneMaterial{
             .id = identity,
             .blob = sceneBlobOf(material::blobOf(kStates), program->parameters),
-            .translucent = program->blend == material::Blend::Translucent,
+            // A transmitting model is drawn after the opaque, over a copy of
+            // what they made, as the translucent are (D720).
+            .translucent = program->blend == material::Blend::Translucent || program->transmits,
             .textures = {.base = slots[0], .packed = slots[1], .emission = slots[2], .normal = slots[3]},
             .program = program};
     }
