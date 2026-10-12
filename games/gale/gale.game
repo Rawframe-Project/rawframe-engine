@@ -25,6 +25,9 @@ component 9684570e-9361-40cc-9327-f56bc11db3ae gale.look rawframe.model.Model
 component f1709939-d7eb-4a52-9acf-8f59734cea9e gale.water rawframe.model.Model
 component 61c67757-1adb-4e63-93c0-5cbbc82656bc gale.waters rawframe.model.Placed
 component 664ccd7d-20b0-45e5-83c6-a91a614b13cf gale.view rawframe.model.Camera
+# Where a client hears another ship's broadsides from (D687): an emitter of
+# its own on each ship.
+component 95079b36-b81f-4629-8fa5-de5ef7425d12 gale.report rawframe.sound.Emitter
 
 # A player's ship is launched, and launched again once abandoned; its guns
 # reload and fire the broadsides its helm asks, which its client predicts
@@ -67,13 +70,18 @@ actions gale.actions
 sample sample.kest sample
 interpolate rawframe.physics3d.pose
 
-# What a client draws (D682): every hull and ball by its shape; the sea as a broad
+# What a client draws (D682): every hull and ball by its shape, a hull
+# darker for each hole in it (D687); the sea as a broad
 # plane of water round its own ship, wherever that sails; and its view
 # from behind and above its ship, along its heading.
 presentation gale.look on rawframe.physics3d.body
-present gale.dress dress read rawframe.physics3d.body write gale.look
+present gale.dress dress read rawframe.physics3d.body write gale.look entities lookup gale.ship
 presentation gale.water on gale.sea
 presentation gale.waters on gale.sea
 present gale.flood flood read gale.sea write gale.water write gale.waters entities lookup rawframe.physics3d.pose
 presentation gale.view on player
 present gale.frame frame read gale.ship write gale.view entities lookup rawframe.physics3d.pose
+# Every other ship's broadsides heard from it as the server's state counts
+# them (D687); a client's own are its predicted effect.
+presentation gale.report on gale.ship
+present gale.report report read gale.ship write gale.report entities

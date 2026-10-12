@@ -14,6 +14,7 @@
 
 #include <array>
 #include <cmath>
+#include <span>
 #include <string>
 
 using namespace rawframe;
@@ -45,6 +46,7 @@ struct Ship {
     std::uint32_t sinking = 0;
     std::uint32_t reload = 0;
     std::uint32_t fired = 0;
+    std::uint32_t volleys = 0;
 };
 
 struct Guns {
@@ -54,12 +56,40 @@ struct Guns {
 /// Gale, composed and started from its directory.
 class PlayedGale : public PlayedGame {
 public:
-    PlayedGale()
-        : PlayedGame(kGale,
+    explicit PlayedGale(std::span<const composition::RegistrarEntry> registrars = kGale)
+        : PlayedGame(registrars,
                      "kest.game = " + std::string{RAWFRAME_SAMPLE_GAMES} +
                          "gale/gale.game\nworld.tick_rate = 60\nworld.maximum_ticks_per_iteration = 1\n") {
     }
 };
+
+constexpr auto kLookId = schema::ComponentTypeId::fromText("9684570e-9361-40cc-9327-f56bc11db3ae");
+constexpr auto kReportId = schema::ComponentTypeId::fromText("95079b36-b81f-4629-8fa5-de5ef7425d12");
+
+/// rawframe.model.Model and rawframe.sound.Emitter.
+struct Model {
+    std::uint64_t mesh = 0;
+    float scaleX = 0;
+    float scaleY = 0;
+    float scaleZ = 0;
+    std::uint32_t color = 0;
+    std::uint64_t material = 0;
+    float lift = 0;
+};
+
+struct Emitter {
+    std::uint64_t sound = 0;
+    std::uint32_t cue = 0;
+    bool playing = false;
+    std::uint8_t despawn = 0;
+};
+
+const std::array<composition::RegistrarEntry, 5> kGalePresented = {
+    kGale[0],
+    kGale[1],
+    kGale[2],
+    kGale[3],
+    composition::RegistrarEntry{"test_plan", &registerPlanWatcher, world_runtime::kScopes}};
 
 /// A player as admission makes one: its player's components, zeroed; it
 /// is its own ship (D685).
@@ -181,6 +211,8 @@ RAWFRAME_TEST(ABroadsideHolesAShipUntilItFoundersAndItsPlayerSailsAgain) {
     }
     RAWFRAME_EXPECT(valueOf<Ship>(world, kHoled, kShipId)->hull == 0);
     RAWFRAME_EXPECT(valueOf<Guns>(world, kFiring, kGunsId)->hits == 5);
+    // Each broadside counted, which other clients hear it by (D687).
+    RAWFRAME_EXPECT(valueOf<Ship>(world, kFiring, kShipId)->volleys >= 5);
     valueOf<Helm>(world, kGunner, kHelmId)->starboard = false;
     // It floods and goes down.
     played.run(200);
@@ -191,4 +223,48 @@ RAWFRAME_TEST(ABroadsideHolesAShipUntilItFoundersAndItsPlayerSailsAgain) {
     const Ship* const kAgain = valueOf<Ship>(world, kTarget, kShipId);
     RAWFRAME_EXPECT(kAgain->launched && kAgain->hull == 5 && kAgain->sinking == 0);
     RAWFRAME_EXPECT(std::abs(poseOf(world, kTarget).x - 7.0) < 0.5 && poseOf(world, kTarget).y > -1.0);
+}
+
+RAWFRAME_TEST(AClientHearsAnotherShipsBroadsidesAndSeesItsHoles) {
+    // D687: presented for one player, the other's broadsides are cued from
+    // its ship as the server counts them, its own ship silent (its
+    // broadsides are its predicted effect), and a holed hull is darker.
+    PlayedGale played{kGalePresented};
+    RAWFRAME_EXPECT(played.started() && presentationPlan != nullptr);
+    if (!played.started() || presentationPlan == nullptr) {
+        return;
+    }
+    auto presentation = presentationPlan->presentation();
+    RAWFRAME_EXPECT(presentation.has_value() && *presentation != nullptr);
+    if (!presentation.has_value() || *presentation == nullptr) {
+        return;
+    }
+    world::World& world = *simulation->world();
+    const world::EntityHandle kGunner = joined(world);
+    const world::EntityHandle kListener = joined(world);
+    played.run(120);
+    const auto kPresent = [&] {
+        RAWFRAME_EXPECT((*presentation)->present(world, kListener, {}, *world::TickRate::of(60)).has_value());
+        RAWFRAME_EXPECT((*presentation)->statistics().systemsFailed == 0);
+    };
+    kPresent();
+    const std::uint32_t kWhole = valueOf<Model>(world, kListener, kLookId)->color;
+    RAWFRAME_EXPECT(kWhole == 0x6B4A2BFF);
+    // Two broadsides at the listener's ship.
+    valueOf<Helm>(world, kGunner, kHelmId)->starboard = true;
+    played.run(120);
+    valueOf<Helm>(world, kGunner, kHelmId)->starboard = false;
+    played.run(30);
+    kPresent();
+    const Emitter* const kHeard = valueOf<Emitter>(world, kGunner, kReportId);
+    RAWFRAME_EXPECT(kHeard != nullptr && kHeard->sound == 0x0032340b6117b8fd &&
+                    kHeard->cue == valueOf<Ship>(world, kGunner, kShipId)->volleys && kHeard->cue >= 2);
+    const Emitter* const kOwn = valueOf<Emitter>(world, kListener, kReportId);
+    RAWFRAME_EXPECT(kOwn != nullptr && kOwn->sound == 0);
+    // Holed, the listener's hull is darker than whole, the gunner's not.
+    RAWFRAME_EXPECT(valueOf<Ship>(world, kListener, kShipId)->hull < 5);
+    const std::uint32_t kHoled = valueOf<Model>(world, kListener, kLookId)->color;
+    RAWFRAME_EXPECT((kHoled >> 24U) < (kWhole >> 24U));
+    RAWFRAME_EXPECT(valueOf<Model>(world, kGunner, kLookId)->color == kWhole);
+    presentationPlan = nullptr;
 }

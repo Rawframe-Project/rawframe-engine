@@ -15,6 +15,7 @@ import controls
 import rawframe.model
 import rawframe.physics3d
 import rawframe.replication
+import rawframe.sound
 import rawframe.world
 import std.math
 
@@ -73,14 +74,16 @@ struct Sea {
 
 // A ship, its player's own entity (D685): whether it has been launched,
 // the holes it can still take, the ticks it has foundered for, the ticks
-// until its guns are loaded, and the sides it fires to this tick (PORT,
-// STARBOARD, D686); a client predicts all of it for its own.
+// until its guns are loaded, the sides it fires to this tick (PORT,
+// STARBOARD, D686), and the broadsides it has fired (D687); a client
+// predicts all of it for its own.
 struct Ship {
     launched: bool
     hull: u32
     sinking: u32
     reload: u32
     fired: u32
+    volleys: u32
 }
 
 // The sides a ship fires to.
@@ -114,6 +117,9 @@ extern fn Ship.has(entity: world.Entity) -> bool
 extern fn Ship.get(entity: world.Entity) -> Ship
 extern fn Shot.insert(entity: world.Entity, value: Shot)
 extern fn Effects.broadside(entity: world.Entity)
+
+// The broadside's sound (gale.game's `sound` line).
+const CANNON: u64 = 0x0032340b6117b8fd
 extern fn Guns.has(entity: world.Entity) -> bool
 extern fn Guns.get(entity: world.Entity) -> Guns
 extern fn Guns.insert(entity: world.Entity, value: Guns)
@@ -148,7 +154,7 @@ fn launch(count: i32, ships: [Ship], bodies: [physics3d.Body3D], poses: [physics
         if !ships[i].launched {
             let x = f64(launched % u32(4)) * SPACING - f64(1.5) * SPACING
             let z = f64(launched / u32(4)) * ROWS
-            ships[i] = Ship(true, HULL, u32(0), u32(0), u32(0))
+            ships[i] = Ship(true, HULL, u32(0), u32(0), u32(0), ships[i].volleys)
             bodies[i] = physics3d.Body3D(physics3d.DYNAMIC, physics3d.BOX, false, false, false, SHIP, BEAM, HEIGHT,
                                          LENGTH, DENSITY, 0.4, 0.0, 0.4, 1.5)
             poses[i] = physics3d.Pose3D(x, f64(0.2), z, 0.0, 0.0, 0.0, 1.0)
@@ -269,12 +275,17 @@ const REACH: f32 = 300.0
 const BEHIND: f32 = 16.0
 const ABOVE: f32 = 7.0
 
-// Every hull, as the box its body is, and every ball.
-fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
+// Every hull, as the box its body is, darker for each hole in it (D687),
+// and every ball.
+fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model], entities: [world.Entity]) {
     let i = 0
     while i < count {
         let b = bodies[i]
-        looks[i] = model.Model(model.BOX, b.width, b.height, b.depth, 0x6B4A2BFF, u64(0), 0.0)
+        let color = u32(0x6B4A2BFF)
+        if Ship.has(entities[i]) {
+            color = charred(Ship.get(entities[i]).hull)
+        }
+        looks[i] = model.Model(model.BOX, b.width, b.height, b.depth, color, u64(0), 0.0)
         if b.shape == physics3d.SPHERE {
             looks[i] = model.Model(model.SPHERE, b.width, b.width, b.width, 0x202020FF, u64(0), 0.0)
         }
@@ -340,6 +351,7 @@ fn aim(count: i32, helms: [controls.Helm], ships: [Ship], entities: [world.Entit
                     ships[i].fired = ships[i].fired | STARBOARD
                 }
                 ships[i].reload = RELOAD
+                ships[i].volleys = ships[i].volleys + u32(1)
                 Effects.broadside(entities[i])
             }
         }
@@ -410,6 +422,34 @@ fn strike(count: i32, shots: [Shot], contacts: [physics3d.Contact3D], poses: [ph
             world.destroy(entities[i])
         } else if poses[i].y < f64(-1.0) || shots[i].age > FLIGHT {
             world.destroy(entities[i])
+        }
+        i = i + 1
+    }
+}
+
+// A hull's wood with `hull` holes left of HULL: its own brown whole, and
+// a fifth of the way to charred black for each hole.
+fn charred(hull: u32) -> u32 {
+    let left = hull
+    if left > HULL {
+        left = HULL
+    }
+    let holes = HULL - left
+    let red = u32(0x6B) - (u32(0x6B) - u32(0x1C)) * holes / HULL
+    let green = u32(0x4A) - (u32(0x4A) - u32(0x14)) * holes / HULL
+    let blue = u32(0x2B) - (u32(0x2B) - u32(0x0C)) * holes / HULL
+    return (red << u32(24)) | (green << u32(16)) | (blue << u32(8)) | u32(0xFF)
+}
+
+// Every other ship's broadsides, heard from it as its count rises; the
+// client's own ship is silent here, its broadsides its predicted effect.
+fn report(count: i32, ships: [Ship], emitters: [sound.Emitter], entities: [world.Entity]) {
+    let me = replication.player()
+    let i = 0
+    while i < count {
+        emitters[i] = sound.Emitter(CANNON, ships[i].volleys, false, sound.STOP)
+        if entities[i] == me {
+            emitters[i] = sound.Emitter(u64(0), u32(0), false, sound.STOP)
         }
         i = i + 1
     }
