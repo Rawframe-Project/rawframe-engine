@@ -113,6 +113,16 @@ for pattern in "${wanted[@]}"; do
     fi
 done
 
+# The client says it sees touches once, at the first (D559), so what a
+# later touch keeps is waited for in the file itself, up to three minutes:
+# a slow emulator in CI has drawn the frame that hears it ten seconds on.
+if [ -n "$kept" ]; then
+    for _ in $(seq 90); do
+        "${adb[@]}" shell run-as "$package" cat files/settings.json 2>/dev/null | tr -d '\r\n' |
+            grep -qE -- "$kept" && break
+        sleep 2
+    done
+fi
 "${adb[@]}" shell input keyevent BACK
 for _ in $(seq 60); do
     client_log | grep -q '"code":"stopped"' && break
