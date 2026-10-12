@@ -3,7 +3,9 @@
 // build's driver reads made a shader, and the engine's own models'
 // pipelines that run its code made again with it as a frame first wants
 // each: the lit ones, the prepass's that cut or leave surfaces, and, from
-// the shadow's container, the masked casters' (D488).
+// the shadow's container, the masked casters' (D488); and for a material
+// that moves its vertices, the prepass's depth and the solid casters' too
+// (D691).
 
 #include "pipelines.h"
 
@@ -25,7 +27,7 @@ namespace {
 constexpr std::size_t kContainer = RAWFRAME_PROGRAM_CONTAINER;
 static_assert(kContainer < material::kProgramContainers);
 
-constexpr std::array<std::string_view, 19> kLabels = {"rawframe.scene.program.lit",
+constexpr std::array<std::string_view, 22> kLabels = {"rawframe.scene.program.lit",
                                                       "rawframe.scene.program.masked",
                                                       "rawframe.scene.program.glass",
                                                       "rawframe.scene.program.lit.decaled",
@@ -43,7 +45,10 @@ constexpr std::array<std::string_view, 19> kLabels = {"rawframe.scene.program.li
                                                       "rawframe.scene.program.depth.masked.multisampled",
                                                       "rawframe.scene.program.depth.surfaces.multisampled",
                                                       "rawframe.scene.program.depth.surfaces.masked.multisampled",
-                                                      "rawframe.scene.program.shadows.masked"};
+                                                      "rawframe.scene.program.shadows.masked",
+                                                      "rawframe.scene.program.depth",
+                                                      "rawframe.scene.program.depth.multisampled",
+                                                      "rawframe.scene.program.shadows"};
 
 /// What the device said refusing a program's `part`: the error and what it
 /// names, one line.
@@ -84,19 +89,24 @@ void Pipelines::wantPrograms(std::span<const std::shared_ptr<const material::Pro
         const bool kSurfaced = asked_.at(static_cast<std::size_t>(Effect::Surfaces));
         const std::array<mrhiGraphicsPipelineDef, 2> kSurfacing = surfacing(prepass_);
         for (std::size_t variant = 0; variant < shading.variants.size() && !shading.refused; ++variant) {
-            // The lit twelve, the prepass's six, then the masked casters'
+            // The lit twelve, the prepass's six, then the masked casters';
+            // then a moving material's depth, two, and its solid casters'
             // (`variantOf`).
             const bool kLit = variant < 12;
-            const bool kCasting = variant == 18;
-            const std::size_t kPrepass = kLit || kCasting ? 0 : (variant - 12) % 3;
+            const bool kCasting = variant == 18 || variant == 21;
+            const bool kMoving = variant > 18;
+            const bool kDepth = variant == 19 || variant == 20;
+            const std::size_t kPrepass = kLit || variant >= 18 ? 0 : (variant - 12) % 3;
             const bool kDecaled = kLit && (variant % 6) >= 3;
-            const bool kMultisampled = kLit ? variant >= 6 : !kCasting && variant >= 15;
+            const bool kMultisampled = kLit ? variant >= 6 : kDepth ? variant == 20 : !kCasting && variant >= 15;
             if (shading.asked.at(variant) || (kDecaled && !decaled) || (kMultisampled && !sampled) ||
-                (!kLit && !kCasting && kPrepass > 0 && !kSurfaced)) {
+                (!kLit && variant < 18 && kPrepass > 0 && !kSurfaced) || (kMoving && !kProgram->moves)) {
                 continue;
             }
             mrhiGraphicsPipelineDef def = kLit            ? shading_.at(variant % 3)
-                                          : kCasting      ? cutCasting_
+                                          : variant == 18 ? cutCasting_
+                                          : variant == 21 ? casting_
+                                          : kDepth        ? prepass_
                                           : kPrepass == 0 ? cut_
                                                           : kSurfacing.at(kPrepass - 1);
             def.shader = kCasting ? shading.shadowShader : shading.shader;

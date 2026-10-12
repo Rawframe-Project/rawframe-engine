@@ -11,6 +11,8 @@
 #include "generated/faded_graph_shadow_container.h"
 #include "generated/faded_scene_container.h"
 #include "generated/faded_shadow_container.h"
+#include "generated/rising_graph_scene_container.h"
+#include "generated/rising_graph_shadow_container.h"
 #include "rawframe/material/material.h"
 #include "rawframe/render/device.h"
 #include "rawframe/render/frame.h"
@@ -343,4 +345,98 @@ RAWFRAME_TEST(AGraphMaterialDrawsAsItsHandwrittenTwinDoes) {
                 least[1],
                 most[1]);
     RAWFRAME_EXPECT(*kGraph == *kHand && fromBlob > 500 && most[0] - least[0] > 40 && most[1] - least[1] > 40);
+}
+
+RAWFRAME_TEST(AMovingMaterialRisesWithThePresentedWorldsTimeAndItsShadowWithIt) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // The sun's shadows' scene again, its box red and drawn by
+    // rising.material as rawframe.material writes it (rising_graph.slang),
+    // lifted a meter a second of the presented World's time (D691): in the
+    // picture, through the depth prepass, and into the shadow map.
+    SceneFrame frame = looking();
+    SceneDraw floor = box(8, 1, {1, 1, 1, 1});
+    floor.model[0] = 10;
+    floor.model[5] = 0.1F;
+    floor.model[10] = 10;
+    floor.normal[0] = 0.1F;
+    floor.normal[5] = 10;
+    floor.normal[10] = 0.1F;
+    floor.model[13] = -2;
+    SceneDraw cube = box(8, 0.5F, {1, 0, 0, 1});
+    cube.material = 1;
+    frame.draws = {floor, cube};
+    frame.shadows.casters = frame.draws;
+    for (std::size_t at = 0; at < frame.shadows.count; ++at) {
+        frame.shadows.cascades[at].firstCaster = 0;
+        frame.shadows.cascades[at].casterCount = 2;
+    }
+    frame.materials = {render_scene::noMaterial(), render_scene::noMaterial()};
+    auto rising = programOf(kRisingGraphScene, kRisingGraphShadow, material::Shading::Lit);
+    material::ProgramMaterial moving = *rising;
+    moving.moves = true;
+    frame.programs = {nullptr, std::make_shared<const material::ProgramMaterial>(std::move(moving))};
+    // The red box's rows, averaged; and the floor's red in the shadow, over
+    // a window of it.
+    const auto kRow = [](const std::vector<std::byte>& pixels) {
+        double rows = 0;
+        int count = 0;
+        for (std::uint32_t y = 0; y < 64; ++y) {
+            for (std::uint32_t x = 0; x < 64; ++x) {
+                const std::array<int, 3> kAt = at(pixels, x, y);
+                if (kAt[0] > kAt[1] + 60 && kAt[0] > kAt[2] + 60) {
+                    rows += y;
+                    ++count;
+                }
+            }
+        }
+        return count > 0 ? rows / count : -1.0;
+    };
+    const auto kShade = [](const std::vector<std::byte>& pixels) {
+        int sum = 0;
+        for (std::uint32_t y = 38; y < 41; ++y) {
+            for (std::uint32_t x = 28; x < 32; ++x) {
+                sum += at(pixels, x, y)[0];
+            }
+        }
+        return sum;
+    };
+    frame.time = {0, 0};
+    const auto kNow =
+        drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
+    frame.time = {1, 1};
+    const auto kLater = drawn(**framer, **made, frame, kMeshes);
+    // Far above, its shadow is gone from the floor below.
+    frame.time = {40, 40};
+    const auto kAbove = drawn(**framer, **made, frame, kMeshes);
+    RAWFRAME_EXPECT(kNow.has_value() && kLater.has_value() && kAbove.has_value());
+    if (!kNow.has_value() || !kLater.has_value() || !kAbove.has_value()) {
+        return;
+    }
+    const render_scene_gpu::RendererStatistics kStatistics = (*made)->statistics();
+    std::printf("rising: the box's row %.1f, a second later %.1f; the shadow's window %d, far above %d; program "
+                "models drawn %llu, waiting %llu, refused %llu%s%s\n",
+                kRow(*kNow),
+                kRow(*kLater),
+                kShade(*kNow),
+                kShade(*kAbove),
+                static_cast<unsigned long long>(kStatistics.programModelsDrawn),
+                static_cast<unsigned long long>(kStatistics.programModelsWaiting),
+                static_cast<unsigned long long>(kStatistics.programsRefused),
+                kStatistics.programRefusal.empty() ? "" : ": ",
+                kStatistics.programRefusal.c_str());
+    RAWFRAME_EXPECT(kRow(*kNow) > 0 && kRow(*kLater) > 0 && kRow(*kLater) + 3 < kRow(*kNow));
+    RAWFRAME_EXPECT(kRow(*kAbove) < 0 && kShade(*kNow) + 200 < kShade(*kAbove));
+    RAWFRAME_EXPECT(kStatistics.programsRefused == 0);
 }

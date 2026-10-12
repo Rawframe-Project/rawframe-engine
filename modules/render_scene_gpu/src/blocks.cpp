@@ -89,6 +89,9 @@ FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, s
     block.exposure = {factorOf(frame.exposure), 0, 0, 0};
     block.occlusion = {frame.occlusion.enabled ? 1.0F : 0.0F, 0, 0, 0};
     block.forward = {frame.forward[0], frame.forward[1], frame.forward[2], 0};
+    block.eye = {
+        static_cast<float>(frame.eye[0]), static_cast<float>(frame.eye[1]), static_cast<float>(frame.eye[2]), 0};
+    block.time = {static_cast<float>(frame.time[0]), static_cast<float>(frame.time[1]), 0, 0};
     const render_scene::SceneShadows& kShadows = frame.shadows;
     for (std::size_t at = 0; at < kShadows.count; ++at) {
         block.cascadeFar[at] = kShadows.cascades[at].far;

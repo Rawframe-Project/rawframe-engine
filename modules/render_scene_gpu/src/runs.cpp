@@ -103,7 +103,8 @@ Placed placeDraws(const render_scene::SceneFrame& scene,
     for (std::size_t at = 0; at < scene.shadows.count && at < placed.cascadeRuns.size(); ++at) {
         const render_scene::ShadowCascade& kCascade = scene.shadows.cascades[at];
         const auto [kCastSolid, kCastMasked] = kSplit(kSunCasters.subspan(kCascade.firstCaster, kCascade.casterCount));
-        append(kCastSolid, usable, {}, {}, placed, placed.cascadeRuns[at].solid, count, false, modelsLeftOut);
+        append(
+            kCastSolid, usable, {}, scene.programs, placed, placed.cascadeRuns[at].solid, count, false, modelsLeftOut);
         append(kCastMasked,
                usable,
                scene.textures,
@@ -118,7 +119,7 @@ Placed placeDraws(const render_scene::SceneFrame& scene,
     for (const render_scene::ShadowSlot& slot : scene.lightShadows.slots) {
         const auto [kCastSolid, kCastMasked] = kSplit(kCasters.subspan(slot.firstCaster, slot.casterCount));
         Casters& casters = placed.slotRuns.emplace_back();
-        append(kCastSolid, usable, {}, {}, placed, casters.solid, count, false, modelsLeftOut);
+        append(kCastSolid, usable, {}, scene.programs, placed, casters.solid, count, false, modelsLeftOut);
         append(
             kCastMasked, usable, scene.textures, scene.programs, placed, casters.masked, count, false, modelsLeftOut);
     }

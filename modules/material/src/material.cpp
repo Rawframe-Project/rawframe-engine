@@ -23,6 +23,7 @@ namespace {
 using document::Value;
 using surface_graph::Carried;
 using surface_graph::carriedBy;
+using surface_graph::combine3In;
 using surface_graph::kBlends;
 using surface_graph::known;
 using surface_graph::kShadings;
@@ -42,8 +43,12 @@ using surface_graph::statesOf;
 using surface_graph::surfaceNode;
 using surface_graph::Switch;
 using surface_graph::switchIn;
+using surface_graph::timeIn;
 using surface_graph::typeOf;
+using surface_graph::unary;
+using surface_graph::unaryIn;
 using surface_graph::uvIn;
+using surface_graph::worldPositionIn;
 
 /// A literal's numbers, if it is one of the parameter's shape in its
 /// range.
@@ -101,7 +106,9 @@ result::Result<bool> inputsIn(const graph::Node& node, Surface& into) {
     for (std::size_t at = 0; at < inputs->names().size(); ++at) {
         const Parameter* kParameter = parameterNamed(inputs->names()[at]);
         const bool kNormal = inputs->names()[at] == "geometry_normal";
-        if ((kParameter == nullptr && !kNormal) || (at > 0 && !(inputs->names()[at - 1] < inputs->names()[at]))) {
+        const bool kOffset = inputs->names()[at] == "position_offset";
+        if ((kParameter == nullptr && !kNormal && !kOffset) ||
+            (at > 0 && !(inputs->names()[at - 1] < inputs->names()[at]))) {
             return invalid("a surface node's inputs are the Surface contract's core parameters, in name order");
         }
         if (graph::connectionOf(inputs->items()[at]).has_value()) {
@@ -110,6 +117,9 @@ result::Result<bool> inputsIn(const graph::Node& node, Surface& into) {
         }
         if (kNormal) {
             return invalid("a surface's geometry normal is connected: a stream or a map, never a literal");
+        }
+        if (kOffset) {
+            return invalid("a surface's position offset is connected: what moves each vertex, never a literal");
         }
         const std::optional<std::array<double, 3>> kLiteral = literalOf(*kParameter, inputs->items()[at]);
         if (!kLiteral.has_value()) {
@@ -144,7 +154,7 @@ result::Result<Affine> affineOf(const graph::Document& surface, const graph::Con
         }
         return Affine{};
     }
-    if (!math(typeOf(kNode))) {
+    if (typeOf(kNode) != kMultiplyType && typeOf(kNode) != kAddType) {
         return unsupported("a texture is sampled at a mesh's coordinates, scaled and moved, in generation 1");
     }
     RAWFRAME_TRY_ASSIGN(const Math kMath, mathIn(surface, kNode));
@@ -437,6 +447,14 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
             RAWFRAME_TRY(normalMapIn(surface, node));
         } else if (typeOf(node) == kQualitySwitchType) {
             RAWFRAME_TRY(switchIn(surface, node));
+        } else if (unary(typeOf(node))) {
+            RAWFRAME_TRY(unaryIn(surface, node));
+        } else if (typeOf(node) == kCombine3Type) {
+            RAWFRAME_TRY(combine3In(surface, node));
+        } else if (typeOf(node) == kTimeType) {
+            RAWFRAME_TRY(timeIn(node));
+        } else if (typeOf(node) == kWorldPositionType) {
+            RAWFRAME_TRY(worldPositionIn(node));
         } else {
             RAWFRAME_TRY(sampleIn(surface, node));
         }
@@ -560,6 +578,9 @@ result::Result<Material> compiled(const graph::Document& surface) {
             continue;
         }
         const std::string& kName = kInputs.names()[at];
+        if (kName == "position_offset") {
+            return unsupported("a material that moves its vertices is a program material (D691)");
+        }
         if (kName == "geometry_normal") {
             // A normal texture through `normal_map` (D313).
             const graph::Node& kNode = *nodeOf(surface, kFrom->node);

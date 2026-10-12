@@ -20,6 +20,11 @@ struct Generated : IMaterial
         made.unlit = false;
         return made;
     }
+
+    static float3 offset(Placed placed)
+    {
+        return float3(0.0);
+    }
 }
 
 export struct Material : IMaterial = Generated;

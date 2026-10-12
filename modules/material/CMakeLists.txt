@@ -17,6 +17,13 @@ if(TARGET rawframe_material_tests)
     rawframe_embedded_file(TARGET rawframe_material_tests
                            FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/faded_graph.slang"
                            HEADER "faded_graph.h" SYMBOL "kFadedGraph")
+    # A graph whose vertices rise with time (D691), and the Slang written
+    # from it, which the scene's tests draw.
+    rawframe_embedded_file(TARGET rawframe_material_tests FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/seeds/rising.material"
+                           HEADER "rising_material.h" SYMBOL "kRisingMaterial")
+    rawframe_embedded_file(TARGET rawframe_material_tests
+                           FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/rising_graph.slang"
+                           HEADER "rising_graph.h" SYMBOL "kRisingGraph")
 endif()
 rawframe_module_fuzz(NAME material TARGET documents RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_material.cpp)
 rawframe_module_fuzz(NAME material TARGET post_processes RUNS 10000 SEEDS tests/post_seeds SOURCES tests/fuzz_post_process.cpp)

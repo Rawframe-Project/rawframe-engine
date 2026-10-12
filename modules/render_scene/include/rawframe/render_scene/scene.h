@@ -594,6 +594,11 @@ struct SceneFrame {
     /// Where the eye looks, in the World's axes: what a cascade is chosen
     /// by.
     std::array<float, 3> forward{0, 0, -1};
+    /// The eye's place in the World's axes, which the models are placed
+    /// relative to; and the presented World's time in seconds, now and the
+    /// frame before, the same for the first (`Scene::shownAt`, D691).
+    std::array<double, 3> eye{0, 0, 0};
+    std::array<double, 2> time{0, 0};
     SceneShadows shadows;
     SceneTemporal temporal;
     SceneLightShadows lightShadows;
@@ -840,6 +845,12 @@ public:
     void extract(world::World& world,
                  const world_animation::AnimationQueries* poses = nullptr,
                  const HandsInWorld* hands = nullptr);
+
+    /// The presented World's time on its simulation timeline, in seconds
+    /// (ADR-0010, D691), which the frames queued from now show: what a
+    /// material that moves its vertices reads. Nought until told, and for
+    /// a time not finite.
+    void shownAt(double seconds) noexcept;
 
     /// The view and queue stages, in `present`: the extracted models seen
     /// through `camera` and culled to its view, those in view in the order

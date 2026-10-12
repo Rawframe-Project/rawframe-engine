@@ -442,22 +442,29 @@ struct SceneRenderer::State {
             const bool kOpaque = kRuns == &now.placed.runs;
             const bool kMasked = kRuns == &now.placed.maskedRuns;
             const Shade kShade = kOpaque ? Shade::Lit : kMasked ? Shade::Masked : Shade::Glass;
-            // The prepass's pipeline running the material's code, if any.
-            const std::optional<Shade> kPrepass = kMasked ? std::optional{kSurfaced ? Shade::CutSurfaces : Shade::Cut}
-                                                  : kOpaque && kSurfaced ? std::optional{Shade::Surfaces}
-                                                                         : std::nullopt;
             for (const Run& kRun : *kRuns) {
                 if (kRun.program == nullptr) {
                     continue;
                 }
+                // The prepass's pipeline running the material's code, if
+                // any: an opaque model's depth only where it moves its
+                // vertices (D691).
+                const bool kMoves = kRun.program->moves;
+                const std::optional<Shade> kPrepass = kMasked
+                                                          ? std::optional{kSurfaced ? Shade::CutSurfaces : Shade::Cut}
+                                                      : kOpaque && kSurfaced ? std::optional{Shade::Surfaces}
+                                                      : kOpaque && kMoves    ? std::optional{Shade::Depth}
+                                                                             : std::nullopt;
                 // A masked model casting shadows is cut by its program there
-                // too (D488).
-                const bool kOwn =
-                    pipelines->programPipeline(kRun.program, kShade, kDecaled, kSampling) != nullptr &&
-                    (!kPrepass.has_value() ||
-                     pipelines->programPipeline(kRun.program, *kPrepass, false, kSampling) != nullptr) &&
-                    (!kMasked || frame->shadows.count == 0 ||
-                     pipelines->programPipeline(kRun.program, Shade::CutCasting, false, false) != nullptr);
+                // too (D488), and a moving one is moved there (D691).
+                const std::optional<Shade> kCast = kMasked  ? std::optional{Shade::CutCasting}
+                                                   : kMoves ? std::optional{Shade::Casting}
+                                                            : std::nullopt;
+                const bool kOwn = pipelines->programPipeline(kRun.program, kShade, kDecaled, kSampling) != nullptr &&
+                                  (!kPrepass.has_value() ||
+                                   pipelines->programPipeline(kRun.program, *kPrepass, false, kSampling) != nullptr) &&
+                                  (!kCast.has_value() || frame->shadows.count == 0 ||
+                                   pipelines->programPipeline(kRun.program, *kCast, false, false) != nullptr);
                 (kOwn ? statistics.programModelsDrawn : statistics.programModelsWaiting) += kRun.count;
             }
         }

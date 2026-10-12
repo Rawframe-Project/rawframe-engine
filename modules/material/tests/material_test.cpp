@@ -6,6 +6,8 @@
 
 #include "generated/faded_graph.h"
 #include "generated/faded_material.h"
+#include "generated/rising_graph.h"
+#include "generated/rising_material.h"
 #include "rawframe/material/errors.h"
 #include "rawframe/material/material.h"
 #include "rawframe/test/test.h"
@@ -618,7 +620,8 @@ RAWFRAME_TEST(WhatTheBlobCannotFoldIsWrittenAsSlang) {
 RAWFRAME_TEST(AProgramMaterialRoundTripsAndRefusesWhatItWouldNotWrite) {
     // States, two textures at their slots, and a scene's and a shadow's
     // container a backend (D484, D488).
-    ProgramMaterial made{.shading = Shading::Unlit, .blend = Blend::Masked, .alphaCutoff = 0.25F, .doubleSided = true};
+    ProgramMaterial made{
+        .shading = Shading::Unlit, .blend = Blend::Masked, .alphaCutoff = 0.25F, .doubleSided = true, .moves = true};
     made.textures = {{.id = 0xa44ecb4a39ac5cc8ULL}, {.id = 7, .filter = Filter::Nearest, .address = Address::Clamp}};
     for (std::size_t at = 0; at < made.containers.size(); ++at) {
         made.containers.at(at) = {std::byte{'M'}, std::byte{'R'}, std::byte{'S'}, std::byte{'C'}, std::byte(at)};
@@ -654,6 +657,13 @@ RAWFRAME_TEST(AProgramMaterialRoundTripsAndRefusesWhatItWouldNotWrite) {
     std::vector<std::byte> blended = kBytes;
     blended[9] = std::byte{3};
     RAWFRAME_EXPECT(refusedWith(decodeProgram(blended), MaterialError::Invalid));
+    // Moving is one or nought (D691); nought, as before it was said.
+    std::vector<std::byte> moving = kBytes;
+    moving[11] = std::byte{2};
+    RAWFRAME_EXPECT(refusedWith(decodeProgram(moving), MaterialError::Invalid));
+    moving[11] = std::byte{0};
+    const auto kStill = decodeProgram(moving);
+    RAWFRAME_EXPECT(kStill.has_value() && !kStill->moves);
 }
 
 RAWFRAME_TEST(AGraphIsWrittenAsTheSlangItsHandwrittenTwinIsCheckedAgainst) {
@@ -673,4 +683,115 @@ RAWFRAME_TEST(AGraphIsWrittenAsTheSlangItsHandwrittenTwinIsCheckedAgainst) {
     RAWFRAME_EXPECT(kWritten.has_value() && kWritten->source == kGolden);
     RAWFRAME_EXPECT(kWritten.has_value() && kWritten->textures.size() == 1 &&
                     kWritten->textures[0].id == 0xa44ecb4a39ac5cc8ULL);
+}
+
+namespace {
+
+constexpr graph::NodeId kTime = 0x2f00000000000021ULL;
+constexpr graph::NodeId kWorld = 0x2f00000000000022ULL;
+constexpr graph::NodeId kAxes = 0x2f00000000000023ULL;
+constexpr graph::NodeId kPhase = 0x2f00000000000024ULL;
+constexpr graph::NodeId kWave = 0x2f00000000000025ULL;
+constexpr graph::NodeId kSlope = 0x2f00000000000026ULL;
+constexpr graph::NodeId kLifted = 0x2f00000000000027ULL;
+constexpr graph::NodeId kTilted = 0x2f00000000000028ULL;
+constexpr graph::NodeId kFacing = 0x2f00000000000029ULL;
+
+graph::Node timeOf(Value timeline) {
+    Value params = Value::object();
+    if (timeline.kind() != Value::Kind::Null) {
+        params.add("timeline", std::move(timeline));
+    }
+    return nodeOf(kTime, kTimeType, std::move(params), Value::object());
+}
+
+graph::Node unaryOf(graph::NodeId id, std::string_view type, Value in) {
+    return nodeOf(id, type, Value::object(), objectOf({{"in", std::move(in)}}));
+}
+
+graph::Node combineOf(graph::NodeId id, Value x, Value y, Value z) {
+    return nodeOf(
+        id, kCombine3Type, Value::object(), objectOf({{"x", std::move(x)}, {"y", std::move(y)}, {"z", std::move(z)}}));
+}
+
+/// A wave rolling along the World's x: each vertex lifted by sin(x + t),
+/// and the surface's normal tilted by the wave's slope, cos(x + t).
+graph::Document waved() {
+    return surfaceOf(objectOf({{"geometry_normal", from(kFacing, "out")}, {"position_offset", from(kLifted, "out")}}),
+                     {timeOf(Value::string("simulation")),
+                      nodeOf(kWorld, kWorldPositionType, Value::object(), Value::object()),
+                      unaryOf(kAxes, kSeparate3Type, from(kWorld, "position")),
+                      mathOf(kPhase, kAddType, from(kAxes, "r"), from(kTime, "seconds")),
+                      unaryOf(kWave, kSinType, from(kPhase, "out")),
+                      unaryOf(kSlope, kCosType, from(kPhase, "out")),
+                      combineOf(kLifted, Value::real(0), from(kWave, "out"), Value::real(0)),
+                      combineOf(kTilted, from(kSlope, "out"), Value::real(-1), Value::real(0)),
+                      nodeOf(kFacing, kNormalizeType, Value::object(), objectOf({{"in", from(kTilted, "out")}}))});
+}
+
+} // namespace
+
+RAWFRAME_TEST(AMaterialMovesItsVerticesAtThePresentedWorldsTime) {
+    // SPEC-0026's position offset (D691): the vertex stage's code, at a
+    // vertex placed in the World and the World's time, which the fragment
+    // stage reads as well; the blob folds none of it.
+    const graph::Document kWaved = waved();
+    RAWFRAME_EXPECT(validateSurface(kWaved).has_value());
+    RAWFRAME_EXPECT(refusedWith(compileQualities(kWaved), MaterialError::Unsupported));
+    RAWFRAME_EXPECT(semanticHash(kWaved).has_value());
+    const auto kMade = generateSlang(kWaved);
+    RAWFRAME_EXPECT(kMade.has_value() && kMade->moves && kMade->textures.empty());
+    if (!kMade.has_value()) {
+        return;
+    }
+    const std::string& kSource = kMade->source;
+    const std::size_t kOffset = kSource.find("static float3 offset(Placed placed)");
+    RAWFRAME_EXPECT(kOffset != std::string::npos);
+    const std::string kFragment = kSource.substr(0, kOffset);
+    const std::string kVertex = kOffset != std::string::npos ? kSource.substr(kOffset) : std::string{};
+    RAWFRAME_EXPECT(kVertex.contains("(placed.position).r + placed.time") && kVertex.contains("sin(") &&
+                    kVertex.contains("float3(0.0, ") && !kVertex.contains("point.") && !kVertex.contains("cos("));
+    RAWFRAME_EXPECT(kFragment.contains("(point.position).r + point.time") && kFragment.contains("cos(") &&
+                    kFragment.contains("normalize(") && !kFragment.contains("placed.") && !kFragment.contains("sin("));
+    // A material without one moves nothing.
+    const auto kStill = generateSlang(sampledAt(0));
+    RAWFRAME_EXPECT(kStill.has_value() && !kStill->moves &&
+                    kStill->source.contains("static float3 offset(Placed placed)\n    {\n        return float3(0.0);"));
+    // The timeline is the simulation's, named; the offset connected; a
+    // combine3 of floats; a normalized vec3; no texture in the vertex
+    // stage.
+    for (const Value& kTimeline : {Value{}, Value::string("frame"), Value::real(1)}) {
+        graph::Document wrong = kWaved;
+        wrong.nodes[1] = timeOf(kTimeline);
+        RAWFRAME_EXPECT(refusedWith(validateSurface(wrong), MaterialError::Invalid));
+    }
+    RAWFRAME_EXPECT(refusedWith(
+        validateSurface(surfaceOf(
+            objectOf({{"position_offset", Value::array({Value::real(0), Value::real(1), Value::real(0)})}}), {})),
+        MaterialError::Invalid));
+    graph::Document wrong = kWaved;
+    wrong.nodes[7] = combineOf(kLifted, Value::real(0), from(kWorld, "position"), Value::real(0));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(wrong), MaterialError::Invalid));
+    wrong = kWaved;
+    wrong.nodes[9] = unaryOf(kFacing, kNormalizeType, from(kWave, "out"));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(wrong), MaterialError::Invalid));
+    wrong = kWaved;
+    wrong.nodes[4] = mathOf(kPhase, kAddType, from(kSampler, "alpha"), from(kTime, "seconds"));
+    wrong.nodes.insert(wrong.nodes.begin() + 1, samplerOf({}));
+    RAWFRAME_EXPECT(validateSurface(wrong).has_value());
+    RAWFRAME_EXPECT(refusedWith(generateSlang(wrong), MaterialError::Unsupported));
+}
+
+RAWFRAME_TEST(AGraphRisingWithTimeIsWrittenAsTheSlangTheScenesTestsDraw) {
+    // rising.material lifts its model a meter a second (D691); the scene's
+    // tests draw what it is written as, rising_graph.slang, word for word.
+    const std::string_view kDocument{reinterpret_cast<const char*>(kRisingMaterial.data()), kRisingMaterial.size()};
+    const auto kRead = readMaterial(kDocument);
+    RAWFRAME_EXPECT(kRead.has_value());
+    if (!kRead.has_value()) {
+        return;
+    }
+    const auto kWritten = generateSlang(*kRead);
+    const std::string_view kGolden{reinterpret_cast<const char*>(kRisingGraph.data()), kRisingGraph.size()};
+    RAWFRAME_EXPECT(kWritten.has_value() && kWritten->moves && kWritten->source == kGolden);
 }

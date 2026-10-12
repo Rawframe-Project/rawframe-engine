@@ -59,8 +59,22 @@ struct FrameBlock {
     std::array<float, 4> reflections{};
     std::array<float, 4> contact{};
     std::array<float, 4> decals{};
+    /// The eye's place in the World's axes, and the presented World's time
+    /// in seconds, now and the frame before (D691).
+    std::array<float, 4> eye{};
+    std::array<float, 4> time{};
 };
-static_assert(sizeof(FrameBlock) == 848, "the scene's shaders read the frame as 848 bytes");
+static_assert(sizeof(FrameBlock) == 880, "the scene's shaders read the frame as 880 bytes");
+
+/// A shadow square's view as the shadow's shaders read it (std140): the
+/// cascade's or the light's view and projection, then the frame's eye and
+/// time, where a material that moves its vertices moves them (D691).
+struct CasterBlock {
+    Matrix4 viewProjection{};
+    std::array<float, 4> eye{};
+    std::array<float, 4> time{};
+};
+static_assert(sizeof(CasterBlock) == 96, "the shadow's shaders read a square's view as 96 bytes");
 
 /// A point or spot light as the scene's shaders read it (std430, D290).
 struct LightBlock {

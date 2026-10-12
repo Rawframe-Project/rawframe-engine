@@ -29,7 +29,7 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
         // The cascade's square, then the material's bindings, as the
         // material module puts them (D488).
         const mrhiResourceId kWhite = resourceOf(with.textures->resource(0));
-        std::array<mrhiBinding, 10> binding = {bufferAt(0, kSquare.view, sizeof(Matrix4)),
+        std::array<mrhiBinding, 10> binding = {bufferAt(0, kSquare.view, sizeof(CasterBlock)),
                                                bufferAt(9, with.materials, with.materialsBytes),
                                                textureAt(10, kWhite),
                                                samplerAt(11, pipelines.materialSamplers[0]),
@@ -43,12 +43,30 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
             return failed("a shadow square could not be set up", mrhi_errorState);
         }
         if (!kSquare.casters->solid.empty()) {
-            if (mrhiSetGraphicsPipeline(native, pass, pipelines.casting.pipeline) != mrhi_success ||
+            mrhiGraphicsPipelineId set = pipelines.casting.pipeline;
+            if (mrhiSetGraphicsPipeline(native, pass, set) != mrhi_success ||
                 mrhiSetVertexBuffer(native, pass, 1, with.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success ||
                 mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
                 return failed("the casters could not be set up", mrhi_errorState);
             }
+            // A caster whose material moves its vertices is moved by its
+            // program, once its pipeline is made (D691); it samples no
+            // texture there, so the table stays.
             for (const Run& run : kSquare.casters->solid) {
+                mrhiGraphicsPipelineId wanted = pipelines.casting.pipeline;
+                if (const Asked* kOwn = run.program != nullptr
+                                            ? pipelines.programPipeline(run.program, Shade::Casting, false, false)
+                                            : nullptr;
+                    kOwn != nullptr) {
+                    wanted = kOwn->pipeline;
+                }
+                if (wanted.index1 != set.index1 || wanted.generation != set.generation) {
+                    if (mrhiSetGraphicsPipeline(native, pass, wanted) != mrhi_success ||
+                        mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
+                        return failed("a material's program could not be set", mrhi_errorState);
+                    }
+                    set = wanted;
+                }
                 RAWFRAME_TRY(kDraw(run));
             }
         }
@@ -126,7 +144,10 @@ ShadowPasses::declare(const render_scene::SceneFrame& frame, const FrameBlock& b
     // nothing reads the depth of when there are none.
     cascadeCount_ = frame.shadows.count;
     side_ = cascadeCount_ > 0 ? frame.shadows.side : 1;
-    cascadeMatrices_ = block.cascades;
+    for (std::size_t at = 0; at < cascadeBlocks_.size(); ++at) {
+        cascadeBlocks_.at(at) =
+            CasterBlock{.viewProjection = block.cascades.at(at), .eye = block.eye, .time = block.time};
+    }
     mrhiTextureDef sunDef = mrhiDefaultTextureDef();
     sunDef.format = kShadowFormat;
     sunDef.width = cascadeCount_ > 0 ? 2 * side_ : 1;
@@ -136,7 +157,7 @@ ShadowPasses::declare(const render_scene::SceneFrame& frame, const FrameBlock& b
     }
     for (std::size_t at = 0; at < cascadeCount_; ++at) {
         mrhiBufferDef def = mrhiDefaultBufferDef();
-        def.size = sizeof(Matrix4);
+        def.size = sizeof(CasterBlock);
         if (mrhiDeclareBuffer(native_, &def, &cascades_[at]) != mrhi_success) {
             return failed("a cascade's view could not be declared", mrhi_errorCapacity);
         }
@@ -146,7 +167,7 @@ ShadowPasses::declare(const render_scene::SceneFrame& frame, const FrameBlock& b
     // the depth of when there are none; each square's view.
     const render_scene::SceneLightShadows& kLightShadows = frame.lightShadows;
     slots_ = slotsOf(frame);
-    slotMatrices_.clear();
+    slotBlocks_.clear();
     slotViews_.clear();
     slotViewports_.clear();
     mrhiTextureDef atlasDef = mrhiDefaultTextureDef();
@@ -164,12 +185,12 @@ ShadowPasses::declare(const render_scene::SceneFrame& frame, const FrameBlock& b
     writes.push_back(wholeOf(slotsResource_, mrhi_accessCopyDestination));
     for (const render_scene::ShadowSlot& slot : kLightShadows.slots) {
         mrhiBufferDef def = mrhiDefaultBufferDef();
-        def.size = sizeof(Matrix4);
+        def.size = sizeof(CasterBlock);
         if (mrhiDeclareBuffer(native_, &def, &slotViews_.emplace_back()) != mrhi_success) {
             return failed("a shadow square's view could not be declared", mrhi_errorCapacity);
         }
         writes.push_back(wholeOf(slotViews_.back(), mrhi_accessCopyDestination));
-        slotMatrices_.push_back(slot.viewProjection);
+        slotBlocks_.push_back({.viewProjection = slot.viewProjection, .eye = block.eye, .time = block.time});
         slotViewports_.push_back({.x = static_cast<float>(slot.x),
                                   .y = static_cast<float>(slot.y),
                                   .width = static_cast<float>(slot.side),
@@ -217,7 +238,7 @@ result::Status ShadowPasses::addPasses(const std::vector<mrhiAccess>& reads) {
 
 result::Status ShadowPasses::write(mrhiPassId upload) {
     for (std::size_t at = 0; at < cascadeCount_; ++at) {
-        if (mrhiWriteBuffer(native_, upload, cascades_[at], 0, &cascadeMatrices_[at], sizeof(Matrix4)) !=
+        if (mrhiWriteBuffer(native_, upload, cascades_[at], 0, &cascadeBlocks_[at], sizeof(CasterBlock)) !=
             mrhi_success) {
             return failed("a cascade's view could not be written", mrhi_errorCapacity);
         }
@@ -226,7 +247,8 @@ result::Status ShadowPasses::write(mrhiPassId upload) {
         return failed("the lights' shadow squares could not be written", mrhi_errorCapacity);
     }
     for (std::size_t at = 0; at < slotViews_.size(); ++at) {
-        if (mrhiWriteBuffer(native_, upload, slotViews_[at], 0, &slotMatrices_[at], sizeof(Matrix4)) != mrhi_success) {
+        if (mrhiWriteBuffer(native_, upload, slotViews_[at], 0, &slotBlocks_[at], sizeof(CasterBlock)) !=
+            mrhi_success) {
             return failed("a shadow square's view could not be written", mrhi_errorCapacity);
         }
     }

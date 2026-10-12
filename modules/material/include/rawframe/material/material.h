@@ -230,6 +230,15 @@ inline constexpr std::string_view kAddType = "rawframe/add@1";
 inline constexpr std::string_view kSeparate3Type = "rawframe/separate3@1";
 inline constexpr std::string_view kNormalMapType = "rawframe/normal_map@1";
 inline constexpr std::string_view kQualitySwitchType = "rawframe/quality_switch@1";
+/// The vertex stage's and the streams' nodes (D691): the time on a named
+/// timeline, the point's place in the World, and the math that moves it.
+inline constexpr std::string_view kTimeType = "rawframe/time@1";
+inline constexpr std::string_view kWorldPositionType = "rawframe/world_position@1";
+inline constexpr std::string_view kSubtractType = "rawframe/subtract@1";
+inline constexpr std::string_view kSinType = "rawframe/sin@1";
+inline constexpr std::string_view kCosType = "rawframe/cos@1";
+inline constexpr std::string_view kNormalizeType = "rawframe/normalize@1";
+inline constexpr std::string_view kCombine3Type = "rawframe/combine3@1";
 
 /// What a surface compiles to at each quality, by `Quality`: the same
 /// material at each where its graph does not differ (D318).
@@ -272,6 +281,8 @@ using Qualities = std::array<Material, 3>;
 struct GeneratedSlang {
     std::string source;
     std::vector<SampledTexture> textures;
+    /// Whether its vertices move: its position offset is connected (D691).
+    bool moves = false;
     /// The material's declared states, which its program does not say.
     Shading shading = Shading::Lit;
     Blend blend = Blend::Opaque;
@@ -281,8 +292,9 @@ struct GeneratedSlang {
 
 /// The surface written as Slang at a quality, for a graph the blob cannot
 /// fold. Refuses (`Unsupported`) a node of a type this family does not
-/// know, a mesh's coordinates past its first, and more than four textures;
-/// (`Invalid`) what `validateSurface` refuses.
+/// know, a mesh's coordinates past its first, more than four textures, and
+/// a texture or a normal map in the vertex stage (D691); (`Invalid`) what
+/// `validateSurface` refuses.
 [[nodiscard]] result::Result<GeneratedSlang> generateSlang(const graph::Document& surface,
                                                            Quality quality = Quality::High);
 
@@ -299,6 +311,9 @@ struct ProgramMaterial {
     Blend blend = Blend::Opaque;
     float alphaCutoff = 0.5F;
     bool doubleSided = false;
+    /// Whether its vertices move (D691): its own program then places them
+    /// in every pass, the depth prepass's and the shadows' too.
+    bool moves = false;
     std::vector<SampledTexture> textures;
     std::array<std::vector<std::byte>, kProgramContainers> containers;
     std::array<std::vector<std::byte>, kProgramContainers> shadows;
@@ -307,7 +322,8 @@ struct ProgramMaterial {
 };
 
 /// A program material's bytes: `RFMP`, format 2 (D488); its states
-/// (shading, blend, double sided, a byte each and one of nought) and alpha
+/// (shading, blend, double sided, a byte each, and one that is one where
+/// its vertices move, nought before D691) and alpha
 /// cutoff; the count of its textures, then each one's identity (low word
 /// first), filter, address, and two bytes of nought; then each scene
 /// container's length and bytes, then each shadow container's. Little-endian.

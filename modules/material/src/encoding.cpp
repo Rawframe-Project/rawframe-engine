@@ -242,7 +242,7 @@ std::vector<std::byte> encodeProgram(const ProgramMaterial& made) {
     bytes.push_back(static_cast<std::byte>(made.shading));
     bytes.push_back(static_cast<std::byte>(made.blend));
     bytes.push_back(static_cast<std::byte>(made.doubleSided ? 1 : 0));
-    bytes.push_back(std::byte{0});
+    bytes.push_back(static_cast<std::byte>(made.moves ? 1 : 0));
     putWord(bytes, std::bit_cast<std::uint32_t>(made.alphaCutoff));
     putWord(bytes, static_cast<std::uint32_t>(made.textures.size()));
     for (const SampledTexture& kTexture : made.textures) {
@@ -291,13 +291,14 @@ result::Result<ProgramMaterial> decodeProgram(std::span<const std::byte> bytes) 
     const std::span<const std::byte> kStates = kTake(4);
     const float kCutoff = std::bit_cast<float>(kWord());
     if (!fits || std::to_integer<std::uint8_t>(kStates[0]) > 1 || std::to_integer<std::uint8_t>(kStates[1]) > 2 ||
-        std::to_integer<std::uint8_t>(kStates[2]) > 1 || kStates[3] != std::byte{0} || !(kCutoff >= 0) ||
-        !(kCutoff <= 1)) {
+        std::to_integer<std::uint8_t>(kStates[2]) > 1 || std::to_integer<std::uint8_t>(kStates[3]) > 1 ||
+        !(kCutoff >= 0) || !(kCutoff <= 1)) {
         return invalid("a program material's states are in their sets, its cutoff from nought to one");
     }
     made.shading = static_cast<Shading>(kStates[0]);
     made.blend = static_cast<Blend>(kStates[1]);
     made.doubleSided = kStates[2] != std::byte{0};
+    made.moves = kStates[3] != std::byte{0};
     made.alphaCutoff = kCutoff;
     const std::uint32_t kTextures = kWord();
     if (!fits || kTextures > 4) {

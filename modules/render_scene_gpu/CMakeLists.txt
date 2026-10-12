@@ -42,4 +42,11 @@ if(TARGET rawframe_render_scene_gpu_tests)
     rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
                            FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/faded_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
                            HEADER "faded_graph_shadow_container.h" SYMBOL "kFadedGraphShadow")
+    # A graph's material that lifts its model with the World's time (D691).
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/rising_graph.scene${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "rising_graph_scene_container.h" SYMBOL "kRisingGraphScene")
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/rising_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "rising_graph_shadow_container.h" SYMBOL "kRisingGraphShadow")
 endif()

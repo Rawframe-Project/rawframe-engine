@@ -1,0 +1,36 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {},
+  "graph": {
+    "2f00000000000011": {
+      "type": "rawframe/time@1",
+      "params": {
+        "timeline": "simulation"
+      },
+      "inputs": {}
+    },
+    "2f00000000000012": {
+      "type": "rawframe/combine3@1",
+      "params": {},
+      "inputs": {
+        "x": 0,
+        "y": {
+          "node": "2f00000000000011",
+          "output": "seconds"
+        },
+        "z": 0
+      }
+    },
+    "2f00000000000013": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "position_offset": {
+          "node": "2f00000000000012",
+          "output": "out"
+        }
+      }
+    }
+  }
+}

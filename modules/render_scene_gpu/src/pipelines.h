@@ -72,7 +72,9 @@ struct Multisampled {
 /// The models' pipelines a material's program draws with, by what they
 /// draw: lit, the opaque, the masked (D310), and the translucent (D305);
 /// in the prepass, the masked cut, and each point's surface, whole and
-/// masked (D327, D487); and the masked casters into the shadow maps (D488).
+/// masked (D327, D487); the masked casters into the shadow maps (D488);
+/// and, for a material that moves its vertices (D691), the opaque models'
+/// depth and the solid casters, which run no other material's code.
 enum class Shade : std::uint8_t {
     Lit,
     Masked,
@@ -80,7 +82,9 @@ enum class Shade : std::uint8_t {
     Cut,
     Surfaces,
     CutSurfaces,
-    CutCasting
+    CutCasting,
+    Depth,
+    Casting
 };
 
 /// A material's own program's pipelines (D485, D487): the engine's own
@@ -93,8 +97,8 @@ struct ProgramShading {
     mrhiShaderId shader{};
     /// The shadow's shader, which its masked casters are cut by (D488).
     mrhiShaderId shadowShader{};
-    std::array<Asked, 19> variants{};
-    std::array<bool, 19> asked{};
+    std::array<Asked, 22> variants{};
+    std::array<bool, 22> asked{};
     bool refused = false;
     /// What refused it, as the device said (D501).
     std::string refusal;
@@ -102,11 +106,18 @@ struct ProgramShading {
 
 /// Where a program's pipeline for `shade` lies among its variants: the lit
 /// twelve, then the prepass's six, which no decal changes, then the masked
-/// casters', which no view multisamples.
+/// casters', which no view multisamples; then a moving material's depth,
+/// single and multisampled, and its solid casters' (D691).
 [[nodiscard]] constexpr std::size_t variantOf(Shade shade, bool decaled, bool multisampled) noexcept {
     const auto kShade = static_cast<std::size_t>(shade);
     if (shade == Shade::CutCasting) {
         return 18;
+    }
+    if (shade == Shade::Depth) {
+        return multisampled ? 20 : 19;
+    }
+    if (shade == Shade::Casting) {
+        return 21;
     }
     if (kShade >= 3) {
         return 12U + (kShade - 3U) + (multisampled ? 3U : 0U);
@@ -294,8 +305,9 @@ private:
     /// which the multisampled ones are made from too.
     std::array<mrhiGraphicsPipelineDef, 3> shading_{};
     mrhiGraphicsPipelineDef cut_{};
-    /// The masked casters' pipeline, which a material's program's is made
-    /// from (D488).
+    /// The casters' pipelines, which a material's program's are made from
+    /// (D488, D691).
+    mrhiGraphicsPipelineDef casting_{};
     mrhiGraphicsPipelineDef cutCasting_{};
     mrhiGraphicsPipelineDef sky_{};
 };

@@ -1,6 +1,8 @@
 // A surface material written as Slang (D483): the graph's nodes as code,
 // each output once, the Surface's inputs gathered into what the scene's
-// `IMaterial` gives (modules/render_scene_gpu/shaders/material.slang).
+// `IMaterial` gives (modules/render_scene_gpu/shaders/material.slang):
+// the fragment stage's surface, and the vertex stage's position offset
+// (D691).
 
 #include "common.h"
 #include "parameters.h"
@@ -74,11 +76,20 @@ std::size_t switchInputOf(Quality quality) {
     return quality == Quality::High ? 1 : quality == Quality::Low ? 2 : 3;
 }
 
+/// Where code is written: the fragment stage's `evaluate`, at a `Point`,
+/// or the vertex stage's `offset`, at a `Placed` (D691), where no texture
+/// is sampled.
+enum class Stage : std::uint8_t {
+    Fragment,
+    Vertex
+};
+
 /// The code a graph is written as: its statements, each node output's
 /// expression once made, and the textures bound so far.
 class Writer {
 public:
-    Writer(const graph::Document& surface, Quality quality) : surface_(surface), quality_(quality) {
+    Writer(const graph::Document& surface, Quality quality, Stage stage)
+        : surface_(surface), quality_(quality), at_(stage == Stage::Fragment ? "point" : "placed") {
     }
 
     /// The expression of the output a connection names, its node's code
@@ -89,6 +100,15 @@ public:
             return unsupported("a generated material's nodes are of the types this family knows");
         }
         const std::string_view kType = surface_graph::typeOf(*kNode);
+        if (at_ == "placed" && (kType == kSampleTexture2dType || kType == kNormalMapType)) {
+            return unsupported("a material's vertex stage samples no texture and bends no normal in generation 1");
+        }
+        if (kType == kWorldPositionType) {
+            return at_ + ".position";
+        }
+        if (kType == kTimeType) {
+            return at_ + ".time";
+        }
         if (kType == kSampleTexture2dType) {
             RAWFRAME_TRY_ASSIGN(const std::string kTexel, texelOf(*kNode, from.node));
             return kTexel + (from.output == "alpha" ? ".a" : ".rgb");
@@ -103,7 +123,7 @@ public:
             if (kChannel != 0) {
                 return unsupported("a generated material reads a mesh's first coordinates only");
             }
-            return std::string{"point.uv"};
+            return at_ + ".uv";
         }
         if (const auto kMade = made_.find(from.node); kMade != made_.end()) {
             return kMade->second;
@@ -114,8 +134,25 @@ public:
             RAWFRAME_TRY_ASSIGN(const surface_graph::Math kMath, surface_graph::mathIn(surface_, *kNode));
             RAWFRAME_TRY_ASSIGN(const std::string kA, operandText(kMath.a));
             RAWFRAME_TRY_ASSIGN(const std::string kB, operandText(kMath.b));
-            expression = kA + (kType == kMultiplyType ? " * " : " + ") + kB;
+            expression = kA + (kType == kMultiplyType ? " * " : kType == kAddType ? " + " : " - ") + kB;
             carried = kMath.out.value_or(Carried::Float);
+        } else if (surface_graph::unary(kType)) {
+            RAWFRAME_TRY_ASSIGN(const surface_graph::Operand kIn, surface_graph::unaryIn(surface_, *kNode));
+            RAWFRAME_TRY_ASSIGN(const std::string kInText, operandText(kIn));
+            expression = std::string{kType == kSinType   ? "sin("
+                                     : kType == kCosType ? "cos("
+                                                         : "normalize("} +
+                         kInText + ")";
+            carried = kIn.carried.value_or(Carried::Float);
+        } else if (kType == kCombine3Type) {
+            RAWFRAME_TRY_ASSIGN(const auto kParts, surface_graph::combine3In(surface_, *kNode));
+            expression = "float3(";
+            for (std::size_t at = 0; at < kParts.size(); ++at) {
+                RAWFRAME_TRY_ASSIGN(const std::string kPart, operandText(kParts.at(at)));
+                expression += (at == 0 ? "" : ", ") + kPart;
+            }
+            expression += ")";
+            carried = Carried::Vec3;
         } else if (kType == kQualitySwitchType) {
             RAWFRAME_TRY_ASSIGN(const surface_graph::Switch kSwitch, surface_graph::switchIn(surface_, *kNode));
             const std::optional<surface_graph::Operand>& kChosen = kSwitch.inputs.at(switchInputOf(quality_));
@@ -169,7 +206,7 @@ private:
             return kMade->second;
         }
         RAWFRAME_TRY_ASSIGN(const surface_graph::Sampling kSampling, surface_graph::sampleIn(surface_, node));
-        std::string uv = "point.uv";
+        std::string uv = at_ + ".uv";
         if (kSampling.uv.has_value()) {
             RAWFRAME_TRY_ASSIGN(uv, outputOf(*kSampling.uv));
         }
@@ -197,6 +234,8 @@ private:
 
     const graph::Document& surface_;
     Quality quality_;
+    /// What the stage's function names where it is written.
+    std::string at_;
     std::string statements_;
     std::map<graph::NodeId, std::string> made_;
     std::vector<SampledTexture> textures_;
@@ -210,7 +249,9 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
     RAWFRAME_TRY_ASSIGN(const Material kStates, surface_graph::statesIn(surface_graph::statesOf(surface)));
     const graph::Node& kSurface = *surface_graph::surfaceNode(surface);
     const Value& kInputs = *kSurface.record.find("inputs");
-    Writer writer{surface, quality};
+    Writer writer{surface, quality, Stage::Fragment};
+    Writer placing{surface, quality, Stage::Vertex};
+    std::string offset = "float3(0.0)";
     // Each core parameter's expression: its literal, what feeds it, or its
     // default.
     std::map<std::string_view, std::string> inputs;
@@ -224,6 +265,10 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
         const std::string& kName = kInputs.names()[at];
         const Value& kValue = kInputs.items()[at];
         std::string expression;
+        if (kName == "position_offset") {
+            RAWFRAME_TRY_ASSIGN(offset, placing.outputOf(*graph::connectionOf(kValue)));
+            continue;
+        }
         if (const std::optional<graph::Connection> kFrom = graph::connectionOf(kValue); kFrom.has_value()) {
             RAWFRAME_TRY_ASSIGN(expression, writer.outputOf(*kFrom));
         } else {
@@ -261,10 +306,16 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
                   ";\n        made.unlit = " + (kStates.shading == Shading::Unlit ? "true" : "false") +
                   ";\n"
                   "        return made;\n"
+                  "    }\n\n"
+                  "    static float3 offset(Placed placed)\n"
+                  "    {\n" +
+                  placing.statements() + "        return " + offset +
+                  ";\n"
                   "    }\n"
                   "}\n\n"
                   "export struct Material : IMaterial = Generated;\n";
     made.textures = writer.takeTextures();
+    made.moves = kInputs.find("position_offset") != nullptr;
     made.shading = kStates.shading;
     made.blend = kStates.blend;
     made.alphaCutoff = kStates.alphaCutoff;

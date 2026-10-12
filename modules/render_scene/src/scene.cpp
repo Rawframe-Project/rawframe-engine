@@ -20,6 +20,7 @@
 #include <cstring>
 #include <map>
 #include <numbers>
+#include <optional>
 #include <tuple>
 
 namespace rawframe::render_scene {
@@ -71,6 +72,10 @@ bool wellFormed(const ModelInstance& instance) noexcept {
 
 struct Scene::State {
     SceneSettings settings;
+    /// The presented World's time, and the one the frame before showed
+    /// (D691).
+    double seconds = 0;
+    std::optional<double> queuedSeconds;
     std::vector<world::ColumnQuery> models;
     std::optional<world::ColumnQuery> sun;
     std::optional<world::ColumnQuery> sky;
@@ -231,6 +236,9 @@ struct Scene::State {
     /// Its depth reaches the shadows' distance toward the sun, for casters
     /// between the sun and the view.
     const SceneFrame& queue(const SceneCamera& camera) {
+        frame.eye = camera.eye;
+        frame.time = {seconds, queuedSeconds.value_or(seconds)};
+        queuedSeconds = seconds;
         frame.draws.clear();
         frame.palette.clear();
         frame.skinned = 0;
@@ -917,6 +925,10 @@ void Scene::extract(world::World& world, const world_animation::AnimationQueries
             }
         });
     }
+}
+
+void Scene::shownAt(double seconds) noexcept {
+    state_->seconds = std::isfinite(seconds) ? seconds : 0;
 }
 
 const SceneFrame& Scene::queue(const SceneCamera& camera) {

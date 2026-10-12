@@ -141,6 +141,7 @@ result::Result<Artifact> cookProgram(const graph::Document& document, const Shad
                                    .blend = kGenerated.blend,
                                    .alphaCutoff = kGenerated.alphaCutoff,
                                    .doubleSided = kGenerated.doubleSided,
+                                   .moves = kGenerated.moves,
                                    .textures = kGenerated.textures};
     // The scene's containers and the shadow's (D488), a backend each.
     constexpr std::array<std::string_view, material::kProgramContainers> kSuffixes = {

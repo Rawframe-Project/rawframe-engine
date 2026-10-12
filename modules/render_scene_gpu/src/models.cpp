@@ -193,7 +193,8 @@ result::Status ModelPasses::recordPrepass(const Drawing& with) {
         return failed("a scene pass could not begin", mrhi_errorState);
     }
     // A material's program cuts its masked models and gives its surfaces
-    // (D487); the opaque models' depth alone runs none of its code.
+    // (D487); the opaque models' depth alone runs its code only where it
+    // moves their vertices (D691).
     RAWFRAME_TRY(surfaced_ ? drawRuns(with,
                                       table,
                                       prepass_,
@@ -201,7 +202,13 @@ result::Status ModelPasses::recordPrepass(const Drawing& with) {
                                       kMany.surfaces,
                                       with.placed->runs,
                                       Shaded{.shade = Shade::Surfaces})
-                           : drawRuns(with, table, prepass_, pipelines.depth, kMany.depth, with.placed->runs));
+                           : drawRuns(with,
+                                      table,
+                                      prepass_,
+                                      pipelines.depth,
+                                      kMany.depth,
+                                      with.placed->runs,
+                                      Shaded{.shade = Shade::Depth}));
     RAWFRAME_TRY(surfaced_ ? drawRuns(with,
                                       table,
                                       prepass_,

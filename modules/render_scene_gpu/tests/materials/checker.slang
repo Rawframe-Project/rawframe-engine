@@ -26,6 +26,11 @@ struct Checker : IMaterial
         made.unlit = true;
         return made;
     }
+
+    static float3 offset(Placed placed)
+    {
+        return float3(0.0);
+    }
 }
 
 export struct Material : IMaterial = Checker;

@@ -170,7 +170,14 @@ public:
         if (index >= bots_.size()) {
             return {};
         }
-        return ClientView{.world = bots_[index].world.get(), .owned = bots_[index].client->owned()};
+        const ReplicationClient& kClient = *bots_[index].client;
+        std::optional<double> seconds;
+        if (kClient.accept().has_value() && kClient.accept()->tickRateTicks != 0) {
+            const double kTick = kClient.perceivedTick().value_or(static_cast<double>(kClient.serverTick()));
+            seconds = kTick * static_cast<double>(kClient.accept()->tickRateSeconds) /
+                      static_cast<double>(kClient.accept()->tickRateTicks);
+        }
+        return ClientView{.world = bots_[index].world.get(), .owned = kClient.owned(), .seconds = seconds};
     }
 
     std::uint64_t readEffects(std::size_t index, std::uint64_t seen, std::vector<EffectEvent>& into) noexcept override {

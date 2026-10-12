@@ -75,6 +75,11 @@ struct Frame
     float4 reflections;
     float4 contact;
     float4 decals;
+    // The eye's place in the World's axes, and the presented World's time
+    // in seconds, now and the frame before (D691): where a material that
+    // moves its vertices reads them.
+    float4 eye;
+    float4 time;
 }
 
 // A point or spot light (D290): its place relative to the eye and its
@@ -206,16 +211,31 @@ struct Vertex
 Corner vs(Vertex vertex)
 {
     const float4 at = float4(vertex.position, 1.0);
-    const float3 placed = float3(dot(vertex.model0, at), dot(vertex.model1, at), dot(vertex.model2, at));
-    Corner corner;
-    corner.position = mul(frame.viewProjection, float4(placed, 1.0));
     // The normal's rows, written as GLSL's columns, so it multiplies them
     // from the left.
-    corner.normal = mul(vertex.normal, float3x3(vertex.normal0, vertex.normal1, vertex.normal2));
+    const float3 normal = mul(vertex.normal, float3x3(vertex.normal0, vertex.normal1, vertex.normal2));
+    // Moved as the material moves it (D691), now and the frame before: it
+    // reads the World's axes, and its offset is added where the vertex is
+    // placed relative to the eye, so a material moving none changes no bit.
+    const float3 still = float3(dot(vertex.model0, at), dot(vertex.model1, at), dot(vertex.model2, at));
+    Placed here;
+    here.position = still + frame.eye.xyz;
+    here.normal = normalize(normal);
+    here.uv = vertex.uv;
+    here.color = vertex.color;
+    here.time = frame.time.x;
+    const float3 placed = still + Material.offset(here);
+    Corner corner;
+    corner.position = mul(frame.viewProjection, float4(placed, 1.0));
+    corner.normal = normal;
     corner.color = vertex.color;
     corner.placed = placed;
     const float4 then = float4(vertex.before, 1.0);
-    const float3 was = float3(dot(vertex.previous0, then), dot(vertex.previous1, then), dot(vertex.previous2, then));
+    const float3 stillThen = float3(dot(vertex.previous0, then), dot(vertex.previous1, then), dot(vertex.previous2, then));
+    Placed there = here;
+    there.position = stillThen + frame.eye.xyz;
+    there.time = frame.time.y;
+    const float3 was = stillThen + Material.offset(there);
     corner.now = mul(frame.unjittered, float4(placed, 1.0)).xyw;
     corner.before = mul(frame.previous, float4(was, 1.0)).xyw;
     corner.material = uint(vertex.material);
@@ -251,6 +271,8 @@ Point pointOf(Corner corner)
     point.tangent = corner.tangent;
     point.color = corner.color;
     point.material = corner.material;
+    point.position = corner.placed + frame.eye.xyz;
+    point.time = frame.time.x;
     return point;
 }
 
@@ -704,6 +726,8 @@ Lit shaded(Corner corner, bool decaled)
     point.tangent = corner.tangent;
     point.color = corner.color;
     point.material = corner.material;
+    point.position = corner.placed + frame.eye.xyz;
+    point.time = frame.time.x;
     const Evaluated evaluated = Material.evaluate(point);
     float3 color = evaluated.color;
     float3 normal = evaluated.normal;

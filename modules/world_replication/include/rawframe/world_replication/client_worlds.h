@@ -28,6 +28,11 @@ struct ClientView {
     world::World* world = nullptr;
     /// The client's own player, or null before admission.
     world::EntityHandle owned;
+    /// The World's time as it is shown, on the simulation timeline
+    /// (ADR-0010): the server tick its remote entities are shown at, or the
+    /// newest heard without interpolation, over the tick rate, in seconds;
+    /// none before admission (D691).
+    std::optional<double> seconds;
 };
 
 class ClientWorlds {

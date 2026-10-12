@@ -51,8 +51,8 @@ public:
     explicit ShadowPasses(mrhiDevice* native) noexcept;
 
     /// The maps, views, and squares declared for `frame`, its cascades'
-    /// views those `block` holds; what the upload pass writes added to
-    /// `writes`.
+    /// views those `block` holds, with its eye and time; what the upload
+    /// pass writes added to `writes`.
     result::Status
     declare(const render_scene::SceneFrame& frame, const FrameBlock& block, std::vector<mrhiAccess>& writes);
 
@@ -77,11 +77,11 @@ public:
 
 private:
     mrhiDevice* native_ = nullptr;
-    /// The sun's map, its cascades' views and their matrices, a square's
+    /// The sun's map, its cascades' views and their blocks, a square's
     /// side, and its pass.
     mrhiResourceId sunMap_{};
     std::array<mrhiResourceId, 4> cascades_{};
-    std::array<Matrix4, 4> cascadeMatrices_{};
+    std::array<CasterBlock, 4> cascadeBlocks_{};
     std::size_t cascadeCount_ = 0;
     std::uint32_t side_ = 0;
     mrhiPassId sunPass_{};
@@ -90,7 +90,7 @@ private:
     mrhiResourceId lightMap_{};
     std::vector<SlotBlock> slots_;
     mrhiResourceId slotsResource_{};
-    std::vector<Matrix4> slotMatrices_;
+    std::vector<CasterBlock> slotBlocks_;
     std::vector<mrhiResourceId> slotViews_;
     std::vector<mrhiViewport> slotViewports_;
     mrhiPassId lightPass_{};

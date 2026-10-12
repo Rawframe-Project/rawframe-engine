@@ -79,6 +79,12 @@ struct BlobMaterial : IMaterial
         made.unlit = (flags & 1u) != 0u;
         return made;
     }
+
+    // A blob moves no vertex.
+    static float3 offset(Placed placed)
+    {
+        return float3(0.0);
+    }
 }
 
 export struct Material : IMaterial = BlobMaterial;

@@ -86,13 +86,19 @@ const graph::Node* surfaceNode(const graph::Document& surface) {
 bool known(const graph::Node& node) {
     const Value* kType = node.record.find("type");
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
-    return kText != nullptr &&
-           (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType || *kText == kMultiplyType ||
-            *kText == kAddType || *kText == kSeparate3Type || *kText == kNormalMapType || *kText == kQualitySwitchType);
+    return kText != nullptr && (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType ||
+                                *kText == kMultiplyType || *kText == kAddType || *kText == kSeparate3Type ||
+                                *kText == kNormalMapType || *kText == kQualitySwitchType || *kText == kTimeType ||
+                                *kText == kWorldPositionType || *kText == kSubtractType || *kText == kSinType ||
+                                *kText == kCosType || *kText == kNormalizeType || *kText == kCombine3Type);
 }
 
 bool math(std::string_view type) {
-    return type == kMultiplyType || type == kAddType;
+    return type == kMultiplyType || type == kAddType || type == kSubtractType;
+}
+
+bool unary(std::string_view type) {
+    return type == kSinType || type == kCosType || type == kNormalizeType;
 }
 
 std::string_view typeOf(const graph::Node& node) {
@@ -156,6 +162,14 @@ result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& n
     Math made;
     RAWFRAME_TRY_ASSIGN(made.a, operandOf(surface, *kA));
     RAWFRAME_TRY_ASSIGN(made.b, operandOf(surface, *kB));
+    // Three numbers are a color3 or a vec3, as the other input is.
+    const auto kAs = [](const Operand& literal, const Operand& other) {
+        return !literal.from.has_value() && literal.carried == Carried::Color3 && other.carried == Carried::Vec3
+                   ? other.carried
+                   : literal.carried;
+    };
+    made.a.carried = kAs(made.a, made.b);
+    made.b.carried = kAs(made.b, made.a);
     if (made.a.carried.has_value() && made.b.carried.has_value()) {
         const Carried kA2 = *made.a.carried;
         const Carried kB2 = *made.b.carried;
@@ -165,6 +179,52 @@ result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& n
         made.out = kA2 == Carried::Float ? kB2 : kA2;
     }
     return made;
+}
+
+result::Result<Operand> unaryIn(const graph::Document& surface, const graph::Node& node) {
+    constexpr std::array<std::string_view, 1> kInputs = {"in"};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kInputs));
+    const Value* kIn = kParts.second->find("in");
+    if (kIn == nullptr) {
+        return invalid("a sin, cos, or normalize node's input is in, given");
+    }
+    RAWFRAME_TRY_ASSIGN(Operand made, operandOf(surface, *kIn));
+    if (typeOf(node) == kNormalizeType && made.carried.has_value() && *made.carried != Carried::Vec3) {
+        return invalid("a normalize node's input is a vec3");
+    }
+    return made;
+}
+
+result::Result<std::array<Operand, 3>> combine3In(const graph::Document& surface, const graph::Node& node) {
+    constexpr std::array<std::string_view, 3> kInputs = {"x", "y", "z"};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kInputs));
+    std::array<Operand, 3> made;
+    for (std::size_t at = 0; at < kInputs.size(); ++at) {
+        const Value* kInput = kParts.second->find(kInputs.at(at));
+        if (kInput == nullptr) {
+            return invalid("a combine3 node's inputs are x, y, and z, all given");
+        }
+        RAWFRAME_TRY_ASSIGN(made.at(at), operandOf(surface, *kInput));
+        if (made.at(at).carried.has_value() && *made.at(at).carried != Carried::Float) {
+            return invalid("a combine3 node's inputs are floats");
+        }
+    }
+    return made;
+}
+
+result::Status timeIn(const graph::Node& node) {
+    constexpr std::array<std::string_view, 1> kParams = {"timeline"};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, {}));
+    const Value* kTimeline = kParts.first->find("timeline");
+    if (kTimeline == nullptr || kTimeline->text() == nullptr || *kTimeline->text() != "simulation") {
+        return invalid("a time node names its timeline, the simulation's");
+    }
+    return {};
+}
+
+result::Status worldPositionIn(const graph::Node& node) {
+    RAWFRAME_TRY(partsOf(node, {}, {}));
+    return {};
 }
 
 result::Result<Switch> switchIn(const graph::Document& surface, const graph::Node& node) {
@@ -196,8 +256,8 @@ result::Result<Operand> separate3In(const graph::Document& surface, const graph:
         return invalid("a separate3 node's input is in, given");
     }
     RAWFRAME_TRY_ASSIGN(Operand made, operandOf(surface, *kIn));
-    if (made.carried.has_value() && *made.carried != Carried::Color3) {
-        return invalid("a separate3 node's input is a color3");
+    if (made.carried.has_value() && *made.carried != Carried::Color3 && *made.carried != Carried::Vec3) {
+        return invalid("a separate3 node's input is a color3 or a vec3");
     }
     return made;
 }
@@ -281,6 +341,22 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
     if (math(kType) && from.output == "out") {
         RAWFRAME_TRY_ASSIGN(const Math kMath, mathIn(surface, *kSource));
         return kMath.out;
+    }
+    if (unary(kType) && from.output == "out") {
+        RAWFRAME_TRY_ASSIGN(const Operand kIn, unaryIn(surface, *kSource));
+        return kIn.carried;
+    }
+    if (kType == kCombine3Type && from.output == "out") {
+        RAWFRAME_TRY(combine3In(surface, *kSource));
+        return std::optional{Carried::Vec3};
+    }
+    if (kType == kTimeType && from.output == "seconds") {
+        RAWFRAME_TRY(timeIn(*kSource));
+        return std::optional{Carried::Float};
+    }
+    if (kType == kWorldPositionType && from.output == "position") {
+        RAWFRAME_TRY(worldPositionIn(*kSource));
+        return std::optional{Carried::Vec3};
     }
     if (kType == kNormalMapType && from.output == "out") {
         RAWFRAME_TRY(normalMapIn(surface, *kSource));

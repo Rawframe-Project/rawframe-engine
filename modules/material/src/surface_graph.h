@@ -39,8 +39,10 @@ inline constexpr std::array<std::string_view, 3> kBlends = {"opaque", "masked", 
 [[nodiscard]] const graph::Node* surfaceNode(const graph::Document& surface);
 /// Whether a node is of a type this family knows.
 [[nodiscard]] bool known(const graph::Node& node);
-/// Whether a type is `multiply` or `add`.
+/// Whether a type is `multiply`, `add`, or `subtract`.
 [[nodiscard]] bool math(std::string_view type);
+/// Whether a type is `sin`, `cos`, or `normalize` (D691).
+[[nodiscard]] bool unary(std::string_view type);
 /// A known node's type.
 [[nodiscard]] std::string_view typeOf(const graph::Node& node);
 
@@ -67,6 +69,22 @@ struct Math {
 
 [[nodiscard]] result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& node);
 
+/// A `sin`, `cos`, or `normalize` node's input, checked (D691): a
+/// normalized one a vec3. Its `out` carries what it does.
+[[nodiscard]] result::Result<Operand> unaryIn(const graph::Document& surface, const graph::Node& node);
+
+/// A `combine3` node's inputs, x, y, and z, checked: each a float, all
+/// given (D691).
+[[nodiscard]] result::Result<std::array<Operand, 3>> combine3In(const graph::Document& surface,
+                                                                const graph::Node& node);
+
+/// A `time` node's params, checked (D691): its timeline, the simulation's,
+/// the presented World's ticks over its tick rate in seconds (ADR-0010).
+[[nodiscard]] result::Status timeIn(const graph::Node& node);
+
+/// A `world_position` node, checked: no params and no inputs (D691).
+[[nodiscard]] result::Status worldPositionIn(const graph::Node& node);
+
 /// A `quality_switch` node's inputs, checked, and what its `out` carries
 /// (D318): `default` given, all of one type where it is known.
 struct Switch {
@@ -79,7 +97,8 @@ inline constexpr std::array<std::string_view, 4> kSwitchInputs = {"default", "hi
 
 [[nodiscard]] result::Result<Switch> switchIn(const graph::Document& surface, const graph::Node& node);
 
-/// A `separate3` node's input, checked: a color3 (D312).
+/// A `separate3` node's input, checked: a color3 (D312), or a vec3, a
+/// place's axes r, g, and b (D691).
 [[nodiscard]] result::Result<Operand> separate3In(const graph::Document& surface, const graph::Node& node);
 
 /// A `normal_map` node's input and scale, checked (D313).

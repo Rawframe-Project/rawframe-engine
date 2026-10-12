@@ -463,6 +463,8 @@ private:
                 }
             }
         }
+        shown_ = kView.seconds.value_or(0);
+        scene_->shownAt(shown_);
         scene_->extract(*kView.world, posesOf(*kView.world), &hands);
         extracted_ = true;
         extractEyes(*kView.world, hands);
@@ -541,6 +543,7 @@ private:
                 eyeScenes_.push_back(std::move(*made));
                 eyeScenes_.back()->show(lines_);
             }
+            eyeScenes_[at]->shownAt(shown_);
             eyeScenes_[at]->extract(world, posesOf(world), &hands);
         }
     }
@@ -583,6 +586,7 @@ private:
                 }
                 each.scene = std::move(*made);
             }
+            each.scene->shownAt(kView.seconds.value_or(0));
             each.scene->extract(*kView.world, posesOf(*kView.world));
             if (!kView.owned.isNull() && kView.world->alive(kView.owned)) {
                 static_cast<void>(cameras_.read(*kView.world, kView.owned, each.camera));
@@ -733,6 +737,7 @@ private:
                 }
                 each.scene = std::move(*made);
             }
+            each.scene->shownAt(shown_);
             each.scene->extract(world, posesOf(world));
             static_cast<void>(cameras_.read(world, *each.entity, each.camera));
         }
@@ -852,6 +857,9 @@ private:
     /// Frames seen through a preview's camera (D432).
     std::uint64_t previewed_ = 0;
     std::unique_ptr<Scene> scene_;
+    /// The player's World's time as it is shown, which its eyes and its
+    /// views show too (D691).
+    double shown_ = 0;
     /// The lines the player's view shows (D464).
     std::vector<SceneLine> lines_;
     bool extracted_ = false;
