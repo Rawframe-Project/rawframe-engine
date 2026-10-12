@@ -13,6 +13,7 @@
 #include "rawframe/world/world.h"
 #include "rawframe/world_kest/game_files.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -76,6 +77,14 @@ struct WorldAudioStatistics {
     std::uint64_t continuous = 0;
 };
 
+/// A headset's head in its local space, for the frame's display time
+/// (ADR-0081 section 4, D677): where it is and how it is turned (a unit
+/// quaternion, x, y, z, w). Presentation data only.
+struct HeadPose {
+    std::array<float, 3> position{};
+    std::array<float, 4> orientation{0, 0, 0, 1};
+};
+
 class WorldAudio {
 public:
     [[nodiscard]] static result::Result<std::unique_ptr<WorldAudio>>
@@ -93,7 +102,9 @@ public:
 
     /// Once a frame, on the owner's thread: the listener, every emitter's
     /// continuous sound and new cues, what despawned, then the Sounds.
-    void update(world::World& world, float seconds);
+    /// Where a headset shows, its `head` moves and turns a listener of a 3D
+    /// pose, that pose the play space (D677).
+    void update(world::World& world, float seconds, const std::optional<HeadPose>& head = std::nullopt);
 
     /// Plays the declared sound `sound` once from where `from` is, or where
     /// the listener is when it has no pose: a predicted effect heard (D220).

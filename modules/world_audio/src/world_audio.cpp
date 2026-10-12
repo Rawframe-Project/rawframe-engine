@@ -18,6 +18,28 @@ namespace rawframe::world_audio {
 
 namespace {
 
+/// `vector` turned by the unit quaternion `turn` (x, y, z, w).
+std::array<float, 3> rotated(const std::array<float, 4>& turn, const std::array<float, 3>& vector) noexcept {
+    const auto& [kX, kY, kZ, kW] = turn;
+    // t = 2 (q x v); v + w t + q x t.
+    const float kTx = 2 * ((kY * vector[2]) - (kZ * vector[1]));
+    const float kTy = 2 * ((kZ * vector[0]) - (kX * vector[2]));
+    const float kTz = 2 * ((kX * vector[1]) - (kY * vector[0]));
+    return {vector[0] + (kW * kTx) + ((kY * kTz) - (kZ * kTy)),
+            vector[1] + (kW * kTy) + ((kZ * kTx) - (kX * kTz)),
+            vector[2] + (kW * kTz) + ((kX * kTy) - (kY * kTx))};
+}
+
+/// `left` then `right`, as one turn: `left` times `right`.
+std::array<float, 4> times(const std::array<float, 4>& left, const std::array<float, 4>& right) noexcept {
+    const auto& [kX, kY, kZ, kW] = left;
+    const auto& [kU, kV, kS, kT] = right;
+    return {(kW * kU) + (kX * kT) + (kY * kS) - (kZ * kV),
+            (kW * kV) - (kX * kS) + (kY * kT) + (kZ * kU),
+            (kW * kS) + (kX * kV) - (kY * kU) + (kZ * kT),
+            (kW * kT) - (kX * kU) - (kY * kV) - (kZ * kS)};
+}
+
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, WorldAudioError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(errorClass, kWorldAudioDomain, code(error), why).error()};
 }
@@ -52,21 +74,26 @@ struct WorldAudio::State {
         return kFound == settings.sounds.end() ? std::nullopt : std::optional{kFound->second};
     }
 
-    /// Where an entity is and which way is its right, from its pose.
-    [[nodiscard]] std::optional<audio::Listener> placeOf(const world::World& world, world::EntityHandle entity) const {
+    /// Where an entity is and which way is its right, from its pose; a 3D
+    /// pose moved and turned by a headset's `head` in it (D677).
+    [[nodiscard]] std::optional<audio::Listener> placeOf(const world::World& world,
+                                                         world::EntityHandle entity,
+                                                         const std::optional<HeadPose>& head = std::nullopt) const {
         if (pose3d) {
             if (const auto* pose = static_cast<const physics3d::Pose3D*>(world.getErased(entity, *pose3d))) {
                 const bool kTurned = pose->qx != 0 || pose->qy != 0 || pose->qz != 0 || pose->qw != 0;
-                const float kX = pose->qx;
-                const float kY = pose->qy;
-                const float kZ = pose->qz;
-                const float kW = kTurned ? pose->qw : 1.0F;
-                return audio::Listener{.position = {.x = static_cast<float>(pose->x),
-                                                    .y = static_cast<float>(pose->y),
-                                                    .z = static_cast<float>(pose->z)},
-                                       .right = {.x = 1 - (2 * ((kY * kY) + (kZ * kZ))),
-                                                 .y = 2 * ((kX * kY) + (kW * kZ)),
-                                                 .z = 2 * ((kX * kZ) - (kW * kY))}};
+                const std::array<float, 4> kPose{pose->qx, pose->qy, pose->qz, kTurned ? pose->qw : 1.0F};
+                std::array<float, 3> at{};
+                std::array<float, 4> turn = kPose;
+                if (head.has_value()) {
+                    at = rotated(kPose, head->position);
+                    turn = times(kPose, head->orientation);
+                }
+                const std::array<float, 3> kRight = rotated(turn, {1, 0, 0});
+                return audio::Listener{.position = {.x = static_cast<float>(pose->x) + at[0],
+                                                    .y = static_cast<float>(pose->y) + at[1],
+                                                    .z = static_cast<float>(pose->z) + at[2]},
+                                       .right = {.x = kRight[0], .y = kRight[1], .z = kRight[2]}};
             }
         }
         if (pose2d) {
@@ -91,19 +118,19 @@ struct WorldAudio::State {
         }
     }
 
-    void update(world::World& world, float seconds) {
+    void update(world::World& world, float seconds, const std::optional<HeadPose>& head) {
         // The bound listener, or the one active listener, or none.
         std::optional<audio::Listener> heard;
         std::size_t active = 0;
         if (bound) {
-            heard = world.alive(*bound) ? placeOf(world, *bound) : std::nullopt;
+            heard = world.alive(*bound) ? placeOf(world, *bound, head) : std::nullopt;
         } else if (listeners) {
             listeners->forEachChunk(world, [&](const world::ColumnChunk& chunk) {
                 const auto* values = reinterpret_cast<const Listener*>(chunk.columns[0]);
                 for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
                     if (values[row].active) {
                         ++active;
-                        heard = placeOf(world, chunk.entities[row]).value_or(audio::Listener{});
+                        heard = placeOf(world, chunk.entities[row], head).value_or(audio::Listener{});
                     }
                 }
             });
@@ -268,8 +295,8 @@ void WorldAudio::bindListener(std::optional<world::EntityHandle> entity) {
     state_->bound = entity;
 }
 
-void WorldAudio::update(world::World& world, float seconds) {
-    state_->update(world, seconds);
+void WorldAudio::update(world::World& world, float seconds, const std::optional<HeadPose>& head) {
+    state_->update(world, seconds, head);
 }
 
 void WorldAudio::playOnce(const world::World& world, std::uint64_t sound, world::EntityHandle from) {

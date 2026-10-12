@@ -4,12 +4,14 @@
 // nothing, a game's audio loads from its files against its program, and its
 // sounds are read from cooked content by resource identity, on-demand ones
 // when first wanted and released when idle, and new revisions replace old
-// ones when content reloads.
+// ones when content reloads. A headset's head moves and turns a 3D
+// listener in its pose (D677).
 
 #include "rawframe/assets/errors.h"
 #include "rawframe/audio/decode.h"
 #include "rawframe/audio/mixer.h"
 #include "rawframe/physics2d/components.h"
+#include "rawframe/physics3d/components.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world_audio/sound_loader.h"
 #include "rawframe/world_audio/world_audio.h"
@@ -57,6 +59,7 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
                                             .alignment = alignof(Listener),
                                             .plainData = true});
     builder.add<physics2d::Pose2D>();
+    builder.add<physics3d::Pose3D>();
     return *builder.freeze();
 }
 
@@ -112,8 +115,8 @@ struct Rig {
     }
 
     /// One frame: the World heard, then 10 ms rendered; the last sample.
-    std::pair<float, float> frame() {
-        heard->update(world, 0.01F);
+    std::pair<float, float> frame(const std::optional<HeadPose>& head = std::nullopt) {
+        heard->update(world, 0.01F, head);
         std::vector<float> out(960);
         mixer->render(out);
         return {out[958], out[959]};
@@ -145,6 +148,37 @@ RAWFRAME_TEST(AnEmitterSoundsFromItsPose) {
         std::tie(left, right) = rig.frame();
     }
     RAWFRAME_EXPECT(left == 0 && right == 0);
+}
+
+RAWFRAME_TEST(AHeadsetsHeadTurnsAndMovesTheListener) {
+    Rig rig;
+    // A listener of a 3D pose at the origin, unturned; a hum ten meters to
+    // its right: a quarter, on the right.
+    const auto kListener = *rig.world.create();
+    Listener active{.active = true};
+    RAWFRAME_EXPECT(rig.world.insertErased(kListener, *rig.schema->find(kListenerId), &active).has_value());
+    RAWFRAME_EXPECT(
+        rig.world.insert(kListener, *rig.schema->key<physics3d::Pose3D>(), physics3d::Pose3D{.qw = 1}).has_value());
+    const auto kHummer = *rig.world.create();
+    Emitter humming{.sound = kHum, .playing = true};
+    RAWFRAME_EXPECT(rig.world.insertErased(kHummer, *rig.schema->find(kEmitterId), &humming).has_value());
+    RAWFRAME_EXPECT(
+        rig.world.insert(kHummer, *rig.schema->key<physics3d::Pose3D>(), physics3d::Pose3D{.x = 11, .qw = 1})
+            .has_value());
+    static_cast<void>(rig.frame());
+    auto [left, right] = rig.frame();
+    RAWFRAME_EXPECT(near(right, 0.25F) && near(left, 0));
+    // The head turned half round: it is on the left.
+    const HeadPose kTurned{.orientation = {0, 1, 0, 0}};
+    static_cast<void>(rig.frame(kTurned));
+    std::tie(left, right) = rig.frame(kTurned);
+    RAWFRAME_EXPECT(near(left, 0.25F) && near(right, 0));
+    // Unturned, a meter to the right in its play space: ten meters off, so
+    // 0.55 of the hum.
+    const HeadPose kMoved{.position = {1, 0, 0}};
+    static_cast<void>(rig.frame(kMoved));
+    std::tie(left, right) = rig.frame(kMoved);
+    RAWFRAME_EXPECT(near(right, 0.275F) && near(left, 0));
 }
 
 RAWFRAME_TEST(CuesPlayOneShotsFromWhenFirstSeen) {

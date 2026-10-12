@@ -7,6 +7,7 @@
 #include "rawframe/content/source.h"
 #include "rawframe/content/store.h"
 #include "rawframe/game_content/game_content.h"
+#include "rawframe/view/headset.h"
 #include "rawframe/world_audio/errors.h"
 #include "rawframe/world_audio/frame_sink.h"
 #include "rawframe/world_audio/registrar.h"
@@ -49,6 +50,7 @@ constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        game_content::kGameContent.name,
                                        world_kest::kGameFiles.name,
                                        world_kest::kPresentedVolumes.name,
+                                       view::kHeadsetEyes.name,
                                        kFrameSink.name};
 constexpr std::uint32_t kRecordingRate = 48'000;
 
@@ -79,6 +81,8 @@ std::string emitterCuesOf(const WorldAudioStatistics& heard) {
 /// game's sounds on a mixer at a rate, the listener bound to the player.
 struct Hearing {
     world_replication::ClientWorlds* clients = nullptr;
+    /// A headset's eyes, whose head turns the listener (D677).
+    const view::HeadsetEyes* eyes = nullptr;
     std::uint64_t client = 0;
     std::unique_ptr<audio::Mixer> mixer;
     /// Keeps streamed sounds decoded ahead: on the participant's CPU
@@ -136,6 +140,9 @@ struct Hearing {
         RAWFRAME_TRY_ASSIGN(client, configuration.unsignedInteger("audio.client", 0));
         if (context.has(world_kest::kPresentedVolumes.name)) {
             RAWFRAME_TRY_ASSIGN(volumes, context.capability(world_kest::kPresentedVolumes));
+        }
+        if (context.has(view::kHeadsetEyes.name)) {
+            RAWFRAME_TRY_ASSIGN(eyes, context.capability(view::kHeadsetEyes));
         }
 
         // The game's program, for the layout check, and its audio.
@@ -286,7 +293,17 @@ struct Hearing {
                 heard->playOnce(*kView.world, effectSounds[event.effect.kind], kView.owned);
             }
         }
-        heard->update(*kView.world, static_cast<float>(kSeconds));
+        // A headset's head: between its eyes, turned as they are (D677).
+        std::optional<HeadPose> head;
+        if (eyes != nullptr && eyes->eyes().size() >= 2) {
+            const view::HeadsetEye& kLeft = eyes->eyes()[0];
+            const view::HeadsetEye& kRight = eyes->eyes()[1];
+            head = HeadPose{.position = {(kLeft.position[0] + kRight.position[0]) / 2,
+                                         (kLeft.position[1] + kRight.position[1]) / 2,
+                                         (kLeft.position[2] + kRight.position[2]) / 2},
+                            .orientation = kLeft.orientation};
+        }
+        heard->update(*kView.world, static_cast<float>(kSeconds), head);
         return kSeconds;
     }
 
