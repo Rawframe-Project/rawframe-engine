@@ -67,6 +67,8 @@ public:
 constexpr auto kSeaId = schema::ComponentTypeId::fromText("8c9ece20-a6b4-4a66-9623-035fc0f16d3a");
 constexpr auto kLookId = schema::ComponentTypeId::fromText("9684570e-9361-40cc-9327-f56bc11db3ae");
 constexpr auto kReportId = schema::ComponentTypeId::fromText("95079b36-b81f-4629-8fa5-de5ef7425d12");
+constexpr auto kWakeId = schema::ComponentTypeId::fromText("94087d11-f17e-448e-9c29-45ecbf6c71e4");
+constexpr auto kSmokeId = schema::ComponentTypeId::fromText("414e09ec-0b0d-45b5-9541-88f1155700aa");
 
 /// gale.Sea.
 struct Sea {
@@ -90,6 +92,42 @@ struct Emitter {
     std::uint32_t cue = 0;
     bool playing = false;
     std::uint8_t despawn = 0;
+};
+
+/// rawframe.model.Trail and rawframe.model.ParticleEmitter.
+struct Trail {
+    std::uint64_t material = 0;
+    float lifetime = 0;
+    float spacing = 0;
+    float widthStart = 0;
+    float widthEnd = 0;
+    std::uint32_t colorStart = 0;
+    std::uint32_t colorEnd = 0;
+};
+
+struct ParticleEmitter {
+    std::uint64_t material = 0;
+    float rate = 0;
+    float lifetime = 0;
+    float speed = 0;
+    float spread = 0;
+    float radius = 0;
+    float sizeStart = 0;
+    float sizeEnd = 0;
+    std::uint32_t colorStart = 0;
+    std::uint32_t colorEnd = 0;
+    float accelerationX = 0;
+    float accelerationY = 0;
+    float accelerationZ = 0;
+    float drag = 0;
+    float variation = 0;
+    std::uint32_t bursts = 0;
+    std::uint32_t burstCount = 0;
+    std::uint32_t seed = 0;
+    float inherit = 0;
+    std::uint32_t columns = 0;
+    std::uint32_t rows = 0;
+    float streak = 0;
 };
 
 const std::array<composition::RegistrarEntry, 5> kGalePresented = {
@@ -236,7 +274,8 @@ RAWFRAME_TEST(ABroadsideHolesAShipUntilItFoundersAndItsPlayerSailsAgain) {
 RAWFRAME_TEST(AClientHearsAnotherShipsBroadsidesAndSeesItsHoles) {
     // D687: presented for one player, the other's broadsides are cued from
     // its ship as the server counts them, its own ship silent (its
-    // broadsides are its predicted effect), and a holed hull is darker.
+    // broadsides are its predicted effect), and a holed hull is darker;
+    // each ship's wake and smoke (D692).
     PlayedGale played{kGalePresented};
     RAWFRAME_EXPECT(played.started() && presentationPlan != nullptr);
     if (!played.started() || presentationPlan == nullptr) {
@@ -274,6 +313,15 @@ RAWFRAME_TEST(AClientHearsAnotherShipsBroadsidesAndSeesItsHoles) {
     const std::uint32_t kHoled = valueOf<Model>(world, kListener, kLookId)->color;
     RAWFRAME_EXPECT((kHoled >> 24U) < (kWhole >> 24U));
     RAWFRAME_EXPECT(valueOf<Model>(world, kGunner, kLookId)->color == kWhole);
+    // Every ship leaves a wake; the gunner's smoke bursts at each volley
+    // (D692).
+    for (const world::EntityHandle kShip : {kGunner, kListener}) {
+        const Trail* const kWake = valueOf<Trail>(world, kShip, kWakeId);
+        RAWFRAME_EXPECT(kWake != nullptr && kWake->lifetime > 0 && kWake->widthEnd > kWake->widthStart);
+    }
+    const ParticleEmitter* const kSmoke = valueOf<ParticleEmitter>(world, kGunner, kSmokeId);
+    RAWFRAME_EXPECT(kSmoke != nullptr && kSmoke->rate == 0 && kSmoke->burstCount > 0 &&
+                    kSmoke->bursts == valueOf<Ship>(world, kGunner, kShipId)->volleys);
     presentationPlan = nullptr;
 }
 

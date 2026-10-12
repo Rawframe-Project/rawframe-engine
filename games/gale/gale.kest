@@ -494,6 +494,20 @@ fn report(count: i32, ships: [Ship], emitters: [sound.Emitter], entities: [world
     }
 }
 
+// A ship's wake (D692): foam left on the water behind it, widening as it
+// fades; and its broadsides' smoke, a burst rising round the ship each
+// time its volleys count one more, as its report is heard.
+fn foam(count: i32, ships: [Ship], wakes: [model.Trail], smokes: [model.ParticleEmitter]) {
+    let i = 0
+    while i < count {
+        wakes[i] = model.Trail(u64(0), 4.0, 1.0, 2.5, 7.0, 0xF2F7FFB0, 0xF2F7FF00)
+        smokes[i] = model.ParticleEmitter(u64(0), 0.0, 2.5, 2.0, 1.2, 2.0, 1.0, 4.0, 0xD8D4CCC0, 0xB4B0A800,
+                                          0.0, 0.6, 0.0, 0.6, 0.4, ships[i].volleys, u32(40), u32(0), 0.5,
+                                          u32(0), u32(0), 0.0)
+        i = i + 1
+    }
+}
+
 // The player's HUD (D688): its ship's hull and the hits its broadsides
 // made, the label's two arguments.
 fn tally(count: i32, ships: [Ship], guns: [Guns], tallies: [ui.Node]) {

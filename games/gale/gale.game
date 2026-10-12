@@ -29,6 +29,9 @@ component 664ccd7d-20b0-45e5-83c6-a91a614b13cf gale.view rawframe.model.Camera
 # Where a client hears another ship's broadsides from (D687): an emitter of
 # its own on each ship.
 component 95079b36-b81f-4629-8fa5-de5ef7425d12 gale.report rawframe.sound.Emitter
+# A ship's wake and its broadsides' smoke (D692), a client's alone.
+component 94087d11-f17e-448e-9c29-45ecbf6c71e4 gale.wake rawframe.model.Trail
+component 414e09ec-0b0d-45b5-9541-88f1155700aa gale.smoke rawframe.model.ParticleEmitter
 # The player's HUD (D688): a panel with its ship's hull and hits in words.
 component 90bcc31f-27ec-496b-9287-c33df14ecc7d gale.hud rawframe.ui.Node
 component 0d04321d-cd64-4e5b-ad89-1d1b800a9b9c gale.tally rawframe.ui.Node
@@ -102,6 +105,10 @@ present gale.frame frame read gale.ship write gale.view entities lookup rawframe
 # them (D687); a client's own are its predicted effect.
 presentation gale.report on gale.ship
 present gale.report report read gale.ship write gale.report entities
+# Every ship leaves a wake of foam, and its broadsides a puff of smoke
+# each time its volleys count one more (D692).
+presentation gale.wake gale.smoke on gale.ship
+present gale.foam foam read gale.ship write gale.wake write gale.smoke
 
 # The player's HUD (D688): a panel at the top left of its view telling its
 # ship's hull and the hits its broadsides made, in words from gale.strings,

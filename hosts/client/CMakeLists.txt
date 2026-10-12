@@ -342,8 +342,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              PASS_REGULAR_EXPRESSION
                              "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"output_record\"[^\n]*\"revision\":1,\"offered\":\"sdr_srgb[^\"]*\",\"active\":\"sdr_srgb\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,[^\n]*\"historyReused\":[1-9][0-9]+,\"framesMetered\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]+,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
         # Gale's sea and ships drawn from behind the client's own ship
-        # (D682), its bot at the helm and a second ship beside it, and its
-        # HUD's words (D688).
+        # (D682), its bot at the helm and a second ship beside it, their
+        # wakes and smoke (D692), and its HUD's words (D688).
         # Gale's sources cooked, so the client reads its HUD's words and font
         # (D688) and the server plays the same content.
         set(GALE_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/gale_content)
@@ -366,7 +366,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              PROCESSORS 2
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,.*\"code\":\"ui_drawing_summary\"[^\n]*\"glyphRuns\":[1-9][0-9]*,.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,")
+                             "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,[^\n]*\"ribbonsDrawn\":[1-9][0-9]*,.*\"code\":\"ui_drawing_summary\"[^\n]*\"glyphRuns\":[1-9][0-9]*,.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,")
         # The plaza's view turned as its player drags with the right mouse
         # button held (D521): the scene's last view looks more than a radian
         # away from where it started. The turn is the server's, so it needs
