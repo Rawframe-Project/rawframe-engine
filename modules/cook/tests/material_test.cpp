@@ -9,6 +9,7 @@
 #include "rawframe/cook/errors.h"
 #include "rawframe/cook/material.h"
 #include "rawframe/material/canvas.h"
+#include "rawframe/material/instance.h"
 #include "rawframe/material/material.h"
 #include "rawframe/material/post_process.h"
 #include "rawframe/test/test.h"
@@ -220,6 +221,13 @@ RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
     fs::copy_file(fs::path{RAWFRAME_SURFACE_SEEDS} / "tinted.material", kProject.sources / "tinted.rfmaterial");
     writeText(kProject.sources / "tinted.rfmaterial.rfmeta",
               sidecar("000000000000000000000000000000c6", "", "rawframe.material"));
+    // And an instance of it, red (D709): no program of its own, so it cooks
+    // with or without the toolchain, to its base's identity and its tint.
+    writeText(kProject.sources / "reddened.rfmaterial",
+              "{\n  \"formatVersion\": 1,\n  \"kind\": \"surface\",\n  \"base\": \"tinted.rfmaterial\",\n"
+              "  \"overrides\": {\n    \"tint\": [\n      1,\n      0,\n      0\n    ]\n  }\n}\n");
+    writeText(kProject.sources / "reddened.rfmaterial.rfmeta",
+              sidecar("000000000000000000000000000000c7", "", "rawframe.material"));
     // Without the shader toolchain they are refused, saying it is needed.
     const std::array<Importer, 2> kBare = {audioImporter(), materialImporter()};
     const auto kRefused =
@@ -244,8 +252,16 @@ RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
     bool found = false;
     bool rising = false;
     bool tinted = false;
+    bool reddened = false;
     for (const content::ManifestEntry& each :
          kManifest.has_value() ? *kManifest : std::vector<content::ManifestEntry>{}) {
+        if (each.type.value == material::kMaterialType &&
+            each.representation.text() == material::kInstanceRepresentation) {
+            const std::string kBytes = readText(kProject.output / each.locator);
+            const auto kRead = material::decodeInstance(std::as_bytes(std::span{kBytes.data(), kBytes.size()}));
+            reddened = kRead.has_value() && kRead->base == base::Bits128{.high = 0, .low = 0xc6} &&
+                       kRead->parameters[0] == 1 && kRead->parameters[1] == 0 && kRead->parameters[2] == 0;
+        }
         if (each.type.value == material::kMaterialType &&
             each.representation.text() == material::kProgramRepresentation) {
             const std::string kBytes = readText(kProject.output / each.locator);
@@ -266,5 +282,48 @@ RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
                         kRead.has_value() ? kRead->shadows[2].size() : 0);
         }
     }
-    RAWFRAME_EXPECT(found && rising && tinted);
+    RAWFRAME_EXPECT(found && rising && tinted && reddened);
+}
+
+RAWFRAME_TEST(AnInstanceCooksOnlyAgainstABaseItFits) {
+    // D709: an instance's base is read where it names it, so a base that is
+    // not there, an override the base has no input for, and an instance of
+    // an instance are each refused, and the rest cook.
+    const Project kProject;
+    fs::copy_file(fs::path{RAWFRAME_SURFACE_SEEDS} / "tinted.material", kProject.sources / "tinted.rfmaterial");
+    writeText(kProject.sources / "tinted.rfmaterial.rfmeta",
+              sidecar("000000000000000000000000000000d1", "", "rawframe.material"));
+    const auto kInstance =
+        [&kProject](std::string_view name, std::string_view base, std::string_view input, std::string_view id) {
+            writeText(kProject.sources / name,
+                      "{\n  \"formatVersion\": 1,\n  \"kind\": \"surface\",\n  \"base\": \"" + std::string{base} +
+                          "\",\n  \"overrides\": {\n    \"" + std::string{input} +
+                          "\": [\n      1,\n      0,\n      0\n    ]\n  }\n}\n");
+            writeText(kProject.sources / (std::string{name} + ".rfmeta"), sidecar(id, "", "rawframe.material"));
+        };
+    kInstance("red.rfmaterial", "tinted.rfmaterial", "tint", "000000000000000000000000000000d2");
+    kInstance("lost.rfmaterial", "gone.rfmaterial", "tint", "000000000000000000000000000000d3");
+    kInstance("shaded.rfmaterial", "tinted.rfmaterial", "shade", "000000000000000000000000000000d4");
+    kInstance("again.rfmaterial", "red.rfmaterial", "tint", "000000000000000000000000000000d5");
+    // The base itself needs the toolchain; the instances never do.
+    const std::array<Importer, 2> kBare = {audioImporter(), materialImporter()};
+    const auto kReport =
+        cookSources(CookRequest{.sources = kProject.sources, .output = kProject.output, .importers = kBare});
+    RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.size() == 4);
+    std::vector<std::string> failed;
+    if (kReport.has_value()) {
+        for (const result::Error& each : kReport->failures) {
+            failed.emplace_back(each.description());
+        }
+    }
+    const auto kSays = [&failed](std::string_view words) {
+        return std::ranges::any_of(failed, [words](const std::string& each) {
+            return each.contains(words);
+        });
+    };
+    RAWFRAME_EXPECT(kSays("shader toolchain") && kSays("never another instance") && kSays("interface inputs alone") &&
+                    failed.size() == 4);
+    for (const std::string& each : failed) {
+        std::printf("refused: %s\n", each.c_str());
+    }
 }

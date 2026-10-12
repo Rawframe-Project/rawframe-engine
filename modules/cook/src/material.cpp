@@ -1,8 +1,10 @@
 #include "rawframe/cook/material.h"
 
+#include "rawframe/content/sidecar.h"
 #include "rawframe/cook/errors.h"
 #include "rawframe/material/canvas.h"
 #include "rawframe/material/errors.h"
+#include "rawframe/material/instance.h"
 #include "rawframe/material/material.h"
 #include "rawframe/material/post_process.h"
 #include "rawframe/process/child.h"
@@ -162,8 +164,42 @@ result::Result<Artifact> cookProgram(const graph::Document& document, const Shad
                     .report = {{"variants", 1}, {"axes", 0}, {"variantsHeadroom", kVariantsPerMaterial - 1}}};
 }
 
-result::Result<Artifact> cookMaterial(std::span<const std::byte> source, const std::optional<ShaderTools>& tools) {
+/// An instance of another surface material (D709): its base read from its
+/// source, its overrides made into the base's parameters, its base's
+/// identity from the base's sidecar. Its base may be no instance itself.
+result::Result<Artifact> cookInstance(std::string_view text, Reads& reads) {
+    RAWFRAME_TRY_ASSIGN(const material::InstanceDocument kInstance, material::readInstance(text));
+    RAWFRAME_TRY_ASSIGN(const std::span<const std::byte> kBaseBytes, reads.file(kInstance.base));
+    const std::string_view kBaseText{reinterpret_cast<const char*>(kBaseBytes.data()), kBaseBytes.size()};
+    if (material::namesBase(kBaseText)) {
+        return std::unexpected<result::Error>{
+            result::fail(result::ErrorClass::InvalidArgument,
+                         kCookDomain,
+                         code(CookError::BadReference),
+                         "a material instance's base is a surface material's graph, never another instance")
+                .error()
+                .withContext("name", kInstance.base)};
+    }
+    RAWFRAME_TRY_ASSIGN(const graph::Document kBase, material::readMaterial(kBaseText));
+    RAWFRAME_TRY_ASSIGN(const std::span<const std::byte> kSidecarBytes,
+                        reads.file(kInstance.base + std::string{content::kSidecarSuffix}));
+    RAWFRAME_TRY_ASSIGN(
+        const content::Sidecar kSidecar,
+        content::readSidecar({reinterpret_cast<const char*>(kSidecarBytes.data()), kSidecarBytes.size()}));
+    RAWFRAME_TRY_ASSIGN(const auto kParameters, material::instanceParameters(kBase, kInstance.overrides));
+    return Artifact{.type = content::ResourceTypeId{material::kMaterialType},
+                    .representation = *content::RepresentationId::parse(material::kInstanceRepresentation),
+                    .bytes = material::encodeInstance({.base = kSidecar.id.value, .parameters = kParameters}),
+                    .subassets = {},
+                    .report = {{"variants", 0}, {"axes", 0}, {"variantsHeadroom", kVariantsPerMaterial}}};
+}
+
+result::Result<Artifact>
+cookMaterial(std::span<const std::byte> source, const std::optional<ShaderTools>& tools, Reads& reads) {
     const std::string_view kText{reinterpret_cast<const char*>(source.data()), source.size()};
+    if (material::namesBase(kText)) {
+        return cookInstance(kText, reads);
+    }
     RAWFRAME_TRY_ASSIGN(const graph::Document kDocument, material::readMaterial(kText));
     auto compiled = material::compileQualities(kDocument);
     if (compiled.has_value()) {
@@ -217,8 +253,8 @@ Importer materialImporter(std::optional<ShaderTools> tools) {
     return Importer{.identity = "rawframe.material",
                     .normalize = &normalize,
                     .cook =
-                        [tools = std::move(tools)](std::span<const std::byte> source, std::string_view, Reads&) {
-                            return cookMaterial(source, tools);
+                        [tools = std::move(tools)](std::span<const std::byte> source, std::string_view, Reads& reads) {
+                            return cookMaterial(source, tools, reads);
                         },
                     .tools = kIdentity};
 }
