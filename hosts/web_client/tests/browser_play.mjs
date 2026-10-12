@@ -34,7 +34,10 @@
 // walker walked by W and made to jump, its scene drawn in the canvas (its
 // models seen through the player's camera and drawn), no sprites asked of
 // it, and the sound the export asks of every game played as silence, since
-// the plaza declares no mixer (D397).
+// the plaza declares no mixer (D397). Gale, the Keelstorm-class sample
+// (D703), plays as the plaza does, its ship sailed by W and a broadside
+// fired by Q, its sea's program material drawn by WebGPU, its HUD's words
+// drawn, and the broadside heard.
 // Puppeteer comes from RAWFRAME_NODE_MODULES, and its browser from where
 // Puppeteer looks (PUPPETEER_CACHE_DIR); without either the test is
 // skipped (77).
@@ -56,10 +59,13 @@ import { end } from './verdict.mjs';
 
 const [exportPath, cookPath, buildPath, serverPath, botsPath, wasmPath, windowPath, devicePath, uiPath, repository,
        named] = argv.slice(2);
-// runners, plaza, or tycoon (Stalls).
+// runners, plaza, tycoon (Stalls), or gale.
 const name = named ?? 'runners';
 const plaza = name === 'plaza';
 const stalls = name === 'tycoon';
+const gale = name === 'gale';
+// The games drawn in 3D.
+const scened = plaza || gale;
 let puppeteer;
 try {
     puppeteer = createRequire(join(env.RAWFRAME_NODE_MODULES ?? '', 'x.js'))('puppeteer');
@@ -94,11 +100,11 @@ execFileSync(exportPath, [join(repository, 'games', name), exported, '--target',
              { stdio: ['ignore', 'inherit', 'inherit'] });
 const setup = JSON.parse(await readFile(join(site, 'play.json'), 'utf8'));
 // Here a software adapter draws, which a player's machine is not asked to
-// allow; the plaza's shadow map is small, and its view drawn at half scale
+// allow; a 3D game's shadow map is small, and its view drawn at half scale
 // (D373, D379), for the software rasterizer.
 setup.configuration += [
     'render.device = any',
-    ...(plaza ? ['scene.shadow_side = 256', 'scene.shadow_filter = hardware', 'scene.render_scale_percent = 50'] : []),
+    ...(scened ? ['scene.shadow_side = 256', 'scene.shadow_filter = hardware', 'scene.render_scale_percent = 50'] : []),
     '',
 ].join('\n');
 await writeFile(join(site, 'play.json'), JSON.stringify(setup));
@@ -268,10 +274,10 @@ try {
     });
     await tab.goto(`http://127.0.0.1:${http.address().port}/`);
     await until(/page: play 0/, 30000);
-    // The plaza's scene is drawn by a software rasterizer here: its canvas
+    // A 3D game's scene is drawn by a software rasterizer here: its canvas
     // is made a quarter of the size, which the client follows as a window
     // resized (D281), so the page's drawing leaves its game time to play.
-    if (plaza) {
+    if (scened) {
         await tab.evaluate(() => {
             const canvas = document.querySelector('canvas');
             canvas.style.width = '640px';
@@ -284,7 +290,7 @@ try {
     const host = 'canvas + [id$="-accessibility"]';
     let unread = [];
     let read = [];
-    if (!plaza) {
+    if (!scened) {
         // Stalls' HUD is whole once its purse and its sign's field are read.
         const wanted = stalls ? [/^button "[\d,]+ of 1,000 coins"$/, /^textbox "/] : [/ points"$/];
         const ready = () => wanted.every((pattern) => read.some((line) => pattern.test(line)));
@@ -316,17 +322,19 @@ try {
     // drawing needs (an effect's pipeline, a texture kind first sampled),
     // and a player starting during them confirms a fifth fewer ticks: it
     // starts once they are drawn (D341).
-    const forward = plaza ? 'KeyW' : 'KeyD';
-    if (plaza) {
+    // Gale's ship fires a broadside in the run where the others jump.
+    const forward = scened ? 'KeyW' : 'KeyD';
+    const act = gale ? 'KeyQ' : 'Space';
+    if (scened) {
         await sleep(1500);
     }
     if (!stalls) {
         await tab.click('canvas');
         await tab.keyboard.down(forward);
-        await sleep(plaza ? 6000 : 1000);
-        await tab.keyboard.down('Space');
+        await sleep(scened ? 6000 : 1000);
+        await tab.keyboard.down(act);
         await sleep(200);
-        await tab.keyboard.up('Space');
+        await tab.keyboard.up(act);
         await sleep(800);
         await tab.keyboard.up(forward);
         await sleep(500);
@@ -372,7 +380,7 @@ try {
     // placed, its models drawn on the device.
     const seen3d = /"code":"scene_summary"[^\n]*"framesViewed":(\d+)[^\n]*"modelsDrawn":(\d+)/.exec(clientLog);
     const drawn3d = /"code":"scene_drawing_summary"[^\n]*"models":(\d+),[^\n]*"modelsLeftOut":0,/.exec(clientLog);
-    if (plaza) {
+    if (scened) {
         console.log(`page: the scene drew ${drawn3d ? drawn3d[1] : 'no'} models, ${seen3d ? seen3d[1] : 'no'} frames ` +
                     `through the player's camera`);
     }
@@ -400,12 +408,19 @@ try {
             typed: typing !== null && Number(typing[2]) >= 3 && Number(typing[3]) === 1,
             sent: field('commandsSent') === 1,
         });
-    } else if (plaza) {
+    } else if (scened) {
         Object.assign(checks, {
             seen3d: seen3d !== null && Number(seen3d[1]) > 0 && Number(seen3d[2]) > 0,
             drawn3d: drawn3d !== null && Number(drawn3d[1]) > 0,
-            silent: /"code":"game_silent"/.test(clientLog),
         });
+        if (plaza) {
+            checks.silent = /"code":"game_silent"/.test(clientLog);
+        } else {
+            Object.assign(checks, {
+                worded: worded !== null && Number(worded[1]) > 0 && Number(worded[3]) === 0,
+                heard: heard.frames > 48000 && heard.peak > 0.05,
+            });
+        }
     } else {
         Object.assign(checks, {
             felt: felt !== null && Number(felt[1]) > 0,
