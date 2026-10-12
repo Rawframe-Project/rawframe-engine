@@ -1383,8 +1383,8 @@
           "output": "out"
         },
         "specular_roughness": {
-          "node": "a700000000000087",
-          "output": "out"
+          "node": "a700000000000088",
+          "output": "result"
         }
       }
     },
@@ -1581,6 +1581,38 @@
         },
         "b": {
           "node": "a700000000000086",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000088": {
+      "type": "rawframe/inline_slang@1",
+      "params": {
+        "body": "    result = saturate(a * (0.5 + 0.125 * float(b)));\n    tint = float3(result, 1.0 - result, 0.5);",
+        "capabilities": [],
+        "domains": [
+          "surface"
+        ],
+        "inputs": {
+          "a": "float",
+          "b": "int"
+        },
+        "outputs": {
+          "result": "float",
+          "tint": "color3"
+        },
+        "stages": [
+          "fragment",
+          "vertex"
+        ]
+      },
+      "inputs": {
+        "a": {
+          "node": "a700000000000087",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000076",
           "output": "out"
         }
       }

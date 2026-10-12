@@ -478,6 +478,21 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
     return {};
 }
 
+result::Status admitted(const graph::Document& material, Trust trust) {
+    // Structurally unavailable to an untrusted package, not merely hidden
+    // (SPEC-0026, D718).
+    if (trust == Trust::Untrusted && std::ranges::any_of(material.nodes, [](const graph::Node& node) {
+            const Value* kType = node.record.find("type");
+            return kType != nullptr && kType->text() != nullptr && *kType->text() == kInlineSlangType;
+        })) {
+        return result::fail(result::ErrorClass::PermissionDenied,
+                            kMaterialDomain,
+                            code(MaterialError::Untrusted),
+                            "an untrusted package's material holds no inline Slang");
+    }
+    return {};
+}
+
 result::Result<std::string> writeMaterial(const graph::Document& surface, const graph::Limits& limits) {
     RAWFRAME_TRY(validateSurface(surface, limits));
     auto written = graph::writeDocument(surface, limits);

@@ -279,6 +279,10 @@ inline constexpr std::string_view kSeparate4Type = "rawframe/separate4@1";
 /// model's, the World's, the eye's, the surface's tangent frame, or the
 /// clip's (D714).
 inline constexpr std::string_view kTransformType = "rawframe/transform@1";
+/// SPEC-0026's inline-Slang node (D718): one function's body, its typed
+/// inputs and outputs, and the stages, domains, and capabilities it
+/// declares; a trusted package's alone.
+inline constexpr std::string_view kInlineSlangType = "rawframe/inline_slang@1";
 
 /// What a surface compiles to at each quality, by `Quality`: the same
 /// material at each where its graph does not differ (D318).
@@ -296,6 +300,19 @@ using Qualities = std::array<Material, 3>;
 /// node library's nodes as the header has them, and each connection to one
 /// from an output it has, of the input's type.
 [[nodiscard]] result::Status validateSurface(const graph::Document& surface, const graph::Limits& limits = {});
+
+/// The trust class of the package a material comes from (ADR-0023,
+/// ADR-0027): a first-party or explicitly trusted package's, or another's.
+enum class Trust : std::uint8_t {
+    Trusted,
+    Untrusted
+};
+
+/// Refuses (`Untrusted`) a material its package's trust class may not
+/// hold: an untrusted package's with an inline-Slang node (SPEC-0026,
+/// D718). A game's own materials are trusted; whoever reads another
+/// package's checks it here before cooking or opening it.
+[[nodiscard]] result::Status admitted(const graph::Document& material, Trust trust);
 
 [[nodiscard]] result::Result<std::string> writeMaterial(const graph::Document& surface,
                                                         const graph::Limits& limits = {});

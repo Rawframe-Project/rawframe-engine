@@ -125,8 +125,8 @@ result::Result<Function> readFunction(std::string_view text) {
             return invalid("a function's nodes are of the atomic core");
         }
         const std::string_view kType = surface_graph::typeOf(node);
-        if (kType == kSurfaceType || kType == kQualitySwitchType || isFunction(kType)) {
-            return invalid("a function has no surface, quality switch, or call of another function");
+        if (kType == kSurfaceType || kType == kQualitySwitchType || kType == kInlineSlangType || isFunction(kType)) {
+            return invalid("a function has no surface, quality switch, inline Slang, or call of another function");
         }
         if (kType != kOutputType) {
             RAWFRAME_TRY(surface_graph::nodeChecked(kDocument, node));

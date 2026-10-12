@@ -15,6 +15,7 @@
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <map>
 #include <memory>
 #include <optional>
@@ -121,6 +122,8 @@ struct Code {
     std::vector<SampledTexture> textures;
     std::array<std::uint8_t, 4> inputs{};
     std::vector<std::string_view> helpers;
+    /// Each inline-Slang node's function, by its name (D718).
+    std::vector<std::pair<std::string, std::string>> inlined;
     std::size_t next = 0;
 };
 
@@ -215,6 +218,9 @@ public:
         }
         if (functions::isFunction(kType)) {
             return calledOutput(*kNode, from);
+        }
+        if (kType == kInlineSlangType) {
+            return inlinedOutput(*kNode, from);
         }
         if (kType == kFrontFacingType) {
             // A vertex has no face yet.
@@ -381,6 +387,10 @@ public:
         return code_->helpers;
     }
 
+    [[nodiscard]] const std::vector<std::pair<std::string, std::string>>& inlined() const noexcept {
+        return code_->inlined;
+    }
+
     /// Which interface input gives each slot's texture, one more than its
     /// slot among the inputs, nought for a fixed texture (D710).
     [[nodiscard]] const std::array<std::uint8_t, 4>& textureInputs() const noexcept {
@@ -484,6 +494,53 @@ private:
         return called->writer->operandText(kOutput->from);
     }
 
+    /// An inline-Slang node's output (D718): its body written once a
+    /// material as a function of its declared inputs and outputs, called
+    /// once a node, each output a variable the call fills.
+    result::Result<std::string> inlinedOutput(const graph::Node& node, const graph::Connection& from) {
+        RAWFRAME_TRY_ASSIGN(const surface_graph::Inline kInline, surface_graph::inlineIn(surface_, node));
+        if (std::ranges::find(kInline.outputs, from.output, &surface_graph::Pin::name) == kInline.outputs.end()) {
+            return invalid("a connection names an output its node has");
+        }
+        if (const auto kMade = made_.find(from.node); kMade != made_.end()) {
+            return kMade->second + "_" + from.output;
+        }
+        if (at_ == "point" ? !kInline.fragment : !kInline.vertex) {
+            return invalid("an inline Slang node is written in the stages it declares alone");
+        }
+        std::array<char, 17> id{};
+        std::snprintf(id.data(), id.size(), "%016llx", static_cast<unsigned long long>(node.id));
+        const std::string kFunction = "rawframeInline" + std::string{id.data()};
+        std::string parameters;
+        for (const surface_graph::Pin& kPin : kInline.inputs) {
+            parameters += (parameters.empty() ? "" : ", ") + std::string{"in "} + std::string{slangType(kPin.carried)} +
+                          " " + std::string{kPin.name};
+        }
+        for (const surface_graph::Pin& kPin : kInline.outputs) {
+            parameters += (parameters.empty() ? "" : ", ") + std::string{"out "} +
+                          std::string{slangType(kPin.carried)} + " " + std::string{kPin.name};
+        }
+        if (std::ranges::find(code_->inlined, kFunction, &std::pair<std::string, std::string>::first) ==
+            code_->inlined.end()) {
+            code_->inlined.emplace_back(
+                kFunction, "void " + kFunction + "(" + parameters + ")\n{\n" + std::string{kInline.body} + "\n}\n");
+        }
+        std::string arguments;
+        for (const surface_graph::Operand& kGiven : kInline.given) {
+            RAWFRAME_TRY_ASSIGN(const std::string kText, operandText(kGiven));
+            arguments += (arguments.empty() ? "" : ", ") + kText;
+        }
+        const std::string kName = name();
+        for (const surface_graph::Pin& kPin : kInline.outputs) {
+            code_->statements +=
+                "        " + std::string{slangType(kPin.carried)} + " " + kName + "_" + std::string{kPin.name} + ";\n";
+            arguments += (arguments.empty() ? "" : ", ") + kName + "_" + std::string{kPin.name};
+        }
+        code_->statements += "        " + kFunction + "(" + arguments + ");\n";
+        made_.emplace(from.node, kName);
+        return kName + "_" + from.output;
+    }
+
     std::string name() {
         return "v" + std::to_string(code_->next++);
     }
@@ -572,6 +629,16 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
     std::string helped;
     for (const std::string_view kHelper : helpers) {
         helped += std::string{kHelper} + "\n";
+    }
+    // Then each inline-Slang node's function, once (D718).
+    std::vector<std::string_view> written;
+    for (const auto* kStage : {&writer, &placing}) {
+        for (const auto& [kFunction, kText] : kStage->inlined()) {
+            if (std::ranges::find(written, kFunction) == written.end()) {
+                written.push_back(kFunction);
+                helped += kText + "\n";
+            }
+        }
     }
     made.source = "// A surface material written by rawframe.material (D483); generated, never edited.\n"
                   "import material;\n\n" +

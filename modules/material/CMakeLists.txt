@@ -24,7 +24,7 @@ foreach(function IN ITEMS checkerboard fractal_noise_2d fresnel polar_coordinate
                            HEADER "${function}_function.h" SYMBOL "${symbol}Function")
 endforeach()
 
-rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/functions_test.cpp tests/groups_test.cpp tests/instance_test.cpp tests/ints_test.cpp
+rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/functions_test.cpp tests/groups_test.cpp tests/inline_test.cpp tests/instance_test.cpp tests/ints_test.cpp
                                            tests/material_test.cpp tests/nodes_test.cpp tests/post_process_test.cpp
                                            tests/transform_test.cpp)
 if(TARGET rawframe_material_tests)

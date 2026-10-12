@@ -266,6 +266,34 @@ struct Transform {
 
 [[nodiscard]] result::Result<Transform> transformIn(const graph::Document& surface, const graph::Node& node);
 
+/// One of an inline-Slang node's declared inputs or outputs: its name and
+/// its type.
+struct Pin {
+    std::string_view name;
+    Carried carried = Carried::Float;
+};
+
+/// An `inline_slang` node, checked (SPEC-0026's inline-Slang node, D718):
+/// its params `body`, one function's, at most 4096 bytes of printable
+/// ASCII, tabs, and new lines, with no preprocessor line, string, import,
+/// include, module, extern, export, or double underscore, and its braces
+/// closing in order; `capabilities`, none in generation 1; `domains`, of
+/// `surface`, `canvas`, and `post_process`, a surface's among them;
+/// `inputs` and `outputs`, each named as a Kest name is and typed from
+/// the closed set but a texture, eight inputs at most and one to four
+/// outputs; and `stages`, of `fragment` and `vertex`. Its node inputs give
+/// each declared input, of its type.
+struct Inline {
+    std::vector<Pin> inputs;
+    std::vector<Pin> outputs;
+    std::vector<Operand> given;
+    bool fragment = false;
+    bool vertex = false;
+    std::string_view body;
+};
+
+[[nodiscard]] result::Result<Inline> inlineIn(const graph::Document& surface, const graph::Node& node);
+
 /// A `separate3` node's input, checked: a color3 (D312), or a vec3, a
 /// place's axes r, g, and b (D691).
 [[nodiscard]] result::Result<Operand> separate3In(const graph::Document& surface, const graph::Node& node);
