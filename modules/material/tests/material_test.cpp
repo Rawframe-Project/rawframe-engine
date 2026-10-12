@@ -4,6 +4,7 @@
 // color and opacity, and what generation 1 cannot compile refused, never
 // guessed at.
 
+#include "generated/arithmetic_material.h"
 #include "generated/faded_graph.h"
 #include "generated/faded_material.h"
 #include "generated/rising_graph.h"
@@ -13,6 +14,7 @@
 #include "rawframe/test/test.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <iterator>
 #include <string>
 #include <string_view>
@@ -794,4 +796,91 @@ RAWFRAME_TEST(AGraphRisingWithTimeIsWrittenAsTheSlangTheScenesTestsDraw) {
     const auto kWritten = generateSlang(*kRead);
     const std::string_view kGolden{reinterpret_cast<const char*>(kRisingGraph.data()), kRisingGraph.size()};
     RAWFRAME_EXPECT(kWritten.has_value() && kWritten->moves && kWritten->source == kGolden);
+}
+
+RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
+    // D694: arithmetic.material uses every math node of SPEC-0026's atomic
+    // core and both World streams, in the fragment and the vertex stage;
+    // the cook's test builds it through the shader toolchain.
+    const std::string_view kDocument{reinterpret_cast<const char*>(kArithmeticMaterial.data()),
+                                     kArithmeticMaterial.size()};
+    const auto kRead = readMaterial(kDocument);
+    RAWFRAME_EXPECT(kRead.has_value());
+    if (!kRead.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT(refusedWith(compileQualities(*kRead), MaterialError::Unsupported));
+    const auto kMade = generateSlang(*kRead);
+    RAWFRAME_EXPECT(kMade.has_value() && kMade->moves);
+    if (!kMade.has_value()) {
+        return;
+    }
+    for (const std::string_view kCode : {"abs(",
+                                         "sign(",
+                                         "floor(",
+                                         "ceil(",
+                                         "round(",
+                                         "frac(",
+                                         "-(",
+                                         "1.0 / (",
+                                         "sqrt(",
+                                         "exp(",
+                                         "exp2(",
+                                         "log(",
+                                         "log2(",
+                                         "sin(",
+                                         "cos(",
+                                         "tan(",
+                                         "asin(",
+                                         "acos(",
+                                         "saturate(",
+                                         "1.0 - (",
+                                         " / ",
+                                         ") * floor((",
+                                         "min(",
+                                         "max(",
+                                         "pow(",
+                                         "step(",
+                                         "atan2(",
+                                         "lerp(",
+                                         "clamp(",
+                                         "smoothstep(",
+                                         ") + ((",
+                                         "length(",
+                                         "dot(",
+                                         "distance(",
+                                         "cross(",
+                                         "reflect(",
+                                         "refract(",
+                                         "normalize(",
+                                         "point.normal",
+                                         "placed.normal",
+                                         "min(v",
+                                         "float3(1.0))",
+                                         "float3(1.0, 2.0, 3.0)"}) {
+        RAWFRAME_EXPECT(kMade->source.contains(kCode));
+        if (!kMade->source.contains(kCode)) {
+            std::printf("not written: %s\n", std::string{kCode}.c_str());
+        }
+    }
+    // Types: a length of a float, a dot of a vec3 and a float, a cross of a
+    // float, inputs of two vector types, and a refraction's vector ratio.
+    const auto kRefused = [](std::string_view type, std::vector<std::pair<std::string, Value>> inputs) {
+        return refusedWith(
+            validateSurface(surfaceOf(objectOf({{"specular_roughness", from(kPhase, "out")}}),
+                                      {timeOf(Value::string("simulation")),
+                                       nodeOf(kWorld, kWorldPositionType, Value::object(), Value::object()),
+                                       nodeOf(kPhase, type, Value::object(), objectOf(std::move(inputs)))})),
+            MaterialError::Invalid);
+    };
+    RAWFRAME_EXPECT(kRefused("rawframe/length@1", {{"in", from(kTime, "seconds")}}));
+    RAWFRAME_EXPECT(kRefused("rawframe/dot@1", {{"a", from(kWorld, "position")}, {"b", from(kTime, "seconds")}}));
+    RAWFRAME_EXPECT(kRefused("rawframe/cross@1", {{"a", from(kTime, "seconds")}, {"b", from(kWorld, "position")}}));
+    RAWFRAME_EXPECT(kRefused("rawframe/min@1", {{"a", from(kWorld, "position")}, {"b", pair(1, 2)}}));
+    RAWFRAME_EXPECT(kRefused(
+        "rawframe/refract@1",
+        {{"eta", from(kWorld, "position")}, {"in", from(kWorld, "position")}, {"normal", from(kWorld, "position")}}));
+    // An input left out, or one the node has not.
+    RAWFRAME_EXPECT(kRefused("rawframe/clamp@1", {{"in", from(kTime, "seconds")}, {"low", Value::real(0)}}));
+    RAWFRAME_EXPECT(kRefused("rawframe/abs@1", {{"a", from(kTime, "seconds")}}));
 }

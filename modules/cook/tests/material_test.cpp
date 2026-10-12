@@ -210,11 +210,16 @@ RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
     fs::copy_file(fs::path{RAWFRAME_SURFACE_SEEDS} / "rising.material", kProject.sources / "rising.rfmaterial");
     writeText(kProject.sources / "rising.rfmaterial.rfmeta",
               sidecar("000000000000000000000000000000c4", "", "rawframe.material"));
+    // And one using every math node of SPEC-0026's core (D694), which the
+    // toolchain builds for every backend.
+    fs::copy_file(fs::path{RAWFRAME_SURFACE_SEEDS} / "arithmetic.material", kProject.sources / "arithmetic.rfmaterial");
+    writeText(kProject.sources / "arithmetic.rfmaterial.rfmeta",
+              sidecar("000000000000000000000000000000c5", "", "rawframe.material"));
     // Without the shader toolchain they are refused, saying it is needed.
     const std::array<Importer, 2> kBare = {audioImporter(), materialImporter()};
     const auto kRefused =
         cookSources(CookRequest{.sources = kProject.sources, .output = kProject.output, .importers = kBare});
-    RAWFRAME_EXPECT(kRefused.has_value() && kRefused->failures.size() == 2 &&
+    RAWFRAME_EXPECT(kRefused.has_value() && kRefused->failures.size() == 3 &&
                     kRefused->failures[0].code() == code(CookError::ToolFailed));
     const std::optional<ShaderTools> kTools = shaderTools();
     if (!kTools.has_value()) {
@@ -226,7 +231,7 @@ RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
     const std::array<Importer, 2> kTooled = {audioImporter(), materialImporter(kTools)};
     const auto kReport =
         cookSources(CookRequest{.sources = kProject.sources, .output = kProject.output, .importers = kTooled});
-    RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.empty() && kReport->variants == 2);
+    RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.empty() && kReport->variants == 3);
     if (kReport.has_value() && !kReport->failures.empty()) {
         std::printf("%s\n", std::string{kReport->failures[0].description()}.c_str());
     }

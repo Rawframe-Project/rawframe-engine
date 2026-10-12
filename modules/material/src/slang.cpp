@@ -106,6 +106,9 @@ public:
         if (kType == kWorldPositionType) {
             return at_ + ".position";
         }
+        if (kType == kWorldNormalType) {
+            return at_ + ".normal";
+        }
         if (kType == kTimeType) {
             return at_ + ".time";
         }
@@ -131,19 +134,24 @@ public:
         std::string expression;
         Carried carried = Carried::Float;
         if (surface_graph::math(kType)) {
-            RAWFRAME_TRY_ASSIGN(const surface_graph::Math kMath, surface_graph::mathIn(surface_, *kNode));
-            RAWFRAME_TRY_ASSIGN(const std::string kA, operandText(kMath.a));
-            RAWFRAME_TRY_ASSIGN(const std::string kB, operandText(kMath.b));
-            expression = kA + (kType == kMultiplyType ? " * " : kType == kAddType ? " + " : " - ") + kB;
+            // The node's code with its inputs in place (D694): in a call, a
+            // float input made the out's vector.
+            const surface_graph::MathNode& kShape = *surface_graph::mathNodeOf(kType);
+            RAWFRAME_TRY_ASSIGN(const surface_graph::MathInputs kMath, surface_graph::mathInputsOf(surface_, *kNode));
             carried = kMath.out.value_or(Carried::Float);
-        } else if (surface_graph::unary(kType)) {
-            RAWFRAME_TRY_ASSIGN(const surface_graph::Operand kIn, surface_graph::unaryIn(surface_, *kNode));
-            RAWFRAME_TRY_ASSIGN(const std::string kInText, operandText(kIn));
-            expression = std::string{kType == kSinType   ? "sin("
-                                     : kType == kCosType ? "cos("
-                                                         : "normalize("} +
-                         kInText + ")";
-            carried = kIn.carried.value_or(Carried::Float);
+            expression = std::string{kShape.code};
+            for (std::size_t at = 0; at < kMath.count; ++at) {
+                const surface_graph::Operand& kInput = kMath.inputs.at(at);
+                RAWFRAME_TRY_ASSIGN(std::string text, operandText(kInput));
+                if (kShape.call && carried != Carried::Float && kInput.carried == Carried::Float) {
+                    text = std::string{slangType(carried)} + "(" + text + ")";
+                }
+                const std::string kPlace = "$" + std::to_string(at);
+                for (std::size_t found = expression.find(kPlace); found != std::string::npos;
+                     found = expression.find(kPlace, found + text.size())) {
+                    expression.replace(found, kPlace.size(), text);
+                }
+            }
         } else if (kType == kCombine3Type) {
             RAWFRAME_TRY_ASSIGN(const auto kParts, surface_graph::combine3In(surface_, *kNode));
             expression = "float3(";

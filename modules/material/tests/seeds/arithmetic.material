@@ -1,0 +1,623 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {},
+  "graph": {
+    "a700000000000001": {
+      "type": "rawframe/time@1",
+      "params": {
+        "timeline": "simulation"
+      },
+      "inputs": {}
+    },
+    "a700000000000002": {
+      "type": "rawframe/world_position@1",
+      "params": {},
+      "inputs": {}
+    },
+    "a700000000000003": {
+      "type": "rawframe/world_normal@1",
+      "params": {},
+      "inputs": {}
+    },
+    "a700000000000004": {
+      "type": "rawframe/separate3@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000002",
+          "output": "position"
+        }
+      }
+    },
+    "a700000000000005": {
+      "type": "rawframe/abs@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000004",
+          "output": "r"
+        }
+      }
+    },
+    "a700000000000006": {
+      "type": "rawframe/sign@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000005",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000007": {
+      "type": "rawframe/floor@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000006",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000008": {
+      "type": "rawframe/ceil@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000007",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000009": {
+      "type": "rawframe/round@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000008",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000000a": {
+      "type": "rawframe/fract@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000009",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000000b": {
+      "type": "rawframe/negate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000000a",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000000c": {
+      "type": "rawframe/reciprocal@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000000b",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000000d": {
+      "type": "rawframe/sqrt@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000000c",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000000e": {
+      "type": "rawframe/exp@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000000d",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000000f": {
+      "type": "rawframe/exp2@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000000e",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000010": {
+      "type": "rawframe/log@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000000f",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000011": {
+      "type": "rawframe/log2@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000010",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000012": {
+      "type": "rawframe/sin@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000011",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000013": {
+      "type": "rawframe/cos@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000012",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000014": {
+      "type": "rawframe/tan@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000013",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000015": {
+      "type": "rawframe/asin@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000014",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000016": {
+      "type": "rawframe/acos@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000015",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000017": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000016",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000018": {
+      "type": "rawframe/one_minus@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000017",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000019": {
+      "type": "rawframe/divide@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000018",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000001",
+          "output": "seconds"
+        }
+      }
+    },
+    "a70000000000001a": {
+      "type": "rawframe/modulo@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000019",
+          "output": "out"
+        },
+        "b": 2
+      }
+    },
+    "a70000000000001b": {
+      "type": "rawframe/min@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a70000000000001a",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000004",
+          "output": "g"
+        }
+      }
+    },
+    "a70000000000001c": {
+      "type": "rawframe/max@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a70000000000001b",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000004",
+          "output": "b"
+        }
+      }
+    },
+    "a70000000000001d": {
+      "type": "rawframe/power@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a70000000000001c",
+          "output": "out"
+        },
+        "b": 2
+      }
+    },
+    "a70000000000001e": {
+      "type": "rawframe/step@1",
+      "params": {},
+      "inputs": {
+        "edge": 0.5,
+        "in": {
+          "node": "a70000000000001d",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000001f": {
+      "type": "rawframe/atan2@1",
+      "params": {},
+      "inputs": {
+        "x": {
+          "node": "a700000000000001",
+          "output": "seconds"
+        },
+        "y": {
+          "node": "a70000000000001e",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000020": {
+      "type": "rawframe/mix@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a70000000000001f",
+          "output": "out"
+        },
+        "b": 1,
+        "t": 0.25
+      }
+    },
+    "a700000000000021": {
+      "type": "rawframe/clamp@1",
+      "params": {},
+      "inputs": {
+        "high": 1,
+        "in": {
+          "node": "a700000000000020",
+          "output": "out"
+        },
+        "low": 0
+      }
+    },
+    "a700000000000022": {
+      "type": "rawframe/smoothstep@1",
+      "params": {},
+      "inputs": {
+        "high": 1,
+        "in": {
+          "node": "a700000000000021",
+          "output": "out"
+        },
+        "low": 0
+      }
+    },
+    "a700000000000023": {
+      "type": "rawframe/remap@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000022",
+          "output": "out"
+        },
+        "in_high": 1,
+        "in_low": 0,
+        "out_high": 0.8,
+        "out_low": 0.2
+      }
+    },
+    "a700000000000024": {
+      "type": "rawframe/length@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000002",
+          "output": "position"
+        }
+      }
+    },
+    "a700000000000025": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000023",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000024",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000026": {
+      "type": "rawframe/dot@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000002",
+          "output": "position"
+        },
+        "b": {
+          "node": "a700000000000003",
+          "output": "normal"
+        }
+      }
+    },
+    "a700000000000027": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000025",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000026",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000028": {
+      "type": "rawframe/distance@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000002",
+          "output": "position"
+        },
+        "b": {
+          "node": "a700000000000003",
+          "output": "normal"
+        }
+      }
+    },
+    "a700000000000029": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000027",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000028",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000002a": {
+      "type": "rawframe/cross@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000002",
+          "output": "position"
+        },
+        "b": {
+          "node": "a700000000000003",
+          "output": "normal"
+        }
+      }
+    },
+    "a70000000000002b": {
+      "type": "rawframe/reflect@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000002a",
+          "output": "out"
+        },
+        "normal": {
+          "node": "a700000000000003",
+          "output": "normal"
+        }
+      }
+    },
+    "a70000000000002c": {
+      "type": "rawframe/refract@1",
+      "params": {},
+      "inputs": {
+        "eta": 0.75,
+        "in": {
+          "node": "a70000000000002b",
+          "output": "out"
+        },
+        "normal": {
+          "node": "a700000000000003",
+          "output": "normal"
+        }
+      }
+    },
+    "a70000000000002d": {
+      "type": "rawframe/min@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a70000000000002c",
+          "output": "out"
+        },
+        "b": 1
+      }
+    },
+    "a70000000000002e": {
+      "type": "rawframe/mix@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a70000000000002d",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000003",
+          "output": "normal"
+        },
+        "t": {
+          "node": "a700000000000029",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000002f": {
+      "type": "rawframe/clamp@1",
+      "params": {},
+      "inputs": {
+        "high": 1,
+        "in": {
+          "node": "a70000000000002e",
+          "output": "out"
+        },
+        "low": -1
+      }
+    },
+    "a700000000000030": {
+      "type": "rawframe/step@1",
+      "params": {},
+      "inputs": {
+        "edge": 0.5,
+        "in": {
+          "node": "a70000000000002f",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000031": {
+      "type": "rawframe/power@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000030",
+          "output": "out"
+        },
+        "b": [
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    "a700000000000032": {
+      "type": "rawframe/normalize@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000031",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000033": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000029",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000034": {
+      "type": "rawframe/combine3@1",
+      "params": {},
+      "inputs": {
+        "x": 0,
+        "y": {
+          "node": "a700000000000033",
+          "output": "out"
+        },
+        "z": 0
+      }
+    },
+    "a700000000000035": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a700000000000029",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000036": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "geometry_normal": {
+          "node": "a700000000000032",
+          "output": "out"
+        },
+        "position_offset": {
+          "node": "a700000000000034",
+          "output": "out"
+        },
+        "specular_roughness": {
+          "node": "a700000000000035",
+          "output": "out"
+        }
+      }
+    }
+  }
+}

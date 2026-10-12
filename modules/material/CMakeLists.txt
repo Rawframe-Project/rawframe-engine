@@ -17,6 +17,9 @@ if(TARGET rawframe_material_tests)
     rawframe_embedded_file(TARGET rawframe_material_tests
                            FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/faded_graph.slang"
                            HEADER "faded_graph.h" SYMBOL "kFadedGraph")
+    # Every math node of SPEC-0026's atomic core (D694).
+    rawframe_embedded_file(TARGET rawframe_material_tests FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/seeds/arithmetic.material"
+                           HEADER "arithmetic_material.h" SYMBOL "kArithmeticMaterial")
     # A graph whose vertices rise with time (D691), and the Slang written
     # from it, which the scene's tests draw.
     rawframe_embedded_file(TARGET rawframe_material_tests FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/seeds/rising.material"

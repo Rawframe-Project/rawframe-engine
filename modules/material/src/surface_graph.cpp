@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <span>
 #include <string>
+#include <utility>
 
 namespace rawframe::material::surface_graph {
 
@@ -83,22 +84,81 @@ const graph::Node* surfaceNode(const graph::Document& surface) {
     return found;
 }
 
+namespace {
+
+using enum Rule;
+
+/// SPEC-0026's atomic math core as this family writes it (D691, D694).
+/// `fract` is Slang's `frac`, `mix` its `lerp`; `modulo` is floored, as
+/// MaterialX's is, never C's truncated remainder; `remap` takes `in` from
+/// between `in_low` and `in_high` to between `out_low` and `out_high`.
+constexpr std::array<MathNode, 41> kMathNodes = {{
+    {kAddType, {"a", "b"}, 2, Componentwise, "$0 + $1", false},
+    {kSubtractType, {"a", "b"}, 2, Componentwise, "$0 - $1", false},
+    {kMultiplyType, {"a", "b"}, 2, Componentwise, "$0 * $1", false},
+    {"rawframe/divide@1", {"a", "b"}, 2, Componentwise, "$0 / $1", false},
+    {"rawframe/modulo@1", {"a", "b"}, 2, Componentwise, "($0) - ($1) * floor(($0) / ($1))", false},
+    {"rawframe/negate@1", {"in"}, 1, Componentwise, "-($0)", false},
+    {"rawframe/reciprocal@1", {"in"}, 1, Componentwise, "1.0 / ($0)", false},
+    {"rawframe/abs@1", {"in"}, 1, Componentwise, "abs($0)", true},
+    {"rawframe/sign@1", {"in"}, 1, Componentwise, "sign($0)", true},
+    {"rawframe/floor@1", {"in"}, 1, Componentwise, "floor($0)", true},
+    {"rawframe/ceil@1", {"in"}, 1, Componentwise, "ceil($0)", true},
+    {"rawframe/round@1", {"in"}, 1, Componentwise, "round($0)", true},
+    {"rawframe/fract@1", {"in"}, 1, Componentwise, "frac($0)", true},
+    {"rawframe/min@1", {"a", "b"}, 2, Componentwise, "min($0, $1)", true},
+    {"rawframe/max@1", {"a", "b"}, 2, Componentwise, "max($0, $1)", true},
+    {"rawframe/clamp@1", {"in", "low", "high"}, 3, Componentwise, "clamp($0, $1, $2)", true},
+    {"rawframe/saturate@1", {"in"}, 1, Componentwise, "saturate($0)", true},
+    {"rawframe/mix@1", {"a", "b", "t"}, 3, Componentwise, "lerp($0, $1, $2)", true},
+    {"rawframe/step@1", {"edge", "in"}, 2, Componentwise, "step($0, $1)", true},
+    {"rawframe/smoothstep@1", {"low", "high", "in"}, 3, Componentwise, "smoothstep($0, $1, $2)", true},
+    {"rawframe/remap@1",
+     {"in", "in_low", "in_high", "out_low", "out_high"},
+     5,
+     Componentwise,
+     "($3) + (($0) - ($1)) * (($4) - ($3)) / (($2) - ($1))",
+     false},
+    {"rawframe/power@1", {"a", "b"}, 2, Componentwise, "pow($0, $1)", true},
+    {"rawframe/sqrt@1", {"in"}, 1, Componentwise, "sqrt($0)", true},
+    {"rawframe/exp@1", {"in"}, 1, Componentwise, "exp($0)", true},
+    {"rawframe/exp2@1", {"in"}, 1, Componentwise, "exp2($0)", true},
+    {"rawframe/log@1", {"in"}, 1, Componentwise, "log($0)", true},
+    {"rawframe/log2@1", {"in"}, 1, Componentwise, "log2($0)", true},
+    {kSinType, {"in"}, 1, Componentwise, "sin($0)", true},
+    {kCosType, {"in"}, 1, Componentwise, "cos($0)", true},
+    {"rawframe/tan@1", {"in"}, 1, Componentwise, "tan($0)", true},
+    {"rawframe/asin@1", {"in"}, 1, Componentwise, "asin($0)", true},
+    {"rawframe/acos@1", {"in"}, 1, Componentwise, "acos($0)", true},
+    {"rawframe/atan2@1", {"y", "x"}, 2, Componentwise, "atan2($0, $1)", true},
+    {"rawframe/one_minus@1", {"in"}, 1, Componentwise, "1.0 - ($0)", false},
+    {"rawframe/length@1", {"in"}, 1, Measure, "length($0)", false},
+    {kNormalizeType, {"in"}, 1, Unit, "normalize($0)", false},
+    {"rawframe/dot@1", {"a", "b"}, 2, Between, "dot($0, $1)", false},
+    {"rawframe/distance@1", {"a", "b"}, 2, Between, "distance($0, $1)", false},
+    {"rawframe/cross@1", {"a", "b"}, 2, Across, "cross($0, $1)", false},
+    {"rawframe/reflect@1", {"in", "normal"}, 2, Across, "reflect($0, $1)", false},
+    {"rawframe/refract@1", {"in", "normal", "eta"}, 3, Across, "refract($0, $1, $2)", false},
+}};
+
+} // namespace
+
+const MathNode* mathNodeOf(std::string_view type) {
+    const auto kFound = std::ranges::find(kMathNodes, type, &MathNode::type);
+    return kFound == kMathNodes.end() ? nullptr : &*kFound;
+}
+
 bool known(const graph::Node& node) {
     const Value* kType = node.record.find("type");
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
-    return kText != nullptr && (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType ||
-                                *kText == kMultiplyType || *kText == kAddType || *kText == kSeparate3Type ||
-                                *kText == kNormalMapType || *kText == kQualitySwitchType || *kText == kTimeType ||
-                                *kText == kWorldPositionType || *kText == kSubtractType || *kText == kSinType ||
-                                *kText == kCosType || *kText == kNormalizeType || *kText == kCombine3Type);
+    return kText != nullptr &&
+           (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType || *kText == kSeparate3Type ||
+            *kText == kNormalMapType || *kText == kQualitySwitchType || *kText == kTimeType ||
+            *kText == kWorldPositionType || *kText == kWorldNormalType || *kText == kCombine3Type || math(*kText));
 }
 
 bool math(std::string_view type) {
-    return type == kMultiplyType || type == kAddType || type == kSubtractType;
-}
-
-bool unary(std::string_view type) {
-    return type == kSinType || type == kCosType || type == kNormalizeType;
+    return mathNodeOf(type) != nullptr;
 }
 
 std::string_view typeOf(const graph::Node& node) {
@@ -151,48 +211,87 @@ result::Result<Operand> operandOf(const graph::Document& surface, const Value& v
     return made;
 }
 
-result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 2> kInputs = {"a", "b"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kInputs));
-    const Value* kA = kParts.second->find("a");
-    const Value* kB = kParts.second->find("b");
-    if (kA == nullptr || kB == nullptr) {
-        return invalid("a math node's inputs are a and b, both given");
-    }
-    Math made;
-    RAWFRAME_TRY_ASSIGN(made.a, operandOf(surface, *kA));
-    RAWFRAME_TRY_ASSIGN(made.b, operandOf(surface, *kB));
-    // Three numbers are a color3 or a vec3, as the other input is.
-    const auto kAs = [](const Operand& literal, const Operand& other) {
-        return !literal.from.has_value() && literal.carried == Carried::Color3 && other.carried == Carried::Vec3
-                   ? other.carried
-                   : literal.carried;
-    };
-    made.a.carried = kAs(made.a, made.b);
-    made.b.carried = kAs(made.b, made.a);
-    if (made.a.carried.has_value() && made.b.carried.has_value()) {
-        const Carried kA2 = *made.a.carried;
-        const Carried kB2 = *made.b.carried;
-        if (kA2 != kB2 && kA2 != Carried::Float && kB2 != Carried::Float) {
-            return invalid("a math node's inputs are of one type, or one of them is a float");
+result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const graph::Node& node) {
+    const MathNode& kNode = *mathNodeOf(typeOf(node));
+    // The record names its inputs in name order.
+    // Sorted by insertion: GCC's ranges::sort over a span of five takes its
+    // sixteen-element insertion pass for out of bounds.
+    std::array<std::string_view, 5> sorted = kNode.inputs;
+    for (std::size_t at = 1; at < kNode.count; ++at) {
+        for (std::size_t back = at; back > 0 && sorted.at(back) < sorted.at(back - 1); --back) {
+            std::swap(sorted.at(back), sorted.at(back - 1));
         }
-        made.out = kA2 == Carried::Float ? kB2 : kA2;
+    }
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, std::span{sorted.data(), kNode.count}));
+    MathInputs made{.count = kNode.count};
+    for (std::size_t at = 0; at < kNode.count; ++at) {
+        const Value* kInput = kParts.second->find(kNode.inputs.at(at));
+        if (kInput == nullptr) {
+            return invalid("a math node's inputs are all given");
+        }
+        RAWFRAME_TRY_ASSIGN(made.inputs.at(at), operandOf(surface, *kInput));
+    }
+    const std::span<Operand> kIn{made.inputs.data(), kNode.count};
+    // Three numbers are a color3 or a vec3, as a connected input is.
+    const bool kVector = std::ranges::any_of(kIn, [](const Operand& each) {
+        return each.carried == Carried::Vec3;
+    });
+    for (Operand& each : kIn) {
+        if (!each.from.has_value() && each.carried == Carried::Color3 && kVector) {
+            each.carried = Carried::Vec3;
+        }
+    }
+    const bool kKnown = std::ranges::all_of(kIn, [](const Operand& each) {
+        return each.carried.has_value();
+    });
+    if (!kKnown) {
+        return made;
+    }
+    const auto kIsVector = [](Carried carried) {
+        return carried == Carried::Vec2 || carried == Carried::Vec3;
+    };
+    switch (kNode.rule) {
+    case Componentwise: {
+        std::optional<Carried> kind;
+        for (const Operand& each : kIn) {
+            if (*each.carried == Carried::Float) {
+                continue;
+            }
+            if (kind.has_value() && *kind != *each.carried) {
+                return invalid("a math node's inputs are of one type, or floats");
+            }
+            kind = each.carried;
+        }
+        made.out = kind.value_or(Carried::Float);
+        break;
+    }
+    case Measure:
+    case Unit:
+        if (!kIsVector(*kIn[0].carried)) {
+            return invalid("a length or normalize node's input is a vec2 or a vec3");
+        }
+        made.out = kNode.rule == Measure ? Carried::Float : *kIn[0].carried;
+        break;
+    case Between:
+        if (!kIsVector(*kIn[0].carried) || *kIn[0].carried != *kIn[1].carried) {
+            return invalid("a dot or distance node's inputs are vectors of one type");
+        }
+        made.out = Carried::Float;
+        break;
+    case Across:
+        if (*kIn[0].carried != Carried::Vec3 || *kIn[1].carried != Carried::Vec3 ||
+            (kNode.count == 3 && *kIn[2].carried != Carried::Float)) {
+            return invalid("a cross, reflect, or refract node's vectors are vec3s, a refraction's ratio a float");
+        }
+        made.out = Carried::Vec3;
+        break;
     }
     return made;
 }
 
-result::Result<Operand> unaryIn(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 1> kInputs = {"in"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kInputs));
-    const Value* kIn = kParts.second->find("in");
-    if (kIn == nullptr) {
-        return invalid("a sin, cos, or normalize node's input is in, given");
-    }
-    RAWFRAME_TRY_ASSIGN(Operand made, operandOf(surface, *kIn));
-    if (typeOf(node) == kNormalizeType && made.carried.has_value() && *made.carried != Carried::Vec3) {
-        return invalid("a normalize node's input is a vec3");
-    }
-    return made;
+result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& node) {
+    RAWFRAME_TRY_ASSIGN(const MathInputs kInputs, mathInputsOf(surface, node));
+    return Math{.a = kInputs.inputs[0], .b = kInputs.inputs[1], .out = kInputs.out};
 }
 
 result::Result<std::array<Operand, 3>> combine3In(const graph::Document& surface, const graph::Node& node) {
@@ -222,7 +321,7 @@ result::Status timeIn(const graph::Node& node) {
     return {};
 }
 
-result::Status worldPositionIn(const graph::Node& node) {
+result::Status streamIn(const graph::Node& node) {
     RAWFRAME_TRY(partsOf(node, {}, {}));
     return {};
 }
@@ -339,12 +438,8 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
         return std::optional{Carried::Vec2};
     }
     if (math(kType) && from.output == "out") {
-        RAWFRAME_TRY_ASSIGN(const Math kMath, mathIn(surface, *kSource));
+        RAWFRAME_TRY_ASSIGN(const MathInputs kMath, mathInputsOf(surface, *kSource));
         return kMath.out;
-    }
-    if (unary(kType) && from.output == "out") {
-        RAWFRAME_TRY_ASSIGN(const Operand kIn, unaryIn(surface, *kSource));
-        return kIn.carried;
     }
     if (kType == kCombine3Type && from.output == "out") {
         RAWFRAME_TRY(combine3In(surface, *kSource));
@@ -354,8 +449,9 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
         RAWFRAME_TRY(timeIn(*kSource));
         return std::optional{Carried::Float};
     }
-    if (kType == kWorldPositionType && from.output == "position") {
-        RAWFRAME_TRY(worldPositionIn(*kSource));
+    if ((kType == kWorldPositionType && from.output == "position") ||
+        (kType == kWorldNormalType && from.output == "normal")) {
+        RAWFRAME_TRY(streamIn(*kSource));
         return std::optional{Carried::Vec3};
     }
     if (kType == kNormalMapType && from.output == "out") {

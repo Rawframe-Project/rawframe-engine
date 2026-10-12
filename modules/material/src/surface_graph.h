@@ -39,10 +39,8 @@ inline constexpr std::array<std::string_view, 3> kBlends = {"opaque", "masked", 
 [[nodiscard]] const graph::Node* surfaceNode(const graph::Document& surface);
 /// Whether a node is of a type this family knows.
 [[nodiscard]] bool known(const graph::Node& node);
-/// Whether a type is `multiply`, `add`, or `subtract`.
+/// Whether a type is one of the atomic core's math nodes (`mathNodeOf`).
 [[nodiscard]] bool math(std::string_view type);
-/// Whether a type is `sin`, `cos`, or `normalize` (D691).
-[[nodiscard]] bool unary(std::string_view type);
 /// A known node's type.
 [[nodiscard]] std::string_view typeOf(const graph::Node& node);
 
@@ -59,6 +57,47 @@ struct Operand {
 
 [[nodiscard]] result::Result<Operand> operandOf(const graph::Document& surface, const document::Value& value);
 
+/// How a math node types its inputs and its `out` (SPEC-0026; D691, D694).
+enum class Rule : std::uint8_t {
+    /// Each input of one type, or a float; the out of that type.
+    Componentwise,
+    /// One vector in, a float out: its length.
+    Measure,
+    /// One vector in, one of its type out: normalized.
+    Unit,
+    /// Two vectors of one type in, a float out: dot, distance.
+    Between,
+    /// Two vec3s in, a vec3 out: cross, reflect.
+    Across
+};
+
+/// One of the atomic core's math nodes (SPEC-0026, D694): its type, its
+/// inputs in the order its code takes them, how it types them, and its
+/// Slang, `$0` to `$4` standing for its inputs. A componentwise call
+/// (`call`) has its float inputs made the out's vector where the out is
+/// one.
+struct MathNode {
+    std::string_view type;
+    std::array<std::string_view, 5> inputs;
+    std::size_t count = 0;
+    Rule rule = Rule::Componentwise;
+    std::string_view code;
+    bool call = false;
+};
+
+/// The math node of `type`; none for another type.
+[[nodiscard]] const MathNode* mathNodeOf(std::string_view type);
+
+/// A math node's inputs, checked, in its code's order, and what its `out`
+/// carries where that is known.
+struct MathInputs {
+    std::array<Operand, 5> inputs;
+    std::size_t count = 0;
+    std::optional<Carried> out;
+};
+
+[[nodiscard]] result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const graph::Node& node);
+
 /// A `multiply` or `add` node's inputs, checked, and what its `out`
 /// carries: their type, or the one not a float when the other is.
 struct Math {
@@ -69,10 +108,6 @@ struct Math {
 
 [[nodiscard]] result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& node);
 
-/// A `sin`, `cos`, or `normalize` node's input, checked (D691): a
-/// normalized one a vec3. Its `out` carries what it does.
-[[nodiscard]] result::Result<Operand> unaryIn(const graph::Document& surface, const graph::Node& node);
-
 /// A `combine3` node's inputs, x, y, and z, checked: each a float, all
 /// given (D691).
 [[nodiscard]] result::Result<std::array<Operand, 3>> combine3In(const graph::Document& surface,
@@ -82,8 +117,9 @@ struct Math {
 /// the presented World's ticks over its tick rate in seconds (ADR-0010).
 [[nodiscard]] result::Status timeIn(const graph::Node& node);
 
-/// A `world_position` node, checked: no params and no inputs (D691).
-[[nodiscard]] result::Status worldPositionIn(const graph::Node& node);
+/// A stream node, `world_position` or `world_normal`, checked: no params
+/// and no inputs (D691, D694).
+[[nodiscard]] result::Status streamIn(const graph::Node& node);
 
 /// A `quality_switch` node's inputs, checked, and what its `out` carries
 /// (D318): `default` given, all of one type where it is known.

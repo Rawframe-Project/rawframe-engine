@@ -40,15 +40,13 @@ using surface_graph::Sampling;
 using surface_graph::separate3In;
 using surface_graph::statesIn;
 using surface_graph::statesOf;
+using surface_graph::streamIn;
 using surface_graph::surfaceNode;
 using surface_graph::Switch;
 using surface_graph::switchIn;
 using surface_graph::timeIn;
 using surface_graph::typeOf;
-using surface_graph::unary;
-using surface_graph::unaryIn;
 using surface_graph::uvIn;
-using surface_graph::worldPositionIn;
 
 /// A literal's numbers, if it is one of the parameter's shape in its
 /// range.
@@ -447,14 +445,12 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
             RAWFRAME_TRY(normalMapIn(surface, node));
         } else if (typeOf(node) == kQualitySwitchType) {
             RAWFRAME_TRY(switchIn(surface, node));
-        } else if (unary(typeOf(node))) {
-            RAWFRAME_TRY(unaryIn(surface, node));
         } else if (typeOf(node) == kCombine3Type) {
             RAWFRAME_TRY(combine3In(surface, node));
         } else if (typeOf(node) == kTimeType) {
             RAWFRAME_TRY(timeIn(node));
-        } else if (typeOf(node) == kWorldPositionType) {
-            RAWFRAME_TRY(worldPositionIn(node));
+        } else if (typeOf(node) == kWorldPositionType || typeOf(node) == kWorldNormalType) {
+            RAWFRAME_TRY(streamIn(node));
         } else {
             RAWFRAME_TRY(sampleIn(surface, node));
         }

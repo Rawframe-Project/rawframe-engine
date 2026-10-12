@@ -231,9 +231,12 @@ inline constexpr std::string_view kSeparate3Type = "rawframe/separate3@1";
 inline constexpr std::string_view kNormalMapType = "rawframe/normal_map@1";
 inline constexpr std::string_view kQualitySwitchType = "rawframe/quality_switch@1";
 /// The vertex stage's and the streams' nodes (D691): the time on a named
-/// timeline, the point's place in the World, and the math that moves it.
+/// timeline, the point's place and normal in the World (D694), and the
+/// math that moves it; the rest of SPEC-0026's math is surface_graph's
+/// table (D694).
 inline constexpr std::string_view kTimeType = "rawframe/time@1";
 inline constexpr std::string_view kWorldPositionType = "rawframe/world_position@1";
+inline constexpr std::string_view kWorldNormalType = "rawframe/world_normal@1";
 inline constexpr std::string_view kSubtractType = "rawframe/subtract@1";
 inline constexpr std::string_view kSinType = "rawframe/sin@1";
 inline constexpr std::string_view kCosType = "rawframe/cos@1";
