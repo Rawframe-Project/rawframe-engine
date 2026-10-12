@@ -26,6 +26,7 @@ using surface_graph::carriedBy;
 using surface_graph::combineIn;
 using surface_graph::compareIn;
 using surface_graph::constantIn;
+using surface_graph::interfaceOf;
 using surface_graph::kBlends;
 using surface_graph::known;
 using surface_graph::kShadings;
@@ -37,6 +38,7 @@ using surface_graph::NormalMap;
 using surface_graph::normalMapIn;
 using surface_graph::Operand;
 using surface_graph::operandOf;
+using surface_graph::parameterIn;
 using surface_graph::sampleIn;
 using surface_graph::Sampling;
 using surface_graph::separate2In;
@@ -420,10 +422,10 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
     if (auto valid = graph::validate(surface, limits); !valid.has_value()) {
         return asMaterial(std::move(valid).error());
     }
-    if (surface.kind != "surface" || surface.interface.kind() != Value::Kind::Object ||
-        !surface.interface.names().empty()) {
-        return invalid("a surface material is of kind surface, its interface empty");
+    if (surface.kind != "surface") {
+        return invalid("a surface material is of kind surface");
     }
+    RAWFRAME_TRY(interfaceOf(surface));
     for (const auto& [kName, kSection] : surface.sections) {
         if (kName != "states") {
             return invalid("a surface material's one section is its states");
@@ -452,6 +454,8 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
             RAWFRAME_TRY(switchIn(surface, node));
         } else if (typeOf(node) == kCombine3Type || typeOf(node) == kCombine2Type || typeOf(node) == kCombine4Type) {
             RAWFRAME_TRY(combineIn(surface, node));
+        } else if (typeOf(node) == kParameterType) {
+            RAWFRAME_TRY(parameterIn(surface, node));
         } else if (typeOf(node) == kSeparate4Type) {
             RAWFRAME_TRY(separate4In(surface, node));
         } else if (typeOf(node) == kCompareType) {

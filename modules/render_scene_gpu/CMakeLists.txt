@@ -56,4 +56,11 @@ if(TARGET rawframe_render_scene_gpu_tests)
     rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
                            FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/facing_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
                            HEADER "facing_graph_shadow_container.h" SYMBOL "kFacingGraphShadow")
+    # A graph's material whose color is its tint parameter's (D708).
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/tinted_graph.scene${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "tinted_graph_scene_container.h" SYMBOL "kTintedGraphScene")
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/tinted_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "tinted_graph_shadow_container.h" SYMBOL "kTintedGraphShadow")
 endif()

@@ -141,6 +141,14 @@ public:
             RAWFRAME_TRY_ASSIGN(const std::string kInText, operandText(kSwizzle.in));
             return "(" + kInText + ")." + kSwizzle.pattern;
         }
+        if (kType == kParameterType) {
+            // Its vector after the material's blob's nine (D708).
+            RAWFRAME_TRY_ASSIGN(const surface_graph::InterfaceInput kInput,
+                                surface_graph::parameterIn(surface_, *kNode));
+            constexpr std::array<std::string_view, 5> kWidths = {"", ".x", ".xy", ".xyz", ""};
+            return "materials[blobOf(" + at_ + ".material) + " + std::to_string(9 + kInput.slot) + "u]" +
+                   std::string{kWidths.at(channelsOf(kInput.carried))};
+        }
         if (kType == kFrontFacingType) {
             // A vertex has no face yet.
             if (at_ == "placed") {
@@ -416,6 +424,14 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
     made.blend = kStates.blend;
     made.alphaCutoff = kStates.alphaCutoff;
     made.doubleSided = kStates.doubleSided;
+    // Each interface input's default in its own vector (D708).
+    RAWFRAME_TRY_ASSIGN(const std::vector<surface_graph::InterfaceInput> kInterface,
+                        surface_graph::interfaceOf(surface));
+    for (const surface_graph::InterfaceInput& kInput : kInterface) {
+        for (std::size_t channel = 0; channel < channelsOf(kInput.carried); ++channel) {
+            made.parameters.at((kInput.slot * 4) + channel) = static_cast<float>(kInput.initial.at(channel));
+        }
+    }
     return made;
 }
 

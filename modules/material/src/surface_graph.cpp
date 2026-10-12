@@ -261,7 +261,7 @@ bool known(const graph::Node& node) {
             *kText == kCombine2Type || *kText == kSeparate2Type || *kText == kSwizzleType ||
             *kText == kVertexColorType || *kText == kViewDirectionType || *kText == kWorldTangentType ||
             *kText == kCompareType || *kText == kConstantType || *kText == kFrontFacingType ||
-            *kText == kCombine4Type || *kText == kSeparate4Type || math(*kText));
+            *kText == kCombine4Type || *kText == kSeparate4Type || *kText == kParameterType || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -555,6 +555,77 @@ result::Result<Operand> constantIn(const graph::Node& node) {
     return made;
 }
 
+result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& surface) {
+    constexpr std::array<std::pair<std::string_view, Carried>, 6> kTypes = {{{"float", Carried::Float},
+                                                                             {"vec2", Carried::Vec2},
+                                                                             {"vec3", Carried::Vec3},
+                                                                             {"color3", Carried::Color3},
+                                                                             {"vec4", Carried::Vec4},
+                                                                             {"color4", Carried::Color4}}};
+    const Value& kInterface = surface.interface;
+    std::vector<InterfaceInput> made;
+    if (kInterface.kind() != Value::Kind::Object || kInterface.names().size() > 1 ||
+        (kInterface.names().size() == 1 && kInterface.names()[0] != "inputs")) {
+        return invalid("a surface's interface is its inputs alone, or nothing");
+    }
+    if (kInterface.names().empty()) {
+        return made;
+    }
+    const Value& kInputs = kInterface.items()[0];
+    if (kInputs.kind() != Value::Kind::Object || kInputs.names().empty() || kInputs.names().size() > 8) {
+        return invalid("a surface's interface inputs are one to eight");
+    }
+    const graph::Document kNone;
+    for (std::size_t at = 0; at < kInputs.names().size(); ++at) {
+        const std::string& kName = kInputs.names()[at];
+        const bool kNamed =
+            !kName.empty() && kName.size() <= 64 && (kName[0] < '0' || kName[0] > '9') &&
+            std::ranges::all_of(kName, [](char letter) {
+                return (letter >= 'a' && letter <= 'z') || (letter >= '0' && letter <= '9') || letter == '_';
+            });
+        const Value& kInput = kInputs.items()[at];
+        const Value* kDefault = kInput.kind() == Value::Kind::Object ? kInput.find("default") : nullptr;
+        const Value* kType = kInput.kind() == Value::Kind::Object ? kInput.find("type") : nullptr;
+        if (!kNamed || kDefault == nullptr || kType == nullptr || kType->text() == nullptr ||
+            kInput.names().size() != 2 || kInput.names()[0] != "default") {
+            return invalid("an interface input is named in lower case, its default and its type given");
+        }
+        const auto kFound =
+            std::ranges::find(kTypes, std::string_view{*kType->text()}, &std::pair<std::string_view, Carried>::first);
+        if (kFound == kTypes.end()) {
+            return *kType->text() == "bool" || *kType->text() == "int"
+                       ? unsupported("an interface input of a bool or an int waits for them in generation 1")
+                       : invalid("an interface input's type is one of the graph's");
+        }
+        // Its default read as an input's literal is: three or four numbers
+        // read as a color either way.
+        RAWFRAME_TRY_ASSIGN(const Operand kValue, operandOf(kNone, *kDefault));
+        const Carried kRead = kFound->second == Carried::Vec3   ? Carried::Color3
+                              : kFound->second == Carried::Vec4 ? Carried::Color4
+                                                                : kFound->second;
+        if (kValue.carried != kRead) {
+            return invalid("an interface input's default is of its type");
+        }
+        made.push_back(InterfaceInput{.name = kName, .carried = kFound->second, .initial = kValue.literal, .slot = at});
+    }
+    return made;
+}
+
+result::Result<InterfaceInput> parameterIn(const graph::Document& surface, const graph::Node& node) {
+    constexpr std::array<std::string_view, 1> kParams = {"name"};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, {}));
+    const Value* kName = kParts.first->find("name");
+    if (kName == nullptr || kName->text() == nullptr) {
+        return invalid("a parameter node names its interface input");
+    }
+    RAWFRAME_TRY_ASSIGN(const std::vector<InterfaceInput> kInputs, interfaceOf(surface));
+    const auto kFound = std::ranges::find(kInputs, std::string_view{*kName->text()}, &InterfaceInput::name);
+    if (kFound == kInputs.end()) {
+        return invalid("a parameter node names one of the surface's interface inputs");
+    }
+    return *kFound;
+}
+
 result::Result<Compare> compareIn(const graph::Document& surface, const graph::Node& node) {
     constexpr std::array<std::string_view, 1> kParams = {"operator"};
     constexpr std::array<std::string_view, 2> kInputs = {"a", "b"};
@@ -759,6 +830,10 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
     if (kType == kCompareType && from.output == "out") {
         RAWFRAME_TRY(compareIn(surface, *kSource));
         return std::optional{Carried::Bool};
+    }
+    if (kType == kParameterType && from.output == "out") {
+        RAWFRAME_TRY_ASSIGN(const InterfaceInput kInput, parameterIn(surface, *kSource));
+        return std::optional{kInput.carried};
     }
     if (kType == kFrontFacingType && from.output == "front") {
         RAWFRAME_TRY(streamIn(*kSource));

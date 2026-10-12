@@ -1,0 +1,38 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {
+    "inputs": {
+      "tint": {
+        "default": [
+          0,
+          1,
+          0
+        ],
+        "type": "color3"
+      }
+    }
+  },
+  "graph": {
+    "2f00000000000041": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "tint"
+      },
+      "inputs": {}
+    },
+    "2f00000000000042": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "base_color": {
+          "node": "2f00000000000041",
+          "output": "out"
+        }
+      }
+    }
+  },
+  "states": {
+    "shading": "unlit"
+  }
+}

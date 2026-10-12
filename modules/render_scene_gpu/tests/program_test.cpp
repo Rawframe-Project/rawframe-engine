@@ -15,6 +15,8 @@
 #include "generated/faded_shadow_container.h"
 #include "generated/rising_graph_scene_container.h"
 #include "generated/rising_graph_shadow_container.h"
+#include "generated/tinted_graph_scene_container.h"
+#include "generated/tinted_graph_shadow_container.h"
 #include "rawframe/material/material.h"
 #include "rawframe/render/device.h"
 #include "rawframe/render/frame.h"
@@ -481,4 +483,48 @@ RAWFRAME_TEST(AMaterialKnowsTheFaceItIsDrawnOn) {
     // Tone mapped, so neither is pure: each well past its other channels.
     RAWFRAME_EXPECT(kAhead[1] > kAhead[0] + 50 && kAhead[1] > kAhead[2] + 50);
     RAWFRAME_EXPECT(kAround[0] > kAround[1] + 50 && kAround[0] > kAround[2] + 50);
+}
+
+RAWFRAME_TEST(AMaterialReadsItsParametersFromItsBlob) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // tinted.material as rawframe.material writes it (tinted_graph.slang,
+    // D708), unlit, its color its tint parameter's: the vector after its
+    // blob's nine, green as its default says, then red as an instance
+    // would say. The material is the second of three, so the stride
+    // between blobs is read too.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    SceneDraw shown = box(4, 1.5F, {1, 1, 1, 1});
+    shown.material = 1;
+    frame.draws = {shown};
+    frame.programs = {nullptr, programOf(kTintedGraphScene, kTintedGraphShadow, material::Shading::Unlit), nullptr};
+    const auto kCenter = [&](std::array<float, 3> tint) -> std::array<int, 3> {
+        render_scene::MaterialBlob states = render_scene::noMaterial();
+        states[15] = 1;
+        std::ranges::copy(tint, states.begin() + material::kBlobFloats);
+        render_scene::MaterialBlob other = render_scene::noMaterial();
+        std::ranges::copy(std::array<float, 3>{0, 0, 1}, other.begin() + material::kBlobFloats);
+        frame.materials = {render_scene::noMaterial(), states, other};
+        const auto kPixels =
+            drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
+        return kPixels.has_value() ? at(*kPixels, 32, 32) : std::array<int, 3>{};
+    };
+    const std::array<int, 3> kGreen = kCenter({0, 1, 0});
+    const std::array<int, 3> kRed = kCenter({1, 0, 0});
+    std::printf("default %d %d %d, overridden %d %d %d\n", kGreen[0], kGreen[1], kGreen[2], kRed[0], kRed[1], kRed[2]);
+    // Tone mapped, so neither is pure: each well past its other channels.
+    RAWFRAME_EXPECT(kGreen[1] > kGreen[0] + 50 && kGreen[1] > kGreen[2] + 50);
+    RAWFRAME_EXPECT(kRed[0] > kRed[1] + 50 && kRed[0] > kRed[2] + 50);
 }

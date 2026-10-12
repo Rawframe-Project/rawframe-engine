@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 namespace rawframe::material::surface_graph {
 
@@ -164,6 +165,24 @@ struct Swizzle {
 /// bool, a vec2, a vec3, or a color3, its value of that shape; an int, a
 /// vec4, or a color4 waits for those types. Its `out` is the value.
 [[nodiscard]] result::Result<Operand> constantIn(const graph::Node& node);
+
+/// One of a surface's interface inputs (SPEC-0028's interface, D708): its
+/// name, its type, and its default, held in the parameters' vector `slot`.
+struct InterfaceInput {
+    std::string_view name;
+    Carried carried = Carried::Float;
+    std::array<double, 4> initial{};
+    std::size_t slot = 0;
+};
+
+/// The document's interface, checked: none, or `inputs`, each named as a
+/// Kest name is, eight at most, its `default` and its `type` (a float, a
+/// vector, or a color), in name order, a slot each in that order.
+[[nodiscard]] result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& surface);
+
+/// A `parameter` node's input, checked: the interface input its `name`
+/// param names, its `out` of that input's type.
+[[nodiscard]] result::Result<InterfaceInput> parameterIn(const graph::Document& surface, const graph::Node& node);
 
 /// A `compare` node's operator and inputs, checked (D697): `less`,
 /// `less_equal`, `greater`, `greater_equal`, `equal`, or `not_equal`, over

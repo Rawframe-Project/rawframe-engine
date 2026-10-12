@@ -8,11 +8,14 @@
 #include "generated/facing_material.h"
 #include "generated/rising_graph.h"
 #include "generated/rising_material.h"
+#include "generated/tinted_graph.h"
+#include "generated/tinted_material.h"
 #include "rawframe/material/errors.h"
 #include "rawframe/material/material.h"
 #include "rawframe/test/test.h"
 #include "surface_documents.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -494,4 +497,86 @@ RAWFRAME_TEST(AFourWideValueIsCombinedSeparatedAndSwizzled) {
     const auto kLength = generateSlang(kMeasured);
     RAWFRAME_EXPECT(kLength.has_value() && kLength->source.contains("length(") &&
                     kLength->source.contains("float4((point.time.x + point.time.y), 1.0, 2.0, 3.0)"));
+}
+
+RAWFRAME_TEST(AParameterIsReadFromItsMaterialsVectors) {
+    // D708: interface inputs in name order, a vector each after the blob's
+    // nine, their defaults the generated material's parameters; read in
+    // either stage.
+    const auto kThree = [](double x, double y, double z) {
+        return Value::array({Value::real(x), Value::real(y), Value::real(z)});
+    };
+    const auto kInput = [](std::string_view type, Value initial) {
+        return objectOf({{"default", std::move(initial)}, {"type", Value::string(std::string{type})}});
+    };
+    const auto kTinted = [&](Value inputs, std::string_view tint = "tint") {
+        graph::Document made = surfaceOf(
+            objectOf({{"base_color", from(kPhase, "out")}, {"position_offset", from(kLifted, "out")}}),
+            {nodeOf(kAxes, kParameterType, objectOf({{"name", Value::string(std::string{tint})}}), Value::object()),
+             nodeOf(kPhase,
+                    "rawframe/multiply@1",
+                    Value::object(),
+                    objectOf({{"a", from(kAxes, "out")}, {"b", from(kWave, "out")}})),
+             nodeOf(kWave, kParameterType, objectOf({{"name", Value::string("strength")}}), Value::object()),
+             combineOf(kLifted, Value::real(0), from(kWave, "out"), Value::real(0))});
+        made.interface = objectOf({{"inputs", std::move(inputs)}});
+        return made;
+    };
+    const graph::Document kMade = kTinted(
+        objectOf({{"strength", kInput("float", Value::real(2))}, {"tint", kInput("color3", kThree(1, 0.5, 0.25))}}));
+    RAWFRAME_EXPECT(validateSurface(kMade).has_value());
+    const auto kWritten = generateSlang(kMade);
+    RAWFRAME_EXPECT(kWritten.has_value() && kWritten->source.contains("materials[blobOf(point.material) + 10u].xyz") &&
+                    kWritten->source.contains("materials[blobOf(point.material) + 9u].x") &&
+                    kWritten->source.contains("materials[blobOf(placed.material) + 9u].x"));
+    RAWFRAME_EXPECT(kWritten.has_value() && kWritten->parameters[0] == 2 && kWritten->parameters[1] == 0 &&
+                    kWritten->parameters[4] == 1 && kWritten->parameters[5] == 0.5F &&
+                    kWritten->parameters[6] == 0.25F);
+    const auto kHash = semanticHash(kMade);
+    const auto kStronger = semanticHash(kTinted(
+        objectOf({{"strength", kInput("float", Value::real(3))}, {"tint", kInput("color3", kThree(1, 0.5, 0.25))}})));
+    RAWFRAME_EXPECT(kHash.has_value() && kStronger.has_value() && *kHash != *kStronger);
+    // A parameter naming no input; an input of a bool, which waits; a
+    // default not of its type; a name not in lower case; nine inputs; an
+    // interface with outputs.
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kTinted(objectOf({{"strength", kInput("float", Value::real(2))},
+                                                                  {"tint", kInput("color3", kThree(1, 1, 1))}}),
+                                                        "shade")),
+                                MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kTinted(objectOf({{"strength", kInput("float", Value::real(2))},
+                                                                  {"tint", kInput("color3", kThree(1, 1, 1))},
+                                                                  {"wet", kInput("bool", Value::boolean(true))}}))),
+                                MaterialError::Unsupported));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kTinted(objectOf({{"strength", kInput("float", Value::real(2))},
+                                                                  {"tint", kInput("color3", pair(1, 1))}}))),
+                                MaterialError::Invalid));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kTinted(objectOf({{"Strength", kInput("float", Value::real(2))},
+                                                                  {"strength", kInput("float", Value::real(2))},
+                                                                  {"tint", kInput("color3", kThree(1, 1, 1))}}))),
+                                MaterialError::Invalid));
+    std::vector<std::pair<std::string, Value>> many = {{"strength", kInput("float", Value::real(2))},
+                                                       {"tint", kInput("color3", kThree(1, 1, 1))}};
+    for (const char kLetter : std::string_view{"uvwxyzq"}) {
+        many.emplace_back(std::string{"u"} + kLetter, kInput("float", Value::real(0)));
+    }
+    std::ranges::sort(many, {}, &std::pair<std::string, Value>::first);
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kTinted(objectOf(std::move(many)))), MaterialError::Invalid));
+    graph::Document outputs = kMade;
+    outputs.interface = objectOf({{"inputs", kMade.interface.items()[0]}, {"outputs", Value::object()}});
+    RAWFRAME_EXPECT(refusedWith(validateSurface(outputs), MaterialError::Invalid));
+}
+
+RAWFRAME_TEST(AGraphColoredByItsParameterIsWrittenAsTheSlangTheScenesTestsDraw) {
+    // tinted.material's color is its tint parameter's, green unless an
+    // instance says otherwise (D708); the scene's tests draw what it is
+    // written as, tinted_graph.slang, word for word.
+    const std::string_view kDocument{reinterpret_cast<const char*>(kTintedMaterial.data()), kTintedMaterial.size()};
+    const auto kRead = readMaterial(kDocument);
+    RAWFRAME_EXPECT(kRead.has_value());
+    if (!kRead.has_value()) {
+        return;
+    }
+    const auto kWritten = generateSlang(*kRead);
+    const std::string_view kGolden{reinterpret_cast<const char*>(kTintedGraph.data()), kTintedGraph.size()};
+    RAWFRAME_EXPECT(kWritten.has_value() && kWritten->source == kGolden && kWritten->parameters[1] == 1);
 }

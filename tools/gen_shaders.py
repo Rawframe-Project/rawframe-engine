@@ -58,7 +58,8 @@ DRAWN_WITH = {"scene": ("vs", ("fs", "fsDecaled", "cut", "normal", "cutNormal"))
 # built from tests/materials/NAME.slang with each linked container, as
 # `--material` builds a game's, into tests/generated/NAME.CONTAINER.
 TEST_MATERIALS = (("render_scene_gpu", "checker"), ("render_scene_gpu", "faded"), ("render_scene_gpu", "faded_graph"),
-                  ("render_scene_gpu", "rising_graph"), ("render_scene_gpu", "facing_graph"))
+                  ("render_scene_gpu", "rising_graph"), ("render_scene_gpu", "facing_graph"),
+                  ("render_scene_gpu", "tinted_graph"))
 # Each container: its module and its name.
 CONTAINERS = (
     ("render", "display"),
