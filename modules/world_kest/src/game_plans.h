@@ -14,6 +14,8 @@
 
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace rawframe::world_kest {
@@ -34,5 +36,11 @@ namespace rawframe::world_kest {
 /// the radius it entered at. None for a game without an interest line.
 [[nodiscard]] result::Result<std::optional<world_replication::InterestSettings>>
 interestOf(const GameDescription& game, std::span<const kest::TypeLayout> layouts);
+
+/// The identities of `names`, each a component the game replicates: its
+/// interpolated components, or those kept to their holder (D673), `why`
+/// the refusal of one it does not replicate.
+[[nodiscard]] result::Result<std::vector<schema::ComponentTypeId>>
+replicatedAmong(const GameDescription& game, std::span<const std::string> names, std::string_view why);
 
 } // namespace rawframe::world_kest

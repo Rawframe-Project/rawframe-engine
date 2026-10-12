@@ -72,6 +72,11 @@ public:
     virtual void deliverCommands(std::span<const ReceivedCommand> commands) noexcept {
         static_cast<void>(commands);
     }
+    /// The replicated components sent only to the connection whose player
+    /// holds them (D673); empty for a game that keeps none to its holder.
+    [[nodiscard]] virtual std::span<const schema::ComponentTypeId> ownComponents() const noexcept {
+        return {};
+    }
     /// The components a client shows remote entities' values of between
     /// states; empty for a game that shows every state as it arrives.
     [[nodiscard]] virtual std::span<const schema::ComponentTypeId> interpolatedComponents() const noexcept = 0;

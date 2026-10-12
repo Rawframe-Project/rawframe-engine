@@ -117,7 +117,8 @@ public:
                     .presence = presence,
                     .predicted = {plan->predictedComponents().begin(), plan->predictedComponents().end()},
                     .captureDivergences = kCapture,
-                    .commandSizes = {plan->commandSizes().begin(), plan->commandSizes().end()}}));
+                    .commandSizes = {plan->commandSizes().begin(), plan->commandSizes().end()},
+                    .own = {plan->ownComponents().begin(), plan->ownComponents().end()}}));
         return simulation_->addSystems(*server_);
     }
 

@@ -69,4 +69,21 @@ interestOf(const GameDescription& game, std::span<const kest::TypeLayout> layout
     return std::optional{std::move(settings)};
 }
 
+result::Result<std::vector<schema::ComponentTypeId>>
+replicatedAmong(const GameDescription& game, std::span<const std::string> names, std::string_view why) {
+    std::vector<schema::ComponentTypeId> made;
+    for (const std::string& name : names) {
+        const auto kComponent = std::ranges::find(game.components, name, &GameComponent::name);
+        if (!std::ranges::contains(game.replicated, name) || kComponent == game.components.end()) {
+            return std::unexpected<result::Error>{
+                result::fail(
+                    result::ErrorClass::InvalidArgument, kWorldKestDomain, code(WorldKestError::BadGameLine), why)
+                    .error()
+                    .withContext("name", name)};
+        }
+        made.push_back(kComponent->id);
+    }
+    return made;
+}
+
 } // namespace rawframe::world_kest

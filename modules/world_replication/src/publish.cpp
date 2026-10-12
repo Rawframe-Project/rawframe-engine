@@ -4,7 +4,8 @@
 // scope kept every tick (D204).
 // Each connection looks only at the interest cells around its player and at
 // what it already holds, so its work follows its interest, not the World
-// (D209).
+// (D209). A component the game keeps to its holder goes to that player's
+// connection alone (D673).
 
 #include "rawframe/world_replication/checksum.h"
 #include "server_state.h"
@@ -446,6 +447,10 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         held.replicas.resize(settings.table.components.size());
         for (std::size_t kIndex = valuesAt[entity.slot]; kIndex != valuesAt[entity.slot + 1]; ++kIndex) {
             const PresentValue& value = present[kIndex];
+            // Another's own values are never this connection's (D673).
+            if (!kPlayer && ownOnly[value.component] != 0) {
+                continue;
+            }
             Replica& replica = held.replicas[value.component];
             // An entity it names goes by this connection's name for it.
             const ComponentCodec& codec = settings.table.components[value.component];

@@ -123,6 +123,12 @@ struct ServerReplicationSettings {
     /// the four ticks a client late by a burst catches up at once. Past
     /// them each is dropped unread and counted.
     std::size_t commandsPerTick = 32;
+    /// Replicated components sent only to the connection whose player holds
+    /// them, never to another (D673; SPEC-0010's visibility, held by the
+    /// replication projection): a player's input, a tracked pose in it,
+    /// reaches no other client unless the game makes something of it that
+    /// replicates (ADR-0081's pose visibility, off unless the server says).
+    std::vector<schema::ComponentTypeId> own;
 };
 
 /// SPEC-0041's `prediction_divergence`: a connection's checksum of its

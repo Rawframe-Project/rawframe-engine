@@ -46,6 +46,42 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
     RAWFRAME_EXPECT(scenario.mirrored() == 3);
 }
 
+RAWFRAME_TEST(AComponentKeptToItsHolderReachesNoOtherConnection) {
+    // D673 (ADR-0081's pose visibility): the input is replicated, so the
+    // client hears its own; kept to its holder, another entity's is never
+    // sent, though the entity and its other values are, where without
+    // `own` it is.
+    for (const bool kKept : {true, false}) {
+        Scenario scenario{
+            {.latency = MonotonicDuration::fromMilliseconds(20)},
+            {.own = kKept ? std::vector{Steer::kComponentTypeId} : std::vector<schema::ComponentTypeId>{}}};
+        const auto kPosition = *scenario.schema->key<Position>();
+        const auto kSteer = *scenario.schema->key<Steer>();
+        const world::EntityHandle kAnother = *scenario.serverWorld.create();
+        RAWFRAME_EXPECT(scenario.serverWorld.insert(kAnother, kPosition, Position{5, 0}).has_value() &&
+                        scenario.serverWorld.insert(kAnother, kSteer, Steer{0.25F, 0.75F}).has_value());
+        for (int step = 0; step < 60; ++step) {
+            scenario.step(Steer{1, 0.5F});
+        }
+        RAWFRAME_EXPECT(scenario.client->admitted() && scenario.mirrored() == 2);
+        const Steer* own = scenario.clientWorld.get(scenario.client->owned(), kSteer);
+        RAWFRAME_EXPECT(own != nullptr && own->dx == 1 && own->dy == 0.5F);
+        std::size_t others = 0;
+        auto query = world::Query<world::Read<Position>>::resolve(*scenario.schema);
+        query->forEach(scenario.clientWorld, [&](world::EntityHandle entity, const Position& position) {
+            if (entity == scenario.client->owned()) {
+                return;
+            }
+            ++others;
+            const Steer* heard = scenario.clientWorld.get(entity, kSteer);
+            // Its position is heard either way, moving as it steers.
+            RAWFRAME_EXPECT(position.x > 5);
+            RAWFRAME_EXPECT(kKept ? heard == nullptr : heard != nullptr && heard->dx == 0.25F && heard->dy == 0.75F);
+        });
+        RAWFRAME_EXPECT(others == 1);
+    }
+}
+
 RAWFRAME_TEST(AConnectionAdmittedAfterTheStoppingNoticeIsToldToo) {
     // SPEC-0012's stopping notice, asked for each iteration a server drains
     // (D585): a connection a tick admits after the first asking hears it

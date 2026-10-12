@@ -542,18 +542,20 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.presentation.push_back(std::move(presentation));
         } else if (kKeyword == "replicate" || kKeyword == "player" || kKeyword == "predict" ||
-                   kKeyword == "interpolate" || kKeyword == "nearby") {
+                   kKeyword == "interpolate" || kKeyword == "nearby" || kKeyword == "own") {
             std::vector<std::string>& into =
                 kKeyword == "replicate"
                     ? game.replicated
                     : (kKeyword == "player"
                            ? game.player
-                           : (kKeyword == "predict" ? game.predicted
-                                                    : (kKeyword == "nearby" ? game.nearby : game.interpolated)));
+                           : (kKeyword == "predict"
+                                  ? game.predicted
+                                  : (kKeyword == "nearby" ? game.nearby
+                                                          : (kKeyword == "own" ? game.own : game.interpolated))));
             if (kWords.size() < 2) {
                 return badLine(number,
                                WorldKestError::BadGameLine,
-                               "a replicate, player, predict, nearby, or interpolate line names components");
+                               "a replicate, player, predict, nearby, interpolate, or own line names components");
             }
             for (std::size_t at = 1; at < kWords.size(); ++at) {
                 into.emplace_back(kWords[at]);

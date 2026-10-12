@@ -165,6 +165,8 @@ struct Options {
     MonotonicDuration stepLength = MonotonicDuration::fromMilliseconds(16);
     /// The game's commands' sizes; the command lane is declared with any.
     std::vector<std::size_t> commandSizes;
+    /// Components sent to their holder's connection alone (D673).
+    std::vector<schema::ComponentTypeId> own;
 };
 
 inline std::vector<network::EventLaneDeclaration> lanesFor(const Options& options) {
@@ -214,7 +216,8 @@ struct Scenario {
              .interest = std::move(options.interest),
              .statePeriod = options.statePeriod,
              .stateBytesPerPublish = options.stateBytesPerPublish,
-             .commandSizes = options.commandSizes});
+             .commandSizes = options.commandSizes,
+             .own = std::move(options.own)});
         std::vector<world::SystemDeclaration> declarations;
         RAWFRAME_EXPECT(server->declareSystems(*schema, declarations).has_value());
         move = std::make_unique<Move>(*schema);

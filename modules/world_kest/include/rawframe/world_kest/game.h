@@ -50,7 +50,10 @@
 // lists the
 // replicated components a client shows other entities' values of between
 // the states it receives, a little in the past, rather than as each arrives.
-// An `interest` line makes what each connection is sent spatial: an entity
+// `own` lists replicated components sent only to the connection whose
+// player holds them, never to another's (D673): a player's input, whose
+// tracked pose then reaches no other client but as what the game makes of
+// it. An `interest` line makes what each connection is sent spatial: an entity
 // whose component's coordinate fields lie within the radius of the player's
 // is sent, one without the component is sent to every connection, and the
 // player always is:
@@ -607,6 +610,10 @@ struct GameDescription {
     std::vector<std::string> nearby;
     /// Components shown between states on every entity but the player's.
     std::vector<std::string> interpolated;
+    /// Replicated components sent only to the connection whose player
+    /// holds them (`own`, D673): a player's input, say, whose tracked pose
+    /// no other client then sees (ADR-0081).
+    std::vector<std::string> own;
     std::vector<GameEntityField> entityFields;
     std::optional<GameInterest> interest;
     std::optional<GamePhysics> physics;

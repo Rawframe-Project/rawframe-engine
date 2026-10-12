@@ -102,6 +102,9 @@ struct ReplicationServer::State {
     std::vector<std::byte> named;
     /// Whether each table component's codec names entities, known once.
     std::vector<std::uint8_t> naming;
+    /// Whether each table component goes to its holder's connection alone
+    /// (D673).
+    std::vector<std::uint8_t> ownOnly;
     /// Every positioned entity, when interest is spatial, and where each is
     /// in it by slot.
     struct Located {

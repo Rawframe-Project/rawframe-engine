@@ -2,6 +2,7 @@
 // input: every sample game's description, mutated a line or a byte at a
 // time, is read or refused with the line that refused it, never half read.
 
+#include "../src/game_plans.h"
 #include "game_harness.h"
 #include "rawframe/test/mutations.h"
 #include "rawframe/test/scratch.h"
@@ -75,7 +76,8 @@ RAWFRAME_TEST(PredictionIsDeclaredByLine) {
                           "system a.other simulation other predicted write a.position\n"
                           "system a.server simulation serve read a.position\n"
                           "predict a.position\n"
-                          "interpolate a.position\n");
+                          "interpolate a.position\n"
+                          "own a.position\n");
     RAWFRAME_EXPECT(game.has_value());
     if (!game.has_value()) {
         return;
@@ -84,8 +86,18 @@ RAWFRAME_TEST(PredictionIsDeclaredByLine) {
     RAWFRAME_EXPECT(game->systems[0].columns.size() == 1 && game->systems[1].columns.size() == 1);
     RAWFRAME_EXPECT((game->predicted == std::vector<std::string>{"a.position"}));
     RAWFRAME_EXPECT((game->interpolated == std::vector<std::string>{"a.position"}));
+    RAWFRAME_EXPECT((game->own == std::vector<std::string>{"a.position"}));
     RAWFRAME_EXPECT(refusedAt("program p.kest\npredict\n", WorldKestError::BadGameLine, "2"));
     RAWFRAME_EXPECT(refusedAt("program p.kest\ninterpolate\n", WorldKestError::BadGameLine, "2"));
+    RAWFRAME_EXPECT(refusedAt("program p.kest\nown\n", WorldKestError::BadGameLine, "2"));
+    // Kept to its holder only where it replicates (D673).
+    const std::array<std::string, 1> kOwn = {"a.position"};
+    const auto kUnreplicated = replicatedAmong(*game, kOwn, "kept");
+    RAWFRAME_EXPECT(!kUnreplicated.has_value() && kUnreplicated.error().description() == "kept");
+    game->replicated.emplace_back("a.position");
+    const auto kReplicated = replicatedAmong(*game, kOwn, "kept");
+    RAWFRAME_EXPECT(kReplicated.has_value() && kReplicated->size() == 1 &&
+                    kReplicated->front() == game->components[0].id);
 }
 
 RAWFRAME_TEST(ControlsAreDeclaredByLine) {

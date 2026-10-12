@@ -175,16 +175,9 @@ public:
         RAWFRAME_TRY(planPhysics());
         // A process that plays elsewhere animates the World it mirrors.
         RAWFRAME_TRY_ASSIGN(animation_, animationSettings(files, layouts_));
-        for (const std::string& name : game_.interpolated) {
-            if (std::ranges::find(game_.replicated, name) == game_.replicated.end()) {
-                return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
-                                                             WorldKestError::BadGameLine,
-                                                             "an interpolated component replicates")
-                                                          .error()
-                                                          .withContext("name", name)};
-            }
-            interpolated_.push_back(componentNamed(name)->id);
-        }
+        RAWFRAME_TRY_ASSIGN(interpolated_,
+                            replicatedAmong(game_, game_.interpolated, "an interpolated component replicates"));
+        RAWFRAME_TRY_ASSIGN(own_, replicatedAmong(game_, game_.own, "a component kept to its holder replicates"));
         RAWFRAME_TRY_ASSIGN(persistence_, planPersistence(game_, layouts_));
         // Both sides declare the game's message lane, so a process that
         // plays elsewhere measures the messages too (D266). These systems,
@@ -564,6 +557,9 @@ public:
     std::span<const schema::ComponentTypeId> interpolatedComponents() const noexcept override {
         return interpolated_;
     }
+    std::span<const schema::ComponentTypeId> ownComponents() const noexcept override {
+        return own_;
+    }
     std::size_t messageRecord() const noexcept override {
         return messages_ != nullptr ? messages_->largest() : 0;
     }
@@ -936,6 +932,7 @@ private:
     std::vector<std::vector<std::size_t>> entityOffsets_;
     std::optional<world_replication::InterestSettings> interest_;
     std::vector<schema::ComponentTypeId> interpolated_;
+    std::vector<schema::ComponentTypeId> own_;
     std::optional<physics2d::Physics2DSettings> physics2d_;
     std::optional<physics3d::Physics3DSettings> physics3d_;
     PhysicsDoorContext doorContext_;

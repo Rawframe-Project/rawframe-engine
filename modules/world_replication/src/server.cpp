@@ -426,6 +426,14 @@ result::Result<std::unique_ptr<ReplicationServer>> ReplicationServer::create(net
     state->settings = std::move(settings);
     for (const ComponentCodec& codec : state->settings.table.components) {
         state->naming.push_back(codec.namesEntities() ? 1 : 0);
+        state->ownOnly.push_back(std::ranges::contains(state->settings.own, codec.component) ? 1 : 0);
+    }
+    for (const schema::ComponentTypeId& component : state->settings.own) {
+        if (!std::ranges::contains(state->settings.table.components, component, &ComponentCodec::component)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          ReplicationError::Malformed,
+                          "a component sent to its own player alone is replicated");
+        }
     }
     for (const schema::ComponentTypeId& component : state->settings.predicted) {
         const auto& kTable = state->settings.table.components;
