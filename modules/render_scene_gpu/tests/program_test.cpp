@@ -873,3 +873,73 @@ RAWFRAME_TEST(AGlassLetsTheSunThroughFromBehindIt) {
     RAWFRAME_EXPECT(kThrough[0] > 100 && kThrough[1] > 100 && kThrough[2] > 100);
     RAWFRAME_EXPECT(kEdge[0] + kEdge[1] + kEdge[2] + 150 < kThrough[0] + kThrough[1] + kThrough[2]);
 }
+
+RAWFRAME_TEST(ACoatReflectsTheProbesThatHoldIt) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A sky's picture red all round and a room's green all round, each a
+    // cube of one level.
+    constexpr std::uint64_t kSky = 0x51c7e0a2b9d34f68ULL;
+    constexpr std::uint64_t kRoom = 0x7c2d5e18a94b03f1ULL;
+    const auto kCubeOf = [](float red, float green) {
+        texture::Texture cube{.format = texture::Format::Rgba16Float, .faces = 6};
+        texture::Level level{.width = 4, .height = 4};
+        for (std::uint32_t texel = 0; texel < 6 * 16; ++texel) {
+            for (const float kChannel : {red, green, 0.0F, 1.0F}) {
+                const std::uint16_t kHalf = texture::halfOf(kChannel);
+                level.bytes.push_back(static_cast<std::byte>(kHalf & 0xFFU));
+                level.bytes.push_back(static_cast<std::byte>(kHalf >> 8U));
+            }
+        }
+        cube.levels.push_back(std::move(level));
+        return std::make_shared<const texture::Texture>(std::move(cube));
+    };
+    const std::shared_ptr<const texture::Texture> kRed = kCubeOf(1, 0);
+    const std::shared_ptr<const texture::Texture> kGreen = kCubeOf(0, 1);
+    const render_scene_gpu::TextureSource kTextures = [&](std::uint64_t id) -> std::shared_ptr<const texture::Texture> {
+        return id == kSky ? kRed : id == kRoom ? kGreen : nullptr;
+    };
+    // A black ball under coated.material's smooth coat (coated_graph.slang,
+    // D716) in a green room, under a red sky: its coat reflects the room
+    // that holds it (D725), as its base does, and not the sky beyond it.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
+    frame.lights.sky = {20000, 20000, 20000};
+    frame.lights.environment = kSky;
+    SceneDraw ball = box(4, 1.5F, {0, 0, 0, 1}, render_scene::kSphere);
+    ball.material = 1;
+    frame.draws = {ball};
+    frame.materials = {render_scene::noMaterial(), render_scene::noMaterial()};
+    frame.probes = {
+        render_scene::SceneProbe{.position = {0, 0, -4}, .half = {3, 3, 3}, .environment = kRoom, .intensity = 20000}};
+    frame.clusters = {.tilesX = 1, .tilesY = 1, .slices = 1};
+    frame.clusters.ranges = {0, 0, 0, 1};
+    frame.clusters.indices = {0};
+    frame.programs = {nullptr, programOf(kCoatedGraphScene, kCoatedGraphShadow, material::Shading::Lit)};
+    // Its probe's pipeline, then its program's, each made as the device
+    // answers (D337, D485).
+    static_cast<void>(
+        drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::probesDrawn, kTextures));
+    const auto kCoated = drawnWith(
+        **framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn, kTextures);
+    RAWFRAME_EXPECT(kCoated.has_value());
+    if (!kCoated.has_value()) {
+        return;
+    }
+    const std::array<int, 3> kMiddle = at(*kCoated, kSide / 2, kSide / 2);
+    std::printf("a coat in a green room under a red sky: %d %d %d\n", kMiddle[0], kMiddle[1], kMiddle[2]);
+    RAWFRAME_EXPECT(kMiddle[1] > kMiddle[0] + 30 && kMiddle[0] < 20);
+}

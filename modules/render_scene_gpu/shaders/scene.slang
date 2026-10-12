@@ -829,6 +829,34 @@ float3 projected(Probe probe, float3 placed, float3 mirrored)
     return local + mirrored * min(min(far.x, far.y), far.z);
 }
 
+// What the cluster `range`'s probes that hold `placed` reflect along
+// `mirrored` (D340), the first a point takes first: each its picture's mip
+// for `roughness` (of eight), projected onto its box, over what the ones
+// before left, fading out across a tenth of its size past its box; and in
+// `left` what they leave to the sky. The base's reflection and a coat's
+// each read them along their own (D725).
+float3 probedAlong(uint4 range, float3 placed, float3 mirrored, float roughness, out float left)
+{
+    float3 probed = float3(0.0);
+    left = 1.0;
+    const uint firstProbe = range.x + range.y + range.z;
+    for (uint each = firstProbe; each < firstProbe + range.w && left > 0.0; ++each)
+    {
+        const Probe probe = probes[indices[each]];
+        const float3 past = (abs(placed - probe.place.xyz) - probe.extent.xyz) / (0.1 * probe.extent.xyz);
+        const float holds = clamp(1.0 - max(max(past.x, past.y), past.z), 0.0, 1.0);
+        if (probe.place.w < 0.0 || holds <= 0.0)
+        {
+            continue;
+        }
+        const float3 toward = projected(probe, placed, mirrored);
+        probed += left * holds * probe.light.rgb *
+                  probeAtlas.SampleLevel(environmentSampler, float4(toward, probe.place.w), roughness * 7.0).rgb;
+        left *= 1.0 - holds;
+    }
+    return probed;
+}
+
 struct Lit
 {
     float4 color : SV_Target0;
@@ -986,29 +1014,11 @@ Lit shaded(Corner corner, bool decaled, bool front)
         around = frame.sky.rgb * irradianceAt(normal);
     }
     // Along the reflection, the cluster's probes that hold the point
-    // (D340), the first a point takes first: each its picture's mip for the
-    // roughness (of eight), projected onto its box, weighed by the split
-    // sum (D322), over what the ones before left, fading out across a
-    // tenth of its size past its box.
+    // (D340), weighed by the split sum (D322).
     const float2 scaleBias = environmentBrdf(surface.roughness, nv);
     const float3 split = surface.headOn * scaleBias.x + scaleBias.y;
-    float3 probed = float3(0.0);
-    float left = 1.0;
-    const uint firstProbe = range.x + range.y + range.z;
-    for (uint each = firstProbe; each < firstProbe + range.w && left > 0.0; ++each)
-    {
-        const Probe probe = probes[indices[each]];
-        const float3 past = (abs(corner.placed - probe.place.xyz) - probe.extent.xyz) / (0.1 * probe.extent.xyz);
-        const float holds = clamp(1.0 - max(max(past.x, past.y), past.z), 0.0, 1.0);
-        if (probe.place.w < 0.0 || holds <= 0.0)
-        {
-            continue;
-        }
-        const float3 toward = projected(probe, corner.placed, mirrored);
-        probed += left * holds * probe.light.rgb *
-                  probeAtlas.SampleLevel(environmentSampler, float4(toward, probe.place.w), surface.roughness * 7.0).rgb;
-        left *= 1.0 - holds;
-    }
+    float left;
+    const float3 probed = probedAlong(range, corner.placed, mirrored, surface.roughness, left);
     // What they left, the sky's picture's level for the roughness, by the
     // split sum; with none, the sky above and the ground below, by the
     // sheen.
@@ -1044,9 +1054,10 @@ Lit shaded(Corner corner, bool decaled, bool front)
     sky += (1.0 - sheen) * transmission * transmitted;
     // Under a coat (D716): what it lets through of that by its Fresnel to
     // the eye, and what it reflects along its own normal's reflection at
-    // its roughness, by the split sum, of the sky's picture, or of the sky
-    // above and the ground below; neither the probes nor the screen-space
-    // reflection, which the base's reflection alone takes.
+    // its roughness, by the split sum: the probes that hold the point
+    // (D725), and what they leave of the sky's picture, or of the sky
+    // above and the ground below. The screen-space reflection marches the
+    // base's reflection alone.
     if (surface.coat > 0.0)
     {
         const float coatNv = max(dot(surface.coatNormal, toEye), 0.0);
@@ -1061,6 +1072,8 @@ Lit shaded(Corner corner, bool decaled, bool front)
                           .SampleLevel(environmentSampler, coatMirrored, surface.coatRoughness * (frame.environment.w - 1.0))
                           .rgb;
         }
+        float coatLeft;
+        coatSky = probedAlong(range, corner.placed, coatMirrored, surface.coatRoughness, coatLeft) + coatLeft * coatSky;
         sky = sky * (1.0 - surface.coat * coatFresnel) +
               occlusion * reaches * surface.coat * (kCoatHeadOn * coatBias.x + coatBias.y) * coatSky;
     }
