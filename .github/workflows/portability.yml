@@ -292,9 +292,11 @@ jobs:
       - name: The scene on Direct3D 12
         shell: bash
         continue-on-error: true
+        # The harness takes one filter, so each test is run on its own.
         run: |
-          out/windows-development/modules/render_scene_gpu/rawframe_render_scene_gpu_tests.exe \
-            AMaterialKnowsTheFaceItIsDrawnOn AMaterialReadsItsParametersFromItsBlob
+          for test in AMaterialKnowsTheFaceItIsDrawnOn AMaterialReadsItsParametersFromItsBlob; do
+            out/windows-development/modules/render_scene_gpu/rawframe_render_scene_gpu_tests.exe "$test"
+          done
       # The sample games to play on Windows (D515): each exported as the
       # export tool makes a folder, whose rawframe-play starts its server and
       # then its client in a window, with the DLLs its programs import from
