@@ -2,6 +2,7 @@
 
 #include "rawframe/authoring/errors.h"
 #include "rawframe/material/instance.h"
+#include "rawframe/material/material.h"
 
 #include <algorithm>
 #include <array>
@@ -19,25 +20,67 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, AuthoringEr
     return result::fail(errorClass, kAuthoringDomain, code(error), why);
 }
 
-constexpr std::array<std::string_view, 4> kDocumentFields = {"formatVersion", "kind", "base", "overrides"};
+constexpr std::array<std::string_view, 4> kInstanceFields = {"formatVersion", "kind", "base", "overrides"};
+constexpr std::array<std::string_view, 6> kGraphFields = {
+    "formatVersion", "kind", "interface", "graph", "states", "presentation"};
+constexpr std::array<std::string_view, 2> kInterfaceFields = {"inputs", "switches"};
+constexpr std::array<std::string_view, 3> kNodeFields = {"type", "params", "inputs"};
+constexpr std::array<std::string_view, 4> kStatesFields = {"shading", "blend", "alpha_cutoff", "double_sided"};
 
 /// The instance's objects' members in order: the root's, and its overrides
 /// by name (D721).
-std::span<const std::string_view> orderOf(std::string_view holder) noexcept {
+std::span<const std::string_view> instanceOrderOf(std::string_view holder) noexcept {
     if (holder.empty()) {
-        return kDocumentFields;
+        return kInstanceFields;
     }
     return {};
 }
 
-result::Status reads(std::string_view text) {
+/// A node's identity, as a graph keys it: 16 lowercase hex digits.
+bool nodeKeyed(std::string_view holder) noexcept {
+    return holder.size() == 16 && std::ranges::all_of(holder, [](char digit) {
+               return (digit >= '0' && digit <= '9') || (digit >= 'a' && digit <= 'f');
+           });
+}
+
+/// The graph's objects' members in order, as its canonical writer puts them
+/// (SPEC-0028, D728): the root's, the interface's, a node's, the states';
+/// the graph's nodes, a node's params and inputs, and the presentation by
+/// name, which is their ids' order.
+std::span<const std::string_view> graphOrderOf(std::string_view holder) noexcept {
+    if (holder.empty()) {
+        return kGraphFields;
+    }
+    if (holder == "interface") {
+        return kInterfaceFields;
+    }
+    if (holder == "states") {
+        return kStatesFields;
+    }
+    if (nodeKeyed(holder)) {
+        return kNodeFields;
+    }
+    return {};
+}
+
+std::unexpected<result::Error> unread(result::Error error, std::string_view what) {
+    std::string why = std::string{what} + " does not read: " + std::string{error.description()};
+    return std::unexpected<result::Error>{std::move(error).mappedTo(
+        result::ErrorClass::InvalidArgument, kAuthoringDomain, code(AuthoringError::ValidationFailed), why)};
+}
+
+result::Status readsInstance(std::string_view text) {
     auto read = material::readInstance(text);
     if (!read.has_value()) {
-        return std::unexpected<result::Error>{std::move(read).error().mappedTo(
-            result::ErrorClass::InvalidArgument,
-            kAuthoringDomain,
-            code(AuthoringError::ValidationFailed),
-            "the material instance does not read: " + std::string{read.error().description()})};
+        return unread(std::move(read).error(), "the material instance");
+    }
+    return {};
+}
+
+result::Status readsGraph(std::string_view text) {
+    auto read = material::readMaterial(text);
+    if (!read.has_value()) {
+        return unread(std::move(read).error(), "the material graph");
     }
     return {};
 }
@@ -50,13 +93,108 @@ bool named(std::string_view name) {
            });
 }
 
+std::string hexOf(std::uint64_t id) {
+    std::array<char, 16> digits{};
+    for (std::size_t at = 0; at < digits.size(); ++at) {
+        digits[at] = "0123456789abcdef"[(id >> (60 - 4 * at)) & 0xFU];
+    }
+    return std::string{digits.data(), digits.size()};
+}
+
+JsonStep step(std::string member) {
+    return JsonStep{.member = std::move(member), .key = {}, .id = {}};
+}
+
+JsonDelta setting(const Value& staged, JsonPath path, std::optional<Value> to) {
+    std::optional<Value> before = slotAt(staged, path);
+    return JsonDelta{.path = std::move(path), .place = 0, .before = std::move(before), .after = std::move(to)};
+}
+
+/// The deltas `operation` makes of `staged`, an instance's or, `graph`, a
+/// graph's; refused where they cannot be made.
+result::Result<std::vector<JsonDelta>> deltasOf(const Value& staged, bool graph, const Operation& operation) {
+    const auto kNotOurs = [graph] {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      AuthoringError::ValidationFailed,
+                      graph ? "the operation does not change a material graph"
+                            : "the operation does not change a material instance");
+    };
+    if (const auto* set = std::get_if<SetMaterialOverride>(&operation)) {
+        if (graph) {
+            return kNotOurs();
+        }
+        if (!named(set->input)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          AuthoringError::ValidationFailed,
+                          "an override names an input or a switch as a Kest name is");
+        }
+        return std::vector{setting(staged, {step("overrides"), step(set->input)}, set->value)};
+    }
+    if (!graph) {
+        return kNotOurs();
+    }
+    const auto kHas = [&staged](std::uint64_t node) {
+        return slotAt(staged, JsonPath{step("graph"), step(hexOf(node))}).has_value();
+    };
+    const auto kUnknown = [] {
+        return refuse(result::ErrorClass::NotFound, AuthoringError::TargetNotFound, "the graph has no such node");
+    };
+    if (const auto* input = std::get_if<SetMaterialNodeInput>(&operation)) {
+        if (!kHas(input->node)) {
+            return kUnknown();
+        }
+        if (input->input.empty()) {
+            return refuse(result::ErrorClass::InvalidArgument, AuthoringError::ValidationFailed, "an input is named");
+        }
+        return std::vector{setting(
+            staged, {step("graph"), step(hexOf(input->node)), step("inputs"), step(input->input)}, input->value)};
+    }
+    if (const auto* param = std::get_if<SetMaterialNodeParam>(&operation)) {
+        if (!kHas(param->node)) {
+            return kUnknown();
+        }
+        if (param->param.empty()) {
+            return refuse(result::ErrorClass::InvalidArgument, AuthoringError::ValidationFailed, "a param is named");
+        }
+        return std::vector{setting(
+            staged, {step("graph"), step(hexOf(param->node)), step("params"), step(param->param)}, param->value)};
+    }
+    if (const auto* create = std::get_if<CreateMaterialNode>(&operation)) {
+        if (create->node == 0 || kHas(create->node)) {
+            return refuse(result::ErrorClass::AlreadyExists,
+                          AuthoringError::Conflict,
+                          "a new node's identity is fresh and not nought");
+        }
+        Value record = Value::object();
+        record.add("type", Value::string(create->type));
+        record.add("params", Value::object());
+        record.add("inputs", Value::object());
+        return std::vector{setting(staged, {step("graph"), step(hexOf(create->node))}, std::move(record))};
+    }
+    if (const auto* remove = std::get_if<RemoveMaterialNode>(&operation)) {
+        if (!kHas(remove->node)) {
+            return kUnknown();
+        }
+        // Its drawing goes with it, keyed by it (SPEC-0028).
+        std::vector made{setting(staged, {step("graph"), step(hexOf(remove->node))}, std::nullopt)};
+        if (slotAt(staged, JsonPath{step("presentation"), step(hexOf(remove->node))}).has_value()) {
+            made.push_back(setting(staged, {step("presentation"), step(hexOf(remove->node))}, std::nullopt));
+        }
+        return made;
+    }
+    return kNotOurs();
+}
+
 } // namespace
 
 result::Result<std::unique_ptr<AuthoredMaterial>>
 AuthoredMaterial::open(base::Bits128 document, std::string_view text, const HistoryLimits& limits) {
-    RAWFRAME_TRY(reads(text));
-    RAWFRAME_TRY_ASSIGN(JsonDocument opened, JsonDocument::open(text, orderOf, reads, limits));
-    return std::unique_ptr<AuthoredMaterial>{new AuthoredMaterial(document, std::move(opened))};
+    const bool kGraph = !material::namesBase(text);
+    const DocumentReader kReads = kGraph ? readsGraph : readsInstance;
+    RAWFRAME_TRY(kReads(text));
+    RAWFRAME_TRY_ASSIGN(JsonDocument opened,
+                        JsonDocument::open(text, kGraph ? graphOrderOf : instanceOrderOf, kReads, limits));
+    return std::unique_ptr<AuthoredMaterial>{new AuthoredMaterial(document, std::move(opened), kGraph)};
 }
 
 std::string AuthoredMaterial::base() const {
@@ -72,23 +210,16 @@ result::Result<Committed> AuthoredMaterial::change(std::uint64_t generation, std
                       "a batch has more operations than its limit");
     }
     for (std::size_t at = 0; at < operations.size(); ++at) {
-        const auto* kSet = std::get_if<SetMaterialOverride>(&operations[at]);
-        if (kSet == nullptr || !named(kSet->input)) {
-            return std::unexpected<result::Error>{
-                refuse(result::ErrorClass::InvalidArgument,
-                       AuthoringError::ValidationFailed,
-                       kSet == nullptr ? "the operation does not change a material instance"
-                                       : "an override names an input or a switch as a Kest name is")
-                    .error()
-                    .withContext("index", std::to_string(at))};
+        auto deltas = deltasOf(staged.root, graph_, operations[at]);
+        if (!deltas.has_value()) {
+            return std::unexpected<result::Error>{std::move(deltas).error().withContext("index", std::to_string(at))};
         }
-        JsonPath path = {JsonStep{.member = "overrides", .key = {}, .id = {}},
-                         JsonStep{.member = kSet->input, .key = {}, .id = {}}};
-        std::optional<Value> before = slotAt(staged.root, path);
-        auto applied = document_.apply(
-            staged, JsonDelta{.path = std::move(path), .place = 0, .before = std::move(before), .after = kSet->value});
-        if (!applied.has_value()) {
-            return std::unexpected<result::Error>{std::move(applied).error().withContext("index", std::to_string(at))};
+        for (JsonDelta& delta : *deltas) {
+            auto applied = document_.apply(staged, std::move(delta));
+            if (!applied.has_value()) {
+                return std::unexpected<result::Error>{
+                    std::move(applied).error().withContext("index", std::to_string(at))};
+            }
         }
     }
     return document_.keep(std::move(staged));
@@ -100,23 +231,41 @@ std::string AuthoredMaterial::summaryAt(std::size_t entry) const {
         return "no change";
     }
     const JsonDelta& kFirst = journal.front();
-    std::string made = (kFirst.after.has_value() ? "set " : "unset ") + kFirst.path.back().member;
-    if (journal.size() > 1) {
-        made += " and " + std::to_string(journal.size() - 1) + " more";
+    const bool kSet = kFirst.after.has_value();
+    std::string made;
+    if (kFirst.path.size() == 2 && kFirst.path[0].member == "overrides") {
+        made = (kSet ? "set " : "unset ") + kFirst.path[1].member;
+    } else if (kFirst.path.size() == 2) {
+        const Value* kType = kSet ? kFirst.after->find("type") : kFirst.before->find("type");
+        made = (kSet ? "create node " : "remove node ") +
+               (kType != nullptr && kType->text() != nullptr ? *kType->text() : kFirst.path[1].member);
+    } else {
+        made = (kSet ? "set " : "unset ") + kFirst.path[1].member.substr(0, 8) + "." + kFirst.path[3].member;
+    }
+    // A node's drawing removed with it is the node's removal, not another.
+    const std::size_t kMore =
+        journal.size() - 1 - static_cast<std::size_t>(std::ranges::count_if(journal, [](const JsonDelta& delta) {
+            return delta.path.front().member == "presentation";
+        }));
+    if (kMore > 0) {
+        made += " and " + std::to_string(kMore) + " more";
     }
     return made;
 }
 
 result::Result<Value> answer(const AuthoredMaterial& material, const Query& query) {
-    if (!std::holds_alternative<ReadMaterialInstance>(query)) {
+    const bool kInstance = std::holds_alternative<ReadMaterialInstance>(query) && !material.graph();
+    const bool kGraph = std::holds_alternative<ReadMaterialGraph>(query) && material.graph();
+    if (!kInstance && !kGraph) {
         return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
                                                      AuthoringError::ValidationFailed,
-                                                     "the query does not read a material instance")
+                                                     material.graph() ? "the query does not read a material graph"
+                                                                      : "the query does not read a material instance")
                                                   .error()
                                                   .withContext("operation", declarationOf(query).name)};
     }
     Value made = Value::object();
-    made.add("instance", material.documentValue());
+    made.add(kInstance ? "instance" : "graph", material.documentValue());
     return made;
 }
 

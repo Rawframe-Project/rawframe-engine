@@ -56,10 +56,17 @@ constexpr std::array<InputDeclaration, 2> kTransitionsInputs = {
     {{"style", InputType::Style}, {"value", InputType::DocumentValue}}};
 constexpr std::array<InputDeclaration, 2> kOverrideInputs = {
     {{"input", InputType::Text}, {"value", InputType::DocumentValue}}};
+constexpr std::array<InputDeclaration, 3> kNodeInputInputs = {
+    {{"node", InputType::GraphNode}, {"input", InputType::Text}, {"value", InputType::DocumentValue}}};
+constexpr std::array<InputDeclaration, 3> kNodeParamInputs = {
+    {{"node", InputType::GraphNode}, {"param", InputType::Text}, {"value", InputType::DocumentValue}}};
+constexpr std::array<InputDeclaration, 2> kCreateNodeInputs = {
+    {{"node", InputType::GraphNode}, {"type", InputType::Text}}};
+constexpr std::array<InputDeclaration, 1> kGraphNodeInputs = {{{"node", InputType::GraphNode}}};
 constexpr std::array<InputDeclaration, 2> kRenameClassInputs = {
     {{"style", InputType::Style}, {"name", InputType::Text}}};
 
-constexpr std::array<OperationDeclaration, 30> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 35> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -84,6 +91,10 @@ constexpr std::array<OperationDeclaration, 30> kDeclarations = {{
     {.name = "ui.remove_node", .targets = "ui.document node", .inputs = kUiNodeInputs},
     {.name = "ui.move_node", .targets = "ui.document node", .inputs = kUiCreateInputs},
     {.name = "materials.set_override", .targets = "rawframe.material override", .inputs = kOverrideInputs},
+    {.name = "materials.set_node_input", .targets = "rawframe.material node", .inputs = kNodeInputInputs},
+    {.name = "materials.set_node_param", .targets = "rawframe.material node", .inputs = kNodeParamInputs},
+    {.name = "materials.create_node", .targets = "rawframe.material node", .inputs = kCreateNodeInputs},
+    {.name = "materials.remove_node", .targets = "rawframe.material node", .inputs = kGraphNodeInputs},
     {.name = "scene.list_entities", .history = HistoryClass::ReadOnly, .targets = "rawframe.scene", .inputs = {}},
     {.name = "scene.read_entity",
      .history = HistoryClass::ReadOnly,
@@ -98,6 +109,10 @@ constexpr std::array<OperationDeclaration, 30> kDeclarations = {{
     {.name = "materials.read_instance",
      .history = HistoryClass::ReadOnly,
      .targets = "rawframe.material instance",
+     .inputs = {}},
+    {.name = "materials.read_graph",
+     .history = HistoryClass::ReadOnly,
+     .targets = "rawframe.material graph",
      .inputs = {}},
 }};
 static_assert(kDeclarations.size() == std::variant_size_v<Operation> + std::variant_size_v<Query>);

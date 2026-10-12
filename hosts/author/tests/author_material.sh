@@ -5,7 +5,9 @@
 # by one atomic request, written to the file in its canonical form; undone
 # back to its very bytes and redone; its last override unset, an input not
 # named as Kest names are, and a scene's operation refused with the file
-# untouched; and its history listed.
+# untouched; and its history listed. The rock, a material graph, authored
+# too (D728): read whole, its surface's roughness set and undone to its
+# very bytes, and an instance's operation refused.
 #
 # usage: author_material.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -65,4 +67,22 @@ reply 8 | grep -q '"entries":\[{"summary":"set tint","deltas":1,"applied":true}\
 # A graph is no instance to author here.
 reply 9 | grep -q '"code":"validation_failed"'
 cmp "$work/root/shore.rfmaterial" "$work/redone.rfmaterial"
+
+cp "$work/root/rock.rfmaterial" "$work/rock.original"
+read_graph='{"formatVersion":1,"kind":"authoring.query","queries":[{"operation":"materials.read_graph"}]}'
+rough='{"operation":"materials.set_node_input","node":"60c0000000000005","input":"specular_roughness","value":0.4}'
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.read","id":2,"scene":"rock.rfmaterial","queries":'"$read_graph"'}'
+    echo '{"kind":"authoring.apply","id":3,"scene":"rock.rfmaterial","request":'"$(request "$rough")"'}'
+    echo '{"kind":"authoring.apply","id":4,"scene":"rock.rfmaterial","request":'"$(request "$(set_override tint 1)")"'}'
+    echo '{"kind":"authoring.history","id":5,"scene":"rock.rfmaterial"}'
+    echo '{"kind":"authoring.undo","id":6,"scene":"rock.rfmaterial"}'
+} | "$author" session "$game" "$work/root" >"$work/replies" || true
+reply 2 | grep -q '"answer":{"graph":{"formatVersion":1,"kind":"surface","interface":{"inputs":{"stone"'
+reply 3 | grep -q '"written":true,.*"results":\[{"deltas":1}\]'
+reply 4 | grep -q '"code":"validation_failed".*"message":"the operation does not change a material graph"'
+reply 5 | grep -q '"entries":\[{"summary":"set 60c00000.specular_roughness","deltas":1,"applied":true}\]'
+reply 6 | grep -q '"undoable":0,"redoable":1'
+cmp "$work/root/rock.rfmaterial" "$work/rock.original"
 echo "authored gale's shore in a session"

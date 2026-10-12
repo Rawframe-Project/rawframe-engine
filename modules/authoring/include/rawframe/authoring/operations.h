@@ -269,6 +269,32 @@ struct SetMaterialOverride {
     std::optional<document::Value> value;
 };
 
+/// One input of a material graph's node (D728): `input` of node `node`
+/// given `value` as the graph holds it, a literal or a connection
+/// (`{"node": ..., "output": ...}`), or unset for its default.
+struct SetMaterialNodeInput {
+    std::uint64_t node = 0;
+    std::string input;
+    std::optional<document::Value> value;
+};
+/// One param of a material graph's node (D728), set or unset.
+struct SetMaterialNodeParam {
+    std::uint64_t node = 0;
+    std::string param;
+    std::optional<document::Value> value;
+};
+/// A node made in a material graph (D728), of `type`, its params and
+/// inputs at their defaults, `node` a fresh identity the caller mints.
+struct CreateMaterialNode {
+    std::uint64_t node = 0;
+    std::string type;
+};
+/// A node removed from a material graph, with its drawing (D728); refused
+/// while another node reads it, as the graph then does not read.
+struct RemoveMaterialNode {
+    std::uint64_t node = 0;
+};
+
 /// The id an instantiation named `instance` gives the source's entity
 /// `source`: a version 8 UUID from their SHA-256 (D156).
 [[nodiscard]] base::Bits128 instanceEntityId(base::Bits128 instance, base::Bits128 source) noexcept;
@@ -296,13 +322,17 @@ using Operation = std::variant<CreateEntity,
                                CreateUiNode,
                                RemoveUiNode,
                                MoveUiNode,
-                               SetMaterialOverride>;
+                               SetMaterialOverride,
+                               SetMaterialNodeInput,
+                               SetMaterialNodeParam,
+                               CreateMaterialNode,
+                               RemoveMaterialNode>;
 
 /// Whether `operation` changes a scene, rather than a style sheet (D636), a
 /// UI document (D641), or a material instance (D721), which follow the
 /// scene's in `Operation`.
 [[nodiscard]] constexpr bool changesScene(const Operation& operation) noexcept {
-    return operation.index() < std::variant_size_v<Operation> - 10;
+    return operation.index() < std::variant_size_v<Operation> - 14;
 }
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the
@@ -326,8 +356,11 @@ struct ReadSheet {};
 struct ReadUiDocument {};
 /// A material instance whole (D721): its base and its overrides.
 struct ReadMaterialInstance {};
+/// A material graph read whole (D728).
+struct ReadMaterialGraph {};
 
-using Query = std::variant<ListEntities, ReadEntity, FindEntities, ReadSheet, ReadUiDocument, ReadMaterialInstance>;
+using Query = std::
+    variant<ListEntities, ReadEntity, FindEntities, ReadSheet, ReadUiDocument, ReadMaterialInstance, ReadMaterialGraph>;
 
 /// SPEC-0040's history classes: every operation that changes a scene is
 /// `Undoable`, and every query `ReadOnly`.
@@ -359,6 +392,8 @@ enum class InputType : std::uint8_t {
     DocumentValue,
     /// Text that may be null (D641).
     OptionalText,
+    /// A graph node's identity, as 16 hex digits (D728).
+    GraphNode,
 };
 
 struct InputDeclaration {

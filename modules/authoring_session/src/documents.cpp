@@ -49,6 +49,10 @@ template <class Authored>
 void addTo(Value& /*answer*/, const Authored& /*authored*/, const std::filesystem::path& /*root*/) {
 }
 void addTo(Value& answer, const authoring::AuthoredMaterial& material, const std::filesystem::path& root) {
+    // A graph is its own interface's holder (D728).
+    if (material.graph()) {
+        return;
+    }
     const std::filesystem::path kPath = std::filesystem::weakly_canonical(root / material.base());
     const auto [kRootEnd, kPathAt] = std::ranges::mismatch(root, kPath);
     const auto kText = kRootEnd == root.end() ? readFile(kPath) : std::nullopt;

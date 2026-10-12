@@ -1,6 +1,6 @@
 // Coverage-guided fuzzing of a request applied to a game's UI document,
-// style sheet, and material instance (D640, D641, D721), seeded with every
-// operation of each kind.
+// style sheet, material instance, and material graph (D640, D641, D721,
+// D728), seeded with every operation of each kind.
 // Whatever a request holds, a document it changes still reads, its text
 // opens again to the very same bytes, undo gives back the text it had, and
 // redo the text the change made.
@@ -86,6 +86,46 @@ constexpr std::string_view kShore = R"({
 }
 )";
 
+constexpr std::string_view kTinted = R"({
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {
+    "inputs": {
+      "tint": {
+        "default": [
+          0,
+          1,
+          0
+        ],
+        "type": "color3"
+      }
+    }
+  },
+  "graph": {
+    "2f00000000000041": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "tint"
+      },
+      "inputs": {}
+    },
+    "2f00000000000042": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "base_color": {
+          "node": "2f00000000000041",
+          "output": "out"
+        }
+      }
+    }
+  },
+  "states": {
+    "shading": "unlit"
+  }
+}
+)";
+
 /// `document` changed by `request`, undone, and redone, or aborted where
 /// any step breaks the properties above.
 template <class Authored> void exercise(std::string_view text, const authoring::Request& request) {
@@ -125,5 +165,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     exercise<authoring::AuthoredUi>(kHud, *kRequest);
     exercise<authoring::AuthoredStyles>(kSheet, *kRequest);
     exercise<authoring::AuthoredMaterial>(kShore, *kRequest);
+    exercise<authoring::AuthoredMaterial>(kTinted, *kRequest);
     return 0;
 }

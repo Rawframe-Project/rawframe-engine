@@ -26,7 +26,7 @@ constexpr std::array<std::string_view, 10> kCodeNames = {"validation_failed",
                                                          "delta_invalid",
                                                          "delta_mismatch"};
 
-constexpr std::array<std::string_view, 14> kInputTypeNames = {"entity",
+constexpr std::array<std::string_view, 15> kInputTypeNames = {"entity",
                                                               "component",
                                                               "field",
                                                               "text",
@@ -39,7 +39,8 @@ constexpr std::array<std::string_view, 14> kInputTypeNames = {"entity",
                                                               "optional_component",
                                                               "style",
                                                               "document_value",
-                                                              "optional_text"};
+                                                              "optional_text",
+                                                              "graph_node"};
 constexpr std::array<std::string_view, 4> kHistoryNames = {
     "undoable", "non_dirtying", "bulk_non_undoable", "read_only"};
 
@@ -158,6 +159,9 @@ result::Result<Query> queryOf(const Value& value) {
     if (kIndex == kChanging + 5) {
         return Query{ReadMaterialInstance{}};
     }
+    if (kIndex == kChanging + 6) {
+        return Query{ReadMaterialGraph{}};
+    }
     if (kIndex == kChanging + 2) {
         const std::string* named = textOf(value.find("named"));
         const Value* having = value.find("having");
@@ -197,6 +201,35 @@ result::Result<Operation> operationOf(const Value& value) {
             return kBad();
         }
         return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
+    }
+    if (kIndex >= 24) {
+        // A material graph's node, by its 16 hex digits (D728).
+        const std::string* node = textOf(value.find("node"));
+        const std::optional<std::uint64_t> kNode =
+            node != nullptr && node->size() == 16 ? base::parseHex64(*node) : std::nullopt;
+        if (!kNode.has_value()) {
+            return kBad();
+        }
+        if (kIndex == 24 || kIndex == 25) {
+            const std::string* named = textOf(value.find(kIndex == 24 ? "input" : "param"));
+            const Value& given = *value.find("value");
+            if (named == nullptr) {
+                return kBad();
+            }
+            const std::optional<Value> kGiven = given.isNull() ? std::nullopt : std::optional<Value>{given};
+            if (kIndex == 24) {
+                return Operation{SetMaterialNodeInput{.node = *kNode, .input = *named, .value = kGiven}};
+            }
+            return Operation{SetMaterialNodeParam{.node = *kNode, .param = *named, .value = kGiven}};
+        }
+        if (kIndex == 26) {
+            const std::string* type = textOf(value.find("type"));
+            if (type == nullptr) {
+                return kBad();
+            }
+            return Operation{CreateMaterialNode{.node = *kNode, .type = *type}};
+        }
+        return Operation{RemoveMaterialNode{.node = *kNode}};
     }
     if (kIndex == 23) {
         // A material instance's override, by its input's name (D721).

@@ -40,6 +40,10 @@ public:
     [[nodiscard]] base::Bits128 identity() const noexcept {
         return identity_;
     }
+    /// Whether it is a material's graph (D728), not an instance of one.
+    [[nodiscard]] bool graph() const noexcept {
+        return graph_;
+    }
     [[nodiscard]] std::uint64_t generation() const noexcept {
         return document_.generation();
     }
@@ -95,12 +99,13 @@ public:
     [[nodiscard]] std::string summaryAt(std::size_t entry) const;
 
 private:
-    AuthoredMaterial(base::Bits128 identity, JsonDocument document)
-        : identity_(identity), document_(std::move(document)) {
+    AuthoredMaterial(base::Bits128 identity, JsonDocument document, bool graph)
+        : identity_(identity), document_(std::move(document)), graph_(graph) {
     }
 
     base::Bits128 identity_{};
     JsonDocument document_;
+    bool graph_ = false;
 };
 
 /// A material instance's query answered (`materials.read_instance`:

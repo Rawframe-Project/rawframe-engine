@@ -74,6 +74,11 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
         R"({"operation": "ui.move_node", "node": "game.coin", "parent": null, "place": 1})",
         R"({"operation": "materials.set_override", "input": "tint", "value": [1, 0, 0]})",
         R"({"operation": "materials.set_override", "input": "wet", "value": null})",
+        R"({"operation": "materials.set_node_input", "node": "2f00000000000042", "input": "base_color",
+            "value": {"node": "2f00000000000041", "output": "out"}})",
+        R"({"operation": "materials.set_node_param", "node": "2f00000000000041", "param": "name", "value": null})",
+        R"({"operation": "materials.create_node", "node": "2f00000000000043", "type": "rawframe/uv@1"})",
+        R"({"operation": "materials.remove_node", "node": "2f00000000000043"})",
     };
     std::string joined;
     for (const std::string& each : kAll) {
@@ -121,6 +126,15 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
     RAWFRAME_EXPECT(kTint.input == "tint" && kTint.value.has_value() && kTint.value->items().size() == 3 &&
                     !std::get<SetMaterialOverride>(kRead->operations[31]).value.has_value());
     RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "materials.set_override", "input": "tint"})")),
+                                AuthoringError::ValidationFailed));
+    // A material graph's (D728): its node by 16 hex digits.
+    const auto& kInput = std::get<SetMaterialNodeInput>(kRead->operations[32]);
+    RAWFRAME_EXPECT(kInput.node == 0x2f00000000000042 && kInput.input == "base_color" && kInput.value.has_value() &&
+                    kInput.value->find("output") != nullptr);
+    RAWFRAME_EXPECT(!std::get<SetMaterialNodeParam>(kRead->operations[33]).value.has_value() &&
+                    std::get<CreateMaterialNode>(kRead->operations[34]).type == "rawframe/uv@1" &&
+                    std::get<RemoveMaterialNode>(kRead->operations[35]).node == 0x2f00000000000043);
+    RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "materials.remove_node", "node": "2f0000"})")),
                                 AuthoringError::ValidationFailed));
     RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "ui.create_node", "node": "game.coin",
         "parent": 3})")),
