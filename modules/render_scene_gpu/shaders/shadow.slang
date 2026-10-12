@@ -51,6 +51,7 @@ float4 placed(Caster caster)
     here.color = caster.color;
     here.time = cascade.time.xy;
     here.view = normalize(-there);
+    here.material = uint(caster.material);
     return mul(cascade.viewProjection, float4(there + Material.offset(here), 1.0));
 }
 

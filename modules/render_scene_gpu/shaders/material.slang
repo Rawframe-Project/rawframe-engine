@@ -30,13 +30,14 @@ module material;
 [[vk::binding(17, 0)]] public SamplerState normalSampler;
 
 // The first vector of material `material`'s blob, held to the blobs there
-// are.
+// are: nine vectors of its blob, then eight of its interface inputs' values
+// (D708).
 public uint blobOf(uint material)
 {
     uint count;
     uint stride;
     materials.GetDimensions(count, stride);
-    return min(material, count / 9u - 1u) * 9u;
+    return min(material, count / 17u - 1u) * 17u;
 }
 
 // A texture's channel a number is read from: one to four, red to alpha;
@@ -72,7 +73,8 @@ public struct Point
 // vertex placed by its model in the World's axes, its normal there, its
 // texture coordinates, the model's color, the presented World's time in
 // seconds, now or the frame before, its whole seconds and the fraction left
-// (D702), and the way to the eye, a unit vector (D696).
+// (D702), the way to the eye, a unit vector (D696), and the draw's material
+// among the frame's, whose parameters it reads (D708).
 public struct Placed
 {
     public float3 position;
@@ -81,6 +83,7 @@ public struct Placed
     public float4 color;
     public float2 time;
     public float3 view;
+    public uint material;
 }
 
 // What a material gives the lit shading model (ADR-0031's Surface, D299):

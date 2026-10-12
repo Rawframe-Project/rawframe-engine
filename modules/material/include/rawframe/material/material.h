@@ -294,6 +294,11 @@ using Qualities = std::array<Material, 3>;
 /// The surface compiled at each quality, as `compile` refuses it.
 [[nodiscard]] result::Result<Qualities> compileQualities(const graph::Document& surface);
 
+/// The numbers a material's interface inputs hold, a vector of four each
+/// (SPEC-0028's interface, D708): eight inputs at most, in name order,
+/// each in its own vector, its channels past its type's nought.
+inline constexpr std::size_t kParameterFloats = 32;
+
 /// A surface material written as Slang (ADR-0026, D481 to D483): a module
 /// importing the scene's `material` module and exporting `Material`, a
 /// struct meeting its `IMaterial`, which the scene is linked with in place
@@ -310,6 +315,8 @@ struct GeneratedSlang {
     Blend blend = Blend::Opaque;
     float alphaCutoff = 0.5F;
     bool doubleSided = false;
+    /// Its interface inputs' defaults (D708).
+    std::array<float, kParameterFloats> parameters{};
 };
 
 /// The surface written as Slang at a quality, for a graph the blob cannot
@@ -336,6 +343,8 @@ struct ProgramMaterial {
     /// Whether its vertices move (D691): its own program then places them
     /// in every pass, the depth prepass's and the shadows' too.
     bool moves = false;
+    /// Its interface inputs' values (D708), which an instance overrides.
+    std::array<float, kParameterFloats> parameters{};
     std::vector<SampledTexture> textures;
     std::array<std::vector<std::byte>, kProgramContainers> containers;
     std::array<std::vector<std::byte>, kProgramContainers> shadows;
@@ -343,14 +352,15 @@ struct ProgramMaterial {
     friend bool operator==(const ProgramMaterial&, const ProgramMaterial&) = default;
 };
 
-/// A program material's bytes: `RFMP`, format 2 (D488); its states
+/// A program material's bytes: `RFMP`, format 3 (D488, D708); its states
 /// (shading, blend, double sided, a byte each, and one that is one where
 /// its vertices move, nought before D691) and alpha
-/// cutoff; the count of its textures, then each one's identity (low word
-/// first), filter, address, and two bytes of nought; then each scene
-/// container's length and bytes, then each shadow container's. Little-endian.
-/// Format 1, which carried no shadow's, is read no more: a cook's key
-/// changes with its toolchain, so what was cooked so is cooked again.
+/// cutoff; its parameters' numbers; the count of its textures, then each
+/// one's identity (low word first), filter, address, and two bytes of
+/// nought; then each scene container's length and bytes, then each shadow
+/// container's. Little-endian. Formats 1 and 2, which carried no shadow's
+/// and no parameters, are read no more: a cook's key changes with its
+/// toolchain, so what was cooked so is cooked again.
 [[nodiscard]] std::vector<std::byte> encodeProgram(const ProgramMaterial& made);
 /// Refuses (`Invalid`) bytes `encodeProgram` would not write: states out of
 /// their sets, more than four textures or one naming none, a container

@@ -26,7 +26,7 @@ namespace {
 render_scene::MaterialBlob red() {
     material::Material made{.shading = material::Shading::Unlit};
     made.surface.baseColor = {1, 0, 0};
-    return material::blobOf(made);
+    return render_scene::sceneBlobOf(material::blobOf(made));
 }
 
 render_scene::MaterialBlob glowing() {
@@ -35,7 +35,7 @@ render_scene::MaterialBlob glowing() {
     made.surface.emissionColor = {0, 1, 0};
     // About one, times the exposure at EV 15.
     made.surface.emissionLuminance = 20000;
-    return material::blobOf(made);
+    return render_scene::sceneBlobOf(material::blobOf(made));
 }
 
 /// An emitter five meters ahead, its ring of `capacity`, spawning `spawned`

@@ -226,6 +226,7 @@ Corner vs(Vertex vertex)
     here.color = vertex.color;
     here.time = frame.time.xy;
     here.view = normalize(-still);
+    here.material = uint(vertex.material);
     const float3 placed = still + Material.offset(here);
     Corner corner;
     corner.position = mul(frame.viewProjection, float4(placed, 1.0));

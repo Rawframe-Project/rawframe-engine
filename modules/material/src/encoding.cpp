@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -238,12 +239,15 @@ std::vector<std::byte> encodeProgram(const ProgramMaterial& made) {
     for (const char kLetter : {'R', 'F', 'M', 'P'}) {
         bytes.push_back(static_cast<std::byte>(kLetter));
     }
-    putWord(bytes, 2);
+    putWord(bytes, 3);
     bytes.push_back(static_cast<std::byte>(made.shading));
     bytes.push_back(static_cast<std::byte>(made.blend));
     bytes.push_back(static_cast<std::byte>(made.doubleSided ? 1 : 0));
     bytes.push_back(static_cast<std::byte>(made.moves ? 1 : 0));
     putWord(bytes, std::bit_cast<std::uint32_t>(made.alphaCutoff));
+    for (const float kNumber : made.parameters) {
+        putWord(bytes, std::bit_cast<std::uint32_t>(kNumber));
+    }
     putWord(bytes, static_cast<std::uint32_t>(made.textures.size()));
     for (const SampledTexture& kTexture : made.textures) {
         putWord(bytes, static_cast<std::uint32_t>(kTexture.id));
@@ -284,8 +288,8 @@ result::Result<ProgramMaterial> decodeProgram(std::span<const std::byte> bytes) 
                    return each == static_cast<std::byte>(letter);
                });
     };
-    if (!kIs(kTake(4), "RFMP") || kWord() != 2) {
-        return invalid("a program material is RFMP, format 2");
+    if (!kIs(kTake(4), "RFMP") || kWord() != 3) {
+        return invalid("a program material is RFMP, format 3");
     }
     ProgramMaterial made;
     const std::span<const std::byte> kStates = kTake(4);
@@ -300,6 +304,12 @@ result::Result<ProgramMaterial> decodeProgram(std::span<const std::byte> bytes) 
     made.doubleSided = kStates[2] != std::byte{0};
     made.moves = kStates[3] != std::byte{0};
     made.alphaCutoff = kCutoff;
+    for (float& number : made.parameters) {
+        number = std::bit_cast<float>(kWord());
+        if (!std::isfinite(number)) {
+            return invalid("a program material's parameters are finite");
+        }
+    }
     const std::uint32_t kTextures = kWord();
     if (!fits || kTextures > 4) {
         return invalid("a program material binds at most four textures");

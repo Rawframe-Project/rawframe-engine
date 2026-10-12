@@ -51,7 +51,7 @@ readMaterial(content::ContentStore& store, std::uint64_t identity, base::Bits128
         }
         return SceneMaterial{
             .id = identity,
-            .blob = material::blobOf(kStates),
+            .blob = sceneBlobOf(material::blobOf(kStates), program.parameters),
             .translucent = program.blend == material::Blend::Translucent,
             .textures = {.base = slots[0], .packed = slots[1], .emission = slots[2], .normal = slots[3]},
             .program = std::make_shared<const material::ProgramMaterial>(std::move(program))};
@@ -59,7 +59,7 @@ readMaterial(content::ContentStore& store, std::uint64_t identity, base::Bits128
     RAWFRAME_TRY_ASSIGN(const material::Qualities kQualities, material::decode(kRead.bytes()));
     const material::Material& kMaterial = kQualities.at(static_cast<std::size_t>(quality));
     return SceneMaterial{.id = identity,
-                         .blob = material::blobOf(kMaterial),
+                         .blob = sceneBlobOf(material::blobOf(kMaterial)),
                          .translucent = kMaterial.blend == material::Blend::Translucent,
                          .textures = {.base = sceneTextureOf(kMaterial.textures.base),
                                       .packed = sceneTextureOf(kMaterial.textures.packed),

@@ -52,8 +52,13 @@ inline constexpr std::uint32_t kGridCells = 128;
 [[nodiscard]] std::shared_ptr<const mesh::Mesh> engineMesh(std::uint64_t id);
 
 /// A mesh the scene may draw, by the identity a Model names it by.
-/// A compiled material as a device reads it (`material::blobOf`, D303).
-using MaterialBlob = std::array<float, material::kBlobFloats>;
+/// A compiled material as a device reads it (`material::blobOf`, D303),
+/// then its interface inputs' values (D708).
+using MaterialBlob = std::array<float, material::kBlobFloats + material::kParameterFloats>;
+
+/// A material's blob and its parameters as a device reads them.
+[[nodiscard]] MaterialBlob sceneBlobOf(const std::array<float, material::kBlobFloats>& blob,
+                                       const std::array<float, material::kParameterFloats>& parameters = {}) noexcept;
 
 /// A model without a material: OpenPBR's surface but for a white base
 /// color, so the model's color is its base color.

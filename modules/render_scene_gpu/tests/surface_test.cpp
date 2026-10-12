@@ -363,7 +363,7 @@ RAWFRAME_TEST(PackedAndEmissionTexturesShapeTheSurface) {
     const auto kHalvesOf = [&](SceneFrame& frame, const material::Material& surface) {
         frame.shadows.count = 0;
         frame.draws = {shown};
-        frame.materials = {render_scene::noMaterial(), material::blobOf(surface)};
+        frame.materials = {render_scene::noMaterial(), render_scene::sceneBlobOf(material::blobOf(surface))};
         const auto kPixels = drawn(**framer, **made, frame, kMeshes, kTextures);
         RAWFRAME_EXPECT(kPixels.has_value());
         return kPixels.has_value() ? std::pair{at(*kPixels, 32, 24)[0], at(*kPixels, 32, 40)[0]} : std::pair{-1, -1};
@@ -439,7 +439,7 @@ RAWFRAME_TEST(ANormalTextureBendsTheLight) {
         if (bent) {
             surface.textures.normal.id = 0x77;
         }
-        frame.materials = {render_scene::noMaterial(), material::blobOf(surface)};
+        frame.materials = {render_scene::noMaterial(), render_scene::sceneBlobOf(material::blobOf(surface))};
         frame.textures = {{}, {.normal = {.id = bent ? 0x77ULL : 0ULL}}};
         const auto kPixels = drawn(**framer, **made, frame, kMeshes, kTextures);
         RAWFRAME_EXPECT(kPixels.has_value());
