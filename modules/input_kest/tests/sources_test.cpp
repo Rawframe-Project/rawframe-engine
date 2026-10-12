@@ -7,7 +7,8 @@
 // each local player's own locale chosen by their sample (D548), and a
 // controller's pose read by the sample (D596), and its select the UI's at
 // its pointer on a headset's panel (D598); and whether its player wears
-// a headset (D603); and a tracked hand's joints (D663).
+// a headset (D603); and a tracked hand's joints (D663); and a headset's
+// player and a flat one taking through one action to one input (D674).
 
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/input_kest/sources.h"
@@ -773,4 +774,74 @@ RAWFRAME_TEST(TheSampleReadsATrackedHandsJoints) {
     RAWFRAME_EXPECT(play(**bot, 1)[0] == Stick{});
     hands.tell({});
     RAWFRAME_EXPECT(play(**source, 1)[0] == Stick{});
+}
+
+RAWFRAME_TEST(AHeadsetAndAFlatPlayerTakeThroughOneAction) {
+    // ADR-0081's cross-play conformance (D674), on Reach's own actions and
+    // sample: a headset's right controller held over the near row's middle
+    // block and its select pressed, and a flat player's hand walked there
+    // by keys and its mouse's left button pressed, make the same input,
+    // `controls.Hands` (the right hand's place and grip, the left at rest),
+    // through the one action `take_right`. The server sees nothing else of
+    // either, and takes the block for that input (world_kest's Reach test).
+    constexpr std::size_t kRightX = 4;
+    constexpr std::size_t kRightGrip = 7;
+    const world_kest::GameFiles* reach = &gameAt("reach/reach.game");
+    input::Feed headsetFeed;
+    auto headset = makeInputSources(SourceSettings{.game = reach, .inputSize = sizeof(Stick), .feed = &headsetFeed});
+    input::Feed flatFeed;
+    auto flat = makeInputSources(SourceSettings{.game = reach, .inputSize = sizeof(Stick), .feed = &flatFeed});
+    RAWFRAME_EXPECT(headset.has_value() && flat.has_value());
+    if (!headset.has_value() || !flat.has_value()) {
+        return;
+    }
+    auto worn = (*headset)->playerSource(0);
+    auto seated = (*flat)->playerSource(0);
+    RAWFRAME_EXPECT(worn.has_value() && seated.has_value());
+    if (!worn.has_value() || !seated.has_value()) {
+        return;
+    }
+    // The headset: the controller where the block is, from a seated eye.
+    constexpr input::DeviceId kHands{7};
+    headsetFeed.connect(kHands, input::DeviceClass::Controller);
+    headsetFeed.submit(
+        {.device = kHands,
+         .control = *input::controlNamed(input::DeviceClass::Controller, "grip_right"),
+         .pose = {.position = {0, -0.32F, -0.75F}, .orientation = {0, 0, 0, 1}, .located = true, .tracked = true}});
+    RAWFRAME_EXPECT(play(**worn, 1)[0][kRightGrip] == 0);
+    headsetFeed.submit(
+        {.device = kHands, .control = *input::controlNamed(input::DeviceClass::Controller, "select_right"), .x = 1});
+    const Stick kWorn = play(**worn, 1)[0];
+    // The flat player: from the hand's rest above the table's edge (0.2,
+    // 0.95, -0.35), a centimeter a tick, one key at a time: down 7, left 20,
+    // ahead 40; then the mouse's left button. Its sample builds on the
+    // input it made the tick before (D525), so one input is carried on.
+    constexpr input::DeviceId kKeyboard{1};
+    constexpr input::DeviceId kMouse{2};
+    flatFeed.connect(kKeyboard, input::DeviceClass::Keyboard);
+    flatFeed.connect(kMouse, input::DeviceClass::Mouse);
+    alignas(Stick) std::array<std::byte, sizeof(Stick)> carried{};
+    std::uint64_t tick = 0;
+    const auto kPlayOn = [&](int ticks) {
+        for (int each = 0; each < ticks; ++each) {
+            RAWFRAME_EXPECT((*seated)->next(++tick, carried).has_value());
+        }
+        Stick made{};
+        std::memcpy(made.data(), carried.data(), sizeof made);
+        return made;
+    };
+    for (const auto& [kKey, kTicks] : {std::pair{"key_q", 7}, std::pair{"key_a", 20}, std::pair{"key_w", 40}}) {
+        const input::Control kControl = *input::controlNamed(input::DeviceClass::Keyboard, kKey);
+        flatFeed.submit({.device = kKeyboard, .control = kControl, .x = 1});
+        RAWFRAME_EXPECT(kPlayOn(kTicks)[kRightGrip] == 0);
+        flatFeed.submit({.device = kKeyboard, .control = kControl, .x = 0});
+    }
+    flatFeed.submit({.device = kMouse, .control = *input::controlNamed(input::DeviceClass::Mouse, "left"), .x = 1});
+    const Stick kSeated = kPlayOn(1);
+    RAWFRAME_EXPECT(kWorn[kRightGrip] == 1 && kSeated[kRightGrip] == 1);
+    RAWFRAME_EXPECT(std::abs(kWorn[kRightX]) < 1e-4F && std::abs(kWorn[kRightX + 1] - 0.88F) < 1e-4F &&
+                    std::abs(kWorn[kRightX + 2] + 0.75F) < 1e-4F);
+    for (std::size_t at = 0; at < kWorn.size(); ++at) {
+        RAWFRAME_EXPECT(std::abs(kWorn[at] - kSeated[at]) < 1e-4F);
+    }
 }
