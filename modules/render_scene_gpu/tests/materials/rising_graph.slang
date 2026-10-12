@@ -21,7 +21,7 @@ struct Generated : IMaterial
 
     static float3 offset(Placed placed)
     {
-        const float3 v0 = float3(0.0, placed.time, 0.0);
+        const float3 v0 = float3(0.0, (placed.time.x + placed.time.y), 0.0);
         return v0;
     }
 }

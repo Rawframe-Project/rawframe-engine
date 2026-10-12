@@ -60,7 +60,8 @@ struct FrameBlock {
     std::array<float, 4> contact{};
     std::array<float, 4> decals{};
     /// The eye's place in the World's axes, and the presented World's time
-    /// in seconds, now and the frame before (D691).
+    /// in seconds, now and the frame before (D691), each its whole seconds
+    /// and the fraction left (D702).
     std::array<float, 4> eye{};
     std::array<float, 4> time{};
 };

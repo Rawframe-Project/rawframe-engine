@@ -76,8 +76,9 @@ struct Frame
     float4 contact;
     float4 decals;
     // The eye's place in the World's axes, and the presented World's time
-    // in seconds, now and the frame before (D691): where a material that
-    // moves its vertices reads them.
+    // in seconds, now and the frame before (D691), each its whole seconds
+    // and the fraction left (D702): where a material that moves its
+    // vertices reads them.
     float4 eye;
     float4 time;
 }
@@ -223,7 +224,7 @@ Corner vs(Vertex vertex)
     here.normal = normalize(normal);
     here.uv = vertex.uv;
     here.color = vertex.color;
-    here.time = frame.time.x;
+    here.time = frame.time.xy;
     here.view = normalize(-still);
     const float3 placed = still + Material.offset(here);
     Corner corner;
@@ -235,7 +236,7 @@ Corner vs(Vertex vertex)
     const float3 stillThen = float3(dot(vertex.previous0, then), dot(vertex.previous1, then), dot(vertex.previous2, then));
     Placed there = here;
     there.position = stillThen + frame.eye.xyz;
-    there.time = frame.time.y;
+    there.time = frame.time.zw;
     there.view = normalize(-stillThen);
     const float3 was = stillThen + Material.offset(there);
     corner.now = mul(frame.unjittered, float4(placed, 1.0)).xyw;
@@ -274,7 +275,7 @@ Point pointOf(Corner corner)
     point.color = corner.color;
     point.material = corner.material;
     point.position = corner.placed + frame.eye.xyz;
-    point.time = frame.time.x;
+    point.time = frame.time.xy;
     point.view = normalize(-corner.placed);
     return point;
 }
@@ -730,7 +731,7 @@ Lit shaded(Corner corner, bool decaled)
     point.color = corner.color;
     point.material = corner.material;
     point.position = corner.placed + frame.eye.xyz;
-    point.time = frame.time.x;
+    point.time = frame.time.xy;
     point.view = toEye;
     const Evaluated evaluated = Material.evaluate(point);
     float3 color = evaluated.color;

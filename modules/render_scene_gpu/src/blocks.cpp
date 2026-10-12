@@ -16,6 +16,14 @@ float factorOf(float ev100) noexcept {
     return 1.0F / (1.2F * std::exp2(ev100));
 }
 
+/// A time in seconds as its whole seconds and the fraction left (D702):
+/// a float holds each finely where it would hold their sum coarsely once
+/// a game has run for days.
+std::array<float, 2> split(double seconds) noexcept {
+    const double kWhole = std::floor(seconds);
+    return {static_cast<float>(kWhole), static_cast<float>(seconds - kWhole)};
+}
+
 } // namespace
 
 ExposureBlock exposureOf(float ev100) noexcept {
@@ -91,7 +99,9 @@ FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, s
     block.forward = {frame.forward[0], frame.forward[1], frame.forward[2], 0};
     block.eye = {
         static_cast<float>(frame.eye[0]), static_cast<float>(frame.eye[1]), static_cast<float>(frame.eye[2]), 0};
-    block.time = {static_cast<float>(frame.time[0]), static_cast<float>(frame.time[1]), 0, 0};
+    const std::array<float, 2> kNow = split(frame.time[0]);
+    const std::array<float, 2> kBefore = split(frame.time[1]);
+    block.time = {kNow[0], kNow[1], kBefore[0], kBefore[1]};
     const render_scene::SceneShadows& kShadows = frame.shadows;
     for (std::size_t at = 0; at < kShadows.count; ++at) {
         block.cascadeFar[at] = kShadows.cascades[at].far;

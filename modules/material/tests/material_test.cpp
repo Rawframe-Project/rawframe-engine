@@ -751,10 +751,12 @@ RAWFRAME_TEST(AMaterialMovesItsVerticesAtThePresentedWorldsTime) {
     RAWFRAME_EXPECT(kOffset != std::string::npos);
     const std::string kFragment = kSource.substr(0, kOffset);
     const std::string kVertex = kOffset != std::string::npos ? kSource.substr(kOffset) : std::string{};
-    RAWFRAME_EXPECT(kVertex.contains("(placed.position).r + placed.time") && kVertex.contains("sin(") &&
-                    kVertex.contains("float3(0.0, ") && !kVertex.contains("point.") && !kVertex.contains("cos("));
-    RAWFRAME_EXPECT(kFragment.contains("(point.position).r + point.time") && kFragment.contains("cos(") &&
-                    kFragment.contains("normalize(") && !kFragment.contains("placed.") && !kFragment.contains("sin("));
+    RAWFRAME_EXPECT(kVertex.contains("(placed.position).r + (placed.time.x + placed.time.y)") &&
+                    kVertex.contains("sin(") && kVertex.contains("float3(0.0, ") && !kVertex.contains("point.") &&
+                    !kVertex.contains("cos("));
+    RAWFRAME_EXPECT(kFragment.contains("(point.position).r + (point.time.x + point.time.y)") &&
+                    kFragment.contains("cos(") && kFragment.contains("normalize(") && !kFragment.contains("placed.") &&
+                    !kFragment.contains("sin("));
     // A material without one moves nothing.
     const auto kStill = generateSlang(sampledAt(0));
     RAWFRAME_EXPECT(kStill.has_value() && !kStill->moves &&
@@ -766,6 +768,24 @@ RAWFRAME_TEST(AMaterialMovesItsVerticesAtThePresentedWorldsTime) {
         graph::Document wrong = kWaved;
         wrong.nodes[1] = timeOf(kTimeline);
         RAWFRAME_EXPECT(refusedWith(validateSurface(wrong), MaterialError::Invalid));
+    }
+    // Wrapped at a whole period (D702): its whole seconds wrapped before
+    // the fraction left is added, in both stages; a period is whole
+    // seconds, from one to below 2^24.
+    const auto kPeriodOf = [&kWaved](Value period) {
+        graph::Document wrapped = kWaved;
+        wrapped.nodes[1] = nodeOf(kTime,
+                                  kTimeType,
+                                  objectOf({{"period", std::move(period)}, {"timeline", Value::string("simulation")}}),
+                                  Value::object());
+        return wrapped;
+    };
+    const auto kWrapped = generateSlang(kPeriodOf(Value::integer(600)));
+    RAWFRAME_EXPECT(kWrapped.has_value() && kWrapped->source.contains("(fmod(placed.time.x, 600.0) + placed.time.y)") &&
+                    kWrapped->source.contains("(fmod(point.time.x, 600.0) + point.time.y)"));
+    for (const Value& kPeriod :
+         {Value::integer(0), Value::real(1.5), Value::integer(std::int64_t{1} << 24), Value::string("600")}) {
+        RAWFRAME_EXPECT(refusedWith(validateSurface(kPeriodOf(kPeriod)), MaterialError::Invalid));
     }
     RAWFRAME_EXPECT(refusedWith(
         validateSurface(surfaceOf(

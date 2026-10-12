@@ -49,7 +49,7 @@ float4 placed(Caster caster)
     here.normal = normalize(mul(caster.normal, float3x3(caster.normal0, caster.normal1, caster.normal2)));
     here.uv = caster.uv;
     here.color = caster.color;
-    here.time = cascade.time.x;
+    here.time = cascade.time.xy;
     here.view = normalize(-there);
     return mul(cascade.viewProjection, float4(there + Material.offset(here), 1.0));
 }
@@ -103,7 +103,7 @@ void cut(Cut cut)
     point.color = cut.color;
     point.material = cut.material;
     point.position = float3(0.0);
-    point.time = cascade.time.x;
+    point.time = cascade.time.xy;
     point.view = float3(0.0, 0.0, 1.0);
     const Evaluated evaluated = Material.evaluate(point);
     if (evaluated.opacity < materials[blobOf(cut.material) + 3u].z)

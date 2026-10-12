@@ -136,7 +136,14 @@ public:
             return "(" + kInText + ")." + kSwizzle.pattern;
         }
         if (kType == kTimeType) {
-            return at_ + ".time";
+            // Whole seconds and the fraction left (D702): wrapped at a
+            // whole period before they are added, so a material reads a
+            // time days long as finely as one a minute long.
+            RAWFRAME_TRY_ASSIGN(const std::uint32_t kPeriod, surface_graph::timeIn(*kNode));
+            if (kPeriod == 0) {
+                return "(" + at_ + ".time.x + " + at_ + ".time.y)";
+            }
+            return "(fmod(" + at_ + ".time.x, " + numberText(kPeriod) + ") + " + at_ + ".time.y)";
         }
         if (kType == kSampleTexture2dType) {
             RAWFRAME_TRY_ASSIGN(const std::string kTexel, texelOf(*kNode, from.node));

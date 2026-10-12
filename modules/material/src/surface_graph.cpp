@@ -527,14 +527,24 @@ result::Result<Compare> compareIn(const graph::Document& surface, const graph::N
     return made;
 }
 
-result::Status timeIn(const graph::Node& node) {
-    constexpr std::array<std::string_view, 1> kParams = {"timeline"};
+result::Result<std::uint32_t> timeIn(const graph::Node& node) {
+    constexpr std::array<std::string_view, 2> kParams = {"period", "timeline"};
     RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, {}));
     const Value* kTimeline = kParts.first->find("timeline");
     if (kTimeline == nullptr || kTimeline->text() == nullptr || *kTimeline->text() != "simulation") {
         return invalid("a time node names its timeline, the simulation's");
     }
-    return {};
+    const Value* kPeriod = kParts.first->find("period");
+    if (kPeriod == nullptr) {
+        return 0U;
+    }
+    // Whole seconds below 2^24, each a float exactly.
+    const std::optional<std::int64_t> kSeconds =
+        kPeriod->kind() == Value::Kind::Number ? kPeriod->integer() : std::nullopt;
+    if (!kSeconds.has_value() || *kSeconds < 1 || *kSeconds >= (std::int64_t{1} << 24)) {
+        return invalid("a time node's period is whole seconds, from one to below 2^24");
+    }
+    return static_cast<std::uint32_t>(*kSeconds);
 }
 
 result::Status streamIn(const graph::Node& node) {

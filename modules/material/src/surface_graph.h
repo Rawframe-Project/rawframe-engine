@@ -164,8 +164,9 @@ struct Compare {
 [[nodiscard]] result::Result<Compare> compareIn(const graph::Document& surface, const graph::Node& node);
 
 /// A `time` node's params, checked (D691): its timeline, the simulation's,
-/// the presented World's ticks over its tick rate in seconds (ADR-0010).
-[[nodiscard]] result::Status timeIn(const graph::Node& node);
+/// the presented World's ticks over its tick rate in seconds (ADR-0010);
+/// and the whole seconds it wraps at, none when it is not wrapped (D702).
+[[nodiscard]] result::Result<std::uint32_t> timeIn(const graph::Node& node);
 
 /// A stream node, `world_position`, `world_normal`, `vertex_color`,
 /// `view_direction`, or `world_tangent`, checked: no params and no inputs

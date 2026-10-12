@@ -50,8 +50,9 @@ public float channelOf(float4 texel, float channel)
 // derivatives across the pixel, taken before anything branches; the
 // surface's normal, normalized, and its tangent with the bitangent's sign;
 // the model's color; the draw's material among the frame's; the point in
-// the World's axes, and the presented World's time in seconds (D691); and
-// the way to the eye from it, a unit vector (D696).
+// the World's axes, and the presented World's time in seconds (D691), its
+// whole seconds and the fraction left (D702); and the way to the eye from
+// it, a unit vector (D696).
 public struct Point
 {
     public float2 uv;
@@ -62,22 +63,22 @@ public struct Point
     public float4 color;
     public uint material;
     public float3 position;
-    public float time;
+    public float2 time;
     public float3 view;
 }
 
 // Where a material moves a vertex (SPEC-0026's position offset, D691): the
 // vertex placed by its model in the World's axes, its normal there, its
 // texture coordinates, the model's color, the presented World's time in
-// seconds, now or the frame before, and the way to the eye, a unit vector
-// (D696).
+// seconds, now or the frame before, its whole seconds and the fraction left
+// (D702), and the way to the eye, a unit vector (D696).
 public struct Placed
 {
     public float3 position;
     public float3 normal;
     public float2 uv;
     public float4 color;
-    public float time;
+    public float2 time;
     public float3 view;
 }
 
