@@ -1,0 +1,1305 @@
+{
+  "formatVersion": 1,
+  "kind": "function",
+  "interface": {
+    "inputs": {
+      "jitter": {
+        "default": 1,
+        "type": "float"
+      },
+      "uv": {
+        "stream": "uv",
+        "type": "vec2"
+      }
+    },
+    "outputs": {
+      "out": {
+        "type": "float"
+      }
+    }
+  },
+  "graph": {
+    "f7e5000001000001": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "uv"
+      },
+      "inputs": {}
+    },
+    "f7e5000001000002": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "jitter"
+      },
+      "inputs": {}
+    },
+    "f7e5000001000003": {
+      "type": "rawframe/floor@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000001",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000004": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000003",
+          "output": "out"
+        },
+        "b": [
+          -1,
+          -1
+        ]
+      }
+    },
+    "f7e5000001000005": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000004",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000006": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000004",
+          "output": "out"
+        },
+        "b": [
+          173,
+          911
+        ]
+      }
+    },
+    "f7e5000001000007": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000006",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000008": {
+      "type": "rawframe/combine2@1",
+      "params": {},
+      "inputs": {
+        "x": {
+          "node": "f7e5000001000005",
+          "output": "out"
+        },
+        "y": {
+          "node": "f7e5000001000007",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000009": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000008",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e500000100000a": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000009",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000002",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100000b": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000004",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e500000100000c": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100000b",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e500000100000a",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100000d": {
+      "type": "rawframe/distance@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e500000100000c",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100000e": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000003",
+          "output": "out"
+        },
+        "b": [
+          0,
+          -1
+        ]
+      }
+    },
+    "f7e500000100000f": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e500000100000e",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000010": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100000e",
+          "output": "out"
+        },
+        "b": [
+          173,
+          911
+        ]
+      }
+    },
+    "f7e5000001000011": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000010",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000012": {
+      "type": "rawframe/combine2@1",
+      "params": {},
+      "inputs": {
+        "x": {
+          "node": "f7e500000100000f",
+          "output": "out"
+        },
+        "y": {
+          "node": "f7e5000001000011",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000013": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000012",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e5000001000014": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000013",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000002",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000015": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100000e",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e5000001000016": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000015",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000014",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000017": {
+      "type": "rawframe/distance@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000016",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000018": {
+      "type": "rawframe/min@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100000d",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000017",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000019": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000003",
+          "output": "out"
+        },
+        "b": [
+          1,
+          -1
+        ]
+      }
+    },
+    "f7e500000100001a": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000019",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100001b": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000019",
+          "output": "out"
+        },
+        "b": [
+          173,
+          911
+        ]
+      }
+    },
+    "f7e500000100001c": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e500000100001b",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100001d": {
+      "type": "rawframe/combine2@1",
+      "params": {},
+      "inputs": {
+        "x": {
+          "node": "f7e500000100001a",
+          "output": "out"
+        },
+        "y": {
+          "node": "f7e500000100001c",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100001e": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100001d",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e500000100001f": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100001e",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000002",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000020": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000019",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e5000001000021": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000020",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e500000100001f",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000022": {
+      "type": "rawframe/distance@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000021",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000023": {
+      "type": "rawframe/min@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000018",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000022",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000024": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000003",
+          "output": "out"
+        },
+        "b": [
+          -1,
+          0
+        ]
+      }
+    },
+    "f7e5000001000025": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000024",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000026": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000024",
+          "output": "out"
+        },
+        "b": [
+          173,
+          911
+        ]
+      }
+    },
+    "f7e5000001000027": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000026",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000028": {
+      "type": "rawframe/combine2@1",
+      "params": {},
+      "inputs": {
+        "x": {
+          "node": "f7e5000001000025",
+          "output": "out"
+        },
+        "y": {
+          "node": "f7e5000001000027",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000029": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000028",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e500000100002a": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000029",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000002",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100002b": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000024",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e500000100002c": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100002b",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e500000100002a",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100002d": {
+      "type": "rawframe/distance@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e500000100002c",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100002e": {
+      "type": "rawframe/min@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000023",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e500000100002d",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100002f": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000003",
+          "output": "out"
+        },
+        "b": [
+          0,
+          0
+        ]
+      }
+    },
+    "f7e5000001000030": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e500000100002f",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000031": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100002f",
+          "output": "out"
+        },
+        "b": [
+          173,
+          911
+        ]
+      }
+    },
+    "f7e5000001000032": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000031",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000033": {
+      "type": "rawframe/combine2@1",
+      "params": {},
+      "inputs": {
+        "x": {
+          "node": "f7e5000001000030",
+          "output": "out"
+        },
+        "y": {
+          "node": "f7e5000001000032",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000034": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000033",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e5000001000035": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000034",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000002",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000036": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100002f",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e5000001000037": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000036",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000035",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000038": {
+      "type": "rawframe/distance@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000037",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000039": {
+      "type": "rawframe/min@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100002e",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000038",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100003a": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000003",
+          "output": "out"
+        },
+        "b": [
+          1,
+          0
+        ]
+      }
+    },
+    "f7e500000100003b": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e500000100003a",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100003c": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100003a",
+          "output": "out"
+        },
+        "b": [
+          173,
+          911
+        ]
+      }
+    },
+    "f7e500000100003d": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e500000100003c",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100003e": {
+      "type": "rawframe/combine2@1",
+      "params": {},
+      "inputs": {
+        "x": {
+          "node": "f7e500000100003b",
+          "output": "out"
+        },
+        "y": {
+          "node": "f7e500000100003d",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100003f": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100003e",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e5000001000040": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100003f",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000002",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000041": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100003a",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e5000001000042": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000041",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000040",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000043": {
+      "type": "rawframe/distance@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000042",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000044": {
+      "type": "rawframe/min@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000039",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000043",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000045": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000003",
+          "output": "out"
+        },
+        "b": [
+          -1,
+          1
+        ]
+      }
+    },
+    "f7e5000001000046": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000045",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000047": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000045",
+          "output": "out"
+        },
+        "b": [
+          173,
+          911
+        ]
+      }
+    },
+    "f7e5000001000048": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000047",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000049": {
+      "type": "rawframe/combine2@1",
+      "params": {},
+      "inputs": {
+        "x": {
+          "node": "f7e5000001000046",
+          "output": "out"
+        },
+        "y": {
+          "node": "f7e5000001000048",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100004a": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000049",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e500000100004b": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100004a",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000002",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100004c": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000045",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e500000100004d": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100004c",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e500000100004b",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100004e": {
+      "type": "rawframe/distance@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e500000100004d",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100004f": {
+      "type": "rawframe/min@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000044",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e500000100004e",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000050": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000003",
+          "output": "out"
+        },
+        "b": [
+          0,
+          1
+        ]
+      }
+    },
+    "f7e5000001000051": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000050",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000052": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000050",
+          "output": "out"
+        },
+        "b": [
+          173,
+          911
+        ]
+      }
+    },
+    "f7e5000001000053": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000052",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000054": {
+      "type": "rawframe/combine2@1",
+      "params": {},
+      "inputs": {
+        "x": {
+          "node": "f7e5000001000051",
+          "output": "out"
+        },
+        "y": {
+          "node": "f7e5000001000053",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000055": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000054",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e5000001000056": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000055",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000002",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000057": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000050",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e5000001000058": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000057",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000056",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000059": {
+      "type": "rawframe/distance@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000058",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100005a": {
+      "type": "rawframe/min@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100004f",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000059",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100005b": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000003",
+          "output": "out"
+        },
+        "b": [
+          1,
+          1
+        ]
+      }
+    },
+    "f7e500000100005c": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e500000100005b",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100005d": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100005b",
+          "output": "out"
+        },
+        "b": [
+          173,
+          911
+        ]
+      }
+    },
+    "f7e500000100005e": {
+      "type": "rawframe/cell_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e500000100005d",
+          "output": "out"
+        }
+      }
+    },
+    "f7e500000100005f": {
+      "type": "rawframe/combine2@1",
+      "params": {},
+      "inputs": {
+        "x": {
+          "node": "f7e500000100005c",
+          "output": "out"
+        },
+        "y": {
+          "node": "f7e500000100005e",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000060": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100005f",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e5000001000061": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000060",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000002",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000062": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100005b",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "f7e5000001000063": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000062",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000061",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000064": {
+      "type": "rawframe/distance@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000001000001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000063",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000065": {
+      "type": "rawframe/min@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e500000100005a",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000001000064",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000001000066": {
+      "type": "rawframe/output@1",
+      "params": {
+        "name": "out"
+      },
+      "inputs": {
+        "in": {
+          "node": "f7e5000001000065",
+          "output": "out"
+        }
+      }
+    }
+  }
+}

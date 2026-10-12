@@ -10,7 +10,7 @@ rawframe_module(NAME material
 
 # The engine's functions, SPEC-0026's standard subgraphs (D711), written by
 # tools/make_functions.py.
-foreach(function IN ITEMS checkerboard fresnel polar_coordinates rotate_uv tile_and_offset)
+foreach(function IN ITEMS checkerboard fractal_noise_2d fresnel polar_coordinates rotate_uv tile_and_offset voronoi_2d)
     string(REPLACE "_" ";" words "${function}")
     set(symbol "k")
     foreach(word IN LISTS words)

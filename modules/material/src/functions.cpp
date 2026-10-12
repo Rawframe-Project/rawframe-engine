@@ -2,10 +2,12 @@
 
 #include "common.h"
 #include "generated/checkerboard_function.h"
+#include "generated/fractal_noise_2d_function.h"
 #include "generated/fresnel_function.h"
 #include "generated/polar_coordinates_function.h"
 #include "generated/rotate_uv_function.h"
 #include "generated/tile_and_offset_function.h"
+#include "generated/voronoi_2d_function.h"
 #include "rawframe/material/material.h"
 
 #include <algorithm>
@@ -24,12 +26,14 @@ namespace {
 
 /// The engine's functions by their node types, each its document's text
 /// (modules/material/library, written by tools/make_functions.py).
-const std::array<std::pair<std::string_view, std::span<const std::uint8_t>>, 5> kLibrary = {{
+const std::array<std::pair<std::string_view, std::span<const std::uint8_t>>, 7> kLibrary = {{
     {"rawframe/checkerboard@1", kCheckerboardFunction},
+    {"rawframe/fractal_noise_2d@1", kFractalNoise2dFunction},
     {"rawframe/fresnel@1", kFresnelFunction},
     {"rawframe/polar_coordinates@1", kPolarCoordinatesFunction},
     {"rawframe/rotate_uv@1", kRotateUvFunction},
     {"rawframe/tile_and_offset@1", kTileAndOffsetFunction},
+    {"rawframe/voronoi_2d@1", kVoronoi2dFunction},
 }};
 
 /// A function's outputs as its interface declares them: one to four, each

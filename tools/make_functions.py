@@ -126,12 +126,67 @@ def checkerboard():
                    "tiling": value("vec2", [8, 8]), "uv": stream("vec2", "uv")}, {"out": {"type": "color3"}})
 
 
+def fractal_noise_2d():
+    # Fractal Brownian motion over simplex noise, MaterialX's fractal's
+    # shape: `octaves` of noise, each `lacunarity` times finer and
+    # `diminish` times fainter than the last, `amplitude` the first's. With
+    # no loops in a graph, eight are made and those past `octaves` weighed
+    # nought; a fraction of an octave fades it in.
+    f = Function("f7e5000000f0")
+    uv, octaves = f.input("uv"), f.input("octaves")
+    lacunarity, diminish = f.input("lacunarity"), f.input("diminish")
+    total = None
+    scale = None
+    weight = f.input("amplitude")
+    for octave in range(8):
+        at = uv if scale is None else out(f.node("multiply", inputs={"a": uv, "b": scale}))
+        noise = out(f.node("simplex_noise_2d", inputs={"in": at}))
+        # How much of this octave there is: one below `octaves`, its fraction
+        # at it, nought past it.
+        share = out(f.node("saturate", inputs={"in": out(f.node("subtract", inputs={"a": octaves, "b": octave}))}))
+        term = out(f.node("multiply", inputs={"a": out(f.node("multiply", inputs={"a": noise, "b": weight})),
+                                              "b": share}))
+        total = term if total is None else out(f.node("add", inputs={"a": total, "b": term}))
+        scale = lacunarity if scale is None else out(f.node("multiply", inputs={"a": scale, "b": lacunarity}))
+        weight = out(f.node("multiply", inputs={"a": weight, "b": diminish}))
+    f.output("out", total)
+    return f.text({"amplitude": value("float", 1), "diminish": value("float", 0.5),
+                   "lacunarity": value("float", 2), "octaves": value("float", 3), "uv": stream("vec2", "uv")},
+                  {"out": {"type": "float"}})
+
+
+def voronoi_2d():
+    # The distance to the nearest feature point, one a cell, each placed in
+    # its cell by two of the cell's hashes times `jitter`, MaterialX's
+    # worley's shape; the nine cells round the point's searched, unrolled.
+    f = Function("f7e500000100")
+    uv, jitter = f.input("uv"), f.input("jitter")
+    base = out(f.node("floor", inputs={"in": uv}))
+    nearest = None
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            cell = out(f.node("add", inputs={"a": base, "b": [dx, dy]}))
+            # Two hashes of the cell: its own, and its neighbor's far off.
+            first = out(f.node("cell_noise_2d", inputs={"in": cell}))
+            second = out(f.node("cell_noise_2d", inputs={"in": out(f.node("add", inputs={"a": cell,
+                                                                                        "b": [173, 911]}))}))
+            spread = out(f.node("combine2", inputs={"x": first, "y": second}))
+            # From the cell's center, jittered toward its edges.
+            offset = out(f.node("multiply", inputs={"a": out(f.node("subtract", inputs={"a": spread, "b": 0.5})),
+                                                    "b": jitter}))
+            point = out(f.node("add", inputs={"a": out(f.node("add", inputs={"a": cell, "b": 0.5})), "b": offset}))
+            gap = out(f.node("distance", inputs={"a": uv, "b": point}))
+            nearest = gap if nearest is None else out(f.node("min", inputs={"a": nearest, "b": gap}))
+    f.output("out", nearest)
+    return f.text({"jitter": value("float", 1), "uv": stream("vec2", "uv")}, {"out": {"type": "float"}})
+
+
 def main():
     if len(sys.argv) != 2:
         sys.exit("usage: tools/make_functions.py <modules/material/library>")
-    for name, make in (("checkerboard", checkerboard), ("fresnel", fresnel),
-                       ("polar_coordinates", polar_coordinates), ("rotate_uv", rotate_uv),
-                       ("tile_and_offset", tile_and_offset)):
+    for name, make in (("checkerboard", checkerboard), ("fractal_noise_2d", fractal_noise_2d),
+                       ("fresnel", fresnel), ("polar_coordinates", polar_coordinates), ("rotate_uv", rotate_uv),
+                       ("tile_and_offset", tile_and_offset), ("voronoi_2d", voronoi_2d)):
         with open(os.path.join(sys.argv[1], name + ".function"), "w", encoding="utf-8") as file:
             file.write(make())
 

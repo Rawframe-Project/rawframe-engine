@@ -1,0 +1,960 @@
+{
+  "formatVersion": 1,
+  "kind": "function",
+  "interface": {
+    "inputs": {
+      "amplitude": {
+        "default": 1,
+        "type": "float"
+      },
+      "diminish": {
+        "default": 0.5,
+        "type": "float"
+      },
+      "lacunarity": {
+        "default": 2,
+        "type": "float"
+      },
+      "octaves": {
+        "default": 3,
+        "type": "float"
+      },
+      "uv": {
+        "stream": "uv",
+        "type": "vec2"
+      }
+    },
+    "outputs": {
+      "out": {
+        "type": "float"
+      }
+    }
+  },
+  "graph": {
+    "f7e5000000f00001": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "uv"
+      },
+      "inputs": {}
+    },
+    "f7e5000000f00002": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "octaves"
+      },
+      "inputs": {}
+    },
+    "f7e5000000f00003": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "lacunarity"
+      },
+      "inputs": {}
+    },
+    "f7e5000000f00004": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "diminish"
+      },
+      "inputs": {}
+    },
+    "f7e5000000f00005": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "amplitude"
+      },
+      "inputs": {}
+    },
+    "f7e5000000f00006": {
+      "type": "rawframe/simplex_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00001",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00007": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00002",
+          "output": "out"
+        },
+        "b": 0
+      }
+    },
+    "f7e5000000f00008": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00007",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00009": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00006",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00005",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0000a": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00009",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00008",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0000b": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00005",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00004",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0000c": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00003",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0000d": {
+      "type": "rawframe/simplex_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f0000c",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0000e": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00002",
+          "output": "out"
+        },
+        "b": 1
+      }
+    },
+    "f7e5000000f0000f": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f0000e",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00010": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0000d",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f0000b",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00011": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00010",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f0000f",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00012": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0000a",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00011",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00013": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00003",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00003",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00014": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0000b",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00004",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00015": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00013",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00016": {
+      "type": "rawframe/simplex_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00015",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00017": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00002",
+          "output": "out"
+        },
+        "b": 2
+      }
+    },
+    "f7e5000000f00018": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00017",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00019": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00016",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00014",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0001a": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00019",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00018",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0001b": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00012",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f0001a",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0001c": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00013",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00003",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0001d": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00014",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00004",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0001e": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f0001c",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0001f": {
+      "type": "rawframe/simplex_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f0001e",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00020": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00002",
+          "output": "out"
+        },
+        "b": 3
+      }
+    },
+    "f7e5000000f00021": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00020",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00022": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0001f",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f0001d",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00023": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00022",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00021",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00024": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0001b",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00023",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00025": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0001c",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00003",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00026": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0001d",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00004",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00027": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00025",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00028": {
+      "type": "rawframe/simplex_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00027",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00029": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00002",
+          "output": "out"
+        },
+        "b": 4
+      }
+    },
+    "f7e5000000f0002a": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00029",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0002b": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00028",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00026",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0002c": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0002b",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f0002a",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0002d": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00024",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f0002c",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0002e": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00025",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00003",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0002f": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00026",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00004",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00030": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f0002e",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00031": {
+      "type": "rawframe/simplex_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00030",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00032": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00002",
+          "output": "out"
+        },
+        "b": 5
+      }
+    },
+    "f7e5000000f00033": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00032",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00034": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00031",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f0002f",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00035": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00034",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00033",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00036": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0002d",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00035",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00037": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0002e",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00003",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00038": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0002f",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00004",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00039": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00037",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0003a": {
+      "type": "rawframe/simplex_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00039",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0003b": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00002",
+          "output": "out"
+        },
+        "b": 6
+      }
+    },
+    "f7e5000000f0003c": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f0003b",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0003d": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0003a",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00038",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0003e": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0003d",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f0003c",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0003f": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00036",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f0003e",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00040": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00037",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00003",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00041": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00038",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00004",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00042": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00040",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00043": {
+      "type": "rawframe/simplex_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00042",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00044": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00002",
+          "output": "out"
+        },
+        "b": 7
+      }
+    },
+    "f7e5000000f00045": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00044",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00046": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00043",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00041",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00047": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00046",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00045",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00048": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f0003f",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00047",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f00049": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00040",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00003",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0004a": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000f00041",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000f00004",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000f0004b": {
+      "type": "rawframe/output@1",
+      "params": {
+        "name": "out"
+      },
+      "inputs": {
+        "in": {
+          "node": "f7e5000000f00048",
+          "output": "out"
+        }
+      }
+    }
+  }
+}
