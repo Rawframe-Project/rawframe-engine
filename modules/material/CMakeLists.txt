@@ -8,7 +8,8 @@ rawframe_module(NAME material
     DEPS graph document result base
 )
 
-rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/material_test.cpp tests/post_process_test.cpp)
+rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/material_test.cpp tests/nodes_test.cpp
+                                           tests/post_process_test.cpp)
 if(TARGET rawframe_material_tests)
     # ADR-0026's proof (D490): a graph and the Slang written from it, which
     # the scene's tests build beside its handwritten twin.
