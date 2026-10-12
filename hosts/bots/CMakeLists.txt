@@ -44,7 +44,10 @@ if(RAWFRAME_BUILD_TESTS)
     # A bots process whose frames are long inside them, about three a
     # second (D678, a development build's `host.drawing_ms`): its commands
     # are labelled past the server's tick, so the server consumes them where
-    # before it consumed none and played every tick neutral.
+    # before it consumed none and played every tick neutral. Read on the
+    # bot's side, its predictions confirmed by the server's state (one
+    # before, about 400 now): Git's bash on Windows ends the server outright,
+    # before its summary.
     if(NOT RAWFRAME_SHIPPING)
         set(PLAZA_CONTENT ${PROJECT_BINARY_DIR}/hosts/arena/plaza_content)
         configure_file(tests/long_frames.conf.in ${CMAKE_CURRENT_BINARY_DIR}/long_frames.conf @ONLY)
@@ -56,7 +59,7 @@ if(RAWFRAME_BUILD_TESTS)
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(bots_long_frames PROPERTIES
                              FIXTURES_REQUIRED plaza_content
-                             PASS_REGULAR_EXPRESSION "\"code\":\"server_summary\"[^\n]*\"inputsConsumed\":([2-9][0-9]|[1-9][0-9][0-9]+),")
+                             PASS_REGULAR_EXPRESSION "\"code\":\"bots_summary\"[^\n]*\"confirmed\":[1-9][0-9][0-9]+,")
     endif()
     add_test(NAME bots_composition
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/composition.sh
