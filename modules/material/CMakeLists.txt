@@ -24,7 +24,7 @@ foreach(function IN ITEMS checkerboard fractal_noise_2d fresnel polar_coordinate
                            HEADER "${function}_function.h" SYMBOL "${symbol}Function")
 endforeach()
 
-rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/functions_test.cpp tests/instance_test.cpp tests/ints_test.cpp
+rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/coat_test.cpp tests/functions_test.cpp tests/instance_test.cpp tests/ints_test.cpp
                                            tests/material_test.cpp tests/nodes_test.cpp tests/post_process_test.cpp
                                            tests/transform_test.cpp)
 if(TARGET rawframe_material_tests)
@@ -65,6 +65,12 @@ if(TARGET rawframe_material_tests)
     rawframe_embedded_file(TARGET rawframe_material_tests
                            FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/spaced_graph.slang"
                            HEADER "spaced_graph.h" SYMBOL "kSpacedGraph")
+    # A graph coated smooth over a rough base (D716), and its Slang.
+    rawframe_embedded_file(TARGET rawframe_material_tests FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/seeds/coated.material"
+                           HEADER "coated_material.h" SYMBOL "kCoatedMaterial")
+    rawframe_embedded_file(TARGET rawframe_material_tests
+                           FILE "${PROJECT_SOURCE_DIR}/modules/render_scene_gpu/tests/materials/coated_graph.slang"
+                           HEADER "coated_graph.h" SYMBOL "kCoatedGraph")
 endif()
 rawframe_module_fuzz(NAME material TARGET documents RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_material.cpp)
 rawframe_module_fuzz(NAME material TARGET post_processes RUNS 10000 SEEDS tests/post_seeds SOURCES tests/fuzz_post_process.cpp)

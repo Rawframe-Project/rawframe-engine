@@ -35,7 +35,11 @@
 // metalness, the roughness, the opacity, and the occlusion; the index of
 // refraction is from one to three; luminance is nought or more.
 // `geometry_normal`, a stream or a map, has no literal: it is connected or
-// left out for the mesh's normal (D313).
+// left out for the mesh's normal (D313). The coat's feature group
+// (`KHR_materials_clearcoat`, D716): `coat_weight` and `coat_roughness`,
+// each from nought to one, nought by default, and `coat_normal`, connected
+// or left out for the mesh's normal; a material whose coat is given is a
+// program material.
 //
 // The optional `states` (SPEC-0026's declared material states, in this
 // order, each left out at its default): `shading` `lit` or `unlit`;

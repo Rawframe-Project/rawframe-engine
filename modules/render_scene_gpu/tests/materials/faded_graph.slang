@@ -17,6 +17,9 @@ struct Generated : IMaterial
         made.opacity = point.color.a * (1.0);
         made.occlusion = 1.0;
         made.normal = point.normal;
+        made.coat = 0.0;
+        made.coatRoughness = 0.0;
+        made.coatNormal = point.normal;
         made.unlit = false;
         return made;
     }

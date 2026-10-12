@@ -198,7 +198,9 @@ public struct Placed
 // the base color, the model's color applied; the metalness; the specular
 // color times its weight; the roughness; the emission in nits; the index of
 // refraction; the opacity, the model's alpha applied; the occlusion; the
-// normal, bent as the material bends it; and whether it stands unlit.
+// normal, bent as the material bends it; the coat's weight, its roughness,
+// and its normal (KHR_materials_clearcoat, D716), a weight of nought for
+// none; and whether it stands unlit.
 public struct Evaluated
 {
     public float3 color;
@@ -210,6 +212,9 @@ public struct Evaluated
     public float opacity;
     public float occlusion;
     public float3 normal;
+    public float coat;
+    public float coatRoughness;
+    public float3 coatNormal;
     public bool unlit;
 }
 

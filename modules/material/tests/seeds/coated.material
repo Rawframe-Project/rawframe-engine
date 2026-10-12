@@ -1,0 +1,16 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {},
+  "graph": {
+    "2f00000000000091": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "coat_roughness": 0.1,
+        "coat_weight": 1,
+        "specular_roughness": 0.9
+      }
+    }
+  }
+}

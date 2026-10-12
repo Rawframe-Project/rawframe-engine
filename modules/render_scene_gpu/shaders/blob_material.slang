@@ -75,6 +75,10 @@ struct BlobMaterial : IMaterial
         made.opacity = rest.x * point.color.a * ((flags & 4u) != 0u ? sampled.a : 1.0);
         made.occlusion = rest.y * channelOf(packedTexel, channels.z);
         made.normal = normal;
+        // The blob holds no coat (D716).
+        made.coat = 0.0;
+        made.coatRoughness = 0.0;
+        made.coatNormal = point.normal;
         // Unlit (KHR_materials_unlit).
         made.unlit = (flags & 1u) != 0u;
         return made;

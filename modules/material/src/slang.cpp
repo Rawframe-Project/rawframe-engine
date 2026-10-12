@@ -525,6 +525,11 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
         inputs.emplace(kParameter.name, literalText(initial, kParameter.channels));
     }
     std::string normal = "point.normal";
+    // The coat's (D716): none, smooth, over the mesh's own normal, unless
+    // given.
+    inputs.emplace("coat_weight", "0.0");
+    inputs.emplace("coat_roughness", "0.0");
+    std::string coatNormal = "point.normal";
     for (std::size_t at = 0; at < kInputs.names().size(); ++at) {
         const std::string& kName = kInputs.names()[at];
         const Value& kValue = kInputs.items()[at];
@@ -535,6 +540,8 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
         }
         if (const std::optional<graph::Connection> kFrom = graph::connectionOf(kValue); kFrom.has_value()) {
             RAWFRAME_TRY_ASSIGN(expression, writer.outputOf(*kFrom));
+        } else if (groupInputNamed(kName) != nullptr) {
+            expression = numberText(*kValue.real());
         } else {
             const Parameter& kParameter = *parameterNamed(kName);
             std::array<double, 4> literal{};
@@ -545,6 +552,8 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
         }
         if (kName == "geometry_normal") {
             normal = expression;
+        } else if (kName == "coat_normal") {
+            coatNormal = expression;
         } else {
             inputs[kName] = expression;
         }
@@ -578,7 +587,9 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Qua
                   inputs.at("emission_luminance") + ");\n        made.ior = " + inputs.at("specular_ior") +
                   ";\n        made.opacity = point.color.a * (" + inputs.at("geometry_opacity") +
                   ");\n        made.occlusion = " + inputs.at("ambient_occlusion") +
-                  ";\n        made.normal = " + normal +
+                  ";\n        made.normal = " + normal + ";\n        made.coat = " + inputs.at("coat_weight") +
+                  ";\n        made.coatRoughness = " + inputs.at("coat_roughness") +
+                  ";\n        made.coatNormal = " + coatNormal +
                   ";\n        made.unlit = " + (kStates.shading == Shading::Unlit ? "true" : "false") +
                   ";\n"
                   "        return made;\n"

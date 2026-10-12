@@ -98,6 +98,11 @@ const std::array<Parameter, 10> kContractOrder = {kParameters[1],
                                                   kParameters[5],
                                                   kParameters[0]};
 
+const GroupInput* groupInputNamed(std::string_view name) {
+    const auto kFound = std::ranges::find(kGroupInputs, name, &GroupInput::name);
+    return kFound == kGroupInputs.end() ? nullptr : &*kFound;
+}
+
 const Parameter* parameterNamed(std::string_view name) {
     const auto kFound = std::ranges::find(kParameters, name, &Parameter::name);
     return kFound == kParameters.end() ? nullptr : &*kFound;

@@ -7,6 +7,8 @@
 #include "fixture.h"
 #include "generated/checker_container.h"
 #include "generated/checker_shadow_container.h"
+#include "generated/coated_graph_scene_container.h"
+#include "generated/coated_graph_shadow_container.h"
 #include "generated/facing_graph_scene_container.h"
 #include "generated/facing_graph_shadow_container.h"
 #include "generated/faded_graph_scene_container.h"
@@ -573,4 +575,54 @@ RAWFRAME_TEST(AMaterialReadsItsModelsAndItsEyesSpaces) {
     for (std::size_t channel = 0; channel < 3; ++channel) {
         RAWFRAME_EXPECT(std::abs(kNear.at(channel) - kFar.at(channel)) <= 6);
     }
+}
+
+RAWFRAME_TEST(ACoatShinesOverARoughBase) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A black ball under the default sun, rough (0.9), its highlight spread
+    // thin; then coated.material as rawframe.material writes it
+    // (coated_graph.slang, D716), the same base under a smooth coat, which
+    // gathers the sun's highlight where the plain one spreads it.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    SceneDraw ball = box(4, 1.5F, {0, 0, 0, 1}, render_scene::kSphere);
+    ball.material = 1;
+    frame.draws = {ball};
+    render_scene::MaterialBlob rough = render_scene::noMaterial();
+    rough[7] = 0.9F;
+    frame.materials = {render_scene::noMaterial(), rough};
+    const auto kPlain = drawn(**framer, **made, frame, kMeshes);
+    frame.programs = {nullptr, programOf(kCoatedGraphScene, kCoatedGraphShadow, material::Shading::Lit)};
+    const auto kCoated =
+        drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
+    RAWFRAME_EXPECT(kPlain.has_value() && kCoated.has_value());
+    if (!kPlain.has_value() || !kCoated.has_value()) {
+        return;
+    }
+    // The brightest red in each: the sun's highlight.
+    const auto kBrightest = [](const std::vector<std::byte>& pixels) {
+        int most = 0;
+        for (std::uint32_t y = 0; y < kSide; ++y) {
+            for (std::uint32_t x = 0; x < kSide; ++x) {
+                most = std::max(most, at(pixels, x, y)[0]);
+            }
+        }
+        return most;
+    };
+    const int kRough = kBrightest(*kPlain);
+    const int kShining = kBrightest(*kCoated);
+    std::printf("highlight rough %d, coated %d\n", kRough, kShining);
+    RAWFRAME_EXPECT(kShining > kRough + 30);
 }

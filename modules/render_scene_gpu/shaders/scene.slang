@@ -382,19 +382,41 @@ static const float kPi = 3.14159265;
 // A point's surface as the BRDF takes it: the diffuse color (the base
 // color less what metal takes), what it reflects head on (a dielectric's
 // by its index of refraction and specular color, or a metal's base color),
-// and its roughness.
+// and its roughness; and the coat over it, its weight, nought for none, its
+// roughness, and its normal (D716).
 struct Surface
 {
     float3 diffuse;
     float3 headOn;
     float roughness;
+    float coat;
+    float coatRoughness;
+    float3 coatNormal;
 }
 
-// Of the light arriving from `toward`, per unit of illuminance, what leaves
-// toward the eye, times the cosine it arrives at: glTF's metallic-roughness
-// BRDF, the diffuse color's Lambert under Schlick's Fresnel, and GGX with
-// Smith's height-correlated visibility.
-float3 reflected(Surface surface, float3 normal, float3 toEye, float3 toward)
+// What a coat reflects head on: a dielectric's of index 1.6, OpenPBR's
+// coat's, which SPEC-0026 fixes (D716).
+static const float kCoatHeadOn = 0.0532544;
+
+// GGX's distribution about `normal` at `roughness` times Smith's
+// height-correlated visibility, times the cosine the light arrives at: a
+// specular lobe before its Fresnel.
+float lobe(float3 normal, float3 toEye, float3 toward, float3 halfway, float roughness)
+{
+    const float nl = max(dot(normal, toward), 0.0);
+    const float nv = max(dot(normal, toEye), 1e-4);
+    const float nh = max(dot(normal, halfway), 0.0);
+    const float alpha = max(roughness * roughness, 1e-3);
+    const float alpha2 = alpha * alpha;
+    const float spread = nh * nh * (alpha2 - 1.0) + 1.0;
+    const float distribution = alpha2 / (kPi * spread * spread);
+    const float visibility =
+        0.5 / (nl * sqrt(nv * nv * (1.0 - alpha2) + alpha2) + nv * sqrt(nl * nl * (1.0 - alpha2) + alpha2));
+    return distribution * visibility * nl;
+}
+
+// The BRDF beneath any coat.
+float3 beneath(Surface surface, float3 normal, float3 toEye, float3 toward)
 {
     const float nl = max(dot(normal, toward), 0.0);
     if (nl <= 0.0)
@@ -412,6 +434,27 @@ float3 reflected(Surface surface, float3 normal, float3 toEye, float3 toward)
     const float visibility =
         0.5 / (nl * sqrt(nv * nv * (1.0 - alpha2) + alpha2) + nv * sqrt(nl * nl * (1.0 - alpha2) + alpha2));
     return ((1.0 - fresnel) * surface.diffuse / kPi + fresnel * (distribution * visibility)) * nl;
+}
+
+// Of the light arriving from `toward`, per unit of illuminance, what leaves
+// toward the eye, times the cosine it arrives at: glTF's metallic-roughness
+// BRDF, the diffuse color's Lambert under Schlick's Fresnel, and GGX with
+// Smith's height-correlated visibility; under a coat, as
+// KHR_materials_clearcoat layers it, what the coat lets through of that
+// and the coat's own lobe, each by the coat's Fresnel (D716).
+float3 reflected(Surface surface, float3 normal, float3 toEye, float3 toward)
+{
+    const float3 under = beneath(surface, normal, toEye, toward);
+    if (surface.coat <= 0.0)
+    {
+        return under;
+    }
+    const float3 halfway = normalize(toEye + toward);
+    const float coatFresnel = kCoatHeadOn + (1.0 - kCoatHeadOn) * pow(1.0 - max(dot(toEye, halfway), 0.0), 5.0);
+    const float coatLobe = dot(surface.coatNormal, toward) > 0.0
+                               ? lobe(surface.coatNormal, toEye, toward, halfway, surface.coatRoughness)
+                               : 0.0;
+    return under * (1.0 - surface.coat * coatFresnel) + surface.coat * coatFresnel * coatLobe;
 }
 
 // The irradiance over π the sky's picture gives a surface facing `normal`,
@@ -796,6 +839,9 @@ Lit shaded(Corner corner, bool decaled, bool front)
     surface.diffuse = color * (1.0 - metalness);
     surface.headOn = lerp(reflectance * reflectance * evaluated.specular, color, metalness);
     surface.roughness = roughness;
+    surface.coat = evaluated.coat;
+    surface.coatRoughness = evaluated.coatRoughness;
+    surface.coatNormal = normalize(evaluated.coatNormal);
     const int2 texel = int2(pixel);
     // What of the sun's light the contact shadows let through (D338), for
     // an opaque model the prepass saw.
@@ -872,7 +918,29 @@ Lit shaded(Corner corner, bool decaled, bool front)
     // hair short of one.
     const float reaches =
         frame.occlusion.x > 0.5 && opacity >= 0.999 ? occlusionTexture.Load(int3(texel / 2, 0)).r : 1.0;
-    const float3 sky = occlusion * reaches * ((1.0 - sheen) * surface.diffuse * around + alongReflection);
+    float3 sky = occlusion * reaches * ((1.0 - sheen) * surface.diffuse * around + alongReflection);
+    // Under a coat (D716): what it lets through of that by its Fresnel to
+    // the eye, and what it reflects along its own normal's reflection at
+    // its roughness, by the split sum, of the sky's picture, or of the sky
+    // above and the ground below; neither the probes nor the screen-space
+    // reflection, which the base's reflection alone takes.
+    if (surface.coat > 0.0)
+    {
+        const float coatNv = max(dot(surface.coatNormal, toEye), 0.0);
+        const float coatFresnel = kCoatHeadOn + (1.0 - kCoatHeadOn) * pow(1.0 - coatNv, 5.0);
+        const float2 coatBias = environmentBrdf(surface.coatRoughness, coatNv);
+        const float3 coatMirrored = reflect(-toEye, surface.coatNormal);
+        float3 coatSky = lerp(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * coatMirrored.y);
+        if (frame.environment.w > 0.5)
+        {
+            coatSky = frame.sky.rgb *
+                      environmentTexture
+                          .SampleLevel(environmentSampler, coatMirrored, surface.coatRoughness * (frame.environment.w - 1.0))
+                          .rgb;
+        }
+        sky = sky * (1.0 - surface.coat * coatFresnel) +
+              occlusion * reaches * surface.coat * (kCoatHeadOn * coatBias.x + coatBias.y) * coatSky;
+    }
     lit.color = float4((direct + sky + glowing) * exposure[0].value.y, opacity);
     return lit;
 }

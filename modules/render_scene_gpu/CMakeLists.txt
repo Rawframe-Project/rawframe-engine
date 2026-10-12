@@ -70,4 +70,11 @@ if(TARGET rawframe_render_scene_gpu_tests)
     rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
                            FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/spaced_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
                            HEADER "spaced_graph_shadow_container.h" SYMBOL "kSpacedGraphShadow")
+    # A graph's material coated smooth over a rough base (D716).
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/coated_graph.scene${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "coated_graph_scene_container.h" SYMBOL "kCoatedGraphScene")
+    rawframe_embedded_file(TARGET rawframe_render_scene_gpu_tests
+                           FILE "${CMAKE_CURRENT_SOURCE_DIR}/tests/generated/coated_graph.shadow${RAWFRAME_SHADER_SUFFIX}.mrsc"
+                           HEADER "coated_graph_shadow_container.h" SYMBOL "kCoatedGraphShadow")
 endif()
