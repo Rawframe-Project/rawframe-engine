@@ -347,7 +347,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # Gale's sources cooked, so the client reads its HUD's words and font
         # (D688) and the server plays the same content.
         set(GALE_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/gale_content)
-        # A machine without the shader toolchain skips it (D701).
+        # A machine without the shader toolchain skips it, and the client's
+        # test of what it cooked (D701, D707).
         add_test(NAME gale_cooked
                  COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cooked.sh $<TARGET_FILE:rawframe_host_cook_tool>
                          ${PROJECT_SOURCE_DIR}/games/gale ${GALE_CONTENT} ${CMAKE_CURRENT_BINARY_DIR}/gale_cook_cache)
@@ -358,7 +359,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/gale_server.conf "content.root = ${GALE_CONTENT}\n")
         configure_file(tests/gale_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/gale_drawn.conf @ONLY)
         add_test(NAME client_gale_drawn
-                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cooked.sh --then ${GALE_CONTENT}
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_BINARY_DIR}/gale_drawn.conf
                          games/gale/gale.game ${CMAKE_CURRENT_BINARY_DIR}/gale_server.conf 1
@@ -366,7 +368,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set_tests_properties(client_gale_drawn PROPERTIES
                              FIXTURES_REQUIRED gale_content
                              PROCESSORS 2
-                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             SKIP_REGULAR_EXPRESSION "skip: no device;skip: no shader toolchain"
                              PASS_REGULAR_EXPRESSION
                              "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,[^\n]*\"ribbonsDrawn\":[1-9][0-9]*,.*\"code\":\"ui_drawing_summary\"[^\n]*\"glyphRuns\":[1-9][0-9]*,.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,")
         # The plaza's view turned as its player drags with the right mouse
