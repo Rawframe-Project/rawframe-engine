@@ -126,7 +126,9 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         // The rest are an entity's (D637).
         endEdit();
         ++refused_;
-        say(sheetChosen() ? "not done to a style class" : "not done to a UI node");
+        say(sheetChosen() ? "not done to a style class"
+            : uiChosen()  ? "not done to a UI node"
+                          : "not done to a material's input");
     } else if (node == newNode_ && !scene_.empty()) {
         endEdit();
         create();
@@ -329,6 +331,10 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
     }
     if (row.role == FieldRow::Role::NodeField) {
         setNodeField(row, text);
+        return;
+    }
+    if (row.role == FieldRow::Role::Override) {
+        setOverride(text);
         return;
     }
     if (row.role == FieldRow::Role::Name && sheetChosen()) {

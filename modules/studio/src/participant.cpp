@@ -1,5 +1,7 @@
 #include "generated/studio_font.h"
 #include "rawframe/authoring_session/attach.h"
+#include "rawframe/authoring_session/game.h"
+#include "rawframe/material/instance.h"
 #include "rawframe/process/self.h"
 #include "shell.h"
 
@@ -127,9 +129,15 @@ bool ShellParticipant::openGame() {
         listed_.push_back(Listed::Scene);
     }
     // The game's style sheets after its scenes, then its UI documents,
-    // edited as they are (D637, D643).
-    for (const auto& [kKind, kExtension] : {std::pair{Listed::Sheet, ".styles"}, std::pair{Listed::Ui, ".ui"}}) {
+    // edited as they are (D637, D643), then its material instances (D722),
+    // a material graph not among them.
+    for (const auto& [kKind, kExtension] : {std::pair{Listed::Sheet, ".styles"},
+                                            std::pair{Listed::Ui, ".ui"},
+                                            std::pair{Listed::Material, ".rfmaterial"}}) {
         for (const std::filesystem::path& kFile : authoring_session::filesBeside(description_, kExtension)) {
+            if (kKind == Listed::Material && !material::namesBase(authoring_session::readFile(kFile).value_or(""))) {
+                continue;
+            }
             std::error_code error;
             scenes_.push_back(std::filesystem::relative(kFile, sceneRoot_, error).generic_string());
             sceneSources_.emplace_back();

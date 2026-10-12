@@ -268,6 +268,10 @@ void ShellParticipant::showScene(std::size_t at) {
         showUi();
         return;
     }
+    if (materialChosen()) {
+        showMaterial();
+        return;
+    }
     const std::optional<Value> kList = entitiesShown();
     const Value* listed = kList.has_value() ? kList->find("entities") : nullptr;
     if (listed == nullptr || listed->kind() != Value::Kind::Array) {
@@ -362,6 +366,10 @@ void ShellParticipant::showEntity(std::size_t at) {
     }
     if (uiChosen()) {
         showNode(at);
+        return;
+    }
+    if (materialChosen()) {
+        showInput(at);
         return;
     }
     endEdit();

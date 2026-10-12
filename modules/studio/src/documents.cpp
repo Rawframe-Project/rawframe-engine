@@ -9,7 +9,10 @@
 // siblings (D644), and Move to moving it into the node pressed next, or to
 // the document's top where the document's row is (D671). New offers the
 // game's node components the document does not hold, one made at its top
-// as its row is pressed (D672).
+// as its row is pressed (D672). A material instance (D722): its base's
+// inputs and switches in the entity column, and a chosen one's type,
+// default, and override, the override set through
+// `materials.set_override` (D721).
 
 #include "rawframe/ui/document.h"
 #include "rawframe/ui/styles.h"
@@ -336,6 +339,80 @@ void ShellParticipant::showNodeForm() {
         ++offered;
     }
     say(offered == 0 ? "every node component the game declares is in the document" : "choose the node's component");
+}
+
+void ShellParticipant::showMaterial() {
+    // The instance and its base's interface, as one answer holds them.
+    sheet_ = read(scene_, "materials.read_instance");
+    const Value* instance = sheet_.has_value() ? sheet_->find("instance") : nullptr;
+    const Value* overrides = instance != nullptr ? instance->find("overrides") : nullptr;
+    const Value* interface = sheet_.has_value() ? sheet_->find("interface") : nullptr;
+    for (const std::string_view kKind : {"inputs", "switches"}) {
+        const Value* held = interface != nullptr ? interface->find(kKind) : nullptr;
+        for (const std::string& kName : held != nullptr ? held->names() : std::span<const std::string>{}) {
+            const bool kSet = overrides != nullptr && overrides->find(kName) != nullptr;
+            auto added = row(entitiesColumn_, kName, kSet ? kText : kQuiet, kRow, true);
+            if (!added.has_value()) {
+                return;
+            }
+            entityRows_.push_back(*added);
+            entities_.push_back(kName);
+            names_.push_back(std::string{kKind});
+            brought_.push_back(false);
+            removed_.push_back(false);
+            places_.push_back(std::nullopt);
+        }
+    }
+    if (interface == nullptr || interface->kind() != Value::Kind::Object) {
+        say("the instance's base does not read as a material");
+    }
+}
+
+void ShellParticipant::showInput(std::size_t at) {
+    endEdit();
+    fields_.clear();
+    entityAt_ = at;
+    entity_ = entities_[at];
+    for (std::size_t each = 0; each < entityRows_.size(); ++each) {
+        static_cast<void>(
+            tree_->setLook(entityRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
+    }
+    clear(componentRows_);
+    actions_.clear();
+    components_ = 0;
+    const Value* interface = sheet_.has_value() ? sheet_->find("interface") : nullptr;
+    const Value* kind = interface != nullptr ? interface->find(names_[at]) : nullptr;
+    const Value* declared = kind != nullptr ? kind->find(entity_) : nullptr;
+    const Value* instance = sheet_.has_value() ? sheet_->find("instance") : nullptr;
+    const Value* overrides = instance != nullptr ? instance->find("overrides") : nullptr;
+    const Value* held = overrides != nullptr ? overrides->find(entity_) : nullptr;
+    // A switch is a bool its base's graph branches on (D719).
+    const Value* type = declared != nullptr ? declared->find("type") : nullptr;
+    const Value* fallback = declared != nullptr ? declared->find("default") : nullptr;
+    for (const std::string& kLine :
+         {names_[at] == "switches" ? std::string{"switch"} : (type != nullptr ? partText(*type) : std::string{}),
+          "default " + (fallback != nullptr ? partText(*fallback) : std::string{})}) {
+        auto line = row(componentsColumn_, kLine, kQuiet, kPanel);
+        if (!line.has_value()) {
+            return;
+        }
+        componentRows_.push_back(*line);
+    }
+    auto line = fieldRow("override", held != nullptr ? partText(*held) : std::string{}, std::nullopt, held != nullptr);
+    if (!line.has_value()) {
+        return;
+    }
+    componentRows_.push_back(line->first);
+    fields_.push_back(FieldRow{.value = line->second, .role = FieldRow::Role::Override, .field = entity_});
+    components_ = 1;
+}
+
+void ShellParticipant::setOverride(const std::string& text) {
+    Value operation = Value::object();
+    operation.add("operation", Value::string("materials.set_override"));
+    operation.add("input", Value::string(entity_));
+    operation.add("value", documentedValue(text));
+    commit(std::move(operation), entity_ + (text.empty() ? " unset" : " set to " + text), entity_);
 }
 
 } // namespace rawframe::studio

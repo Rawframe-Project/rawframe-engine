@@ -3,7 +3,7 @@
 # closure contains it.
 rawframe_module(NAME studio
     SOURCES src/documents.cpp src/editing.cpp src/operations.cpp src/panels.cpp src/participant.cpp src/play.cpp src/playing.cpp src/records.cpp
-    DEPS authoring_session font_import process view ui texture document composition execution diagnostics result base
+    DEPS authoring_session material font_import process view ui texture document composition execution diagnostics result base
 )
 # Studio's own font (Inter, SIL Open Font License 1.1, fonts/Inter-LICENSE.txt).
 rawframe_embedded_file(TARGET rawframe_studio FILE "${CMAKE_CURRENT_SOURCE_DIR}/fonts/Inter-Regular.ttf"

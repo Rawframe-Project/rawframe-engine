@@ -76,7 +76,9 @@ class XImage(ctypes.Structure):
 
 
 # Characters typed whose X key names are words.
-KEYS = {".": "period", ",": "comma", "-": "minus", " ": "space", "/": "slash"}
+# A vector's brackets among them, as a material's override is typed (D722).
+KEYS = {".": "period", ",": "comma", "-": "minus", " ": "space", "/": "slash", "[": "bracketleft",
+        "]": "bracketright"}
 # Characters typed with Shift held, by the key that types them (D473), a
 # color's # among them (D637).
 SHIFTED = {":": "semicolon", "_": "underscore", "#": "3"}

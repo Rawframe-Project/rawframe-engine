@@ -98,7 +98,10 @@ struct FieldRow {
         /// (D639).
         Part,
         /// A field of a UI document's node (D643).
-        NodeField
+        NodeField,
+        /// A material instance's override of its base's input or switch
+        /// (D722).
+        Override
     };
     ui::Node value{};
     Role role = Role::Field;
@@ -307,8 +310,11 @@ private:
     [[nodiscard]] bool uiChosen() const noexcept {
         return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Ui;
     }
+    [[nodiscard]] bool materialChosen() const noexcept {
+        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Material;
+    }
     [[nodiscard]] bool documentChosen() const noexcept {
-        return sheetChosen() || uiChosen();
+        return sheetChosen() || uiChosen() || materialChosen();
     }
     /// The chosen style sheet's classes in the entity column, read whole
     /// from the session (`styles.read_sheet`).
@@ -339,6 +345,16 @@ private:
     /// of the game's node components the document does not hold, pressed
     /// to make a node of it at the document's top (`ui.create_node`).
     void showNodeForm();
+    /// The chosen material instance's base's inputs, then its switches, in
+    /// the entity column, read with the instance from the session
+    /// (`materials.read_instance`, D722); those it overrides brighter.
+    void showMaterial();
+    /// The input or switch at `at`: its type, its base's default, and the
+    /// instance's override as a field.
+    void showInput(std::size_t at);
+    /// `text` set as the chosen input's override (`materials.set_override`),
+    /// typed as a part's is: nothing unsets it.
+    void setOverride(const std::string& text);
 
     /// One operation asked of the session for the chosen scene; `done` or
     /// the session's message said; the scene shown again with `choose`
@@ -434,6 +450,7 @@ private:
         Scene,
         Sheet,
         Ui,
+        Material,
     };
     std::vector<Listed> listed_;
     std::optional<Value> sheet_;
