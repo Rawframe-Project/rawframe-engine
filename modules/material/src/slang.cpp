@@ -57,6 +57,8 @@ std::string_view slangType(Carried carried) {
         return "float4";
     case Carried::Texture2d:
         return "Texture2D";
+    case Carried::Int:
+        return "int";
     }
     return "float";
 }
@@ -73,11 +75,25 @@ std::string literalText(const std::array<double, 4>& literal, std::size_t count)
     return made + ")";
 }
 
+std::size_t channelsOf(Carried carried);
+
+/// A literal of `carried`'s type: a bool's word, an int's digits (D715),
+/// or `literalText`'s numbers.
+std::string valueText(Carried carried, const std::array<double, 4>& literal) {
+    if (carried == Carried::Bool) {
+        return literal[0] != 0 ? "true" : "false";
+    }
+    if (carried == Carried::Int) {
+        return std::to_string(static_cast<std::int64_t>(literal[0]));
+    }
+    return literalText(literal, channelsOf(carried));
+}
+
 std::size_t channelsOf(Carried carried) {
-    return carried == Carried::Float                                ? 1
-           : carried == Carried::Vec2                               ? 2
-           : carried == Carried::Vec4 || carried == Carried::Color4 ? 4
-                                                                    : 3;
+    return carried == Carried::Float || carried == Carried::Int || carried == Carried::Bool ? 1
+           : carried == Carried::Vec2                                                       ? 2
+           : carried == Carried::Vec4 || carried == Carried::Color4                         ? 4
+                                                                                            : 3;
 }
 
 /// The slots a generated material binds its textures at, in order.
@@ -186,8 +202,16 @@ public:
                 return "(" + bindings_.find(kInput.name)->second + ")";
             }
             constexpr std::array<std::string_view, 5> kWidths = {"", ".x", ".xy", ".xyz", ""};
-            return "materials[blobOf(" + at_ + ".material) + " + std::to_string(9 + kInput.slot) + "u]" +
-                   std::string{kWidths.at(channelsOf(kInput.carried))};
+            const std::string kRead = "materials[blobOf(" + at_ + ".material) + " + std::to_string(9 + kInput.slot) +
+                                      "u]" + std::string{kWidths.at(channelsOf(kInput.carried))};
+            // An int or a bool held as a float, exactly (D715).
+            if (kInput.carried == Carried::Int) {
+                return "int(" + kRead + ")";
+            }
+            if (kInput.carried == Carried::Bool) {
+                return "(" + kRead + " != 0.0)";
+            }
+            return kRead;
         }
         if (functions::isFunction(kType)) {
             return calledOutput(*kNode, from);
@@ -245,7 +269,10 @@ public:
             const surface_graph::MathNode& kShape = *surface_graph::mathNodeOf(kType);
             RAWFRAME_TRY_ASSIGN(const surface_graph::MathInputs kMath, surface_graph::mathInputsOf(surface_, *kNode));
             carried = kMath.out.value_or(Carried::Float);
-            expression = std::string{kShape.code};
+            // Over ints, the code an int takes (D715).
+            expression = std::string{carried == Carried::Int && kShape.rule != surface_graph::Rule::Choice
+                                         ? *surface_graph::wholeCodeOf(kType)
+                                         : kShape.code};
             for (const std::string_view kHelper : kShape.helpers) {
                 if (!kHelper.empty() && std::ranges::find(code_->helpers, kHelper) == code_->helpers.end()) {
                     code_->helpers.push_back(kHelper);
@@ -369,10 +396,7 @@ private:
         if (operand.from.has_value()) {
             return outputOf(*operand.from);
         }
-        if (operand.carried == Carried::Bool) {
-            return std::string{operand.literal[0] != 0 ? "true" : "false"};
-        }
-        return literalText(operand.literal, channelsOf(operand.carried.value_or(Carried::Float)));
+        return valueText(operand.carried.value_or(Carried::Float), operand.literal);
     }
 
     /// A sampled texture's texel, sampled once a node: the texture bound
@@ -445,7 +469,7 @@ private:
                                                                &std::pair<std::string_view, std::string_view>::first)
                                                  ->second};
                 } else {
-                    text = literalText(kInput.initial, channelsOf(kInput.carried));
+                    text = valueText(kInput.carried, kInput.initial);
                 }
                 bindings.emplace(std::string{kInput.name}, std::move(text));
             }

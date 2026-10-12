@@ -31,7 +31,10 @@ enum class Carried : std::uint8_t {
     Color4,
     /// A texture an interface input gives, which only a sampled texture
     /// takes (D710).
-    Texture2d
+    Texture2d,
+    /// A whole number, which the int-taking math nodes, compare, and select
+    /// take with ints alone (D715).
+    Int
 };
 
 /// SPEC-0026's states' words, in their enumerations' order.
@@ -114,6 +117,15 @@ struct MathNode {
 /// The math node of `type`; none for another type.
 [[nodiscard]] const MathNode* mathNodeOf(std::string_view type);
 
+/// The code a math node is written as over ints, `$0` to `$2` its inputs:
+/// add, subtract, multiply, divide (truncating), modulo (floored, as the
+/// float's is), negate, abs, sign, min, max, and clamp (D715); none for
+/// another.
+[[nodiscard]] std::optional<std::string_view> wholeCodeOf(std::string_view type);
+
+/// Whether a literal number is whole and an int holds it.
+[[nodiscard]] bool wholeNumber(double number);
+
 /// A math node's inputs, checked, in its code's order, and what its `out`
 /// carries where that is known.
 struct MathInputs {
@@ -184,10 +196,18 @@ struct InterfaceInput {
     std::string_view stream;
 };
 
+/// What an interface input's default or an instance's override of it
+/// says, of the input's type (D708, D715): numbers, three or four a vector
+/// or a color alike; an int a whole number within 2^24 either way of
+/// nought, which the blob's float holds exactly; a bool true or false, held
+/// as one or nought.
+[[nodiscard]] result::Result<std::array<double, 4>> interfaceValueOf(Carried carried, const document::Value& value);
+
 /// The document's interface, checked: none, or `inputs`, each named as a
-/// Kest name is, eight at most, its `default` and its `type` (a float, a
-/// vector, a color, or a `texture_2d` defaulting to a game's texture by 16
-/// lowercase hex digits, D710), in name order, a slot each in that order.
+/// Kest name is, eight at most, its `default` and its `type` (a float, an
+/// int, a bool, D715, a vector, a color, or a `texture_2d` defaulting to a
+/// game's texture by 16 lowercase hex digits, D710), in name order, a slot
+/// each in that order.
 /// A function's texture input is its type alone, each call giving it a
 /// texture (D713).
 [[nodiscard]] result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& surface);

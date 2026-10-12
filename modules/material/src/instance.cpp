@@ -65,7 +65,6 @@ result::Result<InstanceValues> instanceValues(const graph::Document& base, const
     }
     // The texture each input gives where an override changes it.
     std::array<std::uint64_t, 8> textures{};
-    const graph::Document kNone;
     for (std::size_t at = 0; at < overrides.names().size(); ++at) {
         const auto kFound =
             std::ranges::find(kInputs, std::string_view{overrides.names()[at]}, &surface_graph::InterfaceInput::name);
@@ -87,18 +86,14 @@ result::Result<InstanceValues> instanceValues(const graph::Document& base, const
             textures.at(kFound->slot) = *kId;
             continue;
         }
-        RAWFRAME_TRY_ASSIGN(const surface_graph::Operand kValue, surface_graph::operandOf(kNone, kOverride));
-        const surface_graph::Carried kRead =
-            kFound->carried == surface_graph::Carried::Vec3   ? surface_graph::Carried::Color3
-            : kFound->carried == surface_graph::Carried::Vec4 ? surface_graph::Carried::Color4
-                                                              : kFound->carried;
-        if (kValue.carried != kRead || kValue.from.has_value()) {
+        if (graph::connectionOf(kOverride).has_value()) {
             return invalid("a material instance's override is of its input's type");
         }
-        if (kValue.literal == kFound->initial) {
+        RAWFRAME_TRY_ASSIGN(const auto kValue, surface_graph::interfaceValueOf(kFound->carried, kOverride));
+        if (kValue == kFound->initial) {
             return invalid("a material instance's override differs from its input's default, which it would repeat");
         }
-        std::ranges::copy(kValue.literal, values.begin() + static_cast<std::ptrdiff_t>(kFound->slot * 4));
+        std::ranges::copy(kValue, values.begin() + static_cast<std::ptrdiff_t>(kFound->slot * 4));
     }
     InstanceValues made;
     std::ranges::transform(values, made.parameters.begin(), [](double each) {

@@ -252,6 +252,30 @@ const MathNode* mathNodeOf(std::string_view type) {
     return kFound == kMathNodes.end() ? nullptr : &*kFound;
 }
 
+std::optional<std::string_view> wholeCodeOf(std::string_view type) {
+    constexpr std::array<std::pair<std::string_view, std::string_view>, 11> kWhole = {{
+        {kAddType, "$0 + $1"},
+        {kSubtractType, "$0 - $1"},
+        {kMultiplyType, "$0 * $1"},
+        {"rawframe/divide@1", "$0 / $1"},
+        // Slang's remainder takes the dividend's sign; floored as the
+        // float's modulo is, the divisor's.
+        {"rawframe/modulo@1", "((($0) % ($1)) + ($1)) % ($1)"},
+        {"rawframe/negate@1", "-($0)"},
+        {"rawframe/abs@1", "abs($0)"},
+        {"rawframe/sign@1", "sign($0)"},
+        {"rawframe/min@1", "min($0, $1)"},
+        {"rawframe/max@1", "max($0, $1)"},
+        {"rawframe/clamp@1", "clamp($0, $1, $2)"},
+    }};
+    const auto kFound = std::ranges::find(kWhole, type, &std::pair<std::string_view, std::string_view>::first);
+    return kFound == kWhole.end() ? std::nullopt : std::optional{kFound->second};
+}
+
+bool wholeNumber(double number) {
+    return std::isfinite(number) && number == std::trunc(number) && number >= -2147483648.0 && number <= 2147483647.0;
+}
+
 bool known(const graph::Node& node) {
     const Value* kType = node.record.find("type");
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
@@ -369,6 +393,14 @@ result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const gr
         })) {
         return invalid("a texture input's texture is sampled, never computed with");
     }
+    // A whole literal beside an int is an int (D715).
+    if (kAny(Carried::Int)) {
+        for (Operand& each : kIn) {
+            if (!each.from.has_value() && each.carried == Carried::Float && wholeNumber(each.literal[0])) {
+                each.carried = Carried::Int;
+            }
+        }
+    }
     const bool kKnown = std::ranges::all_of(kIn, [](const Operand& each) {
         return each.carried.has_value();
     });
@@ -405,6 +437,18 @@ result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const gr
                 return invalid("a math node's inputs are of one type, or floats");
             }
             kind = each.carried;
+        }
+        // An int is computed with ints alone, by the nodes that take them
+        // (D715).
+        if (kind == Carried::Int) {
+            if (!kChoice && !wholeCodeOf(kNode.type).has_value()) {
+                return invalid("an int is computed with by the nodes that take ints alone");
+            }
+            if (std::ranges::any_of(kIn.subspan(kChoice ? 1 : 0), [](const Operand& each) {
+                    return each.carried == Carried::Float;
+                })) {
+                return invalid("an int is computed with ints alone");
+            }
         }
         made.out = kind.value_or(Carried::Float);
         break;
@@ -500,11 +544,12 @@ result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::N
     RAWFRAME_TRY_ASSIGN(made.in, operandOf(surface, *kIn));
     const std::optional<Carried>& kFrom = made.in.carried;
     const bool kFour = kFrom == Carried::Vec4 || kFrom == Carried::Color4;
-    const std::size_t kWidth = !kFrom.has_value()                                                                 ? 4
-                               : kFrom == Carried::Vec2                                                           ? 2
-                               : kFrom == Carried::Float || kFrom == Carried::Bool || kFrom == Carried::Texture2d ? 0
-                               : kFour                                                                            ? 4
-                                                                                                                  : 3;
+    const std::size_t kWidth =
+        !kFrom.has_value()                                                                                          ? 4
+        : kFrom == Carried::Vec2                                                                                    ? 2
+        : kFrom == Carried::Float || kFrom == Carried::Bool || kFrom == Carried::Texture2d || kFrom == Carried::Int ? 0
+        : kFour                                                                                                     ? 4
+                                                                                                                    : 3;
     // x, y, z, and w: the channel each letter names.
     const auto kChannel = [](char letter) -> std::size_t {
         return letter == 'w' ? 3 : letter >= 'x' && letter <= 'z' ? static_cast<std::size_t>(letter - 'x') : 4;
@@ -527,14 +572,14 @@ result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::N
 
 result::Result<Operand> constantIn(const graph::Node& node) {
     constexpr std::array<std::string_view, 2> kParams = {"type", "value"};
-    constexpr std::array<std::pair<std::string_view, Carried>, 7> kTypes = {{{"float", Carried::Float},
+    constexpr std::array<std::pair<std::string_view, Carried>, 8> kTypes = {{{"float", Carried::Float},
+                                                                             {"int", Carried::Int},
                                                                              {"bool", Carried::Bool},
                                                                              {"vec2", Carried::Vec2},
                                                                              {"vec3", Carried::Vec3},
                                                                              {"color3", Carried::Color3},
                                                                              {"vec4", Carried::Vec4},
                                                                              {"color4", Carried::Color4}}};
-    constexpr std::array<std::string_view, 1> kWaiting = {"int"};
     RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, {}));
     const Value* kType = kParts.first->find("type");
     const Value* kValue = kParts.first->find("value");
@@ -542,9 +587,6 @@ result::Result<Operand> constantIn(const graph::Node& node) {
         return invalid("a constant node declares its type and its value");
     }
     const std::string_view kName = *kType->text();
-    if (std::ranges::find(kWaiting, kName) != kWaiting.end()) {
-        return unsupported("a constant of an int waits for the int type in generation 1");
-    }
     const auto kFound = std::ranges::find(kTypes, kName, &std::pair<std::string_view, Carried>::first);
     if (kFound == kTypes.end()) {
         return invalid("a constant's type is one of the graph's types");
@@ -553,6 +595,10 @@ result::Result<Operand> constantIn(const graph::Node& node) {
     // shape: a literal of three or four numbers reads as a color either way.
     const graph::Document kNone;
     RAWFRAME_TRY_ASSIGN(Operand made, operandOf(kNone, *kValue));
+    // An int's a whole number an int holds (D715).
+    if (kFound->second == Carried::Int && made.carried == Carried::Float && wholeNumber(made.literal[0])) {
+        made.carried = Carried::Int;
+    }
     const Carried kRead = kFound->second == Carried::Vec3   ? Carried::Color3
                           : kFound->second == Carried::Vec4 ? Carried::Color4
                                                             : kFound->second;
@@ -563,8 +609,30 @@ result::Result<Operand> constantIn(const graph::Node& node) {
     return made;
 }
 
+result::Result<std::array<double, 4>> interfaceValueOf(Carried carried, const Value& value) {
+    const graph::Document kNone;
+    RAWFRAME_TRY_ASSIGN(const Operand kValue, operandOf(kNone, value));
+    if (carried == Carried::Int) {
+        if (kValue.carried != Carried::Float || !wholeNumber(kValue.literal[0]) ||
+            std::abs(kValue.literal[0]) > 16777216.0) {
+            return invalid("an int input's value is a whole number within 2^24 either way of nought");
+        }
+        return kValue.literal;
+    }
+    // Three or four numbers read as a color either way.
+    const Carried kRead = carried == Carried::Vec3   ? Carried::Color3
+                          : carried == Carried::Vec4 ? Carried::Color4
+                                                     : carried;
+    if (kValue.carried != kRead) {
+        return invalid("an interface input's value is of its type");
+    }
+    return kValue.literal;
+}
+
 result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& surface) {
-    constexpr std::array<std::pair<std::string_view, Carried>, 6> kTypes = {{{"float", Carried::Float},
+    constexpr std::array<std::pair<std::string_view, Carried>, 8> kTypes = {{{"float", Carried::Float},
+                                                                             {"int", Carried::Int},
+                                                                             {"bool", Carried::Bool},
                                                                              {"vec2", Carried::Vec2},
                                                                              {"vec3", Carried::Vec3},
                                                                              {"color3", Carried::Color3},
@@ -591,7 +659,6 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& s
     if (kInputs.kind() != Value::Kind::Object || kInputs.names().empty() || kInputs.names().size() > 8) {
         return invalid("a surface's interface inputs are one to eight");
     }
-    const graph::Document kNone;
     for (std::size_t at = 0; at < kInputs.names().size(); ++at) {
         const std::string& kName = kInputs.names()[at];
         const bool kNamed =
@@ -649,20 +716,10 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& s
         const auto kFound =
             std::ranges::find(kTypes, std::string_view{*kType->text()}, &std::pair<std::string_view, Carried>::first);
         if (kFound == kTypes.end()) {
-            return *kType->text() == "bool" || *kType->text() == "int"
-                       ? unsupported("an interface input of a bool or an int waits for them in generation 1")
-                       : invalid("an interface input's type is one of the graph's");
+            return invalid("an interface input's type is one of the graph's");
         }
-        // Its default read as an input's literal is: three or four numbers
-        // read as a color either way.
-        RAWFRAME_TRY_ASSIGN(const Operand kValue, operandOf(kNone, *kDefault));
-        const Carried kRead = kFound->second == Carried::Vec3   ? Carried::Color3
-                              : kFound->second == Carried::Vec4 ? Carried::Color4
-                                                                : kFound->second;
-        if (kValue.carried != kRead) {
-            return invalid("an interface input's default is of its type");
-        }
-        made.push_back(InterfaceInput{.name = kName, .carried = kFound->second, .initial = kValue.literal, .slot = at});
+        RAWFRAME_TRY_ASSIGN(const auto kInitial, interfaceValueOf(kFound->second, *kDefault));
+        made.push_back(InterfaceInput{.name = kName, .carried = kFound->second, .initial = kInitial, .slot = at});
     }
     return made;
 }
@@ -709,9 +766,14 @@ result::Result<Compare> compareIn(const graph::Document& surface, const graph::N
     Compare made{.symbol = kFound->second};
     RAWFRAME_TRY_ASSIGN(made.a, operandOf(surface, *kA));
     RAWFRAME_TRY_ASSIGN(made.b, operandOf(surface, *kB));
-    for (const Operand* kEach : {&made.a, &made.b}) {
-        if (kEach->carried.has_value() && *kEach->carried != Carried::Float) {
-            return invalid("a compare node's inputs are floats");
+    // Two floats, or two ints, a whole literal beside an int one (D715).
+    const bool kWhole = made.a.carried == Carried::Int || made.b.carried == Carried::Int;
+    for (Operand* each : {&made.a, &made.b}) {
+        if (kWhole && !each->from.has_value() && each->carried == Carried::Float && wholeNumber(each->literal[0])) {
+            each->carried = Carried::Int;
+        }
+        if (each->carried.has_value() && *each->carried != (kWhole ? Carried::Int : Carried::Float)) {
+            return invalid("a compare node's inputs are floats, or ints");
         }
     }
     return made;

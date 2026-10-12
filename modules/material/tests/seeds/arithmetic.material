@@ -1,7 +1,18 @@
 {
   "formatVersion": 1,
   "kind": "surface",
-  "interface": {},
+  "interface": {
+    "inputs": {
+      "count": {
+        "default": 4,
+        "type": "int"
+      },
+      "wet": {
+        "default": true,
+        "type": "bool"
+      }
+    }
+  },
   "graph": {
     "a700000000000001": {
       "type": "rawframe/time@1",
@@ -1372,7 +1383,204 @@
           "output": "out"
         },
         "specular_roughness": {
+          "node": "a700000000000087",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000076": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "count"
+      },
+      "inputs": {}
+    },
+    "a700000000000077": {
+      "type": "rawframe/constant@1",
+      "params": {
+        "type": "int",
+        "value": 3
+      },
+      "inputs": {}
+    },
+    "a700000000000078": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000076",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000077",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000079": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000078",
+          "output": "out"
+        },
+        "b": 1
+      }
+    },
+    "a70000000000007a": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000079",
+          "output": "out"
+        },
+        "b": 2
+      }
+    },
+    "a70000000000007b": {
+      "type": "rawframe/divide@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a70000000000007a",
+          "output": "out"
+        },
+        "b": 3
+      }
+    },
+    "a70000000000007c": {
+      "type": "rawframe/modulo@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a70000000000007b",
+          "output": "out"
+        },
+        "b": 3
+      }
+    },
+    "a70000000000007d": {
+      "type": "rawframe/negate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000007c",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000007e": {
+      "type": "rawframe/abs@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000007d",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000007f": {
+      "type": "rawframe/sign@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000007e",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000080": {
+      "type": "rawframe/min@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a70000000000007f",
+          "output": "out"
+        },
+        "b": 5
+      }
+    },
+    "a700000000000081": {
+      "type": "rawframe/max@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000080",
+          "output": "out"
+        },
+        "b": -5
+      }
+    },
+    "a700000000000082": {
+      "type": "rawframe/clamp@1",
+      "params": {},
+      "inputs": {
+        "high": 1,
+        "in": {
+          "node": "a700000000000081",
+          "output": "out"
+        },
+        "low": 0
+      }
+    },
+    "a700000000000083": {
+      "type": "rawframe/compare@1",
+      "params": {
+        "operator": "equal"
+      },
+      "inputs": {
+        "a": {
+          "node": "a700000000000082",
+          "output": "out"
+        },
+        "b": 1
+      }
+    },
+    "a700000000000084": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "wet"
+      },
+      "inputs": {}
+    },
+    "a700000000000085": {
+      "type": "rawframe/and@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000083",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000084",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000086": {
+      "type": "rawframe/select@1",
+      "params": {},
+      "inputs": {
+        "a": 1,
+        "b": 0.5,
+        "condition": {
+          "node": "a700000000000085",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000087": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
           "node": "a700000000000045",
+          "output": "out"
+        },
+        "b": {
+          "node": "a700000000000086",
           "output": "out"
         }
       }

@@ -342,10 +342,9 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
 }
 
 RAWFRAME_TEST(AConstantIsWrittenAsItsTypedValue) {
-    // D704: a constant of each type the graph carries in generation 1, its
-    // value inline wherever it is read; one of a type yet to come waits for
-    // it, and one whose value is not of its type, or not one of the graph's
-    // types, is refused.
+    // D704: a constant of each type the graph carries, its value inline
+    // wherever it is read; one whose value is not of its type, or not one of
+    // the graph's types, is refused.
     const auto kConstant = [](graph::NodeId id, std::string_view type, Value value) {
         return nodeOf(id,
                       kConstantType,
@@ -380,15 +379,14 @@ RAWFRAME_TEST(AConstantIsWrittenAsItsTypedValue) {
     const auto kSelected = generateSlang(kChosen);
     RAWFRAME_EXPECT(kSelected.has_value() && kSelected->source.contains("(false) ? (1.0) : (") &&
                     kSelected->source.contains("(float2(0.125, 0.625)).y"));
-    // A vec3 feeds no color; a value not of its type; no such type; the
-    // int, which generation 1 does not carry yet; the type or the value left
-    // out.
+    // A vec3 feeds no color, nor an int (D715); a value not of its type;
+    // no such type; the type or the value left out.
     RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("vec3", kThree(0.25, 0.5, 0.75))), MaterialError::Invalid));
     RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("color3", pair(0.25, 0.5))), MaterialError::Invalid));
     RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("color3", Value::boolean(true))), MaterialError::Invalid));
     RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("matrix3", kThree(0, 0, 0))), MaterialError::Invalid));
     RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("color4", kThree(0, 0, 0))), MaterialError::Invalid));
-    RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("int", Value::integer(1))), MaterialError::Unsupported));
+    RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("int", Value::integer(1))), MaterialError::Invalid));
     RAWFRAME_EXPECT(
         refusedWith(validateSurface(surfaceOf(
                         objectOf({{"specular_roughness", from(kWave, "out")}}),
@@ -536,17 +534,17 @@ RAWFRAME_TEST(AParameterIsReadFromItsMaterialsVectors) {
     const auto kStronger = semanticHash(kTinted(
         objectOf({{"strength", kInput("float", Value::real(3))}, {"tint", kInput("color3", kThree(1, 0.5, 0.25))}})));
     RAWFRAME_EXPECT(kHash.has_value() && kStronger.has_value() && *kHash != *kStronger);
-    // A parameter naming no input; an input of a bool, which waits; a
-    // default not of its type; a name not in lower case; nine inputs; an
-    // interface with outputs.
+    // A bool input beside them, read by none (D715). A parameter naming no
+    // input; a default not of its type; a name not in lower case; nine
+    // inputs; an interface with outputs.
     RAWFRAME_EXPECT(refusedWith(validateSurface(kTinted(objectOf({{"strength", kInput("float", Value::real(2))},
                                                                   {"tint", kInput("color3", kThree(1, 1, 1))}}),
                                                         "shade")),
                                 MaterialError::Invalid));
-    RAWFRAME_EXPECT(refusedWith(validateSurface(kTinted(objectOf({{"strength", kInput("float", Value::real(2))},
-                                                                  {"tint", kInput("color3", kThree(1, 1, 1))},
-                                                                  {"wet", kInput("bool", Value::boolean(true))}}))),
-                                MaterialError::Unsupported));
+    RAWFRAME_EXPECT(validateSurface(kTinted(objectOf({{"strength", kInput("float", Value::real(2))},
+                                                      {"tint", kInput("color3", kThree(1, 1, 1))},
+                                                      {"wet", kInput("bool", Value::boolean(true))}})))
+                        .has_value());
     RAWFRAME_EXPECT(refusedWith(validateSurface(kTinted(objectOf({{"strength", kInput("float", Value::real(2))},
                                                                   {"tint", kInput("color3", pair(1, 1))}}))),
                                 MaterialError::Invalid));
