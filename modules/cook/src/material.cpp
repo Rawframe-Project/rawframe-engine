@@ -108,8 +108,12 @@ std::vector<std::byte> bytesOf(const std::filesystem::path& path) {
 
 /// A graph the blob cannot fold, written as Slang and linked into the
 /// scene's containers by the shader toolchain (D484): a program material,
-/// one variant at the high quality.
-result::Result<Artifact> cookProgram(const graph::Document& document, const ShaderTools& tools) {
+/// one variant at the high quality; for an instance's switched variant
+/// (D719), with the instance's `values` in place of the defaults, an axis
+/// of its own.
+result::Result<Artifact> cookProgram(const graph::Document& document,
+                                     const ShaderTools& tools,
+                                     const material::InstanceValues* values = nullptr) {
     RAWFRAME_TRY_ASSIGN(const material::GeneratedSlang kGenerated, material::generateSlang(document));
     RAWFRAME_TRY_ASSIGN(const std::filesystem::path kWork, freshDirectory());
     const auto kRemove = [&kWork] {
@@ -155,6 +159,14 @@ result::Result<Artifact> cookProgram(const graph::Document& document, const Shad
         made.shadows.at(at) = bytesOf(kWork / ("shadow" + std::string{kSuffixes.at(at)}));
     }
     kRemove();
+    if (values != nullptr) {
+        made.parameters = values->parameters;
+        for (std::size_t slot = 0; slot < made.textures.size(); ++slot) {
+            if (values->textures.at(slot) != 0) {
+                made.textures[slot].id = values->textures.at(slot);
+            }
+        }
+    }
     std::vector<std::byte> bytes = material::encodeProgram(made);
     // What the toolchain wrote, checked as a runtime reads it.
     RAWFRAME_TRY(material::decodeProgram(bytes));
@@ -162,13 +174,17 @@ result::Result<Artifact> cookProgram(const graph::Document& document, const Shad
                     .representation = *content::RepresentationId::parse(material::kProgramRepresentation),
                     .bytes = std::move(bytes),
                     .subassets = {},
-                    .report = {{"variants", 1}, {"axes", 0}, {"variantsHeadroom", kVariantsPerMaterial - 1}}};
+                    .report = {{"variants", 1},
+                               {"axes", values != nullptr ? 1 : 0},
+                               {"variantsHeadroom", kVariantsPerMaterial - 1}}};
 }
 
 /// An instance of another surface material (D709): its base read from its
 /// source, its overrides made into the base's parameters, its base's
 /// identity from the base's sidecar. Its base may be no instance itself.
-result::Result<Artifact> cookInstance(std::string_view text, Reads& reads) {
+/// One that overrides a static switch draws a variant of its own (D719):
+/// a program material, the toolchain's to build.
+result::Result<Artifact> cookInstance(std::string_view text, const std::optional<ShaderTools>& tools, Reads& reads) {
     RAWFRAME_TRY_ASSIGN(const material::InstanceDocument kInstance, material::readInstance(text));
     RAWFRAME_TRY_ASSIGN(const std::span<const std::byte> kBaseBytes, reads.file(kInstance.base));
     const std::string_view kBaseText{reinterpret_cast<const char*>(kBaseBytes.data()), kBaseBytes.size()};
@@ -188,6 +204,15 @@ result::Result<Artifact> cookInstance(std::string_view text, Reads& reads) {
         const content::Sidecar kSidecar,
         content::readSidecar({reinterpret_cast<const char*>(kSidecarBytes.data()), kSidecarBytes.size()}));
     RAWFRAME_TRY_ASSIGN(const material::InstanceValues kValues, material::instanceValues(kBase, kInstance.overrides));
+    RAWFRAME_TRY_ASSIGN(const std::optional<graph::Document> kVariant,
+                        material::switchedVariant(kBase, kInstance.overrides));
+    if (kVariant.has_value()) {
+        if (!tools.has_value()) {
+            return toolFailed("this material instance switches its base to a variant of its own, which the shader "
+                              "toolchain builds, and the cook was given none");
+        }
+        return cookProgram(*kVariant, *tools, &kValues);
+    }
     return Artifact{.type = content::ResourceTypeId{material::kMaterialType},
                     .representation = *content::RepresentationId::parse(material::kInstanceRepresentation),
                     .bytes = material::encodeInstance(
@@ -200,7 +225,7 @@ result::Result<Artifact>
 cookMaterial(std::span<const std::byte> source, const std::optional<ShaderTools>& tools, Reads& reads) {
     const std::string_view kText{reinterpret_cast<const char*>(source.data()), source.size()};
     if (material::namesBase(kText)) {
-        return cookInstance(kText, reads);
+        return cookInstance(kText, tools, reads);
     }
     RAWFRAME_TRY_ASSIGN(const graph::Document kDocument, material::readMaterial(kText));
     auto compiled = material::compileQualities(kDocument);

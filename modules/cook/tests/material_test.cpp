@@ -321,9 +321,64 @@ RAWFRAME_TEST(AnInstanceCooksOnlyAgainstABaseItFits) {
             return each.contains(words);
         });
     };
-    RAWFRAME_EXPECT(kSays("shader toolchain") && kSays("never another instance") && kSays("interface inputs alone") &&
-                    failed.size() == 4);
+    RAWFRAME_EXPECT(kSays("shader toolchain") && kSays("never another instance") &&
+                    kSays("interface inputs and switches alone") && failed.size() == 4);
     for (const std::string& each : failed) {
         std::printf("refused: %s\n", each.c_str());
     }
+}
+
+RAWFRAME_TEST(AnInstanceSwitchingItsBaseCooksItsOwnProgram) {
+    // D719: soaked.material is sandy unless its wet switch is on, when its
+    // tint shows. An instance turning it on draws a variant of its own, a
+    // program with the instance's tint; one changing the tint alone shares
+    // its base's program.
+    const Project kProject;
+    fs::copy_file(fs::path{RAWFRAME_SURFACE_SEEDS} / "soaked.material", kProject.sources / "soaked.rfmaterial");
+    writeText(kProject.sources / "soaked.rfmaterial.rfmeta",
+              sidecar("000000000000000000000000000000e1", "", "rawframe.material"));
+    writeText(kProject.sources / "drenched.rfmaterial",
+              "{\n  \"formatVersion\": 1,\n  \"kind\": \"surface\",\n  \"base\": \"soaked.rfmaterial\",\n"
+              "  \"overrides\": {\n    \"tint\": [\n      1,\n      0,\n      0\n    ],\n    \"wet\": true\n  }\n}\n");
+    writeText(kProject.sources / "drenched.rfmaterial.rfmeta",
+              sidecar("000000000000000000000000000000e2", "", "rawframe.material"));
+    writeText(kProject.sources / "reddish.rfmaterial",
+              "{\n  \"formatVersion\": 1,\n  \"kind\": \"surface\",\n  \"base\": \"soaked.rfmaterial\",\n"
+              "  \"overrides\": {\n    \"tint\": [\n      1,\n      0,\n      0\n    ]\n  }\n}\n");
+    writeText(kProject.sources / "reddish.rfmaterial.rfmeta",
+              sidecar("000000000000000000000000000000e3", "", "rawframe.material"));
+    // Without the toolchain, the base and the switched instance wait for it.
+    const std::array<Importer, 2> kBare = {audioImporter(), materialImporter()};
+    const auto kRefused =
+        cookSources(CookRequest{.sources = kProject.sources, .output = kProject.output, .importers = kBare});
+    RAWFRAME_EXPECT(kRefused.has_value() && kRefused->failures.size() == 2);
+    const std::optional<ShaderTools> kTools = shaderTools();
+    if (!kTools.has_value()) {
+        RAWFRAME_EXPECT(std::getenv("RAWFRAME_REQUIRE_SHADER_TOOLCHAIN") == nullptr);
+        return;
+    }
+    const std::array<Importer, 2> kTooled = {audioImporter(), materialImporter(*kTools)};
+    const auto kReport =
+        cookSources(CookRequest{.sources = kProject.sources, .output = kProject.output, .importers = kTooled});
+    RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.empty());
+    // Two programs, the base's sandy default and the drenched variant with
+    // its red tint, and one instance, sharing the base's.
+    const auto kManifest = content::readManifest(readText(kProject.output / "content.manifest"));
+    std::size_t programs = 0;
+    std::size_t instances = 0;
+    bool drenched = false;
+    for (const content::ManifestEntry& each :
+         kManifest.has_value() ? *kManifest : std::vector<content::ManifestEntry>{}) {
+        const std::string kBytes = readText(kProject.output / each.locator);
+        const auto kAsBytes = std::as_bytes(std::span{kBytes.data(), kBytes.size()});
+        if (each.representation.text() == material::kInstanceRepresentation) {
+            instances += material::decodeInstance(kAsBytes).has_value() ? 1 : 0;
+        }
+        if (each.representation.text() == material::kProgramRepresentation) {
+            const auto kRead = material::decodeProgram(kAsBytes);
+            programs += kRead.has_value() ? 1 : 0;
+            drenched = drenched || (kRead.has_value() && kRead->parameters[0] == 1 && kRead->parameters[1] == 0);
+        }
+    }
+    RAWFRAME_EXPECT(programs == 2 && instances == 1 && drenched);
 }

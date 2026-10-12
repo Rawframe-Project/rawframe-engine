@@ -283,6 +283,9 @@ inline constexpr std::string_view kTransformType = "rawframe/transform@1";
 /// inputs and outputs, and the stages, domains, and capabilities it
 /// declares; a trusted package's alone.
 inline constexpr std::string_view kInlineSlangType = "rawframe/inline_slang@1";
+/// One of two inputs by a static switch the interface declares, chosen at
+/// the cook: each switch an axis of the material's variants (D719).
+inline constexpr std::string_view kStaticSwitchType = "rawframe/static_switch@1";
 
 /// What a surface compiles to at each quality, by `Quality`: the same
 /// material at each where its graph does not differ (D318).

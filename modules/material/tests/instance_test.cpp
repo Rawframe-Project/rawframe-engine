@@ -79,12 +79,13 @@ RAWFRAME_TEST(AnInstanceIsReadInItsCanonicalForm) {
     }
     RAWFRAME_EXPECT(
         kRefusedWith(Value::integer(1), Value::string("surface"), Value::string("a.rfmaterial"), Value::object()));
-    std::vector<std::pair<std::string, Value>> nine;
-    for (const char kLetter : std::string_view{"abcdefghi"}) {
-        nine.emplace_back(std::string{kLetter}, Value::real(1));
+    // Seventeen: eight inputs and eight switches at most (D719).
+    std::vector<std::pair<std::string, Value>> seventeen;
+    for (const char kLetter : std::string_view{"abcdefghijklmnopq"}) {
+        seventeen.emplace_back(std::string{kLetter}, Value::real(1));
     }
     RAWFRAME_EXPECT(kRefusedWith(
-        Value::integer(1), Value::string("surface"), Value::string("a.rfmaterial"), objectOf(std::move(nine))));
+        Value::integer(1), Value::string("surface"), Value::string("a.rfmaterial"), objectOf(std::move(seventeen))));
 }
 
 RAWFRAME_TEST(AnInstancesOverridesBecomeItsBasesParameters) {

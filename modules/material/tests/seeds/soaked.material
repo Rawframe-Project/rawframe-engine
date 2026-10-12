@@ -1,0 +1,57 @@
+{
+  "formatVersion": 1,
+  "kind": "surface",
+  "interface": {
+    "inputs": {
+      "tint": {
+        "default": [
+          0.2,
+          0.2,
+          0.25
+        ],
+        "type": "color3"
+      }
+    },
+    "switches": {
+      "wet": {
+        "default": false
+      }
+    }
+  },
+  "graph": {
+    "2f000000000000c1": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "tint"
+      },
+      "inputs": {}
+    },
+    "2f000000000000c2": {
+      "type": "rawframe/static_switch@1",
+      "params": {
+        "name": "wet"
+      },
+      "inputs": {
+        "off": [
+          0.8,
+          0.6,
+          0.4
+        ],
+        "on": {
+          "node": "2f000000000000c1",
+          "output": "out"
+        }
+      }
+    },
+    "2f000000000000c3": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "base_color": {
+          "node": "2f000000000000c2",
+          "output": "out"
+        }
+      }
+    }
+  }
+}

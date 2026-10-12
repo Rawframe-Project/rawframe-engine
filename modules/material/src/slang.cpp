@@ -222,6 +222,12 @@ public:
         if (kType == kInlineSlangType) {
             return inlinedOutput(*kNode, from);
         }
+        if (kType == kStaticSwitchType) {
+            // The branch its switch takes, alone written (D719).
+            RAWFRAME_TRY_ASSIGN(const surface_graph::SwitchChoice kChoice,
+                                surface_graph::staticSwitchIn(surface_, *kNode));
+            return operandText(kChoice.taken ? kChoice.on : kChoice.off);
+        }
         if (kType == kFrontFacingType) {
             // A vertex has no face yet.
             if (at_ == "placed") {

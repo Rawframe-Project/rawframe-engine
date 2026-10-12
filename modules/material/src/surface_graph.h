@@ -266,6 +266,31 @@ struct Transform {
 
 [[nodiscard]] result::Result<Transform> transformIn(const graph::Document& surface, const graph::Node& node);
 
+/// One of a surface's static switches (ADR-0027's explicit declarations,
+/// SPEC-0026's permutation axis, D719): its name and the branch it takes
+/// unless an instance overrides it.
+struct StaticSwitch {
+    std::string_view name;
+    bool on = false;
+};
+
+/// The surface's declared switches: none, or its interface's `switches`,
+/// one to eight, each named as a Kest name is, `{"default": bool}`, in
+/// name order.
+[[nodiscard]] result::Result<std::vector<StaticSwitch>> switchesOf(const graph::Document& surface);
+
+/// A `static_switch` node, checked: its `name` param a declared switch, its
+/// inputs `off` and `on` of one type, never a texture; the branch the
+/// switch takes, and what `out` carries where that is known.
+struct SwitchChoice {
+    Operand off;
+    Operand on;
+    bool taken = false;
+    std::optional<Carried> out;
+};
+
+[[nodiscard]] result::Result<SwitchChoice> staticSwitchIn(const graph::Document& surface, const graph::Node& node);
+
 /// One of an inline-Slang node's declared inputs or outputs: its name and
 /// its type.
 struct Pin {

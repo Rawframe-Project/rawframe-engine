@@ -18,6 +18,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -41,7 +42,7 @@ struct InstanceDocument {
 
 /// Reads an instance in its canonical form: `formatVersion` 1, `kind`
 /// `surface`, `base` a path of `/`-separated names, none `..`, and one to
-/// eight `overrides`, in that order. Refuses (`Invalid`) anything else.
+/// sixteen `overrides`, in that order. Refuses (`Invalid`) anything else.
 [[nodiscard]] result::Result<InstanceDocument> readInstance(std::string_view text);
 
 /// What an instance's overrides make of its base: its parameters, and the
@@ -55,11 +56,21 @@ struct InstanceValues {
 /// An instance's overrides made into its base's values: each names one of
 /// the base's interface inputs, is of its type (a texture input's the
 /// game's texture by 16 lowercase hex digits), and differs from its
-/// default, which an override equal to it would only repeat (SPEC-0028).
+/// default, which an override equal to it would only repeat (SPEC-0028);
+/// or names one of its static switches, which `switchedVariant` takes.
 /// Refuses (`Invalid`) any other, and a base `validateSurface` refuses; a
 /// texture override, a base `generateSlang` refuses.
 [[nodiscard]] result::Result<InstanceValues> instanceValues(const graph::Document& base,
                                                             const document::Value& overrides);
+
+/// The variant an instance's switch overrides make of its base (ADR-0027,
+/// D719): the base with each overridden switch's default the override's,
+/// which compiles to a program of its own; none where the instance
+/// overrides no switch, and it shares its base's program. Each switch
+/// override is a bool that differs from the switch's default. Refuses
+/// (`Invalid`) any other, and a base `validateSurface` refuses.
+[[nodiscard]] result::Result<std::optional<graph::Document>> switchedVariant(const graph::Document& base,
+                                                                             const document::Value& overrides);
 
 /// A cooked instance: its base's identity and its values.
 struct MaterialInstance {

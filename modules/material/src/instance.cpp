@@ -50,8 +50,8 @@ result::Result<InstanceDocument> readInstance(std::string_view text) {
     if (!named) {
         return invalid("a material instance's base is a path within the sources, its names a slash apart");
     }
-    if (kOverrides.kind() != Value::Kind::Object || kOverrides.names().empty() || kOverrides.names().size() > 8) {
-        return invalid("a material instance overrides one to eight of its base's inputs");
+    if (kOverrides.kind() != Value::Kind::Object || kOverrides.names().empty() || kOverrides.names().size() > 16) {
+        return invalid("a material instance overrides one to sixteen of its base's inputs and switches");
     }
     return InstanceDocument{.base = *kPath, .overrides = kOverrides};
 }
@@ -65,11 +65,17 @@ result::Result<InstanceValues> instanceValues(const graph::Document& base, const
     }
     // The texture each input gives where an override changes it.
     std::array<std::uint64_t, 8> textures{};
+    RAWFRAME_TRY_ASSIGN(const std::vector<surface_graph::StaticSwitch> kSwitches, surface_graph::switchesOf(base));
     for (std::size_t at = 0; at < overrides.names().size(); ++at) {
+        // A switch's override is its variant's (`switchedVariant`, D719).
+        if (std::ranges::find(kSwitches, std::string_view{overrides.names()[at]}, &surface_graph::StaticSwitch::name) !=
+            kSwitches.end()) {
+            continue;
+        }
         const auto kFound =
             std::ranges::find(kInputs, std::string_view{overrides.names()[at]}, &surface_graph::InterfaceInput::name);
         if (kFound == kInputs.end()) {
-            return invalid("a material instance overrides its base's interface inputs alone");
+            return invalid("a material instance overrides its base's interface inputs and switches alone");
         }
         const Value& kOverride = overrides.items()[at];
         if (kFound->carried == surface_graph::Carried::Texture2d) {
@@ -110,6 +116,51 @@ result::Result<InstanceValues> instanceValues(const graph::Document& base, const
         }
     }
     return made;
+}
+
+result::Result<std::optional<graph::Document>> switchedVariant(const graph::Document& base, const Value& overrides) {
+    RAWFRAME_TRY(validateSurface(base));
+    RAWFRAME_TRY_ASSIGN(const std::vector<surface_graph::StaticSwitch> kSwitches, surface_graph::switchesOf(base));
+    graph::Document made = base;
+    bool switched = false;
+    for (std::size_t at = 0; at < overrides.names().size(); ++at) {
+        const auto kFound =
+            std::ranges::find(kSwitches, std::string_view{overrides.names()[at]}, &surface_graph::StaticSwitch::name);
+        if (kFound == kSwitches.end()) {
+            continue;
+        }
+        const std::optional<bool> kOn = overrides.items()[at].truth();
+        if (!kOn.has_value()) {
+            return invalid("a material instance's switch override is a bool");
+        }
+        if (*kOn == kFound->on) {
+            return invalid("a material instance's override differs from its input's default, which it would repeat");
+        }
+        // The switch's default the override, in the variant's own interface.
+        Value interface = Value::object();
+        for (std::size_t member = 0; member < made.interface.names().size(); ++member) {
+            const std::string& kMember = made.interface.names()[member];
+            if (kMember != "switches") {
+                interface.add(kMember, made.interface.items()[member]);
+                continue;
+            }
+            Value switches = Value::object();
+            const Value& kOld = made.interface.items()[member];
+            for (std::size_t each = 0; each < kOld.names().size(); ++each) {
+                Value entry = Value::object();
+                entry.add("default",
+                          kOld.names()[each] == kFound->name ? Value::boolean(*kOn) : kOld.items()[each].items()[0]);
+                switches.add(kOld.names()[each], std::move(entry));
+            }
+            interface.add("switches", std::move(switches));
+        }
+        made.interface = std::move(interface);
+        switched = true;
+    }
+    if (!switched) {
+        return std::optional<graph::Document>{};
+    }
+    return std::optional{std::move(made)};
 }
 
 std::vector<std::byte> encodeInstance(const MaterialInstance& made) {

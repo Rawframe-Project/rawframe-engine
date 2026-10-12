@@ -288,7 +288,7 @@ bool known(const graph::Node& node) {
             *kText == kCompareType || *kText == kConstantType || *kText == kFrontFacingType ||
             *kText == kCombine4Type || *kText == kSeparate4Type || *kText == kParameterType ||
             *kText == kParameterTexture2dType || *kText == kTransformType || *kText == kInlineSlangType ||
-            *kText == kOutputType || functions::isFunction(*kText) || math(*kText));
+            *kText == kStaticSwitchType || *kText == kOutputType || functions::isFunction(*kText) || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -648,9 +648,16 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& s
         kInterface.kind() == Value::Kind::Object &&
         (kFunction ? kInterface.find("outputs") != nullptr && kMembers == (kInputsFound != nullptr ? 2U : 1U) &&
                          (kInputsFound == nullptr || kInterface.names()[0] == "inputs")
-                   : kMembers <= 1 && (kMembers == 0 || kInputsFound != nullptr));
+                   : std::ranges::all_of(kInterface.kind() == Value::Kind::Object ? kInterface.names()
+                                                                                  : std::vector<std::string>{},
+                                         [&kInterface](const std::string& name) {
+                                             // Its inputs, then its static switches (D719).
+                                             return (name == "inputs" && kInterface.names()[0] == "inputs") ||
+                                                    (name == "switches" && kInterface.names().back() == "switches");
+                                         }));
     if (!kShaped) {
-        return invalid("a surface's interface is its inputs alone, or nothing; a function's, its inputs and outputs");
+        return invalid("a surface's interface is its inputs and its switches, or nothing; a function's, its inputs "
+                       "and outputs");
     }
     if (kInputsFound == nullptr) {
         return made;
@@ -952,6 +959,63 @@ result::Result<std::vector<std::string_view>> namesOf(const Value* names, std::s
 
 } // namespace
 
+result::Result<std::vector<StaticSwitch>> switchesOf(const graph::Document& surface) {
+    RAWFRAME_TRY(interfaceOf(surface));
+    std::vector<StaticSwitch> made;
+    const Value* kSwitches =
+        surface.interface.kind() == Value::Kind::Object ? surface.interface.find("switches") : nullptr;
+    if (kSwitches == nullptr) {
+        return made;
+    }
+    if (kSwitches->kind() != Value::Kind::Object || kSwitches->names().empty() || kSwitches->names().size() > 8) {
+        return invalid("a surface's static switches are one to eight");
+    }
+    for (std::size_t at = 0; at < kSwitches->names().size(); ++at) {
+        const Value& kSwitch = kSwitches->items()[at];
+        const Value* kDefault =
+            kSwitch.kind() == Value::Kind::Object && kSwitch.names().size() == 1 ? kSwitch.find("default") : nullptr;
+        const std::optional<bool> kOn = kDefault != nullptr ? kDefault->truth() : std::nullopt;
+        if (!kestNamed(kSwitches->names()[at]) || !kOn.has_value()) {
+            return invalid("a static switch is named in lower case, its default a bool alone");
+        }
+        made.push_back(StaticSwitch{.name = kSwitches->names()[at], .on = *kOn});
+    }
+    return made;
+}
+
+result::Result<SwitchChoice> staticSwitchIn(const graph::Document& surface, const graph::Node& node) {
+    constexpr std::array<std::string_view, 1> kParams = {"name"};
+    constexpr std::array<std::string_view, 2> kInputs = {"off", "on"};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, kInputs));
+    RAWFRAME_TRY_ASSIGN(const std::vector<StaticSwitch> kSwitches, switchesOf(surface));
+    const Value* kName = kParts.first->find("name");
+    const auto kFound = kName != nullptr && kName->text() != nullptr
+                            ? std::ranges::find(kSwitches, std::string_view{*kName->text()}, &StaticSwitch::name)
+                            : kSwitches.end();
+    const Value* kOff = kParts.second->find("off");
+    const Value* kOnGiven = kParts.second->find("on");
+    if (kFound == kSwitches.end() || kOff == nullptr || kOnGiven == nullptr) {
+        return invalid("a static switch node names a declared switch, and its inputs off and on are given");
+    }
+    SwitchChoice made{.taken = kFound->on};
+    RAWFRAME_TRY_ASSIGN(made.off, operandOf(surface, *kOff));
+    RAWFRAME_TRY_ASSIGN(made.on, operandOf(surface, *kOnGiven));
+    // Both of one type: three or four numbers a vector's beside one.
+    for (auto [mine, other] : {std::pair{&made.off, &made.on}, std::pair{&made.on, &made.off}}) {
+        if (!mine->from.has_value() && other->carried.has_value() &&
+            ((mine->carried == Carried::Color3 && other->carried == Carried::Vec3) ||
+             (mine->carried == Carried::Color4 && other->carried == Carried::Vec4))) {
+            mine->carried = other->carried;
+        }
+    }
+    if (made.off.carried == Carried::Texture2d || made.on.carried == Carried::Texture2d ||
+        (made.off.carried.has_value() && made.on.carried.has_value() && *made.off.carried != *made.on.carried)) {
+        return invalid("a static switch node's inputs are of one type, never a texture");
+    }
+    made.out = made.off.carried.has_value() ? made.off.carried : made.on.carried;
+    return made;
+}
+
 result::Result<Inline> inlineIn(const graph::Document& surface, const graph::Node& node) {
     constexpr std::array<std::string_view, 6> kParams = {
         "body", "capabilities", "domains", "inputs", "outputs", "stages"};
@@ -1150,6 +1214,8 @@ result::Status nodeChecked(const graph::Document& surface, const graph::Node& no
         RAWFRAME_TRY(transformIn(surface, node));
     } else if (typeOf(node) == kInlineSlangType) {
         RAWFRAME_TRY(inlineIn(surface, node));
+    } else if (typeOf(node) == kStaticSwitchType) {
+        RAWFRAME_TRY(staticSwitchIn(surface, node));
     } else if (typeOf(node) == kConstantType) {
         RAWFRAME_TRY(constantIn(node));
     } else if (typeOf(node) == kSeparate2Type) {
@@ -1205,6 +1271,10 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
     if (kType == kSeparate2Type && (from.output == "x" || from.output == "y")) {
         RAWFRAME_TRY(separate2In(surface, *kSource));
         return std::optional{Carried::Float};
+    }
+    if (kType == kStaticSwitchType && from.output == "out") {
+        RAWFRAME_TRY_ASSIGN(const SwitchChoice kChoice, staticSwitchIn(surface, *kSource));
+        return kChoice.out;
     }
     if (kType == kInlineSlangType) {
         // An inline node's output is as it declares (D718).
