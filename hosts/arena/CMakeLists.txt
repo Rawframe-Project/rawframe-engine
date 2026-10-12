@@ -184,8 +184,12 @@ if(RAWFRAME_BUILD_TESTS)
     add_test(NAME runners_heard
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/runners_heard.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    # What it hears is counted in wall time, as the prediction runs' ticks
+    # are, so it holds six processors as they do (D83): starved under a full
+    # check, its first bot heard three shots and was never hit.
     set_tests_properties(runners_heard PROPERTIES
                          FIXTURES_REQUIRED runners_content
+                         PROCESSORS 6
                          PASS_REGULAR_EXPRESSION
                          "\"written\":true,\"frames\":[0-9]+,\"peak\":(0\\.[1-9]|[1-9])[^,]*,\"cues\":[1-9][0-9]*,\"emitterCues\":\"[1-9][0-9]* [1-9][0-9]* 0\",\"effects\":[1-9][^\n]*\"continuous\":[1-9]")
     # Four bots play runners and the first one's canvas is drawn offscreen
