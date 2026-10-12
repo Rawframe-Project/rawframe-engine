@@ -11,6 +11,7 @@
                 {"location": 6, "type": "float32", "components": 3},
                 {"location": 7, "type": "float32", "components": 3},
                 {"location": 8, "type": "float32", "components": 4},
+                {"location": 12, "type": "float32", "components": 1},
                 {"location": 13, "type": "float32", "components": 2}],
      "variables": []},
     {"name": "vsCut", "stage": "vertex",

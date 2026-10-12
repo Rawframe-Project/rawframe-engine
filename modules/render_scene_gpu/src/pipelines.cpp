@@ -232,8 +232,10 @@ result::Status Pipelines::make() {
     // The casters into the sun's shadow map: the vertex's place, pushed
     // from the sun by its slope (the depth half of ADR-0051's bias; the
     // normal half is where the map is read); and its normal, color, and
-    // coordinates, which a material moving its vertices reads (D691).
-    static constexpr std::array<mrhiVertexAttribute, 10> kCasterAttributes = {kAttributes[0],
+    // coordinates, which a material moving its vertices reads (D691), and
+    // its material, which WGSL keeps in the caster's struct though only a
+    // masked caster reads it.
+    static constexpr std::array<mrhiVertexAttribute, 11> kCasterAttributes = {kAttributes[0],
                                                                               kAttributes[1],
                                                                               kAttributes[2],
                                                                               kAttributes[3],
@@ -242,7 +244,8 @@ result::Status Pipelines::make() {
                                                                               kAttributes[6],
                                                                               kAttributes[7],
                                                                               kAttributes[8],
-                                                                              kAttributes[9]};
+                                                                              kAttributes[9],
+                                                                              kAttributes[13]};
     mrhiGraphicsPipelineDef casters = prepass;
     constexpr std::string_view kCastingLabel = "rawframe.scene.shadows";
     casters.label = kCastingLabel.data();
@@ -254,18 +257,6 @@ result::Status Pipelines::make() {
     casters.depthStencilFormat = kShadowFormat;
     casters.depthBiasSlopeScale = -2.0F;
     RAWFRAME_TRY(ask(casters, casting));
-    // Masked casters: their material too.
-    static constexpr std::array<mrhiVertexAttribute, 11> kCutAttributes = {kAttributes[0],
-                                                                           kAttributes[1],
-                                                                           kAttributes[2],
-                                                                           kAttributes[3],
-                                                                           kAttributes[4],
-                                                                           kAttributes[5],
-                                                                           kAttributes[6],
-                                                                           kAttributes[7],
-                                                                           kAttributes[8],
-                                                                           kAttributes[9],
-                                                                           kAttributes[13]};
     mrhiGraphicsPipelineDef cutCasters = casters;
     constexpr std::string_view kCutCastingLabel = "rawframe.scene.shadows.masked";
     cutCasters.label = kCutCastingLabel.data();
@@ -274,8 +265,6 @@ result::Status Pipelines::make() {
     cutCasters.vertexEntryLength = 5;
     cutCasters.fragmentEntry = "cut";
     cutCasters.fragmentEntryLength = 3;
-    cutCasters.vertexAttributes = kCutAttributes.data();
-    cutCasters.vertexAttributeCount = static_cast<std::uint32_t>(kCutAttributes.size());
     RAWFRAME_TRY(ask(cutCasters, cutCasting));
     mrhiSamplerDef samplerDef = mrhiDefaultSamplerDef();
     samplerDef.magFilter = mrhi_filterLinear;
