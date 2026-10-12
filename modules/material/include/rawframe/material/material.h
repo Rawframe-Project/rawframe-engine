@@ -251,6 +251,8 @@ inline constexpr std::string_view kVertexColorType = "rawframe/vertex_color@1";
 /// World's axes, the fragment stage's alone (D696).
 inline constexpr std::string_view kViewDirectionType = "rawframe/view_direction@1";
 inline constexpr std::string_view kWorldTangentType = "rawframe/world_tangent@1";
+/// A comparison of two floats, by its declared operator (D697).
+inline constexpr std::string_view kCompareType = "rawframe/compare@1";
 
 /// What a surface compiles to at each quality, by `Quality`: the same
 /// material at each where its graph does not differ (D318).

@@ -92,7 +92,12 @@ using enum Rule;
 /// `fract` is Slang's `frac`, `mix` its `lerp`; `modulo` is floored, as
 /// MaterialX's is, never C's truncated remainder; `remap` takes `in` from
 /// between `in_low` and `in_high` to between `out_low` and `out_high`.
-constexpr std::array<MathNode, 41> kMathNodes = {{
+constexpr std::array<MathNode, 46> kMathNodes = {{
+    {"rawframe/and@1", {"a", "b"}, 2, Logical, "$0 && $1", false},
+    {"rawframe/or@1", {"a", "b"}, 2, Logical, "$0 || $1", false},
+    {"rawframe/xor@1", {"a", "b"}, 2, Logical, "$0 != $1", false},
+    {"rawframe/not@1", {"in"}, 1, Logical, "!($0)", false},
+    {"rawframe/select@1", {"condition", "a", "b"}, 3, Choice, "($0) ? ($1) : ($2)", true},
     {kAddType, {"a", "b"}, 2, Componentwise, "$0 + $1", false},
     {kSubtractType, {"a", "b"}, 2, Componentwise, "$0 - $1", false},
     {kMultiplyType, {"a", "b"}, 2, Componentwise, "$0 * $1", false},
@@ -151,12 +156,12 @@ const MathNode* mathNodeOf(std::string_view type) {
 bool known(const graph::Node& node) {
     const Value* kType = node.record.find("type");
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
-    return kText != nullptr &&
-           (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType || *kText == kSeparate3Type ||
-            *kText == kNormalMapType || *kText == kQualitySwitchType || *kText == kTimeType ||
-            *kText == kWorldPositionType || *kText == kWorldNormalType || *kText == kCombine3Type ||
-            *kText == kCombine2Type || *kText == kSeparate2Type || *kText == kSwizzleType ||
-            *kText == kVertexColorType || *kText == kViewDirectionType || *kText == kWorldTangentType || math(*kText));
+    return kText != nullptr && (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType ||
+                                *kText == kSeparate3Type || *kText == kNormalMapType || *kText == kQualitySwitchType ||
+                                *kText == kTimeType || *kText == kWorldPositionType || *kText == kWorldNormalType ||
+                                *kText == kCombine3Type || *kText == kCombine2Type || *kText == kSeparate2Type ||
+                                *kText == kSwizzleType || *kText == kVertexColorType || *kText == kViewDirectionType ||
+                                *kText == kWorldTangentType || *kText == kCompareType || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -198,9 +203,14 @@ result::Result<Operand> operandOf(const graph::Document& surface, const Value& v
         made.carried = Carried::Float;
         return made;
     }
+    if (const std::optional<bool> kTruth = value.truth(); kTruth.has_value()) {
+        made.literal[0] = *kTruth ? 1 : 0;
+        made.carried = Carried::Bool;
+        return made;
+    }
     const std::size_t kCount = value.kind() == Value::Kind::Array ? value.items().size() : 0;
     if (kCount != 2 && kCount != 3) {
-        return invalid("a math node's literal is a number, or two or three of them");
+        return invalid("a math node's literal is a number, two or three of them, or a bool");
     }
     for (std::size_t at = 0; at < kCount; ++at) {
         const std::optional<double> kChannel = kFinite(value.items()[at]);
@@ -253,9 +263,25 @@ result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const gr
         return carried == Carried::Vec2 || carried == Carried::Vec3;
     };
     switch (kNode.rule) {
+    case Logical:
+        if (!std::ranges::all_of(kIn, [](const Operand& each) {
+                return each.carried == Carried::Bool;
+            })) {
+            return invalid("a logic node's inputs are bools");
+        }
+        made.out = Carried::Bool;
+        break;
+    case Choice:
     case Componentwise: {
+        const bool kChoice = kNode.rule == Choice;
+        if (kChoice && *kIn[0].carried != Carried::Bool) {
+            return invalid("a select node's condition is a bool");
+        }
         std::optional<Carried> kind;
-        for (const Operand& each : kIn) {
+        for (const Operand& each : kIn.subspan(kChoice ? 1 : 0)) {
+            if (*each.carried == Carried::Bool) {
+                return invalid("a bool feeds a logic node or a select's condition alone");
+            }
             if (*each.carried == Carried::Float) {
                 continue;
             }
@@ -353,6 +379,38 @@ result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::N
                    : made.pattern.size() == 2            ? Carried::Vec2
                    : *made.in.carried == Carried::Color3 ? Carried::Color3
                                                          : Carried::Vec3;
+    }
+    return made;
+}
+
+result::Result<Compare> compareIn(const graph::Document& surface, const graph::Node& node) {
+    constexpr std::array<std::string_view, 1> kParams = {"operator"};
+    constexpr std::array<std::string_view, 2> kInputs = {"a", "b"};
+    constexpr std::array<std::pair<std::string_view, std::string_view>, 6> kOperators = {{{"less", "<"},
+                                                                                          {"less_equal", "<="},
+                                                                                          {"greater", ">"},
+                                                                                          {"greater_equal", ">="},
+                                                                                          {"equal", "=="},
+                                                                                          {"not_equal", "!="}}};
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, kInputs));
+    const Value* kOperator = kParts.first->find("operator");
+    const auto kFound = kOperator != nullptr && kOperator->text() != nullptr
+                            ? std::ranges::find(kOperators,
+                                                std::string_view{*kOperator->text()},
+                                                &std::pair<std::string_view, std::string_view>::first)
+                            : kOperators.end();
+    const Value* kA = kParts.second->find("a");
+    const Value* kB = kParts.second->find("b");
+    if (kFound == kOperators.end() || kA == nullptr || kB == nullptr) {
+        return invalid("a compare node declares its operator, and its inputs a and b are given");
+    }
+    Compare made{.symbol = kFound->second};
+    RAWFRAME_TRY_ASSIGN(made.a, operandOf(surface, *kA));
+    RAWFRAME_TRY_ASSIGN(made.b, operandOf(surface, *kB));
+    for (const Operand* kEach : {&made.a, &made.b}) {
+        if (kEach->carried.has_value() && *kEach->carried != Carried::Float) {
+            return invalid("a compare node's inputs are floats");
+        }
     }
     return made;
 }
@@ -494,6 +552,10 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
     if (kType == kSeparate2Type && (from.output == "x" || from.output == "y")) {
         RAWFRAME_TRY(separate2In(surface, *kSource));
         return std::optional{Carried::Float};
+    }
+    if (kType == kCompareType && from.output == "out") {
+        RAWFRAME_TRY(compareIn(surface, *kSource));
+        return std::optional{Carried::Bool};
     }
     if (kType == kSwizzleType && from.output == "out") {
         RAWFRAME_TRY_ASSIGN(const Swizzle kSwizzle, swizzleIn(surface, *kSource));

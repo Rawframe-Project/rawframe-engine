@@ -867,7 +867,15 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
                                          "placed.color.a",
                                          "point.view",
                                          "placed.view",
-                                         "point.tangent.xyz"}) {
+                                         "point.tangent.xyz",
+                                         " < ",
+                                         " >= ",
+                                         " && ",
+                                         " || true",
+                                         " != ",
+                                         "!(",
+                                         ") ? (",
+                                         "const bool "}) {
         RAWFRAME_EXPECT(kMade->source.contains(kCode));
         if (!kMade->source.contains(kCode)) {
             std::printf("not written: %s\n", std::string{kCode}.c_str());
@@ -890,6 +898,41 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
     RAWFRAME_EXPECT(kRefused(
         "rawframe/refract@1",
         {{"eta", from(kWorld, "position")}, {"in", from(kWorld, "position")}, {"normal", from(kWorld, "position")}}));
+    // Logic (D697): an and of floats, a compare of vectors or by no known
+    // operator, a select on a float, and a bool in arithmetic.
+    RAWFRAME_EXPECT(kRefused("rawframe/and@1", {{"a", from(kTime, "seconds")}, {"b", Value::boolean(true)}}));
+    RAWFRAME_EXPECT(kRefused("rawframe/select@1",
+                             {{"a", Value::real(1)}, {"b", Value::real(0)}, {"condition", from(kTime, "seconds")}}));
+    RAWFRAME_EXPECT(kRefused("rawframe/add@1", {{"a", Value::boolean(true)}, {"b", from(kTime, "seconds")}}));
+    const auto kCompared = [](Value operation, Value a) {
+        return refusedWith(
+            validateSurface(surfaceOf(
+                objectOf({{"specular_roughness", from(kWave, "out")}}),
+                {timeOf(Value::string("simulation")),
+                 nodeOf(kWorld, kWorldPositionType, Value::object(), Value::object()),
+                 nodeOf(kPhase,
+                        kCompareType,
+                        objectOf({{"operator", std::move(operation)}}),
+                        objectOf({{"a", std::move(a)}, {"b", Value::real(0)}})),
+                 nodeOf(
+                     kWave,
+                     "rawframe/select@1",
+                     Value::object(),
+                     objectOf({{"a", Value::real(1)}, {"b", Value::real(0)}, {"condition", from(kPhase, "out")}}))})),
+            MaterialError::Invalid);
+    };
+    RAWFRAME_EXPECT(!kCompared(Value::string("less"), from(kTime, "seconds")));
+    RAWFRAME_EXPECT(kCompared(Value::string("less"), from(kWorld, "position")));
+    RAWFRAME_EXPECT(kCompared(Value::string("lessish"), from(kTime, "seconds")));
+    // A bool feeds no surface input.
+    RAWFRAME_EXPECT(refusedWith(
+        validateSurface(surfaceOf(objectOf({{"specular_roughness", from(kPhase, "out")}}),
+                                  {timeOf(Value::string("simulation")),
+                                   nodeOf(kPhase,
+                                          kCompareType,
+                                          objectOf({{"operator", Value::string("less")}}),
+                                          objectOf({{"a", from(kTime, "seconds")}, {"b", Value::real(0)}}))})),
+        MaterialError::Invalid));
     // A swizzle past its input's width, of a float, or of no letters.
     const auto kSwizzled = [](Value pattern, Value in) {
         return refusedWith(

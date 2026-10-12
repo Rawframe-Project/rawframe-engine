@@ -47,6 +47,8 @@ std::string_view slangType(Carried carried) {
     case Carried::Color3:
     case Carried::Vec3:
         return "float3";
+    case Carried::Bool:
+        return "bool";
     }
     return "float";
 }
@@ -175,6 +177,12 @@ public:
                     expression.replace(found, kPlace.size(), text);
                 }
             }
+        } else if (kType == kCompareType) {
+            RAWFRAME_TRY_ASSIGN(const surface_graph::Compare kCompare, surface_graph::compareIn(surface_, *kNode));
+            RAWFRAME_TRY_ASSIGN(const std::string kA, operandText(kCompare.a));
+            RAWFRAME_TRY_ASSIGN(const std::string kB, operandText(kCompare.b));
+            expression = kA + " " + std::string{kCompare.symbol} + " " + kB;
+            carried = Carried::Bool;
         } else if (kType == kCombine3Type || kType == kCombine2Type) {
             RAWFRAME_TRY_ASSIGN(const surface_graph::Combined kParts, surface_graph::combineIn(surface_, *kNode));
             expression = kParts.count == 2 ? "float2(" : "float3(";
@@ -226,6 +234,9 @@ private:
     result::Result<std::string> operandText(const surface_graph::Operand& operand) {
         if (operand.from.has_value()) {
             return outputOf(*operand.from);
+        }
+        if (operand.carried == Carried::Bool) {
+            return std::string{operand.literal[0] != 0 ? "true" : "false"};
         }
         return literalText(operand.literal, channelsOf(operand.carried.value_or(Carried::Float)));
     }

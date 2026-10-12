@@ -24,6 +24,7 @@ using document::Value;
 using surface_graph::Carried;
 using surface_graph::carriedBy;
 using surface_graph::combineIn;
+using surface_graph::compareIn;
 using surface_graph::kBlends;
 using surface_graph::known;
 using surface_graph::kShadings;
@@ -449,6 +450,8 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
             RAWFRAME_TRY(switchIn(surface, node));
         } else if (typeOf(node) == kCombine3Type || typeOf(node) == kCombine2Type) {
             RAWFRAME_TRY(combineIn(surface, node));
+        } else if (typeOf(node) == kCompareType) {
+            RAWFRAME_TRY(compareIn(surface, node));
         } else if (typeOf(node) == kSeparate2Type) {
             RAWFRAME_TRY(separate2In(surface, node));
         } else if (typeOf(node) == kSwizzleType) {

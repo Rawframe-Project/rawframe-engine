@@ -22,7 +22,9 @@ enum class Carried : std::uint8_t {
     Float,
     Color3,
     Vec2,
-    Vec3
+    Vec3,
+    /// What the logic nodes take and give (D697).
+    Bool
 };
 
 /// SPEC-0026's states' words, in their enumerations' order.
@@ -68,7 +70,12 @@ enum class Rule : std::uint8_t {
     /// Two vectors of one type in, a float out: dot, distance.
     Between,
     /// Two vec3s in, a vec3 out: cross, reflect.
-    Across
+    Across,
+    /// Bools in, a bool out: and, or, xor, not (D697).
+    Logical,
+    /// A bool, then two inputs of one type or floats; one of them out:
+    /// select (D697).
+    Choice
 };
 
 /// One of the atomic core's math nodes (SPEC-0026, D694): its type, its
@@ -132,6 +139,17 @@ struct Swizzle {
 };
 
 [[nodiscard]] result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::Node& node);
+
+/// A `compare` node's operator and inputs, checked (D697): `less`,
+/// `less_equal`, `greater`, `greater_equal`, `equal`, or `not_equal`, over
+/// two floats; a bool out.
+struct Compare {
+    std::string_view symbol;
+    Operand a;
+    Operand b;
+};
+
+[[nodiscard]] result::Result<Compare> compareIn(const graph::Document& surface, const graph::Node& node);
 
 /// A `time` node's params, checked (D691): its timeline, the simulation's,
 /// the presented World's ticks over its tick rate in seconds (ADR-0010).
