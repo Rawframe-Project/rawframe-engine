@@ -7,3 +7,4 @@ rawframe_module(NAME world_tooling
 )
 
 rawframe_module_tests(NAME world_tooling SOURCES tests/server_test.cpp)
+rawframe_module_fuzz(NAME world_tooling TARGET records RUNS 15000 MAX_LEN 4096 SEEDS tests/seeds SOURCES tests/fuzz_tooling.cpp)
