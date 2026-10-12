@@ -10,20 +10,28 @@
 # usage: tools/make_waves.py <games/gale/waves.rfmaterial>
 
 import json
+import math
 import sys
 
+# The seconds the sea repeats in (D702): gale.kest's `float` wraps the
+# World's time at them, and the material's time node at the same, so both
+# read a game days long as finely as one a minute long. Each wave's rate
+# turns it a whole number of times in them, and the foam drifts round once.
+PERIOD = 600
 # Each wave: its height, its number along x or z, its rate, and its phase
-# (gale.kest's `height`).
-WAVES = ((0.25, "r", 0.3, 1.1, 0.0), (0.15, "b", 0.23, 0.8, 1.3))
+# (gale.kest's `height`); 105 and 76 turns a period.
+WAVES = ((0.25, "r", 0.3, 1.0995574, 0.0), (0.15, "b", 0.23, 0.7958701, 1.3))
 # The water's color, linear, and its roughness; and the foam's, which
 # whitens the crests where they rise past FOAM_FROM toward FOAM_TO meters,
-# broken up by value noise drifting with the sea (D700).
+# broken up by value noise drifting with the sea (D700), round a circle
+# DRIFT across, in noise cells, once a period.
 COLOR = (0.012, 0.1, 0.19)
 ROUGHNESS = 0.2
 FOAM = (0.75, 0.8, 0.82)
 FOAM_ROUGHNESS = 0.7
 FOAM_FROM = 0.26
 FOAM_TO = 0.38
+DRIFT = 54
 
 
 def material():
@@ -40,7 +48,7 @@ def material():
     def out(name, output="out"):
         return {"node": name, "output": output}
 
-    time = node("time", {"timeline": "simulation"})
+    time = node("time", {"period": PERIOD, "timeline": "simulation"})
     world = node("world_position")
     axes = node("separate3", inputs={"in": out(world, "position")})
     heights = []
@@ -62,7 +70,10 @@ def material():
     normal = node("normalize", inputs={"in": out(leaning)})
     # The foam: the crest's height, give or take noise over the water.
     flat = node("combine2", inputs={"x": out(axes, "r"), "y": out(axes, "b")})
-    drift = node("multiply", inputs={"a": out(time, "seconds"), "b": 0.4})
+    turn = node("multiply", inputs={"a": out(time, "seconds"), "b": round(2 * math.pi / PERIOD, 7)})
+    circle = node("combine2", inputs={"x": out(node("cos", inputs={"in": out(turn)})),
+                                      "y": out(node("sin", inputs={"in": out(turn)}))})
+    drift = node("multiply", inputs={"a": out(circle), "b": DRIFT})
     place = node("add", inputs={"a": out(node("multiply", inputs={"a": out(flat), "b": 1.3})), "b": out(drift)})
     ragged = node("multiply", inputs={"a": out(node("subtract", inputs={
         "a": out(node("value_noise_2d", inputs={"in": out(place)})), "b": 0.5})), "b": 0.16})

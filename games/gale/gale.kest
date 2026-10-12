@@ -158,8 +158,8 @@ extern fn Pose3D.get(entity: world.Entity) -> physics3d.Pose3D
 // drawn sea's material rolls the same waves (D691): change them together
 // in tools/make_waves.py.
 fn height(x: f32, z: f32, time: f32) -> f32 {
-    let one = f64(0.25) * math.sin(f64(0.3 * x + 1.1 * time))
-    let two = f64(0.15) * math.sin(f64(0.23 * z + 0.8 * time + 1.3))
+    let one = f64(0.25) * math.sin(f64(0.3 * x + 1.0995574 * time))
+    let two = f64(0.15) * math.sin(f64(0.23 * z + 0.7958701 * time + 1.3))
     return f32(one + two)
 }
 
@@ -223,9 +223,10 @@ fn dot(a: Offset, b: Offset) -> f32 {
 fn float(count: i32, ships: [Ship], helms: [controls.Helm], poses: [physics3d.Pose3D],
          velocities: [physics3d.Velocity3D], impulses: [physics3d.Impulse3D]) {
     // The World's time in seconds, as the drawn sea's material reads it
-    // (D691): the tick over the tick rate, never wrapped, so the two seas
-    // stay one (D693).
-    let time = f32(f64(world.tick()) / f64(60.0))
+    // (D691): the tick over the tick rate, wrapped where the material's is,
+    // at the ten minutes the waves repeat in (D702), so the two seas stay
+    // one (D693) however long a game runs.
+    let time = f32(f64(world.tick() % u64(36000)) / f64(60.0))
     // The water under one of the six points carries a sixth of the hull's
     // bottom.
     let area = 4.0 * BEAM * LENGTH / 6.0
