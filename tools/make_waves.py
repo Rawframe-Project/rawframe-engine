@@ -2,7 +2,8 @@
 # Writes Gale's waves (D691): the material that rolls them along the sea,
 # the engine's grid, lifting each vertex to the height Gale's float system
 # floats its ships on (gale.kest's `height`) at the presented World's time,
-# and bending its normal by the waves' slope. The waves' sums here are
+# and bending its normal by the waves' slope; foam whitens the crests
+# (D700). The waves' sums here are
 # gale.kest's: change one, change both, and run this again. Its output is
 # committed.
 #
@@ -14,9 +15,15 @@ import sys
 # Each wave: its height, its number along x or z, its rate, and its phase
 # (gale.kest's `height`).
 WAVES = ((0.25, "r", 0.3, 1.1, 0.0), (0.15, "b", 0.23, 0.8, 1.3))
-# The water's color, linear, and its roughness.
+# The water's color, linear, and its roughness; and the foam's, which
+# whitens the crests where they rise past FOAM_FROM toward FOAM_TO meters,
+# broken up by value noise drifting with the sea (D700).
 COLOR = (0.012, 0.1, 0.19)
 ROUGHNESS = 0.2
+FOAM = (0.75, 0.8, 0.82)
+FOAM_ROUGHNESS = 0.7
+FOAM_FROM = 0.26
+FOAM_TO = 0.38
 
 
 def material():
@@ -26,7 +33,8 @@ def material():
     def node(kind, params=None, inputs=None):
         count[0] += 1
         name = f"5ea0000000000{count[0]:03x}"
-        nodes[name] = {"type": f"rawframe/{kind}@1", "params": params or {}, "inputs": inputs or {}}
+        # A record names its inputs in name order.
+        nodes[name] = {"type": f"rawframe/{kind}@1", "params": params or {}, "inputs": dict(sorted((inputs or {}).items()))}
         return name
 
     def out(name, output="out"):
@@ -52,11 +60,19 @@ def material():
     offset = node("combine3", inputs={"x": 0, "y": out(lift), "z": 0})
     leaning = node("combine3", inputs={"x": out(slopes[0]), "y": 1, "z": out(slopes[1])})
     normal = node("normalize", inputs={"in": out(leaning)})
+    # The foam: the crest's height, give or take noise over the water.
+    flat = node("combine2", inputs={"x": out(axes, "r"), "y": out(axes, "b")})
+    drift = node("multiply", inputs={"a": out(time, "seconds"), "b": 0.4})
+    place = node("add", inputs={"a": out(node("multiply", inputs={"a": out(flat), "b": 1.3})), "b": out(drift)})
+    ragged = node("multiply", inputs={"a": out(node("subtract", inputs={
+        "a": out(node("value_noise_2d", inputs={"in": out(place)})), "b": 0.5})), "b": 0.16})
+    crest = node("add", inputs={"a": out(lift), "b": out(ragged)})
+    foam = node("smoothstep", inputs={"low": FOAM_FROM, "high": FOAM_TO, "in": out(crest)})
     node("surface", inputs={
-        "base_color": list(COLOR),
+        "base_color": out(node("mix", inputs={"a": list(COLOR), "b": list(FOAM), "t": out(foam)})),
         "geometry_normal": out(normal),
         "position_offset": out(offset),
-        "specular_roughness": ROUGHNESS,
+        "specular_roughness": out(node("mix", inputs={"a": ROUGHNESS, "b": FOAM_ROUGHNESS, "t": out(foam)})),
     })
     document = {"formatVersion": 1, "kind": "surface", "interface": {}, "graph": nodes}
     return json.dumps(document, indent=2) + "\n"

@@ -244,14 +244,153 @@
       }
     },
     "5ea0000000000017": {
-      "type": "rawframe/surface@1",
+      "type": "rawframe/combine2@1",
       "params": {},
       "inputs": {
-        "base_color": [
+        "x": {
+          "node": "5ea0000000000003",
+          "output": "r"
+        },
+        "y": {
+          "node": "5ea0000000000003",
+          "output": "b"
+        }
+      }
+    },
+    "5ea0000000000018": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "5ea0000000000001",
+          "output": "seconds"
+        },
+        "b": 0.4
+      }
+    },
+    "5ea0000000000019": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "5ea0000000000017",
+          "output": "out"
+        },
+        "b": 1.3
+      }
+    },
+    "5ea000000000001a": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "5ea0000000000019",
+          "output": "out"
+        },
+        "b": {
+          "node": "5ea0000000000018",
+          "output": "out"
+        }
+      }
+    },
+    "5ea000000000001b": {
+      "type": "rawframe/value_noise_2d@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "5ea000000000001a",
+          "output": "out"
+        }
+      }
+    },
+    "5ea000000000001c": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "5ea000000000001b",
+          "output": "out"
+        },
+        "b": 0.5
+      }
+    },
+    "5ea000000000001d": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "5ea000000000001c",
+          "output": "out"
+        },
+        "b": 0.16
+      }
+    },
+    "5ea000000000001e": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "5ea0000000000013",
+          "output": "out"
+        },
+        "b": {
+          "node": "5ea000000000001d",
+          "output": "out"
+        }
+      }
+    },
+    "5ea000000000001f": {
+      "type": "rawframe/smoothstep@1",
+      "params": {},
+      "inputs": {
+        "high": 0.38,
+        "in": {
+          "node": "5ea000000000001e",
+          "output": "out"
+        },
+        "low": 0.26
+      }
+    },
+    "5ea0000000000020": {
+      "type": "rawframe/mix@1",
+      "params": {},
+      "inputs": {
+        "a": [
           0.012,
           0.1,
           0.19
         ],
+        "b": [
+          0.75,
+          0.8,
+          0.82
+        ],
+        "t": {
+          "node": "5ea000000000001f",
+          "output": "out"
+        }
+      }
+    },
+    "5ea0000000000021": {
+      "type": "rawframe/mix@1",
+      "params": {},
+      "inputs": {
+        "a": 0.2,
+        "b": 0.7,
+        "t": {
+          "node": "5ea000000000001f",
+          "output": "out"
+        }
+      }
+    },
+    "5ea0000000000022": {
+      "type": "rawframe/surface@1",
+      "params": {},
+      "inputs": {
+        "base_color": {
+          "node": "5ea0000000000020",
+          "output": "out"
+        },
         "geometry_normal": {
           "node": "5ea0000000000016",
           "output": "out"
@@ -260,7 +399,10 @@
           "node": "5ea0000000000014",
           "output": "out"
         },
-        "specular_roughness": 0.2
+        "specular_roughness": {
+          "node": "5ea0000000000021",
+          "output": "out"
+        }
       }
     }
   }
