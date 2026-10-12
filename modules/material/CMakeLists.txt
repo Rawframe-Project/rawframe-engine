@@ -4,11 +4,11 @@
 # folded to their forms (D348, D355). No renderer in it, so a cook reads
 # materials without a device.
 rawframe_module(NAME material
-    SOURCES src/canvas.cpp src/common.cpp src/encoding.cpp src/fold.cpp src/material.cpp src/parameters.cpp src/post_process.cpp src/slang.cpp src/surface_graph.cpp
+    SOURCES src/canvas.cpp src/common.cpp src/encoding.cpp src/fold.cpp src/instance.cpp src/material.cpp src/parameters.cpp src/post_process.cpp src/slang.cpp src/surface_graph.cpp
     DEPS graph document result base
 )
 
-rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/material_test.cpp tests/nodes_test.cpp
+rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/instance_test.cpp tests/material_test.cpp tests/nodes_test.cpp
                                            tests/post_process_test.cpp)
 if(TARGET rawframe_material_tests)
     # ADR-0026's proof (D490): a graph and the Slang written from it, which
