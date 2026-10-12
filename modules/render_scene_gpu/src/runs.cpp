@@ -78,11 +78,17 @@ Placed placeDraws(const render_scene::SceneFrame& scene,
     std::uint32_t count = 0;
     const std::span<const render_scene::SceneDraw> kDraws = scene.draws;
     const std::size_t kOpaque = kDraws.size() - std::min(scene.translucent, kDraws.size());
-    // The opaque, then the masked: a material with a cutoff (D310).
+    // The opaque, then the masked: a material with a cutoff (D310), and,
+    // among casters, one that blends, which casts as much shadow as it
+    // covers (D726).
     const auto kSplit = [&scene](std::span<const render_scene::SceneDraw> draws) {
         std::pair<std::vector<render_scene::SceneDraw>, std::vector<render_scene::SceneDraw>> split;
         for (const render_scene::SceneDraw& draw : draws) {
-            const bool kMasked = draw.material < scene.materials.size() && scene.materials[draw.material][14] > 0;
+            const render_scene::MaterialBlob* kBlob =
+                draw.material < scene.materials.size() ? &scene.materials[draw.material] : nullptr;
+            const bool kMasked =
+                kBlob != nullptr && ((*kBlob)[14] > 0 || (static_cast<std::uint32_t>((*kBlob)[render_scene::kFlagsAt]) &
+                                                          render_scene::kBlendsFlag) != 0);
             (kMasked ? split.second : split.first).push_back(draw);
         }
         return split;

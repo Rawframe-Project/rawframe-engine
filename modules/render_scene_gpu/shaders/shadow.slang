@@ -6,7 +6,11 @@
 // cut takes it from the view (D487): the material linked as the scene's
 // is, the blob's or a material's own program (D488), with its bindings.
 // A caster whose material moves its vertices is moved as the scene moves
-// it (D691), its normal, color, and coordinates read for that.
+// it (D691), its normal, color, and coordinates read for that. A caster
+// that blends casts as much shadow as it covers (D726): it is cut where a
+// fixed noise over the map passes what it lets through, its opacity's
+// remainder and what it transmits, which the shadows' filter spreads into
+// a partial shadow.
 import material;
 
 extern struct Material : IMaterial;
@@ -127,7 +131,19 @@ void cut(Cut cut, bool front: SV_IsFrontFace)
     point.front = front;
     point.spaces = spacesOf(float4(1.0, 0.0, 0.0, 0.0), float4(0.0, 1.0, 0.0, 0.0), float4(0.0, 0.0, 1.0, 0.0));
     const Evaluated evaluated = Material.evaluate(point);
-    if (evaluated.opacity < materials[blobOf(cut.material) + 3u].z)
+    const float4 states = materials[blobOf(cut.material) + 3u];
+    float covers = 1.0;
+    if ((uint(states.w) & 32u) != 0u)
+    {
+        covers = evaluated.opacity * (1.0 - evaluated.transmission * (1.0 - evaluated.metalness));
+    }
+    // Jimenez's interleaved gradient noise, fixed to the map's texels.
+    const float noise = frac(52.9829189 * frac(dot(cut.position.xy, float2(0.06711056, 0.00583715))));
+    // Every input read whatever the material reads, as the scene's are: an
+    // input left unread is dropped from the entry, and D3D12 refuses a
+    // pixel shader whose inputs are not its vertex shader's outputs (D418).
+    const bool unreadable = isnan(cut.color.x + float(cut.material) + cut.uv.x);
+    if (evaluated.opacity < states.z || noise >= covers || unreadable)
     {
         discard;
     }

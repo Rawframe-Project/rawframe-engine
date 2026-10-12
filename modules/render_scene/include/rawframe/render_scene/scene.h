@@ -53,8 +53,15 @@ inline constexpr std::uint32_t kGridCells = 128;
 
 /// A mesh the scene may draw, by the identity a Model names it by.
 /// A compiled material as a device reads it (`material::blobOf`, D303),
-/// then its interface inputs' values (D708).
+/// then its interface inputs' values (D708). A frame's copy of a material
+/// that blends also carries `kBlendsFlag` among its flags (D726).
 using MaterialBlob = std::array<float, material::kBlobFloats + material::kParameterFloats>;
+
+/// The flag a frame's material carries where it blends over what is behind
+/// it (SceneMaterial's `translucent`), so a shadow is cut by what it covers
+/// (D726): beside `material::blobOf`'s flags, in the same float.
+inline constexpr std::uint32_t kBlendsFlag = 32;
+inline constexpr std::size_t kFlagsAt = 15;
 
 /// A material's blob and its parameters as a device reads them.
 [[nodiscard]] MaterialBlob sceneBlobOf(const std::array<float, material::kBlobFloats>& blob,

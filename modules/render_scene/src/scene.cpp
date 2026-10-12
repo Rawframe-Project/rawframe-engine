@@ -723,13 +723,18 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
         }
         const auto [kAt, kNew] =
             state->materials.try_emplace(kMaterial.id, static_cast<std::uint32_t>(state->frame.materials.size()));
+        // A material that blends says so to the device too (D726).
+        MaterialBlob blob = kMaterial.blob;
+        if (kMaterial.translucent) {
+            blob[kFlagsAt] = static_cast<float>(static_cast<std::uint32_t>(blob[kFlagsAt]) | kBlendsFlag);
+        }
         if (kNew) {
-            state->frame.materials.push_back(kMaterial.blob);
+            state->frame.materials.push_back(blob);
             state->frame.textures.push_back(kMaterial.textures);
             state->frame.programs.push_back(kMaterial.program);
             state->translucent.push_back(kMaterial.translucent);
         } else {
-            state->frame.materials[kAt->second] = kMaterial.blob;
+            state->frame.materials[kAt->second] = blob;
             state->frame.textures[kAt->second] = kMaterial.textures;
             state->frame.programs[kAt->second] = kMaterial.program;
             state->translucent[kAt->second] = kMaterial.translucent;

@@ -468,10 +468,11 @@ struct SceneRenderer::State {
                                                       : kOpaque && kMoves    ? std::optional{Shade::Depth}
                                                                              : std::nullopt;
                 // A masked model casting shadows is cut by its program there
-                // too (D488), and a moving one is moved there (D691).
-                const std::optional<Shade> kCast = kMasked  ? std::optional{Shade::CutCasting}
-                                                   : kMoves ? std::optional{Shade::Casting}
-                                                            : std::nullopt;
+                // too (D488), as is a translucent one by what it covers
+                // (D726), and a moving one is moved there (D691).
+                const std::optional<Shade> kCast = kMasked || kShade == Shade::Glass ? std::optional{Shade::CutCasting}
+                                                   : kMoves                          ? std::optional{Shade::Casting}
+                                                                                     : std::nullopt;
                 const bool kOwn = pipelines->programPipeline(kRun.program, kShade, kDecaled, kSampling) != nullptr &&
                                   (!kPrepass.has_value() ||
                                    pipelines->programPipeline(kRun.program, *kPrepass, false, kSampling) != nullptr) &&

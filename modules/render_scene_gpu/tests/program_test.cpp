@@ -943,3 +943,87 @@ RAWFRAME_TEST(ACoatReflectsTheProbesThatHoldIt) {
     std::printf("a coat in a green room under a red sky: %d %d %d\n", kMiddle[0], kMiddle[1], kMiddle[2]);
     RAWFRAME_EXPECT(kMiddle[1] > kMiddle[0] + 30 && kMiddle[0] < 20);
 }
+
+RAWFRAME_TEST(ASeeThroughCasterCastsAsMuchShadowAsItCovers) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // The sun's shadows' scene again: a white floor and a box above it. The
+    // box opaque casts all its shadow; drawn translucent at half its
+    // opacity, about half (D726); of glass.material, which transmits all
+    // but its reflection, almost none. Each blends, as the scene marks it.
+    SceneFrame frame = looking();
+    SceneDraw floor = box(8, 1, {1, 1, 1, 1});
+    floor.model[0] = 10;
+    floor.model[5] = 0.1F;
+    floor.model[10] = 10;
+    floor.normal[0] = 0.1F;
+    floor.normal[5] = 10;
+    floor.normal[10] = 0.1F;
+    floor.model[13] = -2;
+    SceneDraw cube = box(8, 0.5F, {1, 1, 1, 1});
+    cube.material = 1;
+    frame.draws = {floor, cube};
+    frame.shadows.casters = frame.draws;
+    for (std::size_t at = 0; at < frame.shadows.count; ++at) {
+        frame.shadows.cascades[at].firstCaster = 0;
+        frame.shadows.cascades[at].casterCount = 2;
+    }
+    const auto kShade = [](const std::vector<std::byte>& pixels) {
+        int sum = 0;
+        for (std::uint32_t y = 38; y < 41; ++y) {
+            for (std::uint32_t x = 28; x < 32; ++x) {
+                sum += at(pixels, x, y)[0];
+            }
+        }
+        return sum;
+    };
+    frame.materials = {render_scene::noMaterial(), render_scene::noMaterial()};
+    frame.programs = {nullptr, nullptr};
+    const auto kOpaque = drawn(**framer, **made, frame, kMeshes);
+    render_scene::MaterialBlob half = render_scene::noMaterial();
+    half[12] = 0.5F;
+    half[render_scene::kFlagsAt] =
+        static_cast<float>(static_cast<std::uint32_t>(half[render_scene::kFlagsAt]) | render_scene::kBlendsFlag);
+    frame.materials = {render_scene::noMaterial(), half};
+    frame.translucent = 1;
+    const auto kHalf = drawn(**framer, **made, frame, kMeshes);
+    render_scene::MaterialBlob blends = render_scene::noMaterial();
+    blends[render_scene::kFlagsAt] = static_cast<float>(render_scene::kBlendsFlag);
+    frame.materials = {render_scene::noMaterial(), blends};
+    auto glass = std::make_shared<material::ProgramMaterial>(
+        *programOf(kGlassGraphScene, kGlassGraphShadow, material::Shading::Lit));
+    glass->transmits = true;
+    frame.programs = {nullptr, glass};
+    const auto kGlass =
+        drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
+    frame.shadows.count = 0;
+    const auto kUnshaded = drawn(**framer, **made, frame, kMeshes);
+    RAWFRAME_EXPECT(kOpaque.has_value() && kHalf.has_value() && kGlass.has_value() && kUnshaded.has_value());
+    if (!kOpaque.has_value() || !kHalf.has_value() || !kGlass.has_value() || !kUnshaded.has_value()) {
+        return;
+    }
+    const int kOpaqueShade = kShade(*kOpaque);
+    const int kHalfShade = kShade(*kHalf);
+    const int kGlassShade = kShade(*kGlass);
+    const int kNoShade = kShade(*kUnshaded);
+    std::printf("the shadow's window: opaque %d, half translucent %d, glass %d, no shadow %d\n",
+                kOpaqueShade,
+                kHalfShade,
+                kGlassShade,
+                kNoShade);
+    // The half's shadow lies between; the noise and the filter make it
+    // lighter than half.
+    RAWFRAME_EXPECT(kOpaqueShade + 300 < kHalfShade && kHalfShade + 100 < kNoShade);
+    RAWFRAME_EXPECT(kGlassShade + 50 > kNoShade && kHalfShade + 100 < kGlassShade);
+}

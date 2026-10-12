@@ -555,6 +555,12 @@ RAWFRAME_TEST(TranslucentModelsComeLastFarthestFirst) {
     RAWFRAME_EXPECT(kFrame.draws[0].material != 1 && kFrame.draws[1].material != 1);
     RAWFRAME_EXPECT(near(kFrame.draws[2].model[14], -15) && near(kFrame.draws[3].model[14], -10) &&
                     near(kFrame.draws[4].model[14], -5));
+    // The glass's blob says it blends, so its shadow is cut by what it
+    // covers (D726); the opaque material's does not.
+    const auto kBlends = [&kFrame](std::uint32_t at) {
+        return (static_cast<std::uint32_t>(kFrame.materials[at][kFlagsAt]) & kBlendsFlag) != 0;
+    };
+    RAWFRAME_EXPECT(kFrame.materials.size() == 3 && kBlends(1) && !kBlends(2) && !kBlends(0));
 }
 
 RAWFRAME_TEST(OpaqueModelsAreGroupedByTheirMaterialsTexture) {
