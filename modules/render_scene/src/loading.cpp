@@ -3,12 +3,14 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/content/errors.h"
 #include "rawframe/game_content/game_content.h"
+#include "rawframe/material/instance.h"
 #include "rawframe/render_scene/errors.h"
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <utility>
 
@@ -48,28 +50,56 @@ readCooked(content::ContentStore& store, base::Bits128 id, base::Bits128 type) {
                                                               .description = "a material's read was cancelled"});
 }
 
+/// The program materials read so far, by their resources' identities: one
+/// program however many instances draw with it (D709), so they share its
+/// pipelines.
+using Programs = std::map<base::Bits128, std::shared_ptr<const material::ProgramMaterial>>;
+
 /// A surface material as the scene draws it: its blob at `quality` (D303),
 /// or, cooked with its own program (D484), that program, its states in the
-/// blob and its textures at their slots (D485).
-result::Result<SceneMaterial>
-readMaterial(content::ContentStore& store, std::uint64_t identity, base::Bits128 id, material::Quality quality) {
+/// blob and its textures at their slots (D485); or, an instance (D709), its
+/// base's, its parameters the instance's. An instance's base is no instance.
+result::Result<SceneMaterial> readMaterial(content::ContentStore& store,
+                                           std::uint64_t identity,
+                                           base::Bits128 id,
+                                           material::Quality quality,
+                                           Programs& programs,
+                                           bool instance = true) {
     RAWFRAME_TRY_ASSIGN(const content::VerifiedContent kRead, readCooked(store, id, material::kMaterialType));
+    if (kRead.descriptor().representation.text() == material::kInstanceRepresentation) {
+        RAWFRAME_TRY_ASSIGN(const material::MaterialInstance kInstance, material::decodeInstance(kRead.bytes()));
+        if (!instance) {
+            return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                               kRenderSceneDomain,
+                                                               code(RenderSceneError::MaterialUnreadable),
+                                                               "a material instance's base is another instance")
+                                                      .error()};
+        }
+        RAWFRAME_TRY_ASSIGN(SceneMaterial made,
+                            readMaterial(store, identity, kInstance.base, quality, programs, false));
+        std::ranges::copy(kInstance.parameters, made.blob.begin() + material::kBlobFloats);
+        return made;
+    }
     if (kRead.descriptor().representation.text() == material::kProgramRepresentation) {
-        RAWFRAME_TRY_ASSIGN(material::ProgramMaterial program, material::decodeProgram(kRead.bytes()));
-        const material::Material kStates{.shading = program.shading,
-                                         .blend = program.blend,
-                                         .alphaCutoff = program.alphaCutoff,
-                                         .doubleSided = program.doubleSided};
+        std::shared_ptr<const material::ProgramMaterial>& program = programs[id];
+        if (program == nullptr) {
+            RAWFRAME_TRY_ASSIGN(material::ProgramMaterial decoded, material::decodeProgram(kRead.bytes()));
+            program = std::make_shared<const material::ProgramMaterial>(std::move(decoded));
+        }
+        const material::Material kStates{.shading = program->shading,
+                                         .blend = program->blend,
+                                         .alphaCutoff = program->alphaCutoff,
+                                         .doubleSided = program->doubleSided};
         std::array<SceneTexture, 4> slots{};
-        for (std::size_t at = 0; at < program.textures.size(); ++at) {
-            slots.at(at) = sceneTextureOf(program.textures[at]);
+        for (std::size_t at = 0; at < program->textures.size(); ++at) {
+            slots.at(at) = sceneTextureOf(program->textures[at]);
         }
         return SceneMaterial{
             .id = identity,
-            .blob = sceneBlobOf(material::blobOf(kStates), program.parameters),
-            .translucent = program.blend == material::Blend::Translucent,
+            .blob = sceneBlobOf(material::blobOf(kStates), program->parameters),
+            .translucent = program->blend == material::Blend::Translucent,
             .textures = {.base = slots[0], .packed = slots[1], .emission = slots[2], .normal = slots[3]},
-            .program = std::make_shared<const material::ProgramMaterial>(std::move(program))};
+            .program = program};
     }
     RAWFRAME_TRY_ASSIGN(const material::Qualities kQualities, material::decode(kRead.bytes()));
     const material::Material& kMaterial = kQualities.at(static_cast<std::size_t>(quality));
@@ -234,10 +264,13 @@ result::Status readGameMaterials(composition::ParticipantContext& context,
     if (!files.materials().empty() && context.has(game_content::kGameContent.name)) {
         RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
         if (content->held()) {
-            const std::array<content::AdmittedRepresentation, 3> kAdmitted = {
+            const std::array<content::AdmittedRepresentation, 4> kAdmitted = {
                 content::AdmittedRepresentation{
                     .type = content::ResourceTypeId{material::kMaterialType},
                     .representation = *content::RepresentationId::parse(material::kMaterialRepresentation)},
+                content::AdmittedRepresentation{
+                    .type = content::ResourceTypeId{material::kMaterialType},
+                    .representation = *content::RepresentationId::parse(material::kInstanceRepresentation)},
                 content::AdmittedRepresentation{
                     .type = content::ResourceTypeId{material::kMaterialType},
                     .representation = *content::RepresentationId::parse(material::kProgramRepresentation)},
@@ -245,8 +278,9 @@ result::Status readGameMaterials(composition::ParticipantContext& context,
                     .type = content::ResourceTypeId{material::kPostProcessType},
                     .representation = *content::RepresentationId::parse(material::kPostProcessRepresentation)}};
             RAWFRAME_TRY(content->admit(kAdmitted));
+            Programs programs;
             for (const world_kest::GameMaterialResource& each : files.materials()) {
-                auto read = readMaterial(content->store(), each.id, each.material, quality);
+                auto read = readMaterial(content->store(), each.id, each.material, quality, programs);
                 // One of another type may be a post process.
                 if (!read.has_value() && missing(read.error(), content::ContentError::ResourceTypeMismatch)) {
                     auto cooked = readCooked(content->store(), each.material, material::kPostProcessType);
