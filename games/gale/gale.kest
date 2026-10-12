@@ -6,7 +6,9 @@ module gale
 // up by the weight of the water it displaces there, so a ship floats at
 // its draft, rides the waves, and rights itself as it rolls. Its throttle
 // drives it ahead from the stern, its rudder turns it as it goes, and its
-// keel keeps it from sliding sideways.
+// keel keeps it from sliding sideways. Its guns fire a ball to either side
+// (D683); a ball that strikes another ship holes it, and a ship holed
+// through floods, sinks, and is abandoned, its player given another.
 
 import controls
 import rawframe.model
@@ -15,8 +17,9 @@ import rawframe.replication
 import rawframe.world
 import std.math
 
-// The game's collision class (gale.game).
+// The game's collision classes (gale.game).
 const SHIP: u64 = 0x9063f6d926412ea4
+const SHOT: u64 = 0xdb78660fee00708e
 
 // A tick, in seconds (the World's 60 Hz), and gravity.
 const DT: f32 = 0.016666668
@@ -40,6 +43,24 @@ const THRUST: f32 = 30000.0
 const TURN: f32 = 8000.0
 const KEEL: f32 = 0.08
 
+// A hull's holes before it founders; the ticks a gun takes to reload; and
+// the ticks a foundered ship floods for before it is gone, floating less
+// each tick until it no longer does.
+const HULL: u32 = 5
+const RELOAD: u32 = 90
+const FLOODING: u32 = 120
+const ABANDONED: u32 = 300
+
+// A ball's radius, its iron's density, the meters a second it leaves a gun
+// at across the ship and upward, the meters from the ship's middle it
+// leaves at, and the ticks it flies before it is gone.
+const BALL: f32 = 0.15
+const IRON: f32 = 7800.0
+const MUZZLE: f32 = 35.0
+const LOFT: f32 = 1.0
+const PORTS: f32 = 1.8
+const FLIGHT: u32 = 240
+
 // Meters between ships launched side by side, and between their rows.
 const SPACING: f64 = 14.0
 const ROWS: f64 = 20.0
@@ -55,9 +76,21 @@ struct Berth {
     launched: bool
 }
 
-// A ship: the player who sails it.
+// A ship: the player who sails it, the holes it can still take, the ticks
+// until its guns are loaded, the ticks it has foundered for, and the hits
+// its balls have made.
 struct Ship {
     player: world.Entity
+    hull: u32
+    reload: u32
+    sinking: u32
+    hits: u32
+}
+
+// A ball: the ship that fired it, and the ticks it has flown.
+struct Shot {
+    ship: world.Entity
+    age: u32
 }
 
 // A direction or an offset, in meters.
@@ -74,6 +107,12 @@ extern fn Sea.insert(entity: world.Entity, value: Sea)
 extern fn Helm.has(entity: world.Entity) -> bool
 extern fn Helm.get(entity: world.Entity) -> controls.Helm
 extern fn Ship.insert(entity: world.Entity, value: Ship)
+extern fn Ship.has(entity: world.Entity) -> bool
+extern fn Ship.get(entity: world.Entity) -> Ship
+extern fn Shot.insert(entity: world.Entity, value: Shot)
+extern fn Berth.insert(entity: world.Entity, value: Berth)
+extern fn Velocity3D.get(entity: world.Entity) -> physics3d.Velocity3D
+extern fn Contact3D.insert(entity: world.Entity, value: physics3d.Contact3D)
 extern fn Body3D.insert(entity: world.Entity, value: physics3d.Body3D)
 extern fn Pose3D.insert(entity: world.Entity, value: physics3d.Pose3D)
 extern fn Velocity3D.insert(entity: world.Entity, value: physics3d.Velocity3D)
@@ -113,7 +152,7 @@ fn launch(count: i32, berths: [Berth], entities: [world.Entity]) {
             let x = f64(launched % u32(4)) * SPACING - f64(1.5) * SPACING
             let z = f64(launched / u32(4)) * ROWS
             let ship = world.create()
-            Ship.insert(ship, Ship(entities[i]))
+            Ship.insert(ship, Ship(entities[i], HULL, u32(0), u32(0), u32(0)))
             Body3D.insert(ship, physics3d.Body3D(physics3d.DYNAMIC, physics3d.BOX, false, false, false, SHIP, BEAM,
                                                  HEIGHT, LENGTH, DENSITY, 0.4, 0.0, 0.4, 1.5))
             Pose3D.insert(ship, physics3d.Pose3D(x, f64(0.2), z, 0.0, 0.0, 0.0, 1.0))
@@ -168,6 +207,14 @@ fn float(count: i32, ships: [Ship], poses: [physics3d.Pose3D], velocities: [phys
             world.destroy(entities[i])
         } else {
             let pose = poses[i]
+            // A foundered ship floats less each tick as it floods.
+            let buoyancy = 1.0
+            if ships[i].hull == u32(0) {
+                buoyancy = 1.0 - f32(ships[i].sinking) / f32(FLOODING)
+                if buoyancy < 0.0 {
+                    buoyancy = 0.0
+                }
+            }
             // Its player is where it is, so its client's view follows it.
             Pose3D.insert(ships[i].player, pose)
             // The pushes up, and their turns about x and z, summed over
@@ -192,7 +239,7 @@ fn float(count: i32, ships: [Ship], poses: [physics3d.Pose3D], velocities: [phys
                     if depth > 2.0 * HEIGHT {
                         depth = 2.0 * HEIGHT
                     }
-                    let lift = WATER * GRAVITY * area * depth * DT
+                    let lift = WATER * GRAVITY * area * depth * DT * buoyancy
                     up = up + lift
                     // An upward push at `at` from the middle turns the hull
                     // by `at` crossed with it.
@@ -203,7 +250,7 @@ fn float(count: i32, ships: [Ship], poses: [physics3d.Pose3D], velocities: [phys
                 point = point + 1
             }
             let push = Offset(0.0, up, 0.0)
-            if wet > 0 {
+            if wet > 0 && ships[i].hull > u32(0) {
                 let ahead = turned(pose, Offset(0.0, 0.0, -1.0))
                 let beam = turned(pose, Offset(1.0, 0.0, 0.0))
                 let velocity = Offset(velocities[i].x, velocities[i].y, velocities[i].z)
@@ -234,12 +281,15 @@ const REACH: f32 = 300.0
 const BEHIND: f32 = 16.0
 const ABOVE: f32 = 7.0
 
-// Every hull, as the box its body is.
+// Every hull, as the box its body is, and every ball.
 fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
     let i = 0
     while i < count {
         let b = bodies[i]
         looks[i] = model.Model(model.BOX, b.width, b.height, b.depth, 0x6B4A2BFF, u64(0), 0.0)
+        if b.shape == physics3d.SPHERE {
+            looks[i] = model.Model(model.SPHERE, b.width, b.width, b.width, 0x202020FF, u64(0), 0.0)
+        }
         i = i + 1
     }
 }
@@ -280,6 +330,92 @@ fn frame(count: i32, berths: [Berth], views: [model.Camera], entities: [world.En
         let yaw = f32(math.atan2(f64(0.0 - x), f64(0.0 - z)))
         views[i] = model.Camera(0.0 - x * BEHIND, ABOVE, 0.0 - z * BEHIND, yaw, -0.35, 1.0, 0.1, 15.0, u32(0),
                                 model.FOLLOW)
+        i = i + 1
+    }
+}
+
+// Each ship's crew: its guns reload, and fire to the sides its player
+// asks once loaded; a ship holed through floods, and once it has gone
+// down it is abandoned and its player's berth made ready for another.
+fn crew(count: i32, ships: [Ship], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let player = ships[i].player
+        if Helm.has(player) {
+            if ships[i].reload > u32(0) {
+                ships[i].reload = ships[i].reload - u32(1)
+            }
+            if ships[i].hull == u32(0) {
+                ships[i].sinking = ships[i].sinking + u32(1)
+                if ships[i].sinking > ABANDONED {
+                    world.destroy(entities[i])
+                    Berth.insert(player, Berth(false))
+                }
+            } else if ships[i].reload == u32(0) {
+                let helm = Helm.get(player)
+                if helm.port {
+                    fire(entities[i], 0.0 - 1.0)
+                }
+                if helm.starboard {
+                    fire(entities[i], 1.0)
+                }
+                if helm.port || helm.starboard {
+                    ships[i].reload = RELOAD
+                }
+            }
+        }
+        i = i + 1
+    }
+}
+
+// A ball fired from `ship` to its port side (`side` -1) or starboard (1),
+// from beside its deck, across it and a little up, carried on as the ship
+// moves.
+fn fire(ship: world.Entity, side: f32) {
+    if !Pose3D.has(ship) {
+        return
+    }
+    let pose = Pose3D.get(ship)
+    let moving = Velocity3D.get(ship)
+    let across = turned(pose, Offset(side, 0.0, 0.0))
+    let up = turned(pose, Offset(0.0, 1.0, 0.0))
+    let ball = world.create()
+    Shot.insert(ball, Shot(ship, u32(0)))
+    Body3D.insert(ball, physics3d.Body3D(physics3d.DYNAMIC, physics3d.SPHERE, false, true, false, SHOT, BALL, 0.0,
+                                         0.0, IRON, 0.3, 0.1, 0.0, 0.0))
+    Pose3D.insert(ball, physics3d.Pose3D(pose.x + f64(across.x * PORTS + up.x * HEIGHT),
+                                         pose.y + f64(across.y * PORTS + up.y * HEIGHT),
+                                         pose.z + f64(across.z * PORTS + up.z * HEIGHT), 0.0, 0.0, 0.0, 1.0))
+    Velocity3D.insert(ball, physics3d.Velocity3D(moving.x + across.x * MUZZLE, moving.y + LOFT,
+                                                 moving.z + across.z * MUZZLE, 0.0, 0.0, 0.0))
+    Contact3D.insert(ball, physics3d.Contact3D(u32(0), u32(0), u32(0), u32(0), u32(0), u32(0), ship, 0.0, 0.0, 0.0,
+                                               0.0, ship))
+}
+
+// Each ball that struck another ship this step holes it, counted to the
+// ship that fired it, and is spent; a ball in the sea, or flown its time,
+// is gone.
+fn strike(count: i32, shots: [Shot], contacts: [physics3d.Contact3D], poses: [physics3d.Pose3D],
+          entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        shots[i].age = shots[i].age + u32(1)
+        let struck = contacts[i].hit
+        if contacts[i].began > u32(0) && Ship.has(struck) && struck != shots[i].ship {
+            let holed = Ship.get(struck)
+            if holed.hull > u32(0) {
+                holed.hull = holed.hull - u32(1)
+                Ship.insert(struck, holed)
+                if Ship.has(shots[i].ship) {
+                    let firer = Ship.get(shots[i].ship)
+                    firer.hits = firer.hits + u32(1)
+                    Ship.insert(shots[i].ship, firer)
+                }
+            }
+            world.destroy(entities[i])
+        } else if poses[i].y < f64(-1.0) || shots[i].age > FLIGHT {
+            world.destroy(entities[i])
+        }
         i = i + 1
     }
 }

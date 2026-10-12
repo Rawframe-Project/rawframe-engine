@@ -3,12 +3,15 @@ module sample
 // A client's input for Gale (gale.game's `sample` line): its player's helm,
 // made each tick from its actions (gale.actions). The throttle is a lever:
 // held ahead or astern it moves, let go it stays where it was set, built on
-// tick to tick (D525). The rudder is where the stick or the keys hold it.
+// tick to tick (D525). The rudder is where the stick or the keys hold it,
+// and the guns fire to a side while its key or shoulder is held (D683).
 
 import controls
 import rawframe.input
 
 const HELM: u64 = 0xf46000be89ef70a1
+const FIRE_PORT: u64 = 0x1006d96677d8f113
+const FIRE_STARBOARD: u64 = 0xb4a6943a3b74d17b
 
 // How far the throttle moves in a tick at a full key.
 const LEVER: f32 = 0.02
@@ -23,4 +26,6 @@ fn sample(into: [controls.Helm]) {
     }
     into[0].throttle = throttle
     into[0].rudder = input.x(HELM)
+    into[0].port = input.on(FIRE_PORT) || input.pressed(FIRE_PORT)
+    into[0].starboard = input.on(FIRE_STARBOARD) || input.pressed(FIRE_STARBOARD)
 }

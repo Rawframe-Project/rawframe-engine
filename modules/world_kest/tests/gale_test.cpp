@@ -2,8 +2,10 @@
 // rolling sea at its draft, upright, rides out a list it is given, sails
 // ahead at its throttle and turns at its rudder, and sinks from the World
 // when its player goes; a second player's ship is launched beside the
-// first. The test makes the players as admission would and sets their
-// helms between ticks, as their clients' input would.
+// first. A ship's broadside holes the ship beside it until it founders,
+// sinks, and its player is given another (D683). The test makes the
+// players as admission would and sets their helms between ticks, as their
+// clients' input would.
 
 #include "game_harness.h"
 #include "rawframe/physics3d/components.h"
@@ -33,6 +35,8 @@ constexpr auto kShipId = schema::ComponentTypeId::fromText("b71d9c3f-8a0e-4a92-8
 struct Helm {
     float throttle = 0;
     float rudder = 0;
+    bool port = false;
+    bool starboard = false;
 };
 
 struct Berth {
@@ -41,6 +45,10 @@ struct Berth {
 
 struct Ship {
     world::EntityHandle player;
+    std::uint32_t hull = 0;
+    std::uint32_t reload = 0;
+    std::uint32_t sinking = 0;
+    std::uint32_t hits = 0;
 };
 
 /// Gale, composed and started from its directory.
@@ -158,4 +166,46 @@ RAWFRAME_TEST(AShipFloatsSailsAndTurnsAtItsHelm) {
     RAWFRAME_EXPECT(world.destroy(kPlayer).has_value());
     played.run(3);
     RAWFRAME_EXPECT(holding(world, kShipId).size() == 1 && shipOf(world, kSecond) == kOther);
+}
+
+RAWFRAME_TEST(ABroadsideHolesAShipUntilItFoundersAndItsPlayerSailsAgain) {
+    PlayedGale played;
+    RAWFRAME_EXPECT(played.started());
+    if (!played.started()) {
+        return;
+    }
+    world::World& world = *simulation->world();
+    const world::EntityHandle kGunner = joined(world);
+    const world::EntityHandle kTarget = joined(world);
+    played.run(120);
+    const world::EntityHandle kFiring = shipOf(world, kGunner);
+    const world::EntityHandle kHoled = shipOf(world, kTarget);
+    RAWFRAME_EXPECT(!kFiring.isNull() && !kHoled.isNull());
+    if (kFiring.isNull() || kHoled.isNull()) {
+        return;
+    }
+    // Fourteen meters apart abeam, whole and unhurt.
+    RAWFRAME_EXPECT(valueOf<Ship>(world, kHoled, kShipId)->hull == 5);
+    // The gunner fires to starboard, at the ship beside it, as fast as its
+    // guns reload, until that ship founders.
+    valueOf<Helm>(world, kGunner, kHelmId)->starboard = true;
+    played.run(30);
+    RAWFRAME_EXPECT(valueOf<Ship>(world, kHoled, kShipId)->hull == 4);
+    RAWFRAME_EXPECT(valueOf<Ship>(world, kFiring, kShipId)->hits == 1);
+    for (int volley = 0; volley < 12 && valueOf<Ship>(world, kHoled, kShipId)->hull > 0; ++volley) {
+        played.run(90);
+    }
+    RAWFRAME_EXPECT(valueOf<Ship>(world, kHoled, kShipId)->hull == 0);
+    RAWFRAME_EXPECT(valueOf<Ship>(world, kFiring, kShipId)->hits == 5);
+    valueOf<Helm>(world, kGunner, kHelmId)->starboard = false;
+    // It floods and goes down.
+    played.run(200);
+    RAWFRAME_EXPECT(poseOf(world, kHoled).y < -2.0);
+    // Abandoned, it is gone, and its player sails another, launched at the
+    // next place in the row.
+    played.run(120);
+    RAWFRAME_EXPECT(valueOf<Ship>(world, kHoled, kShipId) == nullptr);
+    const world::EntityHandle kAgain = shipOf(world, kTarget);
+    RAWFRAME_EXPECT(!kAgain.isNull() && valueOf<Ship>(world, kAgain, kShipId)->hull == 5);
+    RAWFRAME_EXPECT(!kAgain.isNull() && std::abs(poseOf(world, kAgain).x - 7.0) < 0.5);
 }
