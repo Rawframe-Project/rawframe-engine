@@ -442,39 +442,7 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
         if (!known(node) || typeOf(node) == kSurfaceType) {
             continue;
         }
-        if (typeOf(node) == kUvType) {
-            RAWFRAME_TRY(uvIn(node));
-        } else if (math(typeOf(node))) {
-            RAWFRAME_TRY(mathIn(surface, node));
-        } else if (typeOf(node) == kSeparate3Type) {
-            RAWFRAME_TRY(separate3In(surface, node));
-        } else if (typeOf(node) == kNormalMapType) {
-            RAWFRAME_TRY(normalMapIn(surface, node));
-        } else if (typeOf(node) == kQualitySwitchType) {
-            RAWFRAME_TRY(switchIn(surface, node));
-        } else if (typeOf(node) == kCombine3Type || typeOf(node) == kCombine2Type || typeOf(node) == kCombine4Type) {
-            RAWFRAME_TRY(combineIn(surface, node));
-        } else if (typeOf(node) == kParameterType || typeOf(node) == kParameterTexture2dType) {
-            RAWFRAME_TRY(parameterIn(surface, node));
-        } else if (typeOf(node) == kSeparate4Type) {
-            RAWFRAME_TRY(separate4In(surface, node));
-        } else if (typeOf(node) == kCompareType) {
-            RAWFRAME_TRY(compareIn(surface, node));
-        } else if (typeOf(node) == kConstantType) {
-            RAWFRAME_TRY(constantIn(node));
-        } else if (typeOf(node) == kSeparate2Type) {
-            RAWFRAME_TRY(separate2In(surface, node));
-        } else if (typeOf(node) == kSwizzleType) {
-            RAWFRAME_TRY(swizzleIn(surface, node));
-        } else if (typeOf(node) == kTimeType) {
-            RAWFRAME_TRY(timeIn(node));
-        } else if (typeOf(node) == kWorldPositionType || typeOf(node) == kWorldNormalType ||
-                   typeOf(node) == kVertexColorType || typeOf(node) == kViewDirectionType ||
-                   typeOf(node) == kWorldTangentType || typeOf(node) == kFrontFacingType) {
-            RAWFRAME_TRY(streamIn(node));
-        } else {
-            RAWFRAME_TRY(sampleIn(surface, node));
-        }
+        RAWFRAME_TRY(surface_graph::nodeChecked(surface, node));
     }
     const Value& kInputs = *kSurface->record.find("inputs");
     for (std::size_t at = 0; at < kInputs.names().size(); ++at) {

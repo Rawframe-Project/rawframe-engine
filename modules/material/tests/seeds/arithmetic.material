@@ -1205,33 +1205,112 @@
       }
     },
     "a700000000000068": {
-      "type": "rawframe/saturate@1",
+      "type": "rawframe/rotate_uv@1",
       "params": {},
       "inputs": {
-        "in": {
-          "node": "a700000000000067",
-          "output": "out"
+        "angle": {
+          "node": "a700000000000001",
+          "output": "seconds"
         }
       }
     },
     "a700000000000069": {
+      "type": "rawframe/polar_coordinates@1",
+      "params": {},
+      "inputs": {
+        "uv": {
+          "node": "a700000000000068",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000006a": {
+      "type": "rawframe/tile_and_offset@1",
+      "params": {},
+      "inputs": {
+        "tiling": [
+          2,
+          2
+        ],
+        "uv": {
+          "node": "a700000000000069",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000006b": {
+      "type": "rawframe/checkerboard@1",
+      "params": {},
+      "inputs": {
+        "uv": {
+          "node": "a70000000000006a",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000006c": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000065",
+          "output": "out"
+        },
+        "b": {
+          "node": "a70000000000006b",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000006d": {
+      "type": "rawframe/fresnel@1",
+      "params": {},
+      "inputs": {
+        "ior": 1.33
+      }
+    },
+    "a70000000000006e": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "a700000000000067",
+          "output": "out"
+        },
+        "b": {
+          "node": "a70000000000006d",
+          "output": "out"
+        }
+      }
+    },
+    "a70000000000006f": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "a70000000000006e",
+          "output": "out"
+        }
+      }
+    },
+    "a700000000000070": {
       "type": "rawframe/combine3@1",
       "params": {},
       "inputs": {
         "x": 0,
         "y": {
-          "node": "a700000000000068",
+          "node": "a70000000000006f",
           "output": "out"
         },
         "z": 0
       }
     },
-    "a70000000000006a": {
+    "a700000000000071": {
       "type": "rawframe/surface@1",
       "params": {},
       "inputs": {
         "base_color": {
-          "node": "a700000000000065",
+          "node": "a70000000000006c",
           "output": "out"
         },
         "geometry_normal": {
@@ -1239,7 +1318,7 @@
           "output": "out"
         },
         "position_offset": {
-          "node": "a700000000000069",
+          "node": "a700000000000070",
           "output": "out"
         },
         "specular_roughness": {

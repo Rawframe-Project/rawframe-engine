@@ -4,11 +4,26 @@
 # folded to their forms (D348, D355). No renderer in it, so a cook reads
 # materials without a device.
 rawframe_module(NAME material
-    SOURCES src/canvas.cpp src/common.cpp src/encoding.cpp src/fold.cpp src/instance.cpp src/material.cpp src/parameters.cpp src/post_process.cpp src/slang.cpp src/surface_graph.cpp
+    SOURCES src/canvas.cpp src/common.cpp src/encoding.cpp src/fold.cpp src/functions.cpp src/instance.cpp src/material.cpp src/parameters.cpp src/post_process.cpp src/slang.cpp src/surface_graph.cpp
     DEPS graph document result base
 )
 
-rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/instance_test.cpp tests/material_test.cpp tests/nodes_test.cpp
+# The engine's functions, SPEC-0026's standard subgraphs (D711), written by
+# tools/make_functions.py.
+foreach(function IN ITEMS checkerboard fresnel polar_coordinates rotate_uv tile_and_offset)
+    string(REPLACE "_" ";" words "${function}")
+    set(symbol "k")
+    foreach(word IN LISTS words)
+        string(SUBSTRING "${word}" 0 1 first)
+        string(TOUPPER "${first}" first)
+        string(SUBSTRING "${word}" 1 -1 rest)
+        string(APPEND symbol "${first}${rest}")
+    endforeach()
+    rawframe_embedded_file(TARGET rawframe_material FILE "${CMAKE_CURRENT_SOURCE_DIR}/library/${function}.function"
+                           HEADER "${function}_function.h" SYMBOL "${symbol}Function")
+endforeach()
+
+rawframe_module_tests(NAME material SOURCES tests/canvas_test.cpp tests/functions_test.cpp tests/instance_test.cpp tests/material_test.cpp tests/nodes_test.cpp
                                            tests/post_process_test.cpp)
 if(TARGET rawframe_material_tests)
     # ADR-0026's proof (D490): a graph and the Slang written from it, which

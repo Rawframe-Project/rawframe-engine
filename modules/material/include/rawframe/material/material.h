@@ -261,6 +261,9 @@ inline constexpr std::string_view kFrontFacingType = "rawframe/front_facing@1";
 /// and a texture input's texture, which a sampled texture samples (D710).
 inline constexpr std::string_view kParameterType = "rawframe/parameter@1";
 inline constexpr std::string_view kParameterTexture2dType = "rawframe/parameter_texture_2d@1";
+/// What feeds one of a function's outputs, by the name its `name` param
+/// gives (D711).
+inline constexpr std::string_view kOutputType = "rawframe/output@1";
 /// The four-wide channel nodes, combine4 the post-process and canvas
 /// families' too (D348, D706).
 inline constexpr std::string_view kCombine4Type = "rawframe/combine4@1";
@@ -302,6 +305,14 @@ using Qualities = std::array<Material, 3>;
 /// (SPEC-0028's interface, D708): eight inputs at most, in name order,
 /// each in its own vector, its channels past its type's nought.
 inline constexpr std::size_t kParameterFloats = 32;
+
+/// A function document (D711), read and checked as the engine's own
+/// functions are: canonical, kind `function`, its interface's inputs (a
+/// literal's default or a stream's) and one to four typed outputs, and
+/// nodes of the atomic core but the surface, the quality switch, and the
+/// textures, never a call, one output node each output, typed as it says.
+/// Refuses (`Invalid`) any other.
+[[nodiscard]] result::Result<graph::Document> readFunction(std::string_view text);
 
 /// A surface material written as Slang (ADR-0026, D481 to D483): a module
 /// importing the scene's `material` module and exporting `Material`, a

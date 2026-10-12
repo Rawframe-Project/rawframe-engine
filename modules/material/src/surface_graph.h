@@ -179,6 +179,9 @@ struct InterfaceInput {
     /// A texture input's default, the game's texture by its identity (D710);
     /// nought for any other.
     std::uint64_t texture = 0;
+    /// The stream a function's input defaults to (`uv`, `world_position`,
+    /// `world_normal`, or `view_direction`, D711); empty for a literal.
+    std::string_view stream;
 };
 
 /// The document's interface, checked: none, or `inputs`, each named as a
@@ -249,6 +252,10 @@ struct Sampling {
 };
 
 [[nodiscard]] result::Result<Sampling> sampleIn(const graph::Document& surface, const graph::Node& node);
+
+/// A node of a type this family knows, other than the surface, checked as
+/// its type checks it: in a surface or a function's document (D711).
+[[nodiscard]] result::Status nodeChecked(const graph::Document& surface, const graph::Node& node);
 
 /// What the output a connection names carries, if its node is of a type
 /// this family knows; refused when the node has no such output.

@@ -1,6 +1,7 @@
 #include "surface_graph.h"
 
 #include "common.h"
+#include "functions.h"
 
 #include <algorithm>
 #include <cmath>
@@ -261,7 +262,8 @@ bool known(const graph::Node& node) {
                                 *kText == kSwizzleType || *kText == kVertexColorType || *kText == kViewDirectionType ||
                                 *kText == kWorldTangentType || *kText == kCompareType || *kText == kConstantType ||
                                 *kText == kFrontFacingType || *kText == kCombine4Type || *kText == kSeparate4Type ||
-                                *kText == kParameterType || *kText == kParameterTexture2dType || math(*kText));
+                                *kText == kParameterType || *kText == kParameterTexture2dType ||
+                                *kText == kOutputType || functions::isFunction(*kText) || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -569,14 +571,22 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& s
                                                                              {"color4", Carried::Color4}}};
     const Value& kInterface = surface.interface;
     std::vector<InterfaceInput> made;
-    if (kInterface.kind() != Value::Kind::Object || kInterface.names().size() > 1 ||
-        (kInterface.names().size() == 1 && kInterface.names()[0] != "inputs")) {
-        return invalid("a surface's interface is its inputs alone, or nothing");
+    // A function's interface has its outputs after its inputs (D711).
+    const bool kFunction = surface.kind == "function";
+    const Value* kInputsFound = kInterface.kind() == Value::Kind::Object ? kInterface.find("inputs") : nullptr;
+    const std::size_t kMembers = kInterface.kind() == Value::Kind::Object ? kInterface.names().size() : 0;
+    const bool kShaped =
+        kInterface.kind() == Value::Kind::Object &&
+        (kFunction ? kInterface.find("outputs") != nullptr && kMembers == (kInputsFound != nullptr ? 2U : 1U) &&
+                         (kInputsFound == nullptr || kInterface.names()[0] == "inputs")
+                   : kMembers <= 1 && (kMembers == 0 || kInputsFound != nullptr));
+    if (!kShaped) {
+        return invalid("a surface's interface is its inputs alone, or nothing; a function's, its inputs and outputs");
     }
-    if (kInterface.names().empty()) {
+    if (kInputsFound == nullptr) {
         return made;
     }
-    const Value& kInputs = kInterface.items()[0];
+    const Value& kInputs = *kInputsFound;
     if (kInputs.kind() != Value::Kind::Object || kInputs.names().empty() || kInputs.names().size() > 8) {
         return invalid("a surface's interface inputs are one to eight");
     }
@@ -591,6 +601,28 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& s
         const Value& kInput = kInputs.items()[at];
         const Value* kDefault = kInput.kind() == Value::Kind::Object ? kInput.find("default") : nullptr;
         const Value* kType = kInput.kind() == Value::Kind::Object ? kInput.find("type") : nullptr;
+        // A function's input may default to a stream, as a mesh's own
+        // coordinates (D711).
+        const Value* kStream = kInput.kind() == Value::Kind::Object ? kInput.find("stream") : nullptr;
+        if (kFunction && kNamed && kStream != nullptr && kType != nullptr && kInput.names().size() == 2 &&
+            kInput.names()[0] == "stream") {
+            constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kStreams = {
+                {{"uv", "vec2"}, {"world_position", "vec3"}, {"world_normal", "vec3"}, {"view_direction", "vec3"}}};
+            const auto kOf = kStream->text() != nullptr
+                                 ? std::ranges::find(kStreams,
+                                                     std::string_view{*kStream->text()},
+                                                     &std::pair<std::string_view, std::string_view>::first)
+                                 : kStreams.end();
+            if (kOf == kStreams.end() || kType->text() == nullptr || *kType->text() != kOf->second) {
+                return invalid("a function's input defaults to the uv, world_position, world_normal, or view_direction "
+                               "stream, of its type");
+            }
+            made.push_back(InterfaceInput{.name = kName,
+                                          .carried = kOf->second == "vec2" ? Carried::Vec2 : Carried::Vec3,
+                                          .slot = at,
+                                          .stream = kOf->first});
+            continue;
+        }
         if (!kNamed || kDefault == nullptr || kType == nullptr || kType->text() == nullptr ||
             kInput.names().size() != 2 || kInput.names()[0] != "default") {
             return invalid("an interface input is named in lower case, its default and its type given");
@@ -827,6 +859,47 @@ result::Result<Sampling> sampleIn(const graph::Document& surface, const graph::N
     return made;
 }
 
+result::Status nodeChecked(const graph::Document& surface, const graph::Node& node) {
+    if (typeOf(node) == kUvType) {
+        RAWFRAME_TRY(uvIn(node));
+    } else if (math(typeOf(node))) {
+        RAWFRAME_TRY(mathIn(surface, node));
+    } else if (typeOf(node) == kSeparate3Type) {
+        RAWFRAME_TRY(separate3In(surface, node));
+    } else if (typeOf(node) == kNormalMapType) {
+        RAWFRAME_TRY(normalMapIn(surface, node));
+    } else if (typeOf(node) == kQualitySwitchType) {
+        RAWFRAME_TRY(switchIn(surface, node));
+    } else if (typeOf(node) == kCombine3Type || typeOf(node) == kCombine2Type || typeOf(node) == kCombine4Type) {
+        RAWFRAME_TRY(combineIn(surface, node));
+    } else if (typeOf(node) == kParameterType || typeOf(node) == kParameterTexture2dType) {
+        RAWFRAME_TRY(parameterIn(surface, node));
+    } else if (typeOf(node) == kSeparate4Type) {
+        RAWFRAME_TRY(separate4In(surface, node));
+    } else if (typeOf(node) == kCompareType) {
+        RAWFRAME_TRY(compareIn(surface, node));
+    } else if (typeOf(node) == kConstantType) {
+        RAWFRAME_TRY(constantIn(node));
+    } else if (typeOf(node) == kSeparate2Type) {
+        RAWFRAME_TRY(separate2In(surface, node));
+    } else if (typeOf(node) == kSwizzleType) {
+        RAWFRAME_TRY(swizzleIn(surface, node));
+    } else if (typeOf(node) == kTimeType) {
+        RAWFRAME_TRY(timeIn(node));
+    } else if (typeOf(node) == kWorldPositionType || typeOf(node) == kWorldNormalType ||
+               typeOf(node) == kVertexColorType || typeOf(node) == kViewDirectionType ||
+               typeOf(node) == kWorldTangentType || typeOf(node) == kFrontFacingType) {
+        RAWFRAME_TRY(streamIn(node));
+    } else if (functions::isFunction(typeOf(node))) {
+        RAWFRAME_TRY(functions::callIn(surface, node));
+    } else if (typeOf(node) == kOutputType) {
+        return invalid("an output node is a function's, feeding one of its interface's outputs");
+    } else {
+        RAWFRAME_TRY(sampleIn(surface, node));
+    }
+    return {};
+}
+
 result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface, const graph::Connection& from) {
     const graph::Node* kSource = nodeOf(surface, from.node);
     if (kSource == nullptr || !known(*kSource)) {
@@ -864,6 +937,14 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
     if (kType == kCompareType && from.output == "out") {
         RAWFRAME_TRY(compareIn(surface, *kSource));
         return std::optional{Carried::Bool};
+    }
+    if (functions::isFunction(kType)) {
+        // A call's output is its function's (D711).
+        RAWFRAME_TRY_ASSIGN(const functions::Call kCall, functions::callIn(surface, *kSource));
+        const auto kOutput = std::ranges::find(kCall.function.outputs, from.output, &functions::Output::name);
+        if (kOutput != kCall.function.outputs.end()) {
+            return std::optional{kOutput->carried};
+        }
     }
     if (kType == kParameterTexture2dType && from.output == "texture") {
         RAWFRAME_TRY(parameterIn(surface, *kSource));

@@ -5,6 +5,7 @@
 // (D691).
 
 #include "common.h"
+#include "functions.h"
 #include "parameters.h"
 #include "rawframe/material/material.h"
 #include "surface_graph.h"
@@ -15,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -95,12 +97,40 @@ enum class Stage : std::uint8_t {
     Vertex
 };
 
+/// What a graph's writer and the writers of the functions it calls write
+/// together: the statements, the textures bound and the inputs giving
+/// them, the helper functions called, and the next name.
+struct Code {
+    std::string statements;
+    std::vector<SampledTexture> textures;
+    std::array<std::uint8_t, 4> inputs{};
+    std::vector<std::string_view> helpers;
+    std::size_t next = 0;
+};
+
+class Writer;
+
+/// A function called, and the writer writing its nodes in its caller's
+/// code (D711).
+struct Called {
+    functions::Call call;
+    std::unique_ptr<Writer> writer;
+};
+
 /// The code a graph is written as: its statements, each node output's
 /// expression once made, and the textures bound so far.
 class Writer {
 public:
     Writer(const graph::Document& surface, Quality quality, Stage stage)
-        : surface_(surface), quality_(quality), at_(stage == Stage::Fragment ? "point" : "placed") {
+        : surface_(surface), quality_(quality), at_(stage == Stage::Fragment ? "point" : "placed"),
+          own_(std::make_unique<Code>()), code_(own_.get()) {
+    }
+
+    /// A function's writer, adding to `caller`'s code, each of the
+    /// function's inputs the expression `bindings` gives it (D711).
+    Writer(const graph::Document& function, Writer& caller, std::map<std::string, std::string, std::less<>> bindings)
+        : surface_(function), quality_(caller.quality_), at_(caller.at_), code_(caller.code_),
+          bindings_(std::move(bindings)), bound_(true) {
     }
 
     /// The expression of the output a connection names, its node's code
@@ -144,12 +174,19 @@ public:
             return "(" + kInText + ")." + kSwizzle.pattern;
         }
         if (kType == kParameterType) {
-            // Its vector after the material's blob's nine (D708).
+            // Its vector after the material's blob's nine (D708); in a
+            // function, what its caller gives it (D711).
             RAWFRAME_TRY_ASSIGN(const surface_graph::InterfaceInput kInput,
                                 surface_graph::parameterIn(surface_, *kNode));
+            if (bound_) {
+                return "(" + bindings_.find(kInput.name)->second + ")";
+            }
             constexpr std::array<std::string_view, 5> kWidths = {"", ".x", ".xy", ".xyz", ""};
             return "materials[blobOf(" + at_ + ".material) + " + std::to_string(9 + kInput.slot) + "u]" +
                    std::string{kWidths.at(channelsOf(kInput.carried))};
+        }
+        if (functions::isFunction(kType)) {
+            return calledOutput(*kNode, from);
         }
         if (kType == kFrontFacingType) {
             // A vertex has no face yet.
@@ -206,8 +243,8 @@ public:
             carried = kMath.out.value_or(Carried::Float);
             expression = std::string{kShape.code};
             for (const std::string_view kHelper : kShape.helpers) {
-                if (!kHelper.empty() && std::ranges::find(helpers_, kHelper) == helpers_.end()) {
-                    helpers_.push_back(kHelper);
+                if (!kHelper.empty() && std::ranges::find(code_->helpers, kHelper) == code_->helpers.end()) {
+                    code_->helpers.push_back(kHelper);
                 }
             }
             for (std::size_t at = 0; at < kMath.count; ++at) {
@@ -248,12 +285,12 @@ public:
             // The tangent-space normal across the tangent frame (D313), its
             // x and y scaled, as the blob's normal texture bends it.
             const std::string kName = name();
-            statements_ += "        float3 " + kName + "Bent = " + kIn + " * 2.0 - 1.0;\n";
-            statements_ += "        " + kName + "Bent.xy *= " + numberText(kMap.scale) + ";\n";
-            statements_ += "        const float3 " + kName +
-                           "Across = normalize(point.tangent.xyz - point.normal * dot(point.normal, "
-                           "point.tangent.xyz));\n";
-            statements_ +=
+            code_->statements += "        float3 " + kName + "Bent = " + kIn + " * 2.0 - 1.0;\n";
+            code_->statements += "        " + kName + "Bent.xy *= " + numberText(kMap.scale) + ";\n";
+            code_->statements += "        const float3 " + kName +
+                                 "Across = normalize(point.tangent.xyz - point.normal * dot(point.normal, "
+                                 "point.tangent.xyz));\n";
+            code_->statements +=
                 "        const float3 " + kName + "Up = cross(point.normal, " + kName + "Across) * point.tangent.w;\n";
             expression = "normalize(" + kName + "Across * " + kName + "Bent.x + " + kName + "Up * " + kName +
                          "Bent.y + point.normal * " + kName + "Bent.z)";
@@ -262,29 +299,30 @@ public:
             return unsupported("a generated material's nodes are of the types this family knows");
         }
         const std::string kName = name();
-        statements_ += "        const " + std::string{slangType(carried)} + " " + kName + " = " + expression + ";\n";
+        code_->statements +=
+            "        const " + std::string{slangType(carried)} + " " + kName + " = " + expression + ";\n";
         made_.emplace(from.node, kName);
         return kName;
     }
 
     [[nodiscard]] const std::string& statements() const noexcept {
-        return statements_;
+        return code_->statements;
     }
 
     /// The functions the written code calls, each before those that call
     /// it (D698, D699).
     [[nodiscard]] const std::vector<std::string_view>& helpers() const noexcept {
-        return helpers_;
+        return code_->helpers;
     }
 
     /// Which interface input gives each slot's texture, one more than its
     /// slot among the inputs, nought for a fixed texture (D710).
     [[nodiscard]] const std::array<std::uint8_t, 4>& textureInputs() const noexcept {
-        return inputs_;
+        return code_->inputs;
     }
 
     [[nodiscard]] std::vector<SampledTexture> takeTextures() {
-        return std::move(textures_);
+        return std::move(code_->textures);
     }
 
 private:
@@ -314,38 +352,81 @@ private:
         // an input's, which an instance may change (D710).
         const std::uint8_t kInput =
             kSampling.input.has_value() ? static_cast<std::uint8_t>(*kSampling.input + 1) : std::uint8_t{0};
-        while (slot < textures_.size() && !(textures_[slot] == kSampling.texture && inputs_.at(slot) == kInput)) {
+        while (slot < code_->textures.size() &&
+               !(code_->textures[slot] == kSampling.texture && code_->inputs.at(slot) == kInput)) {
             ++slot;
         }
-        if (slot == textures_.size()) {
-            if (textures_.size() == kSlots.size()) {
+        if (slot == code_->textures.size()) {
+            if (code_->textures.size() == kSlots.size()) {
                 return unsupported("a generated material samples at most four textures");
             }
-            textures_.push_back(kSampling.texture);
-            inputs_.at(slot) = kInput;
+            code_->textures.push_back(kSampling.texture);
+            code_->inputs.at(slot) = kInput;
         }
         const std::string kSlot{kSlots.at(slot)};
         const std::string kName = name();
-        statements_ +=
+        code_->statements +=
             "        const float4 " + kName + " = " + kSlot + "Texture.Sample(" + kSlot + "Sampler, " + uv + ");\n";
         made_.emplace(id, kName);
         return kName;
     }
 
+    /// A call's output: its function written in this code once a call, each
+    /// of its inputs what the call gives it, its default, or the stream it
+    /// defaults to (D711).
+    result::Result<std::string> calledOutput(const graph::Node& node, const graph::Connection& from) {
+        std::unique_ptr<Called>& called = calls_[from.node];
+        if (called == nullptr) {
+            RAWFRAME_TRY_ASSIGN(functions::Call call, functions::callIn(surface_, node));
+            std::map<std::string, std::string, std::less<>> bindings;
+            for (std::size_t at = 0; at < call.function.inputs.size(); ++at) {
+                const surface_graph::InterfaceInput& kInput = call.function.inputs[at];
+                std::string text;
+                if (call.given[at].has_value()) {
+                    RAWFRAME_TRY_ASSIGN(text, operandText(*call.given[at]));
+                } else if (!kInput.stream.empty()) {
+                    constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kFields = {
+                        {{"uv", ".uv"},
+                         {"world_position", ".position"},
+                         {"world_normal", ".normal"},
+                         {"view_direction", ".view"}}};
+                    text = at_ + std::string{std::ranges::find(kFields,
+                                                               kInput.stream,
+                                                               &std::pair<std::string_view, std::string_view>::first)
+                                                 ->second};
+                } else {
+                    text = literalText(kInput.initial, channelsOf(kInput.carried));
+                }
+                bindings.emplace(std::string{kInput.name}, std::move(text));
+            }
+            called = std::make_unique<Called>(Called{.call = std::move(call)});
+            called->writer = std::make_unique<Writer>(called->call.function.document, *this, std::move(bindings));
+        }
+        const auto kOutput = std::ranges::find(called->call.function.outputs, from.output, &functions::Output::name);
+        if (kOutput == called->call.function.outputs.end()) {
+            return invalid("a connection names an output its node has");
+        }
+        return called->writer->operandText(kOutput->from);
+    }
+
     std::string name() {
-        return "v" + std::to_string(next_++);
+        return "v" + std::to_string(code_->next++);
     }
 
     const graph::Document& surface_;
     Quality quality_;
     /// What the stage's function names where it is written.
     std::string at_;
-    std::string statements_;
     std::map<graph::NodeId, std::string> made_;
-    std::vector<SampledTexture> textures_;
-    std::array<std::uint8_t, 4> inputs_{};
-    std::vector<std::string_view> helpers_;
-    std::size_t next_ = 0;
+    /// The root's code, which a function's writer adds to (D711).
+    std::unique_ptr<Code> own_;
+    Code* code_ = nullptr;
+    /// A function's writer's inputs: each interface input's expression in
+    /// its caller's code.
+    std::map<std::string, std::string, std::less<>> bindings_;
+    bool bound_ = false;
+    /// Each call's function and its writer, by the calling node.
+    std::map<graph::NodeId, std::unique_ptr<Called>> calls_;
 };
 
 } // namespace

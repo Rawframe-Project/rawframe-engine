@@ -1,0 +1,94 @@
+{
+  "formatVersion": 1,
+  "kind": "function",
+  "interface": {
+    "inputs": {
+      "offset": {
+        "default": [
+          0,
+          0
+        ],
+        "type": "vec2"
+      },
+      "tiling": {
+        "default": [
+          1,
+          1
+        ],
+        "type": "vec2"
+      },
+      "uv": {
+        "stream": "uv",
+        "type": "vec2"
+      }
+    },
+    "outputs": {
+      "out": {
+        "type": "vec2"
+      }
+    }
+  },
+  "graph": {
+    "f7e5000000b00001": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "uv"
+      },
+      "inputs": {}
+    },
+    "f7e5000000b00002": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "tiling"
+      },
+      "inputs": {}
+    },
+    "f7e5000000b00003": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "offset"
+      },
+      "inputs": {}
+    },
+    "f7e5000000b00004": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000b00001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000b00002",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000b00005": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000b00004",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000b00003",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000b00006": {
+      "type": "rawframe/output@1",
+      "params": {
+        "name": "out"
+      },
+      "inputs": {
+        "in": {
+          "node": "f7e5000000b00005",
+          "output": "out"
+        }
+      }
+    }
+  }
+}

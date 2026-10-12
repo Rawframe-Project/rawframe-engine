@@ -1,0 +1,170 @@
+{
+  "formatVersion": 1,
+  "kind": "function",
+  "interface": {
+    "inputs": {
+      "ior": {
+        "default": 1.5,
+        "type": "float"
+      },
+      "normal": {
+        "stream": "world_normal",
+        "type": "vec3"
+      },
+      "view": {
+        "stream": "view_direction",
+        "type": "vec3"
+      }
+    },
+    "outputs": {
+      "out": {
+        "type": "float"
+      }
+    }
+  },
+  "graph": {
+    "f7e5000000a00001": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "normal"
+      },
+      "inputs": {}
+    },
+    "f7e5000000a00002": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "view"
+      },
+      "inputs": {}
+    },
+    "f7e5000000a00003": {
+      "type": "rawframe/parameter@1",
+      "params": {
+        "name": "ior"
+      },
+      "inputs": {}
+    },
+    "f7e5000000a00004": {
+      "type": "rawframe/dot@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000a00001",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000a00002",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000a00005": {
+      "type": "rawframe/saturate@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000a00004",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000a00006": {
+      "type": "rawframe/one_minus@1",
+      "params": {},
+      "inputs": {
+        "in": {
+          "node": "f7e5000000a00005",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000a00007": {
+      "type": "rawframe/power@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000a00006",
+          "output": "out"
+        },
+        "b": 5
+      }
+    },
+    "f7e5000000a00008": {
+      "type": "rawframe/subtract@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000a00003",
+          "output": "out"
+        },
+        "b": 1
+      }
+    },
+    "f7e5000000a00009": {
+      "type": "rawframe/add@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000a00003",
+          "output": "out"
+        },
+        "b": 1
+      }
+    },
+    "f7e5000000a0000a": {
+      "type": "rawframe/divide@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000a00008",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000a00009",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000a0000b": {
+      "type": "rawframe/multiply@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000a0000a",
+          "output": "out"
+        },
+        "b": {
+          "node": "f7e5000000a0000a",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000a0000c": {
+      "type": "rawframe/mix@1",
+      "params": {},
+      "inputs": {
+        "a": {
+          "node": "f7e5000000a0000b",
+          "output": "out"
+        },
+        "b": 1,
+        "t": {
+          "node": "f7e5000000a00007",
+          "output": "out"
+        }
+      }
+    },
+    "f7e5000000a0000d": {
+      "type": "rawframe/output@1",
+      "params": {
+        "name": "out"
+      },
+      "inputs": {
+        "in": {
+          "node": "f7e5000000a0000c",
+          "output": "out"
+        }
+      }
+    }
+  }
+}
