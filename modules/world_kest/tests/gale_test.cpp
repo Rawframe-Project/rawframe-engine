@@ -16,6 +16,7 @@
 #include <cmath>
 #include <span>
 #include <string>
+#include <vector>
 
 using namespace rawframe;
 using namespace rawframe::game_test;
@@ -63,8 +64,15 @@ public:
     }
 };
 
+constexpr auto kSeaId = schema::ComponentTypeId::fromText("8c9ece20-a6b4-4a66-9623-035fc0f16d3a");
 constexpr auto kLookId = schema::ComponentTypeId::fromText("9684570e-9361-40cc-9327-f56bc11db3ae");
 constexpr auto kReportId = schema::ComponentTypeId::fromText("95079b36-b81f-4629-8fa5-de5ef7425d12");
+
+/// gale.Sea.
+struct Sea {
+    std::uint32_t launched = 0;
+    std::uint32_t round = 0;
+};
 
 /// rawframe.model.Model and rawframe.sound.Emitter.
 struct Model {
@@ -267,4 +275,36 @@ RAWFRAME_TEST(AClientHearsAnotherShipsBroadsidesAndSeesItsHoles) {
     RAWFRAME_EXPECT((kHoled >> 24U) < (kWhole >> 24U));
     RAWFRAME_EXPECT(valueOf<Model>(world, kGunner, kLookId)->color == kWhole);
     presentationPlan = nullptr;
+}
+
+RAWFRAME_TEST(TheFirstShipToTenHitsWinsTheRoundAndEveryShipSailsAgain) {
+    // D689: a round ends at a ship's tenth hit; every tally is cleared and
+    // every ship launched again, whole, at the next places in the row.
+    PlayedGale played;
+    RAWFRAME_EXPECT(played.started());
+    if (!played.started()) {
+        return;
+    }
+    world::World& world = *simulation->world();
+    const world::EntityHandle kGunner = joined(world);
+    const world::EntityHandle kTarget = joined(world);
+    played.run(120);
+    const std::vector<world::EntityHandle> kSeas = holding(world, kSeaId);
+    RAWFRAME_EXPECT(kSeas.size() == 1);
+    if (kSeas.size() != 1) {
+        return;
+    }
+    // Nine hits made already; one broadside more.
+    valueOf<Guns>(world, kGunner, kGunsId)->hits = 9;
+    valueOf<Helm>(world, kGunner, kHelmId)->starboard = true;
+    played.run(30);
+    valueOf<Helm>(world, kGunner, kHelmId)->starboard = false;
+    played.run(3);
+    RAWFRAME_EXPECT(valueOf<Sea>(world, kSeas[0], kSeaId)->round == 1);
+    RAWFRAME_EXPECT(valueOf<Guns>(world, kGunner, kGunsId)->hits == 0);
+    RAWFRAME_EXPECT(valueOf<Guns>(world, kTarget, kGunsId)->hits == 0);
+    // Launched again, whole, at the row's third and fourth places.
+    const Ship* const kAgain = valueOf<Ship>(world, kTarget, kShipId);
+    RAWFRAME_EXPECT(kAgain->launched && kAgain->hull == 5);
+    RAWFRAME_EXPECT(std::abs(poseOf(world, kGunner).x - 7.0) < 0.5 && std::abs(poseOf(world, kTarget).x - 21.0) < 0.5);
 }

@@ -24,6 +24,20 @@
           "textWrap": "no_wrap"
         }
       ]
+    },
+    {
+      "component": "gale.banner",
+      "padding": 14,
+      "absolute": true,
+      "xScale": 0.5,
+      "yScale": 0.4,
+      "anchorX": 0.5,
+      "anchorY": 0.5,
+      "radius": 8,
+      "font": "317d67e92a7a8052",
+      "textSize": 32,
+      "textColor": "#f4e9c8ff",
+      "textWrap": "no_wrap"
     }
   ]
 }

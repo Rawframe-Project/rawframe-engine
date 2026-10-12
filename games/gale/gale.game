@@ -31,6 +31,9 @@ component 95079b36-b81f-4629-8fa5-de5ef7425d12 gale.report rawframe.sound.Emitte
 # The player's HUD (D688): a panel with its ship's hull and hits in words.
 component 90bcc31f-27ec-496b-9287-c33df14ecc7d gale.hud rawframe.ui.Node
 component 0d04321d-cd64-4e5b-ad89-1d1b800a9b9c gale.tally rawframe.ui.Node
+# A round's end, shown in the middle of the view for five seconds (D689).
+component 413c8d9e-9b17-4267-90bd-0e3d1488941c gale.cheer Cheer
+component a87fef72-48fc-492d-99ba-03551bfeecf4 gale.banner rawframe.ui.Node
 
 # A player's ship is launched, and launched again once abandoned; its guns
 # reload and fire the broadsides its helm asks, which its client predicts
@@ -53,8 +56,13 @@ effect broadside predicted sound 0032340b6117b8fd
 mixer gale.mixer
 sound 0032340b6117b8fd cannon.sound
 
-# The sea: how many ships it has been given, at the World's origin, the
-# still water's height. Its waves roll by the World's tick (D684).
+# Rounds (D689): the first ship to GOAL hits wins; every player is told by
+# message, and every ship is launched again, whole, its tally cleared.
+system gale.judge simulation judge write gale.sea lookup gale.guns lookup gale.ship after gale.strike
+message won Won
+
+# The sea: how many ships it has been given, and the rounds played, at the
+# World's origin, the still water's height. Its waves roll by the World's tick (D684).
 spawn 1 gale.sea rawframe.physics3d.pose
 
 replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity gale.ship gale.guns gale.sea gale.helm
@@ -98,6 +106,9 @@ text gale.strings
 locale en
 font 317d67e92a7a8052 Inter-Regular.ttf
 label 62a7d6a7aface65d gale.strings hud.ship hull hits
-presentation gale.hud gale.tally on player
+label b63948473a328fd7 gale.strings hud.won round
+label 8928637eea61955c gale.strings hud.lost round
+presentation gale.hud gale.tally gale.cheer gale.banner on player
 ui gale.ui
 present gale.tally tally read gale.ship read gale.guns write gale.tally
+present gale.cheer cheer write gale.cheer write gale.banner

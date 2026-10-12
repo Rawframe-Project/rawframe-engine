@@ -68,9 +68,25 @@ const FLIGHT: u32 = 240
 const SPACING: f64 = 14.0
 const ROWS: f64 = 20.0
 
-// The sea: how many ships it has launched.
+// The sea: how many ships it has launched, and the rounds played (D689).
 struct Sea {
     launched: u32
+    round: u32
+}
+
+// What the server tells every player when a round ends (gale.game's
+// `message` line): whether its ship won, and which round it was.
+struct Won {
+    mine: u32
+    round: u32
+}
+
+// A client's round's end, while it is shown: the ticks left, and what it
+// was told.
+struct Cheer {
+    ticks: u32
+    mine: u32
+    round: u32
 }
 
 // A ship, its player's own entity (D685): whether it has been launched,
@@ -118,6 +134,11 @@ extern fn Ship.has(entity: world.Entity) -> bool
 extern fn Ship.get(entity: world.Entity) -> Ship
 extern fn Shot.insert(entity: world.Entity, value: Shot)
 extern fn Effects.broadside(entity: world.Entity)
+extern fn Guns.count() -> i32
+extern fn Guns.entity(index: i32) -> world.Entity
+extern fn Messages.won(to: world.Entity, value: Won)
+extern fn ReceivedCount.won() -> i32
+extern fn Received.won(index: i32) -> Won
 
 // The broadside's sound (gale.game's `sound` line).
 const CANNON: u64 = 0x0032340b6117b8fd
@@ -164,7 +185,11 @@ fn launch(count: i32, ships: [Ship], bodies: [physics3d.Body3D], poses: [physics
         }
         i = i + 1
     }
-    Sea.insert(sea, Sea(launched))
+    // Only when it launched one: an insert lands at the barrier, after a
+    // later system's write to the sea in the same tick (the judge's round).
+    if launched != Sea.get(sea).launched {
+        Sea.insert(sea, Sea(launched, Sea.get(sea).round))
+    }
 }
 
 // `offset` turned by the pose's rotation.
@@ -463,6 +488,77 @@ fn tally(count: i32, ships: [Ship], guns: [Guns], tallies: [ui.Node]) {
     while i < count {
         tallies[i].textValue = i64(ships[i].hull)
         tallies[i].textSecond = i64(guns[i].hits)
+        i = i + 1
+    }
+}
+
+// The hits a ship's broadsides must make to win a round (D689), the ticks
+// a round's end is shown for, and its words (gale.game's `label` lines).
+const GOAL: u32 = 10
+const CHEER: u32 = 300
+const HUD_WON: u64 = 0xb63948473a328fd7
+const HUD_LOST: u64 = 0x8928637eea61955c
+
+// A round ends when a ship's broadsides have made GOAL hits: every player
+// is told whether its ship won, every tally is cleared, and every ship is
+// made ready to be launched again, whole.
+fn judge(count: i32, seas: [Sea]) {
+    let i = 0
+    while i < count {
+        let ships = Guns.count()
+        let winner = -1
+        let k = 0
+        while k < ships {
+            if winner < 0 && Guns.get(Guns.entity(k)).hits >= GOAL {
+                winner = k
+            }
+            k = k + 1
+        }
+        if winner >= 0 {
+            seas[i].round = seas[i].round + u32(1)
+            k = 0
+            while k < ships {
+                let entity = Guns.entity(k)
+                let mine = u32(0)
+                if k == winner {
+                    mine = u32(1)
+                }
+                Messages.won(entity, Won(mine, seas[i].round))
+                Guns.insert(entity, Guns(u32(0)))
+                if Ship.has(entity) {
+                    let ship = Ship.get(entity)
+                    Ship.insert(entity, Ship(false, HULL, u32(0), u32(0), u32(0), ship.volleys))
+                }
+                k = k + 1
+            }
+        }
+        i = i + 1
+    }
+}
+
+// A round's end, in the middle of the client's view for five seconds:
+// that its ship won the round, in gold, or that another did, in a dark
+// panel; nothing between rounds.
+fn cheer(count: i32, cheers: [Cheer], banners: [ui.Node]) {
+    let i = 0
+    while i < count {
+        if ReceivedCount.won() > 0 {
+            let told = Received.won(0)
+            cheers[i] = Cheer(CHEER, told.mine, told.round)
+        }
+        banners[i].text = u64(0)
+        banners[i].fill = u32(0)
+        if cheers[i].ticks > u32(0) {
+            cheers[i].ticks = cheers[i].ticks - u32(1)
+            banners[i].fill = u32(0x101820E0)
+            banners[i].text = HUD_LOST
+            banners[i].textColor = u32(0xF4E9C8FF)
+            if cheers[i].mine == u32(1) {
+                banners[i].text = HUD_WON
+                banners[i].textColor = u32(0xE8B83AFF)
+            }
+            banners[i].textValue = i64(cheers[i].round)
+        }
         i = i + 1
     }
 }

@@ -3,9 +3,17 @@
   "kind": "text.strings",
   "sourceLocale": "en",
   "entries": {
+    "hud.lost": {
+      "message": "Round {$round :integer} went to another ship.",
+      "description": "Shown to every other player when a round ends."
+    },
     "hud.ship": {
       "message": ".input {$hits :integer}\n.match $hits\none {{Hull {$hull} of 5, {$hits} hit}}\n* {{Hull {$hull} of 5, {$hits} hits}}",
       "description": "The player's ship: the holes its hull can still take before it founders, and the hits its broadsides have made."
+    },
+    "hud.won": {
+      "message": "You won round {$round :integer}!",
+      "description": "Shown to the player whose ship won a round, when it ends."
     }
   }
 }
