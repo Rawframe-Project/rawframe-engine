@@ -721,6 +721,14 @@ result::Status ReplicationClient::submitInput(std::span<const std::byte> value) 
     return sendInputWindow();
 }
 
+std::uint64_t ReplicationClient::nextInputTick() const noexcept {
+    return state_->nextInputTick;
+}
+
+void ReplicationClient::skipInputTo(std::uint64_t tick) noexcept {
+    state_->nextInputTick = std::max(state_->nextInputTick, tick);
+}
+
 result::Status ReplicationClient::sampleInput(std::span<const std::byte> value) {
     State& state = *state_;
     if (!state.accept || !state.settings.input || value.size() != state.settings.input->size) {

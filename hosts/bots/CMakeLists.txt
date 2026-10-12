@@ -41,6 +41,23 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(bots_drain PROPERTIES PASS_REGULAR_EXPRESSION "drained in order" TIMEOUT 120)
     # Bots agreeing with the server on runners' Composition are admitted,
     # and bots naming another Composition of the same Build are not.
+    # A bots process whose frames are long inside them, about three a
+    # second (D678, a development build's `host.drawing_ms`): its commands
+    # are labelled past the server's tick, so the server consumes them where
+    # before it consumed none and played every tick neutral.
+    if(NOT RAWFRAME_SHIPPING)
+        set(PLAZA_CONTENT ${PROJECT_BINARY_DIR}/hosts/arena/plaza_content)
+        configure_file(tests/long_frames.conf.in ${CMAKE_CURRENT_BINARY_DIR}/long_frames.conf @ONLY)
+        add_test(NAME bots_long_frames
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/play.sh
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots> 1 1 33
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${CMAKE_CURRENT_BINARY_DIR}/long_frames.conf
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(bots_long_frames PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             PASS_REGULAR_EXPRESSION "\"code\":\"server_summary\"[^\n]*\"inputsConsumed\":([2-9][0-9]|[1-9][0-9][0-9]+),")
+    endif()
     add_test(NAME bots_composition
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/composition.sh
                      $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots>

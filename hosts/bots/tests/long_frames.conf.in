@@ -1,0 +1,5 @@
+# A client whose frames are long inside them (D678): each Host iteration
+# waits 300 ms after its Worlds run, as a loaded headset's drawing holds
+# it, about three frames a second; Plaza's cooked content beside it.
+host.drawing_ms = 300
+content.root = @PLAZA_CONTENT@

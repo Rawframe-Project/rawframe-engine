@@ -98,6 +98,14 @@ public:
     /// The newest server tick applied.
     [[nodiscard]] std::uint64_t serverTick() const noexcept;
 
+    /// The tick the next input sampled is for.
+    [[nodiscard]] std::uint64_t nextInputTick() const noexcept;
+    /// No input is sampled for the ticks before `tick` (D678): a client
+    /// that knows its next command would reach the server after the tick it
+    /// is for leaves those ticks out, and the server holds its last command
+    /// over them. A tick at or before the next changes nothing.
+    void skipInputTo(std::uint64_t tick) noexcept;
+
     /// The input for the next input tick, as a value of the input component
     /// (its in-memory bytes), sent with every command not yet consumed:
     /// `sampleInput`, then `sendInputWindow`.

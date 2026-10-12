@@ -40,6 +40,10 @@ namespace {
 /// were three ticks; counted from the origin, a first state heard late no
 /// longer holds a bot back by as much (D546).
 constexpr std::uint64_t kLeadOverHeard = 3;
+/// How far past the server's tick a late bot samples (D678): SPEC-0013's
+/// input age, 100 ms at 60 ticks a second, past which a command waiting for
+/// its tick is dropped as stale.
+constexpr std::uint64_t kLateLead = 6;
 
 } // namespace
 
@@ -138,6 +142,9 @@ struct Bot {
     /// input window past the newest server tick it has heard of, so it does
     /// not run ahead of a server slowed with it in one process (D522).
     std::optional<execution::MonotonicInstant> admittedAt;
+    /// When the newest server tick it has heard of was read: this Host
+    /// iteration's ingress, before the frame between it and egress (D678).
+    execution::MonotonicInstant heardAt;
     /// Admitted at any time: a session that ends after it is not asked
     /// again.
     bool everAdmitted = false;
@@ -340,6 +347,7 @@ public:
 
     result::Status start(composition::ParticipantContext& context) noexcept override {
         emitter_ = context.emitter();
+        clock_ = &context.clock();
         return {};
     }
 
@@ -385,6 +393,7 @@ public:
                                          .has_value();
                 } else {
                     bot.client->pump();
+                    bot.heardAt = clock_->now();
                     // Pathology, not rollback itself: a local diagnostic,
                     // once for each second past the alarm (SPEC-0041).
                     const std::uint64_t kAlarms = bot.client->predictionStatistics().rollbackAlarms;
@@ -406,6 +415,14 @@ public:
                 }
                 const auto kElapsed = static_cast<std::uint64_t>((frame.now - *bot.admittedAt).nanoseconds);
                 const std::uint64_t kHeard = bot.client->serverTick();
+                // The server's tick now, as near as the client can say: the
+                // newest heard and the ticks played since it was read
+                // (D678).
+                const auto kSinceHeard =
+                    static_cast<std::uint64_t>(std::max<std::int64_t>((clock_->now() - bot.heardAt).nanoseconds, 0));
+                const std::uint64_t kServerNow =
+                    kHeard + (kSinceHeard / 1'000'000U * accept.tickRateTicks /
+                              (1'000U * std::max<std::uint64_t>(accept.tickRateSeconds, 1)));
                 // Sample `n` is for tick origin + 1 + n: as many as reach
                 // the heard tick and the lead past it; before a state is
                 // heard, as many as the first, two past the origin, would
@@ -421,7 +438,23 @@ public:
                 // the server's pace (D522). A bot further behind catches up
                 // over the frames after.
                 bool sampled = false;
-                for (std::size_t burst = 0; burst < kMaximumInputWindow && bot.submitted < kDue;
+                // Late: a frame longer than a command may wait (a loaded
+                // headset's), between its ingress and its egress, left its
+                // next command for a tick the server has played (D678); the
+                // server's pacing cannot bring it back, a window a frame.
+                // Those ticks are left out, as the server would drop them,
+                // and the frame samples from the server's next tick up to
+                // the input age past it, no further: a command that waits
+                // longer for its tick is dropped as stale. A shorter frame
+                // is paced as ever.
+                const bool kLate =
+                    kHeard != 0 && kServerNow > kHeard + kLateLead && bot.client->nextInputTick() <= kServerNow;
+                if (kLate) {
+                    bot.client->skipInputTo(kServerNow + 1);
+                }
+                for (std::size_t burst = 0;
+                     burst < kMaximumInputWindow &&
+                     (kLate ? bot.client->nextInputTick() <= kServerNow + kLateLead : bot.submitted < kDue);
                      ++burst, ++bot.submitted) {
                     steer(bot, bot.submitted);
                     static_cast<void>(bot.client->sampleInput(bot.input));
@@ -626,6 +659,7 @@ private:
     bool allAdmitted_ = false;
     std::uint64_t sourceFailures_ = 0;
     std::size_t localPlayers_ = 1;
+    const execution::MonotonicSource* clock_ = nullptr;
     diagnostics::Emitter emitter_;
 };
 
