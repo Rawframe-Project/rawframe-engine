@@ -33,20 +33,6 @@ using particles::RibbonInstance;
 using particles::Trail;
 using particles::TrailInstance;
 
-MaterialBlob sceneBlobOf(const std::array<float, material::kBlobFloats>& blob,
-                         const std::array<float, material::kParameterFloats>& parameters) noexcept {
-    MaterialBlob made{};
-    std::ranges::copy(blob, made.begin());
-    std::ranges::copy(parameters, made.begin() + material::kBlobFloats);
-    return made;
-}
-
-MaterialBlob noMaterial() noexcept {
-    material::Material plain;
-    plain.surface.baseColor = {1, 1, 1};
-    return sceneBlobOf(material::blobOf(plain));
-}
-
 namespace {
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, RenderSceneError error, std::string_view why) {
