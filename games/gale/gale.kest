@@ -222,7 +222,10 @@ fn dot(a: Offset, b: Offset) -> f32 {
 // its own ship (D685), from the same tick and nothing it does not predict.
 fn float(count: i32, ships: [Ship], helms: [controls.Helm], poses: [physics3d.Pose3D],
          velocities: [physics3d.Velocity3D], impulses: [physics3d.Impulse3D]) {
-    let time = f32(world.tick() % u64(1000000)) * DT
+    // The World's time in seconds, as the drawn sea's material reads it
+    // (D691): the tick over the tick rate, never wrapped, so the two seas
+    // stay one (D693).
+    let time = f32(f64(world.tick()) / f64(60.0))
     // The water under one of the six points carries a sixth of the hull's
     // bottom.
     let area = 4.0 * BEAM * LENGTH / 6.0
@@ -322,6 +325,10 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model], entities:
         looks[i] = model.Model(model.BOX, b.width, b.height, b.depth, color, u64(0), 0.0)
         if b.shape == physics3d.SPHERE {
             looks[i] = model.Model(model.SPHERE, b.width, b.width, b.width, 0x202020FF, u64(0), 0.0)
+        }
+        // An island's rock (D693).
+        if b.shape == physics3d.CYLINDER {
+            looks[i] = model.Model(model.CYLINDER, b.width, b.height, b.width, 0x7D7262FF, u64(0), 0.0)
         }
         i = i + 1
     }

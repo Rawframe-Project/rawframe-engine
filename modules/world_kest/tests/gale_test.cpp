@@ -12,6 +12,7 @@
 #include "rawframe/physics3d/registrar.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <span>
@@ -230,6 +231,30 @@ RAWFRAME_TEST(AShipFloatsSailsAndTurnsAtItsHelm) {
     RAWFRAME_EXPECT(world.destroy(kPlayer).has_value());
     played.run(3);
     RAWFRAME_EXPECT(holding(world, kShipId).size() == 1);
+}
+
+RAWFRAME_TEST(AShipSailedAtAnIslandRunsAgainstItsShoreAndGoesNoFurther) {
+    // D693: the first island stands 160 meters before the row's first
+    // place. Full ahead, the first ship reaches its shore and is turned
+    // aside by the rock, never inside it, and floats on.
+    PlayedGale played;
+    RAWFRAME_EXPECT(played.started());
+    if (!played.started()) {
+        return;
+    }
+    world::World& world = *simulation->world();
+    const world::EntityHandle kShip = joined(world);
+    played.run(60);
+    valueOf<Helm>(world, kShip, kHelmId)->throttle = 1;
+    double nearest = 1e9;
+    for (int second = 0; second < 40; ++second) {
+        played.run(60);
+        const physics3d::Pose3D& kAt = poseOf(world, kShip);
+        nearest = std::min(nearest, std::hypot(kAt.x + 21.0, kAt.z + 160.0));
+    }
+    // The rock's radius is eight meters, the hull's half beam 1.2.
+    RAWFRAME_EXPECT(nearest > 8.5 && nearest < 12.0);
+    RAWFRAME_EXPECT(poseOf(world, kShip).y > -1.0);
 }
 
 RAWFRAME_TEST(ABroadsideHolesAShipUntilItFoundersAndItsPlayerSailsAgain) {
