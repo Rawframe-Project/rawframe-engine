@@ -1,0 +1,13 @@
+module sample
+
+// A client's input for the Lighting Test (lighting.game's `sample` line):
+// its view turning while a key or the stick is held (lighting.actions).
+
+import controls
+import rawframe.input
+
+const TURN: u64 = 0x5d2e9a71c4b03f86
+
+fn sample(into: [controls.View]) {
+    into[0].turn = input.x(TURN)
+}

@@ -494,6 +494,26 @@ if(RAWFRAME_BUILD_TESTS)
         # placement is the GPU tests'.
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/plaza_split.tga)
         configure_file(tests/plaza_split.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_split.conf @ONLY)
+        # The Lighting Test (D749), the constitution's lighting fixture:
+        # cooked, drawn offscreen, and its last frame read for each lamp's
+        # light: the red, green, and blue points, the spot, and the glow.
+        set(LIGHTING_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/lighting_content)
+        add_test(NAME lighting_cooked
+                 COMMAND rawframe_host_cook_tool ${PROJECT_SOURCE_DIR}/games/lighting ${LIGHTING_CONTENT}
+                         ${CMAKE_CURRENT_BINARY_DIR}/lighting_cook_cache)
+        set_tests_properties(lighting_cooked PROPERTIES FIXTURES_SETUP lighting_content PASS_REGULAR_EXPRESSION "failed 0")
+        set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/lighting_drawn.tga)
+        configure_file(tests/lighting_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/lighting_drawn.conf @ONLY)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME lighting_drawn
+                 COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/lighting_seen.py
+                         $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/lighting_drawn.conf ${CAPTURE}
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(lighting_drawn PROPERTIES
+                             FIXTURES_REQUIRED lighting_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"scene_drawing_summary\"[^\n]*\"modelsLeftOut\":0,[^\n]*\"probesDrawn\":[1-9][0-9]*,.*\"code\":\"scene_summary\"[^\n]*\"gameMaterials\":14,\"unknownMaterials\":0,[^\n]*\"picturesReady\":1,\"lightsLit\":[1-9][0-9]*,[^\n]*\"shadowSquares\":[1-9][0-9]*,.*lit by every lamp")
         add_test(NAME plaza_split
                  COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
                          $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/plaza_split.conf

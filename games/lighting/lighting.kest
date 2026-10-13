@@ -1,0 +1,195 @@
+module lighting
+
+// Lighting Test (D749): the fixture's program. The server turns each
+// player's view as it asks; a client dresses the wall, the ground, and the
+// glowing block, and lights them.
+
+import controls
+import rawframe.model
+import rawframe.physics3d
+import rawframe.world
+import std.math
+
+const GROUND: u64 = 0xb1faca30a6eba272
+const GLOW: u64 = 0xc4b487438a7e40f9
+const SKY: u64 = 0x20a6d84f88dc45e0
+
+// Radians the view turns in a tick at a full key, and how far from the
+// wall's middle, and how high, the eye is.
+const TURN: f32 = 0.02
+const EYE_DISTANCE: f32 = 7.5
+const EYE_HEIGHT: f32 = 2.2
+
+// A ball's place in the wall: its row (metalness) and column (roughness).
+struct Ball {
+    row: u8
+    col: u8
+}
+
+// A lamp: red, green, or blue points (0, 1, 2), or the white spot (3).
+struct Lamp {
+    kind: u8
+}
+
+// The probe's box, half its sides.
+struct Hall {
+    halfX: f32
+    halfY: f32
+    halfZ: f32
+}
+
+// The ground (0) or the glowing block (1).
+struct Stage {
+    part: u8
+}
+
+// How far a player's view has turned about the wall.
+struct Orbit {
+    yaw: f32
+}
+
+extern fn Ball.get(entity: world.Entity) -> Ball
+extern fn Ball.has(entity: world.Entity) -> bool
+extern fn Stage.get(entity: world.Entity) -> Stage
+extern fn Stage.has(entity: world.Entity) -> bool
+
+fn turn(count: i32, views: [controls.View], orbits: [Orbit]) {
+    let i = 0
+    while i < count {
+        orbits[i].yaw = orbits[i].yaw + views[i].turn * TURN
+        i = i + 1
+    }
+}
+
+// A ball's material by its row and column.
+fn ballMaterial(row: u8, col: u8) -> u64 {
+    if row == u8(0) && col == u8(0) {
+        return 0x455141d4cefa0786
+    }
+    if row == u8(0) && col == u8(1) {
+        return 0xc316bf33212279e9
+    }
+    if row == u8(0) && col == u8(2) {
+        return 0x6b474b3188e52226
+    }
+    if row == u8(0) && col == u8(3) {
+        return 0x4dd634f8e3d44b74
+    }
+    if row == u8(1) && col == u8(0) {
+        return 0x1968e6c89f41eace
+    }
+    if row == u8(1) && col == u8(1) {
+        return 0x918394b4393e21bd
+    }
+    if row == u8(1) && col == u8(2) {
+        return 0x4646015a85cc7b5c
+    }
+    if row == u8(1) && col == u8(3) {
+        return 0x4b495e29aebabe59
+    }
+    if row == u8(2) && col == u8(0) {
+        return 0x1ab27e2ab28e5169
+    }
+    if row == u8(2) && col == u8(1) {
+        return 0xc5f6544b410a43c6
+    }
+    if row == u8(2) && col == u8(2) {
+        return 0xca2643274ad82c9d
+    }
+    if row == u8(2) && col == u8(3) {
+        return 0x3bc888d32b42e30d
+    }
+    return u64(0)
+}
+
+fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let b = bodies[i]
+        let look = model.Model(model.BOX, b.width, b.height, b.depth, 0xFFFFFFFF, u64(0), 0.0)
+        if b.shape == physics3d.SPHERE {
+            look = model.Model(model.SPHERE, b.width, b.width, b.width, 0xFFFFFFFF, u64(0), 0.0)
+        }
+        if Ball.has(entities[i]) {
+            let ball = Ball.get(entities[i])
+            look.material = ballMaterial(ball.row, ball.col)
+        }
+        if Stage.has(entities[i]) {
+            look.material = GROUND
+            if Stage.get(entities[i]).part == u8(1) {
+                look.material = GLOW
+            }
+        }
+        looks[i] = look
+        i = i + 1
+    }
+}
+
+fn point(count: i32, lamps: [Lamp], points: [model.PointLight]) {
+    let i = 0
+    while i < count {
+        let color: u32 = 0xFF3030FF
+        if lamps[i].kind == u8(1) {
+            color = 0x30FF30FF
+        }
+        if lamps[i].kind == u8(2) {
+            color = 0x3060FFFF
+        }
+        let lumens: f32 = 10000.0
+        if lamps[i].kind == u8(3) {
+            lumens = 0.0
+        }
+        points[i] = model.PointLight(lumens, 8.0, color, true)
+        i = i + 1
+    }
+}
+
+fn spot(count: i32, lamps: [Lamp], spots: [model.SpotLight]) {
+    let i = 0
+    while i < count {
+        let lumens: f32 = 0.0
+        if lamps[i].kind == u8(3) {
+            lumens = 12000.0
+        }
+        spots[i] = model.SpotLight(lumens, 10.0, 0.25, 0.45, 0xFFFFFFFF, true)
+        i = i + 1
+    }
+}
+
+fn probe(count: i32, halls: [Hall], probes: [model.ReflectionProbe]) {
+    let i = 0
+    while i < count {
+        probes[i] = model.ReflectionProbe(halls[i].halfX, halls[i].halfY, halls[i].halfZ, 20.0, u32(0), SKY)
+        i = i + 1
+    }
+}
+
+// The eye on a circle round the wall's middle, looking at it.
+fn frame(count: i32, orbits: [Orbit], cameras: [model.Camera]) {
+    let i = 0
+    while i < count {
+        let yaw = f64(orbits[i].yaw)
+        cameras[i] = model.Camera(f32(f64(EYE_DISTANCE) * math.sin(yaw)), EYE_HEIGHT,
+                                  f32(f64(EYE_DISTANCE) * math.cos(yaw)), orbits[i].yaw, -0.08, 0.9, 0.1, 6.0,
+                                  u32(0), model.FIXED)
+        i = i + 1
+    }
+}
+
+// A dusk's sun, low from the left and behind the eye, dim enough that
+// the lamps' light shows.
+fn sun(count: i32, orbits: [Orbit], suns: [model.Sun]) {
+    let i = 0
+    while i < count {
+        suns[i] = model.Sun(0.6, -0.35, -0.7, 150.0, model.kelvin(3500.0), 0.0093)
+        i = i + 1
+    }
+}
+
+fn sky(count: i32, orbits: [Orbit], skies: [model.Sky]) {
+    let i = 0
+    while i < count {
+        skies[i] = model.Sky(20.0, 0xFFFFFFFF, u32(0), SKY)
+        i = i + 1
+    }
+}

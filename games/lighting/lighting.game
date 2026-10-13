@@ -1,0 +1,89 @@
+# Lighting Test (D749), the constitution's lighting fixture: a validation
+# environment, not a game of its own. Twelve balls in a wall, metalness
+# rising by row (nought, a half, one) and roughness by column (0.1, 0.35,
+# 0.65, 0.95), on a grey ground; lit by a low sun and a clear sky's
+# picture, three shadowed point lights (red, green, and blue) and a white
+# spot light shining down before them, a glowing block, and reflected
+# from a probe round the wall. The player turns the view about the wall.
+program lighting.kest
+
+component 72db7917-b2f2-4ca6-aff1-63338c65d3a5 lighting.ball Ball
+component 7629b6d5-1b90-4f48-aa37-692e4ea6cf00 lighting.lamp Lamp
+component 76550c05-d2f4-40da-b5bc-9bbafeea8a31 lighting.hall Hall
+component 8952dc02-c26e-4569-adf7-d1308488d6ff lighting.stage Stage
+component 8dd1b353-78b9-4a71-84e2-7f23ce6dc25b lighting.view controls.View
+component 92dfb6df-bbf8-4b6c-a14b-e949530fc611 lighting.orbit Orbit
+# What a client draws and lights the wall with: no server carries any.
+component 489b2b97-5756-4d12-85e9-37e29dfc023e lighting.look rawframe.model.Model
+component b80b06c0-76df-46f3-83d3-38a6f2c9c26a lighting.camera rawframe.model.Camera
+component bb832e1a-b876-472a-9c85-1e1e285acb37 lighting.sun rawframe.model.Sun
+component 59f72ebd-5d5b-493b-b7a6-24aa57f3c47a lighting.sky rawframe.model.Sky
+component c9074f00-14e5-4740-a22f-2f75b2a7eae8 lighting.probe rawframe.model.ReflectionProbe
+component 47d1fd99-a484-4c1e-bbfc-e12c2ad9855a lighting.point rawframe.model.PointLight
+component 47de00b7-57d3-402b-bb1f-26e34ea07e4c lighting.spot rawframe.model.SpotLight
+
+material 455141d4cefa0786 ball_00.rfmaterial
+material c316bf33212279e9 ball_01.rfmaterial
+material 6b474b3188e52226 ball_02.rfmaterial
+material 4dd634f8e3d44b74 ball_03.rfmaterial
+material 1968e6c89f41eace ball_10.rfmaterial
+material 918394b4393e21bd ball_11.rfmaterial
+material 4646015a85cc7b5c ball_12.rfmaterial
+material 4b495e29aebabe59 ball_13.rfmaterial
+material 1ab27e2ab28e5169 ball_20.rfmaterial
+material c5f6544b410a43c6 ball_21.rfmaterial
+material ca2643274ad82c9d ball_22.rfmaterial
+material 3bc888d32b42e30d ball_23.rfmaterial
+material b1faca30a6eba272 ground.rfmaterial
+material c4b487438a7e40f9 glow.rfmaterial
+texture 20a6d84f88dc45e0 sky.hdr
+
+physics3d gravity 0 -9.81 0
+
+system lighting.turn simulation turn read lighting.view write lighting.orbit
+
+# The ground and the glowing block.
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=6 height=0.25 depth=6 rawframe.physics3d.pose y=-0.25 rawframe.physics3d.velocity lighting.stage part=0
+spawn 1 rawframe.physics3d.body motion=0 shape=1 width=0.3 height=0.3 depth=0.3 rawframe.physics3d.pose y=0.3 z=2.2 rawframe.physics3d.velocity lighting.stage part=1
+# The wall of balls: each a static sphere, its row and column.
+spawn 1 rawframe.physics3d.body motion=0 shape=0 width=0.45 rawframe.physics3d.pose x=-2.25 y=0.5 rawframe.physics3d.velocity lighting.ball row=0 col=0
+spawn 1 rawframe.physics3d.body motion=0 shape=0 width=0.45 rawframe.physics3d.pose x=-0.75 y=0.5 rawframe.physics3d.velocity lighting.ball row=0 col=1
+spawn 1 rawframe.physics3d.body motion=0 shape=0 width=0.45 rawframe.physics3d.pose x=0.75 y=0.5 rawframe.physics3d.velocity lighting.ball row=0 col=2
+spawn 1 rawframe.physics3d.body motion=0 shape=0 width=0.45 rawframe.physics3d.pose x=2.25 y=0.5 rawframe.physics3d.velocity lighting.ball row=0 col=3
+spawn 1 rawframe.physics3d.body motion=0 shape=0 width=0.45 rawframe.physics3d.pose x=-2.25 y=1.6 rawframe.physics3d.velocity lighting.ball row=1 col=0
+spawn 1 rawframe.physics3d.body motion=0 shape=0 width=0.45 rawframe.physics3d.pose x=-0.75 y=1.6 rawframe.physics3d.velocity lighting.ball row=1 col=1
+spawn 1 rawframe.physics3d.body motion=0 shape=0 width=0.45 rawframe.physics3d.pose x=0.75 y=1.6 rawframe.physics3d.velocity lighting.ball row=1 col=2
+spawn 1 rawframe.physics3d.body motion=0 shape=0 width=0.45 rawframe.physics3d.pose x=2.25 y=1.6 rawframe.physics3d.velocity lighting.ball row=1 col=3
+spawn 1 rawframe.physics3d.body motion=0 shape=0 width=0.45 rawframe.physics3d.pose x=-2.25 y=2.7 rawframe.physics3d.velocity lighting.ball row=2 col=0
+spawn 1 rawframe.physics3d.body motion=0 shape=0 width=0.45 rawframe.physics3d.pose x=-0.75 y=2.7 rawframe.physics3d.velocity lighting.ball row=2 col=1
+spawn 1 rawframe.physics3d.body motion=0 shape=0 width=0.45 rawframe.physics3d.pose x=0.75 y=2.7 rawframe.physics3d.velocity lighting.ball row=2 col=2
+spawn 1 rawframe.physics3d.body motion=0 shape=0 width=0.45 rawframe.physics3d.pose x=2.25 y=2.7 rawframe.physics3d.velocity lighting.ball row=2 col=3
+# The lamps: red, green, and blue points before the wall, and a white
+# spot above them turned to shine down (a quarter turn about -X).
+spawn 1 rawframe.physics3d.pose x=-2.5 y=1.5 z=2 lighting.lamp kind=0
+spawn 1 rawframe.physics3d.pose x=0 y=3.6 z=1.6 lighting.lamp kind=1
+spawn 1 rawframe.physics3d.pose x=2.5 y=1.5 z=2 lighting.lamp kind=2
+spawn 1 rawframe.physics3d.pose y=4.5 z=2.5 qx=-0.70710678 qw=0.70710678 lighting.lamp kind=3
+# The probe round the wall.
+spawn 1 rawframe.physics3d.pose y=1.6 lighting.hall halfX=4 halfY=2 halfZ=4
+
+replicate lighting.ball lighting.lamp lighting.hall lighting.stage lighting.orbit rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity
+player lighting.view lighting.orbit
+input lighting.view
+actions lighting.actions
+sample sample.kest sample
+
+presentation lighting.look on rawframe.physics3d.body
+present lighting.dress dress read rawframe.physics3d.body write lighting.look entities lookup lighting.ball lookup lighting.stage
+presentation lighting.point on lighting.lamp
+present lighting.point point read lighting.lamp write lighting.point
+presentation lighting.spot on lighting.lamp
+present lighting.spot spot read lighting.lamp write lighting.spot
+presentation lighting.probe on lighting.hall
+present lighting.probe probe read lighting.hall write lighting.probe
+presentation lighting.camera on player
+present lighting.frame frame read lighting.orbit write lighting.camera
+presentation lighting.sun on player
+present lighting.sun sun read lighting.orbit write lighting.sun
+presentation lighting.sky on player
+present lighting.sky sky read lighting.orbit write lighting.sky
