@@ -409,9 +409,9 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         for (const world::EntityHandle kGone : comings) {
             if (const Mapping* const kMapping = peer.mapped.find(kGone); kMapping != nullptr) {
                 kRetire(kGone, *kMapping);
-                peer.mapped.erase(kGone);
             }
         }
+        peer.mapped.erase(comings);
     } else {
         peer.mapped.keepIf([&](Mappings::Entry& mapping) {
             const std::size_t kIndex = presentIndex(mapping.first);

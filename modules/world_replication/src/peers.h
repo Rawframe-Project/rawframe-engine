@@ -129,12 +129,28 @@ public:
     void add(world::EntityHandle entity, Mapping mapping) {
         entries_.emplace_back(entity, std::move(mapping));
     }
-    /// Removes the mapping of `entity`, if any.
-    void erase(world::EntityHandle entity) {
-        const auto kAt = std::ranges::lower_bound(entries_, entity, {}, &Entry::first);
-        if (kAt != entries_.end() && kAt->first == entity) {
-            entries_.erase(kAt);
+    /// Removes the mappings of `gone`, given in entity order, those it
+    /// holds. One pass from the first: erasing them one by one moved every
+    /// mapping after each, thousands for a dug block in a large land.
+    void erase(std::span<const world::EntityHandle> gone) {
+        if (gone.empty()) {
+            return;
         }
+        auto into = std::ranges::lower_bound(entries_, gone.front(), {}, &Entry::first);
+        auto next = gone.begin();
+        for (auto at = into; at != entries_.end(); ++at) {
+            while (next != gone.end() && *next < at->first) {
+                ++next;
+            }
+            if (next != gone.end() && *next == at->first) {
+                continue;
+            }
+            if (into != at) {
+                *into = std::move(*at);
+            }
+            ++into;
+        }
+        entries_.erase(into, entries_.end());
     }
     /// Puts added mappings in entity order, `settled` being how many there
     /// were, in order, before the first was added.

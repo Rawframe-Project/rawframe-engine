@@ -78,6 +78,20 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
     });
     RAWFRAME_EXPECT(std::ranges::contains(places, 40.0F) && std::ranges::contains(places, 50.0F) &&
                     !std::ranges::contains(places, 20.0F));
+
+    // Two gone in one turn are both retired, the rest kept.
+    RAWFRAME_EXPECT(scenario.serverWorld.destroy(props[0]).has_value());
+    RAWFRAME_EXPECT(scenario.serverWorld.destroy(kLater).has_value());
+    for (int step = 0; step < 10; ++step) {
+        scenario.step(Steer{});
+    }
+    RAWFRAME_EXPECT(scenario.mirrored() == 2);
+    places.clear();
+    query->forEach(scenario.clientWorld, [&places](world::EntityHandle, const Position& at) {
+        places.push_back(at.x);
+    });
+    RAWFRAME_EXPECT(std::ranges::contains(places, 50.0F) && !std::ranges::contains(places, 40.0F) &&
+                    !std::ranges::contains(places, 0.0F));
 }
 
 RAWFRAME_TEST(AComponentKeptToItsHolderReachesNoOtherConnection) {
