@@ -6,10 +6,12 @@
 #include "rawframe/world_kest/errors.h"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <cstring>
 #include <iterator>
 #include <optional>
+#include <string>
 
 namespace rawframe::world_kest {
 
@@ -148,9 +150,17 @@ GameScenes::sceneSpawns(const GameFiles& files, std::string_view sceneText, cons
         }
         const std::size_t kIndex = static_cast<std::size_t>(kComponent - game_.components.begin());
         if (layouts_[kIndex].mark != mark.mark) {
-            return kRefuse(WorldKestError::BadGameLine,
-                           "a scene was authored against another layout of a component",
-                           mark.component);
+            // The mark the game's layout has, as a scene writes it, so an
+            // author writing one by hand learns it (D738).
+            std::array<char, 16> digits{};
+            const auto [kEnd, kError] =
+                std::to_chars(digits.data(), digits.data() + digits.size(), layouts_[kIndex].mark, 16);
+            std::string expected(digits.data(), kEnd);
+            expected.insert(0, 16 - expected.size(), '0');
+            auto refused = kRefuse(WorldKestError::BadGameLine,
+                                   "a scene was authored against another layout of a component",
+                                   mark.component);
+            return std::unexpected<result::Error>{std::move(refused).error().withContext("layout", expected)};
         }
     }
     SceneSpawns made;
