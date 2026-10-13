@@ -20,6 +20,10 @@
         {
           "device": "gamepad",
           "control": "stick_left"
+        },
+        {
+          "device": "touch",
+          "control": "stick_left"
         }
       ]
     },
@@ -36,6 +40,10 @@
         {
           "device": "gamepad",
           "control": "shoulder_left"
+        },
+        {
+          "device": "touch",
+          "control": "right"
         }
       ]
     },
@@ -52,6 +60,10 @@
         {
           "device": "gamepad",
           "control": "shoulder_right"
+        },
+        {
+          "device": "touch",
+          "control": "right"
         }
       ]
     }
