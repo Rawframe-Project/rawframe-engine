@@ -38,7 +38,8 @@
 # `wait=` and a number of seconds waits that long, and `until=` and a
 # record's code waits, up to three minutes, until the log holds it (D445),
 # one whose field has a value where `,name=value` follows (D476), or a
-# number at least that where `,name>=value` does. A record never seen in
+# number at least that where `,name>=value` does; ending `#` and a count,
+# that many such records (D734). A record never seen in
 # that time is said ("never saw"), which the tests read as a failure: the
 # wait it stands for was three minutes lost (D627). An argument `edit=`
 # and a file, the text in it to replace, and what with, separated by
@@ -55,7 +56,7 @@
 #                 | frozenclick=<x>,<y>:<text>
 #                 | move=<x>,<y> | freeze | thaw
 #                 | orbit=<x>,<y>,<x>,<y>[,<key>] | wait=<seconds>
-#                 | until=<code>[,<field>=<value> | ,<field>>=<number>]
+#                 | until=<code>[,<field>=<value> | ,<field>>=<number>][#<count>]
 #                 | edit=<file>:<text>:<text>
 #                 [...]
 
@@ -102,7 +103,12 @@ class Frozen(str):
 def logged(log, code):
     """Whether the log holds the record `code`; a code followed by
     `,name=value`, a record of it whose field `name` is `value` (D476), and
-    by `,name>=number`, one whose field is a number at least that (D627)."""
+    by `,name>=number`, one whose field is a number at least that (D627);
+    ending `#count`, that many records of it (D734)."""
+    count = 1
+    if "#" in code:
+        code, _, times = code.rpartition("#")
+        count = int(times)
     code, _, field = code.partition(",")
     least = None
     if ">=" in field:
@@ -123,7 +129,7 @@ def logged(log, code):
 
     try:
         with open(log, encoding="utf-8", errors="replace") as records:
-            return any(matches(line) for line in records)
+            return sum(1 for line in records if matches(line)) >= count
     except OSError:
         return False
 

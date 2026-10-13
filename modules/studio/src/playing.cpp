@@ -92,7 +92,23 @@ void ShellParticipant::hearCook() {
         }
         cooking_.reset();
         static_cast<void>(pressWords(cookNode_, "Cook", kText, 14));
+        if (std::exchange(recook_, false)) {
+            cookOrStop();
+        }
     }
+}
+
+void ShellParticipant::recookPlayed() {
+    std::error_code error;
+    if ((!materialChosen() && !graphChosen()) || !playing_.has_value() || cookTool_.empty() ||
+        !std::filesystem::is_regular_file(cookAt_ / "content" / "content.manifest", error)) {
+        return;
+    }
+    if (cooking_.has_value()) {
+        recook_ = true;
+        return;
+    }
+    cookOrStop();
 }
 
 void ShellParticipant::attachPlayed(double seconds) {

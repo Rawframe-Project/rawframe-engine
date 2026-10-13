@@ -530,6 +530,26 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"cooked .*saw studio_previewing.*\"code\":\"studio_said\"[^\n]*\"status\":\"cooked [1-9][0-9]* sources, 0 reused\".*\"code\":\"scene_summary\"[^\n]*\"gameMeshes\":[1-9][0-9]*,[^\n]*\"texturesReady\":[1-9][0-9]*,")
+        # A material edited while the game plays (D734): Gale cooked by
+        # Studio and played from that content, its shore's tint typed, and
+        # Studio cooks again on its own; the played client, following its
+        # content, reads the game's materials again.
+        add_test(NAME studio_recooks_gale
+                 COMMAND ${CMAKE_COMMAND} -E env STUDIO_COOK=$<TARGET_FILE:rawframe_host_cook_tool>
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/hosts/client/tests/cooked.sh --then ${PROJECT_BINARY_DIR}/hosts/client/gale_content
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/gale/gale.game /dev/null ${PROJECT_BINARY_DIR}/hosts/client/gale_drawn.conf
+                         1026,23 "until=studio_said,status=\"cooked " 200,155 1096,23 wait=6 640,161
+                         "1100,161:[0.6,0.2,0.1]" "until=studio_said,status=\"cooked #2" wait=3 1096,23 until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_recooks_gale PROPERTIES
+                             FIXTURES_REQUIRED gale_content
+                             PROCESSORS 2
+                             SKIP_REGULAR_EXPRESSION "skip: no device;skip: no shader toolchain"
+                             PASS_REGULAR_EXPRESSION
+                             "typed \\[0.6,0.2,0.1\\] at 1100,161.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"played\":1,.*\"code\":\"materials_reloaded\"[^\n]*\"reloads\":1")
         # What the author clicks in the played game, selected in Studio
         # (D456): the gate's view aimed at its post, a click in the middle
         # of the played client's window (placed at 700,340, 560 by 360) is

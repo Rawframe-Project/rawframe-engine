@@ -204,7 +204,10 @@ result::Status Play::launch() {
                                      {"render.device", "any"},
                                      // Its styles followed twice a second, an edited
                                      // sheet given to the UI as it plays (D634).
-                                     {"ui.reload_every", "60"}},
+                                     {"ui.reload_every", "60"},
+                                     // And its content, a material Studio cooks
+                                     // again drawn as it plays (D734).
+                                     {"content.reload_every", "60"}},
                                     {{"kest.game", kGame},
                                      {"network.quic.pin_file", (kAt / "server.fingerprint").string()},
                                      {"bots.endpoint", "127.0.0.1:" + kPort},

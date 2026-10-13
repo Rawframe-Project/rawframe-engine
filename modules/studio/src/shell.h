@@ -435,6 +435,11 @@ private:
     /// What the session says of a running cook, shown as it says it.
     void hearCook();
 
+    /// A material changed while a game plays from Studio's cook: cooked
+    /// again, or once the running cook ends, so the game, following its
+    /// content, draws it (D734).
+    void recookPlayed();
+
     /// While the game plays and no preview is live, its client attached as
     /// the chosen scene's preview, tried twice a second: it says who it is,
     /// then admits a session once its player is in.
@@ -561,6 +566,8 @@ private:
     std::filesystem::path cookAt_;
     ui::Node cookNode_{};
     std::optional<std::int64_t> cooking_;
+    /// A material changed during a cook: cooked again once it ends (D734).
+    bool recook_ = false;
     double nextAttach_ = 0;
     double nextPick_ = 0;
     std::uint64_t picked_ = 0;

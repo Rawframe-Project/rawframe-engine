@@ -686,6 +686,7 @@ void ShellParticipant::commitAll(std::vector<Value> operations,
     if (kOutcome.done) {
         ++applied_;
         say(done);
+        recookPlayed();
     } else {
         ++refused_;
         say(kOutcome.message);
@@ -730,6 +731,7 @@ void ShellParticipant::step(std::string_view kind) {
     if (kOutcome.done) {
         ++(kUndo ? undone_ : redone_);
         say(kUndo ? "undone" : "redone");
+        recookPlayed();
     } else {
         say(kOutcome.message);
     }
