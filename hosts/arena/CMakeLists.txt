@@ -513,7 +513,7 @@ if(RAWFRAME_BUILD_TESTS)
                              FIXTURES_REQUIRED lighting_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"scene_drawing_summary\"[^\n]*\"modelsLeftOut\":0,[^\n]*\"probesDrawn\":[1-9][0-9]*,.*\"code\":\"scene_summary\"[^\n]*\"gameMaterials\":14,\"unknownMaterials\":0,[^\n]*\"picturesReady\":1,\"lightsLit\":[1-9][0-9]*,[^\n]*\"shadowSquares\":[1-9][0-9]*,.*lit by every lamp")
+                             "\"code\":\"scene_drawing_summary\"[^\n]*\"modelsLeftOut\":0,[^\n]*\"probesDrawn\":[1-9][0-9]*,.*\"code\":\"scene_summary\"[^\n]*\"gameMaterials\":14,\"unknownMaterials\":0,[^\n]*\"picturesReady\":2,\"lightsLit\":[1-9][0-9]*,[^\n]*\"shadowSquares\":[1-9][0-9]*,.*lit by every lamp")
         add_test(NAME plaza_split
                  COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
                          $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/plaza_split.conf

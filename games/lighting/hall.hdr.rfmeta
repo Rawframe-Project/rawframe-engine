@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "resourceId": "a177f4a5dcfb4ae6a8c0571a7ff703b0",
+  "importer": "rawframe.texture",
+  "settings": {
+    "environment": {
+      "side": 64,
+      "levels": 5,
+      "samples": 64
+    }
+  }
+}

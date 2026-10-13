@@ -13,6 +13,7 @@ import std.math
 const GROUND: u64 = 0xb1faca30a6eba272
 const GLOW: u64 = 0xc4b487438a7e40f9
 const SKY: u64 = 0x20a6d84f88dc45e0
+const HALL: u64 = 0xeea5f06e0bd7a9af
 
 // Radians the view turns in a tick at a full key, and how far it turns
 // either way: the wall is seen from before it, where every lamp's light
@@ -168,7 +169,7 @@ fn spot(count: i32, lamps: [Lamp], spots: [model.SpotLight]) {
 fn probe(count: i32, halls: [Hall], probes: [model.ReflectionProbe]) {
     let i = 0
     while i < count {
-        probes[i] = model.ReflectionProbe(halls[i].halfX, halls[i].halfY, halls[i].halfZ, 20.0, u32(0), SKY)
+        probes[i] = model.ReflectionProbe(halls[i].halfX, halls[i].halfY, halls[i].halfZ, 1.0, u32(0), HALL)
         i = i + 1
     }
 }

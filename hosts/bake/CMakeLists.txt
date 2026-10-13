@@ -27,4 +27,18 @@ if(RAWFRAME_BUILD_TESTS)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"code\":\"probe_baked\"[^\n]*\"texture\":\"ac452b5e41f745bf\",\"path\":\"[^\"]*plaza_baked/hall.hdr\",\"width\":256.*\"code\":\"bake_summary\"[^\n]*\"probes\":1,\"baked\":1,\"notBaked\":0")
+    # The Lighting Test's probe baked the same way (D755), from its middle
+    # before the wall: the picture games/lighting/hall.hdr was made so.
+    set(LIGHTING_CONTENT ${PROJECT_BINARY_DIR}/hosts/arena/lighting_content)
+    set(BAKED ${CMAKE_CURRENT_BINARY_DIR}/lighting_baked)
+    configure_file(tests/lighting_baked.conf.in ${CMAKE_CURRENT_BINARY_DIR}/lighting_baked.conf @ONLY)
+    add_test(NAME lighting_baked
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/hosts/arena/tests/runners_drawn.sh
+                     $<TARGET_FILE:rawframe_host_bake> ${CMAKE_CURRENT_BINARY_DIR}/lighting_baked.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(lighting_baked PROPERTIES
+                         FIXTURES_REQUIRED lighting_content
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"code\":\"probe_baked\"[^\n]*\"texture\":\"eea5f06e0bd7a9af\",\"path\":\"[^\"]*lighting_baked/hall.hdr\",\"width\":256.*\"code\":\"bake_summary\"[^\n]*\"probes\":1,\"baked\":1,\"notBaked\":0")
 endif()
