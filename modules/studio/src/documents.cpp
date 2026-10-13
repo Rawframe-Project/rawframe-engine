@@ -350,8 +350,7 @@ void ShellParticipant::showGraphForm() {
     clear(componentRows_);
     actions_.clear();
     components_ = 0;
-    const std::optional<Value> kListed = read(scene_, "materials.list_node_types");
-    const Value* types = kListed.has_value() ? kListed->find("types") : nullptr;
+    const Value* types = nodeTypes_.has_value() ? nodeTypes_->find("types") : nullptr;
     if (types == nullptr || types->items().empty()) {
         say("the material module lists no node types");
         return;
@@ -362,7 +361,8 @@ void ShellParticipant::showGraphForm() {
     }
     componentRows_.push_back(*heading);
     for (const Value& kType : types->items()) {
-        const std::string kName = kType.text() != nullptr ? *kType.text() : std::string{};
+        const Value* named = kType.find("type");
+        const std::string kName = named != nullptr && named->text() != nullptr ? *named->text() : std::string{};
         auto line = row(componentsColumn_, kName, kText, kRow, true);
         if (!line.has_value()) {
             return;
@@ -448,6 +448,9 @@ void ShellParticipant::setOverride(const std::string& text) {
 }
 
 void ShellParticipant::showGraph() {
+    if (!nodeTypes_.has_value()) {
+        nodeTypes_ = read(scene_, "materials.list_node_types");
+    }
     const std::optional<Value> kRead = read(scene_, "materials.read_graph");
     sheet_ = kRead.has_value() && kRead->find("graph") != nullptr ? std::optional<Value>{*kRead->find("graph")}
                                                                   : std::nullopt;
@@ -489,12 +492,32 @@ void ShellParticipant::showGraphNode(std::size_t at) {
     if (chosen == nullptr) {
         return;
     }
-    // Its params, then its inputs, each under a heading, as the graph
-    // holds them; then a field adding either (D731).
+    // Its params, then its inputs, each under a heading: those its type's
+    // signature names and those the graph holds, in name order, an absent
+    // one an unset field (D732).
+    const Value* types = nodeTypes_.has_value() ? nodeTypes_->find("types") : nullptr;
+    const Value* signature = nullptr;
+    for (const Value& kType : types != nullptr ? types->items() : std::span<const Value>{}) {
+        const Value* named = kType.find("type");
+        if (named != nullptr && named->text() != nullptr && *named->text() == names_[at]) {
+            signature = &kType;
+        }
+    }
     for (const auto& [kMember, kRole] : {std::pair{std::string_view{"params"}, FieldRow::Role::GraphParam},
                                          std::pair{std::string_view{"inputs"}, FieldRow::Role::GraphInput}}) {
         const Value* held = chosen->find(kMember);
-        if (held == nullptr || held->names().empty()) {
+        const Value* listed = signature != nullptr ? signature->find(kMember) : nullptr;
+        std::vector<std::string> names;
+        if (held != nullptr) {
+            names.assign(held->names().begin(), held->names().end());
+        }
+        for (const Value& kName : listed != nullptr ? listed->items() : std::span<const Value>{}) {
+            if (kName.text() != nullptr && !std::ranges::contains(names, *kName.text())) {
+                names.push_back(*kName.text());
+            }
+        }
+        std::ranges::sort(names);
+        if (names.empty()) {
             continue;
         }
         auto heading = row(componentsColumn_, kMember, kQuiet, kPanel);
@@ -503,48 +526,27 @@ void ShellParticipant::showGraphNode(std::size_t at) {
         }
         componentRows_.push_back(*heading);
         ++components_;
-        for (std::size_t each = 0; each < held->names().size(); ++each) {
-            auto line = fieldRow(held->names()[each], partText(held->items()[each]), std::nullopt, true);
+        for (const std::string& kName : names) {
+            const Value* given = held != nullptr ? held->find(kName) : nullptr;
+            auto line =
+                fieldRow(kName, given != nullptr ? partText(*given) : std::string{}, std::nullopt, given != nullptr);
             if (!line.has_value()) {
                 return;
             }
             componentRows_.push_back(line->first);
-            fields_.push_back(FieldRow{.value = line->second, .role = kRole, .field = held->names()[each]});
+            fields_.push_back(FieldRow{.value = line->second, .role = kRole, .field = kName});
         }
-    }
-    for (const auto& [kName, kRole] : {std::pair{std::string_view{"add param"}, FieldRow::Role::GraphParam},
-                                       std::pair{std::string_view{"add input"}, FieldRow::Role::GraphInput}}) {
-        auto line = fieldRow(kName, "", std::nullopt, false);
-        if (!line.has_value()) {
-            return;
-        }
-        componentRows_.push_back(line->first);
-        fields_.push_back(FieldRow{.value = line->second, .role = kRole});
     }
 }
 
 void ShellParticipant::setGraphMember(const FieldRow& row, const std::string& text) {
     const bool kParam = row.role == FieldRow::Role::GraphParam;
-    // An added one is typed `name=value`; the name is the session's to
-    // judge, as the type's.
-    std::string name = row.field;
-    std::string value = text;
-    if (name.empty()) {
-        const std::size_t kSplit = text.find('=');
-        if (kSplit == std::string::npos || kSplit == 0 || kSplit + 1 == text.size()) {
-            ++refused_;
-            say(kParam ? "a param is added as name=value" : "an input is added as name=value");
-            return;
-        }
-        name = text.substr(0, kSplit);
-        value = text.substr(kSplit + 1);
-    }
     Value operation = Value::object();
     operation.add("operation", Value::string(kParam ? "materials.set_node_param" : "materials.set_node_input"));
     operation.add("node", Value::string(entity_));
-    operation.add(kParam ? "param" : "input", Value::string(name));
-    operation.add("value", documentedValue(value));
-    commit(std::move(operation), name + (value.empty() ? " unset" : " set to " + value), entity_);
+    operation.add(kParam ? "param" : "input", Value::string(row.field));
+    operation.add("value", documentedValue(text));
+    commit(std::move(operation), row.field + (text.empty() ? " unset" : " set to " + text), entity_);
 }
 
 } // namespace rawframe::studio

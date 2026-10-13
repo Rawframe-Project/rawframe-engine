@@ -338,17 +338,18 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # A material graph edited in Studio (D730): Gale's rock listed, its
     # surface node chosen among its five, and its roughness typed, set
     # through the session's materials.set_node_input and written; Undo and
-    # Redo leave it standing.
+    # Redo leave it standing. The surface shows each of the Surface
+    # contract's inputs, the roughness 17th (D732).
     add_test(NAME studio_graph
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/gale/gale.game rock.rfmaterial 200,126 640,257 "1100,161:0.4" 1166,23 1236,23
+                     games/gale/gale.game rock.rfmaterial 200,126 640,257 "1100,641:0.4" 1166,23 1236,23
                      "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_graph PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed 0.4 at 1100,161.*rock.rfmaterial written: yes.*\"status\":\"specular_roughness set to 0.4\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"rock.rfmaterial\",\"entities\":5,\"entity\":\"60c0000000000005\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+                         "typed 0.4 at 1100,641.*rock.rfmaterial written: yes.*\"status\":\"specular_roughness set to 0.4\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"rock.rfmaterial\",\"entities\":5,\"entity\":\"60c0000000000005\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
     # A node the surface reads is not deleted: the session refuses what
     # leaves a graph that does not read (D728), and Studio says so.
     add_test(NAME studio_graph_keeps
@@ -363,19 +364,20 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          "clicked at 517,97.*rock.rfmaterial written: no.*\"status\":\"the material graph does not read: a graph's connections are to its nodes\".*\"code\":\"studio_summary\"[^\n]*\"applied\":0,\"refused\":1,.*\"exit\":\"clean_stop\"")
     # A material graph's node made in Studio (D731): in Gale's rock New
     # lists the node types the material module holds, a uv node is made
-    # and chosen, and its channel added as name=value, set through the
-    # session's materials.set_node_param and written.
+    # and chosen, and its channel, which its type's signature offers though
+    # the node holds none (D732), typed, set through the session's
+    # materials.set_node_param and written.
     add_test(NAME studio_graph_makes
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/gale/gale.game rock.rfmaterial 200,126 463,97 1000,193 "1100,97:channel=1"
+                     games/gale/gale.game rock.rfmaterial 200,126 463,97 1000,193 "1100,129:1"
                      "until=studio_said,status=\"channel set to 1\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_graph_makes PROPERTIES
                          ENVIRONMENT "STUDIO_SHOW_WRITTEN=1"
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "clicked at 463,97.*clicked at 1000,193.*typed channel=1 at 1100,97.*rock.rfmaterial written: yes.*\"type\": \"rawframe/uv@1\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"rock.rfmaterial\",\"entities\":6,[^\n]*\"applied\":2,\"refused\":0,[^\n]*\"status\":\"channel set to 1\".*\"exit\":\"clean_stop\"")
+                         "clicked at 463,97.*clicked at 1000,193.*typed 1 at 1100,129.*rock.rfmaterial written: yes.*\"type\": \"rawframe/uv@1\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"rock.rfmaterial\",\"entities\":6,[^\n]*\"applied\":2,\"refused\":0,[^\n]*\"status\":\"channel set to 1\".*\"exit\":\"clean_stop\"")
     # A style class made, named, and deleted in Studio (D638): in Stalls'
     # sheet New makes a class and chooses it, its name typed as tip, and
     # Delete deletes it; Undo brings it back, so the sheet is written with

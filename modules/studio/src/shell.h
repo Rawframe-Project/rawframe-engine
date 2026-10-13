@@ -102,11 +102,9 @@ struct FieldRow {
         /// A material instance's override of its base's input or switch
         /// (D722).
         Override,
-        /// A material graph's node's param, `field` its name (D730), or
-        /// with none one added as `name=value` (D731).
+        /// A material graph's node's param, `field` its name (D730).
         GraphParam,
-        /// A material graph's node's input, `field` its name (D730), or
-        /// with none one added as `name=value` (D731).
+        /// A material graph's node's input, `field` its name (D730).
         GraphInput
     };
     ui::Node value{};
@@ -480,6 +478,9 @@ private:
     };
     std::vector<Listed> listed_;
     std::optional<Value> sheet_;
+    /// The node types a material graph may hold, each with its params and
+    /// inputs, read once a graph is first shown (D732).
+    std::optional<Value> nodeTypes_;
     /// The assets the game declares, read as it opens (D455).
     std::vector<Asset> assets_;
     /// Each scene's identity, from its sidecar, as 32 hex digits.
