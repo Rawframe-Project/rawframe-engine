@@ -590,6 +590,9 @@ public:
     const std::optional<world_replication::InterestSettings>& interest() const noexcept override {
         return interest_;
     }
+    std::size_t maximumMapped() const noexcept override {
+        return game_.mapped;
+    }
     std::optional<network::Reject> admit(const network::Hello& hello) noexcept override {
         if (admission_ == nullptr) {
             return std::nullopt;

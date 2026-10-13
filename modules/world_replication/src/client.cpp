@@ -523,6 +523,11 @@ ReplicationClient::create(network::Sessions& sessions, world::World& world, Clie
         return refuse(
             result::ErrorClass::InvalidArgument, ReplicationError::FieldUnsupported, "an invalid input codec");
     }
+    if (settings.maximumMapped == 0 || settings.maximumMapped > kMostMapped) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      ReplicationError::Malformed,
+                      "a client mirrors at least one entity and at most 65,536");
+    }
     state->predictedIndex.resize(settings.table.components.size());
     if (settings.prediction) {
         const PredictionSettings& kPrediction = *settings.prediction;

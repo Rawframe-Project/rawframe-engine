@@ -112,6 +112,7 @@ public:
                     .input = plan->input(),
                     .perception = plan->perceivedInput(),
                     .interest = plan->interest(),
+                    .maximumMapped = plan->maximumMapped(),
                     .statePeriod = static_cast<std::uint32_t>(kPeriod),
                     .stateBytesPerPublish = static_cast<std::size_t>(kPerPublish),
                     .presence = presence,

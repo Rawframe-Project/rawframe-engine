@@ -400,11 +400,12 @@ result::Result<std::unique_ptr<ReplicationServer>> ReplicationServer::create(net
         }
     }
     if ((settings.input && !settings.input->valid()) || (settings.perception && !settings.input) ||
-        settings.maximumMapped == 0 || settings.inputFutureWindow == 0 || settings.paceInterval == 0 ||
-        settings.statePeriod == 0 || settings.targetInputLead >= settings.inputFutureWindow) {
+        settings.maximumMapped == 0 || settings.maximumMapped > kMostMapped || settings.inputFutureWindow == 0 ||
+        settings.paceInterval == 0 || settings.statePeriod == 0 ||
+        settings.targetInputLead >= settings.inputFutureWindow) {
         return refuse(result::ErrorClass::InvalidArgument,
                       ReplicationError::Malformed,
-                      "the input codec is invalid, or a replication bound is zero");
+                      "the input codec is invalid, or a replication bound is zero or past its most");
     }
     if (settings.interest) {
         const InterestSettings& interest = *settings.interest;

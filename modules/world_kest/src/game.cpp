@@ -732,6 +732,19 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                   .name = std::string{world_replication::Perception::kComponentName},
                                   .kestType = "Perception"});
             }
+        } else if (kKeyword == "mapped") {
+            std::size_t count = 0;
+            const auto kCount = kWords.size() == 2
+                                    ? std::from_chars(kWords[1].data(), kWords[1].data() + kWords[1].size(), count)
+                                    : std::from_chars_result{nullptr, std::errc::invalid_argument};
+            if (kCount.ec != std::errc{} || kCount.ptr != kWords[1].data() + kWords[1].size() ||
+                count <= world_replication::kMappedByDefault || count > world_replication::kMostMapped ||
+                game.mapped != world_replication::kMappedByDefault) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a game has at most one mapped line, `mapped <count>`, past 4096 and at most 65536");
+            }
+            game.mapped = count;
         } else if (kKeyword == "spawn") {
             std::uint32_t count = 0;
             const auto kCount = kWords.size() >= 2

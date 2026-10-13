@@ -134,6 +134,7 @@
 #include "rawframe/world/column_query.h"
 #include "rawframe/world/schedule.h"
 #include "rawframe/world_replication/prediction.h"
+#include "rawframe/world_replication/records.h"
 
 #include <array>
 #include <cstddef>
@@ -616,6 +617,10 @@ struct GameDescription {
     std::vector<std::string> own;
     std::vector<GameEntityField> entityFields;
     std::optional<GameInterest> interest;
+    /// Entities one connection may hold at once, from a `mapped <count>`
+    /// line (D742): a game whose every client sees all of a large World,
+    /// as Quarry's land, asks for more than the default 4,096.
+    std::size_t mapped = world_replication::kMappedByDefault;
     std::optional<GamePhysics> physics;
     std::optional<GameNavigation> navigation;
     GameCollision collision;

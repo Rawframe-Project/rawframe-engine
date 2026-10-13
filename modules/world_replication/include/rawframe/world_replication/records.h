@@ -15,6 +15,11 @@
 
 namespace rawframe::world_replication {
 
+/// Entities one connection may have mapped at once unless its game asks
+/// for more, and the most a game may ask for (D742).
+inline constexpr std::size_t kMappedByDefault = 4096;
+inline constexpr std::size_t kMostMapped = std::size_t{1} << 16U;
+
 /// A connection-local name for a replicated entity: never zero, never reused
 /// within its replication epoch, never an EntityHandle's bits.
 struct NetEntityId {

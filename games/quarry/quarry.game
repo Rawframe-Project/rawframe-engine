@@ -40,6 +40,9 @@ modapi quarry 1
 extension ground service quarry.ground exclusive
 
 replicate quarry.block quarry.part quarry.terrain quarry.digger
+# Every client sees the whole land, some seven thousand blocks, more than
+# a connection holds by default (D742).
+mapped 16384
 player quarry.tool quarry.digger
 input quarry.tool
 # A client makes its tool from its player's actions (quarry.actions) with

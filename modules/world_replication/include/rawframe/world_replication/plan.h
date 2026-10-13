@@ -85,6 +85,11 @@ public:
     /// Who is sent what: none for a game whose every entity every
     /// connection sees.
     [[nodiscard]] virtual const std::optional<InterestSettings>& interest() const noexcept = 0;
+    /// Entities one connection may have mapped at once, on both sides: a
+    /// game every client sees whole may need more than most (D742).
+    [[nodiscard]] virtual std::size_t maximumMapped() const noexcept {
+        return kMappedByDefault;
+    }
     /// What the game's compensated queries gate by, from the server made
     /// for it until that server goes (null).
     virtual void attach(const InterestHistory* history) noexcept = 0;

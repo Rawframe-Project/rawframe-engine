@@ -157,6 +157,23 @@ RAWFRAME_TEST(InterestIsDeclaredByLine) {
         refusedAt(std::string{kProgram} + "interest a.velocity x within 4\n", WorldKestError::UnknownName, "3"));
 }
 
+RAWFRAME_TEST(MappedEntitiesAreDeclaredByLine) {
+    RAWFRAME_EXPECT(parseGame("program p.kest\n")->mapped == world_replication::kMappedByDefault);
+    const auto kGame = parseGame("program p.kest\nmapped 16384\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->mapped == 16384);
+    // No count, two, one not past the default, one past the most, and a
+    // second line.
+    for (const std::string_view kLine : {"mapped\n",
+                                         "mapped 8192 8192\n",
+                                         "mapped 4096\n",
+                                         "mapped 65537\n",
+                                         "mapped -1\n",
+                                         "mapped 8192\nmapped 8192\n"}) {
+        RAWFRAME_EXPECT(refusedAt("program p.kest\n" + std::string{kLine}, WorldKestError::BadGameLine, "2") ||
+                        refusedAt("program p.kest\n" + std::string{kLine}, WorldKestError::BadGameLine, "3"));
+    }
+}
+
 RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     auto game = parseGame("program p.kest\nphysics2d gravity 0.5 -9.8 substeps 8\n"
                           "spawn 1 rawframe.physics2d.body width=1 rawframe.physics2d.pose y=2\n");

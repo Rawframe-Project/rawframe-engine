@@ -35,7 +35,7 @@ struct ClientReplicationSettings {
     /// interpolation shows, or the newest state without it.
     bool perception = false;
     /// Entities mirrored at once.
-    std::size_t maximumMapped = 4096;
+    std::size_t maximumMapped = kMappedByDefault;
     /// Predicting the player's own components from its own input; none
     /// shows the server's state only.
     std::optional<PredictionSettings> prediction;

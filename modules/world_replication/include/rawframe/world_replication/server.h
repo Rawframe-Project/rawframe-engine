@@ -66,7 +66,7 @@ struct ServerReplicationSettings {
     /// Every entity is in every connection's interest without one.
     std::optional<InterestSettings> interest;
     /// Entities one connection may have mapped at once.
-    std::size_t maximumMapped = 4096;
+    std::size_t maximumMapped = kMappedByDefault;
     /// Input ticks a command may run ahead of the newest consumed one.
     std::uint64_t inputFutureWindow = 32;
     /// Ticks the last command is held for when the next has not arrived,

@@ -341,6 +341,7 @@ public:
                                           ClientReplicationSettings{.table = plan_->table(),
                                                                     .input = plan_->input(),
                                                                     .perception = plan_->perceivedInput(),
+                                                                    .maximumMapped = plan_->maximumMapped(),
                                                                     .prediction = prediction,
                                                                     .interpolation = interpolation,
                                                                     .messages = bot.messages.get()}));
