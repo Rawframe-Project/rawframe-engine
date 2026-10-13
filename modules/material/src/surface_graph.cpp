@@ -295,6 +295,19 @@ constexpr auto kTimeParams = std::to_array<std::string_view>({"period", "timelin
 constexpr auto kTransformParams = std::to_array<std::string_view>({"from", "kind", "to"});
 constexpr auto kSampleParams = std::to_array<std::string_view>({"address", "filter", "texture"});
 constexpr auto kSampleInputs = std::to_array<std::string_view>({"texture", "uv"});
+constexpr auto kOut = std::to_array<std::string_view>({"out"});
+constexpr auto kColorOutputs = std::to_array<std::string_view>({"alpha", "color"});
+constexpr auto kUvOutputs = std::to_array<std::string_view>({"uv"});
+constexpr auto kRGBOutputs = std::to_array<std::string_view>({"b", "g", "r"});
+constexpr auto kRGBAOutputs = std::to_array<std::string_view>({"a", "b", "g", "r"});
+constexpr auto kXYOutputs = std::to_array<std::string_view>({"x", "y"});
+constexpr auto kSecondsOutputs = std::to_array<std::string_view>({"seconds"});
+constexpr auto kPositionOutputs = std::to_array<std::string_view>({"position"});
+constexpr auto kNormalOutputs = std::to_array<std::string_view>({"normal"});
+constexpr auto kDirectionOutputs = std::to_array<std::string_view>({"direction"});
+constexpr auto kTangentOutputs = std::to_array<std::string_view>({"tangent"});
+constexpr auto kFrontOutputs = std::to_array<std::string_view>({"front"});
+constexpr auto kTextureOutputs = std::to_array<std::string_view>({"texture"});
 constexpr auto kInlineParams =
     std::to_array<std::string_view>({"body", "capabilities", "domains", "inputs", "outputs", "stages"});
 
@@ -304,34 +317,36 @@ struct OwnNode {
 };
 
 /// The family's own node types, neither a math node's nor a function's,
-/// and their members (D731, D732): what `known` takes and `nodeSignatures`
-/// lists, but a function's output, which a function alone holds.
-constexpr auto kOwnNodes = std::to_array<OwnNode>({{kSurfaceType, {}},
-                                                   {kSampleTexture2dType, {kSampleParams, kSampleInputs}},
-                                                   {kUvType, {kChannelParams, {}}},
-                                                   {kSeparate3Type, {{}, kInInputs}},
-                                                   {kNormalMapType, {kScaleParams, kInInputs}},
-                                                   {kQualitySwitchType, {{}, kSwitchInputs}},
-                                                   {kTimeType, {kTimeParams, {}}},
-                                                   {kWorldPositionType, {}},
-                                                   {kWorldNormalType, {}},
-                                                   {kCombine3Type, {{}, kXYZInputs}},
-                                                   {kCombine2Type, {{}, kXYInputs}},
-                                                   {kSeparate2Type, {{}, kInInputs}},
-                                                   {kSwizzleType, {kPatternParams, kInInputs}},
-                                                   {kVertexColorType, {}},
-                                                   {kViewDirectionType, {}},
-                                                   {kWorldTangentType, {}},
-                                                   {kCompareType, {kOperatorParams, kABInputs}},
-                                                   {kConstantType, {kConstantParams, {}}},
-                                                   {kFrontFacingType, {}},
-                                                   {kCombine4Type, {{}, kWXYZInputs}},
-                                                   {kSeparate4Type, {{}, kInInputs}},
-                                                   {kParameterType, {kNameParams, {}}},
-                                                   {kParameterTexture2dType, {kNameParams, {}}},
-                                                   {kTransformType, {kTransformParams, kInInputs}},
-                                                   {kInlineSlangType, {kInlineParams, {}}},
-                                                   {kStaticSwitchType, {kNameParams, kOffOnInputs}}});
+/// and their members (D731, D732, D733): what `known` takes and
+/// `nodeSignatures` lists, but a function's output, which a function alone
+/// holds.
+constexpr auto kOwnNodes =
+    std::to_array<OwnNode>({{kSurfaceType, {}},
+                            {kSampleTexture2dType, {kSampleParams, kSampleInputs, kColorOutputs}},
+                            {kUvType, {kChannelParams, {}, kUvOutputs}},
+                            {kSeparate3Type, {{}, kInInputs, kRGBOutputs}},
+                            {kNormalMapType, {kScaleParams, kInInputs, kOut}},
+                            {kQualitySwitchType, {{}, kSwitchInputs, kOut}},
+                            {kTimeType, {kTimeParams, {}, kSecondsOutputs}},
+                            {kWorldPositionType, {{}, {}, kPositionOutputs}},
+                            {kWorldNormalType, {{}, {}, kNormalOutputs}},
+                            {kCombine3Type, {{}, kXYZInputs, kOut}},
+                            {kCombine2Type, {{}, kXYInputs, kOut}},
+                            {kSeparate2Type, {{}, kInInputs, kXYOutputs}},
+                            {kSwizzleType, {kPatternParams, kInInputs, kOut}},
+                            {kVertexColorType, {{}, {}, kColorOutputs}},
+                            {kViewDirectionType, {{}, {}, kDirectionOutputs}},
+                            {kWorldTangentType, {{}, {}, kTangentOutputs}},
+                            {kCompareType, {kOperatorParams, kABInputs, kOut}},
+                            {kConstantType, {kConstantParams, {}, kOut}},
+                            {kFrontFacingType, {{}, {}, kFrontOutputs}},
+                            {kCombine4Type, {{}, kWXYZInputs, kOut}},
+                            {kSeparate4Type, {{}, kInInputs, kRGBAOutputs}},
+                            {kParameterType, {kNameParams, {}, kOut}},
+                            {kParameterTexture2dType, {kNameParams, {}, kTextureOutputs}},
+                            {kTransformType, {kTransformParams, kInInputs, kOut}},
+                            {kInlineSlangType, {kInlineParams, {}, {}}},
+                            {kStaticSwitchType, {kNameParams, kOffOnInputs, kOut}}});
 
 } // namespace
 
@@ -934,35 +949,40 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
         return std::optional<Carried>{};
     }
     const std::string_view kType = typeOf(*kSource);
+    // An own node's outputs are its type's (D733); an inline node's as it
+    // declares, and a call's as its function's.
+    if (const std::optional<Members> kOwn = ownMembersOf(kType);
+        kOwn.has_value() && kType != kInlineSlangType && !std::ranges::contains(kOwn->outputs, from.output)) {
+        return invalid("a connection names an output its node has");
+    }
     if (kType == kSampleTexture2dType && from.output == "color") {
         return std::optional{Carried::Color3};
     }
     if (kType == kSampleTexture2dType && from.output == "alpha") {
         return std::optional{Carried::Float};
     }
-    if (kType == kUvType && from.output == "uv") {
+    if (kType == kUvType) {
         return std::optional{Carried::Vec2};
     }
     if (math(kType) && from.output == "out") {
         RAWFRAME_TRY_ASSIGN(const MathInputs kMath, mathInputsOf(surface, *kSource));
         return kMath.out;
     }
-    if ((kType == kCombine3Type || kType == kCombine2Type || kType == kCombine4Type) && from.output == "out") {
+    if (kType == kCombine3Type || kType == kCombine2Type || kType == kCombine4Type) {
         RAWFRAME_TRY_ASSIGN(const Combined kCombined, combineIn(surface, *kSource));
         return std::optional{kCombined.count == 2   ? Carried::Vec2
                              : kCombined.count == 3 ? Carried::Vec3
                                                     : Carried::Vec4};
     }
-    if (kType == kSeparate4Type &&
-        (from.output == "r" || from.output == "g" || from.output == "b" || from.output == "a")) {
+    if (kType == kSeparate4Type) {
         RAWFRAME_TRY(separate4In(surface, *kSource));
         return std::optional{Carried::Float};
     }
-    if (kType == kSeparate2Type && (from.output == "x" || from.output == "y")) {
+    if (kType == kSeparate2Type) {
         RAWFRAME_TRY(separate2In(surface, *kSource));
         return std::optional{Carried::Float};
     }
-    if (kType == kStaticSwitchType && from.output == "out") {
+    if (kType == kStaticSwitchType) {
         RAWFRAME_TRY_ASSIGN(const SwitchChoice kChoice, staticSwitchIn(surface, *kSource));
         return kChoice.out;
     }
@@ -974,11 +994,11 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
             return std::optional{kOutput->carried};
         }
     }
-    if (kType == kTransformType && from.output == "out") {
+    if (kType == kTransformType) {
         RAWFRAME_TRY_ASSIGN(const Transform kTransform, transformIn(surface, *kSource));
         return std::optional{kTransform.to == "clip" ? Carried::Vec4 : Carried::Vec3};
     }
-    if (kType == kCompareType && from.output == "out") {
+    if (kType == kCompareType) {
         RAWFRAME_TRY(compareIn(surface, *kSource));
         return std::optional{Carried::Bool};
     }
@@ -990,50 +1010,48 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
             return std::optional{kOutput->carried};
         }
     }
-    if (kType == kParameterTexture2dType && from.output == "texture") {
+    if (kType == kParameterTexture2dType) {
         RAWFRAME_TRY(parameterIn(surface, *kSource));
         return std::optional{Carried::Texture2d};
     }
-    if (kType == kParameterType && from.output == "out") {
+    if (kType == kParameterType) {
         RAWFRAME_TRY_ASSIGN(const InterfaceInput kInput, parameterIn(surface, *kSource));
         return std::optional{kInput.carried};
     }
-    if (kType == kFrontFacingType && from.output == "front") {
+    if (kType == kFrontFacingType) {
         RAWFRAME_TRY(streamIn(*kSource));
         return std::optional{Carried::Bool};
     }
-    if (kType == kConstantType && from.output == "out") {
+    if (kType == kConstantType) {
         RAWFRAME_TRY_ASSIGN(const Operand kConstant, constantIn(*kSource));
         return kConstant.carried;
     }
-    if (kType == kSwizzleType && from.output == "out") {
+    if (kType == kSwizzleType) {
         RAWFRAME_TRY_ASSIGN(const Swizzle kSwizzle, swizzleIn(surface, *kSource));
         return kSwizzle.out;
     }
-    if (kType == kVertexColorType && (from.output == "color" || from.output == "alpha")) {
+    if (kType == kVertexColorType) {
         RAWFRAME_TRY(streamIn(*kSource));
         return std::optional{from.output == "color" ? Carried::Color3 : Carried::Float};
     }
-    if (kType == kTimeType && from.output == "seconds") {
+    if (kType == kTimeType) {
         RAWFRAME_TRY(timeIn(*kSource));
         return std::optional{Carried::Float};
     }
-    if ((kType == kWorldPositionType && from.output == "position") ||
-        (kType == kWorldNormalType && from.output == "normal") ||
-        (kType == kViewDirectionType && from.output == "direction") ||
-        (kType == kWorldTangentType && from.output == "tangent")) {
+    if (kType == kWorldPositionType || kType == kWorldNormalType || kType == kViewDirectionType ||
+        kType == kWorldTangentType) {
         RAWFRAME_TRY(streamIn(*kSource));
         return std::optional{Carried::Vec3};
     }
-    if (kType == kNormalMapType && from.output == "out") {
+    if (kType == kNormalMapType) {
         RAWFRAME_TRY(normalMapIn(surface, *kSource));
         return std::optional{Carried::Vec3};
     }
-    if (kType == kQualitySwitchType && from.output == "out") {
+    if (kType == kQualitySwitchType) {
         RAWFRAME_TRY_ASSIGN(const Switch kSwitch, switchIn(surface, *kSource));
         return kSwitch.out;
     }
-    if (kType == kSeparate3Type && (from.output == "r" || from.output == "g" || from.output == "b")) {
+    if (kType == kSeparate3Type) {
         RAWFRAME_TRY(separate3In(surface, *kSource));
         return std::optional{Carried::Float};
     }
@@ -1052,7 +1070,8 @@ std::vector<NodeSignature> nodeSignatures() {
     for (const surface_graph::OwnNode& kOwn : surface_graph::kOwnNodes) {
         made.push_back(NodeSignature{.type = std::string{kOwn.type},
                                      .params = kWords(kOwn.members.params),
-                                     .inputs = kWords(kOwn.members.inputs)});
+                                     .inputs = kWords(kOwn.members.inputs),
+                                     .outputs = kWords(kOwn.members.outputs)});
     }
     // The surface's are the Surface contract's: its parameters, its feature
     // groups' inputs, and the geometry's normal and position offset.
@@ -1068,7 +1087,8 @@ std::vector<NodeSignature> nodeSignatures() {
     std::ranges::sort(surface);
     for (const surface_graph::MathNode& kMath : surface_graph::kMathNodes) {
         NodeSignature math{.type = std::string{kMath.type},
-                           .inputs = kWords(std::span{kMath.inputs.data(), kMath.count})};
+                           .inputs = kWords(std::span{kMath.inputs.data(), kMath.count}),
+                           .outputs = {"out"}};
         std::ranges::sort(math.inputs);
         made.push_back(std::move(math));
     }
@@ -1078,6 +1098,10 @@ std::vector<NodeSignature> nodeSignatures() {
             for (const surface_graph::InterfaceInput& kInput : kFunction->inputs) {
                 call.inputs.emplace_back(kInput.name);
             }
+            for (const functions::Output& kOutput : kFunction->outputs) {
+                call.outputs.emplace_back(kOutput.name);
+            }
+            std::ranges::sort(call.outputs);
         }
         made.push_back(std::move(call));
     }

@@ -55,13 +55,14 @@ inline constexpr std::array<std::string_view, 3> kBlends = {"opaque", "masked", 
 [[nodiscard]] bool known(const graph::Node& node);
 
 /// The params and inputs a node of one of the family's own types may hold,
-/// each in name order (D732): what its reader checks a node against and
-/// `nodeSignatures` lists. The surface's inputs are the Surface contract's
-/// and an inline-Slang node's those its params declare, so neither holds
-/// inputs here.
+/// and the outputs a connection may name, each in name order (D732, D733):
+/// what its reader checks a node against and `nodeSignatures` lists. The
+/// surface's inputs are the Surface contract's and an inline-Slang node's
+/// inputs and outputs those its params declare, so neither holds them here.
 struct Members {
     std::span<const std::string_view> params;
     std::span<const std::string_view> inputs;
+    std::span<const std::string_view> outputs;
 };
 /// The members of one of the family's own types; none for another type.
 [[nodiscard]] std::optional<Members> ownMembersOf(std::string_view type);

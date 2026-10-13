@@ -227,14 +227,16 @@ inline constexpr std::string_view kMaterialRepresentation = "rawframe.material";
 /// containers linked with what `generateSlang` wrote.
 inline constexpr std::string_view kProgramRepresentation = "rawframe.material.program";
 
-/// A node type a surface graph may hold and the params and inputs a node of
-/// it may hold, each in name order (SPEC-0026's library, D731, D732). An
-/// inline-Slang node's inputs are those its `inputs` param declares, so
-/// none are listed for it.
+/// A node type a surface graph may hold, the params and inputs a node of it
+/// may hold, and the outputs a connection from it may name, each in name
+/// order (SPEC-0026's library, D731, D732, D733). An inline-Slang node's
+/// inputs and outputs are those its params declare, so none are listed for
+/// it.
 struct NodeSignature {
     std::string type;
     std::vector<std::string> params;
     std::vector<std::string> inputs;
+    std::vector<std::string> outputs;
 };
 
 /// The node types a surface graph may hold, each with its members: the

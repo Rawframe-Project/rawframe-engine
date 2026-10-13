@@ -278,6 +278,7 @@ result::Result<Value> answer(const AuthoredMaterial& material, const Query& quer
             type.add("type", Value::string(kSignature.type));
             type.add("params", kWords(kSignature.params));
             type.add("inputs", kWords(kSignature.inputs));
+            type.add("outputs", kWords(kSignature.outputs));
             types.push(std::move(type));
         }
         Value made = Value::object();

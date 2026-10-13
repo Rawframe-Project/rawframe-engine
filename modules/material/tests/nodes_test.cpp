@@ -3,7 +3,8 @@
 // the atomic core, the channel, stream, logic, color, and noise nodes, in
 // the fragment and the vertex stage, and what each refuses. The library's
 // types listed once each (D731), each with the params and inputs its
-// reader checks a node against (D732).
+// reader checks a node against (D732) and the outputs a connection from it
+// may name (D733).
 
 #include "generated/arithmetic_material.h"
 #include "generated/facing_graph.h"
@@ -655,9 +656,13 @@ RAWFRAME_TEST(EachNodeTypesMembersAreListedInNameOrder) {
     RAWFRAME_EXPECT(kOf(kUvType).params == Words{"channel"} && kOf(kUvType).inputs.empty());
     RAWFRAME_EXPECT(kOf(kSampleTexture2dType).params == (Words{"address", "filter", "texture"}) &&
                     kOf(kSampleTexture2dType).inputs == (Words{"texture", "uv"}));
-    RAWFRAME_EXPECT(kOf("rawframe/clamp@1").inputs == (Words{"high", "in", "low"}));
+    RAWFRAME_EXPECT(kOf("rawframe/clamp@1").inputs == (Words{"high", "in", "low"}) &&
+                    kOf("rawframe/clamp@1").outputs == Words{"out"});
     RAWFRAME_EXPECT(kOf("rawframe/triplanar_projection@1").inputs ==
-                    (Words{"blend", "normal", "position", "texture", "tile"}));
+                        (Words{"blend", "normal", "position", "texture", "tile"}) &&
+                    kOf("rawframe/triplanar_projection@1").outputs == (Words{"alpha", "color"}));
+    RAWFRAME_EXPECT(kOf(kSampleTexture2dType).outputs == (Words{"alpha", "color"}) &&
+                    kOf(kUvType).outputs == Words{"uv"} && kOf(kSurfaceType).outputs.empty());
     // The surface's are the Surface contract's, the feature groups' among
     // them.
     const NodeSignature kSurface = kOf(kSurfaceType);
@@ -669,6 +674,13 @@ RAWFRAME_TEST(EachNodeTypesMembersAreListedInNameOrder) {
         validateSurface(
             surfaceOf(Value::object(), {nodeOf(kTime, kUvType, objectOf({{"set", Value::real(1)}}), Value::object())})),
         MaterialError::Invalid));
+    // As is a connection naming an output its node's type does not list.
+    RAWFRAME_EXPECT(refusedWith(validateSurface(surfaceOf(objectOf({{"base_metalness", from(kTime, "out")}}),
+                                                          {timeOf(Value::string("simulation"))})),
+                                MaterialError::Invalid));
+    RAWFRAME_EXPECT(validateSurface(surfaceOf(objectOf({{"base_metalness", from(kTime, "seconds")}}),
+                                              {timeOf(Value::string("simulation"))}))
+                        .has_value());
 }
 
 RAWFRAME_TEST(TheNodeLibrarysTypesAreListedOnceEach) {

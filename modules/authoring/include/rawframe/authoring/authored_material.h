@@ -111,8 +111,8 @@ private:
 /// A material's query answered: an instance's `materials.read_instance`
 /// (`{"instance": ...}`), a graph's `materials.read_graph` (`{"graph":
 /// ...}`, D728) and `materials.list_node_types` (`{"types": [...]}`, each
-/// `{"type", "params", "inputs"}` as the material module's signature says,
-/// D731, D732); refuses (`ValidationFailed`) any other.
+/// `{"type", "params", "inputs", "outputs"}` as the material module's
+/// signature says, D731, D732, D733); refuses (`ValidationFailed`) any other.
 [[nodiscard]] result::Result<document::Value> answer(const AuthoredMaterial& material, const Query& query);
 
 } // namespace rawframe::authoring
