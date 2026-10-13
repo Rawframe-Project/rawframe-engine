@@ -41,6 +41,11 @@ replication.endpoint = arena
 bots.count = 4
 bots.endpoint = arena
 audio.record = $work/heard.wav
+# What is checked is what is heard, not how fast a loaded machine ticks
+# (D516, D569): a sanitized build far behind stopped as overloaded before
+# its recording was summed up.
+world.degraded_ms = 600000
+world.overload_ms = 0
 CONF
     (cd "$work/elsewhere" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson" 2>"$work/errors.txt")
 }
