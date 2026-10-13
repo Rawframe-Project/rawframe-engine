@@ -96,6 +96,8 @@ for pid in ${pids[@]+"${pids[@]}"}; do
     wait "$pid" || true
 done
 pids=()
-kill -TERM "$server_pid"
+# A server that stopped itself before the bots ended is said by its log,
+# printed below, rather than by kill's refusal (D736).
+kill -TERM "$server_pid" 2>/dev/null || true
 wait "$server_pid" || true
 cat "$work/server.log" "$work"/bots-*.log

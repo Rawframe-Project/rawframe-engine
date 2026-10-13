@@ -378,7 +378,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                          $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_SOURCE_DIR}/tests/quarry_drawn.conf
-                         games/quarry/quarry.game /dev/null
+                         games/quarry/quarry.game ${CMAKE_CURRENT_SOURCE_DIR}/tests/quarry_server.conf
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_quarry_drawn PROPERTIES
                              PROCESSORS 2
