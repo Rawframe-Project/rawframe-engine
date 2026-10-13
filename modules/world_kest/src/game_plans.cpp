@@ -1,6 +1,9 @@
 #include "game_plans.h"
 
+#include "physics_facts.h"
+#include "rawframe/physics/motion.h"
 #include "rawframe/world_kest/errors.h"
+#include "rawframe/world_replication/perception.h"
 
 #include <algorithm>
 
@@ -84,6 +87,102 @@ replicatedAmong(const GameDescription& game, std::span<const std::string> names,
         made.push_back(kComponent->id);
     }
     return made;
+}
+
+result::Result<PredictionPlan> predictionOf(const GameDescription& game,
+                                            const world_replication::ReplicationTable& table,
+                                            std::span<const kest::TypeLayout> layouts,
+                                            const std::vector<physics3d::BodyMesh>& meshes) {
+    PredictionPlan plan;
+    if (game.predicted.empty()) {
+        return plan;
+    }
+    const auto kIn = [](const std::vector<std::string>& names, const std::string& name) {
+        return std::ranges::find(names, name) != names.end();
+    };
+    const auto kRefuse = [](std::string_view why, std::string_view subject) {
+        return std::unexpected<result::Error>{
+            result::fail(result::ErrorClass::InvalidArgument, kWorldKestDomain, code(WorldKestError::BadGameLine), why)
+                .error()
+                .withContext("name", subject)};
+    };
+    // parseGame has checked every name.
+    const auto kId = [&game](const std::string& name) {
+        return std::ranges::find(game.components, name, &GameComponent::name)->id;
+    };
+    if (game.input.empty()) {
+        return kRefuse("a game that predicts needs input to predict from", "input");
+    }
+    // An entity a replicated value names is the mirror's on a client and
+    // the predictor's own there: never the same bits to compare.
+    const auto kNamesEntities = [&](const std::string& name) {
+        const schema::ComponentTypeId kComponent = kId(name);
+        return std::ranges::any_of(table.components, [kComponent](const world_replication::ComponentCodec& codec) {
+            return codec.component == kComponent && codec.namesEntities();
+        });
+    };
+    for (const std::string& name : game.predicted) {
+        if (!kIn(game.player, name) || !kIn(game.replicated, name)) {
+            return kRefuse("a predicted component is one of the player's and replicates", name);
+        }
+        if (kNamesEntities(name)) {
+            return kRefuse("a predicted component names no entity", name);
+        }
+        plan.predicted.push_back(kId(name));
+    }
+    for (const GameSystem& system : game.systems) {
+        if (!system.predicted) {
+            continue;
+        }
+        if (!system.randomStreams.empty()) {
+            return kRefuse("a predicted system draws from no World stream: a client does not have its state",
+                           system.identity);
+        }
+        for (const GameColumn& column : system.columns) {
+            // The moment a player saw is the server's to know: a client
+            // stepping its own command does not have it.
+            if (column.component == world_replication::Perception::kComponentName) {
+                return kRefuse("a predicted system reads no Perception", system.identity);
+            }
+            if (column.access == world::Access::Write && kIn(game.replicated, column.component) &&
+                !kIn(game.predicted, column.component)) {
+                return kRefuse("a predicted system writes no replicated component that is not predicted",
+                               system.identity);
+            }
+        }
+    }
+    // A predicting client steps its player's body among the level's static
+    // bodies; everything that moves besides it is the server's.
+    if (game.physics.has_value()) {
+        if (game.physics->dimensions == 3) {
+            plan.physics3d = physics3dSettingsOf(game, meshes);
+        } else {
+            plan.physics2d = physics2dSettingsOf(game);
+        }
+        const PhysicsFacts kFacts = physicsFacts(game.physics->dimensions);
+        const GameScenes kScenes{game, layouts};
+        for (const GameSpawn& spawn : game.spawns) {
+            RAWFRAME_TRY_ASSIGN(SpawnValues values, kScenes.spawnValues(spawn));
+            const auto kBody = std::ranges::find(values, kFacts.body, &SpawnValues::value_type::first);
+            if (kBody == values.end() || static_cast<std::uint8_t>(kBody->second[kFacts.motion]) !=
+                                             static_cast<std::uint8_t>(physics::Motion::Static)) {
+                continue;
+            }
+            for (std::uint32_t made = 0; made < spawn.count; ++made) {
+                plan.level.push_back(values);
+            }
+        }
+    }
+    for (const std::string& name : game.nearby) {
+        if (!kIn(game.replicated, name)) {
+            return kRefuse("a nearby component replicates", name);
+        }
+        if (kNamesEntities(name)) {
+            return kRefuse("a nearby component names no entity", name);
+        }
+        plan.nearby.push_back(kId(name));
+    }
+    return plan;
 }
 
 } // namespace rawframe::world_kest
