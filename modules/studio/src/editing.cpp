@@ -105,6 +105,14 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         // Of a component the game declares a node, not one the document
         // holds (D672).
         showNodeForm();
+    } else if (graphChosen() && node == deleteNode_ && !entity_.empty()) {
+        // A node another reads is refused by the session: the graph would
+        // not read (D728).
+        endEdit();
+        Value operation = Value::object();
+        operation.add("operation", Value::string("materials.remove_node"));
+        operation.add("node", Value::string(entity_));
+        commit(std::move(operation), "node deleted", std::nullopt);
     } else if (uiChosen() && node == deleteNode_ && !entity_.empty()) {
         // A node is removed with what is inside it (D643).
         endEdit();
@@ -126,9 +134,10 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         // The rest are an entity's (D637).
         endEdit();
         ++refused_;
-        say(sheetChosen() ? "not done to a style class"
-            : uiChosen()  ? "not done to a UI node"
-                          : "not done to a material's input");
+        say(sheetChosen()   ? "not done to a style class"
+            : uiChosen()    ? "not done to a UI node"
+            : graphChosen() ? "not done to a material's node"
+                            : "not done to a material's input");
     } else if (node == newNode_ && !scene_.empty()) {
         endEdit();
         create();
@@ -335,6 +344,10 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
     }
     if (row.role == FieldRow::Role::Override) {
         setOverride(text);
+        return;
+    }
+    if (row.role == FieldRow::Role::GraphParam || row.role == FieldRow::Role::GraphInput) {
+        setGraphMember(row, text);
         return;
     }
     if (row.role == FieldRow::Role::Name && sheetChosen()) {

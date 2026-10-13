@@ -12,7 +12,10 @@
 // as its row is pressed (D672). A material instance (D722): its base's
 // inputs and switches in the entity column, and a chosen one's type,
 // default, and override, the override set through
-// `materials.set_override` (D721).
+// `materials.set_override` (D721). A material graph (D730): its nodes in
+// the entity column, a chosen one's params and inputs as fields, each set
+// through `materials.set_node_param` or `materials.set_node_input` (D728),
+// and Delete removing it.
 
 #include "rawframe/ui/document.h"
 #include "rawframe/ui/styles.h"
@@ -413,6 +416,83 @@ void ShellParticipant::setOverride(const std::string& text) {
     operation.add("input", Value::string(entity_));
     operation.add("value", documentedValue(text));
     commit(std::move(operation), entity_ + (text.empty() ? " unset" : " set to " + text), entity_);
+}
+
+void ShellParticipant::showGraph() {
+    const std::optional<Value> kRead = read(scene_, "materials.read_graph");
+    sheet_ = kRead.has_value() && kRead->find("graph") != nullptr ? std::optional<Value>{*kRead->find("graph")}
+                                                                  : std::nullopt;
+    const Value* nodes = sheet_.has_value() ? sheet_->find("graph") : nullptr;
+    for (std::size_t at = 0; nodes != nullptr && at < nodes->names().size(); ++at) {
+        const std::string& kId = nodes->names()[at];
+        const Value* type = nodes->items()[at].find("type");
+        const std::string kType = type != nullptr && type->text() != nullptr ? *type->text() : std::string{};
+        auto added = row(entitiesColumn_, kId.substr(0, 8) + "  " + kType, kText, kRow, true);
+        if (!added.has_value()) {
+            return;
+        }
+        entityRows_.push_back(*added);
+        entities_.push_back(kId);
+        names_.push_back(kType);
+        brought_.push_back(false);
+        removed_.push_back(false);
+        places_.push_back(std::nullopt);
+    }
+}
+
+void ShellParticipant::showGraphNode(std::size_t at) {
+    endEdit();
+    fields_.clear();
+    entityAt_ = at;
+    if (entity_ != entities_[at]) {
+        static_cast<void>(tree_->scrollTo(componentsColumn_, 0, 0));
+    }
+    entity_ = entities_[at];
+    for (std::size_t each = 0; each < entityRows_.size(); ++each) {
+        static_cast<void>(
+            tree_->setLook(entityRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
+    }
+    clear(componentRows_);
+    actions_.clear();
+    components_ = 0;
+    const Value* nodes = sheet_.has_value() ? sheet_->find("graph") : nullptr;
+    const Value* chosen = nodes != nullptr ? nodes->find(entity_) : nullptr;
+    if (chosen == nullptr) {
+        return;
+    }
+    // Its params, then its inputs, each under a heading, as the graph
+    // holds them.
+    for (const auto& [kMember, kRole] : {std::pair{std::string_view{"params"}, FieldRow::Role::GraphParam},
+                                         std::pair{std::string_view{"inputs"}, FieldRow::Role::GraphInput}}) {
+        const Value* held = chosen->find(kMember);
+        if (held == nullptr || held->names().empty()) {
+            continue;
+        }
+        auto heading = row(componentsColumn_, kMember, kQuiet, kPanel);
+        if (!heading.has_value()) {
+            return;
+        }
+        componentRows_.push_back(*heading);
+        ++components_;
+        for (std::size_t each = 0; each < held->names().size(); ++each) {
+            auto line = fieldRow(held->names()[each], partText(held->items()[each]), std::nullopt, true);
+            if (!line.has_value()) {
+                return;
+            }
+            componentRows_.push_back(line->first);
+            fields_.push_back(FieldRow{.value = line->second, .role = kRole, .field = held->names()[each]});
+        }
+    }
+}
+
+void ShellParticipant::setGraphMember(const FieldRow& row, const std::string& text) {
+    const bool kParam = row.role == FieldRow::Role::GraphParam;
+    Value operation = Value::object();
+    operation.add("operation", Value::string(kParam ? "materials.set_node_param" : "materials.set_node_input"));
+    operation.add("node", Value::string(entity_));
+    operation.add(kParam ? "param" : "input", Value::string(row.field));
+    operation.add("value", documentedValue(text));
+    commit(std::move(operation), row.field + (text.empty() ? " unset" : " set to " + text), entity_);
 }
 
 } // namespace rawframe::studio

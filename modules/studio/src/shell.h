@@ -101,7 +101,11 @@ struct FieldRow {
         NodeField,
         /// A material instance's override of its base's input or switch
         /// (D722).
-        Override
+        Override,
+        /// A material graph's node's param, `field` its name (D730).
+        GraphParam,
+        /// A material graph's node's input, `field` its name (D730).
+        GraphInput
     };
     ui::Node value{};
     Role role = Role::Field;
@@ -313,8 +317,11 @@ private:
     [[nodiscard]] bool materialChosen() const noexcept {
         return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Material;
     }
+    [[nodiscard]] bool graphChosen() const noexcept {
+        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Graph;
+    }
     [[nodiscard]] bool documentChosen() const noexcept {
-        return sheetChosen() || uiChosen() || materialChosen();
+        return sheetChosen() || uiChosen() || materialChosen() || graphChosen();
     }
     /// The chosen style sheet's classes in the entity column, read whole
     /// from the session (`styles.read_sheet`).
@@ -355,6 +362,17 @@ private:
     /// `text` set as the chosen input's override (`materials.set_override`),
     /// typed as a part's is: nothing unsets it.
     void setOverride(const std::string& text);
+    /// The chosen material graph's nodes in the entity column, each by its
+    /// identity's first eight digits and its type, read whole from the
+    /// session (`materials.read_graph`, D730).
+    void showGraph();
+    /// The node at `at`: its params, then its inputs, each a field showing
+    /// what the graph holds, a connection as its JSON.
+    void showGraphNode(std::size_t at);
+    /// `text` set as the chosen node's param or input `row` names
+    /// (`materials.set_node_param`, `materials.set_node_input`), typed as a
+    /// part's is: nothing unsets it.
+    void setGraphMember(const FieldRow& row, const std::string& text);
 
     /// One operation asked of the session for the chosen scene; `done` or
     /// the session's message said; the scene shown again with `choose`
@@ -451,6 +469,7 @@ private:
         Sheet,
         Ui,
         Material,
+        Graph,
     };
     std::vector<Listed> listed_;
     std::optional<Value> sheet_;

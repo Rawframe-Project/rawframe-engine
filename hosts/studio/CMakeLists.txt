@@ -24,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":4,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":22,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":23,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its buttons, its columns as scroll panes named by their
     # headings, and its fields as entries named by theirs; runners' level
@@ -119,25 +119,25 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_makes_scenes
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game crate.scene 248,225:crate 463,97 "until=studio_said,status=\"entity created\""
+                     games/runners/runners.game crate.scene 248,257:crate 463,97 "until=studio_said,status=\"entity created\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_makes_scenes PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed crate at 248,225.*clicked at 463,97.*\"code\":\"studio_summary\"[^\n]*\"scenes\":5,\"scene\":\"crate.scene\",\"entities\":1,[^\n]*\"applied\":2,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+                         "typed crate at 248,257.*clicked at 463,97.*\"code\":\"studio_summary\"[^\n]*\"scenes\":6,\"scene\":\"crate.scene\",\"entities\":1,[^\n]*\"applied\":2,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
     # A file imported from Studio (D503, D505): the plaza's paving typed by
     # its absolute path into the field under runners' scenes, made one of
     # runners' textures under its own name.
     add_test(NAME studio_imports
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene 248,225:${PROJECT_SOURCE_DIR}/games/plaza/paving.png
+                     games/runners/runners.game level.scene 248,257:${PROJECT_SOURCE_DIR}/games/plaza/paving.png
                      "until=studio_said,status=\"imported "
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_imports PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed [^\n]*/games/plaza/paving.png at 248,225.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"imported texture paving.png\".*\"exit\":\"clean_stop\"")
+                         "typed [^\n]*/games/plaza/paving.png at 248,257.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"imported texture paving.png\".*\"exit\":\"clean_stop\"")
     # An entity moved among the scene's own (D451): ground, first in
     # runners' level, is refused Up and moved Down twice, staying chosen.
     add_test(NAME studio_moves
@@ -206,7 +206,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ENVIRONMENT "STUDIO_SCENE_EDIT=$a this is not kest (;STUDIO_SETTINGS=studio.editor = ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixing_editor.sh --goto {file}:{line}:{column}"
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "clicked at 76,164.*clicked at 160,164.*controls.kest written: no.*editor opened --goto [^ ]*/game/controls.kest:[0-9]+:1.*\"code\":\"studio_summary\"[^\n]*\"scenes\":4,[^\n]*\"opened\":1,[^\n]*\"status\":\"the game reads\".*\"exit\":\"clean_stop\"")
+                         "clicked at 76,164.*clicked at 160,164.*controls.kest written: no.*editor opened --goto [^ ]*/game/controls.kest:[0-9]+:1.*\"code\":\"studio_summary\"[^\n]*\"scenes\":5,[^\n]*\"opened\":1,[^\n]*\"status\":\"the game reads\".*\"exit\":\"clean_stop\"")
     # A search of the entity column (D473): in runners' level, slope finds
     # the three slopes, and the field, under them now, then takes a wall
     # holding runners.tile by its last part, which finds the two walls.
@@ -227,12 +227,12 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game level.scene 200,129 640,129 1100,97:first 1100,97:second
-                     1100,97:third 200,449 200,513 "until=studio_said,status=\"redone\""
+                     1100,97:third 200,481 200,545 "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_steps_history PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed third at 1100,97.*clicked at 200,449.*clicked at 200,513.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":3,\"refused\":0,\"undone\":2,\"redone\":2,\"undoable\":3,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+                         "typed third at 1100,97.*clicked at 200,481.*clicked at 200,545.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":3,\"refused\":0,\"undone\":2,\"redone\":2,\"undoable\":3,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
     # An asset typed by name (D455): ground's tile texture, scrolled to, is
     # given hud.png, which the game declares, by its name; hud alone, which
     # several assets' names start with, is refused.
@@ -289,12 +289,12 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game level.scene 200,129 640,129 1100,97:first 1100,97:second
-                     freeze 1100,97:third 200,449 200,513 thaw "until=studio_said,status=\"redone\""
+                     freeze 1100,97:third 200,481 200,545 thaw "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_steps_history_frozen PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed third at 1100,97.*clicked at 200,449.*clicked at 200,513.*let the program go on.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":3,\"refused\":0,\"undone\":2,\"redone\":2,\"undoable\":3,\"redoable\":0,")
+                         "typed third at 1100,97.*clicked at 200,481.*clicked at 200,545.*let the program go on.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":3,\"refused\":0,\"undone\":2,\"redone\":2,\"undoable\":3,\"redoable\":0,")
     # Studio reverting (D443): runners' level brings a platform whose pose
     # its instance sets; the instance's x reverted drops its own value for
     # its source's, written to the level.
@@ -322,19 +322,45 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          PASS_REGULAR_EXPRESSION
                          "clicked at 200,97.*clicked at 640,129.*typed #c01818c0 at 1100,161.*clicked at 1166,23.*clicked at 1236,23.*tycoon.styles written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"tycoon.styles\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
     # A material instance edited in Studio (D722): Gale's shore listed after
-    # its UI document, its rock's graph not, its tint chosen among the
+    # its UI document and its rock's graph (D730), its tint chosen among the
     # rock's inputs and typed as three numbers, set through the session's
     # materials.set_override and written; Undo and Redo leave it standing.
     add_test(NAME studio_material
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/gale/gale.game shore.rfmaterial 200,126 640,161 "1100,161:[0.6,0.2,0.1]" 1166,23 1236,23
+                     games/gale/gale.game shore.rfmaterial 200,155 640,161 "1100,161:[0.6,0.2,0.1]" 1166,23 1236,23
                      "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_material PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed \\[0.6,0.2,0.1\\] at 1100,161.*shore.rfmaterial written: yes.*\"status\":\"tint set to \\[0.6,0.2,0.1\\]\".*\"code\":\"studio_summary\"[^\n]*\"scenes\":2,\"scene\":\"shore.rfmaterial\",\"entities\":2,\"entity\":\"tint\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+                         "typed \\[0.6,0.2,0.1\\] at 1100,161.*shore.rfmaterial written: yes.*\"status\":\"tint set to \\[0.6,0.2,0.1\\]\".*\"code\":\"studio_summary\"[^\n]*\"scenes\":4,\"scene\":\"shore.rfmaterial\",\"entities\":2,\"entity\":\"tint\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+    # A material graph edited in Studio (D730): Gale's rock listed, its
+    # surface node chosen among its five, and its roughness typed, set
+    # through the session's materials.set_node_input and written; Undo and
+    # Redo leave it standing.
+    add_test(NAME studio_graph
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/gale/gale.game rock.rfmaterial 200,126 640,257 "1100,161:0.4" 1166,23 1236,23
+                     "until=studio_said,status=\"redone\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_graph PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "typed 0.4 at 1100,161.*rock.rfmaterial written: yes.*\"status\":\"specular_roughness set to 0.4\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"rock.rfmaterial\",\"entities\":5,\"entity\":\"60c0000000000005\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+    # A node the surface reads is not deleted: the session refuses what
+    # leaves a graph that does not read (D728), and Studio says so.
+    add_test(NAME studio_graph_keeps
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/gale/gale.game rock.rfmaterial 200,126 640,225 517,97
+                     "until=studio_said,status=\"the material graph does not read: a graph's connections are to its nodes\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_graph_keeps PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "clicked at 517,97.*rock.rfmaterial written: no.*\"status\":\"the material graph does not read: a graph's connections are to its nodes\".*\"code\":\"studio_summary\"[^\n]*\"applied\":0,\"refused\":1,.*\"exit\":\"clean_stop\"")
     # A style class made, named, and deleted in Studio (D638): in Stalls'
     # sheet New makes a class and chooses it, its name typed as tip, and
     # Delete deletes it; Undo brings it back, so the sheet is written with
@@ -426,13 +452,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_client> $<TARGET_FILE:rawframe_host_studio_tool>
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf games/plaza/plaza.game
                          ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf 200,97 until=studio_previewing
-                         300,193:0,30,0.5 "until=studio_said,status=\"view set and previewed\""
+                         300,353:0,30,0.5 "until=studio_said,status=\"view set and previewed\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_previews_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "clicked at 200,97.*saw studio_previewing.*typed 0,30,0.5 at 300,193.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"gate.scene\",[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":true,[^\n]*\"status\":\"view set and previewed\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,")
+                             "clicked at 200,97.*saw studio_previewing.*typed 0,30,0.5 at 300,353.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"gate.scene\",[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":true,[^\n]*\"status\":\"view set and previewed\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,")
         # Studio playing the plaza itself (D445): Play starts a server and a
         # client with a tooling endpoint; once the client says who it is,
         # the chosen gate's preview is attached to it (the clicks wait for
@@ -446,14 +472,14 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
-                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing 300,193:0,30,0.5
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing 300,353:0,30,0.5
                          wait=3 463,97 wait=5 1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_plays_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "clicked at 1096,23.*saw studio_previewing.*typed 0,30,0.5 at 300,193.*clicked at 1096,23.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,[^\n]*\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,.*\"code\":\"scene_followed\"[^\n]*\"scene\":\"gate.scene\",\"created\":1.*{\"endpoint\":\"127.0.0.1:[0-9]+\",\"pinFile\":\"[^\"]*/server.fingerprint\",\"tokenFile\":\"[^\"]*/token\"}")
+                             "clicked at 1096,23.*saw studio_previewing.*typed 0,30,0.5 at 300,353.*clicked at 1096,23.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,[^\n]*\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,.*\"code\":\"scene_followed\"[^\n]*\"scene\":\"gate.scene\",\"created\":1.*{\"endpoint\":\"127.0.0.1:[0-9]+\",\"pinFile\":\"[^\"]*/server.fingerprint\",\"tokenFile\":\"[^\"]*/token\"}")
         # The game cooked by Studio and played from that content alone
         # (D502): Cook, its progress, then Play, the server's settings and
         # the client's naming no content; previewed, its client drawing
@@ -483,7 +509,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 980,520 "until=studio_said,status=\"picked "
+                         300,353:-30,3,-20 300,385:-30,2.5,-30 wait=3 980,520 "until=studio_said,status=\"picked "
                          1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_picks_plaza PROPERTIES
@@ -502,7 +528,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 drag=980,520,1080,520 until=studio_dragged 1096,23 until=studio_game_ended
+                         300,353:-30,3,-20 300,385:-30,2.5,-30 wait=3 drag=980,520,1080,520 until=studio_dragged 1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_drags_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
@@ -519,7 +545,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 980,520 until=studio_marked wait=1 drag=999,520,1079,540 until=studio_dragged 1096,23 until=studio_game_ended
+                         300,353:-30,3,-20 300,385:-30,2.5,-30 wait=3 980,520 until=studio_marked wait=1 drag=999,520,1079,540 until=studio_dragged 1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_handles_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
@@ -535,7 +561,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 980,520 until=studio_marked move=999,520 until=studio_lit wait=1
+                         300,353:-30,3,-20 300,385:-30,2.5,-30 wait=3 980,520 until=studio_marked move=999,520 until=studio_lit wait=1
                          1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_hovers_plaza PROPERTIES
@@ -553,7 +579,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 wheel=980,520,-3 orbit=980,520,1080,520 wait=3
+                         300,353:-30,3,-20 300,385:-30,2.5,-30 wait=3 wheel=980,520,-3 orbit=980,520,1080,520 wait=3
                          1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_orbits_plaza PROPERTIES
@@ -570,7 +596,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 300,289:1\ 15 wait=3 drag=980,520,1080,520
+                         300,353:-30,3,-20 300,385:-30,2.5,-30 300,449:1\ 15 wait=3 drag=980,520,1080,520
                          until=studio_dragged 1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_snaps_plaza PROPERTIES
@@ -589,7 +615,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 orbit=980,520,1080,520,Shift_L
+                         300,353:-30,3,-20 300,385:-30,2.5,-30 wait=3 orbit=980,520,1080,520,Shift_L
                          until=studio_view_moved wait=2 wheel=980,520,-3,Shift_L wait=2 1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_looks_plaza PROPERTIES
@@ -606,7 +632,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,8,-25 300,225:-30,2.5,-30 wait=3 980,520 until=studio_marked wait=1 drag=928,520,980,564 until=studio_dragged 1096,23 until=studio_game_ended
+                         300,353:-30,8,-25 300,385:-30,2.5,-30 wait=3 980,520 until=studio_marked wait=1 drag=928,520,980,564 until=studio_dragged 1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_rings_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
@@ -622,7 +648,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 drag=980,520,980,470,Shift_L until=studio_dragged 1096,23 until=studio_game_ended
+                         300,353:-30,3,-20 300,385:-30,2.5,-30 wait=3 drag=980,520,980,470,Shift_L until=studio_dragged 1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_raises_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
@@ -635,7 +661,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf 200,97 1096,23 until=studio_previewing
-                         300,193:-30,3,-20 300,225:-30,2.5,-30 wait=3 drag=980,520,1080,520,Control_L until=studio_dragged 1096,23 until=studio_game_ended
+                         300,353:-30,3,-20 300,385:-30,2.5,-30 wait=3 drag=980,520,1080,520,Control_L until=studio_dragged 1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_turns_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
