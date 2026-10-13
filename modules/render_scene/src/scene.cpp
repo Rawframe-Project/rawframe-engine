@@ -13,6 +13,7 @@
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/layouts.h"
+#include "scene_state.h"
 #include "skinning.h"
 
 #include <algorithm>
@@ -26,12 +27,8 @@
 namespace rawframe::render_scene {
 
 using particles::Beam;
-using particles::BeamInstance;
-using particles::EmitterInstance;
 using particles::ParticleEmitter;
-using particles::RibbonInstance;
 using particles::Trail;
-using particles::TrailInstance;
 
 namespace {
 
@@ -64,569 +61,449 @@ bool wellFormed(const ModelInstance& instance) noexcept {
 
 } // namespace
 
-struct Scene::State {
-    SceneSettings settings;
-    /// The presented World's time, and the one the frame before showed
-    /// (D691).
-    double seconds = 0;
-    std::optional<double> queuedSeconds;
-    std::vector<world::ColumnQuery> models;
-    std::optional<world::ColumnQuery> sun;
-    std::optional<world::ColumnQuery> sky;
-    /// The point lights' queries, then the spot lights'.
-    std::vector<std::pair<world::ColumnQuery, bool>> lightQueries;
-    /// The reflection probes' queries, and what the frame extracted (D325).
-    std::vector<world::ColumnQuery> probeQueries;
-    std::vector<ProbeInstance> probes;
-    /// The decals' queries, and what the frame extracted (D339).
-    std::vector<world::ColumnQuery> decalQueries;
-    std::vector<DecalInstance> decals;
-    /// The particle emitters', trails', and beams' queries, what the frame
-    /// extracted (D352, D354), and the view's accounting of them from
-    /// frame to frame (D357).
-    std::vector<world::ColumnQuery> emitterQueries;
-    std::vector<world::ColumnQuery> trailQueries;
-    std::vector<world::ColumnQuery> beamQueries;
-    std::vector<EmitterInstance> emitters;
-    std::vector<TrailInstance> trails;
-    std::vector<BeamInstance> beams;
-    rawframe::particles::Particles particles;
-    /// The lines shown (D464).
-    std::vector<SceneLine> lines;
-    std::vector<LightInstance> punctual;
-    std::optional<schema::ComponentRuntimeId> pose;
-    /// The game's placements (D665), and its tracking (D676).
-    std::vector<schema::ComponentRuntimeId> placements;
-    std::vector<schema::ComponentRuntimeId> tracking;
-    std::map<std::uint64_t, Bounded> meshes;
-    /// Each game material's place in the frame's materials, and whether
-    /// the material at each place is translucent.
-    std::map<std::uint64_t, std::uint32_t> materials;
-    std::vector<bool> translucent;
-    std::vector<ModelInstance> extracted;
-    /// The extracted skinned models' palettes, and the joints each mesh's
-    /// skin names found among its skeleton's bones (D508).
-    std::vector<Matrix> posed;
-    Skinning skinning;
-
-    /// A skinned model's palette, if its entity was played (D508).
-    void posePalette(const world_animation::AnimationQueries* poses, ModelInstance& instance) {
-        if (poses == nullptr) {
-            return;
+void Scene::State::postProcessesOf(const SceneCamera& camera) {
+    frame.postProcesses.clear();
+    frame.postProcessesLeftOut = 0;
+    for (const PostProcess& kAsked : camera.postProcesses) {
+        // Material nought, or a weight of nought or less, runs nothing.
+        if (std::isfinite(kAsked.weight) && (kAsked.material == 0 || kAsked.weight <= 0)) {
+            continue;
         }
-        const auto kMesh = meshes.find(instance.model.mesh);
-        if (kMesh == meshes.end() || kMesh->second.mesh->skin.joints.empty()) {
-            return;
+        const auto kMaterial =
+            std::ranges::find(settings.postProcesses, kAsked.material, &ScenePostProcessMaterial::id);
+        if (!std::isfinite(kAsked.weight) || kMaterial == settings.postProcesses.end()) {
+            ++frame.postProcessesLeftOut;
+            continue;
         }
-        const animation::Pose* kPose = poses->pose(instance.entity);
-        if (kPose == nullptr) {
-            return;
+        if (frame.postProcesses.size() == settings.limits.maximumPostProcesses) {
+            ++frame.postProcessesLeftOut;
+            continue;
         }
-        const std::size_t kFirst = posed.size();
-        if (skinning.pose(
-                instance.model.mesh, kMesh->second.mesh->skin, poses->bones(instance.entity), *kPose, posed)) {
-            instance.palette = static_cast<std::uint32_t>(kFirst);
-            instance.joints = static_cast<std::uint32_t>(posed.size() - kFirst);
-        }
+        frame.postProcesses.push_back(ScenePostProcess{.insertion = kMaterial->insertion,
+                                                       .blob = kMaterial->blob,
+                                                       .texture = kMaterial->texture,
+                                                       .weight = std::min(kAsked.weight, 1.0F)});
     }
-    std::optional<Sun> sunNow;
-    std::optional<Sky> skyNow;
-    std::vector<const ModelInstance*> order;
-    SceneFrame frame;
-    /// What the frame before drew (D291): each model's turn and scale, and
-    /// its place in the World, by entity and component; and this frame's,
-    /// as it is queued.
-    struct Placement {
-        std::array<float, 9> turned{};
-        std::array<double, 3> position{};
-        /// The palette it was posed with, if posed (D510).
-        std::vector<Matrix> palette;
-    };
-    std::map<std::pair<world::EntityHandle, std::uint32_t>, Placement> placed;
-    std::map<std::pair<world::EntityHandle, std::uint32_t>, Placement> placing;
-    /// The eye the frame before was seen from, if it saw, and its view and
-    /// projection, unjittered; the frames queued.
-    /// Every model a punctual light's shadow may take, with its bounding
-    /// sphere relative to the eye, in draw order; and whether each light
-    /// kept for the view asks for shadows (D292).
-    std::vector<ShadowCandidate> candidates;
-    std::vector<bool> shadowed;
-    /// What the clusters name this frame (D339).
-    std::vector<ClusterName> named;
-    /// The models near enough to cast into the sun's cascades (D298).
-    std::vector<ShadowCandidate> sunCandidates;
-    std::optional<std::array<double, 3>> previousEye;
-    Matrix previousViewProjection{};
-    std::uint64_t frames = 0;
-    /// Whether the eye went on from the frame before, not first nor cut
-    /// away; and whether that frame was metered.
-    bool continuous = false;
-    bool meteredBefore = false;
+}
 
-    /// The camera's post processes as the frame runs them (D349).
-    void postProcessesOf(const SceneCamera& camera) {
-        frame.postProcesses.clear();
-        frame.postProcessesLeftOut = 0;
-        for (const PostProcess& kAsked : camera.postProcesses) {
-            // Material nought, or a weight of nought or less, runs nothing.
-            if (std::isfinite(kAsked.weight) && (kAsked.material == 0 || kAsked.weight <= 0)) {
-                continue;
-            }
-            const auto kMaterial =
-                std::ranges::find(settings.postProcesses, kAsked.material, &ScenePostProcessMaterial::id);
-            if (!std::isfinite(kAsked.weight) || kMaterial == settings.postProcesses.end()) {
-                ++frame.postProcessesLeftOut;
-                continue;
-            }
-            if (frame.postProcesses.size() == settings.limits.maximumPostProcesses) {
-                ++frame.postProcessesLeftOut;
-                continue;
-            }
-            frame.postProcesses.push_back(ScenePostProcess{.insertion = kMaterial->insertion,
-                                                           .blob = kMaterial->blob,
-                                                           .texture = kMaterial->texture,
-                                                           .weight = std::min(kAsked.weight, 1.0F)});
-        }
+void Scene::State::lights() {
+    const Sun kSun = sunNow.value_or(Sun{.directionX = -0.3F,
+                                         .directionY = -1.0F,
+                                         .directionZ = -0.4F,
+                                         .illuminance = 100000,
+                                         .color = 0xFFFFFFFF,
+                                         .angle = kSunAngle});
+    // A clear day's sky: its light, and its blue.
+    const Sky kSky = skyNow.value_or(Sky{.luminance = 5000, .color = kClearSky, .ground = kGround});
+    const Vector kToSun = normalized({-kSun.directionX, -kSun.directionY, -kSun.directionZ});
+    const Vector kSunColor = colorOf(kSun.color);
+    const Vector kSkyColor = colorOf(kSky.color);
+    const float kIlluminance = std::isfinite(kSun.illuminance) ? std::max(kSun.illuminance, 0.0F) : 0.0F;
+    const float kLuminance = std::isfinite(kSky.luminance) ? std::max(kSky.luminance, 0.0F) : 0.0F;
+    frame.lights = SceneLights{
+        .toSun = kToSun,
+        .sun = {kSunColor[0] * kIlluminance, kSunColor[1] * kIlluminance, kSunColor[2] * kIlluminance},
+        .sky = {kSkyColor[0] * kLuminance, kSkyColor[1] * kLuminance, kSkyColor[2] * kLuminance},
+        .sunWidth = 2 * std::tan(std::clamp(std::isfinite(kSun.angle) ? kSun.angle : 0.0F, 0.0F, kMostSunAngle) / 2),
+        .environment = kSky.environment};
+    // The ground, level and unshadowed: what reaches it, the sun's at
+    // its height and the whole upper sky's (π times its luminance),
+    // given back evenly by its albedo.
+    const Vector kAlbedo = colorOf(kSky.ground);
+    const float kSunOnGround = std::max(kToSun[1], 0.0F) / std::numbers::pi_v<float>;
+    for (std::size_t channel = 0; channel < 3; ++channel) {
+        frame.lights.ground[channel] =
+            kAlbedo[channel] * ((frame.lights.sun[channel] * kSunOnGround) + frame.lights.sky[channel]);
     }
+}
 
-    void lights() {
-        const Sun kSun = sunNow.value_or(Sun{.directionX = -0.3F,
-                                             .directionY = -1.0F,
-                                             .directionZ = -0.4F,
-                                             .illuminance = 100000,
-                                             .color = 0xFFFFFFFF,
-                                             .angle = kSunAngle});
-        // A clear day's sky: its light, and its blue.
-        const Sky kSky = skyNow.value_or(Sky{.luminance = 5000, .color = kClearSky, .ground = kGround});
-        const Vector kToSun = normalized({-kSun.directionX, -kSun.directionY, -kSun.directionZ});
-        const Vector kSunColor = colorOf(kSun.color);
-        const Vector kSkyColor = colorOf(kSky.color);
-        const float kIlluminance = std::isfinite(kSun.illuminance) ? std::max(kSun.illuminance, 0.0F) : 0.0F;
-        const float kLuminance = std::isfinite(kSky.luminance) ? std::max(kSky.luminance, 0.0F) : 0.0F;
-        frame.lights = SceneLights{
-            .toSun = kToSun,
-            .sun = {kSunColor[0] * kIlluminance, kSunColor[1] * kIlluminance, kSunColor[2] * kIlluminance},
-            .sky = {kSkyColor[0] * kLuminance, kSkyColor[1] * kLuminance, kSkyColor[2] * kLuminance},
-            .sunWidth =
-                2 * std::tan(std::clamp(std::isfinite(kSun.angle) ? kSun.angle : 0.0F, 0.0F, kMostSunAngle) / 2),
-            .environment = kSky.environment};
-        // The ground, level and unshadowed: what reaches it, the sun's at
-        // its height and the whole upper sky's (π times its luminance),
-        // given back evenly by its albedo.
-        const Vector kAlbedo = colorOf(kSky.ground);
-        const float kSunOnGround = std::max(kToSun[1], 0.0F) / std::numbers::pi_v<float>;
-        for (std::size_t channel = 0; channel < 3; ++channel) {
-            frame.lights.ground[channel] =
-                kAlbedo[channel] * ((frame.lights.sun[channel] * kSunOnGround) + frame.lights.sky[channel]);
-        }
-    }
-
-    /// The sun's cascades for this view (ADR-0051): the view from the near
-    /// plane to the shadows' distance split between them, the logarithmic
-    /// and uniform schemes blended; each a square in the sun's axes around
-    /// its slice's bounding sphere, whose radius depends only on the lens so
-    /// the square keeps its size as the eye turns, placed on whole texels
-    /// of the World, not the eye, so it does not shimmer as the eye moves.
-    /// Its depth reaches the shadows' distance toward the sun, for casters
-    /// between the sun and the view.
-    const SceneFrame& queue(const SceneCamera& camera) {
-        frame.eye = camera.eye;
-        frame.time = {seconds, queuedSeconds.value_or(seconds)};
-        queuedSeconds = seconds;
-        frame.draws.clear();
-        frame.palette.clear();
-        frame.skinned = 0;
-        frame.paletteOverLimit = 0;
-        frame.drawn = 0;
-        frame.placed = 0;
-        frame.tracked = 0;
-        frame.culled = 0;
-        frame.hidden = 0;
-        frame.malformed = 0;
-        frame.unknownMeshes = 0;
-        frame.unknownMaterials = 0;
-        frame.overLimit = 0;
-        frame.shadows.count = 0;
-        frame.shadows.filter = settings.shadows.filter;
-        frame.shadows.casters.clear();
-        frame.shadows.overLimit = 0;
-        frame.lights3d.clear();
-        frame.lightsCulled = 0;
-        frame.lightsOverLimit = 0;
-        frame.clusterOverflow = 0;
-        lights();
-        candidates.clear();
-        sunCandidates.clear();
-        const bool kLightShadows =
-            settings.lightShadows.side > 0 && std::ranges::any_of(punctual, [](const LightInstance& light) {
-                return light.light.shadows && light.light.lumens > 0;
-            });
-        order.clear();
-        for (const ModelInstance& instance : extracted) {
-            order.push_back(&instance);
-        }
-        std::ranges::sort(order, [](const ModelInstance* left, const ModelInstance* right) {
-            return std::tuple{left->model.mesh, left->entity, left->component} <
-                   std::tuple{right->model.mesh, right->entity, right->component};
+const SceneFrame& Scene::State::queue(const SceneCamera& camera) {
+    frame.eye = camera.eye;
+    frame.time = {seconds, queuedSeconds.value_or(seconds)};
+    queuedSeconds = seconds;
+    frame.draws.clear();
+    frame.palette.clear();
+    frame.skinned = 0;
+    frame.paletteOverLimit = 0;
+    frame.drawn = 0;
+    frame.placed = 0;
+    frame.tracked = 0;
+    frame.culled = 0;
+    frame.hidden = 0;
+    frame.malformed = 0;
+    frame.unknownMeshes = 0;
+    frame.unknownMaterials = 0;
+    frame.overLimit = 0;
+    frame.shadows.count = 0;
+    frame.shadows.filter = settings.shadows.filter;
+    frame.shadows.casters.clear();
+    frame.shadows.overLimit = 0;
+    frame.lights3d.clear();
+    frame.lightsCulled = 0;
+    frame.lightsOverLimit = 0;
+    frame.clusterOverflow = 0;
+    lights();
+    candidates.clear();
+    sunCandidates.clear();
+    const bool kLightShadows =
+        settings.lightShadows.side > 0 && std::ranges::any_of(punctual, [](const LightInstance& light) {
+            return light.light.shadows && light.light.lumens > 0;
         });
-        // A camera that sees nothing culls everything.
-        const bool kSees = std::ranges::all_of(camera.eye,
-                                               [](double value) {
-                                                   return std::isfinite(value);
-                                               }) &&
-                           std::isfinite(camera.yaw) && std::isfinite(camera.pitch) && std::isfinite(camera.fovY) &&
-                           std::isfinite(camera.near) && std::isfinite(camera.aspect) && camera.fovY > 0 &&
-                           camera.fovY < std::numbers::pi_v<float> && camera.near > 0 && camera.aspect > 0 &&
-                           orientationSound(camera);
-        const auto [kRight, kUp, kForward] = kSees ? axesOf(camera) : axesOf(0, 0);
-        const float kHalf = kSees ? camera.fovY / 2 : 0.5F;
-        const float kAspect = kSees ? camera.aspect : 1.0F;
-        const float kNear = kSees ? camera.near : 0.1F;
-        const CameraMatrices kMatrices =
-            matricesOf(SceneCamera{.yaw = kSees ? camera.yaw : 0,
-                                   .pitch = kSees ? camera.pitch : 0,
-                                   .fovY = kHalf * 2,
-                                   .near = kNear,
-                                   .aspect = kAspect,
-                                   .orientation = kSees ? camera.orientation : std::nullopt});
-        frame.view = kMatrices.view;
-        frame.projection = kMatrices.projection;
-        frame.exposure = std::isfinite(camera.exposure) ? camera.exposure : 15.0F;
-        frame.metering = meteringOf(camera);
-        frame.grading = gradingOf(camera.grading);
-        postProcessesOf(camera);
-        frame.occlusion = occlusionOf(camera.occlusion);
-        frame.bloom = bloomOf(camera.bloom);
-        frame.reflections = reflectionsOf(camera.reflections);
-        frame.motionBlur = motionBlurOf(camera.motionBlur);
-        frame.depthOfField = depthOfFieldOf(camera.depthOfField);
-        frame.contactShadows = contactShadowsOf(camera.contactShadows);
-        frame.tonemapper = camera.tonemapper <= static_cast<std::uint32_t>(Tonemapper::Linear)
-                               ? static_cast<Tonemapper>(camera.tonemapper)
-                               : Tonemapper::Agx;
-        frame.forward = kForward;
-        const bool kShadows = kSees && settings.shadows.cascades > 0 && settings.shadows.side > 0 &&
-                              settings.shadows.distance > kNear &&
-                              (frame.lights.sun[0] > 0 || frame.lights.sun[1] > 0 || frame.lights.sun[2] > 0);
-        if (kShadows) {
-            fitCascades(settings.shadows,
-                        frame.lights.toSun,
-                        camera,
-                        {kRight, kUp, kForward},
-                        kHalf,
-                        kAspect,
-                        kNear,
-                        frame.shadows);
-        }
-        // The view's side planes in the eye's axes, each normal pointing
-        // out: what lies past one by more than its radius is out of view.
-        const float kWide = std::atan(std::tan(kHalf) * kAspect);
-        const std::array<Vector, 4> kPlanes = {{{0, std::cos(kHalf), std::sin(kHalf)},
-                                                {0, -std::cos(kHalf), std::sin(kHalf)},
-                                                {std::cos(kWide), 0, std::sin(kWide)},
-                                                {-std::cos(kWide), 0, std::sin(kWide)}}};
-        bool full = false;
-        for (const ModelInstance* instance : order) {
-            const Model& kModel = instance->model;
-            if (!wellFormed(*instance)) {
-                ++frame.malformed;
-                continue;
-            }
-            if (kModel.mesh == 0 || (kModel.color & 0xFFU) == 0 || kModel.scaleX == 0 || kModel.scaleY == 0 ||
-                kModel.scaleZ == 0) {
-                ++frame.hidden;
-                continue;
-            }
-            const auto kMesh = meshes.find(kModel.mesh);
-            if (kMesh == meshes.end()) {
-                ++frame.unknownMeshes;
-                continue;
-            }
-            // Relative to the eye in doubles, then floats: far from the
-            // origin, a float would lose the model's place before it is small.
-            const Vector kPlace = {static_cast<float>(instance->position[0] - camera.eye[0]),
-                                   static_cast<float>(instance->position[1] - camera.eye[1]),
-                                   static_cast<float>(instance->position[2] - camera.eye[2])};
-            const bool kTurned = std::ranges::any_of(instance->rotation, [](float value) {
-                return value != 0;
-            });
-            const std::array<Vector, 3> kTurn = turnOf(kTurned ? instance->rotation : std::array<float, 4>{0, 0, 0, 1});
-            const Vector kScale = {kModel.scaleX, kModel.scaleY, kModel.scaleZ};
-            const Bounded& kBounds = kMesh->second;
-            Vector center = kPlace;
-            for (std::size_t column = 0; column < 3; ++column) {
-                for (std::size_t row = 0; row < 3; ++row) {
-                    center[row] += kTurn[column][row] * kScale[column] * kBounds.center[column];
-                }
-            }
-            // A posed mesh may reach past its bind's bounds: twice as far
-            // holds a limb swung about its middle (D508).
-            const float kRadius = kBounds.radius * (instance->joints != 0 ? 2.0F : 1.0F) *
-                                  std::max({std::abs(kScale[0]), std::abs(kScale[1]), std::abs(kScale[2])});
-            SceneDraw draw{.mesh = kModel.mesh, .entity = instance->entity};
-            for (std::size_t column = 0; column < 3; ++column) {
-                for (std::size_t row = 0; row < 3; ++row) {
-                    draw.model[(column * 4) + row] = kTurn[column][row] * kScale[column];
-                    draw.normal[(column * 4) + row] = kTurn[column][row] / kScale[column];
-                }
-            }
-            draw.model[12] = kPlace[0];
-            draw.model[13] = kPlace[1];
-            draw.model[14] = kPlace[2];
-            draw.model[15] = 1;
-            // Where it was: the frame before's turn and place, relative to
-            // this frame's eye.
-            const std::pair kKey{instance->entity, instance->component};
-            draw.previous = draw.model;
-            const auto kBefore = placed.find(kKey);
-            if (kBefore != placed.end()) {
-                for (std::size_t column = 0; column < 3; ++column) {
-                    for (std::size_t row = 0; row < 3; ++row) {
-                        draw.previous[(column * 4) + row] = kBefore->second.turned[(column * 3) + row];
-                    }
-                    draw.previous[12 + column] =
-                        static_cast<float>(kBefore->second.position[column] - camera.eye[column]);
-                }
-            }
-            const Vector kColor = colorOf(kModel.color);
-            draw.color = {kColor[0], kColor[1], kColor[2], static_cast<float>(kModel.color & 0xFFU) / 255.0F};
-            // A draw for each run of parts of one material: the Model's for
-            // all when it names one, else each part's own (D314); runs that
-            // come to one material are one draw.
-            const auto kPlaceOf = [&](std::uint64_t id) -> std::uint32_t {
-                if (id == 0) {
-                    return 0;
-                }
-                const auto kMaterial = materials.find(id);
-                if (kMaterial == materials.end()) {
-                    ++frame.unknownMaterials;
-                    return 0;
-                }
-                return kMaterial->second;
-            };
-            // Its palette, the frame's from here, for its draws and its
-            // shadows' alike, and the frame before's (D510); past the
-            // frame's room, drawn as bound (D508).
-            if (instance->joints != 0 &&
-                !paletteInto(std::span{posed}.subspan(instance->palette, instance->joints),
-                             kBefore != placed.end() ? std::span<const Matrix>{kBefore->second.palette}
-                                                     : std::span<const Matrix>{},
-                             settings.limits.maximumPalette,
-                             frame.palette,
-                             draw)) {
-                ++frame.paletteOverLimit;
-            }
-            std::vector<SceneDraw> runs;
-            const std::uint32_t kOwn = kPlaceOf(kModel.material);
-            for (const Run& kRun : kBounds.runs) {
-                const std::uint32_t kAt = kModel.material != 0 ? kOwn : kPlaceOf(kRun.material);
-                if (!runs.empty() && runs.back().material == kAt) {
-                    runs.back().indexCount += kRun.indexCount;
-                    continue;
-                }
-                draw.firstIndex = kRun.firstIndex;
-                draw.indexCount = kRun.indexCount;
-                draw.material = kAt;
-                runs.push_back(draw);
-            }
-            // A model near enough casts into the shadows, seen or not: a
-            // caster behind the eye still shades what is before it.
-            const float kAway = std::sqrt((center[0] * center[0]) + (center[1] * center[1]) + (center[2] * center[2]));
-            for (const SceneDraw& kRun : runs) {
-                if (kLightShadows) {
-                    candidates.push_back({.draw = kRun, .center = center, .radius = kRadius});
-                }
-                if (frame.shadows.count > 0 && kAway - kRadius <= frame.shadows.distance) {
-                    sunCandidates.push_back({.draw = kRun, .center = center, .radius = kRadius});
-                }
-            }
-            const Vector kSeen = {(kRight[0] * center[0]) + (kRight[1] * center[1]) + (kRight[2] * center[2]),
-                                  (kUp[0] * center[0]) + (kUp[1] * center[1]) + (kUp[2] * center[2]),
-                                  -((kForward[0] * center[0]) + (kForward[1] * center[1]) + (kForward[2] * center[2]))};
-            bool outside = !kSees || kSeen[2] - kRadius > -kNear;
-            for (const Vector& kPlane : kPlanes) {
-                outside = outside || (kPlane[0] * kSeen[0]) + (kPlane[1] * kSeen[1]) + (kPlane[2] * kSeen[2]) > kRadius;
-            }
-            if (outside) {
-                ++frame.culled;
-                continue;
-            }
-            // Past the limit, this model and every one after it are left
-            // out, so what is drawn is a prefix of the order.
-            full = full || frame.drawn == settings.limits.maximumModels;
-            if (full) {
-                ++frame.overLimit;
-                continue;
-            }
-            Placement& now = placing[kKey];
-            for (std::size_t column = 0; column < 3; ++column) {
-                for (std::size_t row = 0; row < 3; ++row) {
-                    now.turned[(column * 3) + row] = draw.model[(column * 4) + row];
-                }
-            }
-            now.position = instance->position;
-            now.palette.assign(frame.palette.begin() + draw.palette,
-                               frame.palette.begin() + draw.palette + draw.joints);
-            frame.skinned += draw.joints != 0 ? 1 : 0;
-            frame.draws.insert(frame.draws.end(), runs.begin(), runs.end());
-            ++frame.drawn;
-            frame.placed += instance->placed ? 1 : 0;
-            frame.tracked += instance->tracked ? 1 : 0;
-        }
-        // The translucent after the opaque, farthest first, so each blends
-        // over what is behind it (D305); the opaque keep their order.
-        const auto kTranslucent = std::ranges::stable_partition(frame.draws, [this](const SceneDraw& draw) {
-            return draw.material >= translucent.size() || !translucent[draw.material];
-        });
-        frame.translucent = kTranslucent.size();
-        const auto kAway = [](const SceneDraw& draw) {
-            return (draw.model[12] * draw.model[12]) + (draw.model[13] * draw.model[13]) +
-                   (draw.model[14] * draw.model[14]);
-        };
-        std::ranges::stable_sort(kTranslucent, [&kAway](const SceneDraw& left, const SceneDraw& right) {
-            return kAway(left) > kAway(right);
-        });
-        // The opaque by their material's program, so a device sets each
-        // once (D485), then by its texture, so it binds each once (D309);
-        // within one, by mesh as they were.
-        const auto kTextureOf = [this](const SceneDraw& draw) {
-            return draw.material < frame.textures.size() ? frame.textures[draw.material] : SceneTextures{};
-        };
-        // A program is its material's alone, so it is known by the
-        // material's place; the engine's own program, nought, first.
-        const auto kProgramOf = [this](const SceneDraw& draw) {
-            return draw.material < frame.programs.size() && frame.programs[draw.material] != nullptr ? draw.material
-                                                                                                     : 0U;
-        };
-        std::ranges::stable_sort(std::ranges::subrange(frame.draws.begin(), kTranslucent.begin()),
-                                 [&kTextureOf, &kProgramOf](const SceneDraw& left, const SceneDraw& right) {
-                                     const std::uint32_t kLeftProgram = kProgramOf(left);
-                                     const std::uint32_t kRightProgram = kProgramOf(right);
-                                     return kLeftProgram != kRightProgram ? kLeftProgram < kRightProgram
-                                                                          : kTextureOf(left) < kTextureOf(right);
-                                 });
-        castIntoCascades();
-        temporal(camera, kSees);
-        frame.metering.snap = frame.metering.enabled && (!meteredBefore || !continuous);
-        meteredBefore = frame.metering.enabled;
-        // The lights and the decals in one clustered structure (D339).
-        named.clear();
-        clusterLights(frame,
-                      punctual,
-                      camera,
-                      {kRight, kUp, kForward},
-                      {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
-                      settings.limits,
-                      shadowed,
-                      named);
-        clusterDecals(frame,
-                      decals,
-                      camera,
-                      {kRight, kUp, kForward},
-                      {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
-                      settings.limits,
-                      named);
-        clusterProbes(frame,
-                      probes,
-                      camera,
-                      {kRight, kUp, kForward},
-                      {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
-                      settings.limits,
-                      named);
-        packClusters(frame, named, settings.limits);
-        shadowLights(frame, shadowed, candidates, settings.lightShadows, settings.limits);
-        // The particles, on a clock the Host's timeline moves (D352).
-        const std::array<Vector, 3> kAxes = {kRight, kUp, kForward};
-        const ViewShape kView{.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear};
-        particles.update(frame.particles,
-                         emitters,
-                         trails,
-                         beams,
-                         {.eye = camera.eye,
-                          .sees =
-                              [&kAxes, &kView](const Vector& center, float radius) {
-                                  return !outsideView(kAxes, kView, center, radius);
-                              }},
-                         materials,
-                         settings.limits.particles,
-                         camera.elapsed);
-        // The lines shown, on the material after the frame's own (D464).
-        addLines(frame, lines, camera.eye);
-        return frame;
+    order.clear();
+    for (const ModelInstance& instance : extracted) {
+        order.push_back(&instance);
     }
-
-    /// Each cascade's casters (D298): the models whose bounding spheres
-    /// reach its box, which runs from the shadows' distance toward the sun
-    /// to past its slice, in draw order, one after another; a model in two
-    /// cascades is in both. Past the models' limit, the rest are left out.
-    void castIntoCascades() {
-        SceneShadows& shadows = frame.shadows;
-        for (std::size_t at = 0; at < shadows.count; ++at) {
-            ShadowCascade& cascade = shadows.cascades[at];
-            const Matrix& kSeen = cascade.viewProjection;
-            // How far a meter reaches along each of the cascade's axes.
-            std::array<float, 3> reach{};
+    std::ranges::sort(order, [](const ModelInstance* left, const ModelInstance* right) {
+        return std::tuple{left->model.mesh, left->entity, left->component} <
+               std::tuple{right->model.mesh, right->entity, right->component};
+    });
+    // A camera that sees nothing culls everything.
+    const bool kSees = std::ranges::all_of(camera.eye,
+                                           [](double value) {
+                                               return std::isfinite(value);
+                                           }) &&
+                       std::isfinite(camera.yaw) && std::isfinite(camera.pitch) && std::isfinite(camera.fovY) &&
+                       std::isfinite(camera.near) && std::isfinite(camera.aspect) && camera.fovY > 0 &&
+                       camera.fovY < std::numbers::pi_v<float> && camera.near > 0 && camera.aspect > 0 &&
+                       orientationSound(camera);
+    const auto [kRight, kUp, kForward] = kSees ? axesOf(camera) : axesOf(0, 0);
+    const float kHalf = kSees ? camera.fovY / 2 : 0.5F;
+    const float kAspect = kSees ? camera.aspect : 1.0F;
+    const float kNear = kSees ? camera.near : 0.1F;
+    const CameraMatrices kMatrices = matricesOf(SceneCamera{.yaw = kSees ? camera.yaw : 0,
+                                                            .pitch = kSees ? camera.pitch : 0,
+                                                            .fovY = kHalf * 2,
+                                                            .near = kNear,
+                                                            .aspect = kAspect,
+                                                            .orientation = kSees ? camera.orientation : std::nullopt});
+    frame.view = kMatrices.view;
+    frame.projection = kMatrices.projection;
+    frame.exposure = std::isfinite(camera.exposure) ? camera.exposure : 15.0F;
+    frame.metering = meteringOf(camera);
+    frame.grading = gradingOf(camera.grading);
+    postProcessesOf(camera);
+    frame.occlusion = occlusionOf(camera.occlusion);
+    frame.bloom = bloomOf(camera.bloom);
+    frame.reflections = reflectionsOf(camera.reflections);
+    frame.motionBlur = motionBlurOf(camera.motionBlur);
+    frame.depthOfField = depthOfFieldOf(camera.depthOfField);
+    frame.contactShadows = contactShadowsOf(camera.contactShadows);
+    frame.tonemapper = camera.tonemapper <= static_cast<std::uint32_t>(Tonemapper::Linear)
+                           ? static_cast<Tonemapper>(camera.tonemapper)
+                           : Tonemapper::Agx;
+    frame.forward = kForward;
+    const bool kShadows = kSees && settings.shadows.cascades > 0 && settings.shadows.side > 0 &&
+                          settings.shadows.distance > kNear &&
+                          (frame.lights.sun[0] > 0 || frame.lights.sun[1] > 0 || frame.lights.sun[2] > 0);
+    if (kShadows) {
+        fitCascades(settings.shadows,
+                    frame.lights.toSun,
+                    camera,
+                    {kRight, kUp, kForward},
+                    kHalf,
+                    kAspect,
+                    kNear,
+                    frame.shadows);
+    }
+    // The view's side planes in the eye's axes, each normal pointing
+    // out: what lies past one by more than its radius is out of view.
+    const float kWide = std::atan(std::tan(kHalf) * kAspect);
+    const std::array<Vector, 4> kPlanes = {{{0, std::cos(kHalf), std::sin(kHalf)},
+                                            {0, -std::cos(kHalf), std::sin(kHalf)},
+                                            {std::cos(kWide), 0, std::sin(kWide)},
+                                            {-std::cos(kWide), 0, std::sin(kWide)}}};
+    bool full = false;
+    for (const ModelInstance* instance : order) {
+        const Model& kModel = instance->model;
+        if (!wellFormed(*instance)) {
+            ++frame.malformed;
+            continue;
+        }
+        if (kModel.mesh == 0 || (kModel.color & 0xFFU) == 0 || kModel.scaleX == 0 || kModel.scaleY == 0 ||
+            kModel.scaleZ == 0) {
+            ++frame.hidden;
+            continue;
+        }
+        const auto kMesh = meshes.find(kModel.mesh);
+        if (kMesh == meshes.end()) {
+            ++frame.unknownMeshes;
+            continue;
+        }
+        // Relative to the eye in doubles, then floats: far from the
+        // origin, a float would lose the model's place before it is small.
+        const Vector kPlace = {static_cast<float>(instance->position[0] - camera.eye[0]),
+                               static_cast<float>(instance->position[1] - camera.eye[1]),
+                               static_cast<float>(instance->position[2] - camera.eye[2])};
+        const bool kTurned = std::ranges::any_of(instance->rotation, [](float value) {
+            return value != 0;
+        });
+        const std::array<Vector, 3> kTurn = turnOf(kTurned ? instance->rotation : std::array<float, 4>{0, 0, 0, 1});
+        const Vector kScale = {kModel.scaleX, kModel.scaleY, kModel.scaleZ};
+        const Bounded& kBounds = kMesh->second;
+        Vector center = kPlace;
+        for (std::size_t column = 0; column < 3; ++column) {
             for (std::size_t row = 0; row < 3; ++row) {
-                reach[row] = std::sqrt((kSeen[row] * kSeen[row]) + (kSeen[4 + row] * kSeen[4 + row]) +
-                                       (kSeen[8 + row] * kSeen[8 + row]));
+                center[row] += kTurn[column][row] * kScale[column] * kBounds.center[column];
             }
-            cascade.firstCaster = static_cast<std::uint32_t>(shadows.casters.size());
-            for (const ShadowCandidate& candidate : sunCandidates) {
-                bool inside = true;
+        }
+        // A posed mesh may reach past its bind's bounds: twice as far
+        // holds a limb swung about its middle (D508).
+        const float kRadius = kBounds.radius * (instance->joints != 0 ? 2.0F : 1.0F) *
+                              std::max({std::abs(kScale[0]), std::abs(kScale[1]), std::abs(kScale[2])});
+        SceneDraw draw{.mesh = kModel.mesh, .entity = instance->entity};
+        for (std::size_t column = 0; column < 3; ++column) {
+            for (std::size_t row = 0; row < 3; ++row) {
+                draw.model[(column * 4) + row] = kTurn[column][row] * kScale[column];
+                draw.normal[(column * 4) + row] = kTurn[column][row] / kScale[column];
+            }
+        }
+        draw.model[12] = kPlace[0];
+        draw.model[13] = kPlace[1];
+        draw.model[14] = kPlace[2];
+        draw.model[15] = 1;
+        // Where it was: the frame before's turn and place, relative to
+        // this frame's eye.
+        const std::pair kKey{instance->entity, instance->component};
+        draw.previous = draw.model;
+        const auto kBefore = placed.find(kKey);
+        if (kBefore != placed.end()) {
+            for (std::size_t column = 0; column < 3; ++column) {
                 for (std::size_t row = 0; row < 3; ++row) {
-                    const float kAt = (kSeen[row] * candidate.center[0]) + (kSeen[4 + row] * candidate.center[1]) +
-                                      (kSeen[8 + row] * candidate.center[2]) + kSeen[12 + row];
-                    const float kMargin = candidate.radius * reach[row];
-                    inside = inside && kAt >= (row == 2 ? 0.0F : -1.0F) - kMargin && kAt <= 1 + kMargin;
+                    draw.previous[(column * 4) + row] = kBefore->second.turned[(column * 3) + row];
                 }
-                if (!inside) {
-                    continue;
-                }
-                if (shadows.casters.size() < settings.limits.maximumModels) {
-                    shadows.casters.push_back(candidate.draw);
-                } else {
-                    ++shadows.overLimit;
-                }
+                draw.previous[12 + column] = static_cast<float>(kBefore->second.position[column] - camera.eye[column]);
             }
-            cascade.casterCount = static_cast<std::uint32_t>(shadows.casters.size()) - cascade.firstCaster;
         }
+        const Vector kColor = colorOf(kModel.color);
+        draw.color = {kColor[0], kColor[1], kColor[2], static_cast<float>(kModel.color & 0xFFU) / 255.0F};
+        // A draw for each run of parts of one material: the Model's for
+        // all when it names one, else each part's own (D314); runs that
+        // come to one material are one draw.
+        const auto kPlaceOf = [&](std::uint64_t id) -> std::uint32_t {
+            if (id == 0) {
+                return 0;
+            }
+            const auto kMaterial = materials.find(id);
+            if (kMaterial == materials.end()) {
+                ++frame.unknownMaterials;
+                return 0;
+            }
+            return kMaterial->second;
+        };
+        // Its palette, the frame's from here, for its draws and its
+        // shadows' alike, and the frame before's (D510); past the
+        // frame's room, drawn as bound (D508).
+        if (instance->joints != 0 &&
+            !paletteInto(std::span{posed}.subspan(instance->palette, instance->joints),
+                         kBefore != placed.end() ? std::span<const Matrix>{kBefore->second.palette}
+                                                 : std::span<const Matrix>{},
+                         settings.limits.maximumPalette,
+                         frame.palette,
+                         draw)) {
+            ++frame.paletteOverLimit;
+        }
+        std::vector<SceneDraw> runs;
+        const std::uint32_t kOwn = kPlaceOf(kModel.material);
+        for (const Run& kRun : kBounds.runs) {
+            const std::uint32_t kAt = kModel.material != 0 ? kOwn : kPlaceOf(kRun.material);
+            if (!runs.empty() && runs.back().material == kAt) {
+                runs.back().indexCount += kRun.indexCount;
+                continue;
+            }
+            draw.firstIndex = kRun.firstIndex;
+            draw.indexCount = kRun.indexCount;
+            draw.material = kAt;
+            runs.push_back(draw);
+        }
+        // A model near enough casts into the shadows, seen or not: a
+        // caster behind the eye still shades what is before it.
+        const float kAway = std::sqrt((center[0] * center[0]) + (center[1] * center[1]) + (center[2] * center[2]));
+        for (const SceneDraw& kRun : runs) {
+            if (kLightShadows) {
+                candidates.push_back({.draw = kRun, .center = center, .radius = kRadius});
+            }
+            if (frame.shadows.count > 0 && kAway - kRadius <= frame.shadows.distance) {
+                sunCandidates.push_back({.draw = kRun, .center = center, .radius = kRadius});
+            }
+        }
+        const Vector kSeen = {(kRight[0] * center[0]) + (kRight[1] * center[1]) + (kRight[2] * center[2]),
+                              (kUp[0] * center[0]) + (kUp[1] * center[1]) + (kUp[2] * center[2]),
+                              -((kForward[0] * center[0]) + (kForward[1] * center[1]) + (kForward[2] * center[2]))};
+        bool outside = !kSees || kSeen[2] - kRadius > -kNear;
+        for (const Vector& kPlane : kPlanes) {
+            outside = outside || (kPlane[0] * kSeen[0]) + (kPlane[1] * kSeen[1]) + (kPlane[2] * kSeen[2]) > kRadius;
+        }
+        if (outside) {
+            ++frame.culled;
+            continue;
+        }
+        // Past the limit, this model and every one after it are left
+        // out, so what is drawn is a prefix of the order.
+        full = full || frame.drawn == settings.limits.maximumModels;
+        if (full) {
+            ++frame.overLimit;
+            continue;
+        }
+        Placement& now = placing[kKey];
+        for (std::size_t column = 0; column < 3; ++column) {
+            for (std::size_t row = 0; row < 3; ++row) {
+                now.turned[(column * 3) + row] = draw.model[(column * 4) + row];
+            }
+        }
+        now.position = instance->position;
+        now.palette.assign(frame.palette.begin() + draw.palette, frame.palette.begin() + draw.palette + draw.joints);
+        frame.skinned += draw.joints != 0 ? 1 : 0;
+        frame.draws.insert(frame.draws.end(), runs.begin(), runs.end());
+        ++frame.drawn;
+        frame.placed += instance->placed ? 1 : 0;
+        frame.tracked += instance->tracked ? 1 : 0;
     }
+    // The translucent after the opaque, farthest first, so each blends
+    // over what is behind it (D305); the opaque keep their order.
+    const auto kTranslucent = std::ranges::stable_partition(frame.draws, [this](const SceneDraw& draw) {
+        return draw.material >= translucent.size() || !translucent[draw.material];
+    });
+    frame.translucent = kTranslucent.size();
+    const auto kAway = [](const SceneDraw& draw) {
+        return (draw.model[12] * draw.model[12]) + (draw.model[13] * draw.model[13]) +
+               (draw.model[14] * draw.model[14]);
+    };
+    std::ranges::stable_sort(kTranslucent, [&kAway](const SceneDraw& left, const SceneDraw& right) {
+        return kAway(left) > kAway(right);
+    });
+    // The opaque by their material's program, so a device sets each
+    // once (D485), then by its texture, so it binds each once (D309);
+    // within one, by mesh as they were.
+    const auto kTextureOf = [this](const SceneDraw& draw) {
+        return draw.material < frame.textures.size() ? frame.textures[draw.material] : SceneTextures{};
+    };
+    // A program is its material's alone, so it is known by the
+    // material's place; the engine's own program, nought, first.
+    const auto kProgramOf = [this](const SceneDraw& draw) {
+        return draw.material < frame.programs.size() && frame.programs[draw.material] != nullptr ? draw.material : 0U;
+    };
+    std::ranges::stable_sort(std::ranges::subrange(frame.draws.begin(), kTranslucent.begin()),
+                             [&kTextureOf, &kProgramOf](const SceneDraw& left, const SceneDraw& right) {
+                                 const std::uint32_t kLeftProgram = kProgramOf(left);
+                                 const std::uint32_t kRightProgram = kProgramOf(right);
+                                 return kLeftProgram != kRightProgram ? kLeftProgram < kRightProgram
+                                                                      : kTextureOf(left) < kTextureOf(right);
+                             });
+    castIntoCascades();
+    temporal(camera, kSees);
+    frame.metering.snap = frame.metering.enabled && (!meteredBefore || !continuous);
+    meteredBefore = frame.metering.enabled;
+    // The lights and the decals in one clustered structure (D339).
+    named.clear();
+    clusterLights(frame,
+                  punctual,
+                  camera,
+                  {kRight, kUp, kForward},
+                  {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
+                  settings.limits,
+                  shadowed,
+                  named);
+    clusterDecals(frame,
+                  decals,
+                  camera,
+                  {kRight, kUp, kForward},
+                  {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
+                  settings.limits,
+                  named);
+    clusterProbes(frame,
+                  probes,
+                  camera,
+                  {kRight, kUp, kForward},
+                  {.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear},
+                  settings.limits,
+                  named);
+    packClusters(frame, named, settings.limits);
+    shadowLights(frame, shadowed, candidates, settings.lightShadows, settings.limits);
+    // The particles, on a clock the Host's timeline moves (D352).
+    const std::array<Vector, 3> kAxes = {kRight, kUp, kForward};
+    const ViewShape kView{.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear};
+    particles.update(frame.particles,
+                     emitters,
+                     trails,
+                     beams,
+                     {.eye = camera.eye,
+                      .sees =
+                          [&kAxes, &kView](const Vector& center, float radius) {
+                              return !outsideView(kAxes, kView, center, radius);
+                          }},
+                     materials,
+                     settings.limits.particles,
+                     camera.elapsed);
+    // The lines shown, on the material after the frame's own (D464).
+    addLines(frame, lines, camera.eye);
+    return frame;
+}
 
-    /// The temporal inputs (D291): the jitter, and the frame before's view
-    /// taking this frame's places, unless this is the first or the eye cut.
-    void temporal(const SceneCamera& camera, bool sees) {
-        std::swap(placed, placing);
-        placing.clear();
-        SceneTemporal& now = frame.temporal;
-        now.enabled = settings.antiAliasing == AntiAliasing::Taa && sees;
-        frame.fxaa = settings.antiAliasing == AntiAliasing::Fxaa && sees;
-        frame.samples = settings.antiAliasing == AntiAliasing::Msaa && sees ? settings.multisamples : 1;
-        now.jitter = now.enabled ? temporalJitter(frames) : std::array<float, 2>{0, 0};
-        const Matrix kViewProjection = times(frame.projection, frame.view);
-        std::array<double, 3> moved{};
-        for (std::size_t axis = 0; axis < 3 && previousEye.has_value(); ++axis) {
-            moved[axis] = camera.eye[axis] - (*previousEye)[axis];
+void Scene::State::castIntoCascades() {
+    SceneShadows& shadows = frame.shadows;
+    for (std::size_t at = 0; at < shadows.count; ++at) {
+        ShadowCascade& cascade = shadows.cascades[at];
+        const Matrix& kSeen = cascade.viewProjection;
+        // How far a meter reaches along each of the cascade's axes.
+        std::array<float, 3> reach{};
+        for (std::size_t row = 0; row < 3; ++row) {
+            reach[row] = std::sqrt((kSeen[row] * kSeen[row]) + (kSeen[4 + row] * kSeen[4 + row]) +
+                                   (kSeen[8 + row] * kSeen[8 + row]));
         }
-        continuous = previousEye.has_value() && (moved[0] * moved[0]) + (moved[1] * moved[1]) + (moved[2] * moved[2]) <=
-                                                    kCutDistance * kCutDistance;
-        now.history = now.enabled && continuous;
-        now.previousViewProjection = kViewProjection;
-        if (now.history) {
-            // The frame before's eye-relative places are this frame's moved
-            // by how far the eye went.
-            now.previousViewProjection = previousViewProjection;
-            for (std::size_t row = 0; row < 4; ++row) {
-                for (std::size_t axis = 0; axis < 3; ++axis) {
-                    now.previousViewProjection[12 + row] +=
-                        previousViewProjection[(axis * 4) + row] * static_cast<float>(moved[axis]);
-                }
+        cascade.firstCaster = static_cast<std::uint32_t>(shadows.casters.size());
+        for (const ShadowCandidate& candidate : sunCandidates) {
+            bool inside = true;
+            for (std::size_t row = 0; row < 3; ++row) {
+                const float kAt = (kSeen[row] * candidate.center[0]) + (kSeen[4 + row] * candidate.center[1]) +
+                                  (kSeen[8 + row] * candidate.center[2]) + kSeen[12 + row];
+                const float kMargin = candidate.radius * reach[row];
+                inside = inside && kAt >= (row == 2 ? 0.0F : -1.0F) - kMargin && kAt <= 1 + kMargin;
+            }
+            if (!inside) {
+                continue;
+            }
+            if (shadows.casters.size() < settings.limits.maximumModels) {
+                shadows.casters.push_back(candidate.draw);
+            } else {
+                ++shadows.overLimit;
             }
         }
-        previousEye = sees ? std::optional{camera.eye} : std::nullopt;
-        previousViewProjection = kViewProjection;
-        ++frames;
+        cascade.casterCount = static_cast<std::uint32_t>(shadows.casters.size()) - cascade.firstCaster;
     }
-};
+}
+
+void Scene::State::temporal(const SceneCamera& camera, bool sees) {
+    std::swap(placed, placing);
+    placing.clear();
+    SceneTemporal& now = frame.temporal;
+    now.enabled = settings.antiAliasing == AntiAliasing::Taa && sees;
+    frame.fxaa = settings.antiAliasing == AntiAliasing::Fxaa && sees;
+    frame.samples = settings.antiAliasing == AntiAliasing::Msaa && sees ? settings.multisamples : 1;
+    now.jitter = now.enabled ? temporalJitter(frames) : std::array<float, 2>{0, 0};
+    const Matrix kViewProjection = times(frame.projection, frame.view);
+    std::array<double, 3> moved{};
+    for (std::size_t axis = 0; axis < 3 && previousEye.has_value(); ++axis) {
+        moved[axis] = camera.eye[axis] - (*previousEye)[axis];
+    }
+    continuous = previousEye.has_value() &&
+                 (moved[0] * moved[0]) + (moved[1] * moved[1]) + (moved[2] * moved[2]) <= kCutDistance * kCutDistance;
+    now.history = now.enabled && continuous;
+    now.previousViewProjection = kViewProjection;
+    if (now.history) {
+        // The frame before's eye-relative places are this frame's moved
+        // by how far the eye went.
+        now.previousViewProjection = previousViewProjection;
+        for (std::size_t row = 0; row < 4; ++row) {
+            for (std::size_t axis = 0; axis < 3; ++axis) {
+                now.previousViewProjection[12 + row] +=
+                    previousViewProjection[(axis * 4) + row] * static_cast<float>(moved[axis]);
+            }
+        }
+    }
+    previousEye = sees ? std::optional{camera.eye} : std::nullopt;
+    previousViewProjection = kViewProjection;
+    ++frames;
+}
 
 Scene::Scene(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
 }
@@ -756,185 +633,6 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
     return std::unique_ptr<Scene>{new Scene{std::move(state)}};
 }
 
-namespace {
-
-/// Each of the game's trail or beam components copied out of `world`,
-/// where its entity's pose puts it (D354).
-template <typename Ribbon>
-void extractRibbons(world::World& world,
-                    std::vector<world::ColumnQuery>& queries,
-                    const std::optional<schema::ComponentRuntimeId>& pose,
-                    std::vector<RibbonInstance<Ribbon>>& made) {
-    made.clear();
-    for (std::size_t component = 0; component < queries.size(); ++component) {
-        queries[component].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
-            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-                RibbonInstance<Ribbon> instance{.entity = chunk.entities[row],
-                                                .component = static_cast<std::uint32_t>(component)};
-                std::memcpy(&instance.ribbon, chunk.columns[0] + (row * sizeof(Ribbon)), sizeof(Ribbon));
-                if (pose) {
-                    if (const auto* placed =
-                            static_cast<const physics3d::Pose3D*>(world.getErased(instance.entity, *pose))) {
-                        instance.position = {placed->x, placed->y, placed->z};
-                    }
-                }
-                made.push_back(instance);
-            }
-        });
-    }
-}
-
-} // namespace
-
-void Scene::extract(world::World& world, const world_animation::AnimationQueries* poses, const HandsInWorld* hands) {
-    State& state = *state_;
-    state.extracted.clear();
-    state.posed.clear();
-    for (std::size_t component = 0; component < state.models.size(); ++component) {
-        state.models[component].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
-            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-                ModelInstance instance{.entity = chunk.entities[row],
-                                       .component = static_cast<std::uint32_t>(component)};
-                std::memcpy(&instance.model, chunk.columns[0] + (row * sizeof(Model)), sizeof(Model));
-                if (state.pose) {
-                    if (const auto* pose =
-                            static_cast<const physics3d::Pose3D*>(world.getErased(instance.entity, *state.pose))) {
-                        instance.position = {pose->x, pose->y, pose->z};
-                        instance.rotation = {pose->qx, pose->qy, pose->qz, pose->qw};
-                    }
-                }
-                // Drawn where it is placed, if it is (D665).
-                for (const schema::ComponentRuntimeId kPlacement : state.placements) {
-                    if (const auto* placed = static_cast<const Placed*>(world.getErased(instance.entity, kPlacement));
-                        placed != nullptr && placed->placed) {
-                        instance.position = {placed->x, placed->y, placed->z};
-                        instance.placed = true;
-                        break;
-                    }
-                }
-                // Drawn where its hand is this frame, if it is (D676).
-                for (const schema::ComponentRuntimeId kTracking : state.tracking) {
-                    const auto* tracked = static_cast<const Tracked*>(world.getErased(instance.entity, kTracking));
-                    if (tracked == nullptr || hands == nullptr || tracked->hand == 0 || tracked->hand > hands->size()) {
-                        continue;
-                    }
-                    if (const auto& kHand = (*hands)[tracked->hand - 1]; kHand.has_value()) {
-                        instance.position = {
-                            (*kHand)[0] + tracked->x, (*kHand)[1] + tracked->y, (*kHand)[2] + tracked->z};
-                        instance.placed = false;
-                        instance.tracked = true;
-                        break;
-                    }
-                }
-                // Drawn `lift` along the pose's own up (D514).
-                const auto [kX, kY, kZ, kW] = instance.rotation;
-                const double kLift = instance.model.lift;
-                instance.position[0] += kLift * 2.0 * ((kX * kY) - (kW * kZ));
-                instance.position[1] += kLift * (1.0 - (2.0 * ((kX * kX) + (kZ * kZ))));
-                instance.position[2] += kLift * 2.0 * ((kY * kZ) + (kW * kX));
-                state.posePalette(poses, instance);
-                state.extracted.push_back(instance);
-            }
-        });
-    }
-    // The first set, if any: a game declares at most one of each.
-    const auto kFirstOf = [&world]<typename T>(std::optional<world::ColumnQuery>& query, std::optional<T>& into) {
-        into.reset();
-        if (!query.has_value()) {
-            return;
-        }
-        query->forEachChunk(world, [&](const world::ColumnChunk& chunk) {
-            if (!into.has_value() && !chunk.entities.empty()) {
-                T value;
-                std::memcpy(&value, chunk.columns[0], sizeof(T));
-                into = value;
-            }
-        });
-    };
-    kFirstOf(state.sun, state.sunNow);
-    kFirstOf(state.sky, state.skyNow);
-    state.punctual.clear();
-    for (auto& [query, spot] : state.lightQueries) {
-        const bool kSpot = spot;
-        query.forEachChunk(world, [&](const world::ColumnChunk& chunk) {
-            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-                LightInstance instance{.entity = chunk.entities[row], .spot = kSpot};
-                if (kSpot) {
-                    std::memcpy(&instance.light, chunk.columns[0] + (row * sizeof(SpotLight)), sizeof(SpotLight));
-                } else {
-                    PointLight point;
-                    std::memcpy(&point, chunk.columns[0] + (row * sizeof(PointLight)), sizeof(PointLight));
-                    instance.light = SpotLight{
-                        .lumens = point.lumens, .range = point.range, .color = point.color, .shadows = point.shadows};
-                }
-                if (state.pose) {
-                    if (const auto* pose =
-                            static_cast<const physics3d::Pose3D*>(world.getErased(instance.entity, *state.pose))) {
-                        instance.position = {pose->x, pose->y, pose->z};
-                        instance.rotation = {pose->qx, pose->qy, pose->qz, pose->qw};
-                    }
-                }
-                state.punctual.push_back(instance);
-            }
-        });
-    }
-    state.probes.clear();
-    for (world::ColumnQuery& query : state.probeQueries) {
-        query.forEachChunk(world, [&](const world::ColumnChunk& chunk) {
-            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-                ProbeInstance instance{.entity = chunk.entities[row]};
-                std::memcpy(
-                    &instance.probe, chunk.columns[0] + (row * sizeof(ReflectionProbe)), sizeof(ReflectionProbe));
-                if (state.pose) {
-                    if (const auto* pose =
-                            static_cast<const physics3d::Pose3D*>(world.getErased(instance.entity, *state.pose))) {
-                        instance.position = {pose->x, pose->y, pose->z};
-                    }
-                }
-                state.probes.push_back(instance);
-            }
-        });
-    }
-    state.emitters.clear();
-    for (std::size_t component = 0; component < state.emitterQueries.size(); ++component) {
-        state.emitterQueries[component].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
-            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-                EmitterInstance instance{.entity = chunk.entities[row],
-                                         .component = static_cast<std::uint32_t>(component)};
-                std::memcpy(
-                    &instance.emitter, chunk.columns[0] + (row * sizeof(ParticleEmitter)), sizeof(ParticleEmitter));
-                if (state.pose) {
-                    if (const auto* pose =
-                            static_cast<const physics3d::Pose3D*>(world.getErased(instance.entity, *state.pose))) {
-                        instance.position = {pose->x, pose->y, pose->z};
-                        instance.way = turnOf({pose->qx, pose->qy, pose->qz, pose->qw})[1];
-                    }
-                }
-                state.emitters.push_back(instance);
-            }
-        });
-    }
-    extractRibbons(world, state.trailQueries, state.pose, state.trails);
-    extractRibbons(world, state.beamQueries, state.pose, state.beams);
-    state.decals.clear();
-    for (world::ColumnQuery& query : state.decalQueries) {
-        query.forEachChunk(world, [&](const world::ColumnChunk& chunk) {
-            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
-                DecalInstance instance{.entity = chunk.entities[row]};
-                std::memcpy(&instance.decal, chunk.columns[0] + (row * sizeof(Decal)), sizeof(Decal));
-                if (state.pose) {
-                    if (const auto* pose =
-                            static_cast<const physics3d::Pose3D*>(world.getErased(instance.entity, *state.pose))) {
-                        instance.position = {pose->x, pose->y, pose->z};
-                        instance.rotation = {pose->qx, pose->qy, pose->qz, pose->qw};
-                    }
-                }
-                state.decals.push_back(instance);
-            }
-        });
-    }
-}
-
 void Scene::shownAt(double seconds) noexcept {
     state_->seconds = std::isfinite(seconds) ? seconds : 0;
 }
@@ -965,38 +663,6 @@ std::array<float, 2> temporalJitter(std::uint64_t frame) noexcept {
     };
     const std::uint64_t kIndex = (frame % 8) + 1;
     return {kRadical(kIndex, 2) - 0.5F, kRadical(kIndex, 3) - 0.5F};
-}
-
-std::span<const Matrix> Scene::extractedPalette() const noexcept {
-    return state_->posed;
-}
-
-std::span<const ModelInstance> Scene::extracted() const noexcept {
-    return state_->extracted;
-}
-
-std::span<const LightInstance> Scene::extractedLights() const noexcept {
-    return state_->punctual;
-}
-
-std::span<const ProbeInstance> Scene::extractedProbes() const noexcept {
-    return state_->probes;
-}
-
-std::span<const EmitterInstance> Scene::extractedEmitters() const noexcept {
-    return state_->emitters;
-}
-
-std::span<const TrailInstance> Scene::extractedTrails() const noexcept {
-    return state_->trails;
-}
-
-std::span<const BeamInstance> Scene::extractedBeams() const noexcept {
-    return state_->beams;
-}
-
-std::span<const DecalInstance> Scene::extractedDecals() const noexcept {
-    return state_->decals;
 }
 
 std::shared_ptr<const mesh::Mesh> Scene::mesh(std::uint64_t id) const {
