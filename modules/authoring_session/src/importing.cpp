@@ -266,11 +266,14 @@ result::Result<Imported> importAsset(const std::filesystem::path& game,
     // A mesh's materials mapped to identities of their own by the cook
     // tool, as an author's `rawframe-cook --map` would (D316): the mesh
     // alone, not every source of the game again, which took past the wait
-    // on a loaded sanitized tree (D536).
+    // on a loaded sanitized tree (D536). Five minutes only bounds a tool
+    // that never ends: the mesh alone took past thirty seconds under the
+    // thread sanitizer on a loaded runner, and a mesh left unmapped does
+    // not cook.
     if (made.kind == "mesh" && !cook.empty()) {
         auto mapping = process::Child::start({.program = cook, .arguments = {"--map", kDirectory.string(), made.path}});
         if (mapping.has_value()) {
-            const auto kUntil = std::chrono::steady_clock::now() + std::chrono::seconds{30};
+            const auto kUntil = std::chrono::steady_clock::now() + std::chrono::minutes{5};
             while (!mapping->exited().has_value() && std::chrono::steady_clock::now() < kUntil) {
                 std::this_thread::sleep_for(std::chrono::milliseconds{20});
             }
