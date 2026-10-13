@@ -110,7 +110,14 @@ struct ReplicationServer::State {
     struct Changed {
         std::uint64_t publish = 0;
         std::vector<world::EntityHandle> entities;
+        /// The entities that appeared and that were gone in it (D745).
+        std::vector<world::EntityHandle> appeared;
+        std::vector<world::EntityHandle> gone;
     };
+    /// The publish before's entities, in slot order.
+    std::vector<world::EntityHandle> previousEntities;
+    /// One connection's entities gone or appeared since its last turn.
+    std::vector<world::EntityHandle> comings;
     std::deque<Changed> changed;
     /// The entities one connection's values are looked at for, and those
     /// it is still not known to hold all of.
@@ -204,7 +211,8 @@ struct ReplicationServer::State {
     void publish(world::World& world, world::TickIndex tick);
 
     /// Keeps which entities' values changed since the publish before
-    /// (D744), as `changed`'s newest.
+    /// (D744), and which appeared and were gone (D745), as `changed`'s
+    /// newest.
     void noteChanges();
 
     void locate(world::World& world);

@@ -539,6 +539,7 @@ void ReplicationServer::forgetWorld() noexcept {
     // Another World's values are no earlier state of the next one's.
     state.previousPresent.clear();
     state.previousEncoded.clear();
+    state.previousEntities.clear();
     state.changed.clear();
 }
 
@@ -668,9 +669,11 @@ std::size_t ReplicationServer::heldBytes() const noexcept {
                         capacityBytes(state.candidates) + capacityBytes(state.records) + capacityBytes(state.datagram) +
                         capacityBytes(state.frame) + capacityBytes(state.inDatagram) +
                         capacityBytes(state.previousPresent) + capacityBytes(state.previousEncoded) +
-                        capacityBytes(state.looking) + capacityBytes(state.unsettling);
+                        capacityBytes(state.looking) + capacityBytes(state.unsettling) +
+                        capacityBytes(state.previousEntities) + capacityBytes(state.comings);
     for (const State::Changed& kChanged : state.changed) {
-        bytes += sizeof(State::Changed) + capacityBytes(kChanged.entities);
+        bytes += sizeof(State::Changed) + capacityBytes(kChanged.entities) + capacityBytes(kChanged.appeared) +
+                 capacityBytes(kChanged.gone);
     }
     for (const auto& [id, peer] : state.peers) {
         bytes += sizeof(Peer) + kNodeOverhead + capacityBytes(peer.retired) + capacityBytes(peer.lastCommand) +

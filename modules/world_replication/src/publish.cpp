@@ -126,6 +126,30 @@ void ReplicationServer::State::noteChanges() {
     }
     newest.publish = publishes;
     newest.entities.clear();
+    newest.appeared.clear();
+    newest.gone.clear();
+    // The entities, both in slot order: one in a slot the publish before
+    // held another in, or none, appeared; the other is gone.
+    std::size_t earlier = 0;
+    for (const PresentEntity& kNow : entities) {
+        while (earlier < previousEntities.size() && previousEntities[earlier].slot < kNow.entity.slot) {
+            newest.gone.push_back(previousEntities[earlier++]);
+        }
+        if (earlier < previousEntities.size() && previousEntities[earlier] == kNow.entity) {
+            ++earlier;
+            continue;
+        }
+        if (earlier < previousEntities.size() && previousEntities[earlier].slot == kNow.entity.slot) {
+            newest.gone.push_back(previousEntities[earlier++]);
+        }
+        newest.appeared.push_back(kNow.entity);
+    }
+    newest.gone.insert(
+        newest.gone.end(), previousEntities.begin() + static_cast<std::ptrdiff_t>(earlier), previousEntities.end());
+    previousEntities.clear();
+    for (const PresentEntity& kNow : entities) {
+        previousEntities.push_back(kNow.entity);
+    }
     // Both in slot, then table, order: walked together.
     std::size_t before = 0;
     const auto kEarlier = [](const PresentValue& left, const PresentValue& right) {
@@ -348,25 +372,54 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         return;
     }
     const std::array<double, 3>* const kViewer = locationOf(peer.player);
+    // Without interest, what a connection holds changes only as entities
+    // come and go (D745): it retires those gone and declares those that
+    // appeared since its last turn, unless those are no longer kept or the
+    // bound on mappings left some undeclared. Otherwise every entity is
+    // looked at.
+    const bool kComings = !settings.interest && !peer.bounded && peer.lookedAt.has_value() && !changed.empty() &&
+                          changed.front().publish <= *peer.lookedAt + 1;
+    const auto kComing = [&](std::vector<world::EntityHandle> Changed::* which) {
+        comings.clear();
+        for (const Changed& kChanged : changed) {
+            if (kChanged.publish > *peer.lookedAt) {
+                comings.insert(comings.end(), (kChanged.*which).begin(), (kChanged.*which).end());
+            }
+        }
+        std::ranges::sort(comings);
+        comings.erase(std::ranges::unique(comings).begin(), comings.end());
+    };
     // Retire what is gone or out of interest; the ID is never used again
     // in this epoch. What stays is marked as held for this connection.
     ++markNow;
-    peer.mapped.keepIf([&](Mappings::Entry& mapping) {
-        const std::size_t kIndex = presentIndex(mapping.first);
-        const bool kPresent = kIndex != kNowhere;
-        if (kPresent && relevant(peer, kViewer, entities[kIndex], true)) {
-            heldMark[kIndex] = markNow;
-            return true;
+    const auto kRetire = [&](world::EntityHandle entity, const Mapping& mapping) {
+        if (mapping.firstSent.has_value()) {
+            peer.retired.push_back(Sent{.entity = entity, .from = *mapping.firstSent, .until = tick.value});
         }
-        statistics.interestLeft += kPresent ? 1 : 0;
-        if (mapping.second.firstSent.has_value()) {
-            peer.retired.push_back(
-                Sent{.entity = mapping.first, .from = *mapping.second.firstSent, .until = tick.value});
+        sendMapping(peer, network::ControlFrame::MappingRetire, mapping.id, false);
+        peer.byNetEntity.erase(mapping.id.value);
+    };
+    if (kComings) {
+        kComing(&Changed::gone);
+        for (const world::EntityHandle kGone : comings) {
+            if (const Mapping* const kMapping = peer.mapped.find(kGone); kMapping != nullptr) {
+                kRetire(kGone, *kMapping);
+                peer.mapped.erase(kGone);
+            }
         }
-        sendMapping(peer, network::ControlFrame::MappingRetire, mapping.second.id, false);
-        peer.byNetEntity.erase(mapping.second.id.value);
-        return false;
-    });
+    } else {
+        peer.mapped.keepIf([&](Mappings::Entry& mapping) {
+            const std::size_t kIndex = presentIndex(mapping.first);
+            const bool kPresent = kIndex != kNowhere;
+            if (kPresent && relevant(peer, kViewer, entities[kIndex], true)) {
+                heldMark[kIndex] = markNow;
+                return true;
+            }
+            statistics.interestLeft += kPresent ? 1 : 0;
+            kRetire(mapping.first, mapping.second);
+            return false;
+        });
+    }
     if (peer.retired.size() > kMaximumTombstones) {
         peer.retired.erase(peer.retired.begin(),
                            peer.retired.begin() +
@@ -394,7 +447,15 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
             entering.push_back(index);
         }
     };
-    if (!settings.interest) {
+    if (kComings) {
+        kComing(&Changed::appeared);
+        for (const world::EntityHandle kAppeared : comings) {
+            const std::size_t kIndex = presentIndex(kAppeared);
+            if (kIndex != kNowhere && kAppeared != peer.player && !peer.mapped.contains(kAppeared)) {
+                entering.push_back(kIndex);
+            }
+        }
+    } else if (!settings.interest) {
         for (std::size_t index = 0; index < entities.size(); ++index) {
             kConsider(index);
         }
@@ -409,8 +470,10 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         }
     }
     std::ranges::sort(entering);
+    peer.bounded = false;
     for (const std::size_t kIndex : entering) {
         if (peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0) {
+            peer.bounded = true;
             break;
         }
         kDeclare(entities[kIndex].entity);

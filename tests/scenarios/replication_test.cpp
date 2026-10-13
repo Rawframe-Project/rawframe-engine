@@ -5,6 +5,9 @@
 
 #include "replication_scenario.h"
 
+#include <algorithm>
+#include <vector>
+
 using namespace rawframe;
 using namespace rawframe::scenario;
 
@@ -54,6 +57,27 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
         scenario.step(Steer{});
     }
     RAWFRAME_EXPECT(scenario.mirrored() == 3);
+
+    // One made later enters, and one made as another is destroyed, in its
+    // slot, takes its place: what a connection holds follows what came and
+    // went since its last turn (D745).
+    const world::EntityHandle kLater = *scenario.serverWorld.create();
+    RAWFRAME_EXPECT(scenario.serverWorld.insert(kLater, kPosition, Position{40, 0}).has_value());
+    RAWFRAME_EXPECT(scenario.serverWorld.destroy(props[2]).has_value());
+    const world::EntityHandle kInstead = *scenario.serverWorld.create();
+    RAWFRAME_EXPECT(kInstead.slot == props[2].slot);
+    RAWFRAME_EXPECT(scenario.serverWorld.insert(kInstead, kPosition, Position{50, 0}).has_value());
+    for (int step = 0; step < 10; ++step) {
+        scenario.step(Steer{});
+    }
+    RAWFRAME_EXPECT(scenario.mirrored() == 4);
+    std::vector<float> places;
+    auto query = world::Query<world::Read<Position>>::resolve(*scenario.schema);
+    query->forEach(scenario.clientWorld, [&places](world::EntityHandle, const Position& at) {
+        places.push_back(at.x);
+    });
+    RAWFRAME_EXPECT(std::ranges::contains(places, 40.0F) && std::ranges::contains(places, 50.0F) &&
+                    !std::ranges::contains(places, 20.0F));
 }
 
 RAWFRAME_TEST(AComponentKeptToItsHolderReachesNoOtherConnection) {

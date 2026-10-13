@@ -129,6 +129,13 @@ public:
     void add(world::EntityHandle entity, Mapping mapping) {
         entries_.emplace_back(entity, std::move(mapping));
     }
+    /// Removes the mapping of `entity`, if any.
+    void erase(world::EntityHandle entity) {
+        const auto kAt = std::ranges::lower_bound(entries_, entity, {}, &Entry::first);
+        if (kAt != entries_.end() && kAt->first == entity) {
+            entries_.erase(kAt);
+        }
+    }
     /// Puts added mappings in entity order, `settled` being how many there
     /// were, in order, before the first was added.
     void settle(std::size_t settled) {
@@ -239,6 +246,9 @@ struct Peer {
     /// its next publish looks at, with what changed since (D744).
     std::optional<std::uint64_t> lookedAt;
     std::vector<world::EntityHandle> unsettled;
+    /// Whether the bound on mappings left an entity undeclared at its last
+    /// turn: its next looks at every entity again (D745).
+    bool bounded = false;
     std::map<std::uint32_t, world::EntityHandle> byNetEntity;
     /// The next input tick to consume, and commands waiting for theirs.
     std::uint64_t nextInputTick = 0;
