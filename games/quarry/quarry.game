@@ -2,8 +2,8 @@
 # World's seed, which players dig and build on, the server deciding. Every
 # block is an entity of its own, persistent. The game is VoxelTech's class
 # among the constitution's reference games at generation 1's scale:
-# procedural land, a World players change, a machine (D737), and (to
-# come) a land kept between runs; chunked storage, meshing, and streaming wait for
+# procedural land, a World players change, a machine (D737), and a land
+# kept between runs (D738); chunked storage, meshing, and streaming wait for
 # the voxel contract SPEC-0037 and ADR-0058 defer.
 program quarry.kest
 
@@ -26,7 +26,11 @@ system quarry.dig simulation dig read quarry.tool write quarry.digger entities l
 # (D737).
 system quarry.power simulation power read quarry.terrain lookup quarry.part lookup quarry.block after quarry.dig
 
-spawn 1 quarry.terrain
+# The land's one entity (land.scene), persistent, so a save keeps it with
+# every block (D738): a server with `save.directory` keeps the land as its
+# players left it between runs, and one that loads it makes no other.
+scene land.scene
+save land quarry.terrain quarry.block quarry.part
 
 replicate quarry.block quarry.part quarry.terrain quarry.digger
 player quarry.tool quarry.digger

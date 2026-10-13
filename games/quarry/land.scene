@@ -1,0 +1,18 @@
+{
+  "kind": "rawframe.scene",
+  "formatVersion": 1,
+  "schema": {
+    "quarry.terrain": "5f9e319cce8c4ca7",
+    "rawframe.world.persistent": "afc8322918a647ff"
+  },
+  "entities": [
+    {
+      "id": "3f6c2a0e-8d1b-4e57-9a41-c2b7d5e8f013",
+      "name": "land",
+      "components": {
+        "quarry.terrain": {},
+        "rawframe.world.persistent": {}
+      }
+    }
+  ]
+}

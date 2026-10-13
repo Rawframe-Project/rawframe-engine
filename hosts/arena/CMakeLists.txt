@@ -76,6 +76,14 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(quarry_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8,[^\n]*\"sourceFailures\":0,.*\"code\":\"tick_summary\"[^\n]*\"entities\":[5-9][0-9][0-9][0-9]}")
+    # Quarry keeps its land between runs (D738): bots change it, the arena
+    # saves it, and a server of another seed loads it and keeps it as it
+    # was.
+    add_test(NAME quarry_saved
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/quarry_saved.sh $<TARGET_FILE:rawframe_host_arena>
+                     $<TARGET_FILE:rawframe_host_dedicated_server>
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(quarry_saved PROPERTIES PROCESSORS 2 PASS_REGULAR_EXPRESSION "land kept across runs")
     # Stalls' sources cooked into the build tree: its customers' figure,
     # which every run plays from them (D512), and its font and text, read
     # by the drawn run (D389).
