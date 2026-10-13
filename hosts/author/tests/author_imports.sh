@@ -22,6 +22,9 @@ work="$(native "$4")"
 rm -rf "$work"
 mkdir -p "$work"
 cp -R "$repository/games/plaza" "$work/plaza"
+# Which check failed, and what the session answered: a run under load once
+# failed with neither said.
+trap 'echo "failed at line $LINENO"; [ -f "$work/replies" ] && tail -20 "$work/replies"' ERR
 game="$work/plaza/plaza.game"
 plaza="$(native "$repository")/games/plaza"
 
