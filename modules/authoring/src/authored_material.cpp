@@ -264,6 +264,15 @@ std::string AuthoredMaterial::summaryAt(std::size_t entry) const {
 }
 
 result::Result<Value> answer(const AuthoredMaterial& material, const Query& query) {
+    if (std::holds_alternative<ListMaterialNodeTypes>(query) && material.graph()) {
+        Value types = Value::array();
+        for (const std::string_view kType : material::nodeTypes()) {
+            types.push(Value::string(std::string{kType}));
+        }
+        Value made = Value::object();
+        made.add("types", std::move(types));
+        return made;
+    }
     const bool kInstance = std::holds_alternative<ReadMaterialInstance>(query) && !material.graph();
     const bool kGraph = std::holds_alternative<ReadMaterialGraph>(query) && material.graph();
     if (!kInstance && !kGraph) {

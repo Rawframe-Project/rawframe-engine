@@ -37,6 +37,9 @@ struct Function {
 /// Whether a node type is one of the engine's functions.
 [[nodiscard]] bool isFunction(std::string_view type);
 
+/// The engine's functions' types, in the library's order (D731).
+[[nodiscard]] std::vector<std::string_view> types();
+
 /// The engine's function of `type`, read from the library it ships with.
 [[nodiscard]] result::Result<Function> functionOf(std::string_view type);
 

@@ -1,7 +1,8 @@
 // SPEC-0026's node library written as Slang (D691 onward): a material
 // moving its vertices at the presented World's time, every math node of
 // the atomic core, the channel, stream, logic, color, and noise nodes, in
-// the fragment and the vertex stage, and what each refuses.
+// the fragment and the vertex stage, and what each refuses. The library's
+// types listed once each (D731).
 
 #include "generated/arithmetic_material.h"
 #include "generated/facing_graph.h"
@@ -636,4 +637,18 @@ RAWFRAME_TEST(ATextureInputGivesWhatASampledTextureSamples) {
           objectOf(
               {{"stone", objectOf({{"default", Value::string("stone")}, {"type", Value::string("texture_2d")}})}})}});
     RAWFRAME_EXPECT(refusedWith(validateSurface(unnamed), MaterialError::Invalid));
+}
+
+RAWFRAME_TEST(TheNodeLibrarysTypesAreListedOnceEach) {
+    const std::vector<std::string_view> kTypes = nodeTypes();
+    std::vector<std::string_view> sorted = kTypes;
+    std::ranges::sort(sorted);
+    RAWFRAME_EXPECT(std::ranges::adjacent_find(sorted) == sorted.end());
+    // The family's own first, the surface leading; a math node; a function;
+    // never a function's output, which only a function holds.
+    RAWFRAME_EXPECT(!kTypes.empty() && kTypes.front() == kSurfaceType);
+    RAWFRAME_EXPECT(std::ranges::contains(kTypes, std::string_view{"rawframe/multiply@1"}) &&
+                    std::ranges::contains(kTypes, std::string_view{"rawframe/triplanar_projection@1"}) &&
+                    std::ranges::contains(kTypes, kParameterType) &&
+                    !std::ranges::contains(kTypes, std::string_view{"rawframe/output@1"}));
 }

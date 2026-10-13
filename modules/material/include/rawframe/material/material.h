@@ -227,6 +227,12 @@ inline constexpr std::string_view kMaterialRepresentation = "rawframe.material";
 /// containers linked with what `generateSlang` wrote.
 inline constexpr std::string_view kProgramRepresentation = "rawframe.material.program";
 
+/// The node types a surface graph may hold (SPEC-0026's library, D731): the
+/// family's own, each math node's, and each engine function's, in that
+/// order. What each type's params and inputs are is read where a node of it
+/// is checked.
+[[nodiscard]] std::vector<std::string_view> nodeTypes();
+
 /// The one type a surface material's output is, and the node library's
 /// types this family knows.
 inline constexpr std::string_view kSurfaceType = "rawframe/surface@1";

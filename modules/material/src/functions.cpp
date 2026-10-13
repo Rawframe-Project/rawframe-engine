@@ -92,6 +92,14 @@ result::Result<GivenTexture> textureGiven(const graph::Document& surface, const 
 
 } // namespace
 
+std::vector<std::string_view> types() {
+    std::vector<std::string_view> made;
+    for (const auto& [kType, kText] : kLibrary) {
+        made.push_back(kType);
+    }
+    return made;
+}
+
 bool isFunction(std::string_view type) {
     return std::ranges::find(kLibrary, type, &std::pair<std::string_view, std::span<const std::uint8_t>>::first) !=
            kLibrary.end();

@@ -4,8 +4,8 @@
 // nothing, the last override not unset, and the instance read whole. A
 // material graph open for authoring (D728): a node's input and param set
 // and unset, a node made and removed, one another node reads refused, the
-// graph in its canonical form after each, and each kind refusing the
-// other's operations. Its interface's inputs and switches declared and
+// graph in its canonical form after each, each kind refusing the other's
+// operations, and the node types a graph may hold listed (D731). Its interface's inputs and switches declared and
 // dropped (D729), one named as a node's identity would be, which is
 // ordered by where it is, not by its name.
 
@@ -223,12 +223,17 @@ RAWFRAME_TEST(AMaterialGraphsNodesChangeAndUndoExactly) {
     const auto kRead = answer(material, ReadMaterialGraph{});
     RAWFRAME_EXPECT(kRead.has_value() && document::write(*kRead->find("graph")) == kTinted);
     RAWFRAME_EXPECT(refusedWith(answer(material, ReadMaterialInstance{}), AuthoringError::ValidationFailed));
+    // The node types it may hold, as the material module lists them (D731).
+    const auto kTypes = answer(material, ListMaterialNodeTypes{});
+    RAWFRAME_EXPECT(kTypes.has_value() && kTypes->find("types") != nullptr && !kTypes->find("types")->items().empty() &&
+                    *kTypes->find("types")->items().front().text() == "rawframe/surface@1");
     auto instance = AuthoredMaterial::open(kDocument, redText());
     RAWFRAME_EXPECT(instance.has_value());
     if (instance.has_value()) {
         const std::array<Operation, 1> kNode = {RemoveMaterialNode{.node = kSurface}};
         RAWFRAME_EXPECT(refusedWith((*instance)->change(0, kNode), AuthoringError::ValidationFailed));
         RAWFRAME_EXPECT(refusedWith(answer(**instance, ReadMaterialGraph{}), AuthoringError::ValidationFailed));
+        RAWFRAME_EXPECT(refusedWith(answer(**instance, ListMaterialNodeTypes{}), AuthoringError::ValidationFailed));
     }
 }
 

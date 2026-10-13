@@ -68,7 +68,7 @@ constexpr std::array<InputDeclaration, 2> kSwitchInputs = {
 constexpr std::array<InputDeclaration, 2> kRenameClassInputs = {
     {{"style", InputType::Style}, {"name", InputType::Text}}};
 
-constexpr std::array<OperationDeclaration, 37> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 38> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -115,6 +115,10 @@ constexpr std::array<OperationDeclaration, 37> kDeclarations = {{
      .targets = "rawframe.material instance",
      .inputs = {}},
     {.name = "materials.read_graph",
+     .history = HistoryClass::ReadOnly,
+     .targets = "rawframe.material graph",
+     .inputs = {}},
+    {.name = "materials.list_node_types",
      .history = HistoryClass::ReadOnly,
      .targets = "rawframe.material graph",
      .inputs = {}},

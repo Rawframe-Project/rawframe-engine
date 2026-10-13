@@ -88,7 +88,8 @@ bool holdsComponent(const scene::Scene& scene, const EntityEntry& entry, std::st
 
 result::Result<Answer> answer(const scene::Scene& scene, const Query& query, const ComponentCatalog& catalog) {
     if (std::holds_alternative<ReadSheet>(query) || std::holds_alternative<ReadUiDocument>(query) ||
-        std::holds_alternative<ReadMaterialInstance>(query) || std::holds_alternative<ReadMaterialGraph>(query)) {
+        std::holds_alternative<ReadMaterialInstance>(query) || std::holds_alternative<ReadMaterialGraph>(query) ||
+        std::holds_alternative<ListMaterialNodeTypes>(query)) {
         return std::unexpected<result::Error>{
             result::fail(result::ErrorClass::InvalidArgument,
                          kAuthoringDomain,

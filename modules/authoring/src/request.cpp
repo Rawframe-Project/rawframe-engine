@@ -162,6 +162,9 @@ result::Result<Query> queryOf(const Value& value) {
     if (kIndex == kChanging + 6) {
         return Query{ReadMaterialGraph{}};
     }
+    if (kIndex == kChanging + 7) {
+        return Query{ListMaterialNodeTypes{}};
+    }
     if (kIndex == kChanging + 2) {
         const std::string* named = textOf(value.find("named"));
         const Value* having = value.find("having");

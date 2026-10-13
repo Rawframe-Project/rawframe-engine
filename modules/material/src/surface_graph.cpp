@@ -276,19 +276,45 @@ bool wholeNumber(double number) {
     return std::isfinite(number) && number == std::trunc(number) && number >= -2147483648.0 && number <= 2147483647.0;
 }
 
+namespace {
+
+/// The family's own node types, neither a math node's nor a function's
+/// (D731): what `known` takes and `nodeTypes` lists, but a function's
+/// output, which a function alone holds.
+constexpr auto kOwnTypes = std::to_array<std::string_view>({kSurfaceType,
+                                                            kSampleTexture2dType,
+                                                            kUvType,
+                                                            kSeparate3Type,
+                                                            kNormalMapType,
+                                                            kQualitySwitchType,
+                                                            kTimeType,
+                                                            kWorldPositionType,
+                                                            kWorldNormalType,
+                                                            kCombine3Type,
+                                                            kCombine2Type,
+                                                            kSeparate2Type,
+                                                            kSwizzleType,
+                                                            kVertexColorType,
+                                                            kViewDirectionType,
+                                                            kWorldTangentType,
+                                                            kCompareType,
+                                                            kConstantType,
+                                                            kFrontFacingType,
+                                                            kCombine4Type,
+                                                            kSeparate4Type,
+                                                            kParameterType,
+                                                            kParameterTexture2dType,
+                                                            kTransformType,
+                                                            kInlineSlangType,
+                                                            kStaticSwitchType});
+
+} // namespace
+
 bool known(const graph::Node& node) {
     const Value* kType = node.record.find("type");
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
-    return kText != nullptr &&
-           (*kText == kSurfaceType || *kText == kSampleTexture2dType || *kText == kUvType || *kText == kSeparate3Type ||
-            *kText == kNormalMapType || *kText == kQualitySwitchType || *kText == kTimeType ||
-            *kText == kWorldPositionType || *kText == kWorldNormalType || *kText == kCombine3Type ||
-            *kText == kCombine2Type || *kText == kSeparate2Type || *kText == kSwizzleType ||
-            *kText == kVertexColorType || *kText == kViewDirectionType || *kText == kWorldTangentType ||
-            *kText == kCompareType || *kText == kConstantType || *kText == kFrontFacingType ||
-            *kText == kCombine4Type || *kText == kSeparate4Type || *kText == kParameterType ||
-            *kText == kParameterTexture2dType || *kText == kTransformType || *kText == kInlineSlangType ||
-            *kText == kStaticSwitchType || *kText == kOutputType || functions::isFunction(*kText) || math(*kText));
+    return kText != nullptr && (std::ranges::contains(kOwnTypes, *kText) || *kText == kOutputType ||
+                                functions::isFunction(*kText) || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -998,3 +1024,18 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
 }
 
 } // namespace rawframe::material::surface_graph
+
+namespace rawframe::material {
+
+std::vector<std::string_view> nodeTypes() {
+    std::vector<std::string_view> made{surface_graph::kOwnTypes.begin(), surface_graph::kOwnTypes.end()};
+    for (const surface_graph::MathNode& kMath : surface_graph::kMathNodes) {
+        made.push_back(kMath.type);
+    }
+    for (const std::string_view kFunction : functions::types()) {
+        made.push_back(kFunction);
+    }
+    return made;
+}
+
+} // namespace rawframe::material

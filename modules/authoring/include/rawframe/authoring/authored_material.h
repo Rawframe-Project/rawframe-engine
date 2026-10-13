@@ -108,9 +108,10 @@ private:
     bool graph_ = false;
 };
 
-/// A material instance's query answered (`materials.read_instance`:
-/// `{"instance": ...}`, the document whole); refuses (`ValidationFailed`)
-/// any other.
+/// A material's query answered: an instance's `materials.read_instance`
+/// (`{"instance": ...}`), a graph's `materials.read_graph` (`{"graph":
+/// ...}`, D728) and `materials.list_node_types` (`{"types": [...]}`, D731);
+/// refuses (`ValidationFailed`) any other.
 [[nodiscard]] result::Result<document::Value> answer(const AuthoredMaterial& material, const Query& query);
 
 } // namespace rawframe::authoring

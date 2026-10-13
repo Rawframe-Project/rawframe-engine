@@ -374,9 +374,18 @@ struct ReadUiDocument {};
 struct ReadMaterialInstance {};
 /// A material graph read whole (D728).
 struct ReadMaterialGraph {};
+/// The node types a material graph may hold (D731), as the material module
+/// lists them.
+struct ListMaterialNodeTypes {};
 
-using Query = std::
-    variant<ListEntities, ReadEntity, FindEntities, ReadSheet, ReadUiDocument, ReadMaterialInstance, ReadMaterialGraph>;
+using Query = std::variant<ListEntities,
+                           ReadEntity,
+                           FindEntities,
+                           ReadSheet,
+                           ReadUiDocument,
+                           ReadMaterialInstance,
+                           ReadMaterialGraph,
+                           ListMaterialNodeTypes>;
 
 /// SPEC-0040's history classes: every operation that changes a scene is
 /// `Undoable`, and every query `ReadOnly`.
