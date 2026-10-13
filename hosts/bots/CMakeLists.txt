@@ -30,6 +30,18 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(bots_renewed PROPERTIES PASS_REGULAR_EXPRESSION
                          "renewed: before \"bots\":2,\"admitted\":2, after \"bots\":2,\"admitted\":2, stale \"bots\":2,\"admitted\":0, renewals [1-9]")
+    # A connection lost without the server's word is asked for again
+    # (D757): the server frozen past the connection's idle time, the bot
+    # says so and is admitted again once it runs on. A shell freezes a
+    # process with SIGSTOP, which Windows has not.
+    if(NOT WIN32)
+        add_test(NAME bots_rejoined
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/rejoined.sh
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots>
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(bots_rejoined PROPERTIES PASS_REGULAR_EXPRESSION
+                             "rejoined: \"bots\":1,\"admitted\":1, \"retried\":[1-9]")
+    endif()
     # A server asked to stop drains: it refuses new bots as unavailable and
     # stops once the bots it serves have left. Asked with SIGTERM on POSIX
     # and Ctrl+Break on Windows, which Python sends and a shell cannot (D237).

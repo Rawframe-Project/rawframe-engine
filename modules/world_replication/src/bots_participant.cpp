@@ -55,6 +55,7 @@ constexpr EventIdentity kRollbackAlarm{"replication", "rollback_rate_alarm"};
 constexpr EventIdentity kBotsSummary{"replication", "bots_summary"};
 constexpr EventIdentity kBotsAdmitted{"replication", "bots_admitted"};
 constexpr EventIdentity kChecksumCapture{"replication", "checksum_capture"};
+constexpr EventIdentity kConnectionLost{"replication", "connection_lost"};
 
 /// A client's game messages for presentation to read, as EffectQueue keeps
 /// effects: the latest kMessagesKept, each read once by each reader's count.
@@ -131,8 +132,9 @@ struct Bot {
     std::unique_ptr<InputSource> source;
     std::vector<std::byte> input;
     bool connecting = false;
-    /// Asked again after a refusal as unavailable (D379): how often so far,
-    /// and not before when.
+    /// Asked again after a refusal as unavailable (D379) or an end without
+    /// the server's word (D541, D757): how often since it was last
+    /// admitted, and not before when.
     std::uint64_t retries = 0;
     std::optional<execution::MonotonicInstant> retryAt;
     /// The last refusal heard, kept while it asks again; none once admitted.
@@ -145,9 +147,9 @@ struct Bot {
     /// When the newest server tick it has heard of was read: this Host
     /// iteration's ingress, before the frame between it and egress (D678).
     execution::MonotonicInstant heardAt;
-    /// Admitted at any time: a session that ends after it is not asked
-    /// again.
-    bool everAdmitted = false;
+    /// Admitted on the connection it has now: one that ends without the
+    /// server's word after it was lost, and is asked again (D757).
+    bool admitted = false;
     std::uint64_t submitted = 0;
     /// Rollback alarms already reported.
     std::uint64_t alarms = 0;
@@ -373,11 +375,26 @@ public:
                 if (const auto kRefusal = bot.client->rejection()) {
                     bot.refusal = kRefusal;
                 }
-                bot.everAdmitted = bot.everAdmitted || bot.client->admitted();
-                const bool kUnanswered = !bot.everAdmitted && bot.client->ended() &&
-                                         !bot.client->rejection().has_value() &&
-                                         !bot.client->termination().has_value() && !bot.client->serverStopping();
-                if (bot.connecting && (bot.client->rejection() == network::RejectReason::Unavailable || kUnanswered) &&
+                // Ended without the server's word: unanswered, or, once
+                // admitted, lost; a program its platform suspended past the
+                // connection's idle time comes back to one (D757). Asked
+                // again, its World is mirrored from nothing in a new epoch.
+                const bool kWordless = bot.client->ended() && !bot.client->rejection().has_value() &&
+                                       !bot.client->termination().has_value() && !bot.client->serverStopping();
+                if (bot.client->admitted()) {
+                    // Its retries are counted afresh for each loss.
+                    bot.admitted = true;
+                    bot.retries = 0;
+                } else if (bot.admitted && kWordless) {
+                    bot.admitted = false;
+                    bot.admittedAt.reset();
+                    bot.submitted = 0;
+                    emitter_.log(diagnostics::Severity::Warning,
+                                 kConnectionLost,
+                                 "a bot's connection ended without the server's word; it asks again",
+                                 {diagnostics::field("bot", static_cast<std::uint64_t>(&bot - bots_.data()))});
+                }
+                if (bot.connecting && (bot.client->rejection() == network::RejectReason::Unavailable || kWordless) &&
                     bot.retries < retries_) {
                     if (!bot.retryAt) {
                         bot.retryAt = frame.now + retryAfter_;
