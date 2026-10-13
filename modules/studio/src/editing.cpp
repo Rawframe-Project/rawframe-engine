@@ -52,6 +52,8 @@ bool ShellParticipant::beforePress() {
 }
 
 void ShellParticipant::pressOn(ui::Node node, bool moving) {
+    // An output pressed waits for the input to connect (D733).
+    const std::optional<std::pair<std::string, std::string>> kConnecting = std::exchange(connecting_, std::nullopt);
     // The row is the node pressed or the one its words are on.
     if (!cookTool_.empty() && node == cookNode_) {
         endEdit();
@@ -178,6 +180,11 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (const auto kAction = std::ranges::find(actions_, node, &ActionButton::node); kAction != actions_.end()) {
         endEdit();
         const ActionButton kAsked = *kAction;
+        if (kAsked.connects) {
+            connecting_ = std::pair{entity_, kAsked.field};
+            say("choose the input to connect " + kAsked.field + " to");
+            return;
+        }
         if (kAsked.makesNode && graphChosen()) {
             const std::string kNode = mintedHexIdentity();
             Value operation = Value::object();
@@ -224,9 +231,16 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
             moveNodeInto(entities_[static_cast<std::size_t>(kEntity - entityRows_.begin())]);
         } else {
             showEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
+            // Its input is pressed next.
+            connecting_ = graphChosen() ? kConnecting : std::nullopt;
         }
     } else if (const auto kFieldAt = std::ranges::find(fields_, node, &FieldRow::value); kFieldAt != fields_.end()) {
-        beginEdit(*kFieldAt);
+        if (kConnecting.has_value() && kFieldAt->role == FieldRow::Role::GraphInput) {
+            endEdit();
+            connectGraphInput(*kFieldAt, *kConnecting);
+        } else {
+            beginEdit(*kFieldAt);
+        }
     } else if (const auto kViewAt = std::ranges::find(viewFields_, node, &FieldRow::value);
                kViewAt != viewFields_.end()) {
         beginEdit(*kViewAt);

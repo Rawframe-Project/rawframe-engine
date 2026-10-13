@@ -129,6 +129,10 @@ struct ActionButton {
     /// A node of `component` made, not an operation: a UI node (D672), or
     /// a material graph's node of that type (D731).
     bool makesNode = false;
+    /// An output of the chosen graph node, `field` its name: the input
+    /// field pressed next, on this node or one chosen first, takes a
+    /// connection from it (D733).
+    bool connects = false;
 };
 
 /// The shell: a session on the game, and the UI that shows it.
@@ -374,6 +378,9 @@ private:
     /// The node at `at`: its params, then its inputs, each a field showing
     /// what the graph holds, a connection as its JSON.
     void showGraphNode(std::size_t at);
+    /// The chosen graph node's input `row` connected from `from`'s node and
+    /// output (D733).
+    void connectGraphInput(const FieldRow& row, const std::pair<std::string, std::string>& from);
     /// `text` set as the chosen node's param or input `row` names
     /// (`materials.set_node_param`, `materials.set_node_input`), typed as a
     /// part's is: nothing unsets it.
@@ -508,6 +515,10 @@ private:
     /// Move to was pressed: the next press on a scene's row moves the
     /// chosen entity there, and any other lets it go (D498).
     bool moving_ = false;
+    /// An output was pressed, its node's identity and its name: choosing a
+    /// node keeps it, an input field pressed takes a connection from it,
+    /// and any other press lets it go (D733).
+    std::optional<std::pair<std::string, std::string>> connecting_;
     /// The heading `column` made last.
     ui::Node lastHeading_{};
     ui::Node downNode_{};

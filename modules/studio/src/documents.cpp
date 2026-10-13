@@ -537,6 +537,37 @@ void ShellParticipant::showGraphNode(std::size_t at) {
             fields_.push_back(FieldRow{.value = line->second, .role = kRole, .field = kName});
         }
     }
+    // Then its outputs, each pressed to connect it (D733).
+    const Value* outputs = signature != nullptr ? signature->find("outputs") : nullptr;
+    if (outputs == nullptr || outputs->items().empty()) {
+        return;
+    }
+    auto heading = row(componentsColumn_, "outputs", kQuiet, kPanel);
+    if (!heading.has_value()) {
+        return;
+    }
+    componentRows_.push_back(*heading);
+    for (const Value& kOutput : outputs->items()) {
+        const std::string kName = kOutput.text() != nullptr ? *kOutput.text() : std::string{};
+        auto line = row(componentsColumn_, kName, kText, kRow, true);
+        if (!line.has_value()) {
+            return;
+        }
+        componentRows_.push_back(*line);
+        actions_.push_back(ActionButton{.node = *line, .field = kName, .connects = true});
+    }
+}
+
+void ShellParticipant::connectGraphInput(const FieldRow& row, const std::pair<std::string, std::string>& from) {
+    Value connection = Value::object();
+    connection.add("node", Value::string(from.first));
+    connection.add("output", Value::string(from.second));
+    Value operation = Value::object();
+    operation.add("operation", Value::string("materials.set_node_input"));
+    operation.add("node", Value::string(entity_));
+    operation.add("input", Value::string(row.field));
+    operation.add("value", std::move(connection));
+    commit(std::move(operation), row.field + " connected", entity_);
 }
 
 void ShellParticipant::setGraphMember(const FieldRow& row, const std::string& text) {
