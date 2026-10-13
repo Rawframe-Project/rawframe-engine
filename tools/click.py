@@ -40,9 +40,11 @@
 # one whose field has a value where `,name=value` follows (D476), or a
 # number at least that where `,name>=value` does; ending `#` and a count,
 # that many such records, and `@` and a path, in that log beside the
-# watched one, such as a played client's (D734). A record never seen in
-# that time is said ("never saw"), which the tests read as a failure: the
-# wait it stands for was three minutes lost (D627). An argument `edit=`
+# watched one, such as a played client's (D734); ending `~` and a number
+# of seconds, up to that long instead, for what a loaded sanitized tree
+# may take longer than three minutes to make, such as a cook. A record
+# never seen in that time is said ("never saw"), which the tests read as a
+# failure: the wait it stands for was three minutes lost (D627). An argument `edit=`
 # and a file, the text in it to replace, and what with, separated by
 # colons, edits the file as an author would while the game plays (D634).
 # Five seconds after, it stops the program whose pid its pid file holds
@@ -57,7 +59,7 @@
 #                 | frozenclick=<x>,<y>:<text>
 #                 | move=<x>,<y> | freeze | thaw
 #                 | orbit=<x>,<y>,<x>,<y>[,<key>] | wait=<seconds>
-#                 | until=<code>[,<field>=<value> | ,<field>>=<number>][#<count>][@<log>]
+#                 | until=<code>[,<field>=<value> | ,<field>>=<number>][#<count>][@<log>][~<seconds>]
 #                 | edit=<file>:<text>:<text>
 #                 [...]
 
@@ -335,14 +337,19 @@ def main():
             time.sleep(1)
             continue
         if isinstance(text, tuple):
-            # Up to three minutes for the record, however loaded the machine.
+            # Up to three minutes for the record, however loaded the machine,
+            # or as long as it says.
+            code, bound = text[1], 180.0
+            if "~" in code:
+                code, _, seconds = code.rpartition("~")
+                bound = float(seconds)
             found = False
-            for _ in range(720):
-                found = logged(log, text[1])
+            for _ in range(int(bound * 4)):
+                found = logged(log, code)
                 if found or not alive(pid):
                     break
                 time.sleep(0.25)
-            print(f"{'saw' if found else 'never saw'} {text[1]}")
+            print(f"{'saw' if found else 'never saw'} {code}")
             seen = found
             continue
         if isinstance(text, float):

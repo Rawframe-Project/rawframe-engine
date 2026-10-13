@@ -542,8 +542,9 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/gale/gale.game /dev/null ${PROJECT_BINARY_DIR}/hosts/client/gale_drawn.conf
-                         1026,23 "until=studio_said,status=\"cooked " 200,155 1096,23 wait=6 640,161
-                         "1100,161:[0.6,0.2,0.1]" "until=studio_said,status=\"cooked #2" until=materials_reloaded@play/client.log 1096,23 until=studio_game_ended
+                         1026,23 "until=studio_said,status=\"cooked ~600" 200,155 1096,23 wait=6 640,161
+                         "1100,161:[0.6,0.2,0.1]" "until=studio_said,status=\"cooked #2~600" until=materials_reloaded@play/client.log~600
+                         1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_recooks_gale PROPERTIES
                              FIXTURES_REQUIRED gale_content
