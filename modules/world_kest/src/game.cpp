@@ -83,12 +83,13 @@ std::optional<world::Access> accessNamed(std::string_view name) noexcept {
     return std::nullopt;
 }
 
-/// Whether a system writes a component it looks up: its own writes are
-/// journaled until its run ends, so the lookup would read what was there
-/// before them (D391).
+/// Whether a system writes a component it looks up or scans: its own
+/// writes are journaled until its run ends, so the lookup would read what
+/// was there before them (D391, D747).
 bool writesALookup(const GameSystem& system) {
     return std::ranges::any_of(system.columns, [&system](const GameColumn& column) {
-        return column.access == world::Access::Write && std::ranges::contains(system.lookups, column.component);
+        return column.access == world::Access::Write && (std::ranges::contains(system.lookups, column.component) ||
+                                                         std::ranges::contains(system.scans, column.component));
     });
 }
 
@@ -463,6 +464,9 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 } else if (kWhat == "lookup") {
                     system.lookups.push_back(kName);
                     uses.emplace_back(number, kName);
+                } else if (kWhat == "scan") {
+                    system.scans.push_back(kName);
+                    uses.emplace_back(number, kName);
                 } else if (kWhat == "emits") {
                     system.emits.push_back(kName);
                 } else if (kWhat == "after") {
@@ -477,11 +481,17 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                    WorldKestError::BadGameLine,
                                    "a system column is entities, or read, write, with, or without a component; an "
                                    "edge is after or before a system; a stream is random and its name; an effect "
-                                   "is emits and its name; a lookup is lookup and a component");
+                                   "is emits and its name; a lookup is lookup and a component, and a scan scan and "
+                                   "a component");
                 }
             }
             if (writesALookup(system)) {
-                return badLine(number, WorldKestError::BadGameLine, "a system looks up a component it writes");
+                return badLine(number, WorldKestError::BadGameLine, "a system looks up or scans a component it writes");
+            }
+            // A predicting client runs a predicted system over its player
+            // alone, with nothing to scan.
+            if (system.predicted && !system.scans.empty()) {
+                return badLine(number, WorldKestError::BadGameLine, "a predicted system scans nothing");
             }
             game.systems.push_back(std::move(system));
         } else if (kKeyword == "present") {

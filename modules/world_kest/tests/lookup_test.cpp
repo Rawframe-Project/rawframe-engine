@@ -4,6 +4,7 @@
 // that never declared the lookup, a `get` of what an entity lacks, and a
 // lookup of a component the system writes are refused. A declared lookup
 // also counts and names the component's holders across archetypes (D393).
+// A scan lends every holder's value and entity at once (D747).
 
 #include "rawframe/kest_library/library.h"
 #include "rawframe/test/test.h"
@@ -123,6 +124,34 @@ fn grab(count: i32, targets: [Target], seens: [Seen]) {
     let i = 0
     while i < count {
         seens[i].x = Position.get(targets[i].entity).x
+        i = i + 1
+    }
+}
+
+fn survey(count: i32, tallies: [Tally], holders: i32, positions: [Position], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let sum: f32 = 0.0
+        let named = u32(0)
+        let k = 0
+        while k < holders {
+            sum = sum + positions[k].x
+            if Position.get(entities[k]).x == positions[k].x {
+                named = named + u32(1)
+            }
+            k = k + 1
+        }
+        tallies[i].holders = holders
+        tallies[i].sum = sum
+        tallies[i].past = named
+        i = i + 1
+    }
+}
+
+fn shiftAll(count: i32, positions: [Position], holders: i32, scanned: [Position], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        positions[i].x = positions[i].x + 1.0
         i = i + 1
     }
 }
@@ -319,5 +348,60 @@ RAWFRAME_TEST(ALookupCountsAndNamesTheComponentsHolders) {
     if (ticks.has_value()) {
         const auto kReport = ticks->runTick(world, tick, *world::TickRate::of(60));
         RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.size() == 1);
+    }
+}
+
+RAWFRAME_TEST(AScanLendsEveryHolderAtOnce) {
+    const auto kRegistry = registry();
+    world::World world{kRegistry};
+    const auto kPosition = *kRegistry->key<Position>();
+    const auto kSeen = *kRegistry->key<Seen>();
+    const auto kTally = *kRegistry->key<Tally>();
+    // Three positions in two archetypes, and the census apart from them.
+    for (const float kX : {1.0F, 2.0F, 4.0F}) {
+        const world::EntityHandle kEntity = *world.create();
+        RAWFRAME_EXPECT(world.insert(kEntity, kPosition, Position{kX, 0}).has_value());
+        if (kX == 2.0F) {
+            RAWFRAME_EXPECT(world.insert(kEntity, kSeen, Seen{}).has_value());
+        }
+    }
+    const world::EntityHandle kCensus = *world.create();
+    RAWFRAME_EXPECT(world.insert(kCensus, kTally, Tally{}).has_value());
+    constexpr std::array<KestColumn, 1> kTallies = {
+        KestColumn{.component = Tally::kComponentTypeId, .element = "Tally", .access = world::Access::Write}};
+    constexpr std::array<world_kest::KestScan, 1> kScanned = {
+        world_kest::KestScan{.component = Position::kComponentTypeId, .kestType = "Position"}};
+    const std::array<KestSystemDeclaration, 1> kDeclared = {KestSystemDeclaration{
+        .identity = "look.survey", .entry = "survey", .columns = kTallies, .lookups = kPositions, .scans = kScanned}};
+    std::unique_ptr<KestSystems> kest;
+    std::vector<world::SystemDeclaration> declared;
+    auto ticks = scheduled(kDeclared, *kRegistry, kest, declared);
+    RAWFRAME_EXPECT(ticks.has_value());
+    world::TickIndex tick;
+    if (ticks.has_value()) {
+        const auto kReport = ticks->runTick(world, tick, *world::TickRate::of(60));
+        RAWFRAME_EXPECT(kReport.has_value() && kReport->failures.empty());
+        // Every holder once, each value beside its own entity.
+        const Tally& tally = *world.get(kCensus, kTally);
+        RAWFRAME_EXPECT(tally.holders == 3 && tally.sum == 7 && tally.past == 3);
+        // Read, as a lookup is.
+        RAWFRAME_EXPECT(declared.size() == 1 &&
+                        std::ranges::contains(declared[0].reads, *kRegistry->find(Position::kComponentTypeId)));
+    }
+    // A function that does not take the scan's three is refused.
+    const std::array<KestSystemDeclaration, 1> kShort = {
+        KestSystemDeclaration{.identity = "look.census", .entry = "census", .columns = kTallies, .scans = kScanned}};
+    RAWFRAME_EXPECT(
+        !KestSystems::create({.program = program(), .components = kComponents, .limits = kLimits, .systems = kShort})
+             .has_value());
+    // Nor does a system scan what it writes.
+    const std::array<KestSystemDeclaration, 1> kWriting = {
+        KestSystemDeclaration{.identity = "look.shiftAll", .entry = "shiftAll", .columns = kMover, .scans = kScanned}};
+    auto made =
+        KestSystems::create({.program = program(), .components = kComponents, .limits = kLimits, .systems = kWriting});
+    RAWFRAME_EXPECT(made.has_value());
+    if (made.has_value()) {
+        declared.clear();
+        RAWFRAME_EXPECT(!(*made)->declareSystems(*kRegistry, declared).has_value());
     }
 }

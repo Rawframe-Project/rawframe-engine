@@ -174,6 +174,28 @@ RAWFRAME_TEST(MappedEntitiesAreDeclaredByLine) {
     }
 }
 
+RAWFRAME_TEST(ScansAreDeclaredByLine) {
+    constexpr std::string_view kHead = "program p.kest\n"
+                                       "component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 a.position Position\n"
+                                       "component 1e4f9b4f-8d66-4c9f-ae1f-3b72f4d5c6b2 a.tally Tally\n";
+    const auto kGame =
+        parseGame(std::string{kHead} + "system a.survey simulation survey write a.tally scan a.position\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->systems.size() == 1 &&
+                    (kGame->systems[0].scans == std::vector<std::string>{"a.position"}));
+    // Not what it writes, nor in a predicted system, nor an undeclared
+    // component (D747).
+    RAWFRAME_EXPECT(refusedAt(std::string{kHead} + "system a.shift simulation shift write a.position scan a.position\n",
+                              WorldKestError::BadGameLine,
+                              "4"));
+    RAWFRAME_EXPECT(
+        refusedAt(std::string{kHead} + "system a.guess simulation guess write a.tally scan a.position predicted\n",
+                  WorldKestError::BadGameLine,
+                  "4"));
+    RAWFRAME_EXPECT(refusedAt(std::string{kHead} + "system a.survey simulation survey write a.tally scan a.velocity\n",
+                              WorldKestError::UnknownName,
+                              "4"));
+}
+
 RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     auto game = parseGame("program p.kest\nphysics2d gravity 0.5 -9.8 substeps 8\n"
                           "spawn 1 rawframe.physics2d.body width=1 rawframe.physics2d.pose y=2\n");

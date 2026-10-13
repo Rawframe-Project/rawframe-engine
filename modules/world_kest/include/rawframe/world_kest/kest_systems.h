@@ -60,6 +60,13 @@ struct KestComponent {
     std::span<const std::size_t> entityFields;
 };
 
+/// A component a system reads whole (D747): every holder's value and
+/// entity, lent after its columns.
+struct KestScan {
+    schema::ComponentTypeId component;
+    std::string_view kestType;
+};
+
 struct KestSystemDeclaration {
     std::string_view identity;
     world::Phase phase = world::Phase::Simulation;
@@ -78,6 +85,11 @@ struct KestSystemDeclaration {
     /// and `<kestType>.entity(index: i32) -> Entity` (D393), ordered as
     /// reads; never one it writes. Another run's doors refuse them.
     std::span<const schema::ComponentTypeId> lookups;
+    /// Components whose every holder it reads at once (D747): after its
+    /// columns' arrays, for each, `count: i32`, `values: [<kestType>]`, and
+    /// `entities: [world.Entity]`, in World order as the run began, the
+    /// same each call of the run; ordered as reads, never one it writes.
+    std::span<const KestScan> scans;
 };
 
 /// A scene a program spawns whole with `Scene.spawn(prefab: u64)` (D98):

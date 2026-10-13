@@ -181,6 +181,10 @@ struct GameSystem {
     /// Components it reads on any entity, from `lookup <component>` pairs
     /// (D391): never one it writes.
     std::vector<std::string> lookups;
+    /// Components whose every holder it reads whole, from `scan
+    /// <component>` pairs (D747): each lent after its columns as a count,
+    /// the values, and their entities, in World order, as the run began.
+    std::vector<std::string> scans;
     /// Runs on predicting clients too, over the player alone.
     bool predicted = false;
     /// The effects it emits, from `emits <name>` pairs (D219); only a

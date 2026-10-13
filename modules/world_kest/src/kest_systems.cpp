@@ -24,10 +24,14 @@ template <typename Column> bool carriesData(const Column& column) noexcept {
     return column.entities || column.access == world::Access::Read || column.access == world::Access::Write;
 }
 
-/// What a system takes: the count, then one lent array per data column.
-std::vector<kest::Argument> systemArguments(std::size_t data) {
-    std::vector<kest::Argument> takes(1 + data, kest::Argument{.slot = kest::Slot::I32, .lent = true});
+/// What a system takes: the count, then one lent array per data column;
+/// then for each scan a count, its values, and their entities (D747).
+std::vector<kest::Argument> systemArguments(std::size_t data, std::size_t scans) {
+    std::vector<kest::Argument> takes(1 + data + (3 * scans), kest::Argument{.slot = kest::Slot::I32, .lent = true});
     takes[0].lent = false;
+    for (std::size_t scan = 0; scan < scans; ++scan) {
+        takes[1 + data + (3 * scan)].lent = false;
+    }
     return takes;
 }
 
@@ -68,6 +72,8 @@ struct KestSystems::Declared {
     std::vector<std::string> before;
     std::vector<std::string> randomStreams;
     std::vector<schema::ComponentTypeId> lookups;
+    /// Each scanned component and its Kest type (D747).
+    std::vector<std::pair<schema::ComponentTypeId, std::string>> scans;
     std::vector<std::string_view> afterViews;
     std::vector<std::string_view> beforeViews;
     std::vector<std::string_view> streamViews;
@@ -83,21 +89,37 @@ public:
         /// Which of the chunk's columns, or -1 for its entities.
         int chunkColumn;
     };
+    /// A component read whole (D747): its holders, its Kest type and shape,
+    /// and this run's copy of their values and entities.
+    struct Scan {
+        world::ColumnQuery holders;
+        schema::ComponentRuntimeId component;
+        std::string element;
+        std::size_t size;
+        std::vector<std::byte> values;
+        std::vector<world::EntityHandle> entities;
+    };
 
     KestSystem(kest::Machine& machine,
                Doorway& doorway,
                kest::Entry entry,
                world::ColumnQuery query,
                std::vector<DataColumn> columns,
-               std::vector<schema::ComponentRuntimeId> lookups) noexcept
+               std::vector<schema::ComponentRuntimeId> lookups,
+               std::vector<Scan> scans) noexcept
         : machine_(&machine), doorway_(&doorway), entry_(entry), query_(std::move(query)), columns_(std::move(columns)),
-          lookups_(std::move(lookups)) {
+          lookups_(std::move(lookups)), scans_(std::move(scans)) {
         reads_ = query_.reads();
-        // A lookup reads its component wherever it lies: the schedule
-        // orders it as a read.
+        // A lookup or a scan reads its component wherever it lies: the
+        // schedule orders it as a read.
         for (const schema::ComponentRuntimeId kLookup : lookups_) {
             if (!std::ranges::contains(reads_, kLookup)) {
                 reads_.push_back(kLookup);
+            }
+        }
+        for (const Scan& kScan : scans_) {
+            if (!std::ranges::contains(reads_, kScan.component)) {
+                reads_.push_back(kScan.component);
             }
         }
         writes_ = query_.writes();
@@ -161,6 +183,22 @@ private:
         }
         if (chunks_.empty()) {
             return {};
+        }
+        // What it scans, copied once for the run's calls: World memory is
+        // not lent past the chunk it lies in.
+        for (Scan& scan : scans_) {
+            scan.values.clear();
+            scan.entities.clear();
+            scan.holders.forEachChunk(context.world, [&](const world::ColumnChunk& chunk) {
+                scan.values.insert(
+                    scan.values.end(), chunk.columns[0], chunk.columns[0] + (chunk.entities.size() * scan.size));
+                scan.entities.insert(scan.entities.end(), chunk.entities.begin(), chunk.entities.end());
+            });
+            if (scan.entities.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+                return refuse(result::ErrorClass::OutOfRange,
+                              WorldKestError::TooManyRows,
+                              "a scanned component has more holders than a Kest count can say");
+            }
         }
         // SPEC-0013's journal per tick, counted across the machine's
         // systems before any is copied.
@@ -258,19 +296,43 @@ private:
     [[nodiscard]] result::Status callOnce(const Chunk& chunk, kest::Fuel fuel) {
         std::fill(frame_.begin(), frame_.end(), kest::Value{});
         frame_[0].integer = static_cast<std::int64_t>(chunk.rows);
-        std::size_t made = 0;
+        lentSlots_.clear();
         std::optional<result::Error> failure;
-        for (; made < columns_.size(); ++made) {
+        const auto kLend =
+            [&](std::size_t slot, void* data, std::size_t rows, const std::string& element, std::size_t size) {
+                auto handle = machine_->lend(data, static_cast<std::uint32_t>(rows), element, size);
+                if (!handle.has_value()) {
+                    failure.emplace(std::move(handle).error());
+                    return false;
+                }
+                frame_[slot] = *handle;
+                lentSlots_.push_back(slot);
+                return true;
+            };
+        for (std::size_t made = 0; made < columns_.size(); ++made) {
             const Lent& lent = lendFrom_[chunk.firstColumn + made];
-            auto handle = machine_->lend(lent.journal == kInPlace ? lent.world : journalAt(lent),
-                                         static_cast<std::uint32_t>(chunk.rows),
-                                         columns_[made].element,
-                                         columns_[made].size);
-            if (!handle.has_value()) {
-                failure.emplace(std::move(handle).error());
+            if (!kLend(1 + made,
+                       lent.journal == kInPlace ? lent.world : journalAt(lent),
+                       chunk.rows,
+                       columns_[made].element,
+                       columns_[made].size)) {
                 break;
             }
-            frame_[1 + made] = *handle;
+        }
+        for (std::size_t at = 0; at < scans_.size() && !failure; ++at) {
+            Scan& scan = scans_[at];
+            const std::size_t kSlot = 1 + columns_.size() + (3 * at);
+            const std::size_t kRows = scan.entities.size();
+            frame_[kSlot].integer = static_cast<std::int64_t>(kRows);
+            // Read only: a program writing what it scanned writes this copy.
+            if (!kLend(kSlot + 1, kRows == 0 ? nullptr : scan.values.data(), kRows, scan.element, scan.size) ||
+                !kLend(kSlot + 2,
+                       kRows == 0 ? nullptr : scan.entities.data(),
+                       kRows,
+                       std::string{kEntityType},
+                       sizeof(world::EntityHandle))) {
+                break;
+            }
         }
         if (!failure) {
             auto outcome = machine_->call(entry_, frame_, fuel);
@@ -285,8 +347,8 @@ private:
         }
         // Lends end whatever happened: the program must hold nothing over
         // World memory once the call is over.
-        for (std::size_t index = 0; index < made; ++index) {
-            machine_->endLend(frame_[1 + index]);
+        for (const std::size_t kSlot : lentSlots_) {
+            machine_->endLend(frame_[kSlot]);
         }
         if (failure) {
             return std::unexpected<result::Error>{std::move(*failure)};
@@ -300,6 +362,9 @@ private:
     world::ColumnQuery query_;
     std::vector<DataColumn> columns_;
     std::vector<schema::ComponentRuntimeId> lookups_;
+    std::vector<Scan> scans_;
+    /// The frame's slots lent for the call being made.
+    std::vector<std::size_t> lentSlots_;
     std::vector<schema::ComponentRuntimeId> reads_;
     std::vector<schema::ComponentRuntimeId> writes_;
     std::vector<kest::Value> frame_;
@@ -356,7 +421,7 @@ result::Status KestSystems::reload(std::shared_ptr<const kest::Program> program)
         const auto kData =
             static_cast<std::size_t>(std::ranges::count_if(declared.columns, &carriesData<Declared::Column>));
         if (kEntry.frameSlots != declared.entry.frameSlots ||
-            !machine->checkArguments(kEntry, systemArguments(kData)).has_value()) {
+            !machine->checkArguments(kEntry, systemArguments(kData, declared.scans.size())).has_value()) {
             return refuse(result::ErrorClass::FailedPrecondition,
                           WorldKestError::EntryMismatch,
                           "a reloaded system takes other columns than it was declared with");
@@ -504,6 +569,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
                       .before = {system.before.begin(), system.before.end()},
                       .randomStreams = {system.randomStreams.begin(), system.randomStreams.end()},
                       .lookups = {system.lookups.begin(), system.lookups.end()},
+                      .scans = {},
                       .afterViews = {},
                       .beforeViews = {},
                       .streamViews = {}};
@@ -518,12 +584,19 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
                                                     .access = column.access,
                                                     .entities = column.entities});
         }
-        // The count, then one array per data column; an answer, if any, is
-        // one slot and fits over the count.
-        if (kEntry.frameSlots != 1 + data || !machine->checkArguments(kEntry, systemArguments(data)).has_value()) {
+        for (const KestScan& kScan : system.scans) {
+            RAWFRAME_TRY(settings.program->layout(kScan.kestType));
+            copy.scans.emplace_back(kScan.component, std::string{kScan.kestType});
+        }
+        // The count, then one array per data column, then three slots per
+        // scan; an answer, if any, is one slot and fits over the count.
+        const std::size_t kScans = system.scans.size();
+        if (kEntry.frameSlots != 1 + data + (3 * kScans) ||
+            !machine->checkArguments(kEntry, systemArguments(data, kScans)).has_value()) {
             return refuse(result::ErrorClass::InvalidArgument,
                           WorldKestError::EntryMismatch,
-                          "a Kest system takes a count and one array per lent column");
+                          "a Kest system takes a count and one array per lent column, then a count, values, and "
+                          "entities per scan");
         }
         declared.push_back(std::move(copy));
     }
@@ -626,8 +699,32 @@ result::Status KestSystems::declareSystems(const schema::SchemaRegistry& registr
             }
             lookups.push_back(kId);
         }
-        auto system = std::make_unique<KestSystem>(
-            *machine_, *doorway_, declared.entry, std::move(query), std::move(data), std::move(lookups));
+        std::vector<KestSystem::Scan> scans;
+        for (const auto& [kComponent, kElement] : declared.scans) {
+            RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kId, registry.find(kComponent));
+            if (std::ranges::contains(query.writes(), kId)) {
+                return refuse(result::ErrorClass::InvalidArgument,
+                              WorldKestError::ColumnMismatch,
+                              "a Kest system scans a component it writes");
+            }
+            const schema::ComponentDescriptor& descriptor = registry.descriptor(kId);
+            RAWFRAME_TRY(kShaped(descriptor, kElement));
+            const std::array<world::ColumnTerm, 1> kHolders = {world::ColumnTerm{kId, world::Access::Read}};
+            RAWFRAME_TRY_ASSIGN(world::ColumnQuery holders, world::ColumnQuery::resolve(kHolders, registry));
+            scans.push_back(KestSystem::Scan{.holders = std::move(holders),
+                                             .component = kId,
+                                             .element = kElement,
+                                             .size = descriptor.size,
+                                             .values = {},
+                                             .entities = {}});
+        }
+        auto system = std::make_unique<KestSystem>(*machine_,
+                                                   *doorway_,
+                                                   declared.entry,
+                                                   std::move(query),
+                                                   std::move(data),
+                                                   std::move(lookups),
+                                                   std::move(scans));
         systems.push_back(world::SystemDeclaration{.identity = declared.identity,
                                                    .phase = declared.phase,
                                                    .reads = system->reads(),
