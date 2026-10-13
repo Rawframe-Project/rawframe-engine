@@ -135,6 +135,8 @@ struct MathNode {
 
 /// The math node of `type`; none for another type.
 [[nodiscard]] const MathNode* mathNodeOf(std::string_view type);
+/// Every math node, as `nodeSignatures` lists them.
+[[nodiscard]] std::span<const MathNode> mathNodes();
 
 /// The code a math node is written as over ints, `$0` to `$2` its inputs:
 /// add, subtract, multiply, divide (truncating), modulo (floored, as the
