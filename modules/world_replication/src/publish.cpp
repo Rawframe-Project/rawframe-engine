@@ -17,6 +17,7 @@
 #include <bit>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <span>
 
 namespace rawframe::world_replication {
@@ -27,6 +28,10 @@ namespace {
 /// within the radius of each other then land in the same cell or the next
 /// despite rounding.
 constexpr double kCellSlack = 1.01;
+
+/// The most a state record's head takes before its value: two varints,
+/// the entity's name and the component's.
+constexpr std::size_t kRecordHead = 10;
 
 /// The cell a finite coordinate is in, for cells `width` wide. Far out,
 /// cells are clamped, which keeps coordinates in the same cell or the next
@@ -539,6 +544,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     // among the present values.
     candidates.clear();
     named.clear();
+    std::size_t smallest = std::numeric_limits<std::size_t>::max();
     const PeerNames kNames{peer};
     const auto kValueOf = [this](std::size_t index, std::size_t namedAt) {
         const PresentValue& value = present[index];
@@ -610,6 +616,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
                 continue;
             }
             replica.priority += value.entity == peer.player ? kOwnedPriority : 1;
+            smallest = std::min(smallest, kRecordHead + value.length);
             candidates.push_back(
                 Candidate{.priority = replica.priority, .present = kIndex, .named = kNamedAt, .mapping = &held});
         }
@@ -629,16 +636,24 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         }
     }
     peer.unsettled.swap(unsettling);
-    // Longest waiting first; ties in entity order, so a run repeats.
-    std::sort(candidates.begin(), candidates.end(), [](const Candidate& left, const Candidate& right) {
-        return left.priority != right.priority ? left.priority > right.priority : left.present < right.present;
-    });
-
-    for (const Candidate& candidate : candidates) {
+    // Longest waiting first; ties in entity order, so a run repeats. Taken
+    // in that order from a heap, and only while the budget has room for the
+    // smallest record: the rest are deferred unsorted, as a large first
+    // sending defers thousands a turn (D746).
+    const auto kAfter = [](const Candidate& left, const Candidate& right) {
+        return left.priority != right.priority ? left.priority < right.priority : left.present > right.present;
+    };
+    std::ranges::make_heap(candidates, kAfter);
+    auto waiting = candidates.end();
+    while (waiting != candidates.begin() &&
+           spent + used + smallest + kStateHeaderRoom <= settings.stateBytesPerPublish) {
+        std::pop_heap(candidates.begin(), waiting, kAfter);
+        --waiting;
+        const Candidate& candidate = *waiting;
         const PresentValue& value = present[candidate.present];
         Replica& replica = candidate.mapping->replicas[value.component];
         const std::span<const std::byte> kValue = kValueOf(candidate.present, candidate.named);
-        const std::size_t kRecord = 10 + value.length;
+        const std::size_t kRecord = kRecordHead + value.length;
         if (used + kRecord + kStateHeaderRoom > kRoom) {
             kFlush();
         }
@@ -671,6 +686,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         ++count;
         ++statistics.recordsSent;
     }
+    statistics.recordsDeferred += static_cast<std::uint64_t>(waiting - candidates.begin());
     kFlush();
     // Nothing changed, yet the client still needs to hear which of its
     // input the server consumed: without it an idle player's predictions
