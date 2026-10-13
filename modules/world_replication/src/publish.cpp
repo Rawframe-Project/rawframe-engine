@@ -560,11 +560,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         }
     }
     everything = everything || since >= peer.mapped.size();
-    if (everything) {
-        for (const auto& [entity, mapping] : peer.mapped) {
-            looking.push_back(entity);
-        }
-    } else {
+    if (!everything) {
         looking.assign(peer.unsettled.begin(), peer.unsettled.end());
         for (const Changed& kChanged : changed) {
             if (kChanged.publish > *peer.lookedAt) {
@@ -577,15 +573,10 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     }
     peer.lookedAt = publishes;
     unsettling.clear();
-    for (const world::EntityHandle entity : looking) {
-        Mapping* const kMapping = peer.mapped.find(entity);
-        if (kMapping == nullptr) {
-            continue;
-        }
-        Mapping& held = *kMapping;
+    const auto kLook = [&](world::EntityHandle entity, Mapping& held) {
         if (!held.acknowledged || !isPresent(entity)) {
             unsettling.push_back(entity);
-            continue;
+            return;
         }
         bool settled = true;
         const bool kPlayer = entity == peer.player;
@@ -624,6 +615,17 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         }
         if (!settled) {
             unsettling.push_back(entity);
+        }
+    };
+    if (everything) {
+        for (auto& [entity, held] : peer.mapped) {
+            kLook(entity, held);
+        }
+    } else {
+        for (const world::EntityHandle kEntity : looking) {
+            if (Mapping* const kHeld = peer.mapped.find(kEntity); kHeld != nullptr) {
+                kLook(kEntity, *kHeld);
+            }
         }
     }
     peer.unsettled.swap(unsettling);
