@@ -371,6 +371,20 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device;skip: no shader toolchain"
                              PASS_REGULAR_EXPRESSION
                              "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,[^\n]*\"ribbonsDrawn\":[1-9][0-9]*,.*\"code\":\"ui_drawing_summary\"[^\n]*\"glyphRuns\":[1-9][0-9]*,.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,")
+        # Quarry's land drawn (D736): every block a box of its kind's color,
+        # some seven thousand, seen from above the land's near edge, played
+        # from its sources, none left out.
+        add_test(NAME client_quarry_drawn
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh $<TARGET_FILE:rawframe_host_dedicated_server>
+                         $<TARGET_FILE:rawframe_host_client> ${CMAKE_CURRENT_SOURCE_DIR}/tests/quarry_drawn.conf
+                         games/quarry/quarry.game /dev/null
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(client_quarry_drawn PROPERTIES
+                             PROCESSORS 2
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9][0-9][0-9][0-9][0-9]+,[^\n]*\"modelsLeftOut\":0,")
         # The plaza's view turned as its player drags with the right mouse
         # button held (D521): the scene's last view looks more than a radian
         # away from where it started. The turn is the server's, so it needs

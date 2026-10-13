@@ -7,6 +7,7 @@ module quarry
 // column it aims at, or places one on it, once in a while.
 
 import controls
+import rawframe.model
 import rawframe.random
 import rawframe.world
 
@@ -191,6 +192,50 @@ fn dig(count: i32, tools: [controls.Tool], diggers: [Digger], entities: [world.E
             }
             diggers[i].rest = REST
         }
+        i = i + 1
+    }
+}
+
+// A block's color by its kind, 0xRRGGBBAA in sRGB: grey stone, brown
+// earth, green grass, and red brick.
+fn colored(kind: u8) -> u32 {
+    if kind == GRASS {
+        return u32(0x5A8C3CFF)
+    }
+    if kind == EARTH {
+        return u32(0x7A5634FF)
+    }
+    if kind == BRICK {
+        return u32(0xA8442EFF)
+    }
+    return u32(0x8A8A86FF)
+}
+
+// Each block drawn as a box of half a meter's half sides where it stands,
+// once: a block never moves, and its kind never changes.
+fn dress(count: i32, blocks: [Block], looks: [model.Model], spots: [model.Placed]) {
+    let half = f64(SIDE) * 0.5
+    let i = 0
+    while i < count {
+        if !spots[i].placed {
+            let b = blocks[i]
+            looks[i] = model.Model(model.BOX, 0.5, 0.5, 0.5, colored(b.kind), u64(0), 0.0)
+            spots[i] = model.Placed(true, f64(b.x) + 0.5 - half, f64(b.y) + 0.5, f64(b.z) + 0.5 - half)
+        }
+        i = i + 1
+    }
+}
+
+// Where the eye stands to see the whole land: above its near edge,
+// looking along -Z and down at it.
+const EYE_HEIGHT: f32 = 22.0
+const EYE_BACK: f32 = 24.0
+const EYE_PITCH: f32 = -0.62
+
+fn frame(count: i32, views: [model.Camera]) {
+    let i = 0
+    while i < count {
+        views[i] = model.Camera(0.0, EYE_HEIGHT, EYE_BACK, 0.0, EYE_PITCH, 1.0, 0.1, 15.0, u32(0), model.FIXED)
         i = i + 1
     }
 }

@@ -1,0 +1,39 @@
+module sample
+
+// A client's input for Quarry (quarry.game's `sample` line): its player's
+// tool, made each tick from its actions (quarry.actions). The aim moves
+// across the land while held, built on tick to tick (D525), up away from
+// the eye; the tool digs or places while its key or button is held.
+
+import controls
+import rawframe.input
+
+const AIM: u64 = 0xfb1d946b22b94ced
+const DIG: u64 = 0xb37164a7a7d053fd
+const PLACE: u64 = 0xc3915c32fa61f3d2
+
+// How far the aim moves in a tick at a full key, of the land's two.
+const STEP: f32 = 0.02
+
+fn clamped(at: f32) -> f32 {
+    if at > 1.0 {
+        return 1.0
+    }
+    if at < -1.0 {
+        return -1.0
+    }
+    return at
+}
+
+fn sample(into: [controls.Tool]) {
+    into[0].x = clamped(into[0].x + input.x(AIM) * STEP)
+    into[0].z = clamped(into[0].z - input.y(AIM) * STEP)
+    into[0].dig = 0.0
+    if input.on(DIG) {
+        into[0].dig = 1.0
+    }
+    into[0].place = 0.0
+    if input.on(PLACE) {
+        into[0].place = 1.0
+    }
+}
