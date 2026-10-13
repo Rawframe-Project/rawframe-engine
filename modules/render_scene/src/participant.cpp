@@ -683,6 +683,7 @@ private:
             kGiven(each);
         }
         textureViews_.replaceMaterials(materials);
+        pictures_.follow(*files_, materials);
         ++materialReloads_;
         emitter_.log(diagnostics::Severity::Info,
                      kMaterialsReloaded,

@@ -18,6 +18,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -38,6 +39,10 @@ public:
     /// At start: says what load could not ask for, and says through
     /// `emitter` from then on.
     void start(const diagnostics::Emitter& emitter);
+    /// The materials read again from new revisions (D734): a texture one
+    /// samples that load did not read is asked for alone, as a picture is,
+    /// so it is not sampled as white until the game is played again (D758).
+    void follow(const world_kest::GameFiles& files, const std::vector<SceneMaterial>& materials) noexcept;
 
     /// Asks for picture `id` on its first naming; nought is none. One the
     /// game does not declare, or that cannot be asked for, is none, and is
@@ -67,6 +72,8 @@ private:
     diagnostics::Emitter emitter_;
     std::unique_ptr<game_textures::GameTextures> textures_;
     std::uint64_t sampled_ = 0;
+    /// The textures load read for the materials.
+    std::set<std::uint64_t> read_;
     /// The materials naming a texture the game does not declare, and why
     /// the textures could not be asked for.
     std::vector<std::pair<std::string, std::string>> unknownTextures_;

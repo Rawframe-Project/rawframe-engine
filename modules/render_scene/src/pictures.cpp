@@ -18,6 +18,7 @@ constexpr diagnostics::EventIdentity kTextureReloaded{"scene", "texture_reloaded
 constexpr diagnostics::EventIdentity kTexturesRead{"scene", "textures_read"};
 constexpr diagnostics::EventIdentity kPictureUnknown{"scene", "picture_unknown"};
 constexpr diagnostics::EventIdentity kPictureUnread{"scene", "picture_unavailable"};
+constexpr diagnostics::EventIdentity kTextureFollowed{"scene", "texture_followed"};
 /// The decoded levels the materials' textures may hold.
 constexpr std::uint64_t kTextureBudgetBytes = std::uint64_t{256} * 1024 * 1024;
 
@@ -58,6 +59,7 @@ result::Status ScenePictures::read(composition::ParticipantContext& context,
         sampled.insert(texture->id);
     }
     sampled_ = sampled.size();
+    read_ = sampled;
     if (!context.has(game_content::kGameContent.name) || context.cpuExecutor() == nullptr) {
         return {};
     }
@@ -111,6 +113,27 @@ void ScenePictures::start(const diagnostics::Emitter& emitter) {
                      kTexturesUnavailable,
                      "the materials' textures could not be asked for: they are sampled as white",
                      {diagnostics::field("reason", *unreadTextures_)});
+    }
+}
+
+void ScenePictures::follow(const world_kest::GameFiles& files, const std::vector<SceneMaterial>& materials) noexcept {
+    for (const SceneMaterial& kMaterial : materials) {
+        for (const SceneTexture* kTexture : {&kMaterial.textures.base,
+                                             &kMaterial.textures.packed,
+                                             &kMaterial.textures.emission,
+                                             &kMaterial.textures.normal}) {
+            if (kTexture->id != 0 && !read_.contains(kTexture->id) &&
+                !std::ranges::contains(
+                    files.description().renderTextures, kTexture->id, &world_kest::GameRenderTexture::id)) {
+                // Each once: a later reload finds it read.
+                read_.insert(kTexture->id);
+                emitter_.log(diagnostics::Severity::Info,
+                             kTextureFollowed,
+                             "a material read again samples a texture not read before: it is read now",
+                             {diagnostics::field("texture", graph::nodeIdText(kTexture->id))});
+                ask(kTexture->id);
+            }
+        }
     }
 }
 

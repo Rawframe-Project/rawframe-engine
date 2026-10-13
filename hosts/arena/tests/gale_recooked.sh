@@ -3,7 +3,9 @@
 # cooked first as it ships, is recooked rougher once the client has read
 # the materials' textures; the running client publishes the changed
 # manifest and its scene reads the game's materials again, the program
-# materials whose revisions stayed kept. A machine without the shader
+# materials whose revisions stayed kept. The shore is recooked to sample
+# a texture the game declares and nothing sampled before, which the scene
+# then reads (D758). A machine without the shader
 # toolchain, which Gale's sea needs (D484), skips, unless
 # RAWFRAME_REQUIRE_SHADER_TOOLCHAIN is set (D701).
 #
@@ -19,6 +21,14 @@ rm -rf "$work"
 mkdir -p "$work/sources"
 trap 'echo "gale_recooked: failed at line $LINENO"; grep -o "\"code\":\"stopped\".*" "$work/log.ndjson" 2>/dev/null | cut -c1-600' ERR
 cp -r "$repository/games/gale/." "$work/sources/"
+# A texture the game declares and no material samples at first: the
+# recooked shore samples it, and the scene reads it then (D758).
+cp "$work/sources/stone.png" "$work/sources/sand.png"
+sed 's/bdade485c2e3a616d47796f633ec9154/5a2d7e1b9c4f40aa8e6b31d0c7f29e54/' "$work/sources/stone.png.rfmeta" \
+    >"$work/sources/sand.png.rfmeta"
+sed 's/^texture ea9d135c1c4e2805 stone.png$/&\ntexture 5a2d7e1b9c4f40aa sand.png/' "$repository/games/gale/gale.game" \
+    >"$work/sources/gale.game"
+grep -q 'sand.png' "$work/sources/gale.game"
 if ! "$cook" "$work/sources" "$work/content" "$work/cache" >"$work/cooked.txt" 2>&1; then
     if grep -q "the shader toolchain builds, and the cook was given none" "$work/cooked.txt" &&
         [ -z "${RAWFRAME_REQUIRE_SHADER_TOOLCHAIN:-}" ]; then
@@ -33,7 +43,7 @@ cat >"$work/arena.conf" <<CONF
 host.maximum_iterations = 14400
 host.iteration_rate = 120
 world.tick_rate = 60
-kest.game = $repository/games/gale/gale.game
+kest.game = $work/sources/gale.game
 content.root = $work/content
 content.reload_every = 12
 network.loopback.latency_ms = 10
@@ -60,6 +70,9 @@ done
 sed 's/"specular_roughness": 0.9/"specular_roughness": 0.5/' "$work/sources/rock.rfmaterial" >"$work/rock.rfmaterial"
 mv "$work/rock.rfmaterial" "$work/sources/rock.rfmaterial"
 grep -q '"specular_roughness": 0.5' "$work/sources/rock.rfmaterial"
+sed 's/^  "overrides": {$/&\n    "stone": "5a2d7e1b9c4f40aa",/' "$work/sources/shore.rfmaterial" >"$work/shore.rfmaterial"
+mv "$work/shore.rfmaterial" "$work/sources/shore.rfmaterial"
+grep -q '"stone": "5a2d7e1b9c4f40aa"' "$work/sources/shore.rfmaterial"
 "$cook" "$work/sources" "$work/content" "$work/cache" >/dev/null
 for _ in $(seq 1 1800); do
     grep -q '"code":"materials_reloaded"' "$work/log.ndjson" && break
@@ -69,6 +82,7 @@ kill -TERM "$running" 2>/dev/null || true
 wait "$running"
 grep -q '"code":"content_reloaded"' "$work/log.ndjson"
 grep -o '"code":"materials_reloaded".*' "$work/log.ndjson" | head -1
+grep -o '"code":"texture_followed".*' "$work/log.ndjson" | head -1
 if grep -q '"code":"material_unread"' "$work/log.ndjson"; then
     exit 1
 fi

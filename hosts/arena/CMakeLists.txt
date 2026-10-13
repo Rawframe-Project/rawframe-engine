@@ -292,7 +292,7 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(gale_recooked PROPERTIES
                          PROCESSORS 4
                          SKIP_REGULAR_EXPRESSION "skip: no shader toolchain"
-                         PASS_REGULAR_EXPRESSION "\"code\":\"materials_reloaded\"[^\n]*\"materials\":[1-9][0-9]*,\"reloads\":1")
+                         PASS_REGULAR_EXPRESSION "\"code\":\"materials_reloaded\"[^\n]*\"materials\":[1-9][0-9]*,\"reloads\":1.*\"code\":\"texture_followed\"[^\n]*\"texture\":\"5a2d7e1b9c4f40aa\"")
     add_test(NAME runners_recooked
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_recooked.sh $<TARGET_FILE:rawframe_host_arena>
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}
