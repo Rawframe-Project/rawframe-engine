@@ -62,14 +62,15 @@ import { end } from './verdict.mjs';
 
 const [exportPath, cookPath, buildPath, serverPath, botsPath, wasmPath, windowPath, devicePath, uiPath, repository,
        named] = argv.slice(2);
-// runners, plaza, tycoon (Stalls), gale, or quarry.
+// runners, plaza, tycoon (Stalls), gale, quarry, or lighting.
 const name = named ?? 'runners';
 const plaza = name === 'plaza';
 const stalls = name === 'tycoon';
 const gale = name === 'gale';
 const quarry = name === 'quarry';
+const lighting = name === 'lighting';
 // The games drawn in 3D.
-const scened = plaza || gale || quarry;
+const scened = plaza || gale || quarry || lighting;
 let puppeteer;
 try {
     puppeteer = createRequire(join(env.RAWFRAME_NODE_MODULES ?? '', 'x.js'))('puppeteer');
@@ -185,9 +186,10 @@ const browser = await puppeteer.launch({
     env: Object.assign({}, env, { VK_ICD_FILENAMES: swiftShader, VK_DRIVER_FILES: swiftShader }),
 });
 
-// The pixels of a PNG screenshot that are not black: Chrome's are 8-bit
-// RGB or RGBA, not interlaced.
-const litPixels = (png) => {
+// The pixels of a PNG screenshot that are not black, and those red or
+// green over the others, as the Lighting Test's lamps make them (D750):
+// Chrome's are 8-bit RGB or RGBA, not interlaced.
+const pixelCounts = (png) => {
     const width = png.readUInt32BE(16);
     const height = png.readUInt32BE(20);
     const channels = png[25] === 6 ? 4 : 3;
@@ -203,6 +205,8 @@ const litPixels = (png) => {
     const stride = width * channels;
     let previous = Buffer.alloc(stride);
     let lit = 0;
+    let red = 0;
+    let green = 0;
     for (let y = 0; y < height; y++) {
         const filter = raw[y * (stride + 1)];
         const row = Buffer.from(raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)));
@@ -217,11 +221,14 @@ const litPixels = (png) => {
             row[x] = (row[x] + [0, left, up, (left + up) >> 1, nearest][filter]) & 255;
         }
         for (let x = 0; x < stride; x += channels) {
-            lit += row[x] || row[x + 1] || row[x + 2] ? 1 : 0;
+            const [r, g, b] = [row[x], row[x + 1], row[x + 2]];
+            lit += r || g || b ? 1 : 0;
+            red += r > 60 && r > 1.3 * g && r > 1.3 * b ? 1 : 0;
+            green += g > 80 && g > 1.1 * r && g > 1.1 * b ? 1 : 0;
         }
         previous = row;
     }
-    return lit;
+    return { lit, red, green };
 };
 // What Chrome's accessibility tree holds under an element, a node a line,
 // each its role and its name, as a screen reader reads them: ignored nodes,
@@ -350,7 +357,8 @@ try {
         await sleep(500);
     }
     // What the canvas shows before the stop.
-    const shown = litPixels(await (await tab.$('canvas')).screenshot({ type: 'png' }));
+    const pixels = pixelCounts(await (await tab.$('canvas')).screenshot({ type: 'png' }));
+    const shown = pixels.lit;
     await tab.evaluate(() => window.rawframeStop());
     await until(/page: ended/, 30000);
     const ended = Number(/page: ended (\d+)/.exec(clientLog)[1]);
@@ -404,8 +412,9 @@ try {
         lit: shown > 1000,
         noGpuErrors: gpuErrors.length === 0,
     };
-    if (!stalls && !quarry) {
-        // Stalls and Quarry predict nothing, so confirm nothing.
+    if (!stalls && !quarry && !lighting) {
+        // Stalls, Quarry, and the Lighting Test predict nothing, so
+        // confirm nothing.
         checks.confirmed = field('confirmed') > 100;
     }
     if (stalls) {
@@ -430,10 +439,14 @@ try {
                 worded: worded !== null && Number(worded[1]) > 0 && Number(worded[3]) === 0,
                 heard: heard.frames > 48000 && heard.peak > 0.05,
             });
-        } else {
+        } else if (quarry) {
             // The whole land, past the 4,096 a connection holds by
             // default (D742).
             checks.landWhole = field('mirroredEntities') > 6000;
+        } else {
+            // The red lamp's light and the green's, through WebGPU (D750).
+            console.log(`page: the lamps lit ${pixels.red} red and ${pixels.green} green pixels`);
+            checks.lamps = pixels.red > 200 && pixels.green > 50;
         }
     } else {
         Object.assign(checks, {
@@ -473,7 +486,7 @@ const nativeField = (name) => Number(new RegExp(`"${name}":(\\d+)`).exec(native?
 const most = Number(/"mostConnections":(\d+)/.exec(serverLog)?.[1] ?? -1);
 console.log(`page: native bots admitted ${nativeField('admitted')}, confirmed ${nativeField('confirmed')}; ` +
             `the server held ${most} players at once`);
-if (nativeField('admitted') !== 2 || (!stalls && !quarry && nativeField('confirmed') <= 100) ||
+if (nativeField('admitted') !== 2 || (!stalls && !quarry && !lighting && nativeField('confirmed') <= 100) ||
     nativeField('stalled') !== 0 || most < 3) {
     console.log('page: unmet: the native bots or the players held at once');
     verdict = 1;
