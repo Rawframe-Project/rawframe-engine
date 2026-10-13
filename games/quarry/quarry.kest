@@ -230,7 +230,8 @@ fn column(at: f32) -> u32 {
 
 // Each player rested digs the top block of the column it aims at, or
 // places brick on it, the land once made; then rests.
-fn dig(count: i32, tools: [controls.Tool], diggers: [Digger], entities: [world.Entity]) {
+fn dig(count: i32, tools: [controls.Tool], diggers: [Digger], entities: [world.Entity], blockCount: i32,
+       blocks: [Block], blockEntities: [world.Entity]) {
     if Terrain.count() == 0 || !Terrain.get(Terrain.entity(0)).made {
         return
     }
@@ -246,22 +247,22 @@ fn dig(count: i32, tools: [controls.Tool], diggers: [Digger], entities: [world.E
             // Held only once found; the player stands in till then.
             let top = entities[i]
             let topY = u32(0)
+            let topKind = u8(0)
             let b = 0
-            let blocks = Block.count()
-            while b < blocks {
-                let entity = Block.entity(b)
-                let block = Block.get(entity)
+            while b < blockCount {
+                let block = blocks[b]
                 if block.x == x && block.z == z && (!found || block.y > topY) {
                     found = true
-                    top = entity
+                    top = blockEntities[b]
                     topY = block.y
+                    topKind = block.kind
                 }
                 b = b + 1
             }
             let digging = tools[i].dig > 0.5
             let using = !digging && tools[i].use > 0.5
             // A lever on top is thrown.
-            if using && found && Block.get(top).kind == LEVER && Part.has(top) {
+            if using && found && topKind == LEVER && Part.has(top) {
                 Part.insert(top, Part(!Part.get(top).on))
             }
             if digging && found {

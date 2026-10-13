@@ -22,7 +22,9 @@ component 4c7aaa82-92db-4c13-9256-54c5d17b3ff2 quarry.view rawframe.model.Camera
 # The land is made a few columns a tick from the seed its first tick draws;
 # then each player digs or builds where its tool aims.
 system quarry.generate simulation generate write quarry.terrain entities random land
-system quarry.dig simulation dig read quarry.tool write quarry.digger entities lookup quarry.block lookup quarry.part lookup quarry.terrain after quarry.generate
+# Each acting player's column is found among the blocks read whole, not
+# asked of block by block (D747).
+system quarry.dig simulation dig read quarry.tool write quarry.digger entities lookup quarry.part lookup quarry.terrain scan quarry.block after quarry.generate
 # Power goes from each lever thrown along wire to the lamps it reaches
 # (D737).
 system quarry.power simulation power read quarry.terrain lookup quarry.part lookup quarry.block after quarry.dig
