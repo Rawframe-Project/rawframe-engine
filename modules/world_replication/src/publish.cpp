@@ -55,6 +55,24 @@ bool finite(const std::array<double, 3>& at) noexcept {
     return std::isfinite(at[0]) && std::isfinite(at[1]) && std::isfinite(at[2]);
 }
 
+/// Past this many runs in order, a list is sorted rather than merged.
+constexpr int kMostRuns = 8;
+
+/// Puts entities in order where they are a few runs already in order, each
+/// merged in a pass; past `kMostRuns` runs they are sorted.
+void orderRuns(std::vector<world::EntityHandle>& entities) {
+    auto ordered = std::ranges::is_sorted_until(entities);
+    for (int runs = 1; ordered != entities.end(); ++runs) {
+        if (runs == kMostRuns) {
+            std::ranges::sort(entities);
+            return;
+        }
+        const auto kRunEnd = std::is_sorted_until(ordered, entities.end());
+        std::inplace_merge(entities.begin(), ordered, kRunEnd);
+        ordered = kRunEnd;
+    }
+}
+
 } // namespace
 
 void ReplicationServer::State::publish(world::World& world, world::TickIndex tick) {
@@ -574,7 +592,12 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
             }
         }
         looking.push_back(peer.player);
-        std::ranges::sort(looking);
+        // Each part is in entity order: what stayed unsettled was walked
+        // in order and what was declared since was declared in order, and
+        // each publish's changes are in slot order. During a large first
+        // sending thousands stay unsettled, and sorting them every turn
+        // was most of a connection's cost.
+        orderRuns(looking);
         looking.erase(std::ranges::unique(looking).begin(), looking.end());
     }
     peer.lookedAt = publishes;
