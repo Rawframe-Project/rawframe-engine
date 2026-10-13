@@ -88,7 +88,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (sheetChosen() && node == newNode_) {
         // A sheet's class is made and deleted as an entity is (D638).
         endEdit();
-        const std::string kStyle = mintedStyle();
+        const std::string kStyle = mintedHexIdentity();
         Value operation = Value::object();
         operation.add("operation", Value::string("styles.create_class"));
         operation.add("style", Value::string(kStyle));
@@ -105,6 +105,10 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         // Of a component the game declares a node, not one the document
         // holds (D672).
         showNodeForm();
+    } else if (graphChosen() && node == newNode_) {
+        // Of a type the material module lists, with a fresh identity
+        // (D731).
+        showGraphForm();
     } else if (graphChosen() && node == deleteNode_ && !entity_.empty()) {
         // A node another reads is refused by the session: the graph would
         // not read (D728).
@@ -174,6 +178,15 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (const auto kAction = std::ranges::find(actions_, node, &ActionButton::node); kAction != actions_.end()) {
         endEdit();
         const ActionButton kAsked = *kAction;
+        if (kAsked.makesNode && graphChosen()) {
+            const std::string kNode = mintedHexIdentity();
+            Value operation = Value::object();
+            operation.add("operation", Value::string("materials.create_node"));
+            operation.add("node", Value::string(kNode));
+            operation.add("type", Value::string(kAsked.component));
+            commit(std::move(operation), kAsked.done, kNode);
+            return;
+        }
         if (kAsked.makesNode) {
             Value operation = Value::object();
             operation.add("operation", Value::string("ui.create_node"));

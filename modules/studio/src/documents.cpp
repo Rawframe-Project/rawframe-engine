@@ -344,6 +344,35 @@ void ShellParticipant::showNodeForm() {
     say(offered == 0 ? "every node component the game declares is in the document" : "choose the node's component");
 }
 
+void ShellParticipant::showGraphForm() {
+    endEdit();
+    fields_.clear();
+    clear(componentRows_);
+    actions_.clear();
+    components_ = 0;
+    const std::optional<Value> kListed = read(scene_, "materials.list_node_types");
+    const Value* types = kListed.has_value() ? kListed->find("types") : nullptr;
+    if (types == nullptr || types->items().empty()) {
+        say("the material module lists no node types");
+        return;
+    }
+    auto heading = row(componentsColumn_, "make a node of", kQuiet, kPanel);
+    if (!heading.has_value()) {
+        return;
+    }
+    componentRows_.push_back(*heading);
+    for (const Value& kType : types->items()) {
+        const std::string kName = kType.text() != nullptr ? *kType.text() : std::string{};
+        auto line = row(componentsColumn_, kName, kText, kRow, true);
+        if (!line.has_value()) {
+            return;
+        }
+        componentRows_.push_back(*line);
+        actions_.push_back(ActionButton{.node = *line, .component = kName, .done = kName + " made", .makesNode = true});
+    }
+    say("choose the node's type");
+}
+
 void ShellParticipant::showMaterial() {
     // The instance and its base's interface, as one answer holds them.
     sheet_ = read(scene_, "materials.read_instance");
@@ -461,7 +490,7 @@ void ShellParticipant::showGraphNode(std::size_t at) {
         return;
     }
     // Its params, then its inputs, each under a heading, as the graph
-    // holds them.
+    // holds them; then a field adding either (D731).
     for (const auto& [kMember, kRole] : {std::pair{std::string_view{"params"}, FieldRow::Role::GraphParam},
                                          std::pair{std::string_view{"inputs"}, FieldRow::Role::GraphInput}}) {
         const Value* held = chosen->find(kMember);
@@ -483,16 +512,39 @@ void ShellParticipant::showGraphNode(std::size_t at) {
             fields_.push_back(FieldRow{.value = line->second, .role = kRole, .field = held->names()[each]});
         }
     }
+    for (const auto& [kName, kRole] : {std::pair{std::string_view{"add param"}, FieldRow::Role::GraphParam},
+                                       std::pair{std::string_view{"add input"}, FieldRow::Role::GraphInput}}) {
+        auto line = fieldRow(kName, "", std::nullopt, false);
+        if (!line.has_value()) {
+            return;
+        }
+        componentRows_.push_back(line->first);
+        fields_.push_back(FieldRow{.value = line->second, .role = kRole});
+    }
 }
 
 void ShellParticipant::setGraphMember(const FieldRow& row, const std::string& text) {
     const bool kParam = row.role == FieldRow::Role::GraphParam;
+    // An added one is typed `name=value`; the name is the session's to
+    // judge, as the type's.
+    std::string name = row.field;
+    std::string value = text;
+    if (name.empty()) {
+        const std::size_t kSplit = text.find('=');
+        if (kSplit == std::string::npos || kSplit == 0 || kSplit + 1 == text.size()) {
+            ++refused_;
+            say(kParam ? "a param is added as name=value" : "an input is added as name=value");
+            return;
+        }
+        name = text.substr(0, kSplit);
+        value = text.substr(kSplit + 1);
+    }
     Value operation = Value::object();
     operation.add("operation", Value::string(kParam ? "materials.set_node_param" : "materials.set_node_input"));
     operation.add("node", Value::string(entity_));
-    operation.add(kParam ? "param" : "input", Value::string(row.field));
-    operation.add("value", documentedValue(text));
-    commit(std::move(operation), row.field + (text.empty() ? " unset" : " set to " + text), entity_);
+    operation.add(kParam ? "param" : "input", Value::string(name));
+    operation.add("value", documentedValue(value));
+    commit(std::move(operation), name + (value.empty() ? " unset" : " set to " + value), entity_);
 }
 
 } // namespace rawframe::studio

@@ -922,7 +922,7 @@ std::string mintedIdentity() {
     return text;
 }
 
-std::string mintedStyle() {
+std::string mintedHexIdentity() {
     std::random_device device;
     std::uint64_t made = 0;
     while (made == 0) {

@@ -102,9 +102,11 @@ struct FieldRow {
         /// A material instance's override of its base's input or switch
         /// (D722).
         Override,
-        /// A material graph's node's param, `field` its name (D730).
+        /// A material graph's node's param, `field` its name (D730), or
+        /// with none one added as `name=value` (D731).
         GraphParam,
-        /// A material graph's node's input, `field` its name (D730).
+        /// A material graph's node's input, `field` its name (D730), or
+        /// with none one added as `name=value` (D731).
         GraphInput
     };
     ui::Node value{};
@@ -126,7 +128,8 @@ struct ActionButton {
     std::string done;
     /// The scene's operation, naming no entity: a component's remark.
     bool whole = false;
-    /// A UI node of `component` made (D672), not an operation.
+    /// A node of `component` made, not an operation: a UI node (D672), or
+    /// a material graph's node of that type (D731).
     bool makesNode = false;
 };
 
@@ -352,6 +355,10 @@ private:
     /// of the game's node components the document does not hold, pressed
     /// to make a node of it at the document's top (`ui.create_node`).
     void showNodeForm();
+
+    /// The node types a material graph may hold, each a button making one
+    /// (D731).
+    void showGraphForm();
     /// The chosen material instance's base's inputs, then its switches, in
     /// the entity column, read with the instance from the session
     /// (`materials.read_instance`, D722); those it overrides brighter.
