@@ -565,6 +565,106 @@ RAWFRAME_TEST(StructsCrossDoorsByValue) {
     RAWFRAME_EXPECT(frame[0].real == 2.0);
 }
 
+namespace {
+
+struct Widths {
+    std::int8_t a = 0;
+    std::int16_t b = 0;
+    std::uint8_t c = 0;
+    std::uint16_t d = 0;
+    std::uint32_t e = 0;
+    std::int64_t f = 0;
+    double g = 0;
+};
+
+constexpr std::string_view kWidths = "module t\n"
+                                     "\n"
+                                     "struct Widths {\n"
+                                     "    a: i8\n"
+                                     "    b: i16\n"
+                                     "    c: u8\n"
+                                     "    d: u16\n"
+                                     "    e: u32\n"
+                                     "    f: i64\n"
+                                     "    g: f64\n"
+                                     "}\n"
+                                     "\n"
+                                     "extern fn Engine.lower(widths: Widths) -> Widths no.alloc\n"
+                                     "\n"
+                                     "fn run(x: i64) -> i32 {\n"
+                                     "    let w = Engine.lower(Widths(i8(-3), i16(-300), u8(250), u16(65000), "
+                                     "u32(4000000000), x, f64(1.5)))\n"
+                                     "    let right = 0\n"
+                                     "    if w.a == i8(-4) {\n"
+                                     "        right = right + 1\n"
+                                     "    }\n"
+                                     "    if w.b == i16(-301) {\n"
+                                     "        right = right + 2\n"
+                                     "    }\n"
+                                     "    if w.c == u8(249) {\n"
+                                     "        right = right + 4\n"
+                                     "    }\n"
+                                     "    if w.d == u16(64999) {\n"
+                                     "        right = right + 8\n"
+                                     "    }\n"
+                                     "    if w.e == u32(3999999999) {\n"
+                                     "        right = right + 16\n"
+                                     "    }\n"
+                                     "    if w.f == x - 1 && w.g == f64(0.5) {\n"
+                                     "        right = right + 32\n"
+                                     "    }\n"
+                                     "    return right\n"
+                                     "}\n";
+
+// Each field one lower, so a sign or a width lost on either side shows.
+void lower(kest::DoorCall& call, void*) noexcept {
+    Widths widths;
+    if (!call.value(0, std::as_writable_bytes(std::span{&widths, 1})) || widths.a != -3 || widths.b != -300 ||
+        widths.c != 250 || widths.d != 65000 || widths.e != 4000000000U || widths.g != 1.5) {
+        call.fail("the widths did not cross in");
+        return;
+    }
+    --widths.a;
+    --widths.b;
+    --widths.c;
+    --widths.d;
+    --widths.e;
+    --widths.f;
+    widths.g -= 1;
+    if (!call.answerValue(std::as_bytes(std::span{&widths, 1}))) {
+        call.fail("could not answer");
+    }
+}
+
+constexpr std::array<kest::Parameter, 1> kWidthsParameter = {kest::Parameter{Slot::Value, "Widths"}};
+
+} // namespace
+
+// Every width of whole number keeps its value and sign both ways, a narrow
+// piece beside gaps the program's layout leaves.
+RAWFRAME_TEST(EveryWidthCrossesDoorsByValue) {
+    const auto kProgram = compile(kWidths);
+    const auto kLayout = kProgram->layout("Widths");
+    RAWFRAME_EXPECT(kLayout.has_value() && kLayout->size == sizeof(Widths));
+    DoorTable doors;
+    RAWFRAME_EXPECT(
+        doors
+            .add(Door{.name = "Engine.lower", .function = &lower, .takes = kWidthsParameter, .gives = kWidthsParameter})
+            .has_value());
+    auto machine = Machine::start(kProgram, doors, Trust::Trusted, kLimits);
+    RAWFRAME_EXPECT(machine.has_value());
+    if (!machine.has_value()) {
+        return;
+    }
+    auto run = (*machine)->entry("run");
+    for (const std::int64_t kWhole : {std::int64_t{-9'000'000'000}, std::int64_t{7}}) {
+        std::array<Value, 1> frame{};
+        frame[0].integer = kWhole;
+        RAWFRAME_EXPECT((*machine)->call(*run, frame).hasValue());
+        RAWFRAME_EXPECT(frame[0].integer == 63);
+    }
+}
+
 RAWFRAME_TEST(ValueDoorsNameTheirType) {
     const auto kProgram = compile(kPairs);
     constexpr std::array<kest::Parameter, 2> kWrongType = {kest::Parameter{Slot::Value, "Mover"}, Slot::I64};

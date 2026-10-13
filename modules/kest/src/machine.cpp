@@ -90,9 +90,8 @@ bool shapeOf(KestBuild* build, std::uint32_t at, const Door& door, DoorCall::Sha
         if (!sameParameter(build, kLayout, door.takes[which])) {
             return false;
         }
-        shape.slots.push_back(door.takes[which].slot);
         shape.offsets.push_back(offset);
-        shape.layouts.push_back(door.takes[which].slot == Slot::Value ? kLayout : nullptr);
+        shape.takes.push_back(door.takes[which].slot == Slot::Value ? crossingOf(kLayout) : Crossing{});
         offset += kLayout->slots;
     }
     const KestLayout* const kGives = kest_extern_gives(build, at);
@@ -102,7 +101,7 @@ bool shapeOf(KestBuild* build, std::uint32_t at, const Door& door, DoorCall::Sha
     if (!sameParameter(build, kGives, door.gives[0])) {
         return false;
     }
-    shape.gives = door.gives[0].slot == Slot::Value ? kGives : nullptr;
+    shape.gives = door.gives[0].slot == Slot::Value ? crossingOf(kGives) : Crossing{};
     return true;
 }
 

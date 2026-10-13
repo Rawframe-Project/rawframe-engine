@@ -62,18 +62,48 @@ struct Program::State {
     }
 };
 
+/// How a value crosses a door as bytes, worked out once when the door is
+/// bound: at every crossing a piece is one copy, not a walk of its kind.
+struct Crossing {
+    /// How one slot becomes the bytes of its piece and back.
+    enum class Copy : std::uint8_t {
+        Real32,
+        Real64,
+        Unsigned8,
+        Unsigned16,
+        Unsigned32,
+        Signed8,
+        Signed16,
+        Signed32,
+        Whole64
+    };
+    struct Piece {
+        std::uint32_t offset = 0;
+        Copy copy = Copy::Whole64;
+    };
+
+    /// False for an argument or answer that is not a value.
+    bool value = false;
+    std::uint32_t size = 0;
+    /// Pieces in slot order, one slot each.
+    std::vector<Piece> pieces;
+    /// Whether bytes lie between or after the pieces, zeroed on the way out.
+    bool gaps = false;
+};
+
 struct DoorCall::Shape {
-    /// Per argument: its slot kind, its first slot in the frame, and for a
-    /// value the program's layout of it (the build's, which outlives this).
-    std::vector<Slot> slots;
+    /// Per argument: its first slot in the frame, and how it crosses.
     std::vector<std::uint32_t> offsets;
-    std::vector<const KestLayout*> layouts;
-    const KestLayout* gives = nullptr;
+    std::vector<Crossing> takes;
+    Crossing gives;
 };
 
 /// Whether a value of this layout can cross a door as bytes: numbers, truths,
 /// tags, and flags, one slot per piece, no tagged union.
 [[nodiscard]] bool crossesByValue(const KestLayout* layout) noexcept;
+
+/// How a value of a layout `crossesByValue` crosses.
+[[nodiscard]] Crossing crossingOf(const KestLayout* layout);
 
 /// A FILE Kest writes a report into, read back as text. In memory where the
 /// platform offers it; a temporary file elsewhere.

@@ -67,51 +67,113 @@ std::size_t widthOf(std::uint8_t kind) noexcept {
     }
 }
 
-bool signedKind(std::uint8_t kind) noexcept {
-    return kind == KEST_L_I8 || kind == KEST_L_I16 || kind == KEST_L_I32 || kind == KEST_L_I64 || kind == KEST_L_TAG;
+/// How a piece of this kind becomes a slot and back; `widthOf` says the
+/// kind crosses at all.
+Crossing::Copy copyOf(std::uint8_t kind) noexcept {
+    switch (kind) {
+    case KEST_L_F32:
+        return Crossing::Copy::Real32;
+    case KEST_L_F64:
+        return Crossing::Copy::Real64;
+    case KEST_L_I8:
+        return Crossing::Copy::Signed8;
+    case KEST_L_I16:
+        return Crossing::Copy::Signed16;
+    case KEST_L_I32:
+    case KEST_L_TAG:
+        return Crossing::Copy::Signed32;
+    case KEST_L_U8:
+    case KEST_L_BOOL:
+    case KEST_L_HELD:
+    case KEST_L_FLAGS8:
+        return Crossing::Copy::Unsigned8;
+    case KEST_L_U16:
+    case KEST_L_FLAGS16:
+        return Crossing::Copy::Unsigned16;
+    case KEST_L_U32:
+    case KEST_L_FLAGS32:
+        return Crossing::Copy::Unsigned32;
+    default:
+        return Crossing::Copy::Whole64;
+    }
+}
+
+template <typename Narrow> void narrowInto(std::int64_t whole, std::byte* into) noexcept {
+    // Whole numbers keep their low bits: the slot holds the value the
+    // program computed at its declared width, so nothing is lost.
+    const auto kValue = static_cast<Narrow>(whole);
+    std::memcpy(into, &kValue, sizeof kValue);
+}
+
+template <typename Narrow> std::int64_t widenFrom(const std::byte* from) noexcept {
+    Narrow value{};
+    std::memcpy(&value, from, sizeof value);
+    return static_cast<std::int64_t>(value);
 }
 
 /// One slot into the bytes of one piece.
-void toBytes(std::uint8_t kind, const KestValue& slot, std::byte* into) noexcept {
-    if (kind == KEST_L_F32) {
+void toBytes(Crossing::Copy copy, const KestValue& slot, std::byte* into) noexcept {
+    switch (copy) {
+    case Crossing::Copy::Real32: {
         const auto kValue = static_cast<float>(slot.real);
         std::memcpy(into, &kValue, sizeof kValue);
         return;
     }
-    if (kind == KEST_L_F64) {
+    case Crossing::Copy::Real64:
         std::memcpy(into, &slot.real, sizeof slot.real);
         return;
-    }
-    // Whole numbers keep their low bytes: the slot holds the value the
-    // program computed at its declared width, so nothing is lost.
-    const auto kBits = static_cast<std::uint64_t>(slot.integer);
-    const std::size_t kWidth = widthOf(kind);
-    for (std::size_t index = 0; index < kWidth; ++index) {
-        into[index] = static_cast<std::byte>((kBits >> (8U * index)) & 0xFFU);
+    case Crossing::Copy::Unsigned8:
+    case Crossing::Copy::Signed8:
+        narrowInto<std::uint8_t>(slot.integer, into);
+        return;
+    case Crossing::Copy::Unsigned16:
+    case Crossing::Copy::Signed16:
+        narrowInto<std::uint16_t>(slot.integer, into);
+        return;
+    case Crossing::Copy::Unsigned32:
+    case Crossing::Copy::Signed32:
+        narrowInto<std::uint32_t>(slot.integer, into);
+        return;
+    case Crossing::Copy::Whole64:
+        std::memcpy(into, &slot.integer, sizeof slot.integer);
+        return;
     }
 }
 
 /// The bytes of one piece into one slot, widened as the machine expects.
-void fromBytes(std::uint8_t kind, const std::byte* from, KestValue& slot) noexcept {
-    if (kind == KEST_L_F32) {
+void fromBytes(Crossing::Copy copy, const std::byte* from, KestValue& slot) noexcept {
+    switch (copy) {
+    case Crossing::Copy::Real32: {
         float value = 0;
         std::memcpy(&value, from, sizeof value);
         slot.real = value;
         return;
     }
-    if (kind == KEST_L_F64) {
+    case Crossing::Copy::Real64:
         std::memcpy(&slot.real, from, sizeof slot.real);
         return;
+    case Crossing::Copy::Unsigned8:
+        slot.integer = widenFrom<std::uint8_t>(from);
+        return;
+    case Crossing::Copy::Unsigned16:
+        slot.integer = widenFrom<std::uint16_t>(from);
+        return;
+    case Crossing::Copy::Unsigned32:
+        slot.integer = widenFrom<std::uint32_t>(from);
+        return;
+    case Crossing::Copy::Signed8:
+        slot.integer = widenFrom<std::int8_t>(from);
+        return;
+    case Crossing::Copy::Signed16:
+        slot.integer = widenFrom<std::int16_t>(from);
+        return;
+    case Crossing::Copy::Signed32:
+        slot.integer = widenFrom<std::int32_t>(from);
+        return;
+    case Crossing::Copy::Whole64:
+        std::memcpy(&slot.integer, from, sizeof slot.integer);
+        return;
     }
-    const std::size_t kWidth = widthOf(kind);
-    std::uint64_t bits = 0;
-    for (std::size_t index = 0; index < kWidth; ++index) {
-        bits |= static_cast<std::uint64_t>(std::to_integer<std::uint8_t>(from[index])) << (8U * index);
-    }
-    if (signedKind(kind) && kWidth < 8 && ((bits >> ((8U * kWidth) - 1U)) & 1U) != 0) {
-        bits |= ~std::uint64_t{0} << (8U * kWidth);
-    }
-    slot.integer = static_cast<std::int64_t>(bits);
 }
 
 } // namespace
@@ -127,6 +189,20 @@ bool crossesByValue(const KestLayout* layout) noexcept {
         }
     }
     return true;
+}
+
+Crossing crossingOf(const KestLayout* layout) {
+    Crossing crossing{.value = true, .size = layout->size, .pieces = {}, .gaps = false};
+    std::size_t covered = 0;
+    for (std::uint16_t index = 0; index < layout->count; ++index) {
+        const KestPiece& piece = layout->pieces[index];
+        crossing.pieces.push_back(Crossing::Piece{.offset = piece.offset, .copy = copyOf(piece.kind)});
+        covered += widthOf(piece.kind);
+    }
+    // Pieces never overlap (`crossesByValue`), so fewer bytes than the size
+    // leave a gap somewhere.
+    crossing.gaps = covered != layout->size;
+    return crossing;
 }
 
 Value* DoorCall::at(std::size_t argument) const noexcept {
@@ -152,14 +228,16 @@ std::string_view DoorCall::text(std::size_t argument) const noexcept {
 }
 
 bool DoorCall::value(std::size_t argument, std::span<std::byte> into) const noexcept {
-    const KestLayout* const kLayout = shape_->layouts[argument];
-    if (kLayout == nullptr || into.size() != kLayout->size) {
+    const Crossing& kCrossing = shape_->takes[argument];
+    if (!kCrossing.value || into.size() != kCrossing.size) {
         return false;
     }
-    std::memset(into.data(), 0, into.size());
+    if (kCrossing.gaps) {
+        std::memset(into.data(), 0, into.size());
+    }
     const auto* slots = reinterpret_cast<const KestValue*>(at(argument));
-    for (std::uint16_t index = 0; index < kLayout->count; ++index) {
-        toBytes(kLayout->pieces[index].kind, slots[index], into.data() + kLayout->pieces[index].offset);
+    for (std::size_t index = 0; index < kCrossing.pieces.size(); ++index) {
+        toBytes(kCrossing.pieces[index].copy, slots[index], into.data() + kCrossing.pieces[index].offset);
     }
     return true;
 }
@@ -178,13 +256,13 @@ void DoorCall::answerBoolean(bool value) noexcept {
 }
 
 bool DoorCall::answerValue(std::span<const std::byte> from) noexcept {
-    const KestLayout* const kLayout = shape_->gives;
-    if (kLayout == nullptr || from.size() != kLayout->size) {
+    const Crossing& kCrossing = shape_->gives;
+    if (!kCrossing.value || from.size() != kCrossing.size) {
         return false;
     }
     auto* slots = reinterpret_cast<KestValue*>(frame_);
-    for (std::uint16_t index = 0; index < kLayout->count; ++index) {
-        fromBytes(kLayout->pieces[index].kind, from.data() + kLayout->pieces[index].offset, slots[index]);
+    for (std::size_t index = 0; index < kCrossing.pieces.size(); ++index) {
+        fromBytes(kCrossing.pieces[index].copy, from.data() + kCrossing.pieces[index].offset, slots[index]);
     }
     return true;
 }
