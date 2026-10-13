@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # The Lighting Test drawn (D749): runs the arena on a configuration that
 # draws the fixture offscreen and writes its last frame, prints what it
-# logged, and reads the frame for each light the fixture lights with. Each
-# measure was taken with its lamps on and off: the red lamp's pixels
-# (red past 1.3 times green and blue: none without it, about 2,000 with),
-# the green's (green past 1.1 times red and blue: none, about 850), the
-# blue's on the ground below the horizon (blue past 1.3 times red: about
-# 4,700, about 18,800), and what the spot light and the glowing block
-# make nearly white. A machine with no adapter the configuration allows
+# logged, and reads the frame for each light the fixture lights with. The
+# bots turn the view at random, by how fast the machine runs, within the
+# quarter radian either way the fixture allows; each measure was taken at
+# both ends and the middle, with the point lamps on and off: the red
+# lamp's pixels (red past 1.3 times green and blue: none without it, 3,500
+# to 6,750 with), the green's (green past 1.1 times red and blue: none,
+# 480 to 700), the blue's on the ground below the horizon (blue past 1.3
+# times red: 1,500 to 3,200 from the sky alone, 9,500 to 18,200 with it),
+# and what the spot light and the glowing block make nearly white (about
+# 2,300 to 2,600). A machine with no adapter the configuration allows
 # skips, unless RAWFRAME_REQUIRE_GPU is set (as runners_drawn.sh).
 #
 # usage: lighting_seen.py <rawframe-arena> <configuration> <capture>
@@ -56,7 +59,7 @@ def main():
         return 1
     found = counts(capture)
     print("seen: red %(red)d, green %(green)d, blue %(blue)d, white %(white)d" % found)
-    if found["red"] >= 500 and found["green"] >= 200 and found["blue"] >= 10000 and found["white"] >= 500:
+    if found["red"] >= 1000 and found["green"] >= 200 and found["blue"] >= 6000 and found["white"] >= 500:
         print("lit by every lamp")
         return 0
     print("a lamp's light is missing")

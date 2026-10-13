@@ -14,9 +14,11 @@ const GROUND: u64 = 0xb1faca30a6eba272
 const GLOW: u64 = 0xc4b487438a7e40f9
 const SKY: u64 = 0x20a6d84f88dc45e0
 
-// Radians the view turns in a tick at a full key, and how far from the
-// wall's middle, and how high, the eye is.
+// Radians the view turns in a tick at a full key, and how far it turns
+// either way: the wall is seen from before it, where every lamp's light
+// falls; and how far from the wall's middle, and how high, the eye is.
 const TURN: f32 = 0.02
+const FURTHEST: f32 = 0.25
 const EYE_DISTANCE: f32 = 7.5
 const EYE_HEIGHT: f32 = 2.2
 
@@ -56,7 +58,14 @@ extern fn Stage.has(entity: world.Entity) -> bool
 fn turn(count: i32, views: [controls.View], orbits: [Orbit]) {
     let i = 0
     while i < count {
-        orbits[i].yaw = orbits[i].yaw + views[i].turn * TURN
+        let yaw = orbits[i].yaw + views[i].turn * TURN
+        if yaw > FURTHEST {
+            yaw = FURTHEST
+        }
+        if yaw < 0.0 - FURTHEST {
+            yaw = 0.0 - FURTHEST
+        }
+        orbits[i].yaw = yaw
         i = i + 1
     }
 }
