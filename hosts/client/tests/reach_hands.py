@@ -43,20 +43,24 @@ TRIGGER_TOUCH = 113
 
 EYE = 1.2
 # Where the hand is (seat frame, before the round's block is chosen across)
-# and whether it grips, by seconds into a three-second round; between two,
-# it moves straight. The trigger's rounds reach for the block at 0, the
-# fist's for the block at -0.3.
-ROUND = 3.0
+# and whether it grips, by seconds into a round; between two, it moves
+# straight. The trigger's rounds reach for the block at 0, the fist's for
+# the block at -0.3. The hand grips at the block for 0.4 s before it
+# lifts: a block is taken only while a gripping hand is within ten
+# centimeters of it, which lifting leaves in a tenth of a second, and a
+# client on a loaded machine may sample no frame in that (D744).
+ROUND = 3.4
 ACROSS = (0.0, -0.3)
 WAYPOINTS = [
     (0.0, (0.0, 1.1, -0.75), False),
     (0.6, (0.0, 0.88, -0.75), False),
     (0.9, (0.0, 0.88, -0.75), True),
-    (1.4, (0.0, 1.4, -0.75), True),
-    (1.9, (0.0, 1.4, -1.45), True),
-    (1.91, (0.0, 1.4, -1.47), False),
-    (2.1, (0.0, 1.4, -1.6), False),
-    (3.0, (0.0, 1.1, -0.75), False),
+    (1.3, (0.0, 0.88, -0.75), True),
+    (1.8, (0.0, 1.4, -0.75), True),
+    (2.3, (0.0, 1.4, -1.45), True),
+    (2.31, (0.0, 1.4, -1.47), False),
+    (2.5, (0.0, 1.4, -1.6), False),
+    (3.4, (0.0, 1.1, -0.75), False),
 ]
 
 
