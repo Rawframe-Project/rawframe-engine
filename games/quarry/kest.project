@@ -1,0 +1,3 @@
+project quarry
+source .
+source ../../modules/kest_library/kest

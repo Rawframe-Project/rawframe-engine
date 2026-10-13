@@ -1,0 +1,24 @@
+# Quarry (D735), the small block game: a land of blocks drawn from the
+# World's seed, which players dig and build on, the server deciding. Every
+# block is an entity of its own, persistent. The game is VoxelTech's class
+# among the constitution's reference games at generation 1's scale:
+# procedural land, a World players change, and (to come) machines and a
+# land kept between runs; chunked storage, meshing, and streaming wait for
+# the voxel contract SPEC-0037 and ADR-0058 defer.
+program quarry.kest
+
+component 5c3e5cc3-74d0-4669-8cb9-08ee3e1ec13d quarry.terrain Terrain
+component 19d85c29-6787-4293-ad64-5078eb4255c7 quarry.block Block
+component 0f03f35b-6f21-46f9-8780-a71c82028ccb quarry.digger Digger
+component 61646d7c-70f6-4a5d-b965-b39c0c8c1ea4 quarry.tool Tool
+
+# The land is made a few columns a tick from the seed its first tick draws;
+# then each player digs or builds where its tool aims.
+system quarry.generate simulation generate write quarry.terrain entities random land
+system quarry.dig simulation dig read quarry.tool write quarry.digger entities lookup quarry.block lookup quarry.terrain after quarry.generate
+
+spawn 1 quarry.terrain
+
+replicate quarry.block quarry.terrain quarry.digger
+player quarry.tool quarry.digger
+input quarry.tool

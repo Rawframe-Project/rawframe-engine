@@ -1,0 +1,196 @@
+module quarry
+
+// Quarry (D735): a land of blocks drawn from the World's seed, which players
+// dig and build on. Each block is an entity of its own at a whole place on a
+// grid of one meter; the land is made a few columns a tick, so no tick holds
+// more than a system's commands, and a player digs the top block of the
+// column it aims at, or places one on it, once in a while.
+
+import controls
+import rawframe.random
+import rawframe.world
+
+// The land is SIDE blocks each way; a column's ground is from LOWEST to
+// HIGHEST blocks deep, drawn between heights picked at every CELL-th
+// column, and nothing is built above CEILING.
+const SIDE: u32 = 32
+const CELL: u32 = 8
+const LOWEST: u32 = 2
+const HIGHEST: u32 = 10
+const CEILING: u32 = 16
+
+// Columns made a tick: at most about a thousand commands, each block a
+// creation and two inserts.
+const COLUMNS: u32 = 48
+
+// A player's ticks between two of its digs or placements.
+const REST: u32 = 30
+
+// What a block is: the land's stone under two of earth with grass on top,
+// and what players place, brick.
+const STONE: u8 = 1
+const EARTH: u8 = 2
+const GRASS: u8 = 3
+const BRICK: u8 = 4
+
+// The land's one entity: the seed its heights are drawn from, the next
+// column to make, whether every column is made, and the blocks made.
+struct Terrain {
+    seed: u32
+    next: u32
+    made: bool
+    blocks: u32
+}
+
+// A block where it stands: its column and its height above the bottom.
+struct Block {
+    x: u32
+    y: u32
+    z: u32
+    kind: u8
+}
+
+// A player's work: ticks until it may act again, and the blocks it has dug
+// and placed.
+struct Digger {
+    rest: u32
+    dug: u32
+    placed: u32
+}
+
+extern fn Block.insert(entity: world.Entity, value: Block)
+extern fn Block.count() -> i32
+extern fn Block.entity(index: i32) -> world.Entity
+extern fn Block.get(entity: world.Entity) -> Block
+extern fn Terrain.count() -> i32
+extern fn Terrain.get(entity: world.Entity) -> Terrain
+extern fn Terrain.entity(index: i32) -> world.Entity
+
+// A whole number from a lattice point and the seed, the same on every
+// machine: the point's coordinates and the seed mixed by multiplying and
+// shifting, all wrapping at 32 bits.
+fn mixed(x: u32, z: u32, seed: u32) -> u32 {
+    let h = x * u32(374761393) + z * u32(668265263) + seed * u32(2246822519)
+    h = (h ^ (h >> u32(13))) * u32(1274126177)
+    return h ^ (h >> u32(16))
+}
+
+// The ground's height at a lattice point, LOWEST to HIGHEST.
+fn lattice(x: u32, z: u32, seed: u32) -> f32 {
+    return f32(LOWEST) + f32(mixed(x, z, seed) % (HIGHEST - LOWEST + u32(1)))
+}
+
+// A column's height, drawn between the four lattice points round it.
+fn height(x: u32, z: u32, seed: u32) -> u32 {
+    let cx = x / CELL
+    let cz = z / CELL
+    let fx = f32(x % CELL) / f32(CELL)
+    let fz = f32(z % CELL) / f32(CELL)
+    let near = lattice(cx, cz, seed) * (1.0 - fx) + lattice(cx + u32(1), cz, seed) * fx
+    let far = lattice(cx, cz + u32(1), seed) * (1.0 - fx) + lattice(cx + u32(1), cz + u32(1), seed) * fx
+    return u32(near * (1.0 - fz) + far * fz + 0.5)
+}
+
+// One block made where it stands, persistent, so a save keeps it.
+fn make(x: u32, y: u32, z: u32, kind: u8) {
+    let block = world.create()
+    Block.insert(block, Block(x, y, z, kind))
+    world.persist(block)
+}
+
+// The land, made COLUMNS columns a tick from the seed the first tick
+// draws: stone, two of earth, and grass on top.
+fn generate(count: i32, terrains: [Terrain], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        if !terrains[i].made {
+            if terrains[i].seed == u32(0) {
+                terrains[i].seed = random.below(0, u32(4294967295)) + u32(1)
+            }
+            let made = u32(0)
+            while made < COLUMNS && terrains[i].next < SIDE * SIDE {
+                let x = terrains[i].next % SIDE
+                let z = terrains[i].next / SIDE
+                let top = height(x, z, terrains[i].seed)
+                let y = u32(0)
+                while y < top {
+                    let kind = STONE
+                    if y + u32(1) == top {
+                        kind = GRASS
+                    } else if y + u32(3) >= top {
+                        kind = EARTH
+                    }
+                    make(x, y, z, kind)
+                    y = y + u32(1)
+                }
+                terrains[i].blocks = terrains[i].blocks + top
+                terrains[i].next = terrains[i].next + u32(1)
+                made = made + u32(1)
+            }
+            terrains[i].made = terrains[i].next == SIDE * SIDE
+        }
+        i = i + 1
+    }
+}
+
+// The column a tool aims at: -1 to 1 across the land each way.
+fn column(at: f32) -> u32 {
+    let place = (at + 1.0) * 0.5 * f32(SIDE)
+    if place < 0.0 {
+        return u32(0)
+    }
+    if place >= f32(SIDE) {
+        return SIDE - u32(1)
+    }
+    return u32(place)
+}
+
+// Each player rested digs the top block of the column it aims at, or
+// places brick on it, the land once made; then rests.
+fn dig(count: i32, tools: [controls.Tool], diggers: [Digger], entities: [world.Entity]) {
+    if Terrain.count() == 0 || !Terrain.get(Terrain.entity(0)).made {
+        return
+    }
+    let i = 0
+    while i < count {
+        if diggers[i].rest > u32(0) {
+            diggers[i].rest = diggers[i].rest - u32(1)
+        } else if tools[i].dig > 0.5 || tools[i].place > 0.5 {
+            let x = column(tools[i].x)
+            let z = column(tools[i].z)
+            // The column's top block, if it has one.
+            let found = false
+            // Held only once found; the player stands in till then.
+            let top = entities[i]
+            let topY = u32(0)
+            let b = 0
+            let blocks = Block.count()
+            while b < blocks {
+                let entity = Block.entity(b)
+                let block = Block.get(entity)
+                if block.x == x && block.z == z && (!found || block.y > topY) {
+                    found = true
+                    top = entity
+                    topY = block.y
+                }
+                b = b + 1
+            }
+            let digging = tools[i].dig > 0.5
+            if digging && found {
+                world.destroy(top)
+                diggers[i].dug = diggers[i].dug + u32(1)
+            }
+            // Brick goes on the top block, or on the bottom where none is.
+            let y = u32(0)
+            if found {
+                y = topY + u32(1)
+            }
+            if !digging && y < CEILING {
+                make(x, y, z, BRICK)
+                diggers[i].placed = diggers[i].placed + u32(1)
+            }
+            diggers[i].rest = REST
+        }
+        i = i + 1
+    }
+}

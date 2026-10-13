@@ -69,6 +69,13 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(gale_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8,[^\n]*\"sourceFailures\":0,.*\"bodiesMade\":(9|[1-9][0-9]+),\"bodiesRemoved\":[1-9][0-9]*,\"bodiesRefused\":0,\"teleports\":[0-9]+,\"velocitiesSet\":0,\"impulses\":[1-9][0-9][0-9][0-9]+,")
+    # Eight bots dig and build on Quarry (D735): its land, some seven
+    # thousand blocks, made from the World's seed and sent to every bot.
+    add_test(NAME quarry_bots
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/quarry.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(quarry_bots PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8,[^\n]*\"sourceFailures\":0,.*\"code\":\"tick_summary\"[^\n]*\"entities\":[5-9][0-9][0-9][0-9]}")
     # Stalls' sources cooked into the build tree: its customers' figure,
     # which every run plays from them (D512), and its font and text, read
     # by the drawn run (D389).
