@@ -3001,6 +3001,21 @@ static bool fits_the_piece(uint8_t kind, KestValue given_as) {
 }
 
 
+// Whether every piece of a value fits the width it is kept at, without saying
+// which did not: the question the walk below answers in words, asked first
+// where it can be asked flat. A piece of text is two slots. See D1292.
+static bool pieces_fit(const KestLayout *layout, const KestValue *frame) {
+    uint16_t slot = 0;
+    for (uint16_t p = 0; p < layout->count; p++) {
+        if (!fits_the_piece(layout->pieces[p].kind, frame[slot])) {
+            return false;
+        }
+        slot = (uint16_t)(slot +
+                          (layout->pieces[p].kind == KEST_L_TEXT ? 2 : 1));
+    }
+    return true;
+}
+
 // And what it is called, which is the piece's own word for itself: a host
 // reading this is looking at a slot it filled and wants the width it was
 // supposed to fill it to.
@@ -9146,6 +9161,17 @@ bool kest_call_host(KestRuntime *rt, uint16_t index, KestValue *base,
         // It used to read the top of that value and no further, so a host
         // answering with a shape that had a piece of text in a field was
         // where the door was before D718. See D719.
+        // Most answers are a few numbers, and a type walk over a shape of
+        // four of them was the dearest part of a crossing that answers one: a
+        // host's engine asking 14,000 of them for one player's action. So a
+        // layout with nothing a walk reads beyond the width of each number is
+        // weighed by its pieces, which is a flat loop over what the layout
+        // already holds. A piece that does not fit is handed to the walk, so
+        // what is refused and what it is told are the walk's, word for word.
+        // See D1292.
+        if (!answers->by_the_type && pieces_fit(answers, base)) {
+            return true;
+        }
         Saying answering = {true, frame, NULL, where};
         uint32_t gave = 0;
         if (!handed_well(rt, &answering, module->externs[index].name,

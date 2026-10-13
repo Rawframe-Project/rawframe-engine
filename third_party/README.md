@@ -7,7 +7,7 @@ apply to vendored files; the code is upstream's, not ours.
 
 | Name | Upstream | Revision | License | What is vendored |
 | --- | --- | --- | --- | --- |
-| Kest | `Rawframe-Project/kest` | `3d14951e09f2b9da92a477a4941fd1cbcb1cae73` | MIT | `include/`, `src/` except `main.c`, `lib/`, `LICENSE` |
+| Kest | `Rawframe-Project/kest` | `fa092f540ffe2cb94f75199842792fb61e68451f` | MIT | `include/`, `src/` except `main.c`, `lib/`, `LICENSE` |
 | Maul2D 0.0.1 | `Rawframe-Project/maul2d` | `1589de32bed38a8e1d8f388789bf3151e084542d` | MIT | `include/`, `src/`, `LICENSE` |
 | Maul3D 0.0.1 | `Rawframe-Project/maul3d` | `a6cd5b2534c3cab2fd9347a32ab422710a209e69` | MIT | `include/`, `src/`, `LICENSE` |
 | Maul Unicode 0.3.0 | `Rawframe-Project/maul-unicode` | `45523494be854c073dcb1a26a0b55dd07ca68879` | MIT (its UCD tables: Unicode-3.0) | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE` |
