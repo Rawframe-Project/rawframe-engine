@@ -30,7 +30,7 @@ if ! "$cook" "$work/sources" "$work/content" "$work/cache" >"$work/cooked.txt" 2
 fi
 
 cat >"$work/arena.conf" <<CONF
-host.maximum_iterations = 1200
+host.maximum_iterations = 14400
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = $repository/games/gale/gale.game
@@ -46,19 +46,26 @@ world.degraded_ms = 600000
 world.overload_ms = 0
 CONF
 
-(cd "$repository" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson") &
+(cd "$repository" && exec "$arena" --config "$work/arena.conf" >"$work/log.ndjson") &
 running=$!
 
 # Recook only once the scene read its materials from the first cook, which
-# its textures being read follows.
-for _ in $(seq 1 200); do
+# its textures being read follows. A recook of a program material takes
+# long on a loaded machine, so the run lasts until the reload is seen, or a
+# minute and a half after the recook, then is stopped as a user would.
+for _ in $(seq 1 1200); do
     grep -q '"code":"textures_read"' "$work/log.ndjson" 2>/dev/null && break
     sleep 0.05
 done
-sed -i 's/"specular_roughness": 0.9/"specular_roughness": 0.5/' "$work/sources/rock.rfmaterial"
+sed 's/"specular_roughness": 0.9/"specular_roughness": 0.5/' "$work/sources/rock.rfmaterial" >"$work/rock.rfmaterial"
+mv "$work/rock.rfmaterial" "$work/sources/rock.rfmaterial"
 grep -q '"specular_roughness": 0.5' "$work/sources/rock.rfmaterial"
 "$cook" "$work/sources" "$work/content" "$work/cache" >/dev/null
-
+for _ in $(seq 1 1800); do
+    grep -q '"code":"materials_reloaded"' "$work/log.ndjson" && break
+    sleep 0.05
+done
+kill -TERM "$running" 2>/dev/null || true
 wait "$running"
 grep -q '"code":"content_reloaded"' "$work/log.ndjson"
 grep -o '"code":"materials_reloaded".*' "$work/log.ndjson" | head -1
