@@ -482,14 +482,16 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
             # player, so the server's two welds made and let go are the
             # headset's; and its own hands drawn where it holds them
             # (D665), each frame where the headset has them then (D676);
-            # the runtime presents them as Index controllers (D680).
+            # the runtime presents them as Index controllers (D680). Played
+            # for 960 frames: the hands keep wall-clock rounds, and a loaded
+            # machine's client missed one of the two grips in 480 (D734).
             add_test(NAME client_reach_takes
                      COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                              ${PROJECT_SOURCE_DIR}/tools/xr_run.sh --hands ${CMAKE_CURRENT_SOURCE_DIR}/tests/reach_hands.py
                              ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh
                              $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                              ${CMAKE_CURRENT_BINARY_DIR}/reach_headset.conf games/reach/reach.game
-                             ${CMAKE_CURRENT_BINARY_DIR}/reach_server.conf 0
+                             ${CMAKE_CURRENT_BINARY_DIR}/reach_server.conf 0 960
                      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
             set_tests_properties(client_reach_takes PROPERTIES
                                  FIXTURES_REQUIRED reach_content
