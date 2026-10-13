@@ -12,6 +12,7 @@ component 19d85c29-6787-4293-ad64-5078eb4255c7 quarry.block Block
 component 0f03f35b-6f21-46f9-8780-a71c82028ccb quarry.digger Digger
 component 61646d7c-70f6-4a5d-b965-b39c0c8c1ea4 quarry.tool Tool
 component df916e40-28f9-4c15-8e7d-f4718f22d2e0 quarry.part Part
+component 94c14b6e-255e-499f-a6cc-2d6850606dee quarry.ground Ground
 # What a client draws (D736): each block a box where it stands, and its
 # view of the whole land from above its near edge; no server carries any.
 component 187bc76e-ac12-43df-a624-73389f27abb7 quarry.look rawframe.model.Model
@@ -31,6 +32,12 @@ system quarry.power simulation power read quarry.terrain lookup quarry.part look
 # players left it between runs, and one that loads it makes no other.
 scene land.scene
 save land quarry.terrain quarry.block quarry.part
+
+# Anyone may mod it (D740): one mod may give the land its ground, asked
+# for each column's height as the land is made (quarry-canyon is one).
+mods open
+modapi quarry 1
+extension ground service quarry.ground exclusive
 
 replicate quarry.block quarry.part quarry.terrain quarry.digger
 player quarry.tool quarry.digger

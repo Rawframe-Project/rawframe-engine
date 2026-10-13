@@ -84,6 +84,14 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_dedicated_server>
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(quarry_saved PROPERTIES PROCESSORS 2 PASS_REGULAR_EXPRESSION "land kept across runs")
+    # Quarry modded (D740): quarry-canyon gives the land its ground through
+    # quarry's ground service, composed with the game and played by a
+    # server from the same seed as the plain composition.
+    add_test(NAME quarry_with_mod
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/quarry_with_mod.sh
+                     $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_cook_tool>
+                     $<TARGET_FILE:rawframe_host_build_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/quarry_with_mod)
+    set_tests_properties(quarry_with_mod PROPERTIES PASS_REGULAR_EXPRESSION "mod shaped the land: [0-9]+ to [0-9]+ entities")
     # Stalls' sources cooked into the build tree: its customers' figure,
     # which every run plays from them (D512), and its font and text, read
     # by the drawn run (D389).

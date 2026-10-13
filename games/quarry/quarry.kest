@@ -69,6 +69,19 @@ struct Part {
     on: bool
 }
 
+// What the land's maker asks of a mod providing its ground (D740): a
+// column, the seed, and the ground's height there as the land draws it;
+// what is left in `height` is the column's ground, kept from one block to
+// CEILING less one.
+struct Ground {
+    x: u32
+    z: u32
+    seed: u32
+    height: u32
+}
+
+extern fn Mods.ground(value: Ground) -> Ground
+
 // A player's work: ticks until it may act again, and the blocks it has dug
 // and placed.
 struct Digger {
@@ -115,6 +128,19 @@ fn height(x: u32, z: u32, seed: u32) -> u32 {
     return u32(near * (1.0 - fz) + far * fz + 0.5)
 }
 
+// A column's ground: as the land draws it, or as a mod providing the
+// ground point leaves it (D740), kept from one block to below the ceiling.
+fn shaped(x: u32, z: u32, seed: u32) -> u32 {
+    let top = Mods.ground(Ground(x, z, seed, height(x, z, seed))).height
+    if top < u32(1) {
+        return u32(1)
+    }
+    if top >= CEILING {
+        return CEILING - u32(1)
+    }
+    return top
+}
+
 // One block made where it stands, persistent, so a save keeps it; a
 // machine's part off.
 fn make(x: u32, y: u32, z: u32, kind: u8) {
@@ -139,7 +165,7 @@ fn generate(count: i32, terrains: [Terrain], entities: [world.Entity]) {
             while made < COLUMNS && terrains[i].next < SIDE * SIDE {
                 let x = terrains[i].next % SIDE
                 let z = terrains[i].next / SIDE
-                let top = height(x, z, terrains[i].seed)
+                let top = shaped(x, z, terrains[i].seed)
                 let y = u32(0)
                 while y < top {
                     let kind = STONE
@@ -165,7 +191,7 @@ fn generate(count: i32, terrains: [Terrain], entities: [world.Entity]) {
                     } else if x == LAMP_X {
                         kind = LAMP
                     }
-                    make(x, height(x, MACHINE_Z, terrains[i].seed), MACHINE_Z, kind)
+                    make(x, shaped(x, MACHINE_Z, terrains[i].seed), MACHINE_Z, kind)
                     x = x + u32(1)
                 }
                 terrains[i].blocks = terrains[i].blocks + (LAMP_X - LEVER_X + u32(1))
