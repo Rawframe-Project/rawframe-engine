@@ -4,7 +4,9 @@ module quarry
 // dig and build on. Each block is an entity of its own at a whole place on a
 // grid of one meter; the land is made a few columns a tick, so no tick holds
 // more than a system's commands, and a player digs the top block of the
-// column it aims at, or places one on it, once in a while.
+// column it aims at, or places one on it, once in a while. A machine stands
+// on the land (D737): a lever a player throws powers a lamp through wire,
+// and a wire dug cuts it.
 
 import controls
 import rawframe.model
@@ -28,11 +30,20 @@ const COLUMNS: u32 = 48
 const REST: u32 = 30
 
 // What a block is: the land's stone under two of earth with grass on top,
-// and what players place, brick.
+// and what players place, brick; and a machine's parts, from LEVER on.
 const STONE: u8 = 1
 const EARTH: u8 = 2
 const GRASS: u8 = 3
 const BRICK: u8 = 4
+const LEVER: u8 = 5
+const WIRE: u8 = 6
+const LAMP: u8 = 7
+
+// The machine the land is made with: a lever, then wire along its row,
+// then a lamp, each on its column's ground.
+const MACHINE_Z: u32 = 4
+const LEVER_X: u32 = 4
+const LAMP_X: u32 = 10
 
 // The land's one entity: the seed its heights are drawn from, the next
 // column to make, whether every column is made, and the blocks made.
@@ -51,6 +62,12 @@ struct Block {
     kind: u8
 }
 
+// A machine's part, on its block alone (D737), so power looks at the parts
+// and not the land: a lever thrown, and wire and a lamp powered, are `on`.
+struct Part {
+    on: bool
+}
+
 // A player's work: ticks until it may act again, and the blocks it has dug
 // and placed.
 struct Digger {
@@ -63,6 +80,11 @@ extern fn Block.insert(entity: world.Entity, value: Block)
 extern fn Block.count() -> i32
 extern fn Block.entity(index: i32) -> world.Entity
 extern fn Block.get(entity: world.Entity) -> Block
+extern fn Part.insert(entity: world.Entity, value: Part)
+extern fn Part.count() -> i32
+extern fn Part.entity(index: i32) -> world.Entity
+extern fn Part.get(entity: world.Entity) -> Part
+extern fn Part.has(entity: world.Entity) -> bool
 extern fn Terrain.count() -> i32
 extern fn Terrain.get(entity: world.Entity) -> Terrain
 extern fn Terrain.entity(index: i32) -> world.Entity
@@ -92,10 +114,14 @@ fn height(x: u32, z: u32, seed: u32) -> u32 {
     return u32(near * (1.0 - fz) + far * fz + 0.5)
 }
 
-// One block made where it stands, persistent, so a save keeps it.
+// One block made where it stands, persistent, so a save keeps it; a
+// machine's part off.
 fn make(x: u32, y: u32, z: u32, kind: u8) {
     let block = world.create()
     Block.insert(block, Block(x, y, z, kind))
+    if kind >= LEVER {
+        Part.insert(block, Part(false))
+    }
     world.persist(block)
 }
 
@@ -128,7 +154,22 @@ fn generate(count: i32, terrains: [Terrain], entities: [world.Entity]) {
                 terrains[i].next = terrains[i].next + u32(1)
                 made = made + u32(1)
             }
-            terrains[i].made = terrains[i].next == SIDE * SIDE
+            if terrains[i].next == SIDE * SIDE {
+                // The machine, on the land's ground.
+                let x = LEVER_X
+                while x <= LAMP_X {
+                    let kind = WIRE
+                    if x == LEVER_X {
+                        kind = LEVER
+                    } else if x == LAMP_X {
+                        kind = LAMP
+                    }
+                    make(x, height(x, MACHINE_Z, terrains[i].seed), MACHINE_Z, kind)
+                    x = x + u32(1)
+                }
+                terrains[i].blocks = terrains[i].blocks + (LAMP_X - LEVER_X + u32(1))
+                terrains[i].made = true
+            }
         }
         i = i + 1
     }
@@ -156,7 +197,7 @@ fn dig(count: i32, tools: [controls.Tool], diggers: [Digger], entities: [world.E
     while i < count {
         if diggers[i].rest > u32(0) {
             diggers[i].rest = diggers[i].rest - u32(1)
-        } else if tools[i].dig > 0.5 || tools[i].place > 0.5 {
+        } else if tools[i].dig > 0.5 || tools[i].place > 0.5 || tools[i].use > 0.5 {
             let x = column(tools[i].x)
             let z = column(tools[i].z)
             // The column's top block, if it has one.
@@ -177,6 +218,11 @@ fn dig(count: i32, tools: [controls.Tool], diggers: [Digger], entities: [world.E
                 b = b + 1
             }
             let digging = tools[i].dig > 0.5
+            let using = !digging && tools[i].use > 0.5
+            // A lever on top is thrown.
+            if using && found && Block.get(top).kind == LEVER && Part.has(top) {
+                Part.insert(top, Part(!Part.get(top).on))
+            }
             if digging && found {
                 world.destroy(top)
                 diggers[i].dug = diggers[i].dug + u32(1)
@@ -186,7 +232,7 @@ fn dig(count: i32, tools: [controls.Tool], diggers: [Digger], entities: [world.E
             if found {
                 y = topY + u32(1)
             }
-            if !digging && y < CEILING {
+            if !digging && !using && y < CEILING {
                 make(x, y, z, BRICK)
                 diggers[i].placed = diggers[i].placed + u32(1)
             }
@@ -197,8 +243,27 @@ fn dig(count: i32, tools: [controls.Tool], diggers: [Digger], entities: [world.E
 }
 
 // A block's color by its kind, 0xRRGGBBAA in sRGB: grey stone, brown
-// earth, green grass, and red brick.
-fn colored(kind: u8) -> u32 {
+// earth, green grass, and red brick; a machine's parts dark, and bright
+// while on.
+fn colored(kind: u8, on: bool) -> u32 {
+    if kind == LEVER {
+        if on {
+            return u32(0xE8C547FF)
+        }
+        return u32(0x4A3A22FF)
+    }
+    if kind == WIRE {
+        if on {
+            return u32(0xF0402AFF)
+        }
+        return u32(0x4A1C18FF)
+    }
+    if kind == LAMP {
+        if on {
+            return u32(0xFFF2B0FF)
+        }
+        return u32(0x30302CFF)
+    }
     if kind == GRASS {
         return u32(0x5A8C3CFF)
     }
@@ -212,15 +277,19 @@ fn colored(kind: u8) -> u32 {
 }
 
 // Each block drawn as a box of half a meter's half sides where it stands,
-// once: a block never moves, and its kind never changes.
-fn dress(count: i32, blocks: [Block], looks: [model.Model], spots: [model.Placed]) {
+// placed once: a block never moves, and its kind never changes; a
+// machine's part colored again as it goes on or off.
+fn dress(count: i32, blocks: [Block], looks: [model.Model], spots: [model.Placed], entities: [world.Entity]) {
     let half = f64(SIDE) * 0.5
     let i = 0
     while i < count {
+        let b = blocks[i]
+        let on = b.kind >= LEVER && Part.has(entities[i]) && Part.get(entities[i]).on
         if !spots[i].placed {
-            let b = blocks[i]
-            looks[i] = model.Model(model.BOX, 0.5, 0.5, 0.5, colored(b.kind), u64(0), 0.0)
+            looks[i] = model.Model(model.BOX, 0.5, 0.5, 0.5, colored(b.kind, on), u64(0), 0.0)
             spots[i] = model.Placed(true, f64(b.x) + 0.5 - half, f64(b.y) + 0.5, f64(b.z) + 0.5 - half)
+        } else if b.kind >= LEVER && looks[i].color != colored(b.kind, on) {
+            looks[i].color = colored(b.kind, on)
         }
         i = i + 1
     }
@@ -237,5 +306,88 @@ fn frame(count: i32, views: [model.Camera]) {
     while i < count {
         views[i] = model.Camera(0.0, EYE_HEIGHT, EYE_BACK, 0.0, EYE_PITCH, 1.0, 0.1, 15.0, u32(0), model.FIXED)
         i = i + 1
+    }
+}
+
+// Power, each tick (D737), looking at the machines' parts alone: from
+// every lever thrown, along wire, between
+// machine parts in neighboring columns whatever their heights, to the
+// lamps it reaches; a part neither powered nor thrown is off. A column's
+// part is its highest; a lamp takes power and passes none on.
+fn power(count: i32, terrains: [Terrain]) {
+    if count == 0 || !terrains[0].made {
+        return
+    }
+    let cells = i32(SIDE * SIDE)
+    let parts = array(cells, -1)
+    let made = Part.count()
+    let p = 0
+    while p < made {
+        let block = Block.get(Part.entity(p))
+        let cell = i32(block.x + block.z * SIDE)
+        if parts[cell] < 0 || Block.get(Part.entity(parts[cell])).y < block.y {
+            parts[cell] = p
+        }
+        p = p + 1
+    }
+    let powered = array(cells, false)
+    let waiting: [i32] = array()
+    let cell = 0
+    while cell < cells {
+        if parts[cell] >= 0 {
+            let entity = Part.entity(parts[cell])
+            if Block.get(entity).kind == LEVER && Part.get(entity).on {
+                powered[cell] = true
+                waiting.push(cell)
+            }
+        }
+        cell = cell + 1
+    }
+    let next = 0
+    while next < waiting.len() {
+        let at = waiting[next]
+        next = next + 1
+        let x = at % i32(SIDE)
+        let z = at / i32(SIDE)
+        let side = 0
+        while side < 4 {
+            let nx = x
+            let nz = z
+            if side == 0 {
+                nx = x - 1
+            } else if side == 1 {
+                nx = x + 1
+            } else if side == 2 {
+                nz = z - 1
+            } else {
+                nz = z + 1
+            }
+            side = side + 1
+            if nx < 0 || nz < 0 || nx >= i32(SIDE) || nz >= i32(SIDE) {
+                continue
+            }
+            let near = nx + nz * i32(SIDE)
+            if parts[near] < 0 || powered[near] {
+                continue
+            }
+            let kind = Block.get(Part.entity(parts[near])).kind
+            if kind == WIRE || kind == LAMP {
+                powered[near] = true
+                if kind == WIRE {
+                    waiting.push(near)
+                }
+            }
+        }
+    }
+    // Wire and lamps told what they are now, those that changed alone.
+    cell = 0
+    while cell < cells {
+        if parts[cell] >= 0 {
+            let entity = Part.entity(parts[cell])
+            if Block.get(entity).kind != LEVER && Part.get(entity).on != powered[cell] {
+                Part.insert(entity, Part(powered[cell]))
+            }
+        }
+        cell = cell + 1
     }
 }

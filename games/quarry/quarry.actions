@@ -54,6 +54,22 @@
           "control": "face_west"
         }
       ]
+    },
+    {
+      "actionId": "1244ee6574e8a1d8",
+      "name": "use",
+      "valueType": "bool",
+      "displayName": "Throw a lever",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "physicalKey": "key_f"
+        },
+        {
+          "device": "gamepad",
+          "control": "face_north"
+        }
+      ]
     }
   ],
   "contexts": [
@@ -63,7 +79,8 @@
       "actions": [
         "aim",
         "dig",
-        "place"
+        "place",
+        "use"
       ]
     }
   ]

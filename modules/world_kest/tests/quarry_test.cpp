@@ -3,13 +3,16 @@
 // grass; the same seed draws the same land, another seed another; and a
 // player digs the top block of the column its tool aims at, or places
 // brick on it, then rests. The test makes the player as admission would and
-// sets its tool between ticks, as its client's input would.
+// sets its tool between ticks, as its client's input would. A machine
+// stands on the land (D737): a lever thrown lights the lamp at the end of
+// its wire, and a wire dug puts it out.
 
 #include "game_harness.h"
 #include "rawframe/test/test.h"
 
 #include <array>
 #include <cstdint>
+#include <iterator>
 #include <map>
 #include <string>
 #include <utility>
@@ -24,9 +27,10 @@ constexpr auto kTerrainId = schema::ComponentTypeId::fromText("5c3e5cc3-74d0-466
 constexpr auto kBlockId = schema::ComponentTypeId::fromText("19d85c29-6787-4293-ad64-5078eb4255c7");
 constexpr auto kDiggerId = schema::ComponentTypeId::fromText("0f03f35b-6f21-46f9-8780-a71c82028ccb");
 constexpr auto kToolId = schema::ComponentTypeId::fromText("61646d7c-70f6-4a5d-b965-b39c0c8c1ea4");
+constexpr auto kPartId = schema::ComponentTypeId::fromText("df916e40-28f9-4c15-8e7d-f4718f22d2e0");
 
-/// quarry.Terrain, quarry.Block, quarry.Digger, and controls.Tool, as the
-/// program lays them out.
+/// quarry.Terrain, quarry.Block, quarry.Part, quarry.Digger, and
+/// controls.Tool, as the program lays them out.
 struct Terrain {
     std::uint32_t seed = 0;
     std::uint32_t next = 0;
@@ -41,6 +45,10 @@ struct Block {
     std::uint8_t kind = 0;
 };
 
+struct Part {
+    bool on = false;
+};
+
 struct Digger {
     std::uint32_t rest = 0;
     std::uint32_t dug = 0;
@@ -52,12 +60,16 @@ struct Tool {
     float z = 0;
     float dig = 0;
     float place = 0;
+    float use = 0;
 };
 
 constexpr std::uint8_t kStone = 1;
 constexpr std::uint8_t kEarth = 2;
 constexpr std::uint8_t kGrass = 3;
 constexpr std::uint8_t kBrick = 4;
+constexpr std::uint8_t kLever = 5;
+constexpr std::uint8_t kWire = 6;
+constexpr std::uint8_t kLamp = 7;
 
 /// Quarry, composed and started from its directory with the World's seed.
 class PlayedQuarry : public PlayedGame {
@@ -70,6 +82,11 @@ public:
                          std::to_string(seed) + "\n") {
     }
 };
+
+/// Where a tool aims at column `column`.
+float aimAt(std::uint32_t column) {
+    return ((static_cast<float>(column) + 0.5F) / 16.0F) - 1.0F;
+}
 
 /// Every column's blocks by height, bottom first.
 using Columns = std::map<std::pair<std::uint32_t, std::uint32_t>, std::map<std::uint32_t, std::uint8_t>>;
@@ -117,12 +134,21 @@ RAWFRAME_TEST(QuarrysLandIsDrawnFromTheWorldsSeed) {
         std::size_t blocks = 0;
         bool layered = true;
         for (const auto& [kAt, kColumn] : kColumns) {
-            const auto kTop = static_cast<std::uint32_t>(kColumn.size());
             blocks += kColumn.size();
+            // The machine's part stands on its column's ground (D737): a
+            // lever, wire, then a lamp, along the fifth row.
+            auto ground = kColumn;
+            const bool kMachine = kAt.second == 4 && kAt.first >= 4 && kAt.first <= 10;
+            if (kMachine) {
+                const std::uint8_t kPart = kAt.first == 4 ? kLever : kAt.first == 10 ? kLamp : kWire;
+                layered = layered && kColumn.rbegin()->second == kPart;
+                ground.erase(std::prev(ground.end()));
+            }
+            const auto kTop = static_cast<std::uint32_t>(ground.size());
             // Whole from the bottom, two to ten deep, stone under two of
             // earth under grass.
-            layered = layered && kTop >= 2 && kTop <= 10 && kColumn.rbegin()->first == kTop - 1;
-            for (const auto& [kY, kKind] : kColumn) {
+            layered = layered && kTop >= 2 && kTop <= 10 && ground.rbegin()->first == kTop - 1;
+            for (const auto& [kY, kKind] : ground) {
                 const std::uint8_t kWanted = kY + 1 == kTop ? kGrass : kY + 3 >= kTop ? kEarth : kStone;
                 layered = layered && kKind == kWanted;
             }
@@ -185,4 +211,60 @@ RAWFRAME_TEST(APlayerDigsAndBuildsWhereItsToolAims) {
     RAWFRAME_EXPECT(depthOf(world, 31, 31) == kCorner + 1);
     const Digger* const kDigger = valueOf<Digger>(world, kPlayer, kDiggerId);
     RAWFRAME_EXPECT(kDigger->dug == 2 && kDigger->placed == 2);
+}
+
+RAWFRAME_TEST(AThrownLeverLightsTheLampThroughItsWire) {
+    PlayedQuarry played{7};
+    RAWFRAME_EXPECT(played.started());
+    if (!played.started()) {
+        return;
+    }
+    world::World& world = *simulation->world();
+    const auto kMade = world.create();
+    RAWFRAME_EXPECT(kMade.has_value());
+    if (!kMade.has_value()) {
+        return;
+    }
+    const world::EntityHandle kPlayer = *kMade;
+    put(world, kPlayer, kToolId, Tool{});
+    put(world, kPlayer, kDiggerId, Digger{});
+    played.run(25);
+    // The top block of a column, as it stands, and whether it is a part
+    // that is on.
+    struct Top {
+        std::uint8_t kind = 0;
+        bool on = false;
+    };
+    const auto kTopOf = [&world](std::uint32_t x, std::uint32_t z) {
+        Block top;
+        world::EntityHandle at;
+        for (const world::EntityHandle kEntity : holding(world, kBlockId)) {
+            const Block* const kBlock = valueOf<Block>(world, kEntity, kBlockId);
+            if (kBlock->x == x && kBlock->z == z && kBlock->y >= top.y) {
+                top = *kBlock;
+                at = kEntity;
+            }
+        }
+        const Part* const kPart = at.isNull() ? nullptr : valueOf<Part>(world, at, kPartId);
+        return Top{.kind = top.kind, .on = kPart != nullptr && kPart->on};
+    };
+    RAWFRAME_EXPECT(kTopOf(4, 4).kind == kLever && !kTopOf(4, 4).on && kTopOf(10, 4).kind == kLamp &&
+                    !kTopOf(10, 4).on);
+    // The lever thrown: it is on, and its power reaches the lamp along the
+    // wire the tick after.
+    Tool* const kTool = valueOf<Tool>(world, kPlayer, kToolId);
+    *kTool = Tool{.x = aimAt(4), .z = aimAt(4), .use = 1};
+    played.run(2);
+    RAWFRAME_EXPECT(kTopOf(4, 4).on);
+    played.run(2);
+    RAWFRAME_EXPECT(kTopOf(7, 4).kind == kWire && kTopOf(7, 4).on && kTopOf(10, 4).on);
+    // A wire dug in its middle: the lamp goes out, the wire before the cut
+    // still powered.
+    *kTool = Tool{.x = aimAt(7), .z = aimAt(4), .dig = 1};
+    played.run(40);
+    RAWFRAME_EXPECT(kTopOf(7, 4).kind != kWire && kTopOf(6, 4).on && !kTopOf(8, 4).on && !kTopOf(10, 4).on);
+    // Brick does not carry power: placed in the cut, the lamp stays out.
+    *kTool = Tool{.x = aimAt(7), .z = aimAt(4), .place = 1};
+    played.run(32);
+    RAWFRAME_EXPECT(kTopOf(7, 4).kind == kBrick && !kTopOf(10, 4).on);
 }
