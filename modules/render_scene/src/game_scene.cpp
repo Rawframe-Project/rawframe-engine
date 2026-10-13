@@ -91,9 +91,16 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                    std::size_t size,
                    std::initializer_list<std::pair<std::string_view, std::size_t>> fields) -> result::Status {
         if (declared && !world_kest::laidOutAs(program, type, size, fields)) {
-            return refuse(result::ErrorClass::InvalidArgument,
-                          RenderSceneError::BadComponents,
-                          "the program lays out a rawframe.model type otherwise than this engine reads it");
+            // A component line naming a type by the last part of an engine
+            // type's name means the engine's: a game's own type of that
+            // name is named by its module (D749).
+            return std::unexpected<result::Error>{
+                refuse(result::ErrorClass::InvalidArgument,
+                       RenderSceneError::BadComponents,
+                       "the program lays out a rawframe.model type otherwise than this engine reads it")
+                    .error()
+                    .withContext("type", std::string{type})
+                    .withContext("hint", "a game's own type of the same last name is named by its module")};
         }
         return {};
     };
