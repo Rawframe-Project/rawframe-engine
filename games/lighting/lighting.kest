@@ -203,3 +203,16 @@ fn sky(count: i32, orbits: [Orbit], skies: [model.Sky]) {
         i = i + 1
     }
 }
+
+// The view's own light work, the same each frame.
+fn lens(count: i32, orbits: [Orbit], hidden: [model.AmbientOcclusion], blooms: [model.Bloom],
+        reflections: [model.ScreenSpaceReflections], contacts: [model.ContactShadows]) {
+    let i = 0
+    while i < count {
+        hidden[i] = model.AmbientOcclusion(0.8, 1.0)
+        blooms[i] = model.Bloom(0.04)
+        reflections[i] = model.ScreenSpaceReflections(8.0)
+        contacts[i] = model.ContactShadows(0.3)
+        i = i + 1
+    }
+}
