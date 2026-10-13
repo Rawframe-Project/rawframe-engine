@@ -533,7 +533,9 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # A material edited while the game plays (D734): Gale cooked by
         # Studio and played from that content, its shore's tint typed, and
         # Studio cooks again on its own; the played client, following its
-        # content, reads the game's materials again.
+        # content, reads the game's materials again: given twelve seconds
+        # after the cook, as the client polls its content every 60
+        # iterations and a sanitized client on a loaded machine is slow.
         add_test(NAME studio_recooks_gale
                  COMMAND ${CMAKE_COMMAND} -E env STUDIO_COOK=$<TARGET_FILE:rawframe_host_cook_tool>
                          ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/hosts/client/tests/cooked.sh --then ${PROJECT_BINARY_DIR}/hosts/client/gale_content
@@ -542,7 +544,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/gale/gale.game /dev/null ${PROJECT_BINARY_DIR}/hosts/client/gale_drawn.conf
                          1026,23 "until=studio_said,status=\"cooked " 200,155 1096,23 wait=6 640,161
-                         "1100,161:[0.6,0.2,0.1]" "until=studio_said,status=\"cooked #2" wait=3 1096,23 until=studio_game_ended
+                         "1100,161:[0.6,0.2,0.1]" "until=studio_said,status=\"cooked #2" wait=12 1096,23 until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_recooks_gale PROPERTIES
                              FIXTURES_REQUIRED gale_content
