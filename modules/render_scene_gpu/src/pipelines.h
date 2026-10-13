@@ -282,8 +282,14 @@ struct Pipelines {
     programPipeline(const material::ProgramMaterial* program, Shade shade, bool decaled, bool sampled) const;
 
     /// The programs refused into `statistics`: how many, and why the first
-    /// was, if none was told before (D501).
+    /// was, if none was told before (D501); and how many are held.
     void tellRefused(RendererStatistics& statistics) const;
+    /// Lets go of each program no material holds any longer, its pipelines
+    /// all answered: a material's program changed while the game plays
+    /// (D734) leaves its old one, whose pipelines would otherwise live as
+    /// long as the renderer (D759). Maul RHI retires what a frame in flight
+    /// still uses once the frame is done.
+    void forgetPrograms();
 
 private:
     result::Status askFor(Effect effect);

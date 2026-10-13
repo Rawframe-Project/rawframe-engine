@@ -122,6 +122,16 @@ RAWFRAME_TEST(AMaterialsOwnProgramLightsItsModel) {
         kStatistics.programRefusal.c_str());
     RAWFRAME_EXPECT(kStatistics.programsRefused == 0 && kWhite[0] == 0 && kWhite[1] == 0 && kChecked[0] > 100 &&
                     kChecked[1] > 100 && kStatistics.programModelsDrawn > 0);
+    // The material's program changed, as a recooked graph's does while a
+    // game plays (D734): once the new one draws, the old one's pipelines
+    // are let go, not held as long as the renderer (D759).
+    frame.programs = {nullptr, checker()};
+    const auto kChanged =
+        drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
+    static_cast<void>(drawn(**framer, **made, frame, kMeshes));
+    std::printf("programs held after the change %llu\n",
+                static_cast<unsigned long long>((*made)->statistics().programsHeld));
+    RAWFRAME_EXPECT(kChanged.has_value() && (*made)->statistics().programsHeld == 1);
 }
 
 RAWFRAME_TEST(AMaskedProgramMaterialIsCutWhereItsProgramSays) {

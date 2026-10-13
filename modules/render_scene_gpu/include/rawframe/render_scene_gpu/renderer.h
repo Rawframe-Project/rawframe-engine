@@ -124,6 +124,8 @@ struct RendererStatistics {
     /// shader or a pipeline of it, as the device said (D501).
     std::uint64_t programsRefused = 0;
     std::string programRefusal;
+    /// Material programs whose pipelines are held now (D759).
+    std::uint64_t programsHeld = 0;
 };
 
 /// The bytes of one draw's placement as the scene pipeline reads it: the

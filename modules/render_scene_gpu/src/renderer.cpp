@@ -449,6 +449,7 @@ struct SceneRenderer::State {
         const bool kDecaled = decalAtlas->drawn() > 0;
         const bool kSurfaced = occlusion->enabled() || reflecting->enabled();
         pipelines->wantPrograms(frame->programs, kDecaled, kSampling);
+        pipelines->forgetPrograms();
         pipelines->tellRefused(statistics);
         for (const Runs* kRuns : {&now.placed.runs, &now.placed.maskedRuns, &now.placed.translucentRuns}) {
             const bool kOpaque = kRuns == &now.placed.runs;

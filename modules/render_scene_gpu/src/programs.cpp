@@ -136,7 +136,33 @@ void Pipelines::wantPrograms(std::span<const std::shared_ptr<const material::Pro
     }
 }
 
+void Pipelines::forgetPrograms() {
+    for (auto at = programs.begin(); at != programs.end();) {
+        ProgramShading& shading = at->second;
+        bool answered = true;
+        for (std::size_t variant = 0; variant < shading.variants.size(); ++variant) {
+            answered = answered && (!shading.asked.at(variant) || shading.variants.at(variant).ready);
+        }
+        // Only this map holds it: no material names it any more. A
+        // pipeline still being made is not let go mid-making; a refused
+        // program's others are never answered, and stay.
+        if (shading.program.use_count() != 1 || !answered) {
+            ++at;
+            continue;
+        }
+        for (std::size_t variant = 0; variant < shading.variants.size(); ++variant) {
+            if (shading.asked.at(variant)) {
+                static_cast<void>(mrhiDestroyGraphicsPipeline(native, shading.variants.at(variant).pipeline));
+            }
+        }
+        static_cast<void>(mrhiDestroyShader(native, shading.shader));
+        static_cast<void>(mrhiDestroyShader(native, shading.shadowShader));
+        at = programs.erase(at);
+    }
+}
+
 void Pipelines::tellRefused(RendererStatistics& statistics) const {
+    statistics.programsHeld = programs.size();
     statistics.programsRefused = 0;
     for (const auto& [kProgram, kShading] : programs) {
         if (kShading.refused) {
