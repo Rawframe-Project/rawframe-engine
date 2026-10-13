@@ -37,7 +37,10 @@
 // the plaza declares no mixer (D397). Gale, the Keelstorm-class sample
 // (D703), plays as the plaza does, its ship sailed by W and a broadside
 // fired by Q, its sea's program material drawn by WebGPU, its HUD's words
-// drawn, and the broadside heard.
+// drawn, and the broadside heard. Quarry, the VoxelTech-class sample
+// (D742), plays its land of seven thousand blocks, each a model drawn by
+// WebGPU, its tool aimed by W and digging by Q; it predicts nothing, has
+// no HUD, and is silent.
 // Puppeteer comes from RAWFRAME_NODE_MODULES, and its browser from where
 // Puppeteer looks (PUPPETEER_CACHE_DIR); without either the test is
 // skipped (77).
@@ -48,7 +51,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createSocket } from 'node:dgram';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -59,13 +62,14 @@ import { end } from './verdict.mjs';
 
 const [exportPath, cookPath, buildPath, serverPath, botsPath, wasmPath, windowPath, devicePath, uiPath, repository,
        named] = argv.slice(2);
-// runners, plaza, tycoon (Stalls), or gale.
+// runners, plaza, tycoon (Stalls), gale, or quarry.
 const name = named ?? 'runners';
 const plaza = name === 'plaza';
 const stalls = name === 'tycoon';
 const gale = name === 'gale';
+const quarry = name === 'quarry';
 // The games drawn in 3D.
-const scened = plaza || gale;
+const scened = plaza || gale || quarry;
 let puppeteer;
 try {
     puppeteer = createRequire(join(env.RAWFRAME_NODE_MODULES ?? '', 'x.js'))('puppeteer');
@@ -99,6 +103,12 @@ execFileSync(exportPath, [join(repository, 'games', name), exported, '--target',
                           join(repository, 'hosts/web_client/page')],
              { stdio: ['ignore', 'inherit', 'inherit'] });
 const setup = JSON.parse(await readFile(join(site, 'play.json'), 'utf8'));
+// Quarry's server ticks a land of seven thousand entities: behind on a
+// loaded machine, it is not let degrade and refuse the page as unavailable,
+// nor stop itself (D212, D742).
+if (quarry) {
+    await appendFile(join(exported, 'server', 'server.conf'), '\nworld.degraded_ms = 600000\nworld.overload_ms = 0\n');
+}
 // Here a software adapter draws, which a player's machine is not asked to
 // allow; a 3D game's shadow map is small, and its view drawn at half scale
 // (D373, D379), for the software rasterizer.
@@ -324,7 +334,7 @@ try {
     // starts once they are drawn (D341).
     // Gale's ship fires a broadside in the run where the others jump.
     const forward = scened ? 'KeyW' : 'KeyD';
-    const act = gale ? 'KeyQ' : 'Space';
+    const act = gale || quarry ? 'KeyQ' : 'Space';
     if (scened) {
         await sleep(1500);
     }
@@ -394,8 +404,8 @@ try {
         lit: shown > 1000,
         noGpuErrors: gpuErrors.length === 0,
     };
-    if (!stalls) {
-        // Stalls predicts nothing, so confirms nothing.
+    if (!stalls && !quarry) {
+        // Stalls and Quarry predict nothing, so confirm nothing.
         checks.confirmed = field('confirmed') > 100;
     }
     if (stalls) {
@@ -415,11 +425,15 @@ try {
         });
         if (plaza) {
             checks.silent = /"code":"game_silent"/.test(clientLog);
-        } else {
+        } else if (gale) {
             Object.assign(checks, {
                 worded: worded !== null && Number(worded[1]) > 0 && Number(worded[3]) === 0,
                 heard: heard.frames > 48000 && heard.peak > 0.05,
             });
+        } else {
+            // The whole land, past the 4,096 a connection holds by
+            // default (D742).
+            checks.landWhole = field('mirroredEntities') > 6000;
         }
     } else {
         Object.assign(checks, {
@@ -459,8 +473,8 @@ const nativeField = (name) => Number(new RegExp(`"${name}":(\\d+)`).exec(native?
 const most = Number(/"mostConnections":(\d+)/.exec(serverLog)?.[1] ?? -1);
 console.log(`page: native bots admitted ${nativeField('admitted')}, confirmed ${nativeField('confirmed')}; ` +
             `the server held ${most} players at once`);
-if (nativeField('admitted') !== 2 || (!stalls && nativeField('confirmed') <= 100) || nativeField('stalled') !== 0 ||
-    most < 3) {
+if (nativeField('admitted') !== 2 || (!stalls && !quarry && nativeField('confirmed') <= 100) ||
+    nativeField('stalled') !== 0 || most < 3) {
     console.log('page: unmet: the native bots or the players held at once');
     verdict = 1;
 }
