@@ -227,11 +227,21 @@ inline constexpr std::string_view kMaterialRepresentation = "rawframe.material";
 /// containers linked with what `generateSlang` wrote.
 inline constexpr std::string_view kProgramRepresentation = "rawframe.material.program";
 
-/// The node types a surface graph may hold (SPEC-0026's library, D731): the
+/// A node type a surface graph may hold and the params and inputs a node of
+/// it may hold, each in name order (SPEC-0026's library, D731, D732). An
+/// inline-Slang node's inputs are those its `inputs` param declares, so
+/// none are listed for it.
+struct NodeSignature {
+    std::string type;
+    std::vector<std::string> params;
+    std::vector<std::string> inputs;
+};
+
+/// The node types a surface graph may hold, each with its members: the
 /// family's own, each math node's, and each engine function's, in that
-/// order. What each type's params and inputs are is read where a node of it
-/// is checked.
-[[nodiscard]] std::vector<std::string_view> nodeTypes();
+/// order, the surface first. Each type's reader checks a node against the
+/// same members.
+[[nodiscard]] std::vector<NodeSignature> nodeSignatures();
 
 /// The one type a surface material's output is, and the node library's
 /// types this family knows.

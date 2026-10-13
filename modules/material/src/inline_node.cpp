@@ -90,8 +90,6 @@ result::Result<std::vector<std::string_view>> namesOf(const Value* names, std::s
 } // namespace
 
 result::Result<Inline> inlineIn(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 6> kParams = {
-        "body", "capabilities", "domains", "inputs", "outputs", "stages"};
     constexpr std::array<std::string_view, 3> kDomains = {"canvas", "post_process", "surface"};
     constexpr std::array<std::string_view, 2> kStages = {"fragment", "vertex"};
     // Its declared inputs name its node's inputs.
@@ -105,7 +103,7 @@ result::Result<Inline> inlineIn(const graph::Document& surface, const graph::Nod
         names.push_back(kPin.name);
     }
     std::ranges::sort(names);
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, names));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, ownMembersOf(kInlineSlangType)->params, names));
     RAWFRAME_TRY_ASSIGN(made.outputs, pinsOf(kParts.first->find("outputs"), 4, false));
     const Value* kBody = kParts.first->find("body");
     if (kBody == nullptr || kBody->text() == nullptr) {

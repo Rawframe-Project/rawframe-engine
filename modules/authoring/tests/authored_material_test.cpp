@@ -226,7 +226,7 @@ RAWFRAME_TEST(AMaterialGraphsNodesChangeAndUndoExactly) {
     // The node types it may hold, as the material module lists them (D731).
     const auto kTypes = answer(material, ListMaterialNodeTypes{});
     RAWFRAME_EXPECT(kTypes.has_value() && kTypes->find("types") != nullptr && !kTypes->find("types")->items().empty() &&
-                    *kTypes->find("types")->items().front().text() == "rawframe/surface@1");
+                    *kTypes->find("types")->items().front().find("type")->text() == "rawframe/surface@1");
     auto instance = AuthoredMaterial::open(kDocument, redText());
     RAWFRAME_EXPECT(instance.has_value());
     if (instance.has_value()) {

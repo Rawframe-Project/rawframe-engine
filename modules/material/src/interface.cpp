@@ -141,8 +141,7 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& s
 }
 
 result::Result<InterfaceInput> parameterIn(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 1> kParams = {"name"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, {}));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kName = kParts.first->find("name");
     if (kName == nullptr || kName->text() == nullptr) {
         return invalid("a parameter node names its interface input");
@@ -183,9 +182,7 @@ result::Result<std::vector<StaticSwitch>> switchesOf(const graph::Document& surf
 }
 
 result::Result<SwitchChoice> staticSwitchIn(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 1> kParams = {"name"};
-    constexpr std::array<std::string_view, 2> kInputs = {"off", "on"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, kInputs));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     RAWFRAME_TRY_ASSIGN(const std::vector<StaticSwitch> kSwitches, switchesOf(surface));
     const Value* kName = kParts.first->find("name");
     const auto kFound = kName != nullptr && kName->text() != nullptr

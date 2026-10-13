@@ -374,8 +374,8 @@ struct ReadUiDocument {};
 struct ReadMaterialInstance {};
 /// A material graph read whole (D728).
 struct ReadMaterialGraph {};
-/// The node types a material graph may hold (D731), as the material module
-/// lists them.
+/// The node types a material graph may hold and each one's params and
+/// inputs (D731, D732), as the material module lists them.
 struct ListMaterialNodeTypes {};
 
 using Query = std::variant<ListEntities,

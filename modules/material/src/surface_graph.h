@@ -13,7 +13,9 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace rawframe::material::surface_graph {
@@ -51,6 +53,22 @@ inline constexpr std::array<std::string_view, 3> kBlends = {"opaque", "masked", 
 [[nodiscard]] const graph::Node* surfaceNode(const graph::Document& surface);
 /// Whether a node is of a type this family knows.
 [[nodiscard]] bool known(const graph::Node& node);
+
+/// The params and inputs a node of one of the family's own types may hold,
+/// each in name order (D732): what its reader checks a node against and
+/// `nodeSignatures` lists. The surface's inputs are the Surface contract's
+/// and an inline-Slang node's those its params declare, so neither holds
+/// inputs here.
+struct Members {
+    std::span<const std::string_view> params;
+    std::span<const std::string_view> inputs;
+};
+/// The members of one of the family's own types; none for another type.
+[[nodiscard]] std::optional<Members> ownMembersOf(std::string_view type);
+/// A node of one of the family's own types: its params and inputs, checked
+/// as `partsOf` checks them against its type's members.
+[[nodiscard]] result::Result<std::pair<const document::Value*, const document::Value*>>
+ownPartsOf(const graph::Node& node);
 /// Whether a type is one of the atomic core's math nodes (`mathNodeOf`).
 [[nodiscard]] bool math(std::string_view type);
 /// A known node's type.

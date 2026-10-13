@@ -265,9 +265,20 @@ std::string AuthoredMaterial::summaryAt(std::size_t entry) const {
 
 result::Result<Value> answer(const AuthoredMaterial& material, const Query& query) {
     if (std::holds_alternative<ListMaterialNodeTypes>(query) && material.graph()) {
+        const auto kWords = [](const std::vector<std::string>& names) {
+            Value made = Value::array();
+            for (const std::string& kName : names) {
+                made.push(Value::string(kName));
+            }
+            return made;
+        };
         Value types = Value::array();
-        for (const std::string_view kType : material::nodeTypes()) {
-            types.push(Value::string(std::string{kType}));
+        for (const material::NodeSignature& kSignature : material::nodeSignatures()) {
+            Value type = Value::object();
+            type.add("type", Value::string(kSignature.type));
+            type.add("params", kWords(kSignature.params));
+            type.add("inputs", kWords(kSignature.inputs));
+            types.push(std::move(type));
         }
         Value made = Value::object();
         made.add("types", std::move(types));

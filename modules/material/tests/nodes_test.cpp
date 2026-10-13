@@ -2,7 +2,8 @@
 // moving its vertices at the presented World's time, every math node of
 // the atomic core, the channel, stream, logic, color, and noise nodes, in
 // the fragment and the vertex stage, and what each refuses. The library's
-// types listed once each (D731).
+// types listed once each (D731), each with the params and inputs its
+// reader checks a node against (D732).
 
 #include "generated/arithmetic_material.h"
 #include "generated/facing_graph.h"
@@ -639,8 +640,43 @@ RAWFRAME_TEST(ATextureInputGivesWhatASampledTextureSamples) {
     RAWFRAME_EXPECT(refusedWith(validateSurface(unnamed), MaterialError::Invalid));
 }
 
+RAWFRAME_TEST(EachNodeTypesMembersAreListedInNameOrder) {
+    const std::vector<NodeSignature> kSignatures = nodeSignatures();
+    const auto kOf = [&](std::string_view type) {
+        const auto kFound = std::ranges::find(kSignatures, type, &NodeSignature::type);
+        return kFound != kSignatures.end() ? *kFound : NodeSignature{};
+    };
+    using Words = std::vector<std::string>;
+    for (const NodeSignature& kSignature : kSignatures) {
+        RAWFRAME_EXPECT(std::ranges::is_sorted(kSignature.params) && std::ranges::is_sorted(kSignature.inputs));
+    }
+    // An own node's, a math node's sorted from its operands' order, and a
+    // function's interface inputs.
+    RAWFRAME_EXPECT(kOf(kUvType).params == Words{"channel"} && kOf(kUvType).inputs.empty());
+    RAWFRAME_EXPECT(kOf(kSampleTexture2dType).params == (Words{"address", "filter", "texture"}) &&
+                    kOf(kSampleTexture2dType).inputs == (Words{"texture", "uv"}));
+    RAWFRAME_EXPECT(kOf("rawframe/clamp@1").inputs == (Words{"high", "in", "low"}));
+    RAWFRAME_EXPECT(kOf("rawframe/triplanar_projection@1").inputs ==
+                    (Words{"blend", "normal", "position", "texture", "tile"}));
+    // The surface's are the Surface contract's, the feature groups' among
+    // them.
+    const NodeSignature kSurface = kOf(kSurfaceType);
+    RAWFRAME_EXPECT(kSurface.params.empty() && std::ranges::contains(kSurface.inputs, "base_color") &&
+                    std::ranges::contains(kSurface.inputs, "transmission_weight") &&
+                    std::ranges::contains(kSurface.inputs, "position_offset"));
+    // A node holding a member its type does not list is refused.
+    RAWFRAME_EXPECT(refusedWith(
+        validateSurface(
+            surfaceOf(Value::object(), {nodeOf(kTime, kUvType, objectOf({{"set", Value::real(1)}}), Value::object())})),
+        MaterialError::Invalid));
+}
+
 RAWFRAME_TEST(TheNodeLibrarysTypesAreListedOnceEach) {
-    const std::vector<std::string_view> kTypes = nodeTypes();
+    const std::vector<NodeSignature> kSignatures = nodeSignatures();
+    std::vector<std::string_view> kTypes;
+    for (const NodeSignature& kSignature : kSignatures) {
+        kTypes.push_back(kSignature.type);
+    }
     std::vector<std::string_view> sorted = kTypes;
     std::ranges::sort(sorted);
     RAWFRAME_EXPECT(std::ranges::adjacent_find(sorted) == sorted.end());

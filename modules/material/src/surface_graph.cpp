@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "functions.h"
+#include "parameters.h"
 
 #include <algorithm>
 #include <cmath>
@@ -278,43 +279,78 @@ bool wholeNumber(double number) {
 
 namespace {
 
-/// The family's own node types, neither a math node's nor a function's
-/// (D731): what `known` takes and `nodeTypes` lists, but a function's
-/// output, which a function alone holds.
-constexpr auto kOwnTypes = std::to_array<std::string_view>({kSurfaceType,
-                                                            kSampleTexture2dType,
-                                                            kUvType,
-                                                            kSeparate3Type,
-                                                            kNormalMapType,
-                                                            kQualitySwitchType,
-                                                            kTimeType,
-                                                            kWorldPositionType,
-                                                            kWorldNormalType,
-                                                            kCombine3Type,
-                                                            kCombine2Type,
-                                                            kSeparate2Type,
-                                                            kSwizzleType,
-                                                            kVertexColorType,
-                                                            kViewDirectionType,
-                                                            kWorldTangentType,
-                                                            kCompareType,
-                                                            kConstantType,
-                                                            kFrontFacingType,
-                                                            kCombine4Type,
-                                                            kSeparate4Type,
-                                                            kParameterType,
-                                                            kParameterTexture2dType,
-                                                            kTransformType,
-                                                            kInlineSlangType,
-                                                            kStaticSwitchType});
+constexpr auto kInInputs = std::to_array<std::string_view>({"in"});
+constexpr auto kNameParams = std::to_array<std::string_view>({"name"});
+constexpr auto kChannelParams = std::to_array<std::string_view>({"channel"});
+constexpr auto kScaleParams = std::to_array<std::string_view>({"scale"});
+constexpr auto kPatternParams = std::to_array<std::string_view>({"pattern"});
+constexpr auto kOperatorParams = std::to_array<std::string_view>({"operator"});
+constexpr auto kABInputs = std::to_array<std::string_view>({"a", "b"});
+constexpr auto kXYInputs = std::to_array<std::string_view>({"x", "y"});
+constexpr auto kXYZInputs = std::to_array<std::string_view>({"x", "y", "z"});
+constexpr auto kWXYZInputs = std::to_array<std::string_view>({"w", "x", "y", "z"});
+constexpr auto kOffOnInputs = std::to_array<std::string_view>({"off", "on"});
+constexpr auto kConstantParams = std::to_array<std::string_view>({"type", "value"});
+constexpr auto kTimeParams = std::to_array<std::string_view>({"period", "timeline"});
+constexpr auto kTransformParams = std::to_array<std::string_view>({"from", "kind", "to"});
+constexpr auto kSampleParams = std::to_array<std::string_view>({"address", "filter", "texture"});
+constexpr auto kSampleInputs = std::to_array<std::string_view>({"texture", "uv"});
+constexpr auto kInlineParams =
+    std::to_array<std::string_view>({"body", "capabilities", "domains", "inputs", "outputs", "stages"});
+
+struct OwnNode {
+    std::string_view type;
+    Members members;
+};
+
+/// The family's own node types, neither a math node's nor a function's,
+/// and their members (D731, D732): what `known` takes and `nodeSignatures`
+/// lists, but a function's output, which a function alone holds.
+constexpr auto kOwnNodes = std::to_array<OwnNode>({{kSurfaceType, {}},
+                                                   {kSampleTexture2dType, {kSampleParams, kSampleInputs}},
+                                                   {kUvType, {kChannelParams, {}}},
+                                                   {kSeparate3Type, {{}, kInInputs}},
+                                                   {kNormalMapType, {kScaleParams, kInInputs}},
+                                                   {kQualitySwitchType, {{}, kSwitchInputs}},
+                                                   {kTimeType, {kTimeParams, {}}},
+                                                   {kWorldPositionType, {}},
+                                                   {kWorldNormalType, {}},
+                                                   {kCombine3Type, {{}, kXYZInputs}},
+                                                   {kCombine2Type, {{}, kXYInputs}},
+                                                   {kSeparate2Type, {{}, kInInputs}},
+                                                   {kSwizzleType, {kPatternParams, kInInputs}},
+                                                   {kVertexColorType, {}},
+                                                   {kViewDirectionType, {}},
+                                                   {kWorldTangentType, {}},
+                                                   {kCompareType, {kOperatorParams, kABInputs}},
+                                                   {kConstantType, {kConstantParams, {}}},
+                                                   {kFrontFacingType, {}},
+                                                   {kCombine4Type, {{}, kWXYZInputs}},
+                                                   {kSeparate4Type, {{}, kInInputs}},
+                                                   {kParameterType, {kNameParams, {}}},
+                                                   {kParameterTexture2dType, {kNameParams, {}}},
+                                                   {kTransformType, {kTransformParams, kInInputs}},
+                                                   {kInlineSlangType, {kInlineParams, {}}},
+                                                   {kStaticSwitchType, {kNameParams, kOffOnInputs}}});
 
 } // namespace
+
+std::optional<Members> ownMembersOf(std::string_view type) {
+    const auto kFound = std::ranges::find(kOwnNodes, type, &OwnNode::type);
+    return kFound == kOwnNodes.end() ? std::nullopt : std::optional{kFound->members};
+}
+
+result::Result<std::pair<const Value*, const Value*>> ownPartsOf(const graph::Node& node) {
+    const std::optional<Members> kMembers = ownMembersOf(typeOf(node));
+    return kMembers.has_value() ? partsOf(node, kMembers->params, kMembers->inputs)
+                                : invalid("a node of the library is of a type it holds");
+}
 
 bool known(const graph::Node& node) {
     const Value* kType = node.record.find("type");
     const std::string* kText = kType != nullptr ? kType->text() : nullptr;
-    return kText != nullptr && (std::ranges::contains(kOwnTypes, *kText) || *kText == kOutputType ||
-                                functions::isFunction(*kText) || math(*kText));
+    return kText != nullptr &&
+           (ownMembersOf(*kText).has_value() || *kText == kOutputType || functions::isFunction(*kText) || math(*kText));
 }
 
 bool math(std::string_view type) {
@@ -326,8 +362,7 @@ std::string_view typeOf(const graph::Node& node) {
 }
 
 result::Result<std::uint32_t> uvIn(const graph::Node& node) {
-    constexpr std::array<std::string_view, 1> kParams = {"channel"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, {}));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kChannel = kParts.first->find("channel");
     if (kChannel == nullptr) {
         return 0U;
@@ -525,11 +560,8 @@ result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& n
 result::Result<Combined> combineIn(const graph::Document& surface, const graph::Node& node) {
     // In name order: w before x.
     constexpr std::array<std::string_view, 4> kInputs = {"x", "y", "z", "w"};
-    constexpr std::array<std::string_view, 4> kNamed = {"w", "x", "y", "z"};
     Combined made{.count = typeOf(node) == kCombine2Type ? 2U : typeOf(node) == kCombine3Type ? 3U : 4U};
-    RAWFRAME_TRY_ASSIGN(const auto kParts,
-                        made.count == 4 ? partsOf(node, {}, kNamed)
-                                        : partsOf(node, {}, std::span{kInputs.data(), made.count}));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     for (std::size_t at = 0; at < made.count; ++at) {
         const Value* kInput = kParts.second->find(kInputs.at(at));
         if (kInput == nullptr) {
@@ -544,8 +576,7 @@ result::Result<Combined> combineIn(const graph::Document& surface, const graph::
 }
 
 result::Result<Operand> separate2In(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 1> kInputs = {"in"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kInputs));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kIn = kParts.second->find("in");
     if (kIn == nullptr) {
         return invalid("a separate2 node's input is in, given");
@@ -558,9 +589,7 @@ result::Result<Operand> separate2In(const graph::Document& surface, const graph:
 }
 
 result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 1> kParams = {"pattern"};
-    constexpr std::array<std::string_view, 1> kInputs = {"in"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, kInputs));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kPattern = kParts.first->find("pattern");
     const Value* kIn = kParts.second->find("in");
     if (kPattern == nullptr || kPattern->text() == nullptr || kIn == nullptr) {
@@ -597,7 +626,6 @@ result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::N
 }
 
 result::Result<Operand> constantIn(const graph::Node& node) {
-    constexpr std::array<std::string_view, 2> kParams = {"type", "value"};
     constexpr std::array<std::pair<std::string_view, Carried>, 8> kTypes = {{{"float", Carried::Float},
                                                                              {"int", Carried::Int},
                                                                              {"bool", Carried::Bool},
@@ -606,7 +634,7 @@ result::Result<Operand> constantIn(const graph::Node& node) {
                                                                              {"color3", Carried::Color3},
                                                                              {"vec4", Carried::Vec4},
                                                                              {"color4", Carried::Color4}}};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, {}));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kType = kParts.first->find("type");
     const Value* kValue = kParts.first->find("value");
     if (kType == nullptr || kType->text() == nullptr || kValue == nullptr) {
@@ -636,15 +664,13 @@ result::Result<Operand> constantIn(const graph::Node& node) {
 }
 
 result::Result<Compare> compareIn(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 1> kParams = {"operator"};
-    constexpr std::array<std::string_view, 2> kInputs = {"a", "b"};
     constexpr std::array<std::pair<std::string_view, std::string_view>, 6> kOperators = {{{"less", "<"},
                                                                                           {"less_equal", "<="},
                                                                                           {"greater", ">"},
                                                                                           {"greater_equal", ">="},
                                                                                           {"equal", "=="},
                                                                                           {"not_equal", "!="}}};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, kInputs));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kOperator = kParts.first->find("operator");
     const auto kFound = kOperator != nullptr && kOperator->text() != nullptr
                             ? std::ranges::find(kOperators,
@@ -673,8 +699,7 @@ result::Result<Compare> compareIn(const graph::Document& surface, const graph::N
 }
 
 result::Result<std::uint32_t> timeIn(const graph::Node& node) {
-    constexpr std::array<std::string_view, 2> kParams = {"period", "timeline"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, {}));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kTimeline = kParts.first->find("timeline");
     if (kTimeline == nullptr || kTimeline->text() == nullptr || *kTimeline->text() != "simulation") {
         return invalid("a time node names its timeline, the simulation's");
@@ -693,12 +718,12 @@ result::Result<std::uint32_t> timeIn(const graph::Node& node) {
 }
 
 result::Status streamIn(const graph::Node& node) {
-    RAWFRAME_TRY(partsOf(node, {}, {}));
+    RAWFRAME_TRY(ownPartsOf(node));
     return {};
 }
 
 result::Result<Switch> switchIn(const graph::Document& surface, const graph::Node& node) {
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kSwitchInputs));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     if (kParts.second->find("default") == nullptr) {
         return invalid("a quality switch's default is given");
     }
@@ -719,11 +744,9 @@ result::Result<Switch> switchIn(const graph::Document& surface, const graph::Nod
 }
 
 result::Result<Transform> transformIn(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 3> kParams = {"from", "kind", "to"};
-    constexpr std::array<std::string_view, 1> kInputs = {"in"};
     constexpr std::array<std::string_view, 5> kSpaces = {"object", "world", "view", "tangent", "clip"};
     constexpr std::array<std::string_view, 3> kKinds = {"point", "vector", "normal"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, kInputs));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const auto kOneOf = [&kParts](std::string_view name, std::span<const std::string_view> among) {
         const Value* kValue = kParts.first->find(name);
         const auto kFound = kValue != nullptr && kValue->text() != nullptr
@@ -759,8 +782,7 @@ result::Result<Transform> transformIn(const graph::Document& surface, const grap
 }
 
 result::Result<Operand> separate3In(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 1> kInputs = {"in"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kInputs));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kIn = kParts.second->find("in");
     if (kIn == nullptr) {
         return invalid("a separate3 node's input is in, given");
@@ -773,8 +795,7 @@ result::Result<Operand> separate3In(const graph::Document& surface, const graph:
 }
 
 result::Result<Operand> separate4In(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 1> kInputs = {"in"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, {}, kInputs));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kIn = kParts.second->find("in");
     if (kIn == nullptr) {
         return invalid("a separate4 node's input is in, given");
@@ -787,9 +808,7 @@ result::Result<Operand> separate4In(const graph::Document& surface, const graph:
 }
 
 result::Result<NormalMap> normalMapIn(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 1> kParams = {"scale"};
-    constexpr std::array<std::string_view, 1> kInputs = {"in"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, kInputs));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kIn = kParts.second->find("in");
     if (kIn == nullptr) {
         return invalid("a normal map's input is in, given");
@@ -810,9 +829,7 @@ result::Result<NormalMap> normalMapIn(const graph::Document& surface, const grap
 }
 
 result::Result<Sampling> sampleIn(const graph::Document& surface, const graph::Node& node) {
-    constexpr std::array<std::string_view, 3> kParams = {"address", "filter", "texture"};
-    constexpr std::array<std::string_view, 2> kInputs = {"texture", "uv"};
-    RAWFRAME_TRY_ASSIGN(const auto kParts, partsOf(node, kParams, kInputs));
+    RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     Sampling made;
     const Value* kTexture = kParts.first->find("texture");
     const Value* kGiven = kParts.second->find("texture");
@@ -1027,13 +1044,42 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
 
 namespace rawframe::material {
 
-std::vector<std::string_view> nodeTypes() {
-    std::vector<std::string_view> made{surface_graph::kOwnTypes.begin(), surface_graph::kOwnTypes.end()};
-    for (const surface_graph::MathNode& kMath : surface_graph::kMathNodes) {
-        made.push_back(kMath.type);
+std::vector<NodeSignature> nodeSignatures() {
+    const auto kWords = [](std::span<const std::string_view> names) {
+        return std::vector<std::string>{names.begin(), names.end()};
+    };
+    std::vector<NodeSignature> made;
+    for (const surface_graph::OwnNode& kOwn : surface_graph::kOwnNodes) {
+        made.push_back(NodeSignature{.type = std::string{kOwn.type},
+                                     .params = kWords(kOwn.members.params),
+                                     .inputs = kWords(kOwn.members.inputs)});
     }
-    for (const std::string_view kFunction : functions::types()) {
-        made.push_back(kFunction);
+    // The surface's are the Surface contract's: its parameters, its feature
+    // groups' inputs, and the geometry's normal and position offset.
+    std::vector<std::string>& surface = made.front().inputs;
+    for (const Parameter& kParameter : kParameters) {
+        surface.emplace_back(kParameter.name);
+    }
+    for (const GroupInput& kGroup : kGroupInputs) {
+        surface.emplace_back(kGroup.name);
+    }
+    surface.emplace_back("geometry_normal");
+    surface.emplace_back("position_offset");
+    std::ranges::sort(surface);
+    for (const surface_graph::MathNode& kMath : surface_graph::kMathNodes) {
+        NodeSignature math{.type = std::string{kMath.type},
+                           .inputs = kWords(std::span{kMath.inputs.data(), kMath.count})};
+        std::ranges::sort(math.inputs);
+        made.push_back(std::move(math));
+    }
+    for (const std::string_view kType : functions::types()) {
+        NodeSignature call{.type = std::string{kType}};
+        if (const result::Result<functions::Function> kFunction = functions::functionOf(kType); kFunction.has_value()) {
+            for (const surface_graph::InterfaceInput& kInput : kFunction->inputs) {
+                call.inputs.emplace_back(kInput.name);
+            }
+        }
+        made.push_back(std::move(call));
     }
     return made;
 }
