@@ -484,10 +484,20 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     };
     // Only what may need sending is looked at (D744): what changed since
     // the connection was last looked at, and what it was not then known to
-    // hold, its player always; every mapping when those changes are no
-    // longer kept.
+    // hold, its player always. Every mapping, in order, when those changes
+    // are no longer kept, or when there are more of them than mappings, as
+    // where most of a large World moves and a connection's interest holds
+    // a part of it.
     looking.clear();
-    if (!peer.lookedAt.has_value() || changed.empty() || changed.front().publish > *peer.lookedAt + 1) {
+    bool everything = !peer.lookedAt.has_value() || changed.empty() || changed.front().publish > *peer.lookedAt + 1;
+    std::size_t since = peer.unsettled.size();
+    for (const Changed& kChanged : changed) {
+        if (!everything && kChanged.publish > *peer.lookedAt) {
+            since += kChanged.entities.size();
+        }
+    }
+    everything = everything || since >= peer.mapped.size();
+    if (everything) {
         for (const auto& [entity, mapping] : peer.mapped) {
             looking.push_back(entity);
         }
