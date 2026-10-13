@@ -114,6 +114,20 @@ RAWFRAME_TEST(AnIslandIsReachedOnlyPartWayAndAPointOffTheNavmeshNotAtAll) {
     RAWFRAME_EXPECT(kNearest.has_value() && near(*kNearest, {2, 0.1, 2}, 0.01));
     const auto kNotFinite = navmesh.path({NAN, 0, 0}, {2, 0, 2});
     RAWFRAME_EXPECT(!kNotFinite.has_value() && kNotFinite.error().code() == code(NavigationError::Invalid));
+    // Finite but far past what Maul Nav's floats hold, or too small to
+    // tell from nought: a program may pass any of them (D116's classes).
+    for (const double kHostile : {1e300, -1e300, 4e38, -4e38, 1e-300, -0.0}) {
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+            Point at{2, 0, 2};
+            at[axis] = kHostile;
+            const auto kFrom = navmesh.path(at, {2, 0, 2});
+            const auto kTo = navmesh.path({2, 0, 2}, at);
+            RAWFRAME_EXPECT(!kFrom.has_value() || kFrom->points.size() <= 2);
+            RAWFRAME_EXPECT(!kTo.has_value() || kTo->points.size() <= 2);
+            static_cast<void>(navmesh.nearest(at));
+            static_cast<void>(navmesh.nearest({2, 0, 2}, kHostile));
+        }
+    }
 }
 
 RAWFRAME_TEST(SettingsAndAreasMaulNavRefusesAreRefused) {
