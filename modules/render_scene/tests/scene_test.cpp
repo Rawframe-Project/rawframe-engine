@@ -5,7 +5,8 @@
 // unknown mesh is left out and counted; models draw in the order of their
 // meshes, then entities, and the limit leaves out a suffix of it; the sun
 // and sky light in linear physical units; a model's material is found by
-// its identity, and translucent ones come last; an emitter emits the way
+// its identity, read again in place of those it was made with (D734),
+// and translucent ones come last; an emitter emits the way
 // its pose turns it, placed relative to the eye; and a game's scene loads
 // against its program. A camera's effects are camera_test's, the other
 // lights' lights_test's.
@@ -472,6 +473,18 @@ RAWFRAME_TEST(AModelsMaterialIsFoundByItsIdentity) {
                     kFrame.unknownMaterials == 1);
     // None is white, so a model's color is its base color.
     RAWFRAME_EXPECT(noMaterial()[0] == 1 && noMaterial()[7] == 0.3F && noMaterial()[15] == 0);
+    // Read again (D734): the stone changed and the brass gone, the frames
+    // from the next draw the new stone, and the brass's models with none.
+    scene->replaceMaterials({{.id = 0xa2, .blob = brass}});
+    scene->extract(world);
+    const SceneFrame& kAgain = scene->queue({.fovY = 1, .near = 0.1F, .aspect = 1});
+    places.clear();
+    for (const SceneDraw& draw : kAgain.draws) {
+        places.push_back(draw.material);
+    }
+    std::ranges::sort(places);
+    RAWFRAME_EXPECT(kAgain.materials.size() == 2 && kAgain.materials[1] == brass &&
+                    places == (std::vector<std::uint32_t>{0, 0, 0, 1}) && kAgain.unknownMaterials == 2);
 }
 
 RAWFRAME_TEST(AMeshsPartsDrawWithTheirOwnMaterials) {

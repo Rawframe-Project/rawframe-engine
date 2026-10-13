@@ -259,6 +259,16 @@ if(RAWFRAME_BUILD_TESTS)
     # recook run at once, so it holds processors as the other bot runs do:
     # squeezed beside the check's heaviest tests, its World fell behind
     # and the host stopped overloaded.
+    # Gale's rock recooked rougher as it plays: its scene reads the game's
+    # materials again (D734).
+    add_test(NAME gale_recooked
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/gale_recooked.sh $<TARGET_FILE:rawframe_host_arena>
+                     $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}
+                     ${CMAKE_CURRENT_BINARY_DIR}/gale_recooked)
+    set_tests_properties(gale_recooked PROPERTIES
+                         PROCESSORS 4
+                         SKIP_REGULAR_EXPRESSION "skip: no shader toolchain"
+                         PASS_REGULAR_EXPRESSION "\"code\":\"materials_reloaded\"[^\n]*\"materials\":[1-9][0-9]*,\"reloads\":1")
     add_test(NAME runners_recooked
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_recooked.sh $<TARGET_FILE:rawframe_host_arena>
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}

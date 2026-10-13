@@ -37,6 +37,7 @@ constexpr diagnostics::EventIdentity kSceneSummary{"scene", "scene_summary"};
 constexpr diagnostics::EventIdentity kParticlesSummary{"scene", "scene_particles_summary"};
 constexpr std::string_view kProvided[] = {kSceneFrames.name};
 constexpr diagnostics::EventIdentity kMaterialUnread{"scene", "material_unread"};
+constexpr diagnostics::EventIdentity kMaterialsReloaded{"scene", "materials_reloaded"};
 constexpr diagnostics::EventIdentity kViewRefused{"scene", "view_refused"};
 constexpr diagnostics::EventIdentity kViewsSummary{"scene", "scene_views_summary"};
 constexpr diagnostics::EventIdentity kRenderScaleChanged{"scene", "render_scale_changed"};
@@ -164,8 +165,20 @@ public:
         // processes (D349).
         std::vector<SceneMaterial> materials;
         std::vector<ScenePostProcessMaterial> postProcesses;
-        RAWFRAME_TRY(readGameMaterials(context, *files, quality_, materials, postProcesses, unreadMaterials_));
+        RAWFRAME_TRY(
+            readGameMaterials(context, *files, quality_, programs_, materials, postProcesses, unreadMaterials_));
         gameMaterials_ = materials.size();
+        // Followed as its content is (D734): the catalog read in now and
+        // what it says each material's revision is.
+        if (!files->materials().empty() && context.has(game_content::kGameContent.name)) {
+            RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
+            if (content->held()) {
+                content_ = content;
+                files_ = files;
+                catalog_ = content->store().catalog();
+                revisions_ = materialRevisions(content->store(), *files);
+            }
+        }
         RAWFRAME_TRY(pictures_.read(context, *files, materials, postProcesses));
         settings_ = SceneSettings{.models = std::move(game->models),
                                   .placements = std::move(game->placements),
@@ -216,6 +229,7 @@ public:
             eyeFrames_.clear();
             ++tick_;
             pictures_.update(tick_);
+            followMaterials();
             extract();
         } else if (phase == composition::HostPhase::Present && extracted_) {
             extracted_ = false;
@@ -779,6 +793,55 @@ private:
         }
     }
 
+    /// A catalog the store published since the last (D734): the game's
+    /// materials read again where any one's revision changed, and every
+    /// scene given them, as the frames from the next draw them. A texture
+    /// a material newly names is not read until the game is played again.
+    void followMaterials() noexcept {
+        if (content_ == nullptr || content_->store().catalog() == catalog_) {
+            return;
+        }
+        catalog_ = content_->store().catalog();
+        std::vector<content::ContentDigest> revisions = materialRevisions(content_->store(), *files_);
+        if (revisions == revisions_) {
+            return;
+        }
+        revisions_ = std::move(revisions);
+        std::vector<SceneMaterial> materials;
+        std::vector<ScenePostProcessMaterial> postProcesses;
+        std::vector<std::pair<std::string, std::string>> unread;
+        readMaterials(content_->store(), *files_, quality_, programs_, materials, postProcesses, unread);
+        for (const auto& [kPath, kReason] : unread) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kMaterialUnread,
+                         "a material could not be read: its models are drawn with none",
+                         {diagnostics::field("material", kPath), diagnostics::field("reason", kReason)});
+        }
+        const auto kGiven = [&materials](const std::unique_ptr<Scene>& scene) {
+            if (scene != nullptr) {
+                scene->replaceMaterials(materials);
+            }
+        };
+        kGiven(scene_);
+        for (LocalPlayer& each : localPlayers_) {
+            kGiven(each.scene);
+        }
+        for (const std::unique_ptr<Scene>& each : eyeScenes_) {
+            kGiven(each);
+        }
+        for (TextureView& each : textureViews_) {
+            kGiven(each.scene);
+        }
+        ++materialReloads_;
+        emitter_.log(diagnostics::Severity::Info,
+                     kMaterialsReloaded,
+                     "the game's materials were read again from their new revisions",
+                     {diagnostics::field("materials", static_cast<std::uint64_t>(materials.size())),
+                      diagnostics::field("reloads", materialReloads_)});
+        gameMaterials_ = materials.size();
+        settings_.materials = std::move(materials);
+    }
+
     world_replication::ClientWorlds* clients_ = nullptr;
     std::optional<std::size_t> client_;
     SceneSettings settings_;
@@ -895,6 +958,16 @@ private:
     /// The particles' frames, summed (D360).
     rawframe::particles::Tally particles_;
     std::size_t gameMaterials_ = 0;
+    /// What the materials are followed through (D734): the game's content,
+    /// its files, the catalog last seen, the materials' revisions in it, and
+    /// how often they were read again.
+    game_content::GameContent* content_ = nullptr;
+    const world_kest::GameFiles* files_ = nullptr;
+    std::shared_ptr<const content::ContentCatalog> catalog_;
+    std::vector<content::ContentDigest> revisions_;
+    std::uint64_t materialReloads_ = 0;
+    /// The program materials read, kept while their revisions are.
+    Programs programs_;
     /// Materials that could not be read, and why, said at start.
     std::vector<std::pair<std::string, std::string>> unreadMaterials_;
     /// The textures the materials sample and the pictures the World names.

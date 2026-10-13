@@ -633,6 +633,43 @@ Scene::Scene(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
 
 Scene::~Scene() = default;
 
+namespace {
+
+/// The frame's materials: none's first, then the game's; a later line of
+/// an identity replaces an earlier.
+void placeMaterials(Scene::State& state, std::span<const SceneMaterial> materials) {
+    state.materials.clear();
+    state.frame.materials = {noMaterial()};
+    state.frame.textures = {SceneTextures{}};
+    state.frame.programs = {nullptr};
+    state.translucent = {false};
+    for (const SceneMaterial& kMaterial : materials) {
+        if (kMaterial.id == 0) {
+            continue;
+        }
+        const auto [kAt, kNew] =
+            state.materials.try_emplace(kMaterial.id, static_cast<std::uint32_t>(state.frame.materials.size()));
+        // A material that blends says so to the device too (D726).
+        MaterialBlob blob = kMaterial.blob;
+        if (kMaterial.translucent) {
+            blob[kFlagsAt] = static_cast<float>(static_cast<std::uint32_t>(blob[kFlagsAt]) | kBlendsFlag);
+        }
+        if (kNew) {
+            state.frame.materials.push_back(blob);
+            state.frame.textures.push_back(kMaterial.textures);
+            state.frame.programs.push_back(kMaterial.program);
+            state.translucent.push_back(kMaterial.translucent);
+        } else {
+            state.frame.materials[kAt->second] = blob;
+            state.frame.textures[kAt->second] = kMaterial.textures;
+            state.frame.programs[kAt->second] = kMaterial.program;
+            state.translucent[kAt->second] = kMaterial.translucent;
+        }
+    }
+}
+
+} // namespace
+
 result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistry& registry, SceneSettings settings) {
     auto state = std::make_unique<State>();
     const auto kQueryOf = [&registry](schema::ComponentTypeId id,
@@ -711,35 +748,7 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
             state->meshes.insert_or_assign(kMesh.id, bounded(kMesh.mesh));
         }
     }
-    // The frame's materials: none's first, then the game's; a later line of
-    // an identity replaces an earlier.
-    state->frame.materials = {noMaterial()};
-    state->frame.textures = {SceneTextures{}};
-    state->frame.programs = {nullptr};
-    state->translucent = {false};
-    for (const SceneMaterial& kMaterial : settings.materials) {
-        if (kMaterial.id == 0) {
-            continue;
-        }
-        const auto [kAt, kNew] =
-            state->materials.try_emplace(kMaterial.id, static_cast<std::uint32_t>(state->frame.materials.size()));
-        // A material that blends says so to the device too (D726).
-        MaterialBlob blob = kMaterial.blob;
-        if (kMaterial.translucent) {
-            blob[kFlagsAt] = static_cast<float>(static_cast<std::uint32_t>(blob[kFlagsAt]) | kBlendsFlag);
-        }
-        if (kNew) {
-            state->frame.materials.push_back(blob);
-            state->frame.textures.push_back(kMaterial.textures);
-            state->frame.programs.push_back(kMaterial.program);
-            state->translucent.push_back(kMaterial.translucent);
-        } else {
-            state->frame.materials[kAt->second] = blob;
-            state->frame.textures[kAt->second] = kMaterial.textures;
-            state->frame.programs[kAt->second] = kMaterial.program;
-            state->translucent[kAt->second] = kMaterial.translucent;
-        }
-    }
+    placeMaterials(*state, settings.materials);
     state->settings = std::move(settings);
     if (const auto kPose = registry.find(physics3d::Pose3D::kComponentTypeId)) {
         state->pose = *kPose;
@@ -932,6 +941,11 @@ void Scene::shownAt(double seconds) noexcept {
 
 const SceneFrame& Scene::queue(const SceneCamera& camera) {
     return state_->queue(camera);
+}
+
+void Scene::replaceMaterials(std::vector<SceneMaterial> materials) {
+    placeMaterials(*state_, materials);
+    state_->settings.materials = std::move(materials);
 }
 
 void Scene::show(std::span<const SceneLine> lines) {

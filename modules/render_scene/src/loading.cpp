@@ -50,11 +50,6 @@ readCooked(content::ContentStore& store, base::Bits128 id, base::Bits128 type) {
                                                               .description = "a material's read was cancelled"});
 }
 
-/// The program materials read so far, by their resources' identities: one
-/// program however many instances draw with it (D709), so they share its
-/// pipelines.
-using Programs = std::map<base::Bits128, std::shared_ptr<const material::ProgramMaterial>>;
-
 /// A surface material as the scene draws it: its blob at `quality` (D303),
 /// or, cooked with its own program (D484), that program, its states in the
 /// blob and its textures at their slots (D485); or, an instance (D709), its
@@ -90,11 +85,13 @@ result::Result<SceneMaterial> readMaterial(content::ContentStore& store,
         return made;
     }
     if (kRead.descriptor().representation.text() == material::kProgramRepresentation) {
-        std::shared_ptr<const material::ProgramMaterial>& program = programs[id];
-        if (program == nullptr) {
+        ReadProgram& read = programs[id];
+        if (read.program == nullptr || read.revision != kRead.descriptor().digest) {
             RAWFRAME_TRY_ASSIGN(material::ProgramMaterial decoded, material::decodeProgram(kRead.bytes()));
-            program = std::make_shared<const material::ProgramMaterial>(std::move(decoded));
+            read = ReadProgram{.revision = kRead.descriptor().digest,
+                               .program = std::make_shared<const material::ProgramMaterial>(std::move(decoded))};
         }
+        const std::shared_ptr<const material::ProgramMaterial>& program = read.program;
         const material::Material kStates{.shading = program->shading,
                                          .blend = program->blend,
                                          .alphaCutoff = program->alphaCutoff,
@@ -266,9 +263,61 @@ result::Result<SceneConfiguration> readConfiguration(const composition::Configur
     return read;
 }
 
+void readMaterials(content::ContentStore& store,
+                   const world_kest::GameFiles& files,
+                   material::Quality quality,
+                   Programs& programs,
+                   std::vector<SceneMaterial>& materials,
+                   std::vector<ScenePostProcessMaterial>& postProcesses,
+                   std::vector<std::pair<std::string, std::string>>& unread) {
+    for (const world_kest::GameMaterialResource& each : files.materials()) {
+        auto read = readMaterial(store, each.id, each.material, quality, programs);
+        // One of another type may be a post process.
+        if (!read.has_value() && missing(read.error(), content::ContentError::ResourceTypeMismatch)) {
+            auto cooked = readCooked(store, each.material, material::kPostProcessType);
+            auto process = cooked.has_value()
+                               ? material::decodePostProcess(cooked->bytes())
+                               : result::Result<material::PostProcess>{std::unexpected{std::move(cooked).error()}};
+            if (process.has_value()) {
+                postProcesses.push_back({.id = each.id,
+                                         .insertion = process->insertion,
+                                         .blob = material::blobOf(*process),
+                                         .texture = sceneTextureOf(process->sampled)});
+                continue;
+            }
+            // One of a third type is a canvas material (D356),
+            // the canvas's to draw.
+            if (missing(process.error(), content::ContentError::ResourceTypeMismatch)) {
+                continue;
+            }
+            read = std::unexpected{std::move(process).error()};
+        }
+        if (read.has_value()) {
+            materials.push_back(std::move(*read));
+        } else if (!each.subasset || !missing(read.error(), content::ContentError::ResourceNotFound)) {
+            // A mesh's subasset its source no longer has names
+            // no resource and is no material (D314).
+            unread.emplace_back(each.path, std::string{read.error().description()});
+        }
+    }
+}
+
+std::vector<content::ContentDigest> materialRevisions(const content::ContentStore& store,
+                                                      const world_kest::GameFiles& files) {
+    const std::shared_ptr<const content::ContentCatalog> kCatalog = store.catalog();
+    std::vector<content::ContentDigest> made;
+    for (const world_kest::GameMaterialResource& kEach : files.materials()) {
+        const auto kFound = kCatalog != nullptr ? kCatalog->lookup(content::ResourceId{kEach.material})
+                                                : result::Result<const content::ContentDescriptor*>{nullptr};
+        made.push_back(kFound.has_value() && *kFound != nullptr ? (*kFound)->digest : content::ContentDigest{});
+    }
+    return made;
+}
+
 result::Status readGameMaterials(composition::ParticipantContext& context,
                                  const world_kest::GameFiles& files,
                                  material::Quality quality,
+                                 Programs& programs,
                                  std::vector<SceneMaterial>& materials,
                                  std::vector<ScenePostProcessMaterial>& postProcesses,
                                  std::vector<std::pair<std::string, std::string>>& unread) {
@@ -289,38 +338,7 @@ result::Status readGameMaterials(composition::ParticipantContext& context,
                     .type = content::ResourceTypeId{material::kPostProcessType},
                     .representation = *content::RepresentationId::parse(material::kPostProcessRepresentation)}};
             RAWFRAME_TRY(content->admit(kAdmitted));
-            Programs programs;
-            for (const world_kest::GameMaterialResource& each : files.materials()) {
-                auto read = readMaterial(content->store(), each.id, each.material, quality, programs);
-                // One of another type may be a post process.
-                if (!read.has_value() && missing(read.error(), content::ContentError::ResourceTypeMismatch)) {
-                    auto cooked = readCooked(content->store(), each.material, material::kPostProcessType);
-                    auto process =
-                        cooked.has_value()
-                            ? material::decodePostProcess(cooked->bytes())
-                            : result::Result<material::PostProcess>{std::unexpected{std::move(cooked).error()}};
-                    if (process.has_value()) {
-                        postProcesses.push_back({.id = each.id,
-                                                 .insertion = process->insertion,
-                                                 .blob = material::blobOf(*process),
-                                                 .texture = sceneTextureOf(process->sampled)});
-                        continue;
-                    }
-                    // One of a third type is a canvas material (D356),
-                    // the canvas's to draw.
-                    if (missing(process.error(), content::ContentError::ResourceTypeMismatch)) {
-                        continue;
-                    }
-                    read = std::unexpected{std::move(process).error()};
-                }
-                if (read.has_value()) {
-                    materials.push_back(std::move(*read));
-                } else if (!each.subasset || !missing(read.error(), content::ContentError::ResourceNotFound)) {
-                    // A mesh's subasset its source no longer has names
-                    // no resource and is no material (D314).
-                    unread.emplace_back(each.path, std::string{read.error().description()});
-                }
-            }
+            readMaterials(content->store(), files, quality, programs, materials, postProcesses, unread);
         }
     }
     return {};
