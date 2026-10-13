@@ -79,6 +79,9 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
         R"({"operation": "materials.set_node_param", "node": "2f00000000000041", "param": "name", "value": null})",
         R"({"operation": "materials.create_node", "node": "2f00000000000043", "type": "rawframe/uv@1"})",
         R"({"operation": "materials.remove_node", "node": "2f00000000000043"})",
+        R"({"operation": "materials.set_interface_input", "input": "gloss",
+            "value": {"default": 0.5, "type": "float"}})",
+        R"({"operation": "materials.set_interface_switch", "switch": "wet", "value": null})",
     };
     std::string joined;
     for (const std::string& each : kAll) {
@@ -134,6 +137,11 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
     RAWFRAME_EXPECT(!std::get<SetMaterialNodeParam>(kRead->operations[33]).value.has_value() &&
                     std::get<CreateMaterialNode>(kRead->operations[34]).type == "rawframe/uv@1" &&
                     std::get<RemoveMaterialNode>(kRead->operations[35]).node == 0x2f00000000000043);
+    // A material graph's interface (D729).
+    RAWFRAME_EXPECT(std::get<SetMaterialInterfaceInput>(kRead->operations[36]).input == "gloss" &&
+                    std::get<SetMaterialInterfaceInput>(kRead->operations[36]).value.has_value() &&
+                    std::get<SetMaterialSwitch>(kRead->operations[37]).name == "wet" &&
+                    !std::get<SetMaterialSwitch>(kRead->operations[37]).value.has_value());
     RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "materials.remove_node", "node": "2f0000"})")),
                                 AuthoringError::ValidationFailed));
     RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "ui.create_node", "node": "game.coin",

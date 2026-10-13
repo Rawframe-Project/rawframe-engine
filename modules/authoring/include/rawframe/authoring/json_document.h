@@ -48,10 +48,10 @@ struct JsonDelta {
     std::optional<document::Value> after;
 };
 
-/// An object's members in its document's order, by the member holding it
-/// (empty for the root); none for an object whose members are names of its
-/// own, kept in name order (D721).
-using MemberOrder = std::span<const std::string_view> (*)(std::string_view holder) noexcept;
+/// An object's members in its document's order, by the path from the root
+/// to it (empty for the root, D729); none for an object whose members are
+/// names of its own, kept in name order (D721).
+using MemberOrder = std::span<const std::string_view> (*)(std::span<const JsonStep> at) noexcept;
 /// Whether a document's text reads as its kind; the reader's refusal, said.
 using DocumentReader = result::Status (*)(std::string_view text);
 

@@ -70,24 +70,26 @@ Value withMember(const Value& object,
     return made;
 }
 
-/// `object`, held by `holder`, with `to` at `path` under it.
+/// `object`, at `path`'s first `depth` steps, with `to` at the rest of
+/// `path` under it.
 result::Result<Value> setIn(const Value& object,
-                            std::string_view holder,
-                            std::span<const JsonStep> path,
+                            std::span<const JsonStep> full,
+                            std::size_t depth,
                             const std::optional<Value>& to,
                             std::size_t place,
                             MemberOrder order) {
+    const std::span<const JsonStep> path = full.subspan(depth);
     const JsonStep& kStep = path.front();
-    const std::span<const std::string_view> kOrder = order(holder);
+    const std::span<const std::string_view> kOrder = order(full.first(depth));
+    const bool kRoot = depth == 0;
     if (kStep.key.empty()) {
         if (path.size() == 1) {
             return withMember(object, kOrder, kStep.member, to);
         }
         const Value* held = object.find(kStep.member);
-        RAWFRAME_TRY_ASSIGN(
-            Value child,
-            setIn(held != nullptr ? *held : Value::object(), kStep.member, path.subspan(1), to, place, order));
-        return withMember(object, kOrder, kStep.member, std::move(child), true, holder.empty());
+        RAWFRAME_TRY_ASSIGN(Value child,
+                            setIn(held != nullptr ? *held : Value::object(), full, depth + 1, to, place, order));
+        return withMember(object, kOrder, kStep.member, std::move(child), true, kRoot);
     }
     const Value* array = object.find(kStep.member);
     const std::size_t kCount = array != nullptr ? array->items().size() : 0;
@@ -116,15 +118,14 @@ result::Result<Value> setIn(const Value& object,
         }
         for (std::size_t each = 0; each < kCount; ++each) {
             if (each == *kFound) {
-                RAWFRAME_TRY_ASSIGN(Value item,
-                                    setIn(array->items()[each], kStep.member, path.subspan(1), to, place, order));
+                RAWFRAME_TRY_ASSIGN(Value item, setIn(array->items()[each], full, depth + 1, to, place, order));
                 items.push(std::move(item));
             } else {
                 items.push(array->items()[each]);
             }
         }
     }
-    return withMember(object, kOrder, kStep.member, std::move(items), true, holder.empty());
+    return withMember(object, kOrder, kStep.member, std::move(items), true, kRoot);
 }
 
 std::size_t bytesOf(const JsonDelta& delta) {
@@ -230,7 +231,7 @@ result::Status JsonDocument::applyTo(Value& root, const JsonDelta& delta, bool f
                       AuthoringError::DeltaMismatch,
                       "a slot does not hold what its change leaves from");
     }
-    RAWFRAME_TRY_ASSIGN(root, setIn(root, "", delta.path, forward ? delta.after : delta.before, delta.place, order_));
+    RAWFRAME_TRY_ASSIGN(root, setIn(root, delta.path, 0, forward ? delta.after : delta.before, delta.place, order_));
     return {};
 }
 

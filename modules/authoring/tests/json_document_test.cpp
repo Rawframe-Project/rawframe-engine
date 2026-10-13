@@ -26,8 +26,8 @@ bool refusedWith(const auto& outcome, AuthoringError error) {
 constexpr std::array<std::string_view, 2> kRoot = {"kind", "nodes"};
 constexpr std::array<std::string_view, 4> kNode = {"name", "size", "colour", "children"};
 
-std::span<const std::string_view> orderOf(std::string_view holder) noexcept {
-    return holder.empty() ? std::span<const std::string_view>{kRoot} : std::span<const std::string_view>{kNode};
+std::span<const std::string_view> orderOf(std::span<const JsonStep> at) noexcept {
+    return at.empty() ? std::span<const std::string_view>{kRoot} : std::span<const std::string_view>{kNode};
 }
 
 /// Canonical JSON whose sizes are below a hundred.

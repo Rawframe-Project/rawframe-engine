@@ -1,0 +1,1 @@
+{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[{"operation":"materials.set_interface_input","input":"abcdef0123456789","value":{"default":0.5,"type":"float"}},{"operation":"materials.set_interface_switch","switch":"wet","value":{"default":true}}]}

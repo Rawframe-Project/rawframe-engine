@@ -294,6 +294,20 @@ struct CreateMaterialNode {
 struct RemoveMaterialNode {
     std::uint64_t node = 0;
 };
+/// One input of a material graph's interface (D729): `input` declared as
+/// `value` holds it (`{"default": ..., "type": ...}`), or no longer
+/// declared.
+struct SetMaterialInterfaceInput {
+    std::string input;
+    std::optional<document::Value> value;
+};
+/// One static switch of a material graph's interface (D729): `name`
+/// declared as `value` holds it (`{"default": true}`), or no longer
+/// declared.
+struct SetMaterialSwitch {
+    std::string name;
+    std::optional<document::Value> value;
+};
 
 /// The id an instantiation named `instance` gives the source's entity
 /// `source`: a version 8 UUID from their SHA-256 (D156).
@@ -326,13 +340,15 @@ using Operation = std::variant<CreateEntity,
                                SetMaterialNodeInput,
                                SetMaterialNodeParam,
                                CreateMaterialNode,
-                               RemoveMaterialNode>;
+                               RemoveMaterialNode,
+                               SetMaterialInterfaceInput,
+                               SetMaterialSwitch>;
 
 /// Whether `operation` changes a scene, rather than a style sheet (D636), a
 /// UI document (D641), or a material instance (D721), which follow the
 /// scene's in `Operation`.
 [[nodiscard]] constexpr bool changesScene(const Operation& operation) noexcept {
-    return operation.index() < std::variant_size_v<Operation> - 14;
+    return operation.index() < std::variant_size_v<Operation> - 16;
 }
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the

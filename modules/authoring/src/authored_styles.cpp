@@ -20,13 +20,13 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, AuthoringEr
 
 constexpr std::array<std::string_view, 3> kDocumentFields = {"kind", "formatVersion", "styles"};
 
-/// The sheet's objects' members in order, by what holds them: the root,
-/// a class in `styles`, and a variant's look.
-std::span<const std::string_view> orderOf(std::string_view holder) noexcept {
-    if (holder.empty()) {
+/// The sheet's objects' members in order, by where they are: the root, a
+/// class in `styles`, and a variant's look.
+std::span<const std::string_view> orderOf(std::span<const JsonStep> at) noexcept {
+    if (at.empty()) {
         return kDocumentFields;
     }
-    if (holder == "styles") {
+    if (at.size() == 1 && at[0].member == "styles") {
         return ui::kStyleFields;
     }
     return ui::kStyleLookFields;

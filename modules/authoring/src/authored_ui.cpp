@@ -18,10 +18,10 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, AuthoringEr
     return result::fail(errorClass, kAuthoringDomain, code(error), why);
 }
 
-/// The document's objects' members in order, by what holds them: the root,
+/// The document's objects' members in order, by where they are: the root,
 /// and a node in `nodes` or `children`.
-std::span<const std::string_view> orderOf(std::string_view holder) noexcept {
-    if (holder.empty()) {
+std::span<const std::string_view> orderOf(std::span<const JsonStep> at) noexcept {
+    if (at.empty()) {
         return ui::kUiDocumentFields;
     }
     return ui::nodeMembers();

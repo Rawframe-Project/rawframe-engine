@@ -29,35 +29,29 @@ constexpr std::array<std::string_view, 4> kStatesFields = {"shading", "blend", "
 
 /// The instance's objects' members in order: the root's, and its overrides
 /// by name (D721).
-std::span<const std::string_view> instanceOrderOf(std::string_view holder) noexcept {
-    if (holder.empty()) {
+std::span<const std::string_view> instanceOrderOf(std::span<const JsonStep> at) noexcept {
+    if (at.empty()) {
         return kInstanceFields;
     }
     return {};
 }
 
-/// A node's identity, as a graph keys it: 16 lowercase hex digits.
-bool nodeKeyed(std::string_view holder) noexcept {
-    return holder.size() == 16 && std::ranges::all_of(holder, [](char digit) {
-               return (digit >= '0' && digit <= '9') || (digit >= 'a' && digit <= 'f');
-           });
-}
-
 /// The graph's objects' members in order, as its canonical writer puts them
-/// (SPEC-0028, D728): the root's, the interface's, a node's, the states';
-/// the graph's nodes, a node's params and inputs, and the presentation by
-/// name, which is their ids' order.
-std::span<const std::string_view> graphOrderOf(std::string_view holder) noexcept {
-    if (holder.empty()) {
+/// (SPEC-0028, D728), by where they are (D729): the root's, the interface's,
+/// the states', and a node's in `graph`; the graph's nodes, a node's params
+/// and inputs, the interface's inputs and switches, and the presentation by
+/// name, which for nodes is their ids' order.
+std::span<const std::string_view> graphOrderOf(std::span<const JsonStep> at) noexcept {
+    if (at.empty()) {
         return kGraphFields;
     }
-    if (holder == "interface") {
+    if (at.size() == 1 && at[0].member == "interface") {
         return kInterfaceFields;
     }
-    if (holder == "states") {
+    if (at.size() == 1 && at[0].member == "states") {
         return kStatesFields;
     }
-    if (nodeKeyed(holder)) {
+    if (at.size() == 2 && at[0].member == "graph") {
         return kNodeFields;
     }
     return {};
@@ -132,6 +126,19 @@ result::Result<std::vector<JsonDelta>> deltasOf(const Value& staged, bool graph,
     }
     if (!graph) {
         return kNotOurs();
+    }
+    const auto* declared = std::get_if<SetMaterialInterfaceInput>(&operation);
+    const auto* switched = std::get_if<SetMaterialSwitch>(&operation);
+    if (declared != nullptr || switched != nullptr) {
+        const std::string& kName = declared != nullptr ? declared->input : switched->name;
+        if (!named(kName)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          AuthoringError::ValidationFailed,
+                          "an interface input or switch is named as a Kest name is");
+        }
+        return std::vector{setting(staged,
+                                   {step("interface"), step(declared != nullptr ? "inputs" : "switches"), step(kName)},
+                                   declared != nullptr ? declared->value : switched->value)};
     }
     const auto kHas = [&staged](std::uint64_t node) {
         return slotAt(staged, JsonPath{step("graph"), step(hexOf(node))}).has_value();
@@ -233,7 +240,10 @@ std::string AuthoredMaterial::summaryAt(std::size_t entry) const {
     const JsonDelta& kFirst = journal.front();
     const bool kSet = kFirst.after.has_value();
     std::string made;
-    if (kFirst.path.size() == 2 && kFirst.path[0].member == "overrides") {
+    if (kFirst.path.size() == 3 && kFirst.path[0].member == "interface") {
+        made = (kSet ? "declare " : "drop ") + std::string{kFirst.path[1].member == "inputs" ? "input " : "switch "} +
+               kFirst.path[2].member;
+    } else if (kFirst.path.size() == 2 && kFirst.path[0].member == "overrides") {
         made = (kSet ? "set " : "unset ") + kFirst.path[1].member;
     } else if (kFirst.path.size() == 2) {
         const Value* kType = kSet ? kFirst.after->find("type") : kFirst.before->find("type");

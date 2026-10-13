@@ -5,7 +5,9 @@
 // material graph open for authoring (D728): a node's input and param set
 // and unset, a node made and removed, one another node reads refused, the
 // graph in its canonical form after each, and each kind refusing the
-// other's operations.
+// other's operations. Its interface's inputs and switches declared and
+// dropped (D729), one named as a node's identity would be, which is
+// ordered by where it is, not by its name.
 
 #include "rawframe/authoring/authored_material.h"
 #include "rawframe/authoring/errors.h"
@@ -228,4 +230,42 @@ RAWFRAME_TEST(AMaterialGraphsNodesChangeAndUndoExactly) {
         RAWFRAME_EXPECT(refusedWith((*instance)->change(0, kNode), AuthoringError::ValidationFailed));
         RAWFRAME_EXPECT(refusedWith(answer(**instance, ReadMaterialGraph{}), AuthoringError::ValidationFailed));
     }
+}
+
+RAWFRAME_TEST(AMaterialGraphsInterfaceIsDeclaredWhereItIs) {
+    auto opened = AuthoredMaterial::open(kDocument, kTinted);
+    RAWFRAME_EXPECT(opened.has_value());
+    if (!opened.has_value()) {
+        return;
+    }
+    AuthoredMaterial& material = **opened;
+    // An input named as sixteen hex digits, a node's identity's shape: a
+    // declaration's members stay default then type, as the interface's
+    // are, and the inputs stay in name order.
+    Value declaration = Value::object();
+    declaration.add("default", Value::real(0.5));
+    declaration.add("type", Value::string("float"));
+    Value on = Value::object();
+    on.add("default", Value::boolean(true));
+    const std::array<Operation, 2> kDeclared = {
+        SetMaterialInterfaceInput{.input = "abcdef0123456789", .value = declaration},
+        SetMaterialSwitch{.name = "wet", .value = on}};
+    const auto kDone = material.change(0, kDeclared);
+    RAWFRAME_EXPECT(kDone.has_value() && material.summaryAt(0) == "declare input abcdef0123456789 and 1 more");
+    const std::string kText = material.text();
+    RAWFRAME_EXPECT(kText.find("\"abcdef0123456789\"") < kText.find("\"tint\"") &&
+                    kText.find("\"tint\"") < kText.find("\"switches\"") &&
+                    kText.find("\"default\": 0.5") < kText.find("\"type\": \"float\""));
+    // Dropped, the graph is as it was; a name not a Kest name, refused.
+    const std::array<Operation, 2> kDropped = {
+        SetMaterialInterfaceInput{.input = "abcdef0123456789", .value = std::nullopt},
+        SetMaterialSwitch{.name = "wet", .value = std::nullopt}};
+    RAWFRAME_EXPECT(material.change(1, kDropped).has_value() && material.text() == kTinted);
+    RAWFRAME_EXPECT(material.summaryAt(1) == "drop input abcdef0123456789 and 1 more");
+    const std::array<Operation, 1> kBadName = {SetMaterialSwitch{.name = "Wet", .value = on}};
+    RAWFRAME_EXPECT(refusedWith(material.change(2, kBadName), AuthoringError::ValidationFailed));
+    // The tint the parameter reads cannot be dropped: the graph would not
+    // read.
+    const std::array<Operation, 1> kTintGone = {SetMaterialInterfaceInput{.input = "tint", .value = std::nullopt}};
+    RAWFRAME_EXPECT(refusedWith(material.change(2, kTintGone), AuthoringError::ValidationFailed));
 }

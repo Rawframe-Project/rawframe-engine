@@ -202,6 +202,19 @@ result::Result<Operation> operationOf(const Value& value) {
         }
         return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
     }
+    if (kIndex == 28 || kIndex == 29) {
+        // A material graph's interface input or switch, by its name (D729).
+        const std::string* named = textOf(value.find(kIndex == 28 ? "input" : "switch"));
+        const Value& given = *value.find("value");
+        if (named == nullptr) {
+            return kBad();
+        }
+        const std::optional<Value> kGiven = given.isNull() ? std::nullopt : std::optional<Value>{given};
+        if (kIndex == 28) {
+            return Operation{SetMaterialInterfaceInput{.input = *named, .value = kGiven}};
+        }
+        return Operation{SetMaterialSwitch{.name = *named, .value = kGiven}};
+    }
     if (kIndex >= 24) {
         // A material graph's node, by its 16 hex digits (D728).
         const std::string* node = textOf(value.find("node"));
