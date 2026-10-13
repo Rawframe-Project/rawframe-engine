@@ -5,7 +5,8 @@
 // brick on it, then rests. The test makes the player as admission would and
 // sets its tool between ticks, as its client's input would. A machine
 // stands on the land (D737): a lever thrown lights the lamp at the end of
-// its wire, and a wire dug puts it out.
+// its wire, and a wire dug puts it out; players place wire and lamps
+// that carry and take its power (D739).
 
 #include "game_harness.h"
 #include "rawframe/test/test.h"
@@ -61,6 +62,7 @@ struct Tool {
     float dig = 0;
     float place = 0;
     float use = 0;
+    float build = 0;
 };
 
 constexpr std::uint8_t kStone = 1;
@@ -267,4 +269,13 @@ RAWFRAME_TEST(AThrownLeverLightsTheLampThroughItsWire) {
     *kTool = Tool{.x = aimAt(7), .z = aimAt(4), .place = 1};
     played.run(32);
     RAWFRAME_EXPECT(kTopOf(7, 4).kind == kBrick && !kTopOf(10, 4).on);
+    // Wire placed on the brick (D739): the circuit is whole again, whatever
+    // the heights, and the lamp lit.
+    *kTool = Tool{.x = aimAt(7), .z = aimAt(4), .place = 1, .build = 1};
+    played.run(32);
+    RAWFRAME_EXPECT(kTopOf(7, 4).kind == kWire && kTopOf(7, 4).on && kTopOf(10, 4).on);
+    // A lamp placed beside the wire takes its power too.
+    *kTool = Tool{.x = aimAt(6), .z = aimAt(5), .place = 1, .build = 2};
+    played.run(32);
+    RAWFRAME_EXPECT(kTopOf(6, 5).kind == kLamp && kTopOf(6, 5).on);
 }

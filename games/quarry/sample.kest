@@ -4,7 +4,8 @@ module sample
 // tool, made each tick from its actions (quarry.actions). The aim moves
 // across the land while held, built on tick to tick (D525), up away from
 // the eye; the tool digs, places, or throws a lever (D737) while its key or
-// button is held.
+// button is held, and each press of choose turns what it places from brick
+// to wire, a lamp, a lever, and brick again (D739).
 
 import controls
 import rawframe.input
@@ -13,6 +14,7 @@ const AIM: u64 = 0xfb1d946b22b94ced
 const DIG: u64 = 0xb37164a7a7d053fd
 const PLACE: u64 = 0xc3915c32fa61f3d2
 const USE: u64 = 0x1244ee6574e8a1d8
+const CHOOSE: u64 = 0x06c58da430cba0bf
 
 // How far the aim moves in a tick at a full key, of the land's two.
 const STEP: f32 = 0.02
@@ -41,5 +43,11 @@ fn sample(into: [controls.Tool]) {
     into[0].use = 0.0
     if input.on(USE) {
         into[0].use = 1.0
+    }
+    if input.pressed(CHOOSE) {
+        into[0].build = into[0].build + 1.0
+        if into[0].build > 3.5 {
+            into[0].build = 0.0
+        }
     }
 }

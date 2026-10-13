@@ -70,6 +70,22 @@
           "control": "face_north"
         }
       ]
+    },
+    {
+      "actionId": "06c58da430cba0bf",
+      "name": "choose",
+      "valueType": "bool",
+      "displayName": "Choose what to place",
+      "bindings": [
+        {
+          "device": "keyboard",
+          "physicalKey": "key_r"
+        },
+        {
+          "device": "gamepad",
+          "control": "shoulder_right"
+        }
+      ]
     }
   ],
   "contexts": [
@@ -80,7 +96,8 @@
         "aim",
         "dig",
         "place",
-        "use"
+        "use",
+        "choose"
       ]
     }
   ]

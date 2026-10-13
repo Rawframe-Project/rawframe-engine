@@ -6,7 +6,8 @@ module quarry
 // more than a system's commands, and a player digs the top block of the
 // column it aims at, or places one on it, once in a while. A machine stands
 // on the land (D737): a lever a player throws powers a lamp through wire,
-// and a wire dug cuts it.
+// and a wire dug cuts it; players place wire, lamps, and levers as they
+// place brick (D739), building machines of their own.
 
 import controls
 import rawframe.model
@@ -175,6 +176,20 @@ fn generate(count: i32, terrains: [Terrain], entities: [world.Entity]) {
     }
 }
 
+// What a tool places (D739): brick, wire, a lamp, or a lever.
+fn chosen(build: f32) -> u8 {
+    if build < 0.5 {
+        return BRICK
+    }
+    if build < 1.5 {
+        return WIRE
+    }
+    if build < 2.5 {
+        return LAMP
+    }
+    return LEVER
+}
+
 // The column a tool aims at: -1 to 1 across the land each way.
 fn column(at: f32) -> u32 {
     let place = (at + 1.0) * 0.5 * f32(SIDE)
@@ -233,7 +248,7 @@ fn dig(count: i32, tools: [controls.Tool], diggers: [Digger], entities: [world.E
                 y = topY + u32(1)
             }
             if !digging && !using && y < CEILING {
-                make(x, y, z, BRICK)
+                make(x, y, z, chosen(tools[i].build))
                 diggers[i].placed = diggers[i].placed + u32(1)
             }
             diggers[i].rest = REST
