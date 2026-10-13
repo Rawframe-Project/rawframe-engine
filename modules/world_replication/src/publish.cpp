@@ -4,8 +4,10 @@
 // scope kept every tick (D204).
 // Each connection looks only at the interest cells around its player and at
 // what it already holds, so its work follows its interest, not the World
-// (D209). A component the game keeps to its holder goes to that player's
-// connection alone (D673).
+// (D209), and at what changed since it was last published to and what it
+// was not yet known to hold, not at every value it holds (D744). A
+// component the game keeps to its holder goes to that player's connection
+// alone (D673).
 
 #include "rawframe/world_replication/checksum.h"
 #include "server_state.h"
@@ -51,6 +53,10 @@ bool finite(const std::array<double, 3>& at) noexcept {
 } // namespace
 
 void ReplicationServer::State::publish(world::World& world, world::TickIndex tick) {
+    // The publish before's values are kept to compare with.
+    std::swap(present, previousPresent);
+    std::swap(encoded, previousEncoded);
+    ++publishes;
     gathered.clear();
     encoded.clear();
     std::uint32_t slots = 0;
@@ -98,6 +104,7 @@ void ReplicationServer::State::publish(world::World& world, world::TickIndex tic
             entities.push_back(PresentEntity{.entity = present[valuesAt[slot]].entity, .located = false, .at = {}});
         }
     }
+    noteChanges();
     locate(world);
     if (settings.interest) {
         cellEntities();
@@ -107,6 +114,42 @@ void ReplicationServer::State::publish(world::World& world, world::TickIndex tic
     for (auto& [id, peer] : peers) {
         publishTo(peer, tick);
     }
+}
+
+void ReplicationServer::State::noteChanges() {
+    // Kept for as many publishes as a connection may go between being
+    // published to; one looked at less often looks at everything.
+    Changed newest;
+    if (changed.size() > settings.statePeriod) {
+        newest = std::move(changed.front());
+        changed.pop_front();
+    }
+    newest.publish = publishes;
+    newest.entities.clear();
+    // Both in slot, then table, order: walked together.
+    std::size_t before = 0;
+    const auto kEarlier = [](const PresentValue& left, const PresentValue& right) {
+        return left.entity.slot != right.entity.slot ? left.entity.slot < right.entity.slot
+                                                     : left.component < right.component;
+    };
+    for (const PresentValue& value : present) {
+        while (before < previousPresent.size() && kEarlier(previousPresent[before], value)) {
+            ++before;
+        }
+        // A value that names entities is encoded again for each
+        // connection, whose names for them may have changed: always looked
+        // at.
+        const bool kSame =
+            naming[value.component] == 0 && before < previousPresent.size() &&
+            previousPresent[before].entity == value.entity && previousPresent[before].component == value.component &&
+            sameBytes(std::span<const std::byte>{previousEncoded}.subspan(previousPresent[before].offset,
+                                                                          previousPresent[before].length),
+                      std::span<const std::byte>{encoded}.subspan(value.offset, value.length));
+        if (!kSame && (newest.entities.empty() || newest.entities.back() != value.entity)) {
+            newest.entities.push_back(value.entity);
+        }
+    }
+    changed.push_back(std::move(newest));
 }
 
 void ReplicationServer::State::locate(world::World& world) {
@@ -335,6 +378,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     const auto kDeclare = [&](world::EntityHandle entity) {
         const NetEntityId kId{peer.nextNetEntity++};
         peer.mapped.add(entity, Mapping{.id = kId});
+        peer.unsettled.push_back(entity);
         peer.byNetEntity[kId.value] = entity;
         sendMapping(peer, network::ControlFrame::MappingDeclare, kId, entity == peer.player);
     };
@@ -428,8 +472,8 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
 
     // What needs sending: not known to be held, and not sent so recently
     // that its acknowledgement may still be on the way.
-    // Only the values of what the connection holds are looked at: its
-    // mappings, in entity order, each found among the present values.
+    // The values of the entities looked at, in entity order, each found
+    // among the present values.
     candidates.clear();
     named.clear();
     const PeerNames kNames{peer};
@@ -438,10 +482,39 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         return naming[value.component] != 0 ? std::span<const std::byte>{named}.subspan(namedAt, value.length)
                                             : std::span<const std::byte>{encoded}.subspan(value.offset, value.length);
     };
-    for (auto& [entity, held] : peer.mapped) {
-        if (!held.acknowledged || !isPresent(entity)) {
+    // Only what may need sending is looked at (D744): what changed since
+    // the connection was last looked at, and what it was not then known to
+    // hold, its player always; every mapping when those changes are no
+    // longer kept.
+    looking.clear();
+    if (!peer.lookedAt.has_value() || changed.empty() || changed.front().publish > *peer.lookedAt + 1) {
+        for (const auto& [entity, mapping] : peer.mapped) {
+            looking.push_back(entity);
+        }
+    } else {
+        looking.assign(peer.unsettled.begin(), peer.unsettled.end());
+        for (const Changed& kChanged : changed) {
+            if (kChanged.publish > *peer.lookedAt) {
+                looking.insert(looking.end(), kChanged.entities.begin(), kChanged.entities.end());
+            }
+        }
+        looking.push_back(peer.player);
+        std::ranges::sort(looking);
+        looking.erase(std::ranges::unique(looking).begin(), looking.end());
+    }
+    peer.lookedAt = publishes;
+    unsettling.clear();
+    for (const world::EntityHandle entity : looking) {
+        Mapping* const kMapping = peer.mapped.find(entity);
+        if (kMapping == nullptr) {
             continue;
         }
+        Mapping& held = *kMapping;
+        if (!held.acknowledged || !isPresent(entity)) {
+            unsettling.push_back(entity);
+            continue;
+        }
+        bool settled = true;
         const bool kPlayer = entity == peer.player;
         playerMapped = playerMapped || kPlayer;
         held.replicas.resize(settings.table.components.size());
@@ -452,6 +525,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
                 continue;
             }
             Replica& replica = held.replicas[value.component];
+            ++statistics.valuesLookedAt;
             // An entity it names goes by this connection's name for it.
             const ComponentCodec& codec = settings.table.components[value.component];
             const std::size_t kNamedAt = named.size();
@@ -466,6 +540,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
                 continue;
             }
             playerPending += kPlayer ? 1 : 0;
+            settled = false;
             if (replica.sent && tick.value - replica.sentAt < settings.resendAfter &&
                 sameBytes(replica.lastSent.bytes(), kValue)) {
                 continue;
@@ -474,7 +549,11 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
             candidates.push_back(
                 Candidate{.priority = replica.priority, .present = kIndex, .named = kNamedAt, .mapping = &held});
         }
+        if (!settled) {
+            unsettling.push_back(entity);
+        }
     }
+    peer.unsettled.swap(unsettling);
     // Longest waiting first; ties in entity order, so a run repeats.
     std::sort(candidates.begin(), candidates.end(), [](const Candidate& left, const Candidate& right) {
         return left.priority != right.priority ? left.priority > right.priority : left.present < right.present;

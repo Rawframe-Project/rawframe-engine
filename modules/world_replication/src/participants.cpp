@@ -220,6 +220,7 @@ public:
                       diagnostics::field("stateBytes", kStatistics.stateBytes),
                       diagnostics::field("recordsSent", kStatistics.recordsSent),
                       diagnostics::field("recordsHeld", kStatistics.recordsHeld),
+                      diagnostics::field("valuesLookedAt", kStatistics.valuesLookedAt),
                       diagnostics::field("recordsDeferred", kStatistics.recordsDeferred),
                       diagnostics::field("interestLeft", kStatistics.interestLeft),
                       diagnostics::field("inputWindows", kStatistics.inputWindows),

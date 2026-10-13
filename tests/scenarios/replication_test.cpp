@@ -19,7 +19,12 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
             scenario.serverWorld.insert(props.back(), kPosition, Position{static_cast<float>(index * 10), 0})
                 .has_value());
     }
-    for (int step = 0; step < 60; ++step) {
+    for (int step = 0; step < 40; ++step) {
+        scenario.step(Steer{1, 0.5F});
+    }
+    const std::uint64_t kSentBefore = scenario.server->statistics().recordsSent;
+    const std::uint64_t kLookedBefore = scenario.server->statistics().valuesLookedAt;
+    for (int step = 0; step < 20; ++step) {
         scenario.step(Steer{1, 0.5F});
     }
     RAWFRAME_EXPECT(scenario.client->admitted());
@@ -35,8 +40,13 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
     // Pacing puts the client's input ahead of consumption within a few ticks
     // of admission, and from then on every tick consumes a real command.
     RAWFRAME_EXPECT(scenario.server->statistics().inputsConsumed > 40);
-    // Props that never move are sent until acknowledged, then left out.
-    RAWFRAME_EXPECT(scenario.server->statistics().recordsHeld > 100);
+    // Props that never move are sent until acknowledged, then left out,
+    // and not looked at again (D744): in the last twenty ticks only the
+    // moving player was sent, and only the player's two values looked at.
+    RAWFRAME_EXPECT(scenario.server->statistics().recordsHeld >= 3);
+    const std::uint64_t kSentSince = scenario.server->statistics().recordsSent - kSentBefore;
+    RAWFRAME_EXPECT(kSentSince >= 10 && kSentSince <= 20);
+    RAWFRAME_EXPECT(scenario.server->statistics().valuesLookedAt - kLookedBefore <= 40);
 
     // A prop destroyed on the server is retired on the client.
     RAWFRAME_EXPECT(scenario.serverWorld.destroy(props[1]).has_value());

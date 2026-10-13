@@ -536,6 +536,10 @@ void ReplicationServer::forgetWorld() noexcept {
         state.sessions->close(peer.connection);
     }
     state.peers.clear();
+    // Another World's values are no earlier state of the next one's.
+    state.previousPresent.clear();
+    state.previousEncoded.clear();
+    state.changed.clear();
 }
 
 void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
@@ -662,11 +666,16 @@ std::size_t ReplicationServer::heldBytes() const noexcept {
                         capacityBytes(state.bucketOf) + capacityBytes(state.unplaced) + capacityBytes(state.reachable) +
                         capacityBytes(state.entering) + capacityBytes(state.heldMark) +
                         capacityBytes(state.candidates) + capacityBytes(state.records) + capacityBytes(state.datagram) +
-                        capacityBytes(state.frame) + capacityBytes(state.inDatagram);
+                        capacityBytes(state.frame) + capacityBytes(state.inDatagram) +
+                        capacityBytes(state.previousPresent) + capacityBytes(state.previousEncoded) +
+                        capacityBytes(state.looking) + capacityBytes(state.unsettling);
+    for (const State::Changed& kChanged : state.changed) {
+        bytes += sizeof(State::Changed) + capacityBytes(kChanged.entities);
+    }
     for (const auto& [id, peer] : state.peers) {
         bytes += sizeof(Peer) + kNodeOverhead + capacityBytes(peer.retired) + capacityBytes(peer.lastCommand) +
                  (peer.byNetEntity.size() * (sizeof(std::pair<std::uint32_t, world::EntityHandle>) + kNodeOverhead));
-        bytes += peer.mapped.capacity() * sizeof(Mappings::Entry);
+        bytes += peer.mapped.capacity() * sizeof(Mappings::Entry) + capacityBytes(peer.unsettled);
         for (const auto& [entity, mapping] : peer.mapped) {
             bytes += capacityBytes(mapping.replicas);
             for (const Replica& replica : mapping.replicas) {

@@ -14,6 +14,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <map>
 #include <memory>
 #include <optional>
@@ -98,6 +99,23 @@ struct ReplicationServer::State {
     std::vector<std::size_t> valuesAt;
     std::vector<std::size_t> filling;
     std::vector<std::byte> encoded;
+    /// The publish before's values, to find which changed (D744); the
+    /// publishes counted; and for each of the last few, the entities with
+    /// a value that changed or appeared in it, or that names entities, in
+    /// entity order. A connection looks at those and at what it was not
+    /// yet known to hold, not at every value it holds.
+    std::vector<PresentValue> previousPresent;
+    std::vector<std::byte> previousEncoded;
+    std::uint64_t publishes = 0;
+    struct Changed {
+        std::uint64_t publish = 0;
+        std::vector<world::EntityHandle> entities;
+    };
+    std::deque<Changed> changed;
+    /// The entities one connection's values are looked at for, and those
+    /// it is still not known to hold all of.
+    std::vector<world::EntityHandle> looking;
+    std::vector<world::EntityHandle> unsettling;
     /// Values that name entities, encoded again for one connection.
     std::vector<std::byte> named;
     /// Whether each table component's codec names entities, known once.
@@ -184,6 +202,10 @@ struct ReplicationServer::State {
     perceived(Peer& peer, std::span<const std::byte> command, std::size_t wire, std::uint64_t arrived);
 
     void publish(world::World& world, world::TickIndex tick);
+
+    /// Keeps which entities' values changed since the publish before
+    /// (D744), as `changed`'s newest.
+    void noteChanges();
 
     void locate(world::World& world);
 

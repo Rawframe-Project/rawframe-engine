@@ -149,9 +149,13 @@ struct ServerReplicationStatistics {
     std::uint64_t stateDatagrams = 0;
     /// Their payload bytes, all connections together.
     std::uint64_t stateBytes = 0;
-    /// State records sent, and left out because the client held the value.
+    /// State records sent, and values left out because the client held
+    /// them, counted where its values were looked at (D744).
     std::uint64_t recordsSent = 0;
     std::uint64_t recordsHeld = 0;
+    /// Values looked at to decide whether to send them: what changed, and
+    /// what a client was not yet known to hold (D744).
+    std::uint64_t valuesLookedAt = 0;
     /// Left for a later tick by the per-connection byte budget.
     std::uint64_t recordsDeferred = 0;
     std::uint64_t acknowledgementsRefused = 0;

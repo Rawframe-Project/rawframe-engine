@@ -234,6 +234,11 @@ struct Peer {
     Perception seen;
     std::uint32_t nextNetEntity = 1;
     Mappings mapped;
+    /// The publish its values were last looked at in, and the mapped
+    /// entities not all of whose values it was then known to hold: what
+    /// its next publish looks at, with what changed since (D744).
+    std::optional<std::uint64_t> lookedAt;
+    std::vector<world::EntityHandle> unsettled;
     std::map<std::uint32_t, world::EntityHandle> byNetEntity;
     /// The next input tick to consume, and commands waiting for theirs.
     std::uint64_t nextInputTick = 0;
