@@ -396,8 +396,10 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .providedCapabilities = kProvided,
         .optionalCapabilities = kMaybe,
         .eligibility = {.roles = ~kServer},
-        // Stopping releases surfaces, which waits for nothing.
-        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
+        // Stopping releases surfaces, which waits for nothing; destroying the
+        // device waits for it to idle and the driver to end its own threads,
+        // some 20 ms on lavapipe and ten times that on a loaded machine.
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(250)},
         .observabilityIdentity = "render.device",
         .budgetOwner = "render",
         .hostPhases = composition::hostPhaseBit(composition::HostPhase::PlatformPoll),
