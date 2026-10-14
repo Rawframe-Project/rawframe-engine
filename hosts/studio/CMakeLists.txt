@@ -513,6 +513,24 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "clicked at 1096,23.*saw studio_previewing.*typed 0,30,0.5 at 300,353.*clicked at 1096,23.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,[^\n]*\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,.*\"code\":\"scene_followed\"[^\n]*\"scene\":\"gate.scene\",\"created\":1.*{\"endpoint\":\"127.0.0.1:[0-9]+\",\"pinFile\":\"[^\"]*/server.fingerprint\",\"tokenFile\":\"[^\"]*/token\"}")
+        # Stalls played from Studio with its UI document edited as it plays
+        # (D761): the document chosen, the game played (a document chosen
+        # previews nothing, so nothing says the game is up: ten seconds
+        # given), the purse's width typed; the played client arranges its UI
+        # anew and gives the purse its new width.
+        add_test(NAME studio_plays_ui
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/tycoon/tycoon.game ${PROJECT_BINARY_DIR}/hosts/client/stalls_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/stalls_clicked.conf 200,126 640,161 1096,23 wait=10
+                         1100,161:300 wait=3 1096,23 until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_plays_ui PROPERTIES
+                             FIXTURES_REQUIRED tycoon_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "typed 300 at 1100,161.*\"code\":\"studio_summary\"[^\n]*\"played\":1,[^\n]*\"status\":\"game stopped\".*\"code\":\"ui_rearranged\".*\"code\":\"presented_summary\"[^\n]*\"restarted\":1,")
         # The game cooked by Studio and played from that content alone
         # (D502): Cook, its progress, then Play, the server's settings and
         # the client's naming no content; previewed, its client drawing

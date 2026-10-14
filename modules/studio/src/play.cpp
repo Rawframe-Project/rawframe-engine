@@ -202,8 +202,9 @@ result::Status Play::launch() {
                                      {"bots.count", "1"},
                                      {"bots.player", "true"},
                                      {"render.device", "any"},
-                                     // Its styles followed twice a second, an edited
-                                     // sheet given to the UI as it plays (D634).
+                                     // Its styles and UI document followed twice a
+                                     // second, an edited one given to the UI as it
+                                     // plays (D634, D761).
                                      {"ui.reload_every", "60"},
                                      // And its content, a material Studio cooks
                                      // again drawn as it plays (D734).
