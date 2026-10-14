@@ -302,6 +302,10 @@ if(MAUL_RHI_BUILD_TESTS)
                      COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/test/test_container_writer.py
                              $<TARGET_FILE:test_shader>)
         endif()
+        # The D3D12 tool's refusal of a loop variable read after its step.
+        if(Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING)
+            add_test(NAME dxil_order COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/test/test_dxil_order.py)
+        endif()
     endif()
     # Every driver the build has, through the public API (mrhi-0003).
     # Where the XCB client library is installed, the suite also makes a

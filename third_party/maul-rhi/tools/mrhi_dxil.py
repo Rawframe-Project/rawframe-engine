@@ -19,14 +19,16 @@
 # fixed one keeps its default. DXC compiles each entry for SHADER_MODEL,
 # 6.1 for one reading the view index (record mrhi-0020), 6.2 with 16-bit
 # types for a module declaring Float16,
-# to DIR/NAME.dxil without reflection or debug data. spirv-cross and dxc
-# must be on the path.
+# to DIR/NAME.dxil without reflection or debug data. HLSL that reads a
+# loop's variable after its continue block has stepped it is refused
+# (stale_reads). spirv-cross and dxc must be on the path.
 #
 # usage: mrhi_dxil.py SPIRV REFLECTION DIR
 
 import importlib.util
 import json
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -128,6 +130,30 @@ def constant_defines(writer, constants, fixed):
     return declaration, defines
 
 
+def stale_reads(source):
+    """Each read of a loop's variable after its continue block has stepped
+    it, as (line, variable), in SPIRV-Cross's HLSL. SPIRV-Cross writes a
+    continue block as one statement per loop variable, and may fold a load
+    into a later one's: `_5736++;` then `_5737 += ...Load(_5736 * 4)...`
+    reads the next iteration's element where the SPIR-V reads this one's.
+    SPIRV-Cross's MSL copies the variable first, so only HLSL shows it."""
+    found = []
+    lines = source.splitlines()
+    for at, line in enumerate(lines):
+        stepped = re.match(r"\s*(_\d+)(\+\+|--);\s*$", line)
+        if not stepped:
+            continue
+        variable = re.compile(rf"\b{stepped.group(1)}\b")
+        for later in range(at + 1, len(lines)):
+            text = lines[later].strip()
+            if text in ("continue;", "break;") or text.startswith("}"):
+                break
+            if variable.search(text):
+                found.append((later + 1, stepped.group(1)))
+                break
+    return found
+
+
 def run(command, what):
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
@@ -174,6 +200,11 @@ def main():
                      "--output", hlsl], f"spirv-cross on {entry['name']}")
                 with open(hlsl, encoding="utf-8") as f:
                     source = f.read()
+                stale = stale_reads(source)
+                if stale:
+                    line, variable = stale[0]
+                    raise RuntimeError(f"spirv-cross on {entry['name']} reads {variable} at line {line} "
+                                       "after its loop stepped it; read it inside the loop's body")
                 with open(hlsl, "w", encoding="utf-8") as f:
                     f.write(declaration + source)
                 run(["dxc", "-T", f"{profile}_{model}", "-E", "main", "-Qstrip_reflect",
