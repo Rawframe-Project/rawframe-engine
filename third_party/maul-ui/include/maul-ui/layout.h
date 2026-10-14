@@ -245,8 +245,9 @@ extern "C"
 
     // The axes a node scrolls its children along. A node that scrolls in
     // either is a scroll container: it clips its children at its rounded
-    // padding box, its automatic minimum size is 0, as CSS's, and layout
-    // measures the extent its children reach (maul-ui/scroll.h).
+    // padding box, its automatic minimum sizes are 0 on both axes, as
+    // CSS's (an aspect ratio's content floor too), and layout measures the
+    // extent its children reach (maul-ui/scroll.h).
     typedef uint8_t muiScrollAxes;
 
     enum

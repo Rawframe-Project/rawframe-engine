@@ -43,6 +43,20 @@ static void Drop(muiScrollStore* store, uint32_t i)
     store->eases[i] = store->eases[--store->easeCount];
 }
 
+// Moves offsets x and y of a scroll container by right and down,
+// physical units its offsets would grow by, within its limits.
+static void Reach(const muiContext* context, uint32_t slot, float* x, float* y, float right,
+                  float down)
+{
+    const muiLayoutNode* layout = &context->layout[slot - 1];
+    const muiScrollState* scroll = &context->scrolls[slot - 1];
+    const muiSize size = {layout->rect.width, layout->rect.height};
+    *x = fminf(fmaxf(*x + (scroll->right ? -right : right), 0.0f),
+               muiScrollLimit(&layout->style, size, scroll, true));
+    *y = fminf(fmaxf(*y + (scroll->bottom ? -down : down), 0.0f),
+               muiScrollLimit(&layout->style, size, scroll, false));
+}
+
 // Stops the step easing a node, if one does.
 // Stops what moves the node at slot, and takes back its overscroll.
 static void Cancel(muiContext* context, uint32_t slot)
@@ -78,11 +92,8 @@ muiResult muiNode_SetScroll(muiContext* context, muiNodeId nodeId, float x, floa
     {
         return status;
     }
-    const muiLayoutNode* layout = &context->layout[slot - 1];
     muiScrollState* scroll = &context->scrolls[slot - 1];
-    const muiSize size = {layout->rect.width, layout->rect.height};
-    x = fminf(fmaxf(x, 0.0f), muiScrollLimit(&layout->style, size, scroll, true));
-    y = fminf(fmaxf(y, 0.0f), muiScrollLimit(&layout->style, size, scroll, false));
+    Reach(context, slot, &x, &y, 0.0f, 0.0f);
     Cancel(context, slot);
     if (x != scroll->x || y != scroll->y)
     {
@@ -99,9 +110,10 @@ static void MoveContent(muiContext* context, uint32_t container, bool horizontal
 {
     const muiLayoutNode* layout = &context->layout[container - 1];
     muiScrollState* scroll = &context->scrolls[container - 1];
-    // A child moves by -x, or by x under right to left, and by -y.
-    double x = (double)scroll->x;
-    double offset = horizontal ? (layout->rtl ? x + move : x - move) : (double)scroll->y - move;
+    // A child moves by minus the offset, or by it from the right or the
+    // bottom.
+    bool far = horizontal ? scroll->right : scroll->bottom;
+    double offset = (double)(horizontal ? scroll->x : scroll->y) + (far ? move : -move);
     const muiSize size = {layout->rect.width, layout->rect.height};
     float limit = muiScrollLimit(&layout->style, size, scroll, horizontal);
     float clamped = fminf(fmaxf((float)offset, 0.0f), limit);
@@ -231,38 +243,31 @@ muiResult muiSetScrollRule(muiContext* context, const muiScrollRule* rule)
     return mui_success;
 }
 
-// Whether a scroll container can move by right and down, physical units
-// its offsets would grow by, along either axis, from where a step easing
-// it goes or else from its offsets.
+// Whether a scroll container can move by right and down along either
+// axis, from where a step easing it goes or else from its offsets, which
+// are always within its limits (overscroll is kept apart).
 static bool CanMove(const muiContext* context, uint32_t slot, float right, float down)
 {
     const muiScrollStore* store = &context->scrolling;
-    const muiLayoutNode* layout = &context->layout[slot - 1];
     const muiScrollState* scroll = &context->scrolls[slot - 1];
-    const muiSize size = {layout->rect.width, layout->rect.height};
     uint32_t i = EaseOf(store, slot);
     bool easing = i < store->easeCount && store->eases[i].kind == muiScrollEaseStep;
     float x = easing ? store->eases[i].toX : scroll->x;
     float y = easing ? store->eases[i].toY : scroll->y;
-    float across = layout->rtl ? -right : right;
-    float limitX = muiScrollLimit(&layout->style, size, scroll, true);
-    float limitY = muiScrollLimit(&layout->style, size, scroll, false);
-    return (across > 0.0f && x < limitX) || (across < 0.0f && x > 0.0f) ||
-           (down > 0.0f && y < limitY) || (down < 0.0f && y > 0.0f);
+    float toX = x;
+    float toY = y;
+    Reach(context, slot, &toX, &toY, right, down);
+    return toX != x || toY != y;
 }
 
 // Moves a scroll container's offsets by right and down, within its
 // limits.
 static void ScrollBy(muiContext* context, uint32_t slot, float right, float down)
 {
-    const muiLayoutNode* layout = &context->layout[slot - 1];
     muiScrollState* scroll = &context->scrolls[slot - 1];
-    const muiSize size = {layout->rect.width, layout->rect.height};
-    float across = layout->rtl ? -right : right;
-    float x =
-        fminf(fmaxf(scroll->x + across, 0.0f), muiScrollLimit(&layout->style, size, scroll, true));
-    float y =
-        fminf(fmaxf(scroll->y + down, 0.0f), muiScrollLimit(&layout->style, size, scroll, false));
+    float x = scroll->x;
+    float y = scroll->y;
+    Reach(context, slot, &x, &y, right, down);
     if (x != scroll->x || y != scroll->y)
     {
         scroll->x = x;
@@ -278,9 +283,7 @@ static void ScrollBy(muiContext* context, uint32_t slot, float right, float down
 static void Step(muiContext* context, uint32_t slot, float right, float down, uint64_t timeNs)
 {
     muiScrollStore* store = &context->scrolling;
-    const muiLayoutNode* layout = &context->layout[slot - 1];
     muiScrollState* scroll = &context->scrolls[slot - 1];
-    const muiSize size = {layout->rect.width, layout->rect.height};
     // A step goes on from where a step easing goes; a fling or a bounce
     // stops where it is.
     uint32_t i = EaseOf(store, slot);
@@ -290,10 +293,9 @@ static void Step(muiContext* context, uint32_t slot, float right, float down, ui
         i = store->easeCount;
     }
     bool easing = i < store->easeCount;
-    float x = (easing ? store->eases[i].toX : scroll->x) + (layout->rtl ? -right : right);
-    float y = (easing ? store->eases[i].toY : scroll->y) + down;
-    x = fminf(fmaxf(x, 0.0f), muiScrollLimit(&layout->style, size, scroll, true));
-    y = fminf(fmaxf(y, 0.0f), muiScrollLimit(&layout->style, size, scroll, false));
+    float x = easing ? store->eases[i].toX : scroll->x;
+    float y = easing ? store->eases[i].toY : scroll->y;
+    Reach(context, slot, &x, &y, right, down);
     if (context->environment.reducedMotion || store->rule.easeNs == 0 ||
         (!easing && store->easeCount == MUI_SCROLL_EASES))
     {
@@ -325,13 +327,11 @@ static bool Ease(muiContext* context, uint32_t slot, const muiScrollEase* ease, 
     // A time of 0 gives an infinity or a NaN, which fmin takes as 1.
     double t = fmin(elapsed / (double)context->scrolling.rule.easeNs, 1.0);
     float eased = (float)(1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t));
-    const muiLayoutNode* layout = &context->layout[slot - 1];
+    // Between offsets within the limits, at most the limits layout left.
     muiScrollState* scroll = &context->scrolls[slot - 1];
-    const muiSize size = {layout->rect.width, layout->rect.height};
-    scroll->x = fminf(ease->fromX + (ease->toX - ease->fromX) * eased,
-                      muiScrollLimit(&layout->style, size, scroll, true));
-    scroll->y = fminf(ease->fromY + (ease->toY - ease->fromY) * eased,
-                      muiScrollLimit(&layout->style, size, scroll, false));
+    scroll->x = ease->fromX + (ease->toX - ease->fromX) * eased;
+    scroll->y = ease->fromY + (ease->toY - ease->fromY) * eased;
+    Reach(context, slot, &scroll->x, &scroll->y, 0.0f, 0.0f);
     return t >= 1.0;
 }
 
@@ -534,15 +534,16 @@ static void Pan(muiContext* context, uint32_t slot, const muiScrollPan* pan,
     const muiSize size = {layout->rect.width, layout->rect.height};
     const muiSize port = PortOf(layout);
     muiScrollAxes axes = layout->style.scrollAxes;
-    float across = layout->rtl ? record->offsetX : -record->offsetX;
+    float across = scroll->right ? record->offsetX : -record->offsetX;
+    float down = scroll->bottom ? record->offsetY : -record->offsetY;
     float overX = 0.0f;
     float overY = 0.0f;
     float x =
         Along(context, pan->startX + across, muiScrollLimit(&layout->style, size, scroll, true),
               port.width, (axes & mui_scrollHorizontal) != 0, &overX);
-    float y = Along(context, pan->startY - record->offsetY,
-                    muiScrollLimit(&layout->style, size, scroll, false), port.height,
-                    (axes & mui_scrollVertical) != 0, &overY);
+    float y =
+        Along(context, pan->startY + down, muiScrollLimit(&layout->style, size, scroll, false),
+              port.height, (axes & mui_scrollVertical) != 0, &overY);
     if (x != scroll->x || y != scroll->y || overX != scroll->overX || overY != scroll->overY)
     {
         scroll->x = x;
@@ -623,15 +624,14 @@ static void StartFling(muiContext* context, uint32_t slot, const muiScrollPan* p
     }
     double scale = speed > MUI_FLING_MAX ? MUI_FLING_MAX / speed : 1.0;
     const muiScrollState* scroll = &context->scrolls[slot - 1];
-    bool rtl = context->layout[slot - 1].rtl;
     store->eases[store->easeCount++] = (muiScrollEase){
         .node = muiTreeIdOf(&context->tree, slot),
         .fromX = scroll->x,
         .fromY = scroll->y,
         .startNs = timeNs,
         .kind = muiScrollEaseFling,
-        .velocityX = (float)((rtl ? vx : -vx) * scale),
-        .velocityY = (float)(-vy * scale),
+        .velocityX = (float)((scroll->right ? vx : -vx) * scale),
+        .velocityY = (float)((scroll->bottom ? vy : -vy) * scale),
     };
 }
 
@@ -928,7 +928,11 @@ muiResult muiNode_GetScrollThumb(const muiContext* context, muiNodeId nodeId, bo
     float extent = horizontal ? scroll->extentWidth : scroll->extentHeight;
     float length = fminf(fmaxf(track * (extent - limit) / extent, minimum), track);
     float offset = horizontal ? scroll->x : scroll->y;
-    *thumbOut = (muiScrollThumb){(track - length) * offset / limit, length};
+    // From the track's start, which is the scroll origin's side unless the
+    // origin is the far edge of its top or inline start.
+    bool far = horizontal ? scroll->right != layout->rtl : scroll->bottom;
+    float placed = (track - length) * offset / limit;
+    *thumbOut = (muiScrollThumb){far ? track - length - placed : placed, length};
     return mui_success;
 }
 

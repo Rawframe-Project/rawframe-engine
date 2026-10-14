@@ -8,6 +8,8 @@
 #ifndef MAUL_UI_SRC_PLACE_H
 #define MAUL_UI_SRC_PLACE_H
 
+#include "outline.h"
+
 #include <stdint.h>
 
 typedef struct muiContext muiContext;
@@ -46,12 +48,12 @@ static inline double muiPlaceY(const muiPlace* place, double y)
 }
 
 // A point back through a place: 0 on an axis it scales to nothing.
-static inline double muiUnplaceX(const muiPlace* place, double x)
+static inline MUI_SIZE_OUTLINE double muiUnplaceX(const muiPlace* place, double x)
 {
     return place->scaleX != 0.0 ? (x - place->offsetX) / place->scaleX : 0.0;
 }
 
-static inline double muiUnplaceY(const muiPlace* place, double y)
+static inline MUI_SIZE_OUTLINE double muiUnplaceY(const muiPlace* place, double y)
 {
     return place->scaleY != 0.0 ? (y - place->offsetY) / place->scaleY : 0.0;
 }

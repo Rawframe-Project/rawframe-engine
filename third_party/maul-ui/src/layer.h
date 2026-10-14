@@ -9,6 +9,7 @@
 #define MAUL_UI_SRC_LAYER_H
 
 #include "layer_store.h"
+#include "outline.h"
 #include "tree.h"
 
 #include "maul-ui/interaction.h"
@@ -26,7 +27,7 @@ void muiNoteLayer(muiContext* context, uint32_t slot, muiLayerKind before);
 
 // Whether a node roots a layer: it has a layer kind and the store holds
 // it.
-static inline bool muiIsLayerRoot(const muiTree* tree, uint32_t slot)
+static inline MUI_SIZE_OUTLINE bool muiIsLayerRoot(const muiTree* tree, uint32_t slot)
 {
     return (muiTreeAt(tree, slot)->flags & MUI_TREE_APART) != 0;
 }

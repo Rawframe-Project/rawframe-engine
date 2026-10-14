@@ -26,6 +26,9 @@ float muiSolveBaseline(const muiSolver* solver, uint32_t node, const muiSizingIn
 muiSizingInput muiRootInput(const muiLayoutStyle* style, const muiSides* safe, float availableWidth,
                             float availableHeight);
 
+// The muiExtentAboveFunction of the solver.
+void muiMeasureExtentAbove(const muiSolver* solver, uint32_t root, uint32_t node);
+
 // Widens a root given both sizes to the minimum its aspect ratio gives it.
 void muiRatioRootWidth(const muiSolver* solver, uint32_t root, muiSizingInput* input);
 

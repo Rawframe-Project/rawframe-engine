@@ -526,18 +526,25 @@ static void Position(muiContext* context, uint32_t slot, const muiVirtualEntry* 
         }
         muiRect* rect = &context->layout[c - 1].rect;
         float offset = (float)muiVirtualOffset(store, entry, item - 1);
+        // From the list's scroll origin: its top or bottom, its left or
+        // right.
         if (!horizontal)
         {
-            rect->y = style->border.top + padding->top + offset;
-        }
-        else if (list->rtl)
-        {
-            rect->x =
-                list->rect.width - style->border.start - padding->start - offset - rect->width;
+            rect->y = context->scrolls[slot - 1].bottom
+                          ? list->rect.height - style->border.bottom - padding->bottom - offset -
+                                rect->height
+                          : style->border.top + padding->top + offset;
         }
         else
         {
-            rect->x = style->border.start + padding->start + offset;
+            // The start side is the right under rtl.
+            float left =
+                list->rtl ? style->border.end + padding->end : style->border.start + padding->start;
+            float right =
+                list->rtl ? style->border.start + padding->start : style->border.end + padding->end;
+            rect->x = context->scrolls[slot - 1].right
+                          ? list->rect.width - right - offset - rect->width
+                          : left + offset;
         }
     }
 }

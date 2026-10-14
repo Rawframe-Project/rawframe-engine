@@ -9,6 +9,7 @@
 #define MAUL_UI_SRC_ACCESS_STORE_H
 
 #include "allocator.h"
+#include "outline.h"
 
 #include "maul-ui/access.h"
 
@@ -116,8 +117,8 @@ static inline void muiAccessFreeBuffers(muiAccessStore* store, const muiAllocato
 }
 
 // Frees one of an entry's texts.
-static inline void muiAccessFreeText(muiAccessEntry* entry, const muiAllocator* allocator,
-                                     uint32_t kind)
+static inline MUI_SIZE_OUTLINE void muiAccessFreeText(muiAccessEntry* entry,
+                                                      const muiAllocator* allocator, uint32_t kind)
 {
     if (entry->text[kind] != nullptr)
     {

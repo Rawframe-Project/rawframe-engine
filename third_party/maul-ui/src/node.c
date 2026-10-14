@@ -65,6 +65,10 @@ muiResult muiCreateNode(muiContext* context, const muiNodeDef* def, muiNodeId* n
     context->interaction[slot - 1] = (muiInteractionStyle){.hitMode = mui_hitAuto};
     context->scrolls[slot - 1] = (muiScrollState){0};
     context->lists.items[slot - 1] = 0;
+    // Never painted: what the slot's last node painted would make a box
+    // in the same place read as unmoved, and the box would not be sent to
+    // assistive technology (MarkMoved in solve.c).
+    context->draw.states[slot - 1] = (muiPaintState){0};
     *nodeOut = muiTreeIdOf(&context->tree, slot);
     return mui_success;
 }

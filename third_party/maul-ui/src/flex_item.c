@@ -91,18 +91,30 @@ float muiFlexAutomaticMinimum(const muiFlexFrame* frame, uint32_t child, const m
         return 0.0f;
     }
     // A row's ratio item counts its content's own answer, the ratio and
-    // its limits applied below (as Chrome).
-    float ratio = frame->solver->nodes[child - 1].style.sizing.aspectRatio;
-    float content =
-        ContentMain(frame, child, mui_measureMinContent, cross, ratio > 0.0f && frame->row);
+    // its limits applied below (as Chrome). A column's ratio item that
+    // wraps as a column breaks its lines at the ratio's height, as when
+    // its height is automatic (as Chrome and Firefox).
+    const muiLayoutStyle* own = &frame->solver->nodes[child - 1].style;
+    float ratio = own->sizing.aspectRatio;
+    muiSizingInput probe =
+        muiFlexChildInput(frame, (muiMeasureAxis){0.0f, mui_measureMinContent}, cross);
+    probe.contentOnly = ratio > 0.0f && frame->row;
+    probe.ratioLines = ratio > 0.0f && !frame->row && own->container.wrap != mui_wrapNone &&
+                       (own->container.direction == mui_flexColumn ||
+                        own->container.direction == mui_flexColumnReverse);
+    float content = muiFlexMainOf(frame, frame->solver->solve(frame->solver, child, &probe, false));
     // A row sizing its content, its height definite only through
     // stretching in rows no style fixes, carries no minimum through a
     // stretched item's ratio, nor through a percentage height of the
     // item's, which that height would resolve (as Chrome, which sizes
-    // content before heights).
+    // content before heights). Asked its min-content width, as for its
+    // own automatic minimum, it carries one through an automatic height
+    // stretched to its line (as Chrome and Firefox).
+    const muiSizing* sizing = &frame->solver->nodes[child - 1].style.sizing;
     bool loose =
         frame->row && frame->mainIn.mode != mui_measureExact && frame->crossLoose &&
-        !muiResolveAxis(&frame->solver->nodes[child - 1].style.sizing, false, -1.0f).definite;
+        !muiResolveAxis(sizing, false, -1.0f).definite &&
+        (frame->mainIn.mode == mui_measureMaxContent || sizing->height.kind != mui_dimensionAuto);
     if (ratio > 0.0f && cross.mode == mui_measureExact && !loose)
     {
         content = fmaxf(content, frame->row ? cross.size * ratio : cross.size / ratio);
@@ -140,6 +152,40 @@ float muiFlexAutomaticMinimum(const muiFlexFrame* frame, uint32_t child, const m
     return content;
 }
 
+float muiFlexMinContribution(const muiFlexFrame* frame, uint32_t child)
+{
+    const muiLayoutNode* layout = &frame->solver->nodes[child - 1];
+    const muiLayoutStyle* style = &layout->style;
+    muiAxisSizing main = muiResolveAxis(&style->sizing, frame->row, frame->extentMain);
+    muiAxisSizing cross = muiResolveAxis(&style->sizing, !frame->row, frame->extentCross);
+    muiMeasureAxis crossConstraint = muiFlexCrossConstraint(frame, style, &cross, true);
+    const muiEdges padding = muiFlexChildPadding(frame, style);
+    float size = main.definite
+                     ? main.size
+                     : ContentMain(frame, child, mui_measureMinContent, crossConstraint, false);
+    return muiClampSize(size, layout->item.minMain, layout->item.maxMain,
+                        muiBoxSum(&padding, style, frame->row)) +
+           layout->item.marginMain;
+}
+
+// A wrapping column asked its max-content width breaks its lines at its
+// items' heights at the widths they take, against which percentages
+// inside them resolve (as Chrome): an item whose width is not definite is
+// measured at that width first. Its min-content width is its widest
+// item's, whatever its lines.
+static muiMeasureAxis FittedCross(const muiFlexFrame* frame, uint32_t child,
+                                  const muiAxisSizing* cross, muiMeasureAxis constraint)
+{
+    if (frame->row || !frame->multiLine || cross->definite ||
+        constraint.mode != mui_measureMaxContent)
+    {
+        return constraint;
+    }
+    muiSizingInput probe =
+        muiFlexChildInput(frame, (muiMeasureAxis){0.0f, mui_measureMaxContent}, constraint);
+    return muiExact(frame->solver->solve(frame->solver, child, &probe, false).width);
+}
+
 float muiFlexPrepareItem(const muiFlexFrame* frame, uint32_t child, float* aloneOut)
 {
     muiLayoutNode* layout = &frame->solver->nodes[child - 1];
@@ -150,6 +196,7 @@ float muiFlexPrepareItem(const muiFlexFrame* frame, uint32_t child, float* alone
     const muiEdges padding = muiFlexChildPadding(frame, style);
     float boxMain = muiBoxSum(&padding, style, frame->row);
     muiMeasureAxis crossConstraint = muiFlexCrossConstraint(frame, style, &cross, true);
+    crossConstraint = FittedCross(frame, child, &cross, crossConstraint);
     muiEdges margins = muiMarginsOf(style, frame->rtl);
     *item = (muiFlexItemState){
         .marginMain = muiEdgeSum(&margins, frame->row),

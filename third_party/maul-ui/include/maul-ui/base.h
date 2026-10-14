@@ -19,7 +19,7 @@ extern "C"
 // The library version. CMake reads it from here.
 #define MUI_VERSION_MAJOR 0
 #define MUI_VERSION_MINOR 5
-#define MUI_VERSION_PATCH 2
+#define MUI_VERSION_PATCH 11
 
 // The version a root def (muiContextDef, muiTextServiceDef) carries, set
 // by its default as the program is built: the headers' major and minor.

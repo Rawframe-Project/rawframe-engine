@@ -10,6 +10,7 @@
 #ifndef MAUL_UI_SRC_STYLE_STORE_H
 #define MAUL_UI_SRC_STYLE_STORE_H
 
+#include "outline.h"
 #include "pool.h"
 #include "property.h"
 
@@ -122,12 +123,13 @@ typedef struct muiStyleStore
 } muiStyleStore;
 
 // Whether classes and count make a list a node or a type may hold.
-static inline bool muiIsClassListValid(const muiStyleId* classes, uint32_t count)
+static inline MUI_SIZE_OUTLINE bool muiIsClassListValid(const muiStyleId* classes, uint32_t count)
 {
     return count <= MUI_MAX_CLASSES && (classes != nullptr || count == 0);
 }
 
-static inline void muiSetClassList(muiClassList* list, const muiStyleId* classes, uint32_t count)
+static inline MUI_SIZE_OUTLINE void muiSetClassList(muiClassList* list, const muiStyleId* classes,
+                                                    uint32_t count)
 {
     *list = (muiClassList){.count = count};
     for (uint32_t i = 0; i < count; i++)
@@ -137,7 +139,7 @@ static inline void muiSetClassList(muiClassList* list, const muiStyleId* classes
 }
 
 // The states a node is in: the host's, and those pointers and focus give.
-static inline muiState muiStatesOf(const muiNodeStyle* node)
+static inline MUI_SIZE_OUTLINE muiState muiStatesOf(const muiNodeStyle* node)
 {
     return (muiState)(node->states | (node->hovers != 0 ? mui_stateHovered : 0) |
                       (node->presses != 0 ? mui_statePressed : 0) |

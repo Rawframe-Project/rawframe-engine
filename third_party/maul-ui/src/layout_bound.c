@@ -168,6 +168,7 @@ static void LayOutAlone(const muiSolver* solver, const Checked* checked)
         .contentHeight = checked->old.finalContentHeight,
         .ratioPercent = checked->old.finalRatioPercent,
         .looseHeight = checked->old.finalLooseHeight,
+        .earlyHeight = checked->old.finalEarlyHeight,
     };
     (void)solver->solve(solver, checked->node, &input, true);
 }
@@ -211,6 +212,7 @@ bool muiBoundLayout(const muiSolver* solver, uint32_t root)
             !solver->nodes[c->node - 1].cache.finalValid)
         {
             LayOutAlone(solver, c);
+            solver->extentAbove(solver, root, c->node);
         }
     }
     return true;

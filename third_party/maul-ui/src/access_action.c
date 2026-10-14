@@ -32,9 +32,10 @@ static bool Page(muiContext* context, uint32_t slot, muiAccessAction action)
     float extent = horizontal ? scroll->extentWidth : scroll->extentHeight;
     float page = (extent - limit) * context->scrolling.rule.pageFraction;
     page = action == mui_actionScrollUp || action == mui_actionScrollLeft ? -page : page;
-    // Right to left, the offset grows toward the left.
-    float x = scroll->x + (horizontal ? (layout->rtl ? -page : page) : 0.0f);
-    float y = scroll->y + (horizontal ? 0.0f : page);
+    // From the right or the bottom, the offset grows toward the left or
+    // the top.
+    float x = scroll->x + (horizontal ? (scroll->right ? -page : page) : 0.0f);
+    float y = scroll->y + (horizontal ? 0.0f : (scroll->bottom ? -page : page));
     float oldX = scroll->x;
     float oldY = scroll->y;
     muiNodeId nodeId = muiTreeIdOf(&context->tree, slot);

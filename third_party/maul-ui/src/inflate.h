@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// DEFLATE (RFC 1951) in a zlib stream (RFC 1950), for PNG (record
-// mui-0006): stored, fixed and dynamic Huffman blocks inflated into a
-// buffer whose size the caller knows, every length, distance and code
-// checked against the input and the output, and the stream's Adler-32
-// checked against what it gave. It allocates nothing.
+// DEFLATE (RFC 1951) in a zlib stream (RFC 1950), as PNG images and FBX
+// arrays hold it (a family file): stored, fixed and dynamic Huffman
+// blocks inflated into a buffer whose size the caller knows, every
+// length, distance and code checked against the input and the output,
+// and the stream's Adler-32 checked against what it gave. It allocates
+// nothing.
 
 #ifndef MAUL_UI_SRC_INFLATE_H
 #define MAUL_UI_SRC_INFLATE_H

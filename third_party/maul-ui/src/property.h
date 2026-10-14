@@ -8,6 +8,7 @@
 #ifndef MAUL_UI_SRC_PROPERTY_H
 #define MAUL_UI_SRC_PROPERTY_H
 
+#include "outline.h"
 #include "property_bits.h"
 
 #include "maul-ui/interaction.h"
@@ -68,12 +69,12 @@ typedef struct muiPropertySet
     uint32_t bindingCount;
 } muiPropertySet;
 
-static inline muiValuesRef muiRefOf(muiStyleValues* values)
+static inline MUI_SIZE_OUTLINE muiValuesRef muiRefOf(muiStyleValues* values)
 {
     return (muiValuesRef){&values->layout, &values->visual, &values->text, &values->interaction};
 }
 
-static inline muiConstValuesRef muiConstRefOf(const muiStyleValues* values)
+static inline MUI_SIZE_OUTLINE muiConstValuesRef muiConstRefOf(const muiStyleValues* values)
 {
     return (muiConstValuesRef){&values->layout, &values->visual, &values->text,
                                &values->interaction};

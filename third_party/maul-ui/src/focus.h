@@ -7,6 +7,7 @@
 #define MAUL_UI_SRC_FOCUS_H
 
 #include "context.h"
+#include "outline.h"
 
 #include <stdint.h>
 
@@ -46,7 +47,7 @@ void muiFocusPress(muiContext* context, uint8_t player, uint32_t slot);
 // style or interaction values changed. Only a focused node has any.
 void muiFocusRecheck(muiContext* context, uint32_t slot);
 
-static inline void muiNoteFocus(muiContext* context, uint32_t slot)
+static inline MUI_SIZE_OUTLINE void muiNoteFocus(muiContext* context, uint32_t slot)
 {
     if (context->style.nodes[slot - 1].focusedBy != 0)
     {

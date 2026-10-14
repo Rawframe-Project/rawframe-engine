@@ -9,6 +9,7 @@
 #ifndef MAUL_UI_SRC_FLEX_ITEM_H
 #define MAUL_UI_SRC_FLEX_ITEM_H
 
+#include "outline.h"
 #include "sizing.h"
 #include "solver.h"
 
@@ -45,11 +46,17 @@ typedef struct muiFlexFrame
     // and the extent its lines reach across.
     bool ratioHeight;
     float contentCross;
-    // Some child was stretched wider than it was measured.
-    bool widened;
+    // Some child was stretched to another size than it was measured at;
+    // narrowed, to a smaller one.
+    bool restretched;
+    bool narrowed;
+    // A wrapping column its own limits made narrower than its lines.
+    bool clamped;
     // A row whose height is its content's, or definite only through
     // stretching in such rows (looseHeight): its stretched items' too.
     bool crossLoose;
+    // A row whose height its style gives or was early (earlyHeight).
+    bool crossEarly;
     uint32_t count;
     uint32_t lineCount;
     float innerMain;
@@ -74,6 +81,7 @@ static inline muiSizingInput muiFlexChildInput(const muiFlexFrame* frame, muiMea
     input.ratioPercent = false;
     input.ratioLines = false;
     input.looseHeight = frame->row && frame->crossLoose;
+    input.earlyHeight = false;
     return input;
 }
 
@@ -82,12 +90,13 @@ static inline float muiFlexMainOf(const muiFlexFrame* frame, muiSize size)
     return frame->row ? size.width : size.height;
 }
 
-static inline float muiFlexCrossOf(const muiFlexFrame* frame, muiSize size)
+static inline MUI_SIZE_OUTLINE float muiFlexCrossOf(const muiFlexFrame* frame, muiSize size)
 {
     return frame->row ? size.height : size.width;
 }
 
-static inline muiAlign muiFlexAlignOf(const muiFlexFrame* frame, const muiLayoutStyle* child)
+static inline MUI_SIZE_OUTLINE muiAlign muiFlexAlignOf(const muiFlexFrame* frame,
+                                                       const muiLayoutStyle* child)
 {
     return child->item.alignSelf != mui_alignAuto ? child->item.alignSelf
                                                   : frame->style->container.alignItems;
@@ -173,6 +182,11 @@ float muiFlexAutomaticMinimum(const muiFlexFrame* frame, uint32_t child, const m
 // preferred size uncapped, content at its narrowest), as Chrome sizes a
 // wrapping row. A column counts hypothetical sizes, as Chrome
 // does.
+// A prepared child's min-content contribution along the main axis: its
+// definite main size or its content's min-content one, within its
+// limits, with its margins.
+float muiFlexMinContribution(const muiFlexFrame* frame, uint32_t child);
+
 float muiFlexPrepareItem(const muiFlexFrame* frame, uint32_t child, float* aloneOut);
 
 #endif

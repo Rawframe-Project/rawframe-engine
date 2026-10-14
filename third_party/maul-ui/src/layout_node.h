@@ -8,6 +8,7 @@
 #ifndef MAUL_UI_SRC_LAYOUT_NODE_H
 #define MAUL_UI_SRC_LAYOUT_NODE_H
 
+#include "outline.h"
 #include "tree.h"
 
 #include "maul-ui/layout.h"
@@ -57,6 +58,11 @@ typedef struct muiSizingInput
     // for percentages (Flexbox 9.8), but a row sizing its content carries
     // no ratio's minimum through it (as Chrome).
     bool looseHeight : 1;
+    // Whether an exact height was known before the node's container laid
+    // out its lines: its own style's, or a stretch in a single line of
+    // such a height. A stretched column with a ratio is laid out at it
+    // from the start, its lines and percentages too (as Chrome).
+    bool earlyHeight : 1;
 } muiSizingInput;
 
 typedef struct muiCacheEntry
@@ -95,6 +101,7 @@ typedef struct muiLayoutCache
     bool finalContentHeight : 1;
     bool finalRatioPercent : 1;
     bool finalLooseHeight : 1;
+    bool finalEarlyHeight : 1;
     muiSize finalSize;
 } muiLayoutCache;
 
@@ -212,7 +219,8 @@ static inline bool muiScaledBelow(const muiTree* tree, muiLayoutNode* nodes, uin
 // A node's content box in its border box, as layout sized it: inside the
 // border and the padding it was laid out with, whose start is the right in
 // a right-to-left node.
-static inline muiRect muiContentBoxOf(const muiLayoutNode* layout, const muiEdges* padding)
+static inline MUI_SIZE_OUTLINE muiRect muiContentBoxOf(const muiLayoutNode* layout,
+                                                       const muiEdges* padding)
 {
     const muiEdges* border = &layout->style.border;
     float start = border->start + padding->start;
@@ -232,7 +240,7 @@ static inline bool muiIsSameRect(muiRect a, muiRect b)
 
 // Brings the values kept beside a node's style up to date after the
 // style changes.
-static inline void muiSyncLayoutNode(muiLayoutNode* node)
+static inline MUI_SIZE_OUTLINE void muiSyncLayoutNode(muiLayoutNode* node)
 {
     node->absolute =
         node->style.placement.position == mui_positionAbsolute || node->popped || node->listed;

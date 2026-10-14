@@ -67,8 +67,14 @@ static FlexTotals SumUnfrozen(const muiTree* tree, const muiLayoutNode* nodes, u
     return totals;
 }
 
+// The relative error a total violation may carry and still be zero: the
+// clamps then cancel exactly, as browsers' fixed-point sums find.
+static const float VIOLATION_SLACK = 1.0e-5f;
+
 // Gives the unfrozen children their share of freeSpace, clamps them to
-// their limits, and returns the total violation.
+// their limits, and returns the total violation. A clamp within the
+// error of the float sums violates nothing: the share lands on the
+// limit, as browsers' fixed-point sums find.
 static float Distribute(const muiTree* tree, muiLayoutNode* nodes, uint32_t first, uint32_t count,
                         float freeSpace, bool growing, const FlexTotals* totals)
 {
@@ -93,16 +99,13 @@ static float Distribute(const muiTree* tree, muiLayoutNode* nodes, uint32_t firs
         }
         // The minimum wins over the maximum, as in CSS.
         float clamped = fmaxf(item->minMain, fminf(target, item->maxMain));
-        item->violation = clamped > target ? 1 : (clamped < target ? -1 : 0);
+        float error = fmaxf(fabsf(item->base), 1.0f) * VIOLATION_SLACK;
+        item->violation = clamped > target + error ? 1 : (clamped < target - error ? -1 : 0);
         violation += clamped - target;
         item->target = clamped;
     }
     return violation;
 }
-
-// The relative error a total violation may carry and still be zero: the
-// clamps then cancel exactly, as browsers' fixed-point sums find.
-static const float VIOLATION_SLACK = 1.0e-5f;
 
 // Freezes every unfrozen child when the total violation is zero, the
 // ones raised to their minimum when it is positive, and the ones lowered

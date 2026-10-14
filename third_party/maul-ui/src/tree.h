@@ -10,6 +10,7 @@
 #define MAUL_UI_SRC_TREE_H
 
 #include "invariant.h"
+#include "outline.h"
 
 #include "maul-ui/base.h"
 
@@ -83,7 +84,7 @@ typedef struct muiTree
 
 // Whether the node at slot or one above it exits: it and its subtree
 // take no input.
-static inline bool muiTreeIsExiting(const muiTree* tree, uint32_t slot)
+static inline MUI_SIZE_OUTLINE bool muiTreeIsExiting(const muiTree* tree, uint32_t slot)
 {
     for (uint32_t at = slot; at != 0; at = tree->nodes[at - 1].links.parent)
     {
@@ -105,7 +106,7 @@ uint32_t muiTreeResolve(const muiTree* tree, muiNodeId nodeId);
 muiNodeId muiTreeIdOf(const muiTree* tree, uint32_t slot);
 
 // A live slot's node. Inline: every walk over the tree calls it.
-static inline muiTreeNode* muiTreeAt(const muiTree* tree, uint32_t slot)
+static inline MUI_SIZE_OUTLINE muiTreeNode* muiTreeAt(const muiTree* tree, uint32_t slot)
 {
     MUI_ASSERT(slot != 0 && slot <= tree->used);
     return &tree->nodes[slot - 1];

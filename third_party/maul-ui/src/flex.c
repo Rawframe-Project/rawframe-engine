@@ -159,8 +159,9 @@ static muiFlexFrame Setup(const muiSolver* solver, uint32_t node, const muiSizin
         frame.innerCross = fmaxf(frame.crossIn.size - frame.boxCross, 0.0f);
         frame.extentCross = crossDefinite ? frame.innerCross : -1.0f;
     }
-    frame.crossLoose = frame.row && (input->contentHeight || input->looseHeight) &&
-                       !muiResolveAxis(&style->sizing, false, input->parentHeight).definite;
+    bool own = muiResolveAxis(&style->sizing, false, input->parentHeight).definite;
+    frame.crossLoose = frame.row && (input->contentHeight || input->looseHeight) && !own;
+    frame.crossEarly = frame.row && (input->earlyHeight || own);
     RatioExtent(&frame, style, input);
     return frame;
 }
@@ -188,6 +189,19 @@ static float LongestLine(const muiFlexFrame* frame, float length)
     return longest;
 }
 
+// The largest min-content contribution of the children, a wrapping
+// row's min-content width.
+static float WidestMinContribution(const muiFlexFrame* frame)
+{
+    float widest = 0.0f;
+    for (uint32_t c = muiFirstFlowChild(frame->solver->tree, frame->solver->nodes, frame->node);
+         c != 0; c = muiNextFlowChild(frame->solver->tree, frame->solver->nodes, c))
+    {
+        widest = fmaxf(widest, muiFlexMinContribution(frame, c));
+    }
+    return widest;
+}
+
 static void SizeMain(muiFlexFrame* frame)
 {
     const muiTree* tree = frame->solver->tree;
@@ -209,7 +223,11 @@ static void SizeMain(muiFlexFrame* frame)
         bool wraps = frame->row && frame->multiLine;
         bool narrowest = wraps && frame->mainIn.mode == mui_measureMinContent;
         float content = narrowest ? widest : sum + Gaps(frame->gap, frame->count);
-        content = wraps ? fmaxf(content, widest) : content;
+        // Items with negative margins may sum short of the widest alone:
+        // the row is then as wide as its min-content width (as Chrome and
+        // Firefox).
+        content =
+            wraps && content < widest ? fmaxf(content, WidestMinContribution(frame)) : content;
         // A wrapping column longer than its maximum height breaks its lines
         // there, as Chrome and Firefox do; the ratio's height breaks them
         // otherwise.
@@ -367,9 +385,14 @@ static void Stretch(muiFlexFrame* frame, uint32_t first, uint32_t count)
             item->resized = item->cross != measured;
         }
         else if (!cross.definite && !frame->row && frame->multiLine &&
-                 !IsBaselineAligned(frame, style) && line - item->marginCross > item->cross)
+                 (!IsBaselineAligned(frame, style) || frame->rtl == frame->wrapReverse) &&
+                 line - item->marginCross > item->cross)
         {
             // Fitted to a narrower space, it grows no wider than its line.
+            // Aligned by baseline, its line-left edge, where a column's is
+            // synthesized, stays put (as Chrome): fitting it is fitting it
+            // at its start only when that is its cross start; otherwise it
+            // keeps its width, as Firefox, rather than pass its line.
             muiMeasureAxis space = {line - item->marginCross, mui_measureAtMost};
             muiSizingInput input = muiFlexChildInput(frame, muiExact(item->target), space);
             input.contentHeight = ColumnContentHeight(frame, style);
@@ -377,7 +400,8 @@ static void Stretch(muiFlexFrame* frame, uint32_t first, uint32_t count)
             item->cross = muiClampSize(size, item->minCross, item->maxCross,
                                        muiBoxSum(&padding, style, true));
         }
-        frame->widened = frame->widened || item->cross > measured;
+        frame->restretched = frame->restretched || item->cross != measured;
+        frame->narrowed = frame->narrowed || item->cross < measured;
     }
 }
 
@@ -506,6 +530,7 @@ static void SizeCross(muiFlexFrame* frame)
         float outer = muiClampSize(total + frame->boxCross, frame->crossLimits.minimum,
                                    frame->crossLimits.maximum, frame->boxCross);
         frame->innerCross = outer - frame->boxCross;
+        frame->clamped = frame->multiLine && frame->innerCross < total;
     }
     uint32_t first = muiFirstFlowChild(frame->solver->tree, frame->solver->nodes, frame->node);
     if (!frame->multiLine && first != 0)
@@ -614,10 +639,14 @@ static muiSizingInput FinalInput(const muiFlexFrame* frame, uint32_t child)
         // laid out again at that size (section 9.4 step 11, as Chrome).
         muiFlexDirection direction = style->container.direction;
         bool column = direction == mui_flexColumn || direction == mui_flexColumnReverse;
-        input.ratioPercent =
-            style->sizing.aspectRatio > 0.0f && !given &&
-            (!muiFlexIsStretched(frame, style) || (column && !ItemOf(frame, child)->resized));
+        // A single line of early height lays it out at that height from
+        // the start, whatever it is (as Chrome and Firefox).
+        bool early = muiFlexIsStretched(frame, style) && !frame->multiLine && frame->crossEarly;
+        input.ratioPercent = style->sizing.aspectRatio > 0.0f && !given &&
+                             (!muiFlexIsStretched(frame, style) ||
+                              (column && !ItemOf(frame, child)->resized && !early));
         input.looseHeight = frame->crossLoose && muiFlexIsStretched(frame, style) && !given;
+        input.earlyHeight = early;
     }
     else
     {
@@ -768,14 +797,11 @@ static float FirstBaseline(const muiFlexFrame* frame)
            (frame->row ? frame->boxCrossStart + offsets.cross : frame->boxMainStart + offsets.main);
 }
 
-// Whether a column sized at an open width lays out otherwise at the width
-// it found: a child was stretched wider than it was measured, or sizes by
-// the container's width.
-static bool WidthMatters(const muiFlexFrame* frame)
+// Whether a child sizes its width by the container's.
+static bool ScaledWidths(const muiFlexFrame* frame)
 {
     for (uint32_t c = muiFirstFlowChild(frame->solver->tree, frame->solver->nodes, frame->node);
-         c != 0 && !frame->widened;
-         c = muiNextFlowChild(frame->solver->tree, frame->solver->nodes, c))
+         c != 0; c = muiNextFlowChild(frame->solver->tree, frame->solver->nodes, c))
     {
         const muiSizing* sizing = &frame->solver->nodes[c - 1].style.sizing;
         if (muiIsScaled(sizing->width) || muiIsScaled(sizing->minWidth) ||
@@ -784,7 +810,64 @@ static bool WidthMatters(const muiFlexFrame* frame)
             return true;
         }
     }
-    return frame->widened;
+    return false;
+}
+
+// Whether a child not stretched, its width automatic, fit its width to
+// the space the column measured it in, its outer width wider than wider.
+static bool Unfitted(const muiFlexFrame* frame, float wider)
+{
+    for (uint32_t c = muiFirstFlowChild(frame->solver->tree, frame->solver->nodes, frame->node);
+         c != 0; c = muiNextFlowChild(frame->solver->tree, frame->solver->nodes, c))
+    {
+        const muiLayoutStyle* style = &frame->solver->nodes[c - 1].style;
+        const muiFlexItemState* item = ItemOf(frame, c);
+        if (!muiFlexIsStretched(frame, style) && style->sizing.width.kind == mui_dimensionAuto &&
+            item->cross + item->marginCross > wider)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Whether a column grew wider than the space it measured its items in, a
+// child sizing its width to fit there, which fits a wider column
+// otherwise.
+static bool Outgrew(const muiFlexFrame* frame)
+{
+    return frame->innerCross > frame->crossIn.size - frame->boxCross && Unfitted(frame, -INFINITY);
+}
+
+// Whether a column sized at an open width ended narrower than a child
+// was measured at, its own maximum clamping it: a stretched child
+// narrowed, one not stretched, its width automatic, wider than the
+// column's inside, which then fits it narrower, or a wrapping column
+// narrower than its lines, whose items then fit its width.
+static bool Squeezed(const muiFlexFrame* frame)
+{
+    return frame->narrowed || frame->clamped || Unfitted(frame, frame->innerCross);
+}
+
+// Whether a container sized at an open width lays out otherwise at the
+// width it found, as CSS lays a box out at a definite width: a row asked
+// its max-content width whose children size by its width, which they
+// could not resolve against it (a wrapping column breaks its lines at
+// such rows' heights); a column at fit-content whose child was stretched
+// to another width than it was measured at, sizes by its width or fits
+// the space the column outgrew; a column at fit-content or asked an
+// intrinsic width that ended narrower than a child was measured at.
+static bool WidthMatters(const muiFlexFrame* frame, const muiSizingInput* fitted)
+{
+    if (frame->row)
+    {
+        return fitted->width.mode == mui_measureMaxContent && ScaledWidths(frame);
+    }
+    if (fitted->width.mode == mui_measureAtMost)
+    {
+        return frame->restretched || ScaledWidths(frame) || Outgrew(frame) || Squeezed(frame);
+    }
+    return fitted->width.mode != mui_measureExact && Squeezed(frame);
 }
 
 // Sizes a row container's width as fit-content: its max-content size
@@ -828,13 +911,14 @@ static muiSize Flex(const muiSolver* solver, uint32_t node, const muiSizingInput
         frame.ratioHeight = ratioHeight;
         SizeMain(&frame);
         SizeCross(&frame);
-        if (row || fitted.width.mode != mui_measureAtMost || !WidthMatters(&frame))
+        if (!WidthMatters(&frame, &fitted))
         {
             break;
         }
-        // A column's width comes first, as CSS sizes a box's width before
-        // its height: its items are laid out again at the width it found.
-        fitted.width = muiExact(frame.innerCross + frame.boxCross);
+        // A box's width comes first, as CSS sizes a box's width before its
+        // height: its items are laid out again at the width it found.
+        fitted.width =
+            muiExact(row ? frame.innerMain + frame.boxMain : frame.innerCross + frame.boxCross);
     }
     if (baseline != nullptr)
     {

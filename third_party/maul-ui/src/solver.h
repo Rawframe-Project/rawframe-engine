@@ -26,6 +26,11 @@ typedef muiSize (*muiSolveFunction)(const muiSolver* solver, uint32_t node,
 typedef float (*muiBaselineSolveFunction)(const muiSolver* solver, uint32_t node,
                                           const muiSizingInput* input);
 
+// Measures again the extent of the nearest scroll container above node,
+// up to root, after node's subtree was laid out alone: what lies below a
+// container's children reaches its extent.
+typedef void (*muiExtentAboveFunction)(const muiSolver* solver, uint32_t root, uint32_t node);
+
 struct muiSolver
 {
     const muiTree* tree;
@@ -35,6 +40,7 @@ struct muiSolver
     muiBaselineFunction measureBaseline;
     muiSolveFunction solve;
     muiBaselineSolveFunction baseline;
+    muiExtentAboveFunction extentAbove;
     // Where the solver requests style for the next pass, on nodes whose
     // conditions read a size or direction their layout changed, and paint
     // on nodes whose rectangle or direction is not what was last painted.

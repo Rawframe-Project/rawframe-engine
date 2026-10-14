@@ -283,9 +283,12 @@ static bool RatioTakesHeight(const muiLayoutStyle* style, const muiEdges* paddin
     }
     if (*fixedWidth && !across.definite)
     {
+        // Its own limits hold over what the height carries, and it is
+        // never below its padding and border (as Chrome and Firefox).
         float box = muiBoxSum(padding, style, false);
-        *width = fminf(fmaxf(*width, fmaxf(down.minimum, box) * ratio),
-                       muiAxisCeiling(&down, box) * ratio);
+        *width = muiClampSize(fminf(fmaxf(*width, fmaxf(down.minimum, box) * ratio),
+                                    muiAxisCeiling(&down, box) * ratio),
+                              across.minimum, across.maximum, muiBoxSum(padding, style, true));
     }
     if (!fixedHeight || down.definite)
     {
@@ -300,8 +303,9 @@ static bool RatioTakesHeight(const muiLayoutStyle* style, const muiEdges* paddin
 }
 
 // A height from both insets, with an aspect ratio, is at least the
-// width's through the ratio and, its minimum automatic, the content's at
-// that width; stretched by its own align-self, it is the insets' as if
+// width's through the ratio and, its minimum automatic and it not a
+// scroll container, the content's at that width; stretched by its own
+// align-self, it is the insets' as if
 // given (both as Chrome). Returns whether its content grew it past the
 // insets', which holds its children's percentages at its ratio's height,
 // the insets' (as Chrome and Firefox).
@@ -310,6 +314,7 @@ static bool RatioHeightFloor(const muiSolver* solver, uint32_t child, muiSizingI
 {
     const muiLayoutStyle* style = &solver->nodes[child - 1].style;
     if (style->sizing.aspectRatio <= 0.0f || style->item.alignSelf == mui_alignStretch ||
+        style->scrollAxes != mui_scrollNone ||
         muiResolveAxis(&style->sizing, false, spanY->paddingSize).definite)
     {
         return false;
