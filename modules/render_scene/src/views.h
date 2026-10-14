@@ -58,7 +58,8 @@ public:
     /// The device missed the frame offered for render texture `id`.
     void missed(std::uint64_t id) noexcept;
     /// Every view's scene given `materials` (D734).
-    void replaceMaterials(const std::vector<SceneMaterial>& materials);
+    void replaceMaterials(const std::vector<SceneMaterial>& materials,
+                          const std::vector<ScenePostProcessMaterial>& postProcesses);
     /// What the render textures were drawn with, if there are any.
     void summarize(diagnostics::Emitter& emitter) const;
 

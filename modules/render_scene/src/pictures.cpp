@@ -116,24 +116,33 @@ void ScenePictures::start(const diagnostics::Emitter& emitter) {
     }
 }
 
-void ScenePictures::follow(const world_kest::GameFiles& files, const std::vector<SceneMaterial>& materials) noexcept {
+void ScenePictures::follow(const world_kest::GameFiles& files,
+                           const std::vector<SceneMaterial>& materials,
+                           const std::vector<ScenePostProcessMaterial>& postProcesses) noexcept {
+    std::vector<std::uint64_t> sampled;
     for (const SceneMaterial& kMaterial : materials) {
         for (const SceneTexture* kTexture : {&kMaterial.textures.base,
                                              &kMaterial.textures.packed,
                                              &kMaterial.textures.emission,
                                              &kMaterial.textures.normal}) {
-            if (kTexture->id != 0 && !read_.contains(kTexture->id) &&
-                !std::ranges::contains(
-                    files.description().renderTextures, kTexture->id, &world_kest::GameRenderTexture::id)) {
-                // Each once: a later reload finds it read.
-                read_.insert(kTexture->id);
-                emitter_.log(diagnostics::Severity::Info,
-                             kTextureFollowed,
-                             "a material read again samples a texture not read before: it is read now",
-                             {diagnostics::field("texture", graph::nodeIdText(kTexture->id))});
-                ask(kTexture->id);
-            }
+            sampled.push_back(kTexture->id);
         }
+    }
+    for (const ScenePostProcessMaterial& kPost : postProcesses) {
+        sampled.push_back(kPost.texture.id);
+    }
+    for (const std::uint64_t kId : sampled) {
+        if (kId == 0 || read_.contains(kId) ||
+            std::ranges::contains(files.description().renderTextures, kId, &world_kest::GameRenderTexture::id)) {
+            continue;
+        }
+        // Each once: a later reload finds it read.
+        read_.insert(kId);
+        emitter_.log(diagnostics::Severity::Info,
+                     kTextureFollowed,
+                     "a material read again samples a texture not read before: it is read now",
+                     {diagnostics::field("texture", graph::nodeIdText(kId))});
+        ask(kId);
     }
 }
 

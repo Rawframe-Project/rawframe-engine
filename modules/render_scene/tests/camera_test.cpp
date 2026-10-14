@@ -222,6 +222,21 @@ RAWFRAME_TEST(ACamerasPostProcessesRunInItsOrder) {
                         kFrame.postProcesses[1].blob[5] == 0.9F);
         RAWFRAME_EXPECT(kFrame.postProcesses[2].blob == material::blobOf(kFade));
     }
+    // Read again (D760): the warmth made cooler and moved past the
+    // tonemapper, the fade gone; the frames from the next run the new
+    // warmth, and the fade is left out as unknown.
+    material::PostProcess cool = warm;
+    cool.insertion = material::Insertion::AfterTonemap;
+    cool.scene = {0.8F, 0.9F, 1};
+    scene->replaceMaterials({}, {{.id = 0xa1, .insertion = cool.insertion, .blob = material::blobOf(cool)}});
+    scene->extract(world);
+    camera.postProcesses = {{.material = 0xa1, .weight = 1}, {.material = 0xa2, .weight = 1}};
+    const SceneFrame& kAgain = scene->queue(camera);
+    RAWFRAME_EXPECT(kAgain.postProcesses.size() == 1 && kAgain.postProcessesLeftOut == 1);
+    if (kAgain.postProcesses.size() == 1) {
+        RAWFRAME_EXPECT(kAgain.postProcesses[0].insertion == material::Insertion::AfterTonemap &&
+                        kAgain.postProcesses[0].blob == material::blobOf(cool));
+    }
 }
 
 RAWFRAME_TEST(AFixedCameraStaysPutWhereverItsPlayerIs) {

@@ -170,10 +170,11 @@ void TextureViews::missed(std::uint64_t id) noexcept {
     }
 }
 
-void TextureViews::replaceMaterials(const std::vector<SceneMaterial>& materials) {
+void TextureViews::replaceMaterials(const std::vector<SceneMaterial>& materials,
+                                    const std::vector<ScenePostProcessMaterial>& postProcesses) {
     for (TextureView& each : views_) {
         if (each.scene != nullptr) {
-            each.scene->replaceMaterials(materials);
+            each.scene->replaceMaterials(materials, postProcesses);
         }
     }
 }

@@ -641,9 +641,11 @@ const SceneFrame& Scene::queue(const SceneCamera& camera) {
     return state_->queue(camera);
 }
 
-void Scene::replaceMaterials(std::vector<SceneMaterial> materials) {
+void Scene::replaceMaterials(std::vector<SceneMaterial> materials,
+                             std::vector<ScenePostProcessMaterial> postProcesses) {
     placeMaterials(*state_, materials);
     state_->settings.materials = std::move(materials);
+    state_->settings.postProcesses = std::move(postProcesses);
 }
 
 void Scene::show(std::span<const SceneLine> lines) {

@@ -670,9 +670,9 @@ private:
                          "a material could not be read: its models are drawn with none",
                          {diagnostics::field("material", kPath), diagnostics::field("reason", kReason)});
         }
-        const auto kGiven = [&materials](const std::unique_ptr<Scene>& scene) {
+        const auto kGiven = [&materials, &postProcesses](const std::unique_ptr<Scene>& scene) {
             if (scene != nullptr) {
-                scene->replaceMaterials(materials);
+                scene->replaceMaterials(materials, postProcesses);
             }
         };
         kGiven(scene_);
@@ -682,8 +682,8 @@ private:
         for (const std::unique_ptr<Scene>& each : eyeScenes_) {
             kGiven(each);
         }
-        textureViews_.replaceMaterials(materials);
-        pictures_.follow(*files_, materials);
+        textureViews_.replaceMaterials(materials, postProcesses);
+        pictures_.follow(*files_, materials, postProcesses);
         ++materialReloads_;
         emitter_.log(diagnostics::Severity::Info,
                      kMaterialsReloaded,
@@ -692,6 +692,7 @@ private:
                       diagnostics::field("reloads", materialReloads_)});
         gameMaterials_ = materials.size();
         settings_.materials = std::move(materials);
+        settings_.postProcesses = std::move(postProcesses);
     }
 
     world_replication::ClientWorlds* clients_ = nullptr;

@@ -39,10 +39,13 @@ public:
     /// At start: says what load could not ask for, and says through
     /// `emitter` from then on.
     void start(const diagnostics::Emitter& emitter);
-    /// The materials read again from new revisions (D734): a texture one
+    /// The materials and post processes read again from new revisions
+    /// (D734, D760): a texture one
     /// samples that load did not read is asked for alone, as a picture is,
     /// so it is not sampled as white until the game is played again (D758).
-    void follow(const world_kest::GameFiles& files, const std::vector<SceneMaterial>& materials) noexcept;
+    void follow(const world_kest::GameFiles& files,
+                const std::vector<SceneMaterial>& materials,
+                const std::vector<ScenePostProcessMaterial>& postProcesses) noexcept;
 
     /// Asks for picture `id` on its first naming; nought is none. One the
     /// game does not declare, or that cannot be asked for, is none, and is

@@ -475,7 +475,7 @@ RAWFRAME_TEST(AModelsMaterialIsFoundByItsIdentity) {
     RAWFRAME_EXPECT(noMaterial()[0] == 1 && noMaterial()[7] == 0.3F && noMaterial()[15] == 0);
     // Read again (D734): the stone changed and the brass gone, the frames
     // from the next draw the new stone, and the brass's models with none.
-    scene->replaceMaterials({{.id = 0xa2, .blob = brass}});
+    scene->replaceMaterials({{.id = 0xa2, .blob = brass}}, {});
     scene->extract(world);
     const SceneFrame& kAgain = scene->queue({.fovY = 1, .near = 0.1F, .aspect = 1});
     places.clear();

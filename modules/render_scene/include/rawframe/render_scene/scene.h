@@ -877,9 +877,10 @@ public:
     /// before, at most `kMostSceneLines`.
     void show(std::span<const SceneLine> lines);
 
-    /// The game's materials, read again, in place of those it was made
-    /// with, as each frame from the next draws them (D734).
-    void replaceMaterials(std::vector<SceneMaterial> materials);
+    /// The game's materials and post-process materials, read again, in
+    /// place of those it was made with, as each frame from the next draws
+    /// them (D734, D760).
+    void replaceMaterials(std::vector<SceneMaterial> materials, std::vector<ScenePostProcessMaterial> postProcesses);
 
     [[nodiscard]] std::span<const ModelInstance> extracted() const noexcept;
     [[nodiscard]] std::span<const Matrix> extractedPalette() const noexcept;
