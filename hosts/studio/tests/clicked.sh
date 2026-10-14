@@ -15,12 +15,8 @@ set -uo pipefail
 
 here="$(dirname "$0")"
 work="$(mktemp -d)"
-bus=""
+source "$here/bus.sh"
 trap '[ -n "$bus" ] && kill "$bus" 2>/dev/null; rm -rf "$work"' EXIT
-if started="$(dbus-daemon --session --fork --print-address=1 --print-pid=1 2>/dev/null)"; then
-    export AT_SPI_BUS_ADDRESS="$(head -1 <<<"$started")"
-    bus="$(tail -1 <<<"$started")"
-fi
 cp -R "$(dirname "$2")" "$work/game"
 # A test may change the copy's scene first: a sed expression in
 # STUDIO_SCENE_EDIT, as a scene authored against an older layout (D452).

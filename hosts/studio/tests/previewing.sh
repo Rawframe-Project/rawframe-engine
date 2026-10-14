@@ -18,7 +18,8 @@ set -uo pipefail
 
 here="$(dirname "$0")"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+source "$here/bus.sh"
+trap '[ -n "$bus" ] && kill "$bus" 2>/dev/null; rm -rf "$work"' EXIT
 mkdir -p "$work/play"
 port="$(python3 "$here/../../../tools/free_port.py")"
 python3 -c 'import secrets; print(secrets.token_hex(24))' >"$work/token"

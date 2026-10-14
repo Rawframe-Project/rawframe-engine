@@ -17,7 +17,8 @@ set -uo pipefail
 
 here="$(dirname "$0")"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+source "$here/bus.sh"
+trap '[ -n "$bus" ] && kill "$bus" 2>/dev/null; rm -rf "$work"' EXIT
 cp -R "$(dirname "$4")" "$work/game"
 # The played client's window beside Studio's, clear of where Studio is
 # clicked: with no window manager, a later window lies over an earlier.

@@ -52,7 +52,8 @@
 # (D774): found through the accessibility bus the test started
 # (AT_SPI_BUS_ADDRESS) by tools/atspi.py when its turn comes, since what
 # came before may have moved it, in the application CLICK_APPLICATION
-# names, rawframe-studio unless set.
+# names, rawframe-studio unless set; between `freeze` and `thaw`, before
+# the program is stopped, since a stopped program answers nobody.
 # Five seconds after, it stops the program whose pid its pid file holds
 # (D430), whose iterations only bound it, and waits for the process it
 # watches to end; half a second, where the last argument waited for a
@@ -195,6 +196,15 @@ def named_point(name):
     return None, None
 
 
+def point_name(x, y):
+    """The name of the control at (x, y), for CLICK_NAME_POINTS."""
+    import atspi
+
+    address = os.environ.get("AT_SPI_BUS_ADDRESS", "")
+    owner = atspi.application(address, os.environ.get("CLICK_APPLICATION", "rawframe-studio")) if address else None
+    return atspi.at(address, owner, x, y) if owner else None
+
+
 def main():
     pid = int(sys.argv[1])
     log = sys.argv[2]
@@ -288,10 +298,22 @@ def main():
         x.XFlush(display)
 
     seen = False
-    for at, y, text in points:
+    for index, (at, y, text) in enumerate(points):
         seen = False
         if not alive(pid):
             break
+        if isinstance(text, tuple) and text[0] == "freeze":
+            # A stopped program answers nobody: the names clicked before
+            # it goes on again are found while it still runs.
+            for later in range(index + 1, len(points)):
+                if isinstance(points[later][2], tuple) and points[later][2][0] == "thaw":
+                    break
+                if isinstance(points[later][0], str):
+                    named = points[later][0]
+                    found = named_point(named[1:])
+                    print(f"found {named[1:]} at {found[0]},{found[1]}" if found[0] is not None
+                          else f"no control named {named[1:]}")
+                    points[later] = (*found, points[later][2])
         if isinstance(at, str):
             named = at
             at, y = named_point(named[1:])
@@ -299,6 +321,9 @@ def main():
                 print(f"no control named {named[1:]}")
                 continue
             print(f"found {named[1:]} at {at},{y}")
+        elif os.environ.get("CLICK_NAME_POINTS") and isinstance(text, str):
+            # Which control a point is on, for moving a test to names.
+            print(f"point {at},{y} is on {point_name(at, y)}")
         if isinstance(text, tuple) and text[0] == "wheel":
             # The wheel turned with a key held through it (D472).
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
