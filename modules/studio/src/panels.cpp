@@ -1,3 +1,4 @@
+#include "hints.h"
 #include "shell.h"
 
 #include <algorithm>
@@ -560,8 +561,13 @@ void ShellParticipant::showEntity(std::size_t at) {
                     text = names_[static_cast<std::size_t>(kAt - entities_.begin())];
                 }
             }
-            // A number naming a declared asset shows the asset (D455).
-            if (kEach.kind == "unsigned") {
+            // A labelled number by its label and a color as #RRGGBBAA
+            // (D784); else a number naming a declared asset shows the
+            // asset (D455).
+            const Catalog::Field kType = kEach.type.value_or(Catalog::Field{.name = kEach.name, .kind = kEach.kind});
+            if (kType.color || !kType.labels.empty()) {
+                text = shownAs(kType, text);
+            } else if (kEach.kind == "unsigned") {
                 if (const Asset* held = assetHeld(assets_, text); held != nullptr) {
                     text = assetShown(*held);
                 }
@@ -571,6 +577,21 @@ void ShellParticipant::showEntity(std::size_t at) {
                 return;
             }
             componentRows_.push_back(line->first);
+            // Its unit and range beside it, and a color's swatch.
+            if (const std::string kHint = hintText(kType); !kHint.empty()) {
+                if (auto hint = box(line->first, ui::Layout{.shrink = 0}, 0); hint.has_value()) {
+                    static_cast<void>(words(*hint, kHint, kQuiet, 13));
+                }
+            }
+            if (const std::optional<std::uint32_t> kColor = kType.color ? colorOf(text) : std::nullopt;
+                kColor.has_value()) {
+                if (auto swatch = box(line->first,
+                                      ui::Layout{.width = ui::pixels(18), .height = ui::pixels(18), .shrink = 0},
+                                      *kColor);
+                    swatch.has_value()) {
+                    static_cast<void>(tree_->setName(*swatch, kEach.name + " swatch"));
+                }
+            }
             // An instance's own value, which it may drop for its source's.
             if (brought_[at] && kEach.text.has_value() && catalog_.offers("scene.revert_field")) {
                 static_cast<void>(action(line->first,
@@ -580,8 +601,11 @@ void ShellParticipant::showEntity(std::size_t at) {
                                                       .field = kEach.name,
                                                       .done = kEach.name + " reverted"}));
             }
-            fields_.push_back(
-                FieldRow{.value = line->second, .component = kComponent, .field = kEach.name, .kind = kEach.kind});
+            fields_.push_back(FieldRow{.value = line->second,
+                                       .component = kComponent,
+                                       .field = kEach.name,
+                                       .kind = kEach.kind,
+                                       .type = kType});
         }
     }
     if (catalog_.offers("scene.add_component")) {

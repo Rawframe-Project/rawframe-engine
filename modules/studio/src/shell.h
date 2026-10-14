@@ -128,6 +128,8 @@ struct FieldRow {
     std::string component;
     std::string field;
     std::string kind;
+    /// The catalog's field, its hints with it (D784).
+    Catalog::Field type{};
 };
 
 /// A button on a component or a field and the operation it asks: Remove,
@@ -421,6 +423,9 @@ private:
     /// said under both; closed again if open.
     void openPreferences();
     void closePreferences();
+
+    /// The values `row`'s field is chosen from, in a list under it (D784).
+    void showChoices(const FieldRow& row, const std::vector<std::string>& choices);
 
     /// A press in the Preferences dialog, taken whole; false for a press
     /// outside it.
@@ -783,6 +788,9 @@ private:
     /// command's own keys, and the editor's command as Studio's settings
     /// give it (D782).
     std::optional<ui::Node> dialog_;
+    /// A field's list of values while open, and the field (D784).
+    std::vector<std::pair<ui::Node, std::string>> choiceRows_;
+    std::optional<FieldRow> choosing_;
     std::vector<FieldRow> shortcutFields_;
     std::optional<FieldRow> editorField_;
     ui::Node dialogClose_{};

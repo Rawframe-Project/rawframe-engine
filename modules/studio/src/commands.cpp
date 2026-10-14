@@ -249,6 +249,39 @@ void ShellParticipant::closePopup() {
     popup_.reset();
     menuOpen_.reset();
     popupRows_.clear();
+    choiceRows_.clear();
+    choosing_.reset();
+}
+
+void ShellParticipant::showChoices(const FieldRow& edited, const std::vector<std::string>& choices) {
+    closePopup();
+    auto popup = box(root_,
+                     ui::Layout{.width = ui::pixels(200),
+                                .direction = ui::Direction::Column,
+                                .gap = 2,
+                                .padding = {4, 4, 4, 4},
+                                .placement = {.absolute = true}},
+                     kHeaderFill);
+    if (!popup.has_value() ||
+        !tree_
+             ->setPopup(*popup,
+                        ui::Popup{.anchor = edited.value, .side = ui::Popup::Side::Below, .gap = 2, .margin = 4})
+             .has_value()) {
+        return;
+    }
+    static_cast<void>(tree_->setRole(*popup, ui::Role::Group));
+    static_cast<void>(tree_->setName(*popup, edited.field + " choices"));
+    popup_ = *popup;
+    choosing_ = edited;
+    // The value it has now marked.
+    const std::string kNow{tree_->textOf(edited.value)};
+    for (const std::string& kChoice : choices) {
+        auto line = row(*popup, kChoice, kText, kChoice == kNow ? kChosen : kRow, true);
+        if (!line.has_value()) {
+            return;
+        }
+        choiceRows_.emplace_back(*line, kChoice);
+    }
 }
 
 } // namespace rawframe::studio

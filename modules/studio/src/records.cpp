@@ -1,5 +1,7 @@
 #include "records.h"
 
+#include "hints.h"
+
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -642,6 +644,7 @@ Catalog catalogOf(std::string_view reply) {
             if (fieldName != nullptr && fieldName->text() != nullptr) {
                 made.fields.push_back(
                     {*fieldName->text(), kind != nullptr && kind->text() != nullptr ? *kind->text() : std::string{}});
+                readHints(field, made.fields.back());
             }
         }
         catalog.components.push_back(std::move(made));
@@ -689,7 +692,7 @@ std::vector<FieldShown> fieldsShown(const Catalog::Component* type, const Value*
     std::vector<FieldShown> shownFields;
     if (type != nullptr) {
         for (const Catalog::Field& kField : type->fields) {
-            shownFields.push_back({kField.name, kField.kind, std::nullopt});
+            shownFields.push_back({kField.name, kField.kind, std::nullopt, kField});
         }
     }
     for (const Value& each :
@@ -701,7 +704,7 @@ std::vector<FieldShown> fieldsShown(const Catalog::Component* type, const Value*
         }
         auto found = std::ranges::find(shownFields, *name->text(), &FieldShown::name);
         if (found == shownFields.end()) {
-            shownFields.push_back({*name->text(), {}, std::nullopt});
+            shownFields.push_back({*name->text(), {}, std::nullopt, std::nullopt});
             found = std::prev(shownFields.end());
         }
         found->text = value != nullptr ? shown(*value) : std::string{};

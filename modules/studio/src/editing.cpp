@@ -1,3 +1,4 @@
+#include "hints.h"
 #include "shell.h"
 
 #include <algorithm>
@@ -76,6 +77,15 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         if (kAt < sceneRows_.size()) {
             node = sceneRows_[kAt];
         }
+    }
+    // A field's value chosen from its list (D784).
+    if (const auto kChoice = std::ranges::find(choiceRows_, node, &std::pair<ui::Node, std::string>::first);
+        kChoice != choiceRows_.end() && choosing_.has_value()) {
+        const FieldRow kChosenField = *choosing_;
+        const std::string kName = kChoice->second;
+        closePopup();
+        apply(kChosenField, kName);
+        return;
     }
     // A menu's or the matches' row does its command, a menu's button opens
     // its menu, the palette's field takes the keyboard, and any other press
@@ -308,6 +318,11 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         if (kConnecting.has_value() && kFieldAt->role == FieldRow::Role::GraphInput) {
             endEdit();
             connectGraphInput(*kFieldAt, *kConnecting);
+        } else if (const std::vector<std::string> kChoices = choicesOf(kFieldAt->type);
+                   kFieldAt->role == FieldRow::Role::Field && !kChoices.empty()) {
+            // A field of a few values is chosen, not typed (D784).
+            endEdit();
+            showChoices(*kFieldAt, kChoices);
         } else {
             beginEdit(*kFieldAt);
         }
@@ -513,7 +528,9 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
             done = row.field + " set to " + text;
         }
     } else {
-        std::optional<Value> kValue = typedValue(row.kind, text);
+        // A label or a color typed as the number it stands for (D784).
+        const std::string kTyped = typedAs(row.type, text);
+        std::optional<Value> kValue = typedValue(row.kind, kTyped);
         // An unsigned field takes an asset by its name, as its identity.
         std::string why;
         const std::optional<Asset> kAsset =
@@ -533,6 +550,10 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
         operation.add("field", Value::string(row.field));
         operation.add("value", *kValue);
         done = row.field + " set to " + text;
+        // Past its range is said, not stopped (D783).
+        if (pastRange(row.type, kTyped)) {
+            done += ", past " + hintText(row.type);
+        }
     }
     commit(std::move(operation), done, entity_);
 }

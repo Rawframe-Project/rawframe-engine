@@ -1,0 +1,44 @@
+#pragma once
+
+// A field's typed control (D784): what the game and the engine tell its
+// authors of it (D783), as `authoring.describe` gives it, made into what
+// the Inspector shows and back into what an author types.
+
+#include "rawframe/document/json.h"
+#include "records.h"
+
+#include <optional>
+#include <string>
+#include <string_view>
+
+namespace rawframe::studio {
+
+/// `field`'s hints and cases, as a described field gives them, into `into`.
+void readHints(const document::Value& field, Catalog::Field& into);
+
+/// A value's text as the Inspector shows it: a labelled number by its
+/// label, a color as `#RRGGBBAA`, else as it is.
+[[nodiscard]] std::string shownAs(const Catalog::Field& type, std::string_view text);
+
+/// What an author typed as the field's value text: a label's number, a
+/// color's `#RRGGBBAA` or `#RRGGBB` (opaque) as its number, else as typed.
+[[nodiscard]] std::string typedAs(const Catalog::Field& type, std::string_view typed);
+
+/// What is said beside the field: its unit and its range, as `m, 4 to 100`,
+/// or nothing.
+[[nodiscard]] std::string hintText(const Catalog::Field& type);
+
+/// Whether the number `text` is outside the field's range, which an author
+/// is told and not stopped by.
+[[nodiscard]] bool pastRange(const Catalog::Field& type, std::string_view text);
+
+/// The values the field is chosen from, as their names: a case field's
+/// cases, a labelled number's labels, or true and false; none for a field
+/// typed into.
+[[nodiscard]] std::vector<std::string> choicesOf(const Catalog::Field& type);
+
+/// A color's number as its four bytes, red first, for a swatch; none for
+/// text that is not one.
+[[nodiscard]] std::optional<std::uint32_t> colorOf(std::string_view text);
+
+} // namespace rawframe::studio

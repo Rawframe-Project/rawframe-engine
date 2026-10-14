@@ -264,6 +264,16 @@ struct Catalog {
         /// Its kind as a read value's key names it (`real`, `unsigned`...),
         /// empty where the catalog has none.
         std::string kind;
+        /// A case field's cases, and what the game and the engine tell its
+        /// authors of a number field (D783): the least and most it should
+        /// take, its unit, whether it is a color, and names for some of its
+        /// values (see hints.h).
+        std::vector<std::string> cases;
+        std::optional<double> least;
+        std::optional<double> most;
+        std::string unit;
+        bool color = false;
+        std::vector<std::pair<std::int64_t, std::string>> labels;
     };
     struct Component {
         std::string id;
@@ -290,6 +300,8 @@ struct FieldShown {
     std::string name;
     std::string kind;
     std::optional<std::string> text;
+    /// The catalog's field, where it knows it (D784).
+    std::optional<Catalog::Field> type;
 };
 
 /// A component's fields as `read_entity` gave them (`fields`, may be
