@@ -67,10 +67,11 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"hierarchyWidth\": 460,[ \n]*\"inspectorWidth\": 460,[ \n]*\"dockHeight\": 36[0-9].*\"code\":\"studio_layout\"[^\n]*\"resized\":3,\"hierarchyWidth\":460,\"inspectorWidth\":460,\"dockHeight\":36[0-9]}.*\"exit\":\"clean_stop\"")
-    # And the sizes kept read back as Studio starts (D779), from a document
-    # it is given and does not write, nothing being dragged.
+    # And the sizes kept read back as Studio starts (D779), from a copy of
+    # a document, nothing being dragged: Studio writes its preferences as it
+    # opens a game (D781), never the checked-in one.
     add_test(NAME studio_keeps_layout
-             COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.preferences = ${CMAKE_CURRENT_SOURCE_DIR}/tests/layout.preferences"
+             COMMAND ${CMAKE_COMMAND} -E env STUDIO_PREFERENCES=${CMAKE_CURRENT_SOURCE_DIR}/tests/layout.preferences
                      ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game level.scene @level.scene wait=2
@@ -79,6 +80,42 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"code\":\"studio_layout\"[^\n]*\"resized\":0,\"hierarchyWidth\":420,\"inspectorWidth\":300,\"dockHeight\":300}.*\"exit\":\"clean_stop\"")
+    # Studio with no game starts on its start screen (D781): a game made
+    # from the starter template under the name typed, by the function
+    # rawframe-author new runs, and opened, kept first among the games
+    # opened last.
+    add_test(NAME studio_starts
+             COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.preferences = {work}/studio.preferences"
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     none none @starter-3d "@new game#2:mygame" "until=studio_said,status=\"opened mygame.game" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_starts PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"recent\": \\[[ \n]*\"[^\"]*/games/mygame/mygame.game\".*\"code\":\"studio_summary\"[^\n]*\"scenes\":[1-9],.*\"code\":\"studio_start\"[^\n]*\"made\":1,\"game\":\"mygame.game\",\"recent\":1}")
+    # A game opened last opened from the start screen, one no longer there
+    # not offered; and one opened by its description's path (D781).
+    add_test(NAME studio_opens_recent
+             COMMAND ${CMAKE_COMMAND} -E env STUDIO_PREFERENCES=${CMAKE_CURRENT_SOURCE_DIR}/tests/recent.preferences
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     none none "@starter.game  templates/starter-3d" "until=studio_said,status=\"opened starter.game" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_opens_recent PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"code\":\"studio_summary\"[^\n]*\"scenes\":[1-9],.*\"code\":\"studio_start\"[^\n]*\"made\":0,\"game\":\"starter.game\",\"recent\":2}")
+    add_test(NAME studio_opens
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     none none "@open#2:templates/nothing.game" "until=studio_said,status=\"templates/nothing.game is not"
+                     "@open#2:templates/starter-3d/starter.game" "until=studio_said,status=\"opened starter.game" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_opens PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"code\":\"studio_summary\"[^\n]*\"scenes\":[1-9],.*\"code\":\"studio_start\"[^\n]*\"made\":0,\"game\":\"starter.game\"")
     # Studio's commands (D777): ground renamed, then undone by Control Z,
     # redone through the palette's search, undone again from the Edit
     # menu, and deleted by the Delete key with no field holding the

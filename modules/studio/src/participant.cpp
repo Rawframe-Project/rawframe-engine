@@ -27,18 +27,16 @@ result::Status misconfigured(std::string_view why) {
 
 result::Status ShellParticipant::load(composition::ParticipantContext& context) {
     const composition::Configuration& configuration = context.configuration();
+    // Without a game, Studio starts on its start screen (D781).
     const auto kGame = configuration.path("studio.game");
-    if (!kGame.has_value()) {
-        return misconfigured("Studio needs studio.game, the game description its session reads");
-    }
-    const std::filesystem::path kDescription{std::string{*kGame}};
-    const std::filesystem::path kRoot{
-        std::string{configuration.path("studio.root").value_or(kDescription.parent_path().string())}};
     const auto kEndpoint = configuration.text("studio.preview.endpoint");
     const auto kPin = configuration.path("studio.preview.pin_file");
     const auto kToken = configuration.path("studio.preview.token_file");
     if (kEndpoint.has_value() != kPin.has_value() || kEndpoint.has_value() != kToken.has_value()) {
         return misconfigured("a preview needs studio.preview.endpoint, pin_file, and token_file together");
+    }
+    if (kEndpoint.has_value() && !kGame.has_value()) {
+        return misconfigured("a preview is of the game studio.game names");
     }
     if (kEndpoint.has_value()) {
         preview_ = Preview{std::string{*kEndpoint}, std::string{*kPin}, std::string{*kToken}};
@@ -50,30 +48,24 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         return misconfigured("playing needs studio.play.server and studio.play.client together");
     }
     if (kPlayServer.has_value()) {
-        std::error_code error;
-        play_ = PlaySettings{
-            .server = std::string{*kPlayServer},
-            .client = std::string{*kPlayClient},
-            .game = std::filesystem::absolute(kDescription, error),
-            .serverSettings = std::string{configuration.path("studio.play.server_settings").value_or("")},
-            .clientSettings = std::string{configuration.path("studio.play.client_settings").value_or("")},
-            // The game's own play directory, where a debugger given the game
-            // finds it (D462).
-            .directory = std::string{configuration.path("studio.play.directory")
-                                         .value_or(authoring_session::playDirectoryOf(kDescription).string())}};
+        play_ =
+            PlaySettings{.server = std::string{*kPlayServer},
+                         .client = std::string{*kPlayClient},
+                         .serverSettings = std::string{configuration.path("studio.play.server_settings").value_or("")},
+                         .clientSettings = std::string{configuration.path("studio.play.client_settings").value_or("")}};
+        playDirectory_ = std::string{configuration.path("studio.play.directory").value_or("")};
     }
     // The cook tool: named, or beside Studio, where an export puts it; the
     // content goes where the game plays (D502).
     cookTool_ = std::string{configuration.path("studio.cook").value_or(process::besideSelf("rawframe-cook").string())};
-    cookAt_ = play_.has_value() ? play_->directory : authoring_session::playDirectoryOf(kDescription);
-    if (play_.has_value()) {
-        play_->content = cookAt_ / "content";
-    }
-    session_ = std::make_unique<authoring_session::Session>(kDescription, kRoot, cookTool_);
-    description_ = kDescription;
-    sceneRoot_ = kRoot;
-    // Studio's own preferences, the docks' sizes, where `studio.preferences`
-    // keeps them (D779); a file that does not read leaves the defaults.
+    // The templates a new game is made from, and where new games go:
+    // named, or beside Studio, where its package puts them (D781).
+    templates_ =
+        std::string{configuration.path("studio.templates").value_or(process::besideSelf("templates").string())};
+    projects_ = std::string{configuration.path("studio.projects").value_or(process::besideSelf("games").string())};
+    // Studio's own preferences, the docks' sizes and the games opened last,
+    // where `studio.preferences` keeps them (D779); a file that does not
+    // read leaves the defaults.
     if (const auto kKept = configuration.path("studio.preferences"); kKept.has_value()) {
         preferencesFile_ = *kKept;
         if (std::FILE* file = std::fopen(preferencesFile_.string().c_str(), "rb")) {
@@ -86,10 +78,12 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     // VS Code by default; any editor that opens a file at a line by its
     // arguments (ADR-0066, D453).
     editor_ = std::string{configuration.text("studio.editor").value_or("code --goto {file}:{line}:{column}")};
-    // A game that does not read is shown so, its diagnostic opened in the
-    // author's editor, and read again when asked.
-    static_cast<void>(openGame());
-    title_ = "Rawframe Studio  " + kDescription.filename().string();
+    title_ = "Rawframe Studio";
+    if (kGame.has_value()) {
+        const std::filesystem::path kDescription{std::string{*kGame}};
+        settle(kDescription,
+               std::string{configuration.path("studio.root").value_or(kDescription.parent_path().string())});
+    }
     if (context.has(view::kUiPointing.name)) {
         RAWFRAME_TRY_ASSIGN(pointing_, context.capability(view::kUiPointing));
     }
@@ -107,6 +101,38 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     RAWFRAME_TRY_ASSIGN(font_, tree_->addFont(kSanitized));
     RAWFRAME_TRY(tree_->setDefaultFont(font_));
     return build();
+}
+
+void ShellParticipant::settle(const std::filesystem::path& description, const std::filesystem::path& root) {
+    std::error_code error;
+    if (play_.has_value()) {
+        play_->game = std::filesystem::absolute(description, error);
+        // The game's own play directory, where a debugger given the game
+        // finds it (D462).
+        play_->directory = playDirectory_.empty() ? authoring_session::playDirectoryOf(description) : playDirectory_;
+    }
+    cookAt_ = play_.has_value() ? play_->directory : authoring_session::playDirectoryOf(description);
+    if (play_.has_value()) {
+        play_->content = cookAt_ / "content";
+    }
+    session_ = std::make_unique<authoring_session::Session>(description, root, cookTool_);
+    description_ = description;
+    sceneRoot_ = root;
+    // A game that does not read is shown so, its diagnostic opened in the
+    // author's editor, and read again when asked.
+    static_cast<void>(openGame());
+    title_ = "Rawframe Studio  " + description.filename().string();
+    // Kept by its whole path, once however it was named before.
+    const auto kWhole = [](const std::filesystem::path& path) {
+        std::error_code ignored;
+        return std::filesystem::absolute(path, ignored).lexically_normal().generic_string();
+    };
+    const std::string kKept = kWhole(description);
+    std::erase_if(preferences_.recent, [&](const std::string& each) {
+        return kWhole(each) == kKept;
+    });
+    preferences_ = opened(preferences_, kKept);
+    keepPreferences();
 }
 
 bool ShellParticipant::openGame() {
@@ -279,7 +305,9 @@ void ShellParticipant::stop() noexcept {
     }
     // Ending lets a preview go, the player's camera given back (D433).
     bool ended = false;
-    static_cast<void>(session_->answer(R"({"kind":"authoring.end","id":0})", ended));
+    if (session_ != nullptr) {
+        static_cast<void>(session_->answer(R"({"kind":"authoring.end","id":0})", ended));
+    }
     emitter_.log(diagnostics::Severity::Info,
                  kSummary,
                  "what Studio showed",
@@ -324,6 +352,14 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("hierarchyWidth", static_cast<std::int64_t>(preferences_.hierarchyWidth)),
                   diagnostics::field("inspectorWidth", static_cast<std::int64_t>(preferences_.inspectorWidth)),
                   diagnostics::field("dockHeight", static_cast<std::int64_t>(preferences_.dockHeight))});
+    // And what the start screen did (D781): the games made from templates,
+    // the game Studio ended on, if any, and the games kept as opened last.
+    emitter_.log(diagnostics::Severity::Info,
+                 kStartScreen,
+                 "what Studio's start screen did",
+                 {diagnostics::field("made", made_),
+                  diagnostics::field("game", session_ != nullptr ? description_.filename().string() : std::string{}),
+                  diagnostics::field("recent", static_cast<std::uint64_t>(preferences_.recent.size()))});
 }
 
 composition::CapabilityObject ShellParticipant::provide(std::string_view capability) noexcept {

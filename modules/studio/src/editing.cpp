@@ -6,6 +6,10 @@
 namespace rawframe::studio {
 
 std::string ShellParticipant::ask(const Value& record) {
+    // On the start screen there is no game to ask of (D781).
+    if (session_ == nullptr) {
+        return {};
+    }
     bool ended = false;
     ++records_;
     return session_->answer(document::writeCompact(record), ended);
@@ -54,6 +58,11 @@ bool ShellParticipant::beforePress() {
 void ShellParticipant::pressOn(ui::Node node, bool moving) {
     // An output pressed waits for the input to connect (D733).
     const std::optional<std::pair<std::string, std::string>> kConnecting = std::exchange(connecting_, std::nullopt);
+    // The start screen's own presses (D781).
+    if (session_ == nullptr) {
+        pressStart(node);
+        return;
+    }
     // A document's tab is pressed as its row in Assets is (D776).
     if (const auto kTab = std::ranges::find(tabRows_, node); kTab != tabRows_.end()) {
         const auto kListed =
@@ -114,21 +123,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (broken_.has_value() && node == retryNode_) {
         // Read again; shown whole as it now reads, or still as it does not.
         const bool kOpened = openGame();
-        // The window's access goes with the tree it read (D575).
-        if (seat_ != nullptr) {
-            seat_->leave();
-        }
-        // The dock's pane not shown is not under the root.
-        for (const ui::Node kPane : {scenesColumn_, historyColumn_, consoleColumn_}) {
-            if (tree_->contains(kPane)) {
-                static_cast<void>(tree_->remove(kPane));
-            }
-        }
-        static_cast<void>(tree_->remove(root_));
-        static_cast<void>(build());
-        if (seat_ != nullptr) {
-            static_cast<void>(seat_->seat(*tree_, root_));
-        }
+        rebuild();
         if (kOpened) {
             say("the game reads");
         }
@@ -379,6 +374,10 @@ void ShellParticipant::take(const view::Typing& typing) {
             place(kTyped);
         } else if (kEdited.role == FieldRow::Role::NewScene) {
             makeScene(kTyped);
+        } else if (kEdited.role == FieldRow::Role::NewGame) {
+            makeGame(kTyped);
+        } else if (kEdited.role == FieldRow::Role::OpenGame) {
+            chooseGame(std::filesystem::path{kTyped});
         } else if (kEdited.role == FieldRow::Role::Find) {
             find_ = kTyped;
             refresh(entity_.empty() ? std::nullopt : std::optional<std::string>{entity_});
@@ -388,6 +387,9 @@ void ShellParticipant::take(const view::Typing& typing) {
     } else if (kLeft == view::TypingKey::Dismiss) {
         const FieldRow::Role kRole = editing_->role;
         endEdit();
+        if (kRole == FieldRow::Role::NewGame || kRole == FieldRow::Role::OpenGame) {
+            return;
+        }
         if (kRole == FieldRow::Role::View) {
             showViewText();
         } else if (kRole == FieldRow::Role::NewScene) {

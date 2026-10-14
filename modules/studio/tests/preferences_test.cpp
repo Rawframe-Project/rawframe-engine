@@ -37,3 +37,19 @@ RAWFRAME_TEST(ADocumentThatIsNotPreferencesIsNone) {
     const auto kSome = preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"dockHeight":300})");
     RAWFRAME_EXPECT(kSome.has_value() && kSome->hierarchyWidth == 360 && kSome->dockHeight == 300);
 }
+
+RAWFRAME_TEST(TheGamesOpenedAreKeptLatestFirst) {
+    Preferences kept;
+    for (int each = 0; each < 10; ++each) {
+        kept = opened(kept, "game" + std::to_string(each) + ".game");
+    }
+    kept = opened(kept, "game5.game");
+    RAWFRAME_EXPECT(kept.recent.size() == kRecentGames);
+    RAWFRAME_EXPECT(kept.recent.front() == "game5.game" && kept.recent[1] == "game9.game");
+    RAWFRAME_EXPECT(kept.recent.back() == "game2.game");
+    const auto kRead = preferencesOf(writtenPreferences(kept));
+    RAWFRAME_EXPECT(kRead.has_value() && *kRead == kept);
+    // A name that is not a string is not one.
+    RAWFRAME_EXPECT(
+        !preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"recent":[3]})").has_value());
+}

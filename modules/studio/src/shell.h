@@ -45,6 +45,7 @@ namespace rawframe::studio {
 
 inline constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"};
 inline constexpr diagnostics::EventIdentity kLayout{"studio", "studio_layout"};
+inline constexpr diagnostics::EventIdentity kStartScreen{"studio", "studio_start"};
 inline constexpr diagnostics::EventIdentity kShown{"studio", "studio_shown"};
 /// Studio's window read by assistive technology (D575), or why not.
 inline constexpr diagnostics::EventIdentity kAccessible{"studio", "studio_accessibility_ready"};
@@ -111,7 +112,10 @@ struct FieldRow {
         /// A material graph's node's input, `field` its name (D730).
         GraphInput,
         /// The command palette's search (D777).
-        Palette
+        Palette,
+        /// The start screen's new game's name, and a game to open (D781).
+        NewGame,
+        OpenGame
     };
     ui::Node value{};
     Role role = Role::Field;
@@ -396,6 +400,35 @@ private:
 
     /// The game that does not read: why, where, and what to do.
     result::Status showBroken(ui::Node body);
+
+    /// Studio on `description`, its scenes under `root`: a session over it,
+    /// where it plays and cooks, and the game kept first among those opened
+    /// last (D781).
+    void settle(const std::filesystem::path& description, const std::filesystem::path& root);
+
+    /// The start screen, while Studio has no game (D781): the games opened
+    /// last, a new one from a template, and one to open by its path.
+    result::Status showStart(ui::Node body);
+
+    /// A press on the start screen: a template chosen, a game opened, or a
+    /// field begun.
+    void pressStart(ui::Node node);
+
+    /// Studio on the game `description` names, the tree built again for it;
+    /// said so, and left on the start screen, when it is not a game.
+    void chooseGame(const std::filesystem::path& description);
+
+    /// A new game named `name` from the chosen template, where new games
+    /// go, by the same function as `rawframe-author new` (D780), and chosen.
+    void makeGame(const std::string& name);
+
+    /// The tree built again, as the game or Studio's state now is, and
+    /// given to assistive technology afresh.
+    void rebuild();
+
+    /// The preferences written where `studio.preferences` keeps them, if
+    /// it names a file.
+    void keepPreferences();
 
     /// The chosen scene's history in the bottom dock's History (D454,
     /// D776): each entry a row, the undone quiet.
@@ -707,6 +740,20 @@ private:
     std::optional<FieldRow> findField_;
     std::uint64_t searched_ = 0;
     std::optional<PlaySettings> play_;
+    /// Where a game plays as Studio's settings name it; empty for each
+    /// game's own (D462).
+    std::filesystem::path playDirectory_;
+    /// The start screen's (D781): the templates' directory and where new
+    /// games go, the templates found and the chosen one, the games opened
+    /// last as rows, and its fields.
+    std::filesystem::path templates_;
+    std::filesystem::path projects_;
+    std::vector<std::pair<ui::Node, std::filesystem::path>> templateRows_;
+    std::size_t templateAt_ = 0;
+    std::vector<std::pair<ui::Node, std::filesystem::path>> recentRows_;
+    std::optional<FieldRow> newGameField_;
+    std::optional<FieldRow> openGameField_;
+    std::uint64_t made_ = 0;
     std::optional<Play> playing_;
     std::optional<Play> stopping_;
     ui::Node playNode_{};

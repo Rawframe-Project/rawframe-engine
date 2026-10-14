@@ -73,6 +73,9 @@ void ShellParticipant::cookOrStop() {
 }
 
 void ShellParticipant::hearCook() {
+    if (session_ == nullptr) {
+        return;
+    }
     for (const std::string& kLine : session_->poll()) {
         const Heard kHeard = heardOf(kLine);
         if (!cooking_.has_value() || kHeard.id != *cooking_ || kHeard.kind == Heard::Kind::None) {

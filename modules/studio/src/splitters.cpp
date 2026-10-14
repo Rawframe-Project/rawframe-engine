@@ -66,6 +66,10 @@ void ShellParticipant::releaseSplitter() {
     }
     resizing_.reset();
     ++resized_;
+    keepPreferences();
+}
+
+void ShellParticipant::keepPreferences() {
     if (preferencesFile_.empty()) {
         return;
     }

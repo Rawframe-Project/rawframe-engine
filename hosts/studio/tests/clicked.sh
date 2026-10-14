@@ -11,30 +11,46 @@
 # the repository root.
 #
 #   clicked.sh <rawframe-studio> <game description> <scene> <x>,<y>[:<text>] | @<name>[:<text>]...
+#
+# With `none` for the game and the scene, Studio starts on its start screen
+# with no game (D781), new games going to the test's own directory and the
+# engine's templates offered.
 set -uo pipefail
 
 here="$(dirname "$0")"
 work="$(mktemp -d)"
 source "$here/bus.sh"
 trap '[ -n "$bus" ] && kill "$bus" 2>/dev/null; rm -rf "$work"' EXIT
-cp -R "$(dirname "$2")" "$work/game"
+if [ "$2" != none ]; then
+    cp -R "$(dirname "$2")" "$work/game"
+fi
 # A test may change the copy's scene first: a sed expression in
 # STUDIO_SCENE_EDIT, as a scene authored against an older layout (D452).
-if [ -n "${STUDIO_SCENE_EDIT:-}" ]; then
+if [ -n "${STUDIO_SCENE_EDIT:-}" ] && [ "$2" != none ]; then
     sed -i "$STUDIO_SCENE_EDIT" "$work/game/$3"
 fi
 cat >"$work/studio.conf" <<CONF
 host.maximum_iterations = 7200
 host.iteration_rate = 120
 render.device = any
-studio.game = $work/game/$(basename "$2")
 CONF
+if [ "$2" = none ]; then
+    printf 'studio.templates = %s\nstudio.projects = %s\n' "$PWD/templates" "$work/games" >>"$work/studio.conf"
+else
+    printf 'studio.game = %s\n' "$work/game/$(basename "$2")" >>"$work/studio.conf"
+fi
 # And settings of its own, in STUDIO_SETTINGS, such as the editor it opens
 # a diagnostic in (D453), which says how it was opened in STUDIO_EDITED;
 # {work} in them is the test's own directory, where the preferences it
 # keeps go (D779).
 if [ -n "${STUDIO_SETTINGS:-}" ]; then
     printf '%s\n' "${STUDIO_SETTINGS//\{work\}/$work}" >>"$work/studio.conf"
+fi
+# Preferences to start from, in STUDIO_PREFERENCES, copied so Studio keeps
+# its own in the test's directory (D781).
+if [ -n "${STUDIO_PREFERENCES:-}" ]; then
+    cp "$STUDIO_PREFERENCES" "$work/studio.preferences"
+    printf 'studio.preferences = %s\n' "$work/studio.preferences" >>"$work/studio.conf"
 fi
 export STUDIO_EDITED="$work/edited"
 "$1" --config "$work/studio.conf" >"$work/log" 2>&1 &

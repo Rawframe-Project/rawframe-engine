@@ -105,17 +105,22 @@ result::Status ShellParticipant::build() {
     // The toolbar's commands at its end: Cook before Play, so Play, Undo,
     // and Redo keep their places (D502).
     RAWFRAME_TRY_ASSIGN(const ui::Node kEnd, box(kToolbar, ui::Layout{.alignItems = ui::Align::Center, .gap = 6}, 0));
-    if (!cookTool_.empty()) {
+    // The start screen has no game to cook, play, or undo in (D781).
+    if (session_ == nullptr) {
+        menus_.clear();
+    } else if (!cookTool_.empty()) {
         RAWFRAME_TRY_ASSIGN(cookNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
         RAWFRAME_TRY(pressWords(cookNode_, cooking_.has_value() ? "Stop" : "Cook", kText, 14));
     }
-    if (play_.has_value()) {
+    if (session_ != nullptr && play_.has_value()) {
         RAWFRAME_TRY_ASSIGN(playNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {12, 2, 10, 2}}, kRow));
         RAWFRAME_TRY(pressWords(playNode_, "Play", kText, 14));
     }
-    RAWFRAME_TRY_ASSIGN(undoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
-    RAWFRAME_TRY_ASSIGN(redoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
-    RAWFRAME_TRY(showHistory());
+    if (session_ != nullptr) {
+        RAWFRAME_TRY_ASSIGN(undoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
+        RAWFRAME_TRY_ASSIGN(redoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
+        RAWFRAME_TRY(showHistory());
+    }
     RAWFRAME_TRY_ASSIGN(
         const ui::Node kBody,
         box(root_, ui::Layout{.minHeight = ui::pixels(0), .direction = ui::Direction::Row, .grow = 1}, kBackground));
@@ -134,6 +139,9 @@ result::Status ShellParticipant::build() {
     popup_.reset();
     menuOpen_.reset();
     popupRows_.clear();
+    if (session_ == nullptr) {
+        return showStart(kBody);
+    }
     if (broken_.has_value()) {
         RAWFRAME_TRY(showBroken(kBody));
         return showMenus(kStart);
