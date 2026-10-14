@@ -47,13 +47,19 @@
 # failure: the wait it stands for was three minutes lost (D627). An argument `edit=`
 # and a file, the text in it to replace, and what with, separated by
 # colons, edits the file as an author would while the game plays (D634).
+# A point may be a control's name instead, `@` and the name as the program
+# gives it to assistive technology, `#n` after it for the n-th so named
+# (D774): found through the accessibility bus the test started
+# (AT_SPI_BUS_ADDRESS) by tools/atspi.py when its turn comes, since what
+# came before may have moved it, in the application CLICK_APPLICATION
+# names, rawframe-studio unless set.
 # Five seconds after, it stops the program whose pid its pid file holds
 # (D430), whose iterations only bound it, and waits for the process it
 # watches to end; half a second, where the last argument waited for a
 # record that came, since what the test asked for has been seen (D493).
 #
 # usage: click.py <watched pid> <log> <ready code> <pid file>
-#                 <x>,<y>[:<text>] | keys=<key>[,<key>...]
+#                 <x>,<y>[:<text>] | @<name>[#<n>][:<text>] | keys=<key>[,<key>...]
 #                 | wheel=<x>,<y>,<turns>[,<key>] | drag=<x>,<y>,<x>,<y>[,<key>]
 #                 | frozen=<key>[,<key>...] | quick=<key>[,<key>...]
 #                 | frozenclick=<x>,<y>:<text>
@@ -173,6 +179,22 @@ def brightness(x, display, root, at, y):
     return sum(values) / len(values)
 
 
+def named_point(name):
+    """The centre of the control called `name` (D774), waiting up to six
+    seconds for it to be shown; (None, None) if it never is."""
+    import atspi
+
+    address = os.environ.get("AT_SPI_BUS_ADDRESS", "")
+    application = os.environ.get("CLICK_APPLICATION", "rawframe-studio")
+    for _ in range(30):
+        owner = atspi.application(address, application) if address else None
+        point = atspi.centre(address, owner, name) if owner else None
+        if point is not None:
+            return point
+        time.sleep(0.2)
+    return None, None
+
+
 def main():
     pid = int(sys.argv[1])
     log = sys.argv[2]
@@ -223,6 +245,9 @@ def main():
             continue
         frozen = argument.startswith("frozenclick=")
         place, _, text = argument[len("frozenclick=") if frozen else 0:].partition(":")
+        if place.startswith("@"):
+            points.append((place, None, Frozen(text) if frozen else text))
+            continue
         points.append((*(int(side) for side in place.split(",")), Frozen(text) if frozen else text))
     x = ctypes.CDLL(ctypes.util.find_library("X11"))
     xtest = ctypes.CDLL("libXtst.so.6")
@@ -267,6 +292,13 @@ def main():
         seen = False
         if not alive(pid):
             break
+        if isinstance(at, str):
+            named = at
+            at, y = named_point(named[1:])
+            if at is None:
+                print(f"no control named {named[1:]}")
+                continue
+            print(f"found {named[1:]} at {at},{y}")
         if isinstance(text, tuple) and text[0] == "wheel":
             # The wheel turned with a key held through it (D472).
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)

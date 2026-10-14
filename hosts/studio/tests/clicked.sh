@@ -2,18 +2,25 @@
 # Studio clicked as an author would (D436, D437): opened on a copy of a
 # game, so what it writes is the copy's, and clicked at the points given
 # through XTest (tools/click.py) once it says it is shown; a point with
-# text types it into the field there and presses Enter. Prints the clicks,
+# text types it into the field there and presses Enter. A point may be a
+# control's name, `@Undo` (D774): Studio is read over a private
+# accessibility bus this script starts, where dbus-daemon exists. Prints the clicks,
 # whether the scene named last was written, and Studio's log. A machine with
 # no adapter the configuration allows skips, unless RAWFRAME_REQUIRE_GPU is
 # set. Run under an X server whose root window is black (Xvfb -br), from
 # the repository root.
 #
-#   clicked.sh <rawframe-studio> <game description> <scene> <x>,<y>[:<text>]...
+#   clicked.sh <rawframe-studio> <game description> <scene> <x>,<y>[:<text>] | @<name>[:<text>]...
 set -uo pipefail
 
 here="$(dirname "$0")"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+bus=""
+trap '[ -n "$bus" ] && kill "$bus" 2>/dev/null; rm -rf "$work"' EXIT
+if started="$(dbus-daemon --session --fork --print-address=1 --print-pid=1 2>/dev/null)"; then
+    export AT_SPI_BUS_ADDRESS="$(head -1 <<<"$started")"
+    bus="$(tail -1 <<<"$started")"
+fi
 cp -R "$(dirname "$2")" "$work/game"
 # A test may change the copy's scene first: a sed expression in
 # STUDIO_SCENE_EDIT, as a scene authored against an older layout (D452).
