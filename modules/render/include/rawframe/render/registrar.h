@@ -45,8 +45,9 @@ namespace rawframe::render {
 ///   render.height      its height (720)
 ///   render.read_every  one frame in this many is read back (60; 0 for
 ///                      none)
-///   render.capture     a TGA file the last picture read back is written to
-///                      when the World stops
+///   render.capture     a TGA file the last picture read back that holds
+///                      more than one color is written to when the World
+///                      stops
 ///   render.frame_rate  the most frames made a second, as a game's frame
 ///                      limit (0, as many as the Host's iterations; D495)
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;

@@ -435,7 +435,10 @@ private:
             mostCovered_ = std::max(mostCovered_, lastCovered_);
             lastColors_ = colorsOf(*pixels);
             mostColors_ = std::max(mostColors_, lastColors_);
-            if (capture_.has_value()) {
+            // A frame of one color, the target as cleared (a stopping
+            // host's last, once what drew in it has stopped), does not take
+            // the capture's place.
+            if (capture_.has_value() && lastColors_ > 1) {
                 last_ = std::move(*pixels);
                 capturedWidth_ = readWidth_;
                 capturedHeight_ = readHeight_;
