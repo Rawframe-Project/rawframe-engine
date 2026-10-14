@@ -26,6 +26,31 @@ std::optional<std::int64_t> numberOf(std::string_view digits) {
     return value;
 }
 
+/// Whether a path under the game is plain: letters, digits, `.`, `_`, `-`,
+/// and `/` between names, none of them `.` or `..`, so it cannot climb out.
+bool plainPath(std::string_view path) {
+    if (path.empty()) {
+        return false;
+    }
+    std::size_t start = 0;
+    while (start <= path.size()) {
+        const std::size_t kEnd = std::min(path.find('/', start), path.size());
+        const std::string_view kName = path.substr(start, kEnd - start);
+        if (kName.empty() || kName == "." || kName == "..") {
+            return false;
+        }
+        for (const char kChar : kName) {
+            const bool kPlain = (kChar >= 'a' && kChar <= 'z') || (kChar >= 'A' && kChar <= 'Z') ||
+                                (kChar >= '0' && kChar <= '9') || kChar == '.' || kChar == '_' || kChar == '-';
+            if (!kPlain) {
+                return false;
+            }
+        }
+        start = kEnd + 1;
+    }
+    return true;
+}
+
 std::string_view textOf(const Value* value) {
     return value != nullptr && value->text() != nullptr ? std::string_view{*value->text()} : std::string_view{};
 }
@@ -34,6 +59,10 @@ std::string_view textOf(const Value* value) {
 
 std::optional<Diagnostic> gamePlaceIn(std::string_view text) {
     for (std::size_t at = text.find("game/"); at != std::string_view::npos; at = text.find("game/", at + 1)) {
+        // Where a name starts: not the end of one, as in `mygame/`.
+        if (at > 0 && (plainPath(text.substr(at - 1, 1)) || text[at - 1] == '/')) {
+            continue;
+        }
         // `game/<path>:<line>:<column>`, the path ending at its first colon.
         const std::size_t kLineAt = text.find(':', at);
         const std::size_t kColumnAt = kLineAt == std::string_view::npos ? kLineAt : text.find(':', kLineAt + 1);
@@ -46,7 +75,7 @@ std::optional<Diagnostic> gamePlaceIn(std::string_view text) {
         }
         const auto kLine = numberOf(text.substr(kLineAt + 1, kColumnAt - kLineAt - 1));
         const auto kColumn = numberOf(text.substr(kColumnAt + 1, columnEnd - kColumnAt - 1));
-        if (kLine.has_value() && kColumn.has_value()) {
+        if (kLine.has_value() && kColumn.has_value() && plainPath(text.substr(at + 5, kLineAt - at - 5))) {
             return Diagnostic{.file = std::string{text.substr(at, kLineAt - at)},
                               .line = *kLine,
                               .column = *kColumn,

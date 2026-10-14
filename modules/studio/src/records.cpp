@@ -851,6 +851,31 @@ editorCommand(std::string_view command, const std::string& file, std::int64_t li
     return made;
 }
 
+std::optional<std::filesystem::path> gameFile(const std::filesystem::path& directory, std::string_view file) {
+    if (!file.starts_with("game/")) {
+        return std::nullopt;
+    }
+    const std::filesystem::path kNamed{std::string{file.substr(5)}};
+    if (kNamed.empty() || kNamed.is_absolute() || kNamed.has_root_name()) {
+        return std::nullopt;
+    }
+    std::error_code error;
+    const std::filesystem::path kRoot = std::filesystem::weakly_canonical(directory, error);
+    if (error) {
+        return std::nullopt;
+    }
+    const std::filesystem::path kResolved = std::filesystem::weakly_canonical(kRoot / kNamed, error);
+    if (error) {
+        return std::nullopt;
+    }
+    // Inside when the way from the game's directory to it never climbs.
+    const std::filesystem::path kWay = kResolved.lexically_relative(kRoot);
+    if (kWay.empty() || *kWay.begin() == ".." || kWay == ".") {
+        return std::nullopt;
+    }
+    return kResolved;
+}
+
 std::optional<std::filesystem::path> programOnPath(const std::string& program, std::string_view path) {
     if (program.find('/') != std::string::npos || program.find('\\') != std::string::npos) {
         return std::filesystem::path{program};

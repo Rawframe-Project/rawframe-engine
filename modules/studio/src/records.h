@@ -345,6 +345,13 @@ editorCommand(std::string_view command, const std::string& file, std::int64_t li
 /// Windows also with `.exe` or `.cmd` after it. None when nowhere.
 [[nodiscard]] std::optional<std::filesystem::path> programOnPath(const std::string& program, std::string_view path);
 
+/// The file `file` (`game/<path>`) names in the game whose description is
+/// in `directory`, resolved through any links, or none when it is not
+/// there: a path that climbs out, is absolute, or reaches outside through
+/// a link is not one of the game's files (D453, D778).
+[[nodiscard]] std::optional<std::filesystem::path> gameFile(const std::filesystem::path& directory,
+                                                            std::string_view file);
+
 /// Whether `program` is a batch file (`.cmd` or `.bat`, in any case),
 /// which Windows starts through cmd.exe, parsing its arguments again.
 [[nodiscard]] bool isBatch(const std::filesystem::path& program);

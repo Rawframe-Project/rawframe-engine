@@ -522,10 +522,13 @@ void ShellParticipant::create() {
 }
 
 void ShellParticipant::openEditor(const Diagnostic& at) {
-    std::error_code error;
-    const std::filesystem::path kFile =
-        std::filesystem::absolute(description_.parent_path() / at.file.substr(5), error);
-    const std::vector<std::string> kWords = editorCommand(editor_, kFile.string(), at.line, at.column);
+    // Only the game's own files: a place a log names may point anywhere.
+    const std::optional<std::filesystem::path> kFile = gameFile(description_.parent_path(), at.file);
+    if (!kFile.has_value()) {
+        say(at.file + " is not one of the game's files");
+        return;
+    }
+    const std::vector<std::string> kWords = editorCommand(editor_, kFile->string(), at.line, at.column);
     if (kWords.empty()) {
         return;
     }

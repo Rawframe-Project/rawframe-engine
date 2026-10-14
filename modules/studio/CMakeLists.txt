@@ -9,7 +9,7 @@ rawframe_module(NAME studio
 rawframe_embedded_file(TARGET rawframe_studio FILE "${CMAKE_CURRENT_SOURCE_DIR}/fonts/Inter-Regular.ttf"
                        HEADER studio_font.h SYMBOL kStudioFont)
 
-rawframe_module_tests(NAME studio SOURCES tests/records_test.cpp)
+rawframe_module_tests(NAME studio SOURCES tests/records_test.cpp tests/console_test.cpp)
 if(TARGET rawframe_studio_tests AND TARGET rawframe_process_child)
     # A program that ends at once on every system, for a played game whose
     # server ends as it starts (D501): the process tests' child, given an
