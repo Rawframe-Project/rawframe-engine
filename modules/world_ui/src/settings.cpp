@@ -22,17 +22,88 @@ std::unexpected<result::Error> refuse(std::string_view why) {
 
 } // namespace
 
+/// What the game's UI document `text` says (D619): which node is inside
+/// which, which typed words each shows, and what each presentation
+/// component starts as.
+result::Result<UiDocument>
+documentOf(const world_kest::GameDescription& game, const kest::Program& program, std::string_view text) {
+    UiDocument made;
+    std::vector<schema::ComponentTypeId> nodes;
+    std::vector<std::string_view> names;
+    for (const world_kest::GameComponent& component : game.components) {
+        if (world_kest::ofEngineType(component, "rawframe.ui.Node")) {
+            nodes.push_back(component.id);
+            names.push_back(component.name);
+        }
+    }
+    made.parents.resize(nodes.size());
+    auto document = ui::readDocument(text);
+    if (!document.has_value()) {
+        return std::unexpected<result::Error>{std::move(document).error()};
+    }
+    const auto kPresented = [&game](std::string_view component) {
+        return std::ranges::any_of(game.presentation, [component](const world_kest::GamePresentation& each) {
+            return std::ranges::contains(each.components, component);
+        });
+    };
+    for (const ui::DocumentNode& kNode : document->nodes) {
+        const auto kNamed = std::ranges::find(names, kNode.component);
+        if (kNamed == names.end()) {
+            return std::unexpected<result::Error>{
+                refuse("a UI document names a component that is not a rawframe.ui.Node")
+                    .error()
+                    .withContext("component", kNode.component)};
+        }
+        const auto kIndex = static_cast<std::size_t>(kNamed - names.begin());
+        if (kNode.parent.has_value()) {
+            // A parent comes before what is inside it, so is named.
+            made.parents[kIndex] = static_cast<std::size_t>(
+                std::ranges::find(names, document->nodes[*kNode.parent].component) - names.begin());
+        }
+        if (!kNode.shows.empty()) {
+            // What nodes show of typed words (D427): rawframe.ui.Typed's
+            // length, then its bytes, each laid out a byte.
+            const auto kTyped = program.layout("rawframe.ui.Typed");
+            if (!kTyped.has_value() || kTyped->size != sizeof(Typed) || kTyped->fields.size() < 2 ||
+                kTyped->fields[0].name != "length" || kTyped->fields[0].offset != offsetof(Typed, length) ||
+                kTyped->fields[1].offset != offsetof(Typed, bytes)) {
+                return refuse("the game's rawframe.ui.Typed is not as the engine reads it");
+            }
+            const auto kWords = std::ranges::find(game.components, kNode.shows, &world_kest::GameComponent::name);
+            if (kWords == game.components.end() || !world_kest::ofEngineType(*kWords, "rawframe.ui.Typed")) {
+                return std::unexpected<result::Error>{
+                    refuse("a UI node shows the words of a rawframe.ui.Typed component")
+                        .error()
+                        .withContext("component", kNode.shows)};
+            }
+            made.shows.resize(nodes.size());
+            made.shows[kIndex] = kWords->id;
+        }
+        constexpr ui::NodeFields kNought{};
+        if (std::memcmp(&kNode.fields, &kNought, sizeof kNought) != 0) {
+            // Only presentation attaches a component, so only one of
+            // its components starts as a document says.
+            if (!kPresented(kNode.component)) {
+                return std::unexpected<result::Error>{
+                    refuse("a UI document starts only the game's presentation components")
+                        .error()
+                        .withContext("component", kNode.component)};
+            }
+            made.starts.push_back(Start{.component = nodes[kIndex], .fields = kNode.fields});
+        }
+    }
+    return made;
+}
+
 /// The game's node components and their parents, and in `starts` what its
 /// UI document starts them as; none for a game without any.
 result::Result<std::optional<UiSettings>>
 settingsOf(const world_kest::GameFiles& files, const kest::Program& program, std::vector<Start>& starts) {
     const world_kest::GameDescription& kGame = files.description();
     UiSettings settings;
-    std::vector<std::string_view> names;
     for (const world_kest::GameComponent& component : kGame.components) {
         if (world_kest::ofEngineType(component, "rawframe.ui.Node")) {
             settings.nodes.push_back(component.id);
-            names.push_back(component.name);
         }
     }
     if (settings.nodes.empty()) {
@@ -108,65 +179,15 @@ settingsOf(const world_kest::GameFiles& files, const kest::Program& program, std
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());
-    // The UI document (D619): which node is inside which, which typed words
-    // each shows, and what each presentation component starts as.
     if (!kGame.ui.empty()) {
         RAWFRAME_TRY_ASSIGN(const std::string_view kText, files.document(kGame.ui));
-        auto document = ui::readDocument(kText);
+        auto document = documentOf(kGame, program, kText);
         if (!document.has_value()) {
             return std::unexpected<result::Error>{std::move(document).error().withContext("name", kGame.ui)};
         }
-        const auto kPresented = [&kGame](std::string_view component) {
-            return std::ranges::any_of(kGame.presentation, [component](const world_kest::GamePresentation& each) {
-                return std::ranges::contains(each.components, component);
-            });
-        };
-        for (const ui::DocumentNode& kNode : document->nodes) {
-            const auto kNamed = std::ranges::find(names, kNode.component);
-            if (kNamed == names.end()) {
-                return std::unexpected<result::Error>{
-                    refuse("a UI document names a component that is not a rawframe.ui.Node")
-                        .error()
-                        .withContext("component", kNode.component)};
-            }
-            const auto kIndex = static_cast<std::size_t>(kNamed - names.begin());
-            if (kNode.parent.has_value()) {
-                // A parent comes before what is inside it, so is named.
-                settings.parents[kIndex] = static_cast<std::size_t>(
-                    std::ranges::find(names, document->nodes[*kNode.parent].component) - names.begin());
-            }
-            if (!kNode.shows.empty()) {
-                // What nodes show of typed words (D427): rawframe.ui.Typed's
-                // length, then its bytes, each laid out a byte.
-                const auto kTyped = program.layout("rawframe.ui.Typed");
-                if (!kTyped.has_value() || kTyped->size != sizeof(Typed) || kTyped->fields.size() < 2 ||
-                    kTyped->fields[0].name != "length" || kTyped->fields[0].offset != offsetof(Typed, length) ||
-                    kTyped->fields[1].offset != offsetof(Typed, bytes)) {
-                    return refuse("the game's rawframe.ui.Typed is not as the engine reads it");
-                }
-                const auto kWords = std::ranges::find(kGame.components, kNode.shows, &world_kest::GameComponent::name);
-                if (kWords == kGame.components.end() || !world_kest::ofEngineType(*kWords, "rawframe.ui.Typed")) {
-                    return std::unexpected<result::Error>{
-                        refuse("a UI node shows the words of a rawframe.ui.Typed component")
-                            .error()
-                            .withContext("component", kNode.shows)};
-                }
-                settings.shows.resize(settings.nodes.size());
-                settings.shows[kIndex] = kWords->id;
-            }
-            constexpr ui::NodeFields kNought{};
-            if (std::memcmp(&kNode.fields, &kNought, sizeof kNought) != 0) {
-                // Only presentation attaches a component, so only one of
-                // its components starts as a document says.
-                if (!kPresented(kNode.component)) {
-                    return std::unexpected<result::Error>{
-                        refuse("a UI document starts only the game's presentation components")
-                            .error()
-                            .withContext("component", kNode.component)};
-                }
-                starts.push_back(Start{.component = settings.nodes[kIndex], .fields = kNode.fields});
-            }
-        }
+        settings.parents = std::move(document->parents);
+        settings.shows = std::move(document->shows);
+        starts = std::move(document->starts);
     }
     for (const world_kest::GameFont& kFont : kGame.fonts) {
         settings.fonts.push_back(kFont.id);
