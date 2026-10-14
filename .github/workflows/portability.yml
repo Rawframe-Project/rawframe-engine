@@ -211,7 +211,8 @@ jobs:
           mkdir -p findings
           # Each target as the check runs it (its longest input and its
           # seeds), searching for five minutes from a fresh seed instead of
-          # a fixed number of inputs.
+          # a fixed number of inputs. An input that takes past twenty seconds
+          # is a finding too: work that grows past its input's size (D764).
           ctest --test-dir out/clang-sanitize --show-only=json-v1 -R '_fuzz_' | python3 -c '
           import json, sys
           shard = int(sys.argv[1])
@@ -223,7 +224,7 @@ jobs:
             name="$(basename "${command[0]}")"
             mkdir -p "corpus/$name"
             echo "== $name"
-            (cd findings && "${command[@]}" -max_total_time=300 "../corpus/$name") </dev/null || status=1
+            (cd findings && "${command[@]}" -max_total_time=300 -timeout=20 "../corpus/$name") </dev/null || status=1
           done < fuzz.commands
           for finding in findings/*; do
             [ -f "$finding" ] && { echo "== $finding"; base64 -w0 "$finding"; echo; }
