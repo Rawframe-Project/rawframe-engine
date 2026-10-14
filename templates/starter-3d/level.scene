@@ -1,0 +1,18 @@
+{
+  "kind": "rawframe.scene",
+  "formatVersion": 1,
+  "schema": {
+    "starter.ground": "680baa2755a44d15"
+  },
+  "entities": [
+    {
+      "id": "8ee96339-f4d6-4dfe-8588-ded8f09fb6c6",
+      "name": "ground",
+      "components": {
+        "starter.ground": {
+          "side": 20
+        }
+      }
+    }
+  ]
+}

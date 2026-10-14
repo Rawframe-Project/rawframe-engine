@@ -23,6 +23,8 @@ mkdir -p "$into/games"
 cp "$tree/hosts/studio/rawframe-studio$exe" "$tree/hosts/cook/rawframe-cook$exe" \
     "$tree/hosts/dedicated_server/rawframe-server$exe" "$tree/hosts/client/rawframe-client$exe" \
     "$tree/hosts/author/rawframe-author$exe" "$into/"
+# The templates a new game is made from (D780).
+cp -R templates "$into/templates"
 for game in "$@"; do
     cp -R "games/$game" "$into/games/$game"
     cat >"$into/$game.conf" <<CONF

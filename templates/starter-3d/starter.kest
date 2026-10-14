@@ -1,0 +1,92 @@
+module starter
+
+// The starter game (D780): each player a box it moves about a ground with
+// its stick, the server moving it and keeping it on the ground; a client
+// draws each box and the ground where they are, seen from above the
+// ground's near edge. A new game made from it starts here.
+
+import controls
+import rawframe.model
+import rawframe.world
+
+// How far a box moves in a tick at a full stick, in meters.
+const SPEED: f64 = 0.1
+
+// A box's half size, and its color and the ground's (0xRRGGBBAA).
+const HALF: f32 = 0.5
+const BOX_COLOR: u32 = 0xe8743bff
+const GROUND_COLOR: u32 = 0x6b8e4eff
+
+// A player's box: where it stands on the ground.
+struct Mover {
+    x: f64
+    z: f64
+}
+
+// The ground: a square `side` meters each way, centered on the World's
+// origin, its top at height nought.
+struct Ground {
+    side: f32
+}
+
+// The ground's entities and each one's ground, which the move system looks
+// up (its `lookup` in starter.game).
+extern fn Ground.count() -> i32
+extern fn Ground.entity(index: i32) -> world.Entity
+extern fn Ground.get(entity: world.Entity) -> Ground
+
+fn held(at: f64, edge: f64) -> f64 {
+    if at > edge {
+        return edge
+    }
+    if at < -edge {
+        return -edge
+    }
+    return at
+}
+
+// Each tick, every player's box moves as its stick asks, no farther from
+// the middle than the ground's half side, less the box's own half, or a
+// ten-meter ground's without one.
+fn move(count: i32, sticks: [controls.Stick], movers: [Mover]) {
+    let most = 5.0 - f64(HALF)
+    if Ground.count() > 0 {
+        most = f64(Ground.get(Ground.entity(0)).side) * 0.5 - f64(HALF)
+    }
+    let i = 0
+    while i < count {
+        movers[i].x = held(movers[i].x + f64(sticks[i].x) * SPEED, most)
+        movers[i].z = held(movers[i].z + f64(sticks[i].z) * SPEED, most)
+        i = i + 1
+    }
+}
+
+// A client draws each box where it stands, on the ground.
+fn dress(count: i32, movers: [Mover], looks: [model.Model], spots: [model.Placed]) {
+    let i = 0
+    while i < count {
+        looks[i] = model.Model(model.BOX, HALF, HALF, HALF, BOX_COLOR, u64(0), 0.0)
+        spots[i] = model.Placed(true, movers[i].x, f64(HALF), movers[i].z)
+        i = i + 1
+    }
+}
+
+// And the ground, a tenth of a meter thick under height nought.
+fn lay(count: i32, grounds: [Ground], looks: [model.Model], spots: [model.Placed]) {
+    let i = 0
+    while i < count {
+        let half = grounds[i].side * 0.5
+        looks[i] = model.Model(model.BOX, half, 0.05, half, GROUND_COLOR, u64(0), 0.0)
+        spots[i] = model.Placed(true, 0.0, -0.05, 0.0)
+        i = i + 1
+    }
+}
+
+// The eye above the ground's near edge, looking along -Z and down at it.
+fn frame(count: i32, views: [model.Camera]) {
+    let i = 0
+    while i < count {
+        views[i] = model.Camera(0.0, 12.0, 14.0, 0.0, -0.7, 1.0, 0.1, 15.0, u32(0), model.FIXED)
+        i = i + 1
+    }
+}

@@ -1,0 +1,15 @@
+module sample
+
+// A client's input for the starter game (starter.game's `sample` line): its
+// player's stick, made each tick from its move action (starter.actions),
+// up the screen away from the eye.
+
+import controls
+import rawframe.input
+
+const MOVE: u64 = 0xb5315e7c271553e1
+
+fn sample(into: [controls.Stick]) {
+    into[0].x = input.x(MOVE)
+    into[0].z = -input.y(MOVE)
+}

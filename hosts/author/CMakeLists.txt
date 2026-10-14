@@ -9,6 +9,17 @@ if(RAWFRAME_BUILD_TESTS)
     # A bad argument is a usage error, not a crash.
     add_test(NAME author_usage COMMAND rawframe_host_author)
     set_tests_properties(author_usage PROPERTIES WILL_FAIL TRUE)
+    # A new game from the starter template (D780): fresh identities, the
+    # refusals, and the game played by four bots in an arena.
+    if(TARGET rawframe_host_arena)
+        add_test(NAME author_new_game
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/new_game.sh $<TARGET_FILE:rawframe_host_author>
+                         $<TARGET_FILE:rawframe_host_arena>
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(author_new_game PROPERTIES
+                             PASS_REGULAR_EXPRESSION
+                             "\"kind\": \"authoring.new_game\".*\"files\": 10,[ \n]*\"identities\": 11.*identities: none shared.*refused: over a game, and under a bad name.*\"bots\":4,\"admitted\":4,[^\n]*\"sourceFailures\":0,.*\"code\":\"tick_summary\"[^\n]*\"entities\":5}")
+    endif()
     # A scene of the runners game changed through requests: a new entity
     # with a body at a place, stale and failing requests refused whole, and
     # a dry run that writes nothing.

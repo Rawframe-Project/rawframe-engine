@@ -1,0 +1,8 @@
+module controls
+
+// What a player asks of the starter game: which way its box moves, across
+// (x) and away from the eye (-z), each from minus one to one.
+struct Stick {
+    x: f32
+    z: f32
+}

@@ -1,0 +1,35 @@
+# The starter game (D780), which `rawframe-author new` and Studio's start
+# screen make a new game from: each player a box it moves about a ground
+# with its keys or a gamepad's stick, the server moving it, all of it seen
+# from above the ground's near edge. Everything here is the new game's to
+# change.
+program starter.kest
+component 0ddf8849-b458-4e59-a943-cf645990ec84 starter.mover Mover
+component 4f0684c7-8546-43d8-8642-b9b3efe65b03 starter.ground Ground
+component e6e4409c-3b6b-4935-95bf-6027499b5e69 starter.stick controls.Stick
+system starter.move simulation move read starter.stick write starter.mover lookup starter.ground
+
+# The ground (level.scene), the one thing the game starts with.
+scene level.scene
+replicate starter.mover starter.ground
+
+# Each player is given a box, moved by its stick, which a client makes from
+# its player's actions (starter.actions) with sample.kest.
+player starter.stick starter.mover
+input starter.stick
+actions starter.actions
+sample sample.kest sample
+
+# What a client draws: each box and the ground where they are, and the
+# whole ground seen from above its near edge.
+component dc501cf5-d960-4979-9b07-a03749c9389d starter.look rawframe.model.Model
+component b926bea2-c918-49aa-a717-8921e325a39e starter.spot rawframe.model.Placed
+component d21c7518-70fb-40ea-9b3d-65acb9658f1d starter.view rawframe.model.Camera
+presentation starter.look starter.spot on starter.mover
+present starter.dress dress read starter.mover write starter.look write starter.spot
+component c0a30c8e-dc2c-4cbd-b48b-cf2304853e04 starter.floor rawframe.model.Model
+component 0525d949-3f08-4d2e-98d0-418140504148 starter.laid rawframe.model.Placed
+presentation starter.floor starter.laid on starter.ground
+present starter.lay lay read starter.ground write starter.floor write starter.laid
+presentation starter.view on player
+present starter.frame frame write starter.view

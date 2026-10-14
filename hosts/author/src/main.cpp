@@ -3,6 +3,7 @@
 // client or a server.
 //
 //   rawframe-author describe [<game description>]
+//   rawframe-author new <template directory> <new game directory>
 //   rawframe-author apply <game description> <scene> <request> [--dry-run]
 //   rawframe-author read <game description> <scene> <queries>
 //   rawframe-author migrate <game description> <scene>... [--dry-run]
@@ -19,6 +20,12 @@
 // with `--dry-run`. The scenes an instance may name are those beside the
 // game description, by the identity their sidecars give them, and the
 // scene's own sidecar gives the document's.
+//
+// `new` makes a game from a template (D780), as Studio's start screen
+// does: the template's files copied to a directory that is absent or empty,
+// its description and Kest project named after that directory, and every
+// identity its sidecars and component lines mint made fresh. It writes the
+// new description's path.
 //
 // `read` answers a query document (D155) against the scene: the document's
 // generation read, and per query its answer or the one error record, each
@@ -70,6 +77,7 @@
 #include "rawframe/authoring/session.h"
 #include "rawframe/authoring_session/game.h"
 #include "rawframe/authoring_session/mcp.h"
+#include "rawframe/authoring_session/new_game.h"
 #include "rawframe/authoring_session/session.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/content/sidecar.h"
@@ -232,6 +240,22 @@ int describe(const char* game) {
         return refused(catalog.error());
     }
     std::fputs(authoring::writeDiscovery(&*catalog).c_str(), stdout);
+    return 0;
+}
+
+/// A new game from a template (D780): its description, how many files it
+/// has, and how many identities were made fresh.
+int makeGame(const std::filesystem::path& from, const std::filesystem::path& directory) {
+    const auto kMade = rawframe::authoring_session::newGame(from, directory);
+    if (!kMade.has_value()) {
+        return refused(kMade.error());
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.new_game"));
+    made.add("description", Value::string(kMade->description.generic_string()));
+    made.add("files", Value::integer(static_cast<std::int64_t>(kMade->files)));
+    made.add("identities", Value::integer(static_cast<std::int64_t>(kMade->identities)));
+    std::fputs(rawframe::document::write(made).c_str(), stdout);
     return 0;
 }
 
@@ -523,6 +547,9 @@ int main(int argc, char** argv) {
     if (kVerb == "describe" && argc == 3) {
         return describe(argv[2]);
     }
+    if (kVerb == "new" && argc == 4) {
+        return makeGame(argv[2], argv[3]);
+    }
     if (kVerb == "read" && argc == 5) {
         return answerQueries(argv[2], argv[3], argv[4]);
     }
@@ -555,6 +582,7 @@ int main(int argc, char** argv) {
         }
     }
     std::fputs("usage: rawframe-author describe [<game description>]\n"
+               "       rawframe-author new <template directory> <new game directory>\n"
                "       rawframe-author apply <game description> <scene> <request> [--dry-run]\n"
                "       rawframe-author read <game description> <scene> <queries>\n"
                "       rawframe-author migrate <game description> <scene>... [--dry-run]\n"
