@@ -161,8 +161,12 @@ private:
     /// Words on `node`, in Studio's font.
     result::Status words(ui::Node node, std::string_view text, std::uint32_t color, float size = 15);
 
-    /// A column under `parent` headed `heading`.
-    result::Result<ui::Node> column(ui::Node parent, std::string_view heading);
+    /// A column under `parent` headed `heading`, sharing its row's width or
+    /// `width` pixels wide.
+    result::Result<ui::Node> column(ui::Node parent, std::string_view heading, float width = 0);
+
+    /// A dock's pane, which scrolls, named `name` and headed by its tab.
+    result::Result<ui::Node> pane(std::string_view name);
 
     /// A button reading `text` under `parent`.
     result::Result<ui::Node> button(ui::Node parent, std::string_view text);
@@ -171,9 +175,18 @@ private:
     /// technology (D575).
     result::Status pressWords(ui::Node node, std::string_view text, std::uint32_t color, float size);
 
-    /// The window: a header over three columns, the scenes' with a row for
-    /// each scene beside the game.
+    /// The window as SPEC-0051 plans it (D776): the toolbar; the Hierarchy
+    /// on the left, the center with the open documents' tabs over the
+    /// active one's view, and the Assets and History under both; the
+    /// Inspector on the right the body's height; the status bar.
     result::Status build();
+
+    /// The bottom dock showing History, or Assets.
+    void showDock(bool history);
+
+    /// A tab for each document opened, the chosen one marked; `opened`
+    /// the scene listed at that place, opened now.
+    void showTabs(std::optional<std::size_t> opened = std::nullopt);
 
     /// A row of `text` under `column`, its height fixed; one to press read
     /// as a button (D575).
@@ -290,11 +303,10 @@ private:
     bool openGame();
 
     /// The game that does not read: why, where, and what to do.
-    result::Status showBroken();
+    result::Status showBroken(ui::Node body);
 
-    /// The chosen scene's history under its view (D454): each entry a row,
-    /// the undone quiet, rebuilt after the view's rows, which are rebuilt
-    /// at the column's end.
+    /// The chosen scene's history in the bottom dock's History (D454,
+    /// D776): each entry a row, the undone quiet.
     void showHistoryList();
 
     /// Undoes or redoes until the history's entry `entry` is the last one
@@ -473,6 +485,18 @@ private:
     std::string editor_;
     std::vector<process::Child> editors_;
     std::vector<ui::Node> historyRows_;
+    /// The bottom dock, its tabs, and its panes: one attached at a time.
+    ui::Node bottomDock_{};
+    ui::Node assetsTab_{};
+    ui::Node historyTab_{};
+    ui::Node historyColumn_{};
+    bool historyShown_ = false;
+    /// The center: the documents' tabs, then the active one's view.
+    ui::Node centerColumn_{};
+    ui::Node tabsRow_{};
+    /// The documents opened, by path, oldest first, and their tabs.
+    std::vector<std::string> openDocuments_;
+    std::vector<ui::Node> tabRows_;
     /// The rows of the history's entries alone, oldest first.
     std::vector<ui::Node> entryRows_;
     ui::Node openNode_{};
@@ -524,8 +548,6 @@ private:
     /// node keeps it, an input field pressed takes a connection from it,
     /// and any other press lets it go (D733).
     std::optional<std::pair<std::string, std::string>> connecting_;
-    /// The heading `column` made last.
-    ui::Node lastHeading_{};
     ui::Node downNode_{};
     std::vector<ActionButton> actions_;
     view::UiPointing* pointing_ = nullptr;

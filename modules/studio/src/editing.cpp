@@ -54,6 +54,15 @@ bool ShellParticipant::beforePress() {
 void ShellParticipant::pressOn(ui::Node node, bool moving) {
     // An output pressed waits for the input to connect (D733).
     const std::optional<std::pair<std::string, std::string>> kConnecting = std::exchange(connecting_, std::nullopt);
+    // A document's tab is pressed as its row in Assets is (D776).
+    if (const auto kTab = std::ranges::find(tabRows_, node); kTab != tabRows_.end()) {
+        const auto kListed =
+            std::ranges::find(scenes_, openDocuments_[static_cast<std::size_t>(kTab - tabRows_.begin())]);
+        const auto kAt = static_cast<std::size_t>(kListed - scenes_.begin());
+        if (kAt < sceneRows_.size()) {
+            node = sceneRows_[kAt];
+        }
+    }
     // The row is the node pressed or the one its words are on.
     if (!cookTool_.empty() && node == cookNode_) {
         endEdit();
@@ -74,6 +83,12 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         if (seat_ != nullptr) {
             seat_->leave();
         }
+        // The dock's pane not shown is not under the root.
+        for (const ui::Node kPane : {scenesColumn_, historyColumn_}) {
+            if (tree_->contains(kPane)) {
+                static_cast<void>(tree_->remove(kPane));
+            }
+        }
         static_cast<void>(tree_->remove(root_));
         static_cast<void>(build());
         if (seat_ != nullptr) {
@@ -84,6 +99,8 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         }
     } else if (broken_.has_value()) {
         return;
+    } else if (node == assetsTab_ || node == historyTab_) {
+        showDock(node == historyTab_);
     } else if (node == undoNode_ || node == redoNode_) {
         endEdit();
         step(node == undoNode_ ? "authoring.undo" : "authoring.redo");

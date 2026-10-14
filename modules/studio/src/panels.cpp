@@ -1,5 +1,7 @@
 #include "shell.h"
 
+#include <algorithm>
+
 namespace rawframe::studio {
 
 result::Result<ui::Node>
@@ -17,32 +19,42 @@ result::Status ShellParticipant::words(ui::Node node, std::string_view text, std
     return tree_->setText(node, text, ui::TextLook{.font = font_, .size = size, .color = color, .wrap = false});
 }
 
-result::Result<ui::Node> ShellParticipant::column(ui::Node parent, std::string_view heading) {
+result::Result<ui::Node> ShellParticipant::column(ui::Node parent, std::string_view heading, float width) {
     RAWFRAME_TRY_ASSIGN(const ui::Node kColumn,
                         box(parent,
-                            ui::Layout{.width = ui::pixels(0),
+                            ui::Layout{.width = ui::pixels(width),
                                        .direction = ui::Direction::Column,
                                        .gap = 4,
-                                       .grow = 1,
+                                       .grow = width > 0 ? 0.0F : 1.0F,
+                                       .shrink = width > 0 ? 0.0F : 1.0F,
                                        .padding = {8, 8, 8, 8},
                                        .scroll = ui::Scroll::Vertical},
                             kPanel));
     // A column scrolls what does not fit (D441), so its rows keep their
     // heights rather than shrinking to fit.
-    // The heading's words at its start, and room for a button at its end.
-    RAWFRAME_TRY_ASSIGN(lastHeading_,
-                        box(kColumn,
-                            ui::Layout{.height = ui::pixels(22),
-                                       .justify = ui::Justify::SpaceBetween,
-                                       .alignItems = ui::Align::Center,
-                                       .shrink = 0},
-                            0));
-    RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(lastHeading_, ui::Layout{}, 0));
+    RAWFRAME_TRY_ASSIGN(
+        const ui::Node kHeading,
+        box(kColumn, ui::Layout{.height = ui::pixels(22), .alignItems = ui::Align::Center, .shrink = 0}, 0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeading, ui::Layout{}, 0));
     RAWFRAME_TRY(words(kTitle, heading, kQuiet, 13));
     // Read as a list that scrolls, by its heading (D575).
     RAWFRAME_TRY(tree_->setRole(kColumn, ui::Role::ScrollView));
     RAWFRAME_TRY(tree_->setName(kColumn, heading));
     return kColumn;
+}
+
+result::Result<ui::Node> ShellParticipant::pane(std::string_view name) {
+    RAWFRAME_TRY_ASSIGN(const ui::Node kPane,
+                        box(std::nullopt,
+                            ui::Layout{.minHeight = ui::pixels(0),
+                                       .direction = ui::Direction::Column,
+                                       .gap = 4,
+                                       .grow = 1,
+                                       .scroll = ui::Scroll::Vertical},
+                            kPanel));
+    RAWFRAME_TRY(tree_->setRole(kPane, ui::Role::ScrollView));
+    RAWFRAME_TRY(tree_->setName(kPane, name));
+    return kPane;
 }
 
 result::Result<ui::Node> ShellParticipant::button(ui::Node parent, std::string_view text) {
@@ -67,19 +79,19 @@ result::Status ShellParticipant::build() {
                                        .gap = 6,
                                        .padding = {6, 6, 6, 6}},
                             kBackground));
-    RAWFRAME_TRY_ASSIGN(const ui::Node kHeader,
+    RAWFRAME_TRY_ASSIGN(const ui::Node kToolbar,
                         box(root_,
                             ui::Layout{.height = ui::pixels(34),
                                        .justify = ui::Justify::SpaceBetween,
                                        .alignItems = ui::Align::Center,
+                                       .shrink = 0,
                                        .padding = {12, 4, 6, 4}},
                             kHeaderFill));
-    RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeader, ui::Layout{.padding = {0, 2, 0, 2}}, 0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kToolbar, ui::Layout{.padding = {0, 2, 0, 2}}, 0));
     RAWFRAME_TRY(words(kTitle, title_, kText));
-    // The status, then undo and redo, at the header's end.
-    RAWFRAME_TRY_ASSIGN(const ui::Node kEnd, box(kHeader, ui::Layout{.alignItems = ui::Align::Center, .gap = 6}, 0));
-    RAWFRAME_TRY_ASSIGN(statusNode_, box(kEnd, ui::Layout{.padding = {0, 2, 8, 2}}, 0));
-    // Cook before Play, so Play, Undo, and Redo keep their places (D502).
+    // The toolbar's commands at its end: Cook before Play, so Play, Undo,
+    // and Redo keep their places (D502).
+    RAWFRAME_TRY_ASSIGN(const ui::Node kEnd, box(kToolbar, ui::Layout{.alignItems = ui::Align::Center, .gap = 6}, 0));
     if (!cookTool_.empty()) {
         RAWFRAME_TRY_ASSIGN(cookNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
         RAWFRAME_TRY(pressWords(cookNode_, cooking_.has_value() ? "Stop" : "Cook", kText, 14));
@@ -91,60 +103,144 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(undoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
     RAWFRAME_TRY_ASSIGN(redoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
     RAWFRAME_TRY(showHistory());
-    if (broken_.has_value()) {
-        return showBroken();
-    }
     RAWFRAME_TRY_ASSIGN(
-        const ui::Node kColumns,
+        const ui::Node kBody,
         box(root_,
             ui::Layout{.minHeight = ui::pixels(0), .direction = ui::Direction::Row, .gap = 6, .grow = 1},
             kBackground));
-    RAWFRAME_TRY_ASSIGN(scenesColumn_, column(kColumns, "Scenes"));
-    RAWFRAME_TRY_ASSIGN(entitiesColumn_, column(kColumns, "Entities"));
-    // The chosen entity copied whole (D458), its operations the catalog's.
+    // The status bar under the body: what Studio last said.
+    RAWFRAME_TRY_ASSIGN(
+        const ui::Node kStatusBar,
+        box(root_,
+            ui::Layout{
+                .height = ui::pixels(24), .alignItems = ui::Align::Center, .shrink = 0, .padding = {10, 2, 10, 2}},
+            kHeaderFill));
+    RAWFRAME_TRY_ASSIGN(statusNode_, box(kStatusBar, ui::Layout{}, 0));
+    if (broken_.has_value()) {
+        return showBroken(kBody);
+    }
+    RAWFRAME_TRY_ASSIGN(const ui::Node kMain,
+                        box(kBody,
+                            ui::Layout{.width = ui::pixels(0), .direction = ui::Direction::Column, .gap = 6, .grow = 1},
+                            kBackground));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kUpper,
+                        box(kMain,
+                            ui::Layout{.height = ui::pixels(0),
+                                       .minHeight = ui::pixels(0),
+                                       .direction = ui::Direction::Row,
+                                       .gap = 6,
+                                       .grow = 3},
+                            kBackground));
+    RAWFRAME_TRY_ASSIGN(entitiesColumn_, column(kUpper, "Hierarchy", 360));
+    // The entities' operations above their rows, in two rows: what makes
+    // and copies, then what restores and orders.
+    RAWFRAME_TRY_ASSIGN(const ui::Node kMaking,
+                        box(entitiesColumn_, ui::Layout{.height = ui::pixels(28), .gap = 6, .shrink = 0}, 0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kOrdering,
+                        box(entitiesColumn_, ui::Layout{.height = ui::pixels(28), .gap = 6, .shrink = 0}, 0));
+    if (catalog_.offers("scene.create_entity")) {
+        RAWFRAME_TRY_ASSIGN(newNode_, button(kMaking, "New"));
+    }
+    if (catalog_.offers("scene.destroy_entity")) {
+        RAWFRAME_TRY_ASSIGN(deleteNode_, button(kMaking, "Delete"));
+    }
+    // The chosen entity copied whole (D458), its operations the catalog's,
+    // and moved to another scene, made there and deleted here (D498).
     if (catalog_.offers("scene.create_entity") && catalog_.offers("scene.add_component") &&
         catalog_.offers("scene.set_field")) {
-        // Moved to another scene, made there and deleted here (D498);
-        // before Duplicate, which keeps its place at the heading's end.
+        RAWFRAME_TRY_ASSIGN(duplicateNode_, button(kMaking, "Duplicate"));
         if (catalog_.offers("scene.destroy_entity")) {
-            RAWFRAME_TRY_ASSIGN(moveNode_, box(lastHeading_, ui::Layout{.padding = {8, 2, 8, 2}}, kRow));
-            RAWFRAME_TRY(pressWords(moveNode_, "Move to", kText, 13));
-        }
-        RAWFRAME_TRY_ASSIGN(duplicateNode_, box(lastHeading_, ui::Layout{.padding = {8, 2, 8, 2}}, kRow));
-        RAWFRAME_TRY(pressWords(duplicateNode_, "Duplicate", kText, 13));
-    }
-    RAWFRAME_TRY_ASSIGN(componentsColumn_, column(kColumns, "Components"));
-    // The entities' operations above their rows.
-    if (catalog_.offers("scene.create_entity") || catalog_.offers("scene.destroy_entity")) {
-        RAWFRAME_TRY_ASSIGN(const ui::Node kTools,
-                            box(entitiesColumn_, ui::Layout{.height = ui::pixels(28), .gap = 6, .shrink = 0}, 0));
-        if (catalog_.offers("scene.create_entity")) {
-            RAWFRAME_TRY_ASSIGN(newNode_, button(kTools, "New"));
-        }
-        if (catalog_.offers("scene.destroy_entity")) {
-            RAWFRAME_TRY_ASSIGN(deleteNode_, button(kTools, "Delete"));
-        }
-        // An instance's entity: one it removed taken back, or the whole
-        // instance removed (D450).
-        if (catalog_.offers("scene.restore_entity")) {
-            RAWFRAME_TRY_ASSIGN(restoreNode_, button(kTools, "Restore"));
-        }
-        if (catalog_.offers("scene.remove_instance")) {
-            RAWFRAME_TRY_ASSIGN(uninstanceNode_, button(kTools, "Remove instance"));
-        }
-        // The chosen entity's place among the scene's own (D451).
-        if (catalog_.offers("scene.move_entity")) {
-            RAWFRAME_TRY_ASSIGN(upNode_, button(kTools, "Up"));
-            RAWFRAME_TRY_ASSIGN(downNode_, button(kTools, "Down"));
+            RAWFRAME_TRY_ASSIGN(moveNode_, button(kMaking, "Move to"));
         }
     }
+    // An instance's entity: one it removed taken back, or the whole
+    // instance removed (D450).
+    if (catalog_.offers("scene.restore_entity")) {
+        RAWFRAME_TRY_ASSIGN(restoreNode_, button(kOrdering, "Restore"));
+    }
+    if (catalog_.offers("scene.remove_instance")) {
+        RAWFRAME_TRY_ASSIGN(uninstanceNode_, button(kOrdering, "Remove instance"));
+    }
+    // The chosen entity's place among the scene's own (D451).
+    if (catalog_.offers("scene.move_entity")) {
+        RAWFRAME_TRY_ASSIGN(upNode_, button(kOrdering, "Up"));
+        RAWFRAME_TRY_ASSIGN(downNode_, button(kOrdering, "Down"));
+    }
+    // The center: the open documents' tabs, then the active one's view,
+    // which the viewport takes over (state.md item 28 step 5).
+    RAWFRAME_TRY_ASSIGN(centerColumn_,
+                        box(kUpper,
+                            ui::Layout{.width = ui::pixels(0),
+                                       .direction = ui::Direction::Column,
+                                       .gap = 4,
+                                       .grow = 2,
+                                       .padding = {8, 8, 8, 8},
+                                       .scroll = ui::Scroll::Vertical},
+                            kPanel));
+    RAWFRAME_TRY(tree_->setRole(centerColumn_, ui::Role::ScrollView));
+    RAWFRAME_TRY(tree_->setName(centerColumn_, "Documents"));
+    RAWFRAME_TRY_ASSIGN(tabsRow_, box(centerColumn_, ui::Layout{.height = ui::pixels(28), .gap = 4, .shrink = 0}, 0));
+    // The bottom dock under the Hierarchy and the center, its tabs its
+    // heading.
+    RAWFRAME_TRY_ASSIGN(bottomDock_,
+                        box(kMain,
+                            ui::Layout{.height = ui::pixels(0),
+                                       .minHeight = ui::pixels(0),
+                                       .direction = ui::Direction::Column,
+                                       .gap = 4,
+                                       .grow = 2,
+                                       .padding = {8, 8, 8, 8}},
+                            kPanel));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kDockTabs,
+                        box(bottomDock_, ui::Layout{.height = ui::pixels(26), .gap = 4, .shrink = 0}, 0));
+    RAWFRAME_TRY_ASSIGN(assetsTab_, button(kDockTabs, "Assets"));
+    RAWFRAME_TRY_ASSIGN(historyTab_, button(kDockTabs, "History"));
+    RAWFRAME_TRY_ASSIGN(scenesColumn_, pane("Assets"));
+    RAWFRAME_TRY_ASSIGN(historyColumn_, pane("History"));
+    RAWFRAME_TRY(tree_->attach(bottomDock_, scenesColumn_));
+    historyShown_ = false;
+    showDock(false);
+    RAWFRAME_TRY_ASSIGN(componentsColumn_, column(kBody, "Inspector", 360));
     return showScenes();
 }
 
-result::Status ShellParticipant::showBroken() {
+void ShellParticipant::showDock(bool history) {
+    if (history != historyShown_) {
+        static_cast<void>(tree_->detach(historyShown_ ? historyColumn_ : scenesColumn_));
+        static_cast<void>(tree_->attach(bottomDock_, history ? historyColumn_ : scenesColumn_));
+        historyShown_ = history;
+    }
+    static_cast<void>(tree_->setLook(assetsTab_, ui::Look{.fill = history ? kRow : kChosen, .radius = 4}));
+    static_cast<void>(tree_->setLook(historyTab_, ui::Look{.fill = history ? kChosen : kRow, .radius = 4}));
+}
+
+void ShellParticipant::showTabs(std::optional<std::size_t> opened) {
+    if (opened.has_value() && *opened < scenes_.size() &&
+        std::ranges::find(openDocuments_, scenes_[*opened]) == openDocuments_.end()) {
+        openDocuments_.push_back(scenes_[*opened]);
+        // The oldest let go past eight, never the one chosen.
+        if (openDocuments_.size() > 8) {
+            openDocuments_.erase(openDocuments_.begin());
+        }
+    }
+    // A document gone from the game, deleted or renamed outside, closes.
+    std::erase_if(openDocuments_, [&](const std::string& path) {
+        return std::ranges::find(scenes_, path) == scenes_.end();
+    });
+    clear(tabRows_);
+    for (const std::string& kPath : openDocuments_) {
+        auto tab = box(tabsRow_, ui::Layout{.shrink = 0, .padding = {10, 4, 10, 4}}, kPath == scene_ ? kChosen : kRow);
+        if (!tab.has_value() || !pressWords(*tab, kPath, kText, 14).has_value()) {
+            return;
+        }
+        tabRows_.push_back(*tab);
+    }
+}
+
+result::Status ShellParticipant::showBroken(ui::Node body) {
     RAWFRAME_TRY_ASSIGN(
         const ui::Node kBroken,
-        box(root_,
+        box(body,
             ui::Layout{.direction = ui::Direction::Column, .gap = 8, .grow = 1, .padding = {16, 16, 16, 16}},
             kPanel));
     RAWFRAME_TRY_ASSIGN(const ui::Node kHeading, box(kBroken, ui::Layout{.height = ui::pixels(24), .shrink = 0}, 0));
@@ -188,10 +284,7 @@ result::Status ShellParticipant::showScenes() {
     RAWFRAME_TRY_ASSIGN(const auto kLine, fieldRow("new scene or import", "", scenesColumn_));
     newSceneRow_ = kLine.first;
     newScene_ = FieldRow{.value = kLine.second, .role = FieldRow::Role::NewScene, .field = "new scene"};
-    if (!viewRows_.empty()) {
-        showView();
-        showViewText();
-    }
+    showTabs();
     return {};
 }
 
@@ -226,6 +319,7 @@ void ShellParticipant::showScene(std::size_t at) {
     }
     scene_ = scenes_[at];
     sceneAt_ = at;
+    showTabs(at);
     if (kChanged) {
         // A scene's view is the session's, unknown here until it says,
         // and its search starts empty. A style sheet has neither, nor a
@@ -276,6 +370,24 @@ void ShellParticipant::showScene(std::size_t at) {
         showGraph();
         return;
     }
+    // Over the scene's entities, the search that chooses them (D473), then
+    // the scene an instance placed in it is of: at the Hierarchy's top,
+    // where a long scene does not scroll them away (D776).
+    if (catalog_.offers("scene.find_entities")) {
+        auto line = fieldRow("find", find_, entitiesColumn_);
+        if (line.has_value()) {
+            sceneFieldRows_.push_back(line->first);
+            findField_ = FieldRow{.value = line->second, .role = FieldRow::Role::Find, .field = "find"};
+        }
+    }
+    if (catalog_.offers("scene.add_instance")) {
+        auto line = fieldRow("instance of", "", entitiesColumn_);
+        if (line.has_value()) {
+            sceneFieldRows_.push_back(line->first);
+            sceneFields_.push_back(
+                FieldRow{.value = line->second, .role = FieldRow::Role::Instance, .field = "instance of"});
+        }
+    }
     const std::optional<Value> kList = entitiesShown();
     const Value* listed = kList.has_value() ? kList->find("entities") : nullptr;
     if (listed == nullptr || listed->kind() != Value::Kind::Array) {
@@ -310,23 +422,6 @@ void ShellParticipant::showScene(std::size_t at) {
         removed_.push_back(kRemoved);
         const Value* place = each.find("place");
         places_.push_back(place != nullptr ? place->integer() : std::nullopt);
-    }
-    // Under the scene's entities, the search that chose them (D473), then
-    // the scene an instance placed in it is of.
-    if (catalog_.offers("scene.find_entities")) {
-        auto line = fieldRow("find", find_, entitiesColumn_);
-        if (line.has_value()) {
-            sceneFieldRows_.push_back(line->first);
-            findField_ = FieldRow{.value = line->second, .role = FieldRow::Role::Find, .field = "find"};
-        }
-    }
-    if (catalog_.offers("scene.add_instance")) {
-        auto line = fieldRow("instance of", "", entitiesColumn_);
-        if (line.has_value()) {
-            sceneFieldRows_.push_back(line->first);
-            sceneFields_.push_back(
-                FieldRow{.value = line->second, .role = FieldRow::Role::Instance, .field = "instance of"});
-        }
     }
 }
 
@@ -538,13 +633,13 @@ ShellParticipant::fieldRow(std::string_view name, std::string_view value, std::o
 void ShellParticipant::showView() {
     clear(viewRows_);
     viewFields_.clear();
-    auto heading = row(scenesColumn_, "View", kQuiet, kPanel);
+    auto heading = row(centerColumn_, "View", kQuiet, kPanel);
     if (!heading.has_value()) {
         return;
     }
     viewRows_.push_back(*heading);
     for (const std::string_view kPart : {"eye", "target", "fieldOfView", "snap"}) {
-        auto line = fieldRow(kPart == "fieldOfView" ? "field of view" : kPart, {}, scenesColumn_);
+        auto line = fieldRow(kPart == "fieldOfView" ? "field of view" : kPart, {}, centerColumn_);
         if (!line.has_value()) {
             return;
         }
@@ -562,14 +657,9 @@ void ShellParticipant::showHistoryList() {
     if (scene_.empty()) {
         return;
     }
-    auto heading = row(scenesColumn_, "History", kQuiet, kPanel);
-    if (!heading.has_value()) {
-        return;
-    }
-    historyRows_.push_back(*heading);
     for (const HistoryEntry& entry : historyOf(ask(historyRecord(next(), scene_)))) {
         auto added =
-            row(scenesColumn_, entry.summary, entry.applied ? kText : kQuiet, entry.applied ? kRow : kField, true);
+            row(historyColumn_, entry.summary, entry.applied ? kText : kQuiet, entry.applied ? kRow : kField, true);
         if (!added.has_value()) {
             return;
         }
