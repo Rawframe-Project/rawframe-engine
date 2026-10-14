@@ -25,6 +25,7 @@ ShellParticipant::read(const std::string& scene, std::string_view operation, std
 }
 
 void ShellParticipant::pressAt(float x, float y) {
+    pressedAt_ = {x, y};
     const bool kMoving = beforePress();
     const auto kHit = tree_->hit(root_, x, y);
     if (kHit.has_value() && kHit->node.has_value()) {
@@ -95,10 +96,10 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     }
     closePalette();
     // A splitter held follows the pointer till it is let go (D779).
-    if (const auto kEdge = std::ranges::find(splitters_, node);
-        kEdge != splitters_.end() && pointing_ != nullptr && pointing_->pointer().has_value()) {
+    // From where it was pressed, not where the pointer is by now.
+    if (const auto kEdge = std::ranges::find(splitters_, node); kEdge != splitters_.end()) {
         const auto kWhich = static_cast<Edge>(kEdge - splitters_.begin());
-        const std::array<float, 2> kAt = *pointing_->pointer();
+        const std::array<float, 2> kAt = pressedAt_;
         const float kSize = kWhich == Edge::Hierarchy     ? preferences_.hierarchyWidth
                             : kWhich == Edge::Inspector   ? preferences_.inspectorWidth
                             : preferences_.dockHeight > 0 ? preferences_.dockHeight

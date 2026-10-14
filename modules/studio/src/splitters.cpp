@@ -1,6 +1,8 @@
 #include "rawframe/base/files.h"
 #include "shell.h"
 
+#include <utility>
+
 namespace rawframe::studio {
 
 namespace {
@@ -28,16 +30,16 @@ result::Status ShellParticipant::splitter(ui::Node parent, Edge edge) {
 }
 
 void ShellParticipant::followSplitter() {
-    if (released_) {
-        released_ = false;
-        releaseSplitter();
-        return;
-    }
-    if (!resizing_.has_value() || pointing_ == nullptr) {
-        return;
-    }
-    const std::optional<std::array<float, 2>> kPointer = pointing_->pointer();
-    if (!kPointer.has_value()) {
+    // Let go, the dock takes where the pointer ended first: a slow frame
+    // may come only after the release, never having seen the last of the
+    // drag.
+    const bool kReleased = std::exchange(released_, false);
+    const std::optional<std::array<float, 2>> kPointer =
+        pointing_ != nullptr ? pointing_->pointer() : std::optional<std::array<float, 2>>{};
+    if (!resizing_.has_value() || !kPointer.has_value()) {
+        if (kReleased) {
+            releaseSplitter();
+        }
         return;
     }
     const float kMoved = (resizing_->edge == Edge::Dock ? (*kPointer)[1] : (*kPointer)[0]) - resizing_->from;
@@ -58,6 +60,9 @@ void ShellParticipant::followSplitter() {
     static_cast<void>(tree_->setLayout(entitiesColumn_, columnLayout(preferences_.hierarchyWidth)));
     static_cast<void>(tree_->setLayout(componentsColumn_, columnLayout(preferences_.inspectorWidth)));
     static_cast<void>(tree_->setLayout(bottomDock_, dockLayout(preferences_.dockHeight)));
+    if (kReleased) {
+        releaseSplitter();
+    }
 }
 
 void ShellParticipant::releaseSplitter() {

@@ -635,6 +635,7 @@ private:
         float size = 0;
     };
     std::optional<Resizing> resizing_;
+    std::array<float, 2> pressedAt_{};
     bool released_ = false;
     Preferences preferences_;
     std::filesystem::path preferencesFile_;
