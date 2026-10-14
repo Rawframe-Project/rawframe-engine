@@ -297,9 +297,14 @@ RAWFRAME_TEST(ShutdownOverrunTakesTheFatalPathWithoutFreeingWork) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }));
+        // Past the drain budget again and again until the process ends: a
+        // stop that reads the clock only after an advance (a loaded machine)
+        // would otherwise wait for one that never comes.
         std::thread mover{[&clock] {
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            clock.advance(kExecutorDrainBudget);
+            for (;;) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                clock.advance(kExecutorDrainBudget);
+            }
         }};
         mover.detach();
         executor.stop();
