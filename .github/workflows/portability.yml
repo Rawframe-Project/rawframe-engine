@@ -313,6 +313,7 @@ jobs:
           for test in AMaterialKnowsTheFaceItIsDrawnOn AMaterialReadsItsParametersFromItsBlob \
               AnEmptySceneIsTheSky TheSkysPictureIsSeenTheWayEachPointLooks TheLitModelReflectsTheSunAndTheSky \
               TheGroundLightsWhatFacesDown TheSunCastsShadows PointAndSpotLightsLightWhatTheyReach \
+              LampsSharingAClusterEachLightWithTheirOwnColor \
               PunctualLightsCastShadowsThroughTheirAtlas SurfacesAreLitByThePictureAndReflectIt \
               APointReflectsTheProbesThatHoldIt TheFloorAtABlocksFootIsDarkerWithAmbientOcclusion \
               ABrightGlowSpreadsWithTheBloom AMirrorFloorShowsTheBlockOnItWithScreenSpaceReflections \
@@ -320,47 +321,6 @@ jobs:
               AFramesLightIsReadBackInPhysicalUnits; do
             out/windows-development/modules/render_scene_gpu/rawframe_render_scene_gpu_tests.exe "$test"
           done
-      # The Lighting Test with each lamp alone, then with every lamp but
-      # without the punctual shadows, and with the hardware's filter: which
-      # light reads differently on WARP (D765). Printed and kept, not
-      # required.
-      - name: The Lighting Test's lamps one by one
-        if: success() || failure()
-        shell: bash
-        continue-on-error: true
-        run: |
-          tree=out/windows-development/hosts/arena
-          into="$(cygpath -m "$RUNNER_TEMP")/lighting"
-          mkdir -p "$into"
-          python3 - games/lighting "$into" <<'EOF'
-          import os, re, shutil, sys
-          source, into = sys.argv[1:3]
-          text = open(os.path.join(source, "lighting.game")).read()
-          lamp = re.compile(r"^(spawn .* lighting\.lamp kind=(\d))$", re.M)
-          for keep in range(4):
-              shutil.copytree(source, os.path.join(into, "only%d" % keep))
-              game = lamp.sub(lambda m: m.group(1) if int(m.group(2)) == keep else "", text)
-              open(os.path.join(into, "only%d" % keep, "lighting.game"), "w").write(game)
-          EOF
-          for variant in only0 only1 only2 only3 unshadowed hardware; do
-            game="$(pwd -W)/games/lighting/lighting.game"
-            [ -d "$into/$variant" ] && game="$into/$variant/lighting.game"
-            sed -e "s#^kest.game = .*#kest.game = $game#" -e "s#^render.capture = .*#render.capture = $into/$variant.tga#" \
-              "$tree/lighting_drawn.conf" > "$into/$variant.conf"
-            [ "$variant" = unshadowed ] && echo "scene.light_shadow_side = 0" >> "$into/$variant.conf"
-            [ "$variant" = hardware ] && echo "scene.shadow_filter = hardware" >> "$into/$variant.conf"
-            python3 hosts/arena/tests/lighting_seen.py "$tree/rawframe-arena.exe" "$into/$variant.conf" "$into/$variant.tga" \
-              > "$into/$variant.log" 2>&1 || true
-            echo "$variant: $(grep -oE 'seen: [^"]*|"code":"start_failed".{0,300}' "$into/$variant.log" | head -2)" \
-              "$(grep -oE '"yaw":[-0-9.]+' "$into/$variant.log" | tail -1)"
-          done
-      - name: Keep the Lighting Test's lamps
-        if: success() || failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: lighting-windows
-          path: ${{ runner.temp }}/lighting/*.tga
-          retention-days: 14
       # The sample games to play on Windows (D515): each exported as the
       # export tool makes a folder, whose rawframe-play starts its server and
       # then its client in a window, with the DLLs its programs import from

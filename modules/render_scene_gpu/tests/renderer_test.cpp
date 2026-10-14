@@ -320,6 +320,53 @@ RAWFRAME_TEST(PointAndSpotLightsLightWhatTheyReach) {
     RAWFRAME_EXPECT(at(*kDown, 32, 39)[0] > 100 && at(*kUp, 32, 39)[0] < 10);
 }
 
+RAWFRAME_TEST(LampsSharingAClusterEachLightWithTheirOwnColor) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    // The dark floor, a red lamp three meters left and a blue one three
+    // right, a meter above it and eight ahead, both in the one cluster:
+    // Direct3D 12 once lit each lamp's place with the next one's color
+    // (D765).
+    SceneFrame frame = looking();
+    frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
+    frame.lights.sky = {0, 0, 0};
+    frame.exposure = 0;
+    frame.shadows.count = 0;
+    SceneDraw floor = box(8, 1, {1, 1, 1, 1});
+    floor.model[0] = 10;
+    floor.model[5] = 0.1F;
+    floor.model[10] = 10;
+    floor.normal[0] = 0.1F;
+    floor.normal[5] = 10;
+    floor.normal[10] = 0.1F;
+    floor.model[13] = -2;
+    frame.draws = {floor};
+    frame.lights3d = {{.position = {-3, -1, -8}, .range = 2.5F, .intensity = {3, 0, 0}},
+                      {.position = {3, -1, -8}, .range = 2.5F, .intensity = {0, 0, 3}}};
+    frame.clusters = {.tilesX = 1, .tilesY = 1, .slices = 1, .ranges = {0, 2, 0, 0}, .indices = {0, 1}};
+    const auto kLamps = drawn(**framer, **made, frame, [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    });
+    RAWFRAME_EXPECT(kLamps.has_value());
+    if (!kLamps.has_value()) {
+        return;
+    }
+    // The floor below each lamp, three eighths of the half view aside.
+    const auto kLeft = at(*kLamps, 20, 39);
+    const auto kRight = at(*kLamps, 44, 39);
+    std::printf("left %d %d %d, right %d %d %d\n", kLeft[0], kLeft[1], kLeft[2], kRight[0], kRight[1], kRight[2]);
+    RAWFRAME_EXPECT(kLeft[0] > 60 && kLeft[0] > 2 * kLeft[2] && kRight[2] > 60 && kRight[2] > 2 * kRight[0]);
+}
+
 RAWFRAME_TEST(TemporalAntiAliasingBlendsEdgesWithoutGhosts) {
     const auto kDevice = opened();
     if (kDevice == nullptr) {

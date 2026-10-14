@@ -617,22 +617,29 @@ float3 punctual(uint4 range, float3 placed, float3 normal, Surface surface, floa
                 clamp((dot(-toward, light.direction.xyz) - light.cone.y) / (light.cone.x - light.cone.y), 0.0, 1.0);
             falloff *= cone * cone;
         }
-        if (light.shadow.y > 0.5 && falloff > 0.0)
+        // Only a light that reaches the point adds to it, and it adds inside
+        // the body: SPIRV-Cross's HLSL read a light's intensity for the sum
+        // after the loop had moved to the next one, so Direct3D 12 lit each
+        // light's place with the next one's color (D765).
+        if (falloff > 0.0)
         {
-            // A point's face by the way the surface lies from it: +X, -X,
-            // +Y, -Y, +Z, -Z.
-            uint slot = uint(light.shadow.x);
-            if (light.shadow.y > 1.5)
+            if (light.shadow.y > 0.5)
             {
-                const float3 axes = abs(toLight);
-                slot += axes.x >= axes.y && axes.x >= axes.z ? (toLight.x <= 0.0 ? 0u : 1u)
-                        : axes.y >= axes.z                   ? (toLight.y <= 0.0 ? 2u : 3u)
-                                                             : (toLight.z <= 0.0 ? 4u : 5u);
+                // A point's face by the way the surface lies from it: +X,
+                // -X, +Y, -Y, +Z, -Z.
+                uint slot = uint(light.shadow.x);
+                if (light.shadow.y > 1.5)
+                {
+                    const float3 axes = abs(toLight);
+                    slot += axes.x >= axes.y && axes.x >= axes.z ? (toLight.x <= 0.0 ? 0u : 1u)
+                            : axes.y >= axes.z                   ? (toLight.y <= 0.0 ? 2u : 3u)
+                                                                 : (toLight.z <= 0.0 ? 4u : 5u);
+                }
+                falloff *= lightShadow(slots[slot], placed, normal);
             }
-            falloff *= lightShadow(slots[slot], placed, normal);
+            sum += light.intensity.rgb * falloff *
+                   (reflected(surface, normal, toEye, toward) + passed(surface, normal, toEye, toward));
         }
-        sum += light.intensity.rgb * falloff *
-               (reflected(surface, normal, toEye, toward) + passed(surface, normal, toEye, toward));
     }
     return sum;
 }
