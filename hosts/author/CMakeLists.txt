@@ -85,6 +85,15 @@ if(RAWFRAME_BUILD_TESTS)
                          PASS_REGULAR_EXPRESSION "imported a texture and a mesh into the plaza and cooked them")
     set_tests_properties(author_cooks PROPERTIES
                          PASS_REGULAR_EXPRESSION "cooked the plaza through a session, [1-9][0-9]* sources")
+    # An agent's tools over the Model Context Protocol (D773): the plaza
+    # changed through the session's operations as tools, failures told as
+    # failed calls, a batch undone, and the game cooked with its progress
+    # and a second cook cancelled.
+    add_test(NAME author_mcp
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_mcp.sh $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_mcp)
+    set_tests_properties(author_mcp PROPERTIES
+                         PASS_REGULAR_EXPRESSION "an agent authored and cooked the plaza over MCP, [1-9][0-9]* sources")
     # A running dedicated server's World read through its tooling endpoint
     # (D408): admitted by its token, status twice as it ticks, an unknown
     # verb answered with an error, and another token refused.

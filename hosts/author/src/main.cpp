@@ -49,6 +49,12 @@
 // long-running operation (D502): records are read and answered while it
 // runs, its progress and its reply said as they come.
 //
+// `mcp` holds the same session for an AI agent over the Model Context
+// Protocol on standard input and output (D773, authoring_session/mcp.h):
+// each operation the session describes is a tool, as are its own verbs,
+// every call one of the session's records. An agent is given it as
+// `claude mcp add rawframe -- rawframe-author mcp <game description>`.
+//
 // `connect` is a client of a running Runtime's tooling endpoint (D408,
 // connect.h): records a line on standard input, the replies on standard
 // output, the hello said for it with the token from its file.
@@ -63,6 +69,7 @@
 #include "rawframe/authoring/request.h"
 #include "rawframe/authoring/session.h"
 #include "rawframe/authoring_session/game.h"
+#include "rawframe/authoring_session/mcp.h"
 #include "rawframe/authoring_session/session.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/content/sidecar.h"
@@ -395,11 +402,14 @@ struct Inbox {
     bool closed = false;
 };
 
-/// `session`: records from standard input answered on standard output
-/// until `end` or the input ends, and what the session says unasked as it
-/// says it; 0 when every record succeeded.
-int session(const std::filesystem::path& game, const std::filesystem::path& root, const std::filesystem::path& cook) {
-    rawframe::authoring_session::Session held{game, root, cook};
+/// Lines from standard input answered on standard output until the
+/// client ends or the input does, and what is said unasked as it is said,
+/// heard ten times a second: `answer` takes a line and says whether it
+/// ended, `poll` gives what is said unasked, and `close` what is said when
+/// the input ends without an end. Ends the process, `clean()` deciding its
+/// status.
+template <typename Answer, typename Poll, typename Close, typename Clean>
+[[noreturn]] void serve(Answer answer, Poll poll, Close close, Clean clean) {
     Inbox inbox;
     std::thread reader([&inbox] {
         std::string line;
@@ -420,7 +430,6 @@ int session(const std::filesystem::path& game, const std::filesystem::path& root
         std::fputs(said.c_str(), stdout);
         std::fflush(stdout);
     };
-    // A running operation is heard from ten times a second.
     constexpr auto kHearEvery = std::chrono::milliseconds{100};
     bool ended = false;
     while (!ended) {
@@ -437,23 +446,70 @@ int session(const std::filesystem::path& game, const std::filesystem::path& root
             }
             closed = inbox.closed && inbox.lines.empty();
         }
-        for (const std::string& kSaid : held.poll()) {
+        for (const std::string& kSaid : poll()) {
             kSay(kSaid);
         }
         if (line.has_value()) {
-            kSay(held.answer(*line, ended));
+            kSay(answer(*line, ended));
         } else if (closed) {
-            // The input ended without `end`: as if it had said it, so a
-            // running operation is stopped and answers.
-            kSay(held.answer(R"({"kind":"authoring.end","id":null})", ended));
+            for (const std::string& kSaid : close()) {
+                kSay(kSaid);
+            }
             break;
         }
     }
-    const int kStatus = held.clean() ? 0 : 1;
+    const int kStatus = clean() ? 0 : 1;
     // Ended without the C library's cleanup, which would wait for standard
     // input, held by the reader in a read that may never return.
     std::fflush(stdout);
     std::_Exit(kStatus);
+}
+
+/// `session`: records from standard input answered on standard output
+/// until `end` or the input ends, and what the session says unasked as it
+/// says it; 0 when every record succeeded.
+[[noreturn]] void
+session(const std::filesystem::path& game, const std::filesystem::path& root, const std::filesystem::path& cook) {
+    rawframe::authoring_session::Session held{game, root, cook};
+    serve(
+        [&held](const std::string& line, bool& ended) {
+            return held.answer(line, ended);
+        },
+        [&held] {
+            return held.poll();
+        },
+        [&held] {
+            // The input ended without `end`: as if it had said it, so a
+            // running operation is stopped and answers.
+            bool ended = false;
+            return std::vector<std::string>{held.answer(R"({"kind":"authoring.end","id":null})", ended)};
+        },
+        [&held] {
+            return held.clean();
+        });
+}
+
+/// `mcp`: the session offered to an agent over the Model Context
+/// Protocol's standard input and output transport (D773, mcp.h), until the
+/// input ends, as MCP ends a session; always 0, a failed call being the
+/// agent's to read, not the process's.
+[[noreturn]] void
+mcp(const std::filesystem::path& game, const std::filesystem::path& root, const std::filesystem::path& cook) {
+    rawframe::authoring_session::Session held{game, root, cook};
+    rawframe::authoring_session::McpBridge bridge{held};
+    serve(
+        [&bridge](const std::string& line, bool&) {
+            return bridge.answer(line);
+        },
+        [&bridge] {
+            return bridge.poll();
+        },
+        [&bridge] {
+            return bridge.end();
+        },
+        [] {
+            return true;
+        });
 }
 
 } // namespace
@@ -480,12 +536,16 @@ int main(int argc, char** argv) {
     // `session <game> [<scene root>] [--cook <program>]`
     const bool kCookNamed = argc >= 5 && std::string_view{argv[argc - 2]} == "--cook";
     const int kSessionArguments = kCookNamed ? argc - 2 : argc;
-    if (kVerb == "session" && (kSessionArguments == 3 || kSessionArguments == 4)) {
+    if ((kVerb == "session" || kVerb == "mcp") && (kSessionArguments == 3 || kSessionArguments == 4)) {
         const std::filesystem::path kGame = argv[2];
-        return session(kGame,
-                       kSessionArguments == 4 ? std::filesystem::path{argv[3]} : kGame.parent_path(),
-                       kCookNamed ? std::filesystem::path{argv[argc - 1]}
-                                  : rawframe::process::besideSelf("rawframe-cook"));
+        const std::filesystem::path kRoot =
+            kSessionArguments == 4 ? std::filesystem::path{argv[3]} : kGame.parent_path();
+        const std::filesystem::path kCook =
+            kCookNamed ? std::filesystem::path{argv[argc - 1]} : rawframe::process::besideSelf("rawframe-cook");
+        if (kVerb == "mcp") {
+            mcp(kGame, kRoot, kCook);
+        }
+        session(kGame, kRoot, kCook);
     }
     if (kVerb == "migrate" && argc >= 4) {
         const bool kDry = std::string_view{argv[argc - 1]} == "--dry-run";
@@ -499,6 +559,7 @@ int main(int argc, char** argv) {
                "       rawframe-author read <game description> <scene> <queries>\n"
                "       rawframe-author migrate <game description> <scene>... [--dry-run]\n"
                "       rawframe-author session <game description> [<scene root>] [--cook <rawframe-cook>]\n"
+               "       rawframe-author mcp <game description> [<scene root>] [--cook <rawframe-cook>]\n"
                "       rawframe-author connect <endpoint> <pin file> <token file>\n",
                stderr);
     return 2;
