@@ -17,6 +17,7 @@
 import re
 import subprocess
 import sys
+import time
 
 
 try:
@@ -105,9 +106,36 @@ def extents(address, owner, path):
     return tuple(int(n) for n in numbers[-4:]) if len(numbers) >= 4 else None
 
 
+def scroll_to(address, owner, path):
+    """Asks the program to scroll the node at `path` into view, as a screen
+    reader does before acting on it."""
+    if dbus is not None:
+        try:
+            _bus(address).get_object(owner, path, introspect=False).ScrollTo(
+                dbus.UInt32(0), dbus_interface="org.a11y.atspi.Component")
+        except dbus.exceptions.DBusException:
+            pass
+        return
+    call(address, "call", owner, path, "org.a11y.atspi.Component", "ScrollTo", "u", "0")
+
+
+def settled(address, owner, path):
+    """The node's extents once a scroll it asked for has moved it: the same
+    twice running, or after a second."""
+    box = extents(address, owner, path)
+    for _ in range(10):
+        time.sleep(0.1)
+        again = extents(address, owner, path)
+        if again == box:
+            return box
+        box = again
+    return box
+
+
 def centre(address, owner, wanted, role=None):
     """The centre of the control named `wanted`, its n-th when it ends with
-    `#n`, of `role` if given; None when there is none."""
+    `#n`, of `role` if given, scrolled into view first (D776); None when
+    there is none."""
     count = 1
     if "#" in wanted:
         wanted, nth = wanted.rsplit("#", 1)
@@ -117,7 +145,8 @@ def centre(address, owner, wanted, role=None):
             continue
         count -= 1
         if count == 0:
-            box = extents(address, owner, path)
+            scroll_to(address, owner, path)
+            box = settled(address, owner, path)
             return None if box is None else (box[0] + box[2] // 2, box[1] + box[3] // 2)
     return None
 
