@@ -36,14 +36,15 @@ std::optional<std::size_t> itemOf(const Value* array, const JsonStep& step) {
 
 /// `object` with its member `name` as `value`, or gone for none, its
 /// members in `order`. A container a change rebuilt (`rebuilt`) and left
-/// empty is gone too, unless it is the root's own member.
+/// empty is gone too, unless it is `kept` (the root's own member, or one
+/// its kind holds even empty).
 Value withMember(const Value& object,
                  std::span<const std::string_view> order,
                  std::string_view name,
                  const std::optional<Value>& value,
                  bool rebuilt = false,
-                 bool root = false) {
-    const bool kEmpty = rebuilt && !root && value.has_value() &&
+                 bool kept = false) {
+    const bool kEmpty = rebuilt && !kept && value.has_value() &&
                         ((value->kind() == Value::Kind::Object && value->names().empty()) ||
                          (value->kind() == Value::Kind::Array && value->items().empty()));
     // A holder whose kind gives no order holds members of its own names, in
@@ -77,19 +78,20 @@ result::Result<Value> setIn(const Value& object,
                             std::size_t depth,
                             const std::optional<Value>& to,
                             std::size_t place,
-                            MemberOrder order) {
+                            MemberOrder order,
+                            KeptEmpty keeps) {
     const std::span<const JsonStep> path = full.subspan(depth);
     const JsonStep& kStep = path.front();
     const std::span<const std::string_view> kOrder = order(full.first(depth));
-    const bool kRoot = depth == 0;
+    const bool kKept = depth == 0 || (keeps != nullptr && keeps(full.first(depth + 1)));
     if (kStep.key.empty()) {
         if (path.size() == 1) {
             return withMember(object, kOrder, kStep.member, to);
         }
         const Value* held = object.find(kStep.member);
         RAWFRAME_TRY_ASSIGN(Value child,
-                            setIn(held != nullptr ? *held : Value::object(), full, depth + 1, to, place, order));
-        return withMember(object, kOrder, kStep.member, std::move(child), true, kRoot);
+                            setIn(held != nullptr ? *held : Value::object(), full, depth + 1, to, place, order, keeps));
+        return withMember(object, kOrder, kStep.member, std::move(child), true, kKept);
     }
     const Value* array = object.find(kStep.member);
     const std::size_t kCount = array != nullptr ? array->items().size() : 0;
@@ -118,14 +120,14 @@ result::Result<Value> setIn(const Value& object,
         }
         for (std::size_t each = 0; each < kCount; ++each) {
             if (each == *kFound) {
-                RAWFRAME_TRY_ASSIGN(Value item, setIn(array->items()[each], full, depth + 1, to, place, order));
+                RAWFRAME_TRY_ASSIGN(Value item, setIn(array->items()[each], full, depth + 1, to, place, order, keeps));
                 items.push(std::move(item));
             } else {
                 items.push(array->items()[each]);
             }
         }
     }
-    return withMember(object, kOrder, kStep.member, std::move(items), true, kRoot);
+    return withMember(object, kOrder, kStep.member, std::move(items), true, kKept);
 }
 
 std::size_t bytesOf(const JsonDelta& delta) {
@@ -164,8 +166,8 @@ std::optional<std::size_t> placeAt(const Value& root, std::span<const JsonStep> 
     return kHolder.has_value() ? itemOf(kHolder->find(path.back().member), path.back()) : std::nullopt;
 }
 
-result::Result<JsonDocument>
-JsonDocument::open(std::string_view text, MemberOrder order, DocumentReader reads, const HistoryLimits& limits) {
+result::Result<JsonDocument> JsonDocument::open(
+    std::string_view text, MemberOrder order, DocumentReader reads, const HistoryLimits& limits, KeptEmpty kept) {
     auto read = reads(text);
     if (!read.has_value()) {
         return std::unexpected<result::Error>{std::move(read).error()};
@@ -178,7 +180,7 @@ JsonDocument::open(std::string_view text, MemberOrder order, DocumentReader read
                                                                                  code(AuthoringError::ValidationFailed),
                                                                                  "a document reads")};
     }
-    return JsonDocument{std::move(*parsed), order, reads, limits};
+    return JsonDocument{std::move(*parsed), order, reads, limits, kept};
 }
 
 std::string JsonDocument::text() const {
@@ -231,7 +233,8 @@ result::Status JsonDocument::applyTo(Value& root, const JsonDelta& delta, bool f
                       AuthoringError::DeltaMismatch,
                       "a slot does not hold what its change leaves from");
     }
-    RAWFRAME_TRY_ASSIGN(root, setIn(root, delta.path, 0, forward ? delta.after : delta.before, delta.place, order_));
+    RAWFRAME_TRY_ASSIGN(root,
+                        setIn(root, delta.path, 0, forward ? delta.after : delta.before, delta.place, order_, kept_));
     return {};
 }
 

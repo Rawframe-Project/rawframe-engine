@@ -237,6 +237,32 @@ RAWFRAME_TEST(AMaterialGraphsNodesChangeAndUndoExactly) {
     }
 }
 
+RAWFRAME_TEST(ANodesInputsAndParamsStayWhenTheirLastIsUnset) {
+    auto opened = AuthoredMaterial::open(kDocument, kTinted);
+    RAWFRAME_EXPECT(opened.has_value());
+    if (!opened.has_value()) {
+        return;
+    }
+    AuthoredMaterial& material = **opened;
+    // The surface's only input unset: its inputs empty, still there, as a
+    // node of the library holds them.
+    const std::array<Operation, 1> kUnset = {
+        SetMaterialNodeInput{.node = kSurface, .input = "base_color", .value = std::nullopt}};
+    RAWFRAME_EXPECT(material.change(0, kUnset).has_value());
+    RAWFRAME_EXPECT(material.text().find("\"inputs\": {}") != std::string::npos);
+    RAWFRAME_EXPECT(material.undo(1).has_value() && material.text() == kTinted);
+    // A node made, given an input, and removed in one batch, as the nightly
+    // fuzzing found: undone exactly, where its inputs emptied were gone.
+    constexpr std::uint64_t kUv = 0x2f00000000000043;
+    const std::array<Operation, 3> kMadeAndGone = {
+        CreateMaterialNode{.node = kUv, .type = "rawframe/uv@1"},
+        SetMaterialNodeInput{.node = kUv, .input = "scale", .value = Value::real(0.25)},
+        RemoveMaterialNode{.node = kUv}};
+    RAWFRAME_EXPECT(material.change(2, kMadeAndGone).has_value() && material.text() == kTinted);
+    RAWFRAME_EXPECT(material.undo(3).has_value() && material.text() == kTinted && !material.dirty());
+    RAWFRAME_EXPECT(material.redo(4).has_value() && material.text() == kTinted);
+}
+
 RAWFRAME_TEST(AMaterialGraphsInterfaceIsDeclaredWhereItIs) {
     auto opened = AuthoredMaterial::open(kDocument, kTinted);
     RAWFRAME_EXPECT(opened.has_value());

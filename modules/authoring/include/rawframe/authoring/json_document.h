@@ -52,6 +52,10 @@ struct JsonDelta {
 /// to it (empty for the root, D729); none for an object whose members are
 /// names of its own, kept in name order (D721).
 using MemberOrder = std::span<const std::string_view> (*)(std::span<const JsonStep> at) noexcept;
+/// Whether the object at `at` stays when a change leaves it empty, as its
+/// kind holds it even then (a material graph node's params and inputs);
+/// without one, a container a change empties goes.
+using KeptEmpty = bool (*)(std::span<const JsonStep> at) noexcept;
 /// Whether a document's text reads as its kind; the reader's refusal, said.
 using DocumentReader = result::Status (*)(std::string_view text);
 
@@ -72,8 +76,11 @@ public:
 
     /// `text` at generation nought and clean; refused (`ValidationFailed`)
     /// where `reads` does not read it.
-    [[nodiscard]] static result::Result<JsonDocument>
-    open(std::string_view text, MemberOrder order, DocumentReader reads, const HistoryLimits& limits = {});
+    [[nodiscard]] static result::Result<JsonDocument> open(std::string_view text,
+                                                           MemberOrder order,
+                                                           DocumentReader reads,
+                                                           const HistoryLimits& limits = {},
+                                                           KeptEmpty kept = nullptr);
 
     [[nodiscard]] std::uint64_t generation() const noexcept {
         return generation_;
@@ -130,8 +137,9 @@ private:
         std::size_t bytes = 0;
     };
 
-    JsonDocument(document::Value root, MemberOrder order, DocumentReader reads, const HistoryLimits& limits)
-        : root_(std::move(root)), order_(order), reads_(reads), history_(limits) {
+    JsonDocument(
+        document::Value root, MemberOrder order, DocumentReader reads, const HistoryLimits& limits, KeptEmpty kept)
+        : root_(std::move(root)), order_(order), kept_(kept), reads_(reads), history_(limits) {
     }
 
     [[nodiscard]] result::Status applyTo(document::Value& root, const JsonDelta& delta, bool forward) const;
@@ -139,6 +147,7 @@ private:
 
     document::Value root_;
     MemberOrder order_ = nullptr;
+    KeptEmpty kept_ = nullptr;
     DocumentReader reads_ = nullptr;
     std::uint64_t generation_ = 0;
     History<Entry> history_;

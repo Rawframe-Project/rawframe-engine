@@ -63,6 +63,12 @@ std::unexpected<result::Error> unread(result::Error error, std::string_view what
         result::ErrorClass::InvalidArgument, kAuthoringDomain, code(AuthoringError::ValidationFailed), why)};
 }
 
+/// A graph node's params and inputs, held even empty: a node of the
+/// library is its type, its params, and its inputs.
+bool keptInGraph(std::span<const JsonStep> at) noexcept {
+    return at.size() == 3 && at[0].member == "graph" && (at[2].member == "params" || at[2].member == "inputs");
+}
+
 result::Status readsInstance(std::string_view text) {
     auto read = material::readInstance(text);
     if (!read.has_value()) {
@@ -199,8 +205,10 @@ AuthoredMaterial::open(base::Bits128 document, std::string_view text, const Hist
     const bool kGraph = !material::namesBase(text);
     const DocumentReader kReads = kGraph ? readsGraph : readsInstance;
     RAWFRAME_TRY(kReads(text));
-    RAWFRAME_TRY_ASSIGN(JsonDocument opened,
-                        JsonDocument::open(text, kGraph ? graphOrderOf : instanceOrderOf, kReads, limits));
+    RAWFRAME_TRY_ASSIGN(
+        JsonDocument opened,
+        JsonDocument::open(
+            text, kGraph ? graphOrderOf : instanceOrderOf, kReads, limits, kGraph ? keptInGraph : nullptr));
     return std::unique_ptr<AuthoredMaterial>{new AuthoredMaterial(document, std::move(opened), kGraph)};
 }
 
