@@ -88,17 +88,20 @@ for pattern in "${wanted[@]}"; do
     # CI draws a frame in a second or two.
     bounds=""
     for _ in $(seq 60); do
-        "${adb[@]}" shell uiautomator dump /sdcard/rawframe-play.xml >/dev/null 2>&1 || true
-        bounds="$("${adb[@]}" shell cat /sdcard/rawframe-play.xml 2>/dev/null | sed 's/<node /\n<node /g' |
+        dumped="$("${adb[@]}" shell uiautomator dump /sdcard/rawframe-play.xml 2>&1 | tr -d '\r' || true)"
+        nodes="$("${adb[@]}" shell cat /sdcard/rawframe-play.xml 2>/dev/null | sed 's/<node /\n<node /g' |
             grep "package=\"$package\"" |
-            sed -n 's/.*content-desc="\([^"]*\)".*bounds="\[\([0-9]*\),\([0-9]*\)\]\[\([0-9]*\),\([0-9]*\)\]".*/\2 \3 \4 \5 \1/p' |
-            grep -E -- " .*$pattern" | head -1 || true)"
+            sed -n 's/.*content-desc="\([^"]*\)".*bounds="\[\([0-9]*\),\([0-9]*\)\]\[\([0-9]*\),\([0-9]*\)\]".*/\2 \3 \4 \5 \1/p' || true)"
+        bounds="$(grep -E -- " .*$pattern" <<<"$nodes" | head -1 || true)"
         [ -n "$bounds" ] && break
         sleep 5
     done
     "${adb[@]}" shell rm -f /sdcard/rawframe-play.xml
     if [ -z "$bounds" ]; then
-        echo "nothing matching $pattern"
+        # What the last dump said, and the client's nodes it held, to tell
+        # a dump that never came from a node that was not there.
+        echo "nothing matching $pattern; the last dump said: $dumped"
+        echo "its nodes: $(tr '\n' ';' <<<"$nodes")"
     else
         read -r left top right bottom label <<<"$bounds"
         "${adb[@]}" shell input tap $(((left + right) / 2)) $(((top + bottom) / 2))
