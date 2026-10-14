@@ -24,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":32,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":35,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its menus and the palette's field (D777), its buttons, its
     # docks as scroll panes named by their headings or tabs in SPEC-0051's
@@ -39,7 +39,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_read_aloud PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no"
                          PASS_REGULAR_EXPRESSION
-                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 push button Console\na11y: 2 scroll pane Assets\n.*a11y: 3 push button level.scene\n.*a11y: 3 entry new scene or import\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 panel Dock edge\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 push button Console\na11y: 2 scroll pane Assets\n.*a11y: 3 push button level.scene\n.*a11y: 3 entry new scene or import\na11y: 2 panel Inspector edge\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
     # Studio typed into by a screen reader (D613): the new scene's entry
     # takes a name inserted through AT-SPI's EditableText as typing, the
     # field begun as a press begins it, and reads it back.
@@ -52,6 +52,33 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no"
                          PASS_REGULAR_EXPRESSION
                          "a11y: 3 entry new scene or import\n.*a11y: typed into new scene or import: b true\na11y: new scene or import reads arena.scene\n.*\"exit\":\"clean_stop\"")
+    # The docks' edges dragged (D779): the Hierarchy wider and the
+    # Inspector wider by a hundred pixels each, the bottom dock taller by
+    # as much; the sizes are kept in the test's preferences as each edge is
+    # let go.
+    add_test(NAME studio_splits
+             COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.preferences = {work}/studio.preferences"
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene drag=369,200,469,200 drag=911,300,811,300 drag=400,418,400,318
+                     wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_splits PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"hierarchyWidth\": 460,[ \n]*\"inspectorWidth\": 460,[ \n]*\"dockHeight\": 36[0-9].*\"code\":\"studio_layout\"[^\n]*\"resized\":3,\"hierarchyWidth\":460,\"inspectorWidth\":460,\"dockHeight\":36[0-9]}.*\"exit\":\"clean_stop\"")
+    # And the sizes kept read back as Studio starts (D779), from a document
+    # it is given and does not write, nothing being dragged.
+    add_test(NAME studio_keeps_layout
+             COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.preferences = ${CMAKE_CURRENT_SOURCE_DIR}/tests/layout.preferences"
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene wait=2
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_keeps_layout PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"code\":\"studio_layout\"[^\n]*\"resized\":0,\"hierarchyWidth\":420,\"inspectorWidth\":300,\"dockHeight\":300}.*\"exit\":\"clean_stop\"")
     # Studio's commands (D777): ground renamed, then undone by Control Z,
     # redone through the palette's search, undone again from the Edit
     # menu, and deleted by the Delete key with no field holding the

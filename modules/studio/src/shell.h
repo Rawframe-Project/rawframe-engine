@@ -9,6 +9,7 @@
 
 #include "console.h"
 #include "play.h"
+#include "preferences.h"
 #include "rawframe/authoring_session/game.h"
 #include "rawframe/authoring_session/session.h"
 #include "rawframe/composition/composition.h"
@@ -43,6 +44,7 @@
 namespace rawframe::studio {
 
 inline constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"};
+inline constexpr diagnostics::EventIdentity kLayout{"studio", "studio_layout"};
 inline constexpr diagnostics::EventIdentity kShown{"studio", "studio_shown"};
 /// Studio's window read by assistive technology (D575), or why not.
 inline constexpr diagnostics::EventIdentity kAccessible{"studio", "studio_accessibility_ready"};
@@ -178,6 +180,30 @@ private:
     /// A column under `parent` headed `heading`, sharing its row's width or
     /// `width` pixels wide.
     result::Result<ui::Node> column(ui::Node parent, std::string_view heading, float width = 0);
+
+    /// A column's layout, sharing its row's width or `width` pixels wide.
+    [[nodiscard]] static ui::Layout columnLayout(float width);
+
+    /// The bottom dock's layout: `height` pixels, or for nought its share
+    /// of the body.
+    [[nodiscard]] static ui::Layout dockLayout(float height);
+
+    /// The docks' edges a pointer drags (D779).
+    enum class Edge : std::uint8_t {
+        Hierarchy,
+        Inspector,
+        Dock
+    };
+
+    /// A splitter under `parent` for `edge`, across a column for the dock's.
+    result::Status splitter(ui::Node parent, Edge edge);
+
+    /// While a splitter is held, its dock follows the pointer.
+    void followSplitter();
+
+    /// A splitter let go: the sizes kept in the preferences' file, if
+    /// Studio has one.
+    void releaseSplitter();
 
     /// A dock's pane, which scrolls, named `name` and headed by its tab.
     result::Result<ui::Node> pane(std::string_view name);
@@ -566,6 +592,20 @@ private:
     ui::Node historyTab_{};
     ui::Node historyColumn_{};
     Dock dockShown_ = Dock::Assets;
+    /// The splitters by edge, the one held with where the pointer was and
+    /// the size then, and the sizes preferred, kept in `preferencesFile_`
+    /// when Studio has one (`studio.preferences`, D779).
+    std::array<ui::Node, 3> splitters_{};
+    struct Resizing {
+        Edge edge = Edge::Hierarchy;
+        float from = 0;
+        float size = 0;
+    };
+    std::optional<Resizing> resizing_;
+    bool released_ = false;
+    Preferences preferences_;
+    std::filesystem::path preferencesFile_;
+    std::uint64_t resized_ = 0;
     ui::Node consoleTab_{};
     /// The Console's pane: its filters over the list of its lines, which
     /// alone scrolls, so the filters stay in sight.

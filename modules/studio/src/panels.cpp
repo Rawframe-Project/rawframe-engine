@@ -19,17 +19,28 @@ result::Status ShellParticipant::words(ui::Node node, std::string_view text, std
     return tree_->setText(node, text, ui::TextLook{.font = font_, .size = size, .color = color, .wrap = false});
 }
 
+ui::Layout ShellParticipant::columnLayout(float width) {
+    return ui::Layout{.width = ui::pixels(width),
+                      .direction = ui::Direction::Column,
+                      .gap = 4,
+                      .grow = width > 0 ? 0.0F : 1.0F,
+                      .shrink = width > 0 ? 0.0F : 1.0F,
+                      .padding = {8, 8, 8, 8},
+                      .scroll = ui::Scroll::Vertical};
+}
+
+ui::Layout ShellParticipant::dockLayout(float height) {
+    return ui::Layout{.height = ui::pixels(height),
+                      .minHeight = ui::pixels(0),
+                      .direction = ui::Direction::Column,
+                      .gap = 4,
+                      .grow = height > 0 ? 0.0F : 2.0F,
+                      .shrink = height > 0 ? 0.0F : 1.0F,
+                      .padding = {8, 8, 8, 8}};
+}
+
 result::Result<ui::Node> ShellParticipant::column(ui::Node parent, std::string_view heading, float width) {
-    RAWFRAME_TRY_ASSIGN(const ui::Node kColumn,
-                        box(parent,
-                            ui::Layout{.width = ui::pixels(width),
-                                       .direction = ui::Direction::Column,
-                                       .gap = 4,
-                                       .grow = width > 0 ? 0.0F : 1.0F,
-                                       .shrink = width > 0 ? 0.0F : 1.0F,
-                                       .padding = {8, 8, 8, 8},
-                                       .scroll = ui::Scroll::Vertical},
-                            kPanel));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kColumn, box(parent, columnLayout(width), kPanel));
     // A column scrolls what does not fit (D441), so its rows keep their
     // heights rather than shrinking to fit.
     RAWFRAME_TRY_ASSIGN(
@@ -107,9 +118,7 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY(showHistory());
     RAWFRAME_TRY_ASSIGN(
         const ui::Node kBody,
-        box(root_,
-            ui::Layout{.minHeight = ui::pixels(0), .direction = ui::Direction::Row, .gap = 6, .grow = 1},
-            kBackground));
+        box(root_, ui::Layout{.minHeight = ui::pixels(0), .direction = ui::Direction::Row, .grow = 1}, kBackground));
     // The status bar under the body: what Studio last said.
     RAWFRAME_TRY_ASSIGN(
         const ui::Node kStatusBar,
@@ -118,7 +127,10 @@ result::Status ShellParticipant::build() {
                 .height = ui::pixels(24), .alignItems = ui::Align::Center, .shrink = 0, .padding = {10, 2, 10, 2}},
             kHeaderFill));
     RAWFRAME_TRY_ASSIGN(statusNode_, box(kStatusBar, ui::Layout{}, 0));
-    // A menu or the matches went with the tree they were in.
+    // A menu or the matches, and the splitters, went with the tree they
+    // were in.
+    splitters_ = {};
+    resizing_.reset();
     popup_.reset();
     menuOpen_.reset();
     popupRows_.clear();
@@ -126,19 +138,18 @@ result::Status ShellParticipant::build() {
         RAWFRAME_TRY(showBroken(kBody));
         return showMenus(kStart);
     }
-    RAWFRAME_TRY_ASSIGN(const ui::Node kMain,
-                        box(kBody,
-                            ui::Layout{.width = ui::pixels(0), .direction = ui::Direction::Column, .gap = 6, .grow = 1},
-                            kBackground));
-    RAWFRAME_TRY_ASSIGN(const ui::Node kUpper,
-                        box(kMain,
-                            ui::Layout{.height = ui::pixels(0),
-                                       .minHeight = ui::pixels(0),
-                                       .direction = ui::Direction::Row,
-                                       .gap = 6,
-                                       .grow = 3},
-                            kBackground));
-    RAWFRAME_TRY_ASSIGN(entitiesColumn_, column(kUpper, "Hierarchy", 360));
+    RAWFRAME_TRY_ASSIGN(
+        const ui::Node kMain,
+        box(kBody, ui::Layout{.width = ui::pixels(0), .direction = ui::Direction::Column, .grow = 1}, kBackground));
+    RAWFRAME_TRY_ASSIGN(
+        const ui::Node kUpper,
+        box(kMain,
+            ui::Layout{.height = ui::pixels(0), .minHeight = ui::pixels(0), .direction = ui::Direction::Row, .grow = 3},
+            kBackground));
+    // The docks at the sizes the author left them (D779), each with a
+    // splitter on its inner edge in place of the gap it had.
+    RAWFRAME_TRY_ASSIGN(entitiesColumn_, column(kUpper, "Hierarchy", preferences_.hierarchyWidth));
+    RAWFRAME_TRY(splitter(kUpper, Edge::Hierarchy));
     // The entities' operations above their rows, in two rows: what makes
     // and copies, then what restores and orders.
     RAWFRAME_TRY_ASSIGN(const ui::Node kMaking,
@@ -189,15 +200,8 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(tabsRow_, box(centerColumn_, ui::Layout{.height = ui::pixels(28), .gap = 4, .shrink = 0}, 0));
     // The bottom dock under the Hierarchy and the center, its tabs its
     // heading.
-    RAWFRAME_TRY_ASSIGN(bottomDock_,
-                        box(kMain,
-                            ui::Layout{.height = ui::pixels(0),
-                                       .minHeight = ui::pixels(0),
-                                       .direction = ui::Direction::Column,
-                                       .gap = 4,
-                                       .grow = 2,
-                                       .padding = {8, 8, 8, 8}},
-                            kPanel));
+    RAWFRAME_TRY(splitter(kMain, Edge::Dock));
+    RAWFRAME_TRY_ASSIGN(bottomDock_, box(kMain, dockLayout(preferences_.dockHeight), kPanel));
     RAWFRAME_TRY_ASSIGN(const ui::Node kDockTabs,
                         box(bottomDock_, ui::Layout{.height = ui::pixels(26), .gap = 4, .shrink = 0}, 0));
     RAWFRAME_TRY_ASSIGN(assetsTab_, button(kDockTabs, "Assets"));
@@ -209,7 +213,8 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY(tree_->attach(bottomDock_, scenesColumn_));
     dockShown_ = Dock::Assets;
     showDock(Dock::Assets);
-    RAWFRAME_TRY_ASSIGN(componentsColumn_, column(kBody, "Inspector", 360));
+    RAWFRAME_TRY(splitter(kBody, Edge::Inspector));
+    RAWFRAME_TRY_ASSIGN(componentsColumn_, column(kBody, "Inspector", preferences_.inspectorWidth));
     RAWFRAME_TRY(showMenus(kStart));
     return showScenes();
 }

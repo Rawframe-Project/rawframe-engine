@@ -30,9 +30,11 @@ render.device = any
 studio.game = $work/game/$(basename "$2")
 CONF
 # And settings of its own, in STUDIO_SETTINGS, such as the editor it opens
-# a diagnostic in (D453), which says how it was opened in STUDIO_EDITED.
+# a diagnostic in (D453), which says how it was opened in STUDIO_EDITED;
+# {work} in them is the test's own directory, where the preferences it
+# keeps go (D779).
 if [ -n "${STUDIO_SETTINGS:-}" ]; then
-    printf '%s\n' "$STUDIO_SETTINGS" >>"$work/studio.conf"
+    printf '%s\n' "${STUDIO_SETTINGS//\{work\}/$work}" >>"$work/studio.conf"
 fi
 export STUDIO_EDITED="$work/edited"
 "$1" --config "$work/studio.conf" >"$work/log" 2>&1 &
@@ -64,5 +66,6 @@ if grep -q '"device_unavailable"' "$work/log" && [ -z "${RAWFRAME_REQUIRE_GPU:-}
     exit 0
 fi
 cat "$work/edited" 2>/dev/null
+cat "$work/studio.preferences" 2>/dev/null
 cat "$work/log"
 exit "$status"

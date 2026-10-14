@@ -85,6 +85,19 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         return;
     }
     closePalette();
+    // A splitter held follows the pointer till it is let go (D779).
+    if (const auto kEdge = std::ranges::find(splitters_, node);
+        kEdge != splitters_.end() && pointing_ != nullptr && pointing_->pointer().has_value()) {
+        const auto kWhich = static_cast<Edge>(kEdge - splitters_.begin());
+        const std::array<float, 2> kAt = *pointing_->pointer();
+        const float kSize = kWhich == Edge::Hierarchy     ? preferences_.hierarchyWidth
+                            : kWhich == Edge::Inspector   ? preferences_.inspectorWidth
+                            : preferences_.dockHeight > 0 ? preferences_.dockHeight
+                                                          : tree_->rectOf(bottomDock_).height;
+        resizing_ = Resizing{.edge = kWhich, .from = kWhich == Edge::Dock ? kAt[1] : kAt[0], .size = kSize};
+        released_ = false;
+        return;
+    }
     // The row is the node pressed or the one its words are on.
     if (!cookTool_.empty() && node == cookNode_) {
         endEdit();

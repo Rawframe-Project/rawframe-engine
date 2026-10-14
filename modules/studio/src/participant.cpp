@@ -5,6 +5,8 @@
 #include "rawframe/process/self.h"
 #include "shell.h"
 
+#include <cstdio>
+
 namespace rawframe::studio {
 
 namespace {
@@ -70,6 +72,17 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     session_ = std::make_unique<authoring_session::Session>(kDescription, kRoot, cookTool_);
     description_ = kDescription;
     sceneRoot_ = kRoot;
+    // Studio's own preferences, the docks' sizes, where `studio.preferences`
+    // keeps them (D779); a file that does not read leaves the defaults.
+    if (const auto kKept = configuration.path("studio.preferences"); kKept.has_value()) {
+        preferencesFile_ = *kKept;
+        if (std::FILE* file = std::fopen(preferencesFile_.string().c_str(), "rb")) {
+            std::string kept(64 * 1024, '\0');
+            kept.resize(std::fread(kept.data(), 1, kept.size(), file));
+            std::fclose(file);
+            preferences_ = preferencesOf(kept).value_or(Preferences{});
+        }
+    }
     // VS Code by default; any editor that opens a file at a line by its
     // arguments (ADR-0066, D453).
     editor_ = std::string{configuration.text("studio.editor").value_or("code --goto {file}:{line}:{column}")};
@@ -173,6 +186,10 @@ result::Status ShellParticipant::start(composition::ParticipantContext& context)
         pointing_->onWheel([this](float x, float y, float deltaX, float deltaY) {
             wheels_.push_back({x, y, deltaX, deltaY});
         });
+        // A splitter held is let go with the press (D779).
+        pointing_->onRelease([this] {
+            released_ = true;
+        });
     }
     if (typing_ != nullptr) {
         typing_->answer([this](const view::Typing& typing) {
@@ -214,6 +231,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     attachPlayed(kSeconds);
     pollPicks(kSeconds);
     readLogs(kSeconds);
+    followSplitter();
     // A press is acted on as the window's records come and may have
     // changed what a column holds; the wheel is turned over it laid out,
     // so a click and a turn read in one frame scroll what the click
@@ -250,6 +268,7 @@ void ShellParticipant::stop() noexcept {
     if (pointing_ != nullptr) {
         pointing_->onPress({});
         pointing_->onWheel({});
+        pointing_->onRelease({});
     }
     if (typing_ != nullptr) {
         typing_->focus(std::nullopt);
@@ -296,6 +315,15 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("framesDrawn", framesDrawn_),
                   diagnostics::field("boxes", static_cast<std::uint64_t>(list_.boxes.size())),
                   diagnostics::field("glyphs", static_cast<std::uint64_t>(list_.glyphs.size()))});
+    // Apart from the summary, which holds as many fields as a record may
+    // (D361): how the docks were left (D779).
+    emitter_.log(diagnostics::Severity::Info,
+                 kLayout,
+                 "how Studio's docks were left",
+                 {diagnostics::field("resized", resized_),
+                  diagnostics::field("hierarchyWidth", static_cast<std::int64_t>(preferences_.hierarchyWidth)),
+                  diagnostics::field("inspectorWidth", static_cast<std::int64_t>(preferences_.inspectorWidth)),
+                  diagnostics::field("dockHeight", static_cast<std::int64_t>(preferences_.dockHeight))});
 }
 
 composition::CapabilityObject ShellParticipant::provide(std::string_view capability) noexcept {
