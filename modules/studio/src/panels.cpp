@@ -1,3 +1,4 @@
+#include "hierarchy.h"
 #include "hints.h"
 #include "shell.h"
 
@@ -384,6 +385,7 @@ void ShellParticipant::showScene(std::size_t at) {
     brought_.clear();
     removed_.clear();
     places_.clear();
+    parents_.clear();
     entity_.clear();
     components_ = 0;
     findField_.reset();
@@ -426,15 +428,27 @@ void ShellParticipant::showScene(std::size_t at) {
     if (listed == nullptr || listed->kind() != Value::Kind::Array) {
         return;
     }
+    // Shown as a tree, each entity under the one it follows (D785).
+    std::vector<const Value*> items;
+    std::vector<std::string> ids;
+    std::vector<std::string> parents;
     for (const Value& each : listed->items()) {
+        const Value* id = each.find("id");
+        const Value* parent = each.find("parent");
+        if (id == nullptr || id->text() == nullptr) {
+            continue;
+        }
+        items.push_back(&each);
+        ids.push_back(*id->text());
+        parents.push_back(parent != nullptr && parent->text() != nullptr ? *parent->text() : std::string{});
+    }
+    for (const TreeLine& kLine : treeOf(ids, parents)) {
+        const Value& each = *items[kLine.at];
         const Value* id = each.find("id");
         const Value* name = each.find("name");
         const Value* brought = each.find("brought");
         const Value* removed = each.find("removed");
         const bool kRemoved = removed != nullptr && removed->truth().value_or(false);
-        if (id == nullptr || id->text() == nullptr) {
-            continue;
-        }
         std::string label = name != nullptr && name->text() != nullptr ? *name->text() : std::string{};
         if (label.empty() && brought != nullptr) {
             const Value* instance = brought->find("instance");
@@ -448,7 +462,15 @@ void ShellParticipant::showScene(std::size_t at) {
         if (!added.has_value()) {
             break;
         }
+        if (kLine.depth > 0) {
+            static_cast<void>(
+                tree_->setLayout(*added,
+                                 ui::Layout{.height = ui::pixels(28),
+                                            .shrink = 0,
+                                            .padding = {8.0F + (16.0F * static_cast<float>(kLine.depth)), 4, 8, 4}}));
+        }
         entityRows_.push_back(*added);
+        parents_.push_back(parents[kLine.at]);
         entities_.push_back(*id->text());
         names_.push_back(name != nullptr && name->text() != nullptr ? *name->text() : std::string{});
         brought_.push_back(brought != nullptr);

@@ -29,8 +29,13 @@ void ShellParticipant::pressAt(float x, float y) {
     pressedAt_ = {x, y};
     const bool kMoving = beforePress();
     const auto kHit = tree_->hit(root_, x, y);
+    heldEntity_.reset();
     if (kHit.has_value() && kHit->node.has_value()) {
+        // Only a pointer's press holds a row to drag; a screen reader's
+        // press is let go as it is made.
+        pointerPress_ = true;
         pressOn(*kHit->node, kMoving);
+        pointerPress_ = false;
     }
 }
 
@@ -307,6 +312,10 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         }
     } else if (const auto kEntity = std::ranges::find(entityRows_, node); kEntity != entityRows_.end()) {
+        // Held, it may be dragged onto another (D785).
+        if (pointerPress_) {
+            heldEntity_ = static_cast<std::size_t>(kEntity - entityRows_.begin());
+        }
         if (moving && uiChosen()) {
             moveNodeInto(entities_[static_cast<std::size_t>(kEntity - entityRows_.begin())]);
         } else {

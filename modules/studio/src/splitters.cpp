@@ -34,6 +34,10 @@ void ShellParticipant::followSplitter() {
     // may come only after the release, never having seen the last of the
     // drag.
     const bool kReleased = std::exchange(released_, false);
+    // An entity row let go after a drag reparents it (D785).
+    if (kReleased && heldEntity_.has_value()) {
+        dropEntity();
+    }
     const std::optional<std::array<float, 2>> kPointer =
         pointing_ != nullptr ? pointing_->pointer() : std::optional<std::array<float, 2>>{};
     if (!resizing_.has_value() || !kPointer.has_value()) {

@@ -424,6 +424,16 @@ private:
     void openPreferences();
     void closePreferences();
 
+    /// An entity row let go after a drag (D785): onto another entity, it
+    /// follows that one; onto the Hierarchy below its entities, none.
+    void dropEntity();
+
+    /// `entity` (a place in `entities_`) made to follow `parent`, or none:
+    /// its attachment added if it has none and its parent set, or the
+    /// attachment removed; refused for an instance's entity, one that
+    /// would follow its own follower, or a game with no attachment.
+    void reparent(std::size_t entity, std::optional<std::size_t> parent);
+
     /// The values `row`'s field is chosen from, in a list under it (D784).
     void showChoices(const FieldRow& row, const std::vector<std::string>& choices);
 
@@ -665,6 +675,9 @@ private:
     };
     std::optional<Resizing> resizing_;
     std::array<float, 2> pressedAt_{};
+    /// The entity row pressed, until the press is let go (D785).
+    std::optional<std::size_t> heldEntity_;
+    bool pointerPress_ = false;
     bool released_ = false;
     Preferences preferences_;
     std::filesystem::path preferencesFile_;
@@ -725,6 +738,8 @@ private:
     std::vector<bool> brought_;
     /// Whether each brought entity is one its instance removed.
     std::vector<bool> removed_;
+    /// Each listed entity's parent, empty for none, beside `entities_` (D785).
+    std::vector<std::string> parents_;
     /// Each of the scene's own entities' place among them; none for one an
     /// instance brought.
     std::vector<std::optional<std::int64_t>> places_;
