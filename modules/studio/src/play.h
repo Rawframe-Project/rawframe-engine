@@ -76,6 +76,12 @@ public:
     /// Asks both to stop, as a Host stops on a stop request.
     void stop() noexcept;
 
+    /// Where its server and client write their logs, server.log and
+    /// client.log, which Studio's Console reads (D778).
+    [[nodiscard]] const std::filesystem::path& directory() const noexcept {
+        return directory_;
+    }
+
 private:
     /// Picks the server's port and the client's endpoint's, writes the
     /// settings naming them, and starts the server, letting go of whatever

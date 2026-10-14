@@ -213,6 +213,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     hearCook();
     attachPlayed(kSeconds);
     pollPicks(kSeconds);
+    readLogs(kSeconds);
     // A press is acted on as the window's records come and may have
     // changed what a column holds; the wheel is turned over it laid out,
     // so a click and a turn read in one frame scroll what the click
@@ -289,6 +290,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("dragged", dragged_),
                   diagnostics::field("raised", raised_),
                   diagnostics::field("turned", turned_),
+                  diagnostics::field("consoleLines", consoleLines_),
                   diagnostics::field("marked", marked_),
                   diagnostics::field("status", std::string_view{status_}),
                   diagnostics::field("framesDrawn", framesDrawn_),

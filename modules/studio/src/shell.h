@@ -7,6 +7,7 @@
 // panels.cpp's, its presses, typing, and session records editing.cpp's,
 // and the game it plays playing.cpp's.
 
+#include "console.h"
 #include "play.h"
 #include "rawframe/authoring_session/game.h"
 #include "rawframe/authoring_session/session.h"
@@ -28,6 +29,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -193,8 +195,29 @@ private:
     /// Inspector on the right the body's height; the status bar.
     result::Status build();
 
-    /// The bottom dock showing History, or Assets.
-    void showDock(bool history);
+    /// The bottom dock's panes, one shown at a time.
+    enum class Dock : std::uint8_t {
+        Assets,
+        History,
+        Console
+    };
+
+    /// The bottom dock showing `pane`.
+    void showDock(Dock pane);
+
+    /// A line added to the Console, the oldest let go past its bound.
+    void addConsoleLine(ConsoleLine line);
+
+    /// The played game's logs read as they grow, twice a second while it
+    /// plays (D778).
+    void readLogs(double seconds);
+
+    /// The Console's pane, made once: its filters over its list.
+    result::Status makeConsole();
+
+    /// The Console's filters lit as they stand, and its lines that pass
+    /// them in its list, newest last.
+    void showConsole();
 
     /// The commands the window's buttons do (D777), then a button in `bar`
     /// for each menu that has any, and the palette's field after them.
@@ -357,7 +380,7 @@ private:
     void stepTo(std::size_t entry);
 
     /// Opens the diagnostic's file at its line in the author's editor.
-    void openEditor();
+    void openEditor(const Diagnostic& at);
 
     /// The scenes' rows, in order, and the new scene's field under them;
     /// the view's rows, if shown, after them again.
@@ -542,7 +565,23 @@ private:
     ui::Node assetsTab_{};
     ui::Node historyTab_{};
     ui::Node historyColumn_{};
-    bool historyShown_ = false;
+    Dock dockShown_ = Dock::Assets;
+    ui::Node consoleTab_{};
+    /// The Console's pane: its filters over the list of its lines, which
+    /// alone scrolls, so the filters stay in sight.
+    ui::Node consoleColumn_{};
+    ui::Node consoleList_{};
+    /// The Console's lines, oldest first, and the played game's logs.
+    std::deque<ConsoleLine> console_;
+    std::vector<LogTail> tails_;
+    double nextLogRead_ = 0;
+    /// Its rows with the lines they show, and its filters: the sources
+    /// shown, by `ConsoleLine::Source`, and warnings and errors alone.
+    std::vector<std::pair<ui::Node, std::size_t>> consoleRows_;
+    std::array<bool, 3> consoleSources_{true, true, true};
+    bool consoleProblems_ = false;
+    std::vector<std::pair<ui::Node, int>> consoleFilters_;
+    std::uint64_t consoleLines_ = 0;
     /// The center: the documents' tabs, then the active one's view.
     ui::Node centerColumn_{};
     ui::Node tabsRow_{};

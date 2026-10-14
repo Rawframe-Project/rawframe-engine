@@ -202,24 +202,35 @@ result::Status ShellParticipant::build() {
                         box(bottomDock_, ui::Layout{.height = ui::pixels(26), .gap = 4, .shrink = 0}, 0));
     RAWFRAME_TRY_ASSIGN(assetsTab_, button(kDockTabs, "Assets"));
     RAWFRAME_TRY_ASSIGN(historyTab_, button(kDockTabs, "History"));
+    RAWFRAME_TRY_ASSIGN(consoleTab_, button(kDockTabs, "Console"));
     RAWFRAME_TRY_ASSIGN(scenesColumn_, pane("Assets"));
     RAWFRAME_TRY_ASSIGN(historyColumn_, pane("History"));
+    RAWFRAME_TRY(makeConsole());
     RAWFRAME_TRY(tree_->attach(bottomDock_, scenesColumn_));
-    historyShown_ = false;
-    showDock(false);
+    dockShown_ = Dock::Assets;
+    showDock(Dock::Assets);
     RAWFRAME_TRY_ASSIGN(componentsColumn_, column(kBody, "Inspector", 360));
     RAWFRAME_TRY(showMenus(kStart));
     return showScenes();
 }
 
-void ShellParticipant::showDock(bool history) {
-    if (history != historyShown_) {
-        static_cast<void>(tree_->detach(historyShown_ ? historyColumn_ : scenesColumn_));
-        static_cast<void>(tree_->attach(bottomDock_, history ? historyColumn_ : scenesColumn_));
-        historyShown_ = history;
+void ShellParticipant::showDock(Dock pane) {
+    const auto kPaneOf = [this](Dock dock) {
+        return dock == Dock::Assets ? scenesColumn_ : dock == Dock::History ? historyColumn_ : consoleColumn_;
+    };
+    if (pane != dockShown_) {
+        static_cast<void>(tree_->detach(kPaneOf(dockShown_)));
+        static_cast<void>(tree_->attach(bottomDock_, kPaneOf(pane)));
+        dockShown_ = pane;
     }
-    static_cast<void>(tree_->setLook(assetsTab_, ui::Look{.fill = history ? kRow : kChosen, .radius = 4}));
-    static_cast<void>(tree_->setLook(historyTab_, ui::Look{.fill = history ? kChosen : kRow, .radius = 4}));
+    static_cast<void>(tree_->setLook(assetsTab_, ui::Look{.fill = pane == Dock::Assets ? kChosen : kRow, .radius = 4}));
+    static_cast<void>(
+        tree_->setLook(historyTab_, ui::Look{.fill = pane == Dock::History ? kChosen : kRow, .radius = 4}));
+    static_cast<void>(
+        tree_->setLook(consoleTab_, ui::Look{.fill = pane == Dock::Console ? kChosen : kRow, .radius = 4}));
+    if (pane == Dock::Console) {
+        showConsole();
+    }
 }
 
 void ShellParticipant::showTabs(std::optional<std::size_t> opened) {
@@ -701,6 +712,7 @@ void ShellParticipant::say(std::string text) {
                      kSaid,
                      "Studio's status line says",
                      {diagnostics::field("status", std::string_view{status_})});
+        addConsoleLine(ConsoleLine{.source = ConsoleLine::Source::Studio, .text = status_});
     }
 }
 

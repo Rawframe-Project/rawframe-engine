@@ -97,7 +97,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
             startPlaying();
         }
     } else if (broken_.has_value() && node == openNode_) {
-        openEditor();
+        openEditor(*diagnostic_);
     } else if (broken_.has_value() && node == retryNode_) {
         // Read again; shown whole as it now reads, or still as it does not.
         const bool kOpened = openGame();
@@ -106,7 +106,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
             seat_->leave();
         }
         // The dock's pane not shown is not under the root.
-        for (const ui::Node kPane : {scenesColumn_, historyColumn_}) {
+        for (const ui::Node kPane : {scenesColumn_, historyColumn_, consoleColumn_}) {
             if (tree_->contains(kPane)) {
                 static_cast<void>(tree_->remove(kPane));
             }
@@ -121,8 +121,26 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         }
     } else if (broken_.has_value()) {
         return;
-    } else if (node == assetsTab_ || node == historyTab_) {
-        showDock(node == historyTab_);
+    } else if (node == assetsTab_ || node == historyTab_ || node == consoleTab_) {
+        showDock(node == assetsTab_ ? Dock::Assets : node == historyTab_ ? Dock::History : Dock::Console);
+    } else if (const auto kFilter = std::ranges::find(consoleFilters_, node, &std::pair<ui::Node, int>::first);
+               kFilter != consoleFilters_.end()) {
+        // A source's button shows or hides its lines; the last shows
+        // warnings and errors alone, or everything (D778).
+        if (kFilter->second < 3) {
+            consoleSources_[static_cast<std::size_t>(kFilter->second)] =
+                !consoleSources_[static_cast<std::size_t>(kFilter->second)];
+        } else {
+            consoleProblems_ = !consoleProblems_;
+        }
+        showConsole();
+    } else if (const auto kLogged = std::ranges::find(consoleRows_, node, &std::pair<ui::Node, std::size_t>::first);
+               kLogged != consoleRows_.end()) {
+        // A line naming a place in the game's own files opens it there.
+        if (kLogged->second < console_.size() && console_[kLogged->second].at.has_value() && !editor_.empty()) {
+            const Diagnostic kAt = *console_[kLogged->second].at;
+            openEditor(kAt);
+        }
     } else if (node == undoNode_ || node == redoNode_) {
         endEdit();
         step(node == undoNode_ ? "authoring.undo" : "authoring.redo");
@@ -503,12 +521,11 @@ void ShellParticipant::create() {
     commit(std::move(operation), "entity created", kIdentity);
 }
 
-void ShellParticipant::openEditor() {
+void ShellParticipant::openEditor(const Diagnostic& at) {
     std::error_code error;
     const std::filesystem::path kFile =
-        std::filesystem::absolute(description_.parent_path() / diagnostic_->file.substr(5), error);
-    const std::vector<std::string> kWords =
-        editorCommand(editor_, kFile.string(), diagnostic_->line, diagnostic_->column);
+        std::filesystem::absolute(description_.parent_path() / at.file.substr(5), error);
+    const std::vector<std::string> kWords = editorCommand(editor_, kFile.string(), at.line, at.column);
     if (kWords.empty()) {
         return;
     }

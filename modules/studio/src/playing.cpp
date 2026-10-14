@@ -24,6 +24,11 @@ void ShellParticipant::startPlaying() {
     }
     playing_.emplace(std::move(*started));
     ++played_;
+    // Its logs read into the Console as they grow, each from its start
+    // (D778).
+    tails_.clear();
+    tails_.emplace_back(playing_->directory() / "server.log", ConsoleLine::Source::Server);
+    tails_.emplace_back(playing_->directory() / "client.log", ConsoleLine::Source::Client);
     nextAttach_ = 0;
     static_cast<void>(pressWords(playNode_, "Stop", kText, 14));
     say("starting the game");

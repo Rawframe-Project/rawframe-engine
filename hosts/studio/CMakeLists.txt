@@ -24,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":31,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":32,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its menus and the palette's field (D777), its buttons, its
     # docks as scroll panes named by their headings or tabs in SPEC-0051's
@@ -39,7 +39,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_read_aloud PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no"
                          PASS_REGULAR_EXPRESSION
-                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 scroll pane Assets\n.*a11y: 3 push button level.scene\n.*a11y: 3 entry new scene or import\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 push button Console\na11y: 2 scroll pane Assets\n.*a11y: 3 push button level.scene\n.*a11y: 3 entry new scene or import\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
     # Studio typed into by a screen reader (D613): the new scene's entry
     # takes a name inserted through AT-SPI's EditableText as typing, the
     # field begun as a press begins it, and reads it back.
@@ -529,6 +529,23 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "clicked at [0-9]+,[0-9]+.*saw studio_previewing.*typed 0,30,0.5 at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,[^\n]*\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,.*\"code\":\"scene_followed\"[^\n]*\"scene\":\"gate.scene\",\"created\":1.*{\"endpoint\":\"127.0.0.1:[0-9]+\",\"pinFile\":\"[^\"]*/server.fingerprint\",\"tokenFile\":\"[^\"]*/token\"}")
+        # The Console (D778): Plaza played, the Console shown, its Server
+        # lines hidden and shown again, and the game stopped; what Studio
+        # said and the records its server and client logged reach its
+        # lines.
+        add_test(NAME studio_console
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
+                         @Console wait=2 @Server wait=1 @Server "@Problems only" @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_console PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "found Console at.*found Server at.*found Server at.*found Problems only at.*\"code\":\"studio_summary\"[^\n]*\"played\":1,[^\n]*\"consoleLines\":[2-9][0-9]+,.*\"exit\":\"clean_stop\"")
         # Stalls played from Studio with its UI document edited as it plays
         # (D761): the document chosen, the game played, and once the played
         # client's UI is up (its log says what navigation reaches), the
