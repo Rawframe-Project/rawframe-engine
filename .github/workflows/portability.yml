@@ -287,14 +287,17 @@ jobs:
       - name: Test
         shell: pwsh
         run: ctest --test-dir out/windows-development --output-on-failure -j3
-      # The frames the arena's drawn tests wrote, to look at where one reads
-      # differently on WARP than on lavapipe (D765).
+      # The frames the arena's drawn tests wrote, and the Lighting Test's
+      # content as Windows cooked it, to look at where one reads differently
+      # on WARP than on lavapipe (D765).
       - name: Keep the drawn frames
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: drawn-windows
-          path: out/windows-development/hosts/arena/*.tga
+          path: |
+            out/windows-development/hosts/arena/*.tga
+            out/windows-development/hosts/arena/lighting_content/
           retention-days: 14
       # What the scene's tests drew on Direct3D 12, where the runner has an
       # adapter: a material's face and parameters (D705, D708), and each
