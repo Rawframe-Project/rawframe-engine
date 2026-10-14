@@ -3,7 +3,8 @@
 // the client's own player alone (D261), the present systems run over the
 // mirror in line order, telling the client's own player from others
 // (D390), a refused one changing nothing, and a new mirror bound afresh;
-// and a component started as a document says (D619).
+// and a component started as a document says (D619), and started again in
+// the fields an edit changed.
 
 #include "../src/presentation.h"
 #include "rawframe/test/test.h"
@@ -11,6 +12,7 @@
 #include "rawframe/world_kest/game_files.h"
 
 #include <array>
+#include <cstdint>
 #include <cstdio>
 #include <span>
 #include <string>
@@ -228,8 +230,13 @@ public:
         return component == kLookId ? std::as_bytes(std::span{wrong}) : std::span<const std::byte>{};
     }
 
+    std::uint64_t revision() const noexcept override {
+        return edits;
+    }
+
     Camera view{.offsetX = 0, .offsetY = 5, .height = 3};
     std::array<float, 3> wrong{1, 2, 3};
+    std::uint64_t edits = 0;
 };
 
 } // namespace
@@ -260,8 +267,8 @@ RAWFRAME_TEST(APresentationComponentStartsAsItsDocumentSays) {
         RAWFRAME_EXPECT(false);
         return;
     }
-    const Starts kStarts;
-    (*presentation)->startWith(&kStarts);
+    Starts starts;
+    (*presentation)->startWith(&starts);
     schema::RegistryBuilder builder;
     for (const schema::ComponentDescriptor& descriptor : kDescriptors) {
         builder.add(descriptor);
@@ -284,6 +291,19 @@ RAWFRAME_TEST(APresentationComponentStartsAsItsDocumentSays) {
     // A start of another size is no start: the look starts at nought.
     const auto* look = static_cast<const Sprite*>(mirror.getErased(kRunner, *kRegistry->find(kLookId)));
     RAWFRAME_EXPECT(look != nullptr && look->texture == 8 && look->placed[0] == 0.0F && look->placed[4] == 2.0F);
+    // The document edited while the game plays: the field whose start
+    // changed and no present system writes takes its new start, the one
+    // the frame writes is written again, and the one whose start stayed
+    // keeps what the frame made of it.
+    starts.view = Camera{.offsetX = 0, .offsetY = 7, .height = 4};
+    ++starts.edits;
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kRunner, {}, *world::TickRate::of(60)).has_value());
+    view = static_cast<const Camera*>(mirror.getErased(kRunner, *kRegistry->find(kViewId)));
+    RAWFRAME_EXPECT(view != nullptr && view->offsetY == 7.0F && view->height == 8.0F && view->offsetX == 2.0F);
+    RAWFRAME_EXPECT((*presentation)->statistics().restarted == 1);
+    // Unedited, nothing is started again.
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kRunner, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT((*presentation)->statistics().restarted == 1);
 }
 
 RAWFRAME_TEST(APresentSystemSetsThePlayersVolume) {

@@ -22,7 +22,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace rawframe::world_kest {
@@ -75,6 +80,9 @@ struct ClientPresentation::State {
     world::TickIndex tick;
     std::vector<world::EntityHandle> missing;
     std::vector<std::byte> started;
+    /// What each component started as at the starts' revision last seen.
+    std::optional<std::uint64_t> startsRevision;
+    std::vector<std::pair<schema::ComponentTypeId, std::vector<std::byte>>> startedAs;
     PresentationStatistics statistics;
 
     /// The present systems and the animation made for `mirror`'s registry.
@@ -153,6 +161,92 @@ struct ClientPresentation::State {
         return {};
     }
 
+    /// What `component` starts as now, `size` bytes: as `starts` says, or
+    /// zeroed (D619).
+    void startOf(schema::ComponentTypeId component, std::size_t size, std::vector<std::byte>& into) const {
+        const std::span<const std::byte> kStart =
+            starts != nullptr ? starts->startOf(component) : std::span<const std::byte>{};
+        if (kStart.size() == size) {
+            into.assign(kStart.begin(), kStart.end());
+        } else {
+            into.assign(size, std::byte{});
+        }
+    }
+
+    /// Where the starts changed since last seen, each field whose start
+    /// changed written into every component of its kind presentation
+    /// attached; what a present system wrote over another field stays.
+    void restart(world::World& mirror) {
+        if (starts == nullptr) {
+            return;
+        }
+        const std::uint64_t kRevision = starts->revision();
+        const bool kFirst = !startsRevision.has_value();
+        if (!kFirst && *startsRevision == kRevision) {
+            return;
+        }
+        startsRevision = kRevision;
+        for (const Attached& each : attached) {
+            for (const schema::ComponentRuntimeId kComponent : each.components) {
+                const schema::ComponentDescriptor& kDescriptor = mirror.registry().descriptor(kComponent);
+                startOf(kDescriptor.id, kDescriptor.size, started);
+                auto was = std::ranges::find(startedAs, kDescriptor.id, &decltype(startedAs)::value_type::first);
+                if (was == startedAs.end()) {
+                    startedAs.emplace_back(kDescriptor.id, std::vector<std::byte>(kDescriptor.size));
+                    was = std::prev(startedAs.end());
+                }
+                std::vector<std::byte>& before = was->second;
+                if (kFirst || before == started) {
+                    before = started;
+                    continue;
+                }
+                // A field runs from its offset to the next field's, or to
+                // the value's end.
+                std::vector<std::size_t> offsets;
+                const auto kKest = std::ranges::find(components, kDescriptor.id, &KestComponent::component);
+                if (kKest != components.end()) {
+                    if (const auto kLayout = settings.program->layout(kKest->kestType); kLayout.has_value()) {
+                        for (const kest::Field& field : kLayout->fields) {
+                            offsets.push_back(field.offset);
+                        }
+                    }
+                }
+                offsets.push_back(0);
+                std::ranges::sort(offsets);
+                offsets.erase(std::ranges::unique(offsets).begin(), offsets.end());
+                std::vector<std::pair<std::size_t, std::size_t>> changed;
+                for (std::size_t at = 0; at < offsets.size() && offsets[at] < kDescriptor.size; ++at) {
+                    const std::size_t kEnd =
+                        at + 1 < offsets.size() ? std::min(offsets[at + 1], kDescriptor.size) : kDescriptor.size;
+                    if (!std::equal(before.begin() + static_cast<std::ptrdiff_t>(offsets[at]),
+                                    before.begin() + static_cast<std::ptrdiff_t>(kEnd),
+                                    started.begin() + static_cast<std::ptrdiff_t>(offsets[at]))) {
+                        changed.emplace_back(offsets[at], kEnd);
+                    }
+                }
+                before = started;
+                const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{kComponent, world::Access::Read}};
+                auto query = world::ColumnQuery::resolve(kTerms, mirror.registry());
+                if (!query.has_value()) {
+                    continue;
+                }
+                missing.clear();
+                query->forEachChunk(mirror, [this](const world::ColumnChunk& chunk) {
+                    missing.insert(missing.end(), chunk.entities.begin(), chunk.entities.end());
+                });
+                for (const world::EntityHandle kEntity : missing) {
+                    auto* value = static_cast<std::byte*>(mirror.getErased(kEntity, kComponent));
+                    for (const auto& [kFrom, kTo] : changed) {
+                        std::copy(started.begin() + static_cast<std::ptrdiff_t>(kFrom),
+                                  started.begin() + static_cast<std::ptrdiff_t>(kTo),
+                                  value + kFrom);
+                    }
+                    ++statistics.restarted;
+                }
+            }
+        }
+    }
+
     /// Each presentation component onto every entity that has its `on`
     /// component (or is `player`) and lacks it: as `starts` says, or
     /// zeroed (D619).
@@ -174,13 +268,7 @@ struct ClientPresentation::State {
                     });
                 }
                 const schema::ComponentDescriptor& kDescriptor = mirror.registry().descriptor(kComponent);
-                const std::span<const std::byte> kStart =
-                    starts != nullptr ? starts->startOf(kDescriptor.id) : std::span<const std::byte>{};
-                if (kStart.size() == kDescriptor.size) {
-                    started.assign(kStart.begin(), kStart.end());
-                } else {
-                    started.assign(kDescriptor.size, std::byte{});
-                }
+                startOf(kDescriptor.id, kDescriptor.size, started);
                 for (const world::EntityHandle kEntity : missing) {
                     RAWFRAME_TRY(mirror.insertErased(kEntity, kComponent, started.data()));
                     ++statistics.attached;
@@ -251,6 +339,7 @@ result::Status ClientPresentation::present(world::World& mirror,
         RAWFRAME_TRY(state.bind(mirror));
     }
     ++state.statistics.ticks;
+    state.restart(mirror);
     RAWFRAME_TRY(state.attach(mirror, player));
     state.playerDoor.player = player;
     state.messages->arrived(arrived);
@@ -436,6 +525,7 @@ public:
                      {diagnostics::field("ticks", kPresented.ticks),
                       diagnostics::field("ticksDropped", dropped_),
                       diagnostics::field("attached", kPresented.attached),
+                      diagnostics::field("restarted", kPresented.restarted),
                       diagnostics::field("bound", kPresented.bound),
                       diagnostics::field("systemsFailed", kPresented.systemsFailed),
                       diagnostics::field("animationSteps", kAnimated.steps),

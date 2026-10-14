@@ -52,8 +52,11 @@ constexpr diagnostics::EventIdentity kKeptUnread{"ui", "kept_unread"};
 constexpr diagnostics::EventIdentity kKeptUnwritten{"ui", "kept_unwritten"};
 constexpr diagnostics::EventIdentity kRestyled{"ui", "ui_restyled"};
 constexpr diagnostics::EventIdentity kStylesUnread{"ui", "styles_unread"};
-/// A styles document's most bytes read again as an author edits it (D634).
-constexpr std::size_t kMostStylesBytes = std::size_t{4} * 1024 * 1024;
+constexpr diagnostics::EventIdentity kRearranged{"ui", "ui_rearranged"};
+constexpr diagnostics::EventIdentity kDocumentUnread{"ui", "ui_document_unread"};
+/// A styles or UI document's most bytes read again as an author edits it
+/// (D634).
+constexpr std::size_t kMostDocumentBytes = std::size_t{4} * 1024 * 1024;
 #endif
 /// The decoded levels each image may hold.
 constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
@@ -111,8 +114,9 @@ public:
         // Where the player's settings are kept (D626), read whatever the
         // game is: a game without UI, and the web, keep none.
         [[maybe_unused]] const std::optional<std::string> kKept = context.configuration().path("ui.kept");
-        // How often a game read from its directory has its styles read again
-        // (D634), in Host iterations; nought never, and never on the web.
+        // How often a game read from its directory has its styles (D634) and
+        // UI document (D619) read again, in Host iterations; nought never,
+        // and never on the web.
         RAWFRAME_TRY_ASSIGN([[maybe_unused]] const std::uint64_t kReloadEvery,
                             context.configuration().unsignedInteger("ui.reload_every", 0));
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
@@ -147,7 +151,15 @@ public:
         if (kReloadEvery != 0 && files->directory().has_value() && !files->description().styles.empty()) {
             reloadEvery_ = kReloadEvery;
             stylesPath_ = *files->directory() / files->description().styles;
-            stylesText_ = fileText(stylesPath_, kMostStylesBytes).value_or(std::string{});
+            stylesText_ = fileText(stylesPath_, kMostDocumentBytes).value_or(std::string{});
+        }
+        // And to its UI document, likewise (D619).
+        if (kReloadEvery != 0 && files->directory().has_value() && !files->description().ui.empty()) {
+            reloadEvery_ = kReloadEvery;
+            documentPath_ = *files->directory() / files->description().ui;
+            documentText_ = fileText(documentPath_, kMostDocumentBytes).value_or(std::string{});
+            files_ = files;
+            program_ = *program;
         }
 #endif
 #if RAWFRAME_FILE_SYSTEM
@@ -416,6 +428,7 @@ public:
             return;
         }
         restyleIfEdited(frame.iteration);
+        rearrangeIfEdited(frame.iteration);
         // The window in logical pixels as the host last heard it, else the
         // frame's size: device pixels each logical one.
         const float kWidth = static_cast<float>(width_);
@@ -671,16 +684,21 @@ public:
         return kStart == starts_.end() ? std::span<const std::byte>{} : std::as_bytes(std::span{&kStart->fields, 1});
     }
 
+    // Another each time the document is edited while the game plays.
+    std::uint64_t revision() const noexcept override {
+        return startsRevision_;
+    }
+
 private:
     /// The styles read again every `ui.reload_every` iterations, and given
     /// to the UI where their text changed (D634); a document that does not
     /// read, or that the tree does not take, is said once a change.
     void restyleIfEdited([[maybe_unused]] std::uint64_t iteration) {
 #if RAWFRAME_FILE_SYSTEM
-        if (reloadEvery_ == 0 || iteration % reloadEvery_ != 0) {
+        if (reloadEvery_ == 0 || stylesPath_.empty() || iteration % reloadEvery_ != 0) {
             return;
         }
-        std::optional<std::string> text = fileText(stylesPath_, kMostStylesBytes);
+        std::optional<std::string> text = fileText(stylesPath_, kMostDocumentBytes);
         if (!text.has_value() || *text == stylesText_) {
             return;
         }
@@ -700,6 +718,44 @@ private:
                          kStylesUnread,
                          "the game's styles changed and could not be read: the UI is unstyled until they can",
                          {diagnostics::field("path", stylesPath_.generic_string()),
+                          diagnostics::field("reason", std::string{kGiven.error().description()})});
+        }
+#endif
+    }
+
+    /// The UI document read again as the styles are (D619): where its text
+    /// changed, the nodes nested and given their words anew, and what the
+    /// presentation components start as told presentation; a document that
+    /// does not read, or that the game does not take, is said once a change
+    /// and changes nothing.
+    void rearrangeIfEdited([[maybe_unused]] std::uint64_t iteration) {
+#if RAWFRAME_FILE_SYSTEM
+        if (reloadEvery_ == 0 || documentPath_.empty() || iteration % reloadEvery_ != 0) {
+            return;
+        }
+        std::optional<std::string> text = fileText(documentPath_, kMostDocumentBytes);
+        if (!text.has_value() || *text == documentText_) {
+            return;
+        }
+        documentText_ = std::move(*text);
+        auto document = documentOf(files_->description(), *program_, documentText_);
+        const result::Status kGiven = document.has_value()
+                                          ? ui_->rearrange(std::move(document->parents), std::move(document->shows))
+                                          : result::Status{std::unexpected<result::Error> {
+                                                std::move(document).error()
+                                            }};
+        if (kGiven.has_value()) {
+            starts_ = std::move(document->starts);
+            ++startsRevision_;
+            emitter_.log(diagnostics::Severity::Info,
+                         kRearranged,
+                         "the game's UI document changed: the UI is arranged anew",
+                         {diagnostics::field("path", documentPath_.generic_string())});
+        } else {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kDocumentUnread,
+                         "the game's UI document changed and could not be taken: the UI stays as it was",
+                         {diagnostics::field("path", documentPath_.generic_string()),
                           diagnostics::field("reason", std::string{kGiven.error().description()})});
         }
 #endif
@@ -818,6 +874,7 @@ private:
     std::unique_ptr<assets::AssetSet> fontSet_;
     std::vector<WantedFont> fonts_;
     std::vector<Start> starts_;
+    std::uint64_t startsRevision_ = 0;
     std::uint64_t fontsRead_ = 0;
     std::uint64_t glyphRuns_ = 0;
     std::uint64_t glyphsLeftOut_ = 0;
@@ -842,6 +899,12 @@ private:
     std::uint64_t reloadEvery_ = 0;
     std::filesystem::path stylesPath_;
     std::string stylesText_;
+    /// The UI document's file and its text as last read, and what reads it
+    /// (D619).
+    std::filesystem::path documentPath_;
+    std::string documentText_;
+    const world_kest::GameFiles* files_ = nullptr;
+    std::shared_ptr<const kest::Program> program_;
     std::unique_ptr<Keeper> keeper_;
     execution::Executor* io_ = nullptr;
     execution::OwnerId owner_{};

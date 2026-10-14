@@ -43,6 +43,9 @@ struct PresentationStatistics {
     std::uint64_t ticks = 0;
     /// Presentation components attached to mirrored entities.
     std::uint64_t attached = 0;
+    /// Attached components given the fields their start changed in, as
+    /// their document was edited while the game plays (D619).
+    std::uint64_t restarted = 0;
     /// Present systems refused or run out, each changing nothing that tick.
     std::uint64_t systemsFailed = 0;
     /// Mirrors bound, one per World the client made.
