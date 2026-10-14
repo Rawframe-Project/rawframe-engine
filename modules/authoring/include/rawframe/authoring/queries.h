@@ -43,6 +43,10 @@ struct EntityEntry {
     std::optional<Brought> brought;
     /// An instance's entity its patch removes.
     bool removed = false;
+    /// The entity a scene's own entity follows (D785): the `parent` of its
+    /// attachment, `rawframe.physics2d.attach` or `rawframe.physics3d.attach`,
+    /// the scene's one parenting; none without one.
+    std::optional<base::Bits128> parent;
 
     friend bool operator==(const EntityEntry&, const EntityEntry&) = default;
 };

@@ -11,11 +11,24 @@ namespace {
 std::vector<EntityEntry> entriesOf(const scene::Scene& scene) {
     std::vector<EntityEntry> made;
     for (std::size_t at = 0; at < scene.entities.size(); ++at) {
+        // Its parent, where an attachment names one.
+        std::optional<base::Bits128> parent;
+        for (const scene::SceneComponent& component : scene.entities[at].components) {
+            if (component.name != "rawframe.physics2d.attach" && component.name != "rawframe.physics3d.attach") {
+                continue;
+            }
+            for (const scene::SceneField& field : component.fields) {
+                if (field.name == "parent" && field.value.kind == scene::FieldValue::Kind::Entity) {
+                    parent = field.value.entity;
+                }
+            }
+        }
         made.push_back(EntityEntry{.id = scene.entities[at].id,
                                    .name = scene.entities[at].name,
                                    .place = at,
                                    .brought = std::nullopt,
-                                   .removed = false});
+                                   .removed = false,
+                                   .parent = parent});
     }
     for (std::size_t at = 0; at < scene.instances.size(); ++at) {
         const scene::SceneInstance& instance = scene.instances[at];

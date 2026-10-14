@@ -106,6 +106,35 @@ RAWFRAME_TEST(EveryEntityIsListedOwnThenBrought) {
     RAWFRAME_EXPECT(entities[2].id == kShelf && entities[2].removed);
 }
 
+RAWFRAME_TEST(AnAttachedEntityIsListedWithItsParent) {
+    // A hand follows a body by its 3D attachment; a lamp's 2D attachment
+    // has no parent set; the body follows nothing (D785).
+    const base::Bits128 kBody{2, 1};
+    const base::Bits128 kHand{2, 2};
+    const base::Bits128 kLamp{2, 3};
+    const scene::Scene kRig{
+        .schema = {},
+        .entities = {
+            {.id = kBody, .name = "body", .components = {}},
+            {.id = kHand,
+             .name = "hand",
+             .components = {{.name = "rawframe.physics3d.attach",
+                             .fields = {{.name = "parent",
+                                         .value = {.kind = scene::FieldValue::Kind::Entity, .entity = kBody}},
+                                        {.name = "x", .value = number("0.5")}}}}},
+            {.id = kLamp,
+             .name = "lamp",
+             .components = {{.name = "rawframe.physics2d.attach", .fields = {{.name = "x", .value = number("1")}}}}}}};
+    const auto kList = answer(kRig, ListEntities{}, catalog());
+    RAWFRAME_EXPECT(kList.has_value());
+    if (!kList.has_value()) {
+        return;
+    }
+    const std::vector<EntityEntry>& entities = std::get<EntityList>(*kList).entities;
+    RAWFRAME_EXPECT(entities.size() == 3 && !entities[0].parent.has_value() && entities[1].parent == kBody &&
+                    !entities[2].parent.has_value());
+}
+
 RAWFRAME_TEST(AnEntityIsReadWholeAndWhatIsUnknownIsMarked) {
     const ComponentCatalog kCatalog = catalog();
     const auto kSpawnRead = answer(room(), ReadEntity{.entity = kSpawn}, kCatalog);
