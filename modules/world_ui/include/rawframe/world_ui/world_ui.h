@@ -126,6 +126,9 @@ struct UiStatistics {
     /// The game's style classes made again as their document changed
     /// (D634).
     std::uint64_t restyled = 0;
+    /// The nodes nested and given words again as the UI document changed
+    /// (D619).
+    std::uint64_t rearranged = 0;
     /// Changes to the values of kept nodes, and kept nodes started as kept
     /// (D626).
     std::uint64_t kept = 0;
@@ -167,6 +170,14 @@ public:
     /// where the tree takes no class of the sheet: the nodes are unstyled
     /// until a sheet it takes comes.
     [[nodiscard]] result::Status restyle(ui::StyleSheet styles);
+    /// Each node component's parent and the typed words it shows taken
+    /// from `parents` and `shows`, as the settings hold them, as an author
+    /// edits the UI document while the game plays (D619): every view's
+    /// nodes nested and given their words anew from its next frame.
+    /// Refused, changing nothing, for a parent out of range or words that
+    /// are not a rawframe.ui.Typed component in a view's World.
+    [[nodiscard]] result::Status rearrange(std::vector<std::optional<std::size_t>> parents,
+                                           std::vector<std::optional<schema::ComponentTypeId>> shows);
 
     /// The window's UI, every view's, seated where assistive technology
     /// reads it (D571); what its access answered, if one was made.

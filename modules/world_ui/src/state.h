@@ -245,6 +245,10 @@ struct WorldUi::State {
 
     /// `view` bound to `world`: every node of the World before gone.
     result::Status bind(ViewState& view, world::World* world);
+    /// What each node component of `view` shows the words of, in its
+    /// World's terms, as the settings say; refused, changing nothing, for
+    /// words that are not a rawframe.ui.Typed component there.
+    result::Status showIn(ViewState& view) const;
 
     /// `view`'s nodes made, changed, and removed as its World's components
     /// are.

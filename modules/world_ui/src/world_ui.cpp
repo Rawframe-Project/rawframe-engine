@@ -497,17 +497,22 @@ result::Status WorldUi::State::bind(ViewState& view, world::World* world) {
         RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, world::ColumnQuery::resolve(kTerms, world->registry()));
         view.queries.push_back(std::move(query));
     }
-    view.shows.assign(settings.nodes.size(), std::nullopt);
+    return showIn(view);
+}
+
+result::Status WorldUi::State::showIn(ViewState& view) const {
+    std::vector<std::optional<schema::ComponentRuntimeId>> shows(settings.nodes.size());
     for (std::size_t at = 0; at < settings.shows.size() && at < settings.nodes.size(); ++at) {
         if (!settings.shows[at].has_value()) {
             continue;
         }
-        const auto kWords = world->registry().find(*settings.shows[at]);
-        if (!kWords.has_value() || world->registry().descriptor(*kWords).size != sizeof(Typed)) {
+        const auto kWords = view.world->registry().find(*settings.shows[at]);
+        if (!kWords.has_value() || view.world->registry().descriptor(*kWords).size != sizeof(Typed)) {
             return refuse("a UI node's words are not a rawframe.ui.Typed component in the World");
         }
-        view.shows[at] = *kWords;
+        shows[at] = *kWords;
     }
+    view.shows = std::move(shows);
     return {};
 }
 
@@ -795,6 +800,39 @@ result::Status WorldUi::restyle(ui::StyleSheet styles) {
     if (!made.has_value()) {
         return std::unexpected<result::Error>{std::move(made).error()};
     }
+    return {};
+}
+
+result::Status WorldUi::rearrange(std::vector<std::optional<std::size_t>> parents,
+                                  std::vector<std::optional<schema::ComponentTypeId>> shows) {
+    State& state = *state_;
+    if (parents.size() != state.settings.nodes.size() ||
+        std::ranges::any_of(parents,
+                            [&state](const std::optional<std::size_t>& parent) {
+                                return parent.has_value() && *parent >= state.settings.nodes.size();
+                            }) ||
+        (!shows.empty() && shows.size() != state.settings.nodes.size())) {
+        return refuse("each UI node component's parent is another of them");
+    }
+    // Every view's words found before any is changed, so a refusal leaves
+    // them all as they were.
+    std::swap(state.settings.shows, shows);
+    std::vector<std::vector<std::optional<schema::ComponentRuntimeId>>> was;
+    for (ViewState& view : state.views) {
+        was.push_back(view.shows);
+        if (view.world == nullptr) {
+            continue;
+        }
+        if (result::Status shown = state.showIn(view); !shown.has_value()) {
+            std::swap(state.settings.shows, shows);
+            for (std::size_t at = 0; at < was.size(); ++at) {
+                state.views[at].shows = std::move(was[at]);
+            }
+            return shown;
+        }
+    }
+    state.settings.parents = std::move(parents);
+    ++state.statistics.rearranged;
     return {};
 }
 
