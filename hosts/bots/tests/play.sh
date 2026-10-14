@@ -83,8 +83,11 @@ cat "$bots_settings" >>"$work/bots.conf"
 
 "$server" --config "$work/server.conf" >"$work/server.log" 2>&1 &
 server_pid=$!
-for _ in $(seq 100); do
-    grep -q '"code":"listening"' "$work/server.log" 2>/dev/null && break
+# The server admits once it is active, not when it listens (D99): a bot
+# that asks before is refused as unavailable, which a bot with no retries
+# keeps. A sanitized server on a loaded machine takes seconds to get there.
+for _ in $(seq 1200); do
+    grep -q '"state":"active"' "$work/server.log" 2>/dev/null && break
     sleep 0.05
 done
 for index in $(seq "$processes"); do
