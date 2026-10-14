@@ -41,6 +41,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -69,6 +70,14 @@ struct FieldSchema {
     /// A case field's cases in the order of their numbers; the first is its
     /// default. Empty for every other kind.
     std::vector<std::string> cases;
+    /// What a number field's authors are told (D783): the least and most it
+    /// should take, its unit, whether it is a color (0xRRGGBBAA), and names
+    /// for some of its values. Hints: an operation may set any value.
+    std::optional<double> least;
+    std::optional<double> most;
+    std::string unit;
+    bool color = false;
+    std::vector<std::pair<std::int64_t, std::string>> labels;
 };
 
 /// A component as authoring knows it: its identity, the name and layout

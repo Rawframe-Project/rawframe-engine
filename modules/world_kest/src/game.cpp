@@ -1,6 +1,7 @@
 #include "rawframe/world_kest/game.h"
 
 #include "description_words.h"
+#include "field_hints.h"
 #include "mod_api.h"
 #include "navigation.h"
 #include "physics_facts.h"
@@ -581,6 +582,13 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     GameEntityField{.component = std::string{kWords[1]}, .field = std::string{kWords[at]}});
             }
             uses.emplace_back(number, std::string{kWords[1]});
+        } else if (kKeyword == "field") {
+            GameFieldHint hint;
+            if (const auto kWhy = readFieldLine(std::span{kWords}.subspan(1), hint); kWhy.has_value()) {
+                return badLine(number, WorldKestError::BadGameLine, *kWhy);
+            }
+            uses.emplace_back(number, hint.component);
+            game.fieldHints.push_back(std::move(hint));
         } else if (kKeyword == "physics2d" || kKeyword == "physics3d") {
             // physics2d [gravity <x> <y>] [substeps <n>]
             // physics3d [gravity <x> <y> <z>] [substeps <n>]

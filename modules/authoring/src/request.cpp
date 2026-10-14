@@ -637,6 +637,29 @@ std::string writeDiscovery(const ComponentCatalog* catalog) {
                     }
                     each.add("cases", std::move(cases));
                 }
+                // The hints an editor shows and an agent reads (D783).
+                if (field.least.has_value()) {
+                    each.add("least", Value::real(*field.least));
+                }
+                if (field.most.has_value()) {
+                    each.add("most", Value::real(*field.most));
+                }
+                if (!field.unit.empty()) {
+                    each.add("unit", Value::string(field.unit));
+                }
+                if (field.color) {
+                    each.add("color", Value::boolean(true));
+                }
+                if (!field.labels.empty()) {
+                    Value labels = Value::array();
+                    for (const auto& [kValue, kName] : field.labels) {
+                        Value label = Value::object();
+                        label.add("value", Value::integer(kValue));
+                        label.add("name", Value::string(kName));
+                        labels.push(std::move(label));
+                    }
+                    each.add("labels", std::move(labels));
+                }
                 fields.push(std::move(each));
             }
             Value each = Value::object();

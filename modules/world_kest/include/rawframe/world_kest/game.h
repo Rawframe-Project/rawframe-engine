@@ -330,6 +330,22 @@ struct GameEntityField {
     std::string field;
 };
 
+/// What is said of a number field for its authors (D783), by a game's
+/// `field` line or the engine of its own types' fields: the least and most
+/// it should take, its unit, whether it is a color (0xRRGGBBAA), and names
+/// for some of its values. Hints only, which an editor shows and an agent
+/// reads in `authoring.describe`: an operation may still set any value the
+/// field's type holds.
+struct GameFieldHint {
+    std::string component;
+    std::string field;
+    std::optional<double> least;
+    std::optional<double> most;
+    std::string unit;
+    bool color = false;
+    std::vector<std::pair<std::int64_t, std::string>> labels;
+};
+
 /// How a client makes its input from a player's controls (ADR-0037): an
 /// `input.actions` document, and a Kest program whose function `entry` fills
 /// the input component from committed actions. Paths are beside the
@@ -620,6 +636,8 @@ struct GameDescription {
     /// no other client then sees (ADR-0081).
     std::vector<std::string> own;
     std::vector<GameEntityField> entityFields;
+    /// The `field` lines, in line order (D783).
+    std::vector<GameFieldHint> fieldHints;
     std::optional<GameInterest> interest;
     /// Entities one connection may hold at once, from a `mapped <count>`
     /// line (D742): a game whose every client sees all of a large World,
@@ -672,6 +690,11 @@ struct GameDescription {
 /// `program`, a column or spawn naming a component the text does not declare,
 /// and more than kMaximumGameLines lines.
 [[nodiscard]] result::Result<GameDescription> parseGame(std::string_view text);
+
+/// What authors are told of `component`'s fields (D783): the engine's hints
+/// for the engine type it is of, then the game's `field` lines for it, a
+/// line for a field in place of the engine's.
+[[nodiscard]] std::vector<GameFieldHint> fieldHintsOf(const GameDescription& game, const GameComponent& component);
 
 /// Every scene file the description names: its scene lines', then its
 /// prefabs', each once.

@@ -20,6 +20,13 @@ if(RAWFRAME_BUILD_TESTS)
                              PASS_REGULAR_EXPRESSION
                              "\"kind\": \"authoring.new_game\".*\"files\": 10,[ \n]*\"identities\": 11.*identities: none shared.*refused: over a game, and under a bad name.*\"bots\":4,\"admitted\":4,[^\n]*\"sourceFailures\":0,.*\"code\":\"tick_summary\"[^\n]*\"entities\":5}")
     endif()
+    # What authors are told of a game's fields (D783).
+    add_test(NAME author_field_hints
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/field_hints.sh $<TARGET_FILE:rawframe_host_author>
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(author_field_hints PROPERTIES
+                         PASS_REGULAR_EXPRESSION
+                         "hinted: side 4 to 100 m.*refused: a range backwards.*refused: a field the component does not have.*refused: a color that is not an unsigned number")
     # A scene of the runners game changed through requests: a new entity
     # with a body at a place, stale and failing requests refused whole, and
     # a dry run that writes nothing.

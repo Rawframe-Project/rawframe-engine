@@ -9,8 +9,12 @@ component 4f0684c7-8546-43d8-8642-b9b3efe65b03 starter.ground Ground
 component e6e4409c-3b6b-4935-95bf-6027499b5e69 starter.stick controls.Stick
 system starter.move simulation move read starter.stick write starter.mover lookup starter.ground
 
-# The ground (level.scene), the one thing the game starts with.
+# The ground (level.scene), the one thing the game starts with; what an
+# editor and an agent are told of its size and of where a box is (D783).
 scene level.scene
+field starter.ground side range 4 100 unit m
+field starter.mover x unit m
+field starter.mover z unit m
 replicate starter.mover starter.ground
 
 # Each player is given a box, moved by its stick, which a client makes from

@@ -107,6 +107,33 @@ result::Result<authoring::ComponentCatalog> catalogOf(const rawframe::world_kest
                     .cases = *kKind == authoring::FieldKind::Case ? field.cases : std::vector<std::string>{}});
             }
         }
+        // What the engine and the game say of its fields (D783), each to a
+        // number field it has: a color is an unsigned whole number, and
+        // labels name whole numbers.
+        for (rawframe::world_kest::GameFieldHint& hint : rawframe::world_kest::fieldHintsOf(game, component)) {
+            const auto kField = std::ranges::find(schema.fields, hint.field, &authoring::FieldSchema::name);
+            const bool kNumber = kField != schema.fields.end() && (kField->kind == authoring::FieldKind::Signed ||
+                                                                   kField->kind == authoring::FieldKind::Unsigned ||
+                                                                   kField->kind == authoring::FieldKind::Real);
+            const bool kWhole = kNumber && kField->kind != authoring::FieldKind::Real;
+            if (!kNumber || (hint.color && kField->kind != authoring::FieldKind::Unsigned) ||
+                (!hint.labels.empty() && !kWhole)) {
+                return std::unexpected{
+                    result::fail(result::ErrorClass::InvalidArgument,
+                                 authoring::kAuthoringDomain,
+                                 code(authoring::AuthoringError::ValidationFailed),
+                                 "a field line names a number field of its component: a color an unsigned one, "
+                                 "labels a whole one")
+                        .error()
+                        .withContext("component", component.name)
+                        .withContext("field", hint.field)};
+            }
+            kField->least = hint.least;
+            kField->most = hint.most;
+            kField->unit = std::move(hint.unit);
+            kField->color = hint.color;
+            kField->labels = std::move(hint.labels);
+        }
         RAWFRAME_TRY(catalog.add(std::move(schema)));
     }
     return catalog;
