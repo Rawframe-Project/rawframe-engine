@@ -80,6 +80,24 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"code\":\"studio_layout\"[^\n]*\"resized\":0,\"hierarchyWidth\":420,\"inspectorWidth\":300,\"dockHeight\":300}.*\"exit\":\"clean_stop\"")
+    # Commands' keys set in the Preferences dialog (D782): Duplicate given
+    # Ctrl+Shift+D, which then duplicates; Redo given Ctrl+Z, which is said
+    # to be Undo's too; text that is no chord refused; the keys kept in the
+    # test's preferences.
+    add_test(NAME studio_shortcuts
+             COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.preferences = {work}/studio.preferences"
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene @Window @Preferences "until=studio_said,status=\"preferences"
+                     "@Duplicate keys#2:Ctrl+Shift+D" "until=studio_said,status=\"Duplicate is Ctrl+Shift+D"
+                     "@Redo keys#2:Ctrl+Z" "until=studio_said,status=\"Redo is Ctrl+Z, Ctrl+Z also Undo's"
+                     "@Undo keys#2:Hello" "until=studio_said,status=\"keys refused"
+                     @Close @ground keys=Control_L+Shift_L+d "until=studio_said,status=\"ground copy made"
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_shortcuts PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"keys\": {[ \n]*\"Duplicate\": \\[[ \n]*\"Ctrl\\+Shift\\+D\"[ \n]*\\],[ \n]*\"Redo\": \\[[ \n]*\"Ctrl\\+Z\"[ \n]*\\][ \n]*}.*\"code\":\"studio_summary\"[^\n]*\"applied\":[1-9][0-9]*,\"refused\":1,.*\"exit\":\"clean_stop\"")
     # Studio with no game starts on its start screen (D781): a game made
     # from the starter template under the name typed, by the function
     # rawframe-author new runs, and opened, kept first among the games

@@ -77,7 +77,9 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     }
     // VS Code by default; any editor that opens a file at a line by its
     // arguments (ADR-0066, D453).
-    editor_ = std::string{configuration.text("studio.editor").value_or("code --goto {file}:{line}:{column}")};
+    configuredEditor_ = std::string{configuration.text("studio.editor").value_or("code --goto {file}:{line}:{column}")};
+    // The author's own choice in the preferences comes first (D782).
+    editor_ = preferences_.editor.empty() ? configuredEditor_ : preferences_.editor;
     title_ = "Rawframe Studio";
     if (kGame.has_value()) {
         const std::filesystem::path kDescription{std::string{*kGame}};

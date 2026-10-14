@@ -32,6 +32,9 @@ constexpr std::string_view kMenus[] = {"Edit", "Entity", "Game", "Window"};
 /// field the keyboard.
 constexpr std::string_view kPalette = "Command palette";
 
+/// Studio's preferences, a dialog of its own with no button.
+constexpr std::string_view kPreferences = "Preferences";
+
 /// What the palette's field reads while it does not hold the keyboard.
 constexpr std::string_view kPaletteHint = "commands  Ctrl+K";
 
@@ -40,13 +43,22 @@ constexpr std::string_view kPaletteHint = "commands  Ctrl+K";
 result::Status ShellParticipant::showMenus(ui::Node bar) {
     commands_.clear();
     menus_.clear();
+    // A command's keys are its own unless the preferences give it others
+    // (D782).
+    const auto kKeys = [&](std::string_view name, std::vector<std::string> keys) {
+        defaultKeys_[std::string{name}] = keys;
+        const auto kGiven = preferences_.keys.find(name);
+        return kGiven != preferences_.keys.end() ? kGiven->second : keys;
+    };
     // Only what a button does now: an operation the catalog does not offer
     // has no button, and so no command (D777).
     const auto kOffer =
         [&](std::string_view name, std::string_view menu, std::vector<std::string> keys, ui::Node button) {
             if (tree_->contains(button)) {
-                commands_.push_back(Command{
-                    .name = std::string{name}, .menu = std::string{menu}, .keys = std::move(keys), .button = button});
+                commands_.push_back(Command{.name = std::string{name},
+                                            .menu = std::string{menu},
+                                            .keys = kKeys(name, std::move(keys)),
+                                            .button = button});
             }
         };
     kOffer("Cook", "Game", {"Ctrl+B"}, cookNode_);
@@ -76,7 +88,8 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
         RAWFRAME_TRY(pressWords(kButton, kMenu, kText, 14));
         menus_.emplace_back(kButton, std::string{kMenu});
     }
-    commands_.push_back(Command{.name = std::string{kPalette}, .menu = "Window", .keys = {"Ctrl+K"}});
+    commands_.push_back(Command{.name = std::string{kPalette}, .menu = "Window", .keys = kKeys(kPalette, {"Ctrl+K"})});
+    commands_.push_back(Command{.name = std::string{kPreferences}, .menu = "Window", .keys = kKeys(kPreferences, {})});
     // The palette's field, as a field named "commands" is read (D575).
     RAWFRAME_TRY_ASSIGN(const ui::Node kSearch, tree_->addEditable(++keys_));
     RAWFRAME_TRY(tree_->setLayout(
@@ -97,6 +110,11 @@ bool ShellParticipant::runCommand(std::string_view name) {
     }
     if (kCommand->name == kPalette) {
         openPalette();
+        return true;
+    }
+    if (kCommand->name == kPreferences) {
+        openPreferences();
+        say(dialog_.has_value() ? "preferences" : "preferences closed");
         return true;
     }
     if (!tree_->contains(kCommand->button)) {

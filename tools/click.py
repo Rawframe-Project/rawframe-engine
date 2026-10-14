@@ -96,8 +96,9 @@ class XImage(ctypes.Structure):
 KEYS = {".": "period", ",": "comma", "-": "minus", " ": "space", "/": "slash", "[": "bracketleft",
         "]": "bracketright", "=": "equal"}
 # Characters typed with Shift held, by the key that types them (D473), a
-# color's # among them (D637).
-SHIFTED = {":": "semicolon", "_": "underscore", "#": "3"}
+# color's # among them (D637), and a plus, as a shortcut's keys are typed
+# (D782).
+SHIFTED = {":": "semicolon", "_": "underscore", "#": "3", "+": "equal"}
 # Capitals typed with Shift held, as a path may hold them (D505).
 SHIFTED.update({letter: letter.lower() for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"})
 

@@ -1,10 +1,12 @@
 #pragma once
 
 // What Studio keeps of how its author arranged it (D779, SPEC-0051 Part 3):
-// the docks' sizes, and the games it opened last (D781), in a document of
-// Studio's own, never the game's. A file that does not read leaves Studio
-// as it starts.
+// the docks' sizes, the games it opened last (D781), and each command's
+// keys and the editor it opens a file in (D782), in a document of Studio's
+// own, never the game's, which an author may write by hand as well. A file
+// that does not read leaves Studio as it starts.
 
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -20,6 +22,12 @@ struct Preferences {
     /// The game descriptions opened last, the latest first, at most
     /// kRecentGames.
     std::vector<std::string> recent;
+    /// Commands' keys in place of their own, by command name: chords as
+    /// `isChord` reads them, none for a command given no keys.
+    std::map<std::string, std::vector<std::string>, std::less<>> keys;
+    /// The command that opens a file at a line (`studio.editor`'s form);
+    /// empty for the setting's or the default.
+    std::string editor;
 
     friend bool operator==(const Preferences&, const Preferences&) = default;
 };
@@ -37,6 +45,19 @@ inline constexpr std::size_t kRecentGames = 8;
 /// for the sizes it gives, and strings for the games, of which the first
 /// kRecentGames are kept.
 [[nodiscard]] std::optional<Preferences> preferencesOf(std::string_view document);
+
+/// Whether `text` is a chord a shortcut can be: `Ctrl+`, `Shift+`, and
+/// `Alt+`, each at most once and in that order, then F1 to F12 but F11
+/// (which the window keeps), a capital letter or a digit with Ctrl, or
+/// Delete alone, as the window names what is pressed (D777).
+[[nodiscard]] bool isChord(std::string_view text) noexcept;
+
+/// The chords `text` lists, separated by commas and spaces, or none when
+/// one is not a chord; nothing for empty text.
+[[nodiscard]] std::optional<std::vector<std::string>> chordsOf(std::string_view text);
+
+/// The chords as `chordsOf` reads them: `Ctrl+Y, Ctrl+Shift+Z`.
+[[nodiscard]] std::string chordsText(const std::vector<std::string>& chords);
 
 /// The document that keeps `preferences`, in one canonical form.
 [[nodiscard]] std::string writtenPreferences(const Preferences& preferences);

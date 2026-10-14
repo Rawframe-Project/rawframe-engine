@@ -64,6 +64,10 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         pressStart(node);
         return;
     }
+    // The Preferences dialog's own (D782).
+    if (pressPreferences(node)) {
+        return;
+    }
     // A document's tab is pressed as its row in Assets is (D776).
     if (const auto kTab = std::ranges::find(tabRows_, node); kTab != tabRows_.end()) {
         const auto kListed =
@@ -377,6 +381,10 @@ void ShellParticipant::take(const view::Typing& typing) {
             makeScene(kTyped);
         } else if (kEdited.role == FieldRow::Role::NewGame) {
             makeGame(kTyped);
+        } else if (kEdited.role == FieldRow::Role::Shortcut) {
+            setKeys(kEdited.field, kTyped);
+        } else if (kEdited.role == FieldRow::Role::Editor) {
+            setEditor(kTyped);
         } else if (kEdited.role == FieldRow::Role::OpenGame) {
             chooseGame(std::filesystem::path{kTyped});
         } else if (kEdited.role == FieldRow::Role::Find) {
@@ -388,7 +396,8 @@ void ShellParticipant::take(const view::Typing& typing) {
     } else if (kLeft == view::TypingKey::Dismiss) {
         const FieldRow::Role kRole = editing_->role;
         endEdit();
-        if (kRole == FieldRow::Role::NewGame || kRole == FieldRow::Role::OpenGame) {
+        if (kRole == FieldRow::Role::NewGame || kRole == FieldRow::Role::OpenGame ||
+            kRole == FieldRow::Role::Shortcut || kRole == FieldRow::Role::Editor) {
             return;
         }
         if (kRole == FieldRow::Role::View) {

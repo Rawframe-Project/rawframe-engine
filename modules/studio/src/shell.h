@@ -82,6 +82,8 @@ inline constexpr std::uint32_t kEditing = 0x1A1C21FFU;
 inline constexpr std::uint32_t kHeaderFill = 0x30343FFFU;
 inline constexpr std::uint32_t kText = 0xE6E8EEFFU;
 inline constexpr std::uint32_t kQuiet = 0x9AA0ADFFU;
+/// Words that warn: a chord two commands share (D782).
+inline constexpr std::uint32_t kWarning = 0xE8B04AFFU;
 
 /// A field Studio edits and what the session needs to act on it: a
 /// component's field (its kind the read value's key), the chosen entity's
@@ -115,7 +117,11 @@ struct FieldRow {
         Palette,
         /// The start screen's new game's name, and a game to open (D781).
         NewGame,
-        OpenGame
+        OpenGame,
+        /// A command's keys, `field` its name, and the editor's command, in
+        /// the Preferences dialog (D782).
+        Shortcut,
+        Editor
     };
     ui::Node value{};
     Role role = Role::Field;
@@ -409,6 +415,24 @@ private:
     /// The start screen, while Studio has no game (D781): the games opened
     /// last, a new one from a template, and one to open by its path.
     result::Status showStart(ui::Node body);
+
+    /// The Preferences dialog over the center (D782): the editor a file is
+    /// opened in, then each command's keys, a chord two commands share
+    /// said under both; closed again if open.
+    void openPreferences();
+    void closePreferences();
+
+    /// A press in the Preferences dialog, taken whole; false for a press
+    /// outside it.
+    bool pressPreferences(ui::Node node);
+
+    /// `command`'s keys from the text typed, its own again when they are
+    /// its own, kept in the preferences; refused when one is not a chord.
+    void setKeys(const std::string& command, const std::string& text);
+
+    /// The editor's command from the text typed; the setting's or the
+    /// default for none.
+    void setEditor(const std::string& text);
 
     /// A press on the start screen: a template chosen, a game opened, or a
     /// field begun.
@@ -755,6 +779,16 @@ private:
     std::optional<FieldRow> newGameField_;
     std::optional<FieldRow> openGameField_;
     std::uint64_t made_ = 0;
+    /// The Preferences dialog while open, its fields, and its Close; each
+    /// command's own keys, and the editor's command as Studio's settings
+    /// give it (D782).
+    std::optional<ui::Node> dialog_;
+    std::vector<FieldRow> shortcutFields_;
+    std::optional<FieldRow> editorField_;
+    ui::Node dialogClose_{};
+    std::map<std::string, std::vector<std::string>, std::less<>> defaultKeys_;
+    std::string configuredEditor_;
+    std::uint64_t rebound_ = 0;
     std::optional<Play> playing_;
     std::optional<Play> stopping_;
     ui::Node playNode_{};

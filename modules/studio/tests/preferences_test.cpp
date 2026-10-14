@@ -53,3 +53,29 @@ RAWFRAME_TEST(TheGamesOpenedAreKeptLatestFirst) {
     RAWFRAME_EXPECT(
         !preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"recent":[3]})").has_value());
 }
+
+RAWFRAME_TEST(AChordIsWhatTheWindowNamesAPress) {
+    for (const std::string_view kGood : {"Ctrl+D", "Ctrl+Shift+Z", "Ctrl+Shift+Alt+9", "F5", "Shift+F12", "Delete"}) {
+        RAWFRAME_EXPECT(isChord(kGood));
+    }
+    // A letter without Ctrl is typing; Ctrl+A selects a field's text; F11
+    // is the window's; the modifiers come in one order.
+    for (const std::string_view kBad : {"D", "Shift+D", "Ctrl+A", "F11", "F13", "F0", "Shift+Ctrl+D", "Ctrl+d", ""}) {
+        RAWFRAME_EXPECT(!isChord(kBad));
+    }
+    const auto kRead = chordsOf(" Ctrl+Y,Ctrl+Shift+Z , Ctrl+Y");
+    RAWFRAME_EXPECT(kRead.has_value() && chordsText(*kRead) == "Ctrl+Y, Ctrl+Shift+Z");
+    RAWFRAME_EXPECT(chordsOf("").has_value() && chordsOf("")->empty());
+    RAWFRAME_EXPECT(!chordsOf("Ctrl+D, hello").has_value());
+}
+
+RAWFRAME_TEST(KeysAndTheEditorAreKeptAsWritten) {
+    Preferences kept;
+    kept.keys["Duplicate"] = {"Ctrl+Shift+D"};
+    kept.keys["Play"] = {};
+    kept.editor = "kate --line {line} {file}";
+    const auto kRead = preferencesOf(writtenPreferences(kept));
+    RAWFRAME_EXPECT(kRead.has_value() && *kRead == kept);
+    RAWFRAME_EXPECT(!preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"keys":{"Play":["P"]}})")
+                         .has_value());
+}
