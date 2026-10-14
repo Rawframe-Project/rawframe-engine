@@ -41,7 +41,11 @@ jobs:
         # Past the first failure, so one run shows every file that does not
         # build here.
         run: cmake --build out/clang-development -- -k 0
+      # The runner's Apple GPU draws every GPU test: a test that finds no
+      # adapter fails rather than skips (D767).
       - name: Test
+        env:
+          RAWFRAME_REQUIRE_GPU: 1
         run: ctest --test-dir out/clang-development --output-on-failure -j3
       # Stalls exported, played, and read and pressed as a screen reader
       # does (D579): its client's UI through the AX API while it plays, the
@@ -284,8 +288,12 @@ jobs:
       - name: Build
         shell: pwsh
         run: cmake --build out/windows-development -- -k 0
+      # WARP, which ships with Windows, draws every GPU test on Direct3D 12:
+      # a test that finds no adapter fails rather than skips (D767).
       - name: Test
         shell: pwsh
+        env:
+          RAWFRAME_REQUIRE_GPU: 1
         run: ctest --test-dir out/windows-development --output-on-failure -j3
       # The frames the arena's drawn tests wrote, and the Lighting Test's
       # content as Windows cooked it, to look at where one reads differently
@@ -299,11 +307,10 @@ jobs:
             out/windows-development/hosts/arena/*.tga
             out/windows-development/hosts/arena/lighting_content/
           retention-days: 14
-      # What the scene's tests drew on Direct3D 12, where the runner has an
-      # adapter: a material's face and parameters (D705, D708), and each
-      # light and what the frame does with it, to tell which one reads
-      # differently there (D765). Printed, not required, since a hosted
-      # runner may offer none (D710), and run after a failed test too.
+      # What the scene's tests drew on Direct3D 12: a material's face and
+      # parameters (D705, D708), and each light and what the frame does with
+      # it, printed to compare with lavapipe's (D765), and run after a failed
+      # test too. The tests themselves are required in the step above (D767).
       - name: The scene on Direct3D 12
         if: success() || failure()
         shell: bash
