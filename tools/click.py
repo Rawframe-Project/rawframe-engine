@@ -16,7 +16,8 @@
 # then Return (D426); a dot, a comma, a minus, and a space are typed as
 # their keys, a colon with Shift (D473), and a slash, an underscore, and
 # capitals as their keys too, so a path is typed whole (D505). An argument `keys=` and X key names apart by commas presses
-# those keys alone, a third of a second apart, and waits a second and a half
+# those keys alone, a name joined by pluses as a chord, the keys before the
+# last held through it (D777), a third of a second apart, and waits a second and a half
 # after them (D430). An argument `wheel=`, a point, and a count turns the
 # wheel there that many detents toward the user, or away for a count below
 # nought, 0.15 seconds apart (D441), and `drag=` and two points presses the
@@ -293,11 +294,19 @@ def main():
             data = ctypes.cast(info.data, ctypes.POINTER(ctypes.c_ubyte * (info.bytes_per_line * info.height))).contents
             lit += 1 if any(bytes(data)) else 0
     def press(name, held):
+        # A chord, "Control_L+z": the keys before the last held through it
+        # (D777).
+        *holding, name = name.split("+") if len(name) > 1 else [name]
+        codes = [x.XKeysymToKeycode(display, x.XStringToKeysym(each.encode())) for each in holding]
+        for code in codes:
+            xtest.XTestFakeKeyEvent(display, code, 1, 0)
         code = x.XKeysymToKeycode(display, x.XStringToKeysym(name.encode()))
         xtest.XTestFakeKeyEvent(display, code, 1, 0)
         x.XFlush(display)
         time.sleep(held)
         xtest.XTestFakeKeyEvent(display, code, 0, 0)
+        for code in reversed(codes):
+            xtest.XTestFakeKeyEvent(display, code, 0, 0)
         x.XFlush(display)
 
     seen = False
