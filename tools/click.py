@@ -78,6 +78,9 @@ import signal
 import sys
 import time
 
+# tools/atspi.py is imported from here; no cache of it is left in tools/.
+sys.dont_write_bytecode = True
+
 
 class XImage(ctypes.Structure):
     _fields_ = [("width", ctypes.c_int), ("height", ctypes.c_int), ("xoffset", ctypes.c_int),

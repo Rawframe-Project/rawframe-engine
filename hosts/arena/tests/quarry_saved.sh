@@ -42,14 +42,23 @@ save.namespace = 71756172727900000000000000000001
 world.overload_ms = 0
 CONF
 
+# A record a run's log must hold, or which it lacked and the log's end:
+# a run starved on a loaded machine says where it stopped (D775).
+need() {
+    grep -q "\"code\":\"$1\"" "$2" && return
+    echo "never saw $1 in $(basename "$2")"
+    tail -5 "$2"
+    exit 1
+}
+
 "$arena" --config "$work/arena.conf" >"$work/first.log"
-grep -q '"code":"save_absent"' "$work/first.log"
-grep -q '"code":"save_kept"' "$work/first.log"
+need save_absent "$work/first.log"
+need save_kept "$work/first.log"
 cp "$work/saves/world.rfsave" "$work/first.rfsave"
 
 "$server" --config "$work/server.conf" >"$work/second.log"
-grep -q '"code":"save_loaded"' "$work/second.log"
-grep -q '"code":"save_kept"' "$work/second.log"
+need save_loaded "$work/second.log"
+need save_kept "$work/second.log"
 
 # The land's blocks as kept, after checking the digest.
 blocks() {
