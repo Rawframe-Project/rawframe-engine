@@ -46,6 +46,8 @@ std::optional<TypingKey> edit(ui::TextEdit& edit, const Typing& typing) {
         static_cast<void>(edit.compose(typing.text, typing.caret, parts));
         return std::nullopt;
     }
+    case Typing::Kind::Chord:
+        return std::nullopt;
     case Typing::Kind::Key:
         break;
     }

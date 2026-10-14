@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <utility>
 #include <variant>
 
@@ -60,6 +61,13 @@ constexpr std::uint16_t kUsageDown = 0x51;
 constexpr std::uint16_t kUsageUp = 0x52;
 constexpr std::uint16_t kUsageKeypadEnter = 0x58;
 constexpr std::uint16_t kUsageF11 = 0x44;
+// And the keys a chord may end in (D777): the letters, the digits one to
+// nine and nought, and the function keys one to twelve.
+constexpr std::uint16_t kUsageZ = 0x1D;
+constexpr std::uint16_t kUsage1 = 0x1E;
+constexpr std::uint16_t kUsage0 = 0x27;
+constexpr std::uint16_t kUsageF1 = 0x3A;
+constexpr std::uint16_t kUsageF12 = 0x45;
 
 bool held(const window::Key& key, window::Modifier modifier) noexcept {
     return (key.modifiers & static_cast<std::uint16_t>(modifier)) != 0;
@@ -120,11 +128,37 @@ std::optional<view::Typing> typingOf(const window::Key& key) {
     return typing;
 }
 
+/// A key going down as a chord (D777), if it is one: a letter or a digit
+/// with Control or Command, Command read as Control so a shortcut is one
+/// name on every desktop, or a function key with any modifiers but F11,
+/// which the window keeps for its full screen. Control or Command with A
+/// stays the field's select all.
+std::optional<view::Typing> chordOf(const window::Key& key) {
+    const bool kControl = held(key, window::Modifier::Control) || held(key, window::Modifier::Meta);
+    std::string name;
+    if (key.usage >= kUsageF1 && key.usage <= kUsageF12 && key.usage != kUsageF11) {
+        name = "F" + std::to_string(key.usage - kUsageF1 + 1);
+    } else if (kControl && key.usage > kUsageA && key.usage <= kUsageZ) {
+        name = std::string(1, static_cast<char>('A' + (key.usage - kUsageA)));
+    } else if (kControl && key.usage >= kUsage1 && key.usage <= kUsage0) {
+        name = key.usage == kUsage0 ? "0" : std::string(1, static_cast<char>('1' + (key.usage - kUsage1)));
+    } else {
+        return std::nullopt;
+    }
+    const std::string kHeld = std::string{kControl ? "Ctrl+" : ""} +
+                              (held(key, window::Modifier::Shift) ? "Shift+" : "") +
+                              (held(key, window::Modifier::Alt) ? "Alt+" : "");
+    return view::Typing{.kind = view::Typing::Kind::Chord, .text = kHeld + name};
+}
+
 /// A window's record as typing for the field that holds focus, if it is
 /// any: a key that edits, typed or committed text, or a composition.
 std::optional<view::Typing> typingOf(const window::Event& event) {
     switch (event.kind) {
     case window::EventKind::KeyDown:
+        if (auto chord = chordOf(event.key); chord.has_value()) {
+            return chord;
+        }
         return typingOf(event.key);
     case window::EventKind::TextInput:
         return view::Typing{.kind = view::Typing::Kind::Text, .text = event.text};
@@ -331,10 +365,15 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         }
         // A field holding focus takes what is typed (D426); the keys still
         // reach the players' input, whose gated actions they no longer move.
-        if (typing_.editing()) {
-            if (const std::optional<view::Typing> kTyping = typingOf(*event)) {
-                typing_.type(*kTyping);
-            }
+        // A chord goes to the UI whether or not a field holds focus, and
+        // Delete with none holding it is one: what is chosen goes (D777).
+        std::optional<view::Typing> typed = typingOf(*event);
+        if (typed.has_value() && !typing_.editing() && typed->kind == view::Typing::Kind::Key &&
+            typed->key == view::TypingKey::Delete) {
+            typed = view::Typing{.kind = view::Typing::Kind::Chord, .text = "Delete"};
+        }
+        if (typed.has_value() && (typing_.editing() || typed->kind == view::Typing::Kind::Chord)) {
+            typing_.type(*typed);
         }
         // A key pressed while the UI is navigated and no field holds the
         // keyboard may move focus or give a field the keyboard, which the

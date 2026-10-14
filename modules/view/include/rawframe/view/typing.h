@@ -57,13 +57,16 @@ struct TypingSpan {
 };
 
 /// One thing typed: text typed or committed, a key with Shift (`extend`)
-/// and Control or Option (`word`), or the input method's composition, its
-/// caret bytes into it (-1 hidden), empty text ending it.
+/// and Control or Option (`word`), the input method's composition, its
+/// caret bytes into it (-1 hidden), empty text ending it, or a chord, a
+/// shortcut no field takes, named in `text` as "Ctrl+Shift+Z" or "F5"
+/// (D777).
 struct Typing {
     enum class Kind : std::uint8_t {
         Text,
         Key,
-        Composition
+        Composition,
+        Chord
     };
     Kind kind = Kind::Text;
     std::string text;
@@ -117,9 +120,10 @@ public:
         return caret_;
     }
     /// The host's side: `typing` to the field that holds focus; nothing
-    /// while none does.
+    /// while none does, but a chord, which the UI takes whether or not a
+    /// field holds focus (D777).
     void type(const Typing& typing) const {
-        if (editing()) {
+        if (editing() || (typing.kind == Typing::Kind::Chord && take_)) {
             take_(typing);
         }
     }

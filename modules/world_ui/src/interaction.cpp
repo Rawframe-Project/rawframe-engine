@@ -399,7 +399,8 @@ std::optional<float> WorldUi::valueOf(std::size_t player, std::int64_t press) co
 
 void WorldUi::type(const view::Typing& typing) {
     State& state = *state_;
-    if (!state.focus.has_value() || state.focus->edit == nullptr) {
+    // A chord is a tool's shortcut (D777); a game's field takes none.
+    if (!state.focus.has_value() || state.focus->edit == nullptr || typing.kind == view::Typing::Kind::Chord) {
         return;
     }
     ui::TextEdit& edit = *state.focus->edit;
