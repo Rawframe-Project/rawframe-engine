@@ -355,11 +355,18 @@ private:
                      {diagnostics::field("reason", std::string{error.description()})});
     }
 
+    /// Why, and the system's Vulkan devices when the device layer listed
+    /// none, which a device below its floor says (D769).
     void unavailable(const result::Error& error) noexcept {
+        std::string_view seen;
+        for (const result::ContextField& each : error.context()) {
+            seen = each.key == "vulkan" ? std::string_view{each.value} : seen;
+        }
         emitter_.log(diagnostics::Severity::Warning,
                      kUnavailable,
                      "no device could be had: nothing is drawn",
-                     {diagnostics::field("reason", std::string{error.description()})});
+                     {diagnostics::field("reason", std::string{error.description()}),
+                      diagnostics::field("vulkanDevices", std::string{seen})});
     }
 
     std::optional<DeviceSettings> settings_;

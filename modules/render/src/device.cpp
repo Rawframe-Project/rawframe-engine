@@ -12,6 +12,7 @@
 #include <maul-rhi/surface.h>
 #include <maul-rhi/vulkan.h>
 #include <span>
+#include <string>
 #include <string_view>
 #include <variant>
 #include <vulkan/vulkan_core.h>
@@ -79,7 +80,9 @@ public:
                                           reinterpret_cast<void*>(GetProcAddress(library, "vkGetInstanceProcAddr")))
                                     : nullptr;
 #elif defined(RAWFRAME_RENDER_DLFCN)
+        // Android's loader has no version in its name.
         library_ = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
+        library_ = library_ != nullptr ? library_ : dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
         entry_ = library_ != nullptr
                      ? reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(library_, "vkGetInstanceProcAddr"))
                      : nullptr;
@@ -95,6 +98,49 @@ private:
     void* library_ = nullptr;
     PFN_vkGetInstanceProcAddr entry_ = nullptr;
 };
+
+/// The system's Vulkan devices, each its name and the Vulkan it offers
+/// ("name 1.1.128"), apart by commas: what a machine has when Maul RHI
+/// lists no adapter, which it does for any below Vulkan 1.3 (mrhi-0003,
+/// D769). Empty where there is no loader or no device.
+std::string vulkanDevicesSeen() {
+    VulkanLoader loader;
+    if (!loader.open()) {
+        return {};
+    }
+    const auto kCreate = reinterpret_cast<PFN_vkCreateInstance>(loader.entry()(VK_NULL_HANDLE, "vkCreateInstance"));
+    const VkApplicationInfo kApplication{.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .apiVersion = VK_API_VERSION_1_1};
+    const VkInstanceCreateInfo kCreated{.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+                                        .pApplicationInfo = &kApplication};
+    VkInstance instance = VK_NULL_HANDLE;
+    if (kCreate == nullptr || kCreate(&kCreated, nullptr, &instance) != VK_SUCCESS) {
+        return {};
+    }
+    const auto kList =
+        reinterpret_cast<PFN_vkEnumeratePhysicalDevices>(loader.entry()(instance, "vkEnumeratePhysicalDevices"));
+    const auto kRead =
+        reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(loader.entry()(instance, "vkGetPhysicalDeviceProperties"));
+    const auto kDestroy = reinterpret_cast<PFN_vkDestroyInstance>(loader.entry()(instance, "vkDestroyInstance"));
+    std::string seen;
+    std::array<VkPhysicalDevice, 8> devices{};
+    auto count = static_cast<std::uint32_t>(devices.size());
+    // VK_INCOMPLETE, a positive result, still lists the first eight.
+    if (kList != nullptr && kRead != nullptr && kList(instance, &count, devices.data()) >= VK_SUCCESS) {
+        for (std::uint32_t at = 0; at < count; ++at) {
+            VkPhysicalDeviceProperties properties{};
+            kRead(devices.at(at), &properties);
+            seen += seen.empty() ? "" : ", ";
+            seen += std::string{properties.deviceName} + " " +
+                    std::to_string(VK_API_VERSION_MAJOR(properties.apiVersion)) + "." +
+                    std::to_string(VK_API_VERSION_MINOR(properties.apiVersion)) + "." +
+                    std::to_string(VK_API_VERSION_PATCH(properties.apiVersion));
+        }
+    }
+    if (kDestroy != nullptr) {
+        kDestroy(instance, nullptr);
+    }
+    return seen;
+}
 
 /// The Vulkan objects a runtime made, which Maul RHI adopts and never ends:
 /// ended here, after Maul RHI's device and instance.
@@ -368,11 +414,16 @@ struct Device::State {
                 return fail(kChosen.error().clone());
             }
         } else if (mrhiGetAdapters(instance, &chosen, 1, &count) != mrhi_success || count == 0) {
-            return fail(refuse(result::ErrorClass::NotFound,
-                               RenderError::NoAdapter,
-                               settings.allowSoftware ? "no adapter answered"
-                                                      : "no adapter answered that is not a software rasterizer")
-                            .error());
+            result::Error none =
+                refuse(result::ErrorClass::NotFound,
+                       RenderError::NoAdapter,
+                       settings.allowSoftware ? "no adapter answered"
+                                              : "no adapter answered that is not a software rasterizer")
+                    .error();
+            if (const std::string kSeen = vulkanDevicesSeen(); !kSeen.empty()) {
+                none = std::move(none).withContext("vulkan", kSeen);
+            }
+            return fail(std::move(none));
         }
         mrhiAdapterInfo info{};
         if (const mrhiResult kRead = mrhiGetAdapterInfo(instance, chosen, &info); kRead != mrhi_success) {
