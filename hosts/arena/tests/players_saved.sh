@@ -31,6 +31,10 @@ bots.endpoint = arena
 bots.session = runner
 save.directory = $work/saves
 save.namespace = 72756e6e657273000000000000000001
+# What is checked is what the run did, not how fast a loaded machine
+# ticks (D516, D569): stopped as overloaded, the script ends before it.
+world.degraded_ms = 600000
+world.overload_ms = 0
 CONF
 
 # Each player's shots as kept, after checking the save and its slot.

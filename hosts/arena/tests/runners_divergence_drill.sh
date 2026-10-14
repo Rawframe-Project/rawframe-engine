@@ -28,6 +28,10 @@ bots.endpoint = arena
 bots.checksum_interval = 30
 bots.divergence_drill = true
 bots.divergence_capture = true
+# What is checked is what the run did, not how fast a loaded machine
+# ticks (D516, D569): stopped as overloaded, the script ends before it.
+world.degraded_ms = 600000
+world.overload_ms = 0
 CONF
 (cd "$repository" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson")
 grep -q '"checksumsVerified":0,"checksumsUnverifiable":0,"checksumsDiverged":[1-9]' "$work/log.ndjson"

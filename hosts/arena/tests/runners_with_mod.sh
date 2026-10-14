@@ -105,6 +105,10 @@ bots.session = runner
 save.directory = $work/saves
 save.namespace = 72756e6e657273000000000000000001
 ${3:-}
+# What is checked is what the run did, not how fast a loaded machine
+# ticks (D516, D569): stopped as overloaded, the script ends before it.
+world.degraded_ms = 600000
+world.overload_ms = 0
 CONF
     (cd "$work/elsewhere" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson" 2>"$work/errors.txt")
 }
