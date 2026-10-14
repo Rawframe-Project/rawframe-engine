@@ -297,14 +297,24 @@ jobs:
           path: out/windows-development/hosts/arena/*.tga
           retention-days: 14
       # What the scene's tests drew on Direct3D 12, where the runner has an
-      # adapter: a material's face and parameters (D705, D708). Printed, not
-      # required, since a hosted runner may offer none (D710).
+      # adapter: a material's face and parameters (D705, D708), and each
+      # light and what the frame does with it, to tell which one reads
+      # differently there (D765). Printed, not required, since a hosted
+      # runner may offer none (D710), and run after a failed test too.
       - name: The scene on Direct3D 12
+        if: success() || failure()
         shell: bash
         continue-on-error: true
         # The harness takes one filter, so each test is run on its own.
         run: |
-          for test in AMaterialKnowsTheFaceItIsDrawnOn AMaterialReadsItsParametersFromItsBlob; do
+          for test in AMaterialKnowsTheFaceItIsDrawnOn AMaterialReadsItsParametersFromItsBlob \
+              AnEmptySceneIsTheSky TheSkysPictureIsSeenTheWayEachPointLooks TheLitModelReflectsTheSunAndTheSky \
+              TheGroundLightsWhatFacesDown TheSunCastsShadows PointAndSpotLightsLightWhatTheyReach \
+              PunctualLightsCastShadowsThroughTheirAtlas SurfacesAreLitByThePictureAndReflectIt \
+              APointReflectsTheProbesThatHoldIt TheFloorAtABlocksFootIsDarkerWithAmbientOcclusion \
+              ABrightGlowSpreadsWithTheBloom AMirrorFloorShowsTheBlockOnItWithScreenSpaceReflections \
+              TheFloorBesideABlockIsShadedByContactShadows AMeteredExposureFindsTheScenesLight \
+              AFramesLightIsReadBackInPhysicalUnits; do
             out/windows-development/modules/render_scene_gpu/rawframe_render_scene_gpu_tests.exe "$test"
           done
       # The sample games to play on Windows (D515): each exported as the
