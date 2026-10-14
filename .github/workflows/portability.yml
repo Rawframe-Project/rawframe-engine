@@ -387,6 +387,26 @@ jobs:
             fi
           done
           exit "$failed"
+      # Studio packaged for an author with no build (D768), opened on each
+      # game for a few seconds on WARP, and kept two weeks.
+      - name: Package Studio
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools/package_studio.sh out/windows-development studio runners plaza tycoon
+          for game in runners plaza tycoon; do
+            (cd studio && cp "$game.conf" opened.conf && printf 'host.maximum_iterations = 600\n' >>opened.conf &&
+              timeout 120 ./rawframe-studio.exe --config opened.conf >opened.log 2>&1) || true
+            grep -q '"code":"studio_shown"' studio/opened.log || { cat studio/opened.log; echo "studio did not open $game"; exit 1; }
+            echo "studio opened $game"
+            rm studio/opened.conf studio/opened.log
+          done
+      - name: Keep Studio
+        uses: actions/upload-artifact@v7
+        with:
+          name: studio-windows
+          path: studio/
+          retention-days: 14
       # Stalls read and pressed as a screen reader does (D579): its client's
       # UI through UI Automation while it plays, the purse a button named by
       # its coins and invoked, and the collect command that gives sent by

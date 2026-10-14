@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Packages Studio for an author with no build of their own (D768): Studio,
+# the cook tool, the dedicated server, and the client from one build tree,
+# beside the sources of the games named and a configuration for each, so
+# Studio opens the game, cooks it, and plays it from its header. A Windows
+# tree's programs take the DLLs they import from the tree, and the C++
+# runtime's from the system, and each game has a batch file opening Studio
+# on it.
+#
+#   tools/package_studio.sh <build tree> <folder> <game>...
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+tree="$1"
+into="$2"
+shift 2
+exe=""
+[ -e "$tree/hosts/studio/rawframe-studio.exe" ] && exe=.exe
+mkdir -p "$into/games"
+cp "$tree/hosts/studio/rawframe-studio$exe" "$tree/hosts/cook/rawframe-cook$exe" \
+    "$tree/hosts/dedicated_server/rawframe-server$exe" "$tree/hosts/client/rawframe-client$exe" "$into/"
+for game in "$@"; do
+    cp -R "games/$game" "$into/games/$game"
+    cat >"$into/$game.conf" <<CONF
+# Studio on $game: Cook, then Play, from its header.
+studio.game = games/$game/$game.game
+studio.play.server = rawframe-server$exe
+studio.play.client = rawframe-client$exe
+render.device = any
+CONF
+    if [ -n "$exe" ]; then
+        printf 'rawframe-studio.exe --config %s.conf\r\n' "$game" >"$into/studio-$game.bat"
+    fi
+done
+if [ -n "$exe" ]; then
+    for program in "$into"/*.exe; do
+        for dll in $(llvm-objdump -p "$program" | sed -n 's/^ *DLL Name: //p' | tr -d '\r'); do
+            [ -e "$into/$dll" ] && continue
+            found="$(find "$tree" -name "$dll" -print -quit)"
+            [ -z "$found" ] && [ -e "/c/Windows/System32/$dll" ] && case "${dll,,}" in
+            vcruntime* | msvcp* | concrt*) found="/c/Windows/System32/$dll" ;;
+            esac
+            [ -n "$found" ] && cp "$found" "$into/"
+        done
+    done
+fi
+ls "$into"
