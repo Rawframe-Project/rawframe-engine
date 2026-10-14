@@ -24,11 +24,11 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":30,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":31,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
-    # holds its buttons, its docks as scroll panes named by their headings
-    # or tabs in SPEC-0051's order (D776), and its fields as entries named
-    # by theirs; runners' level
+    # holds its menus and the palette's field (D777), its buttons, its
+    # docks as scroll panes named by their headings or tabs in SPEC-0051's
+    # order (D776), and its fields as entries named by theirs; runners' level
     # and then New pressed through AT-SPI as a screen reader presses them
     # make an entity there, as clicks do.
     add_test(NAME studio_read_aloud
@@ -39,7 +39,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_read_aloud PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no"
                          PASS_REGULAR_EXPRESSION
-                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 scroll pane Assets\n.*a11y: 3 push button level.scene\n.*a11y: 3 entry new scene or import\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 scroll pane Assets\n.*a11y: 3 push button level.scene\n.*a11y: 3 entry new scene or import\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
     # Studio typed into by a screen reader (D613): the new scene's entry
     # takes a name inserted through AT-SPI's EditableText as typing, the
     # field begun as a press begins it, and reads it back.
@@ -52,6 +52,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no"
                          PASS_REGULAR_EXPRESSION
                          "a11y: 3 entry new scene or import\n.*a11y: typed into new scene or import: b true\na11y: new scene or import reads arena.scene\n.*\"exit\":\"clean_stop\"")
+    # Studio's commands (D777): ground renamed, then undone by Control Z,
+    # redone through the palette's search, undone again from the Edit
+    # menu, and deleted by the Delete key with no field holding the
+    # keyboard; each as its button does it.
+    add_test(NAME studio_commands
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene @ground "@name#2:first" "until=studio_said,status=\"renamed first\""
+                     keys=Control_L+z "until=studio_said,status=\"undone\"" @commands:redo "until=studio_said,status=\"redone\""
+                     @Edit "@Undo  Ctrl+Z" "until=studio_said,status=\"undone\"" keys=Delete "until=studio_said,status=\"entity deleted\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_commands PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "pressed Control_L\\+z.*found commands at.*typed redo at.*found Edit at.*found Undo  Ctrl\\+Z at.*pressed Delete.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":2,\"refused\":0,\"undone\":2,\"redone\":1,[^\n]*\"status\":\"entity deleted\".*\"exit\":\"clean_stop\"")
     # Studio clicked: runners' level chosen shows its entities, read from
     # the session, and its ground chosen shows its four components and is
     # chosen in the session; its body's width typed as 12 and given with

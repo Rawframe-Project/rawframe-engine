@@ -63,6 +63,28 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
             node = sceneRows_[kAt];
         }
     }
+    // A menu's or the matches' row does its command, a menu's button opens
+    // its menu, the palette's field takes the keyboard, and any other press
+    // closes what is open (D777).
+    if (const auto kLine = std::ranges::find(popupRows_, node, &std::pair<ui::Node, std::size_t>::first);
+        kLine != popupRows_.end()) {
+        const std::string kName = commands_[kLine->second].name;
+        closePalette();
+        closePopup();
+        static_cast<void>(runCommand(kName));
+        return;
+    }
+    if (const auto kMenu = std::ranges::find(menus_, node, &std::pair<ui::Node, std::string>::first);
+        kMenu != menus_.end()) {
+        showMenu(static_cast<std::size_t>(kMenu - menus_.begin()));
+        return;
+    }
+    closePopup();
+    if (palette_.has_value() && node == palette_->value) {
+        openPalette();
+        return;
+    }
+    closePalette();
     // The row is the node pressed or the one its words are on.
     if (!cookTool_.empty() && node == cookNode_) {
         endEdit();
@@ -302,10 +324,20 @@ void ShellParticipant::endEdit() {
 }
 
 void ShellParticipant::take(const view::Typing& typing) {
+    // A shortcut does its command whether or not a field holds the
+    // keyboard (D777).
+    if (typing.kind == view::Typing::Kind::Chord) {
+        runChord(typing.text);
+        return;
+    }
     if (edit_ == nullptr || !editing_.has_value()) {
         return;
     }
     const std::optional<view::TypingKey> kLeft = view::edit(*edit_, typing);
+    if (editing_->role == FieldRow::Role::Palette) {
+        paletteTyped(kLeft);
+        return;
+    }
     if (kLeft == view::TypingKey::Submit) {
         const FieldRow kEdited = *editing_;
         const std::string kTyped{tree_->textOf(kEdited.value)};

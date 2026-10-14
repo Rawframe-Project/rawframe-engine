@@ -87,7 +87,9 @@ result::Status ShellParticipant::build() {
                                        .shrink = 0,
                                        .padding = {12, 4, 6, 4}},
                             kHeaderFill));
-    RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kToolbar, ui::Layout{.padding = {0, 2, 0, 2}}, 0));
+    // The title, then the menu bar and the palette (D777).
+    RAWFRAME_TRY_ASSIGN(const ui::Node kStart, box(kToolbar, ui::Layout{.alignItems = ui::Align::Center, .gap = 4}, 0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kStart, ui::Layout{.padding = {0, 2, 8, 2}}, 0));
     RAWFRAME_TRY(words(kTitle, title_, kText));
     // The toolbar's commands at its end: Cook before Play, so Play, Undo,
     // and Redo keep their places (D502).
@@ -116,8 +118,13 @@ result::Status ShellParticipant::build() {
                 .height = ui::pixels(24), .alignItems = ui::Align::Center, .shrink = 0, .padding = {10, 2, 10, 2}},
             kHeaderFill));
     RAWFRAME_TRY_ASSIGN(statusNode_, box(kStatusBar, ui::Layout{}, 0));
+    // A menu or the matches went with the tree they were in.
+    popup_.reset();
+    menuOpen_.reset();
+    popupRows_.clear();
     if (broken_.has_value()) {
-        return showBroken(kBody);
+        RAWFRAME_TRY(showBroken(kBody));
+        return showMenus(kStart);
     }
     RAWFRAME_TRY_ASSIGN(const ui::Node kMain,
                         box(kBody,
@@ -201,6 +208,7 @@ result::Status ShellParticipant::build() {
     historyShown_ = false;
     showDock(false);
     RAWFRAME_TRY_ASSIGN(componentsColumn_, column(kBody, "Inspector", 360));
+    RAWFRAME_TRY(showMenus(kStart));
     return showScenes();
 }
 

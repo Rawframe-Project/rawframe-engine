@@ -105,7 +105,9 @@ struct FieldRow {
         /// A material graph's node's param, `field` its name (D730).
         GraphParam,
         /// A material graph's node's input, `field` its name (D730).
-        GraphInput
+        GraphInput,
+        /// The command palette's search (D777).
+        Palette
     };
     ui::Node value{};
     Role role = Role::Field;
@@ -133,6 +135,16 @@ struct ActionButton {
     /// field pressed next, on this node or one chosen first, takes a
     /// connection from it (D733).
     bool connects = false;
+};
+
+/// A named action (SPEC-0051 Part 1, D777): its menu's row, its palette
+/// entry, and its chords do it as its button's press does.
+struct Command {
+    std::string name;
+    std::string menu;
+    /// Its chords as `view::Typing` names them, the first shown beside it.
+    std::vector<std::string> keys;
+    ui::Node button{};
 };
 
 /// The shell: a session on the game, and the UI that shows it.
@@ -183,6 +195,37 @@ private:
 
     /// The bottom dock showing History, or Assets.
     void showDock(bool history);
+
+    /// The commands the window's buttons do (D777), then a button in `bar`
+    /// for each menu that has any, and the palette's field after them.
+    result::Status showMenus(ui::Node bar);
+
+    /// Does the command named `name`; false when there is none.
+    bool runCommand(std::string_view name);
+
+    /// Does the command `chord` is a shortcut of, if one is.
+    void runChord(std::string_view chord);
+
+    /// The menu at `at` in a popup under its button, or closed if it is
+    /// the one open.
+    void showMenu(std::size_t at);
+
+    /// The commands whose names hold `typed`, in a popup under the
+    /// palette's field.
+    void showMatches(std::string_view typed);
+
+    /// What the palette's field does with a key it left: Enter does the
+    /// first match, Escape closes the matches, and text shows them.
+    void paletteTyped(std::optional<view::TypingKey> left);
+
+    /// The palette's field given the keyboard, emptied, its matches all.
+    void openPalette();
+
+    /// The palette's field let go, if it held the keyboard, reading its hint.
+    void closePalette();
+
+    /// The open menu or matches closed, if any is.
+    void closePopup();
 
     /// A tab for each document opened, the chosen one marked; `opened`
     /// the scene listed at that place, opened now.
@@ -485,6 +528,15 @@ private:
     std::string editor_;
     std::vector<process::Child> editors_;
     std::vector<ui::Node> historyRows_;
+    std::vector<Command> commands_;
+    /// The menu bar's buttons and the menus they open.
+    std::vector<std::pair<ui::Node, std::string>> menus_;
+    /// An open menu or the palette's matches, the menu if it is one, and
+    /// its rows with the commands they do.
+    std::optional<ui::Node> popup_;
+    std::optional<std::size_t> menuOpen_;
+    std::vector<std::pair<ui::Node, std::size_t>> popupRows_;
+    std::optional<FieldRow> palette_;
     /// The bottom dock, its tabs, and its panes: one attached at a time.
     ui::Node bottomDock_{};
     ui::Node assetsTab_{};
