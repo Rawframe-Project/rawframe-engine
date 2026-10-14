@@ -58,14 +58,16 @@ result::Result<InstanceDocument> readInstance(std::string_view text) {
 
 result::Result<InstanceValues> instanceValues(const graph::Document& base, const Value& overrides) {
     RAWFRAME_TRY(validateSurface(base));
-    RAWFRAME_TRY_ASSIGN(const std::vector<surface_graph::InterfaceInput> kInputs, surface_graph::interfaceOf(base));
+    RAWFRAME_TRY_ASSIGN(const std::vector<surface_graph::InterfaceInput> kInputs,
+                        surface_graph::interfaceOf(surface_graph::Graph{base}));
     std::array<double, kParameterFloats> values{};
     for (const surface_graph::InterfaceInput& kInput : kInputs) {
         std::ranges::copy(kInput.initial, values.begin() + static_cast<std::ptrdiff_t>(kInput.slot * 4));
     }
     // The texture each input gives where an override changes it.
     std::array<std::uint64_t, 8> textures{};
-    RAWFRAME_TRY_ASSIGN(const std::vector<surface_graph::StaticSwitch> kSwitches, surface_graph::switchesOf(base));
+    RAWFRAME_TRY_ASSIGN(const std::vector<surface_graph::StaticSwitch> kSwitches,
+                        surface_graph::switchesOf(surface_graph::Graph{base}));
     for (std::size_t at = 0; at < overrides.names().size(); ++at) {
         // A switch's override is its variant's (`switchedVariant`, D719).
         if (std::ranges::find(kSwitches, std::string_view{overrides.names()[at]}, &surface_graph::StaticSwitch::name) !=
@@ -120,7 +122,8 @@ result::Result<InstanceValues> instanceValues(const graph::Document& base, const
 
 result::Result<std::optional<graph::Document>> switchedVariant(const graph::Document& base, const Value& overrides) {
     RAWFRAME_TRY(validateSurface(base));
-    RAWFRAME_TRY_ASSIGN(const std::vector<surface_graph::StaticSwitch> kSwitches, surface_graph::switchesOf(base));
+    RAWFRAME_TRY_ASSIGN(const std::vector<surface_graph::StaticSwitch> kSwitches,
+                        surface_graph::switchesOf(surface_graph::Graph{base}));
     graph::Document made = base;
     bool switched = false;
     for (std::size_t at = 0; at < overrides.names().size(); ++at) {

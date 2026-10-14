@@ -12,8 +12,10 @@
 
 #include <array>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -37,6 +39,35 @@ enum class Carried : std::uint8_t {
     /// A whole number, which the int-taking math nodes, compare, and select
     /// take with ints alone (D715).
     Int
+};
+
+/// A surface's or a function's document while it is checked, compiled, or
+/// written, with what each output it reaches carries, found once: a node
+/// many read is reached by every path to it, and finding it again each
+/// time grows with the paths, twice over a level where a node reads one
+/// output twice.
+class Graph {
+public:
+    explicit Graph(const graph::Document& document) noexcept : document_(document) {
+    }
+    Graph(const Graph&) = delete;
+    Graph& operator=(const Graph&) = delete;
+
+    // The document, as the helpers that only look a node up take it.
+    operator const graph::Document&() const noexcept {
+        return document_;
+    }
+    [[nodiscard]] const graph::Document& document() const noexcept {
+        return document_;
+    }
+
+    /// What `from` carries, if found before.
+    [[nodiscard]] std::optional<std::optional<Carried>> found(const graph::Connection& from) const;
+    void remember(const graph::Connection& from, std::optional<Carried> carried) const;
+
+private:
+    const graph::Document& document_;
+    mutable std::map<std::pair<graph::NodeId, std::string>, std::optional<Carried>> found_;
 };
 
 /// SPEC-0026's states' words, in their enumerations' order.
@@ -86,7 +117,7 @@ struct Operand {
     std::optional<Carried> carried;
 };
 
-[[nodiscard]] result::Result<Operand> operandOf(const graph::Document& surface, const document::Value& value);
+[[nodiscard]] result::Result<Operand> operandOf(const Graph& surface, const document::Value& value);
 
 /// How a math node types its inputs and its `out` (SPEC-0026; D691, D694).
 enum class Rule : std::uint8_t {
@@ -155,7 +186,7 @@ struct MathInputs {
     std::optional<Carried> out;
 };
 
-[[nodiscard]] result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<MathInputs> mathInputsOf(const Graph& surface, const graph::Node& node);
 
 /// A `multiply` or `add` node's inputs, checked, and what its `out`
 /// carries: their type, or the one not a float when the other is.
@@ -165,7 +196,7 @@ struct Math {
     std::optional<Carried> out;
 };
 
-[[nodiscard]] result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<Math> mathIn(const Graph& surface, const graph::Node& node);
 
 /// A `combine2`, `combine3`, or `combine4` node's inputs, `x`, `y`, and
 /// for three `z`, for four `w` too, checked: each a float, all given (D691,
@@ -175,15 +206,15 @@ struct Combined {
     std::size_t count = 0;
 };
 
-[[nodiscard]] result::Result<Combined> combineIn(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<Combined> combineIn(const Graph& surface, const graph::Node& node);
 
 /// A `separate2` node's input, checked: a vec2, its outputs `x` and `y`
 /// (D695).
-[[nodiscard]] result::Result<Operand> separate2In(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<Operand> separate2In(const Graph& surface, const graph::Node& node);
 
 /// A `separate4` node's input, checked: a vec4 or a color4, its outputs
 /// `r`, `g`, `b`, and `a`, as a separate3's are (D706).
-[[nodiscard]] result::Result<Operand> separate4In(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<Operand> separate4In(const Graph& surface, const graph::Node& node);
 
 /// A `swizzle` node's input and its declared pattern, checked (D695): one
 /// to four of `x`, `y`, `z`, and `w`, each within the input's width, a
@@ -195,7 +226,7 @@ struct Swizzle {
     std::optional<Carried> out;
 };
 
-[[nodiscard]] result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<Swizzle> swizzleIn(const Graph& surface, const graph::Node& node);
 
 /// A `constant` node's declared type and value, checked (D704): a float, a
 /// bool, a vec2, a vec3, or a color3, its value of that shape; an int, a
@@ -236,13 +267,13 @@ struct InterfaceInput {
 /// each in that order.
 /// A function's texture input is its type alone, each call giving it a
 /// texture (D713).
-[[nodiscard]] result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& surface);
+[[nodiscard]] result::Result<std::vector<InterfaceInput>> interfaceOf(const Graph& surface);
 
 /// A `parameter` node's input, checked: the interface input its `name`
 /// param names, its `out` of that input's type; or a
 /// `parameter_texture_2d` node's, a texture input, its `texture` that
 /// texture.
-[[nodiscard]] result::Result<InterfaceInput> parameterIn(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<InterfaceInput> parameterIn(const Graph& surface, const graph::Node& node);
 
 /// A `compare` node's operator and inputs, checked (D697): `less`,
 /// `less_equal`, `greater`, `greater_equal`, `equal`, or `not_equal`, over
@@ -253,7 +284,7 @@ struct Compare {
     Operand b;
 };
 
-[[nodiscard]] result::Result<Compare> compareIn(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<Compare> compareIn(const Graph& surface, const graph::Node& node);
 
 /// A `time` node's params, checked (D691): its timeline, the simulation's,
 /// the presented World's ticks over its tick rate in seconds (ADR-0010);
@@ -275,7 +306,7 @@ struct Switch {
 /// A quality switch's inputs, in the order `Switch::inputs` holds them.
 inline constexpr std::array<std::string_view, 4> kSwitchInputs = {"default", "high", "low", "medium"};
 
-[[nodiscard]] result::Result<Switch> switchIn(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<Switch> switchIn(const Graph& surface, const graph::Node& node);
 
 /// A `transform` node's spaces, what it takes, and its input, checked
 /// (D714): `from` and `to` two of `object`, `world`, `view`, `tangent`,
@@ -290,7 +321,7 @@ struct Transform {
     Operand in;
 };
 
-[[nodiscard]] result::Result<Transform> transformIn(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<Transform> transformIn(const Graph& surface, const graph::Node& node);
 
 /// One of a surface's static switches (ADR-0027's explicit declarations,
 /// SPEC-0026's permutation axis, D719): its name and the branch it takes
@@ -303,7 +334,7 @@ struct StaticSwitch {
 /// The surface's declared switches: none, or its interface's `switches`,
 /// one to eight, each named as a Kest name is, `{"default": bool}`, in
 /// name order.
-[[nodiscard]] result::Result<std::vector<StaticSwitch>> switchesOf(const graph::Document& surface);
+[[nodiscard]] result::Result<std::vector<StaticSwitch>> switchesOf(const Graph& surface);
 
 /// A `static_switch` node, checked: its `name` param a declared switch, its
 /// inputs `off` and `on` of one type, never a texture; the branch the
@@ -315,7 +346,7 @@ struct SwitchChoice {
     std::optional<Carried> out;
 };
 
-[[nodiscard]] result::Result<SwitchChoice> staticSwitchIn(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<SwitchChoice> staticSwitchIn(const Graph& surface, const graph::Node& node);
 
 /// One of an inline-Slang node's declared inputs or outputs: its name and
 /// its type.
@@ -343,11 +374,11 @@ struct Inline {
     std::string_view body;
 };
 
-[[nodiscard]] result::Result<Inline> inlineIn(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<Inline> inlineIn(const Graph& surface, const graph::Node& node);
 
 /// A `separate3` node's input, checked: a color3 (D312), or a vec3, a
 /// place's axes r, g, and b (D691).
-[[nodiscard]] result::Result<Operand> separate3In(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<Operand> separate3In(const Graph& surface, const graph::Node& node);
 
 /// A `normal_map` node's input and scale, checked (D313).
 struct NormalMap {
@@ -355,7 +386,7 @@ struct NormalMap {
     double scale = 1;
 };
 
-[[nodiscard]] result::Result<NormalMap> normalMapIn(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<NormalMap> normalMapIn(const Graph& surface, const graph::Node& node);
 
 /// What a `sample_texture_2d` node's params say, and what its `uv` comes
 /// from, if connected. Its texture is its `texture` param's, or the
@@ -367,15 +398,14 @@ struct Sampling {
     std::optional<std::size_t> input;
 };
 
-[[nodiscard]] result::Result<Sampling> sampleIn(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<Sampling> sampleIn(const Graph& surface, const graph::Node& node);
 
 /// A node of a type this family knows, other than the surface, checked as
 /// its type checks it: in a surface or a function's document (D711).
-[[nodiscard]] result::Status nodeChecked(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Status nodeChecked(const Graph& surface, const graph::Node& node);
 
 /// What the output a connection names carries, if its node is of a type
 /// this family knows; refused when the node has no such output.
-[[nodiscard]] result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
-                                                               const graph::Connection& from);
+[[nodiscard]] result::Result<std::optional<Carried>> carriedBy(const Graph& surface, const graph::Connection& from);
 
 } // namespace rawframe::material::surface_graph

@@ -72,6 +72,6 @@ struct Call {
 /// type, each texture input given the game's texture by 16 lowercase hex
 /// digits or the caller's texture input by its parameter_texture_2d node.
 /// Refuses (`Invalid`) any other, and params, which a call has none of.
-[[nodiscard]] result::Result<Call> callIn(const graph::Document& surface, const graph::Node& node);
+[[nodiscard]] result::Result<Call> callIn(const surface_graph::Graph& surface, const graph::Node& node);
 
 } // namespace rawframe::material::functions

@@ -200,7 +200,7 @@ result::Result<std::uint32_t> uvIn(const graph::Node& node) {
     return static_cast<std::uint32_t>(*kNumber);
 }
 
-result::Result<Operand> operandOf(const graph::Document& surface, const Value& value) {
+result::Result<Operand> operandOf(const Graph& surface, const Value& value) {
     Operand made;
     made.from = graph::connectionOf(value);
     if (made.from.has_value()) {
@@ -236,7 +236,7 @@ result::Result<Operand> operandOf(const graph::Document& surface, const Value& v
     return made;
 }
 
-result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const graph::Node& node) {
+result::Result<MathInputs> mathInputsOf(const Graph& surface, const graph::Node& node) {
     const MathNode& kNode = *mathNodeOf(typeOf(node));
     // The record names its inputs in name order.
     // Sorted by insertion: GCC's ranges::sort over a span of five takes its
@@ -377,12 +377,12 @@ result::Result<MathInputs> mathInputsOf(const graph::Document& surface, const gr
     return made;
 }
 
-result::Result<Math> mathIn(const graph::Document& surface, const graph::Node& node) {
+result::Result<Math> mathIn(const Graph& surface, const graph::Node& node) {
     RAWFRAME_TRY_ASSIGN(const MathInputs kInputs, mathInputsOf(surface, node));
     return Math{.a = kInputs.inputs[0], .b = kInputs.inputs[1], .out = kInputs.out};
 }
 
-result::Result<Combined> combineIn(const graph::Document& surface, const graph::Node& node) {
+result::Result<Combined> combineIn(const Graph& surface, const graph::Node& node) {
     // In name order: w before x.
     constexpr std::array<std::string_view, 4> kInputs = {"x", "y", "z", "w"};
     Combined made{.count = typeOf(node) == kCombine2Type ? 2U : typeOf(node) == kCombine3Type ? 3U : 4U};
@@ -400,7 +400,7 @@ result::Result<Combined> combineIn(const graph::Document& surface, const graph::
     return made;
 }
 
-result::Result<Operand> separate2In(const graph::Document& surface, const graph::Node& node) {
+result::Result<Operand> separate2In(const Graph& surface, const graph::Node& node) {
     RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kIn = kParts.second->find("in");
     if (kIn == nullptr) {
@@ -413,7 +413,7 @@ result::Result<Operand> separate2In(const graph::Document& surface, const graph:
     return made;
 }
 
-result::Result<Swizzle> swizzleIn(const graph::Document& surface, const graph::Node& node) {
+result::Result<Swizzle> swizzleIn(const Graph& surface, const graph::Node& node) {
     RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kPattern = kParts.first->find("pattern");
     const Value* kIn = kParts.second->find("in");
@@ -473,7 +473,7 @@ result::Result<Operand> constantIn(const graph::Node& node) {
     // Its value read as an input's literal is, then held to the declared
     // shape: a literal of three or four numbers reads as a color either way.
     const graph::Document kNone;
-    RAWFRAME_TRY_ASSIGN(Operand made, operandOf(kNone, *kValue));
+    RAWFRAME_TRY_ASSIGN(Operand made, operandOf(Graph{kNone}, *kValue));
     // An int's a whole number an int holds (D715).
     if (kFound->second == Carried::Int && made.carried == Carried::Float && wholeNumber(made.literal[0])) {
         made.carried = Carried::Int;
@@ -488,7 +488,7 @@ result::Result<Operand> constantIn(const graph::Node& node) {
     return made;
 }
 
-result::Result<Compare> compareIn(const graph::Document& surface, const graph::Node& node) {
+result::Result<Compare> compareIn(const Graph& surface, const graph::Node& node) {
     constexpr std::array<std::pair<std::string_view, std::string_view>, 6> kOperators = {{{"less", "<"},
                                                                                           {"less_equal", "<="},
                                                                                           {"greater", ">"},
@@ -547,7 +547,7 @@ result::Status streamIn(const graph::Node& node) {
     return {};
 }
 
-result::Result<Switch> switchIn(const graph::Document& surface, const graph::Node& node) {
+result::Result<Switch> switchIn(const Graph& surface, const graph::Node& node) {
     RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     if (kParts.second->find("default") == nullptr) {
         return invalid("a quality switch's default is given");
@@ -568,7 +568,7 @@ result::Result<Switch> switchIn(const graph::Document& surface, const graph::Nod
     return made;
 }
 
-result::Result<Transform> transformIn(const graph::Document& surface, const graph::Node& node) {
+result::Result<Transform> transformIn(const Graph& surface, const graph::Node& node) {
     constexpr std::array<std::string_view, 5> kSpaces = {"object", "world", "view", "tangent", "clip"};
     constexpr std::array<std::string_view, 3> kKinds = {"point", "vector", "normal"};
     RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
@@ -606,7 +606,7 @@ result::Result<Transform> transformIn(const graph::Document& surface, const grap
     return made;
 }
 
-result::Result<Operand> separate3In(const graph::Document& surface, const graph::Node& node) {
+result::Result<Operand> separate3In(const Graph& surface, const graph::Node& node) {
     RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kIn = kParts.second->find("in");
     if (kIn == nullptr) {
@@ -619,7 +619,7 @@ result::Result<Operand> separate3In(const graph::Document& surface, const graph:
     return made;
 }
 
-result::Result<Operand> separate4In(const graph::Document& surface, const graph::Node& node) {
+result::Result<Operand> separate4In(const Graph& surface, const graph::Node& node) {
     RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kIn = kParts.second->find("in");
     if (kIn == nullptr) {
@@ -632,7 +632,7 @@ result::Result<Operand> separate4In(const graph::Document& surface, const graph:
     return made;
 }
 
-result::Result<NormalMap> normalMapIn(const graph::Document& surface, const graph::Node& node) {
+result::Result<NormalMap> normalMapIn(const Graph& surface, const graph::Node& node) {
     RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kIn = kParts.second->find("in");
     if (kIn == nullptr) {
@@ -653,7 +653,7 @@ result::Result<NormalMap> normalMapIn(const graph::Document& surface, const grap
     return made;
 }
 
-result::Result<Sampling> sampleIn(const graph::Document& surface, const graph::Node& node) {
+result::Result<Sampling> sampleIn(const Graph& surface, const graph::Node& node) {
     RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     Sampling made;
     const Value* kTexture = kParts.first->find("texture");
@@ -706,7 +706,7 @@ result::Result<Sampling> sampleIn(const graph::Document& surface, const graph::N
     return made;
 }
 
-result::Status nodeChecked(const graph::Document& surface, const graph::Node& node) {
+result::Status nodeChecked(const Graph& surface, const graph::Node& node) {
     if (typeOf(node) == kUvType) {
         RAWFRAME_TRY(uvIn(node));
     } else if (math(typeOf(node))) {
@@ -753,7 +753,36 @@ result::Status nodeChecked(const graph::Document& surface, const graph::Node& no
     return {};
 }
 
-result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface, const graph::Connection& from) {
+namespace {
+
+result::Result<std::optional<Carried>> findCarried(const Graph& surface, const graph::Connection& from);
+
+} // namespace
+
+std::optional<std::optional<Carried>> Graph::found(const graph::Connection& from) const {
+    const auto kFound = found_.find(std::pair{from.node, from.output});
+    if (kFound == found_.end()) {
+        return std::nullopt;
+    }
+    return std::optional<std::optional<Carried>>{std::in_place, kFound->second};
+}
+
+void Graph::remember(const graph::Connection& from, std::optional<Carried> carried) const {
+    found_.emplace(std::pair{from.node, from.output}, carried);
+}
+
+result::Result<std::optional<Carried>> carriedBy(const Graph& surface, const graph::Connection& from) {
+    if (const auto kFound = surface.found(from); kFound.has_value()) {
+        return *kFound;
+    }
+    RAWFRAME_TRY_ASSIGN(const std::optional<Carried> kCarried, findCarried(surface, from));
+    surface.remember(from, kCarried);
+    return kCarried;
+}
+
+namespace {
+/// What `from` carries, found from its node.
+result::Result<std::optional<Carried>> findCarried(const Graph& surface, const graph::Connection& from) {
     const graph::Node* kSource = nodeOf(surface, from.node);
     if (kSource == nullptr || !known(*kSource)) {
         return std::optional<Carried>{};
@@ -867,6 +896,7 @@ result::Result<std::optional<Carried>> carriedBy(const graph::Document& surface,
     }
     return invalid("a connection names an output its node has");
 }
+} // namespace
 
 } // namespace rawframe::material::surface_graph
 

@@ -20,7 +20,7 @@ bool kestNamed(std::string_view name) {
 
 result::Result<std::array<double, 4>> interfaceValueOf(Carried carried, const Value& value) {
     const graph::Document kNone;
-    RAWFRAME_TRY_ASSIGN(const Operand kValue, operandOf(kNone, value));
+    RAWFRAME_TRY_ASSIGN(const Operand kValue, operandOf(Graph{kNone}, value));
     if (carried == Carried::Int) {
         if (kValue.carried != Carried::Float || !wholeNumber(kValue.literal[0]) ||
             std::abs(kValue.literal[0]) > 16777216.0) {
@@ -38,7 +38,7 @@ result::Result<std::array<double, 4>> interfaceValueOf(Carried carried, const Va
     return kValue.literal;
 }
 
-result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& surface) {
+result::Result<std::vector<InterfaceInput>> interfaceOf(const surface_graph::Graph& surface) {
     constexpr std::array<std::pair<std::string_view, Carried>, 8> kTypes = {{{"float", Carried::Float},
                                                                              {"int", Carried::Int},
                                                                              {"bool", Carried::Bool},
@@ -47,10 +47,10 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& s
                                                                              {"color3", Carried::Color3},
                                                                              {"vec4", Carried::Vec4},
                                                                              {"color4", Carried::Color4}}};
-    const Value& kInterface = surface.interface;
+    const Value& kInterface = surface.document().interface;
     std::vector<InterfaceInput> made;
     // A function's interface has its outputs after its inputs (D711).
-    const bool kFunction = surface.kind == "function";
+    const bool kFunction = surface.document().kind == "function";
     const Value* kInputsFound = kInterface.kind() == Value::Kind::Object ? kInterface.find("inputs") : nullptr;
     const std::size_t kMembers = kInterface.kind() == Value::Kind::Object ? kInterface.names().size() : 0;
     const bool kShaped =
@@ -140,7 +140,7 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const graph::Document& s
     return made;
 }
 
-result::Result<InterfaceInput> parameterIn(const graph::Document& surface, const graph::Node& node) {
+result::Result<InterfaceInput> parameterIn(const surface_graph::Graph& surface, const graph::Node& node) {
     RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     const Value* kName = kParts.first->find("name");
     if (kName == nullptr || kName->text() == nullptr) {
@@ -157,11 +157,12 @@ result::Result<InterfaceInput> parameterIn(const graph::Document& surface, const
     return *kFound;
 }
 
-result::Result<std::vector<StaticSwitch>> switchesOf(const graph::Document& surface) {
+result::Result<std::vector<StaticSwitch>> switchesOf(const surface_graph::Graph& surface) {
     RAWFRAME_TRY(interfaceOf(surface));
     std::vector<StaticSwitch> made;
-    const Value* kSwitches =
-        surface.interface.kind() == Value::Kind::Object ? surface.interface.find("switches") : nullptr;
+    const Value* kSwitches = surface.document().interface.kind() == Value::Kind::Object
+                                 ? surface.document().interface.find("switches")
+                                 : nullptr;
     if (kSwitches == nullptr) {
         return made;
     }
@@ -181,7 +182,7 @@ result::Result<std::vector<StaticSwitch>> switchesOf(const graph::Document& surf
     return made;
 }
 
-result::Result<SwitchChoice> staticSwitchIn(const graph::Document& surface, const graph::Node& node) {
+result::Result<SwitchChoice> staticSwitchIn(const surface_graph::Graph& surface, const graph::Node& node) {
     RAWFRAME_TRY_ASSIGN(const auto kParts, ownPartsOf(node));
     RAWFRAME_TRY_ASSIGN(const std::vector<StaticSwitch> kSwitches, switchesOf(surface));
     const Value* kName = kParts.first->find("name");

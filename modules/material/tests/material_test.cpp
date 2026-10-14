@@ -641,3 +641,22 @@ RAWFRAME_TEST(AGraphIsWrittenAsTheSlangItsHandwrittenTwinIsCheckedAgainst) {
     RAWFRAME_EXPECT(kWritten.has_value() && kWritten->textures.size() == 1 &&
                     kWritten->textures[0].id == 0xa44ecb4a39ac5cc8ULL);
 }
+
+RAWFRAME_TEST(ANodeEveryPathReachesIsTypedOnce) {
+    // Sixty adds, each reading the one before it twice: 2^60 paths reach the
+    // first, so the graph is checked, compiled, and written only because
+    // what each output carries is found once (a hostile mod's material
+    // could otherwise hold a reader for ever).
+    std::vector<graph::Node> nodes;
+    for (graph::NodeId at = 1; at <= 60; ++at) {
+        nodes.push_back(
+            at == 1 ? mathOf(kNode + 100 + at, kAddType, Value::real(0.5), Value::real(0.25))
+                    : mathOf(kNode + 100 + at, kAddType, from(kNode + 99 + at, "out"), from(kNode + 99 + at, "out")));
+    }
+    const graph::Document kDeep =
+        surfaceOf(objectOf({{"specular_roughness", from(kNode + 160, "out")}}), std::move(nodes));
+    RAWFRAME_EXPECT(validateSurface(kDeep).has_value());
+    RAWFRAME_EXPECT(writeMaterial(kDeep).has_value());
+    RAWFRAME_EXPECT(generateSlang(kDeep, Quality::High).has_value());
+    static_cast<void>(compileQualities(kDeep));
+}

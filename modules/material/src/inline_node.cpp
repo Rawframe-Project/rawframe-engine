@@ -89,7 +89,7 @@ result::Result<std::vector<std::string_view>> namesOf(const Value* names, std::s
 
 } // namespace
 
-result::Result<Inline> inlineIn(const graph::Document& surface, const graph::Node& node) {
+result::Result<Inline> inlineIn(const surface_graph::Graph& surface, const graph::Node& node) {
     constexpr std::array<std::string_view, 3> kDomains = {"canvas", "post_process", "surface"};
     constexpr std::array<std::string_view, 2> kStages = {"fragment", "vertex"};
     // Its declared inputs name its node's inputs.

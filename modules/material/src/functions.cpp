@@ -71,7 +71,7 @@ result::Result<std::vector<Output>> outputsOf(const graph::Document& function) {
 
 /// What a call gives a texture input (D713): the game's texture by 16
 /// lowercase hex digits, or the caller's texture input.
-result::Result<GivenTexture> textureGiven(const graph::Document& surface, const Value* given) {
+result::Result<GivenTexture> textureGiven(const surface_graph::Graph& surface, const Value* given) {
     if (given != nullptr && given->text() != nullptr) {
         const std::optional<std::uint64_t> kId = graph::nodeIdOf(*given->text());
         if (!kId.has_value() || *kId == 0) {
@@ -124,11 +124,11 @@ result::Result<Function> readFunction(std::string_view text) {
         return invalid("a function is in its canonical form");
     }
     Function made{.document = std::move(*read)};
-    const graph::Document& kDocument = made.document;
+    const surface_graph::Graph kDocument{made.document};
     RAWFRAME_TRY_ASSIGN(made.inputs, surface_graph::interfaceOf(kDocument));
     RAWFRAME_TRY_ASSIGN(made.outputs, outputsOf(kDocument));
     std::vector<bool> fed(made.outputs.size(), false);
-    for (const graph::Node& node : kDocument.nodes) {
+    for (const graph::Node& node : made.document.nodes) {
         if (!surface_graph::known(node)) {
             return invalid("a function's nodes are of the atomic core");
         }
@@ -173,7 +173,7 @@ result::Result<Function> readFunction(std::string_view text) {
     return made;
 }
 
-result::Result<Call> callIn(const graph::Document& surface, const graph::Node& node) {
+result::Result<Call> callIn(const surface_graph::Graph& surface, const graph::Node& node) {
     RAWFRAME_TRY_ASSIGN(Function function, functionOf(surface_graph::typeOf(node)));
     std::vector<std::string_view> names;
     for (const surface_graph::InterfaceInput& kInput : function.inputs) {

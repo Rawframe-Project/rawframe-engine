@@ -551,7 +551,7 @@ private:
         return "v" + std::to_string(code_->next++);
     }
 
-    const graph::Document& surface_;
+    const surface_graph::Graph surface_;
     Quality quality_;
     /// What the stage's function names where it is written.
     std::string at_;
@@ -571,7 +571,8 @@ private:
 
 } // namespace
 
-result::Result<GeneratedSlang> generateSlang(const graph::Document& surface, Quality quality) {
+result::Result<GeneratedSlang> generateSlang(const graph::Document& document, Quality quality) {
+    const surface_graph::Graph surface{document};
     RAWFRAME_TRY(validateSurface(surface));
     RAWFRAME_TRY_ASSIGN(const Material kStates, surface_graph::statesIn(surface_graph::statesOf(surface)));
     const graph::Node& kSurface = *surface_graph::surfaceNode(surface);

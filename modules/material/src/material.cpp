@@ -175,7 +175,7 @@ struct Affine {
     std::array<double, 2> offset{0, 0};
 };
 
-result::Result<Affine> affineOf(const graph::Document& surface, const graph::Connection& from) {
+result::Result<Affine> affineOf(const surface_graph::Graph& surface, const graph::Connection& from) {
     const graph::Node& kNode = *nodeOf(surface, from.node);
     if (typeOf(kNode) == kUvType) {
         RAWFRAME_TRY_ASSIGN(const std::uint32_t kChannel, uvIn(kNode));
@@ -216,7 +216,7 @@ struct Fed {
     std::array<double, 3> factor{1, 1, 1};
 };
 
-result::Result<Fed> fedBy(const graph::Document& surface, const graph::Connection& from, bool factored = false) {
+result::Result<Fed> fedBy(const surface_graph::Graph& surface, const graph::Connection& from, bool factored = false) {
     const auto kRefused = [] {
         return unsupported("a surface input connected to anything but a sampled texture's color or channel, or that "
                            "times a literal, waits for the node library");
@@ -443,15 +443,18 @@ graph::Document documentOf(const Material& made, graph::NodeId node) {
     return document;
 }
 
-result::Status validateSurface(const graph::Document& surface, const graph::Limits& limits) {
+result::Status validateSurface(const graph::Document& document, const graph::Limits& limits) {
+    // What each connection carries found once (a node read by many is
+    // reached by every path to it).
+    const surface_graph::Graph surface{document};
     if (auto valid = graph::validate(surface, limits); !valid.has_value()) {
         return asMaterial(std::move(valid).error());
     }
-    if (surface.kind != "surface") {
+    if (surface.document().kind != "surface") {
         return invalid("a surface material is of kind surface");
     }
     RAWFRAME_TRY(interfaceOf(surface));
-    for (const auto& [kName, kSection] : surface.sections) {
+    for (const auto& [kName, kSection] : surface.document().sections) {
         if (kName != "states") {
             return invalid("a surface material's one section is its states");
         }
@@ -463,7 +466,7 @@ result::Status validateSurface(const graph::Document& surface, const graph::Limi
     Surface ignored;
     RAWFRAME_TRY(inputsIn(*kSurface, ignored));
     RAWFRAME_TRY(statesIn(statesOf(surface)));
-    for (const graph::Node& node : surface.nodes) {
+    for (const graph::Node& node : surface.document().nodes) {
         if (!known(node) || typeOf(node) == kSurfaceType) {
             continue;
         }
@@ -586,7 +589,8 @@ graph::Document atQuality(const graph::Document& surface, Quality quality) {
     return made;
 }
 
-result::Result<Material> compiled(const graph::Document& surface) {
+result::Result<Material> compiled(const graph::Document& document) {
+    const surface_graph::Graph surface{document};
     RAWFRAME_TRY(validateSurface(surface));
     const graph::Node& kSurface = *surfaceNode(surface);
     RAWFRAME_TRY_ASSIGN(Material made, statesIn(statesOf(surface)));
