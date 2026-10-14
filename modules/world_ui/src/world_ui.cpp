@@ -1,5 +1,6 @@
 #include "rawframe/world_ui/world_ui.h"
 
+#include "rawframe/ui/node_look.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_ui/errors.h"
 #include "state.h"
@@ -20,69 +21,6 @@ namespace {
 std::unexpected<result::Error> refuse(std::string_view why) {
     return std::unexpected<result::Error>{
         result::fail(result::ErrorClass::InvalidArgument, kWorldUiDomain, code(WorldUiError::BadNodes), why).error()};
-}
-
-/// A size along one axis: automatic at nought and nought.
-ui::Dimension dimensionOf(float scale, float offset) noexcept {
-    return scale == 0 && offset == 0 ? ui::Dimension{}
-                                     : ui::Dimension{.automatic = false, .scale = scale, .offset = offset};
-}
-
-/// `node`'s layout as the tree takes it; none for a number past its
-/// constants.
-std::optional<ui::Layout> layoutOf(const ui::NodeFields& node) noexcept {
-    if (node.direction > 3 || node.justify > 5 || node.alignItems > 4 || node.alignSelf > 4 || node.scroll > 3) {
-        return std::nullopt;
-    }
-    const auto kSides = [](float value) {
-        return std::array<float, 4>{value, value, value, value};
-    };
-    return ui::Layout{
-        .width = dimensionOf(node.widthScale, node.widthOffset),
-        .height = dimensionOf(node.heightScale, node.heightOffset),
-        .direction = static_cast<ui::Direction>(node.direction),
-        .justify = static_cast<ui::Justify>(node.justify),
-        // A parent's AUTO stretches.
-        .alignItems = node.alignItems == 0 ? ui::Align::Stretch : static_cast<ui::Align>(node.alignItems),
-        .gap = node.gap,
-        .grow = node.grow,
-        .shrink = node.shrink,
-        .alignSelf = static_cast<ui::Align>(node.alignSelf),
-        .padding = kSides(node.padding),
-        // A popup's margin is its gap from its anchor (D623).
-        .margin = kSides(node.popup != 0 ? 0 : node.margin),
-        .border = kSides(node.border),
-        .placement = {.absolute = node.absolute != 0 || node.popup != 0,
-                      .x = {.automatic = false, .scale = node.xScale, .offset = node.xOffset},
-                      .y = {.automatic = false, .scale = node.yScale, .offset = node.yOffset},
-                      .anchorX = node.anchorX,
-                      .anchorY = node.anchorY},
-        .scroll = static_cast<ui::Scroll>(node.scroll),
-    };
-}
-
-ui::Look lookOf(const ui::NodeFields& node) noexcept {
-    const float kSlice = node.imageSlice;
-    // A kind past the set is passed on, for the tree to refuse.
-    const ui::GradientLook kGradient = node.gradientKind == 0
-                                           ? ui::GradientLook{}
-                                           : ui::GradientLook{.kind = static_cast<ui::GradientLook::Kind>(
-                                                                  std::min<std::uint32_t>(node.gradientKind, 255)),
-                                                              .angle = node.gradientAngle,
-                                                              .colors = {node.gradientFrom, node.gradientTo},
-                                                              .positions = {0, 1},
-                                                              .stops = 2};
-    return ui::Look{
-        .fill = node.fill,
-        .borderColor = node.borderColor,
-        .radius = node.radius,
-        .clip = node.clip != 0,
-        .image = node.image,
-        .imageSlice = {kSlice, kSlice, kSlice, kSlice},
-        // Nought draws it as it is.
-        .imageTint = node.imageTint != 0 ? node.imageTint : 0xFFFFFFFF,
-        .outerShadow = {.color = node.shadowColor, .x = node.shadowX, .y = node.shadowY, .blur = node.shadowBlur},
-        .gradient = kGradient};
 }
 
 /// `node`'s part in what presses hit (D421); none for a number past its
@@ -143,15 +81,6 @@ ui::Role roleOf(const ui::NodeFields& node) noexcept {
     return ui::Role::Generic;
 }
 
-/// `node`'s text look.
-ui::TextLook textLookOf(const ui::NodeFields& node, ui::Font font) noexcept {
-    return ui::TextLook{.font = font,
-                        .size = node.textSize > 0 ? node.textSize : 16,
-                        .color = node.textColor,
-                        .align = static_cast<ui::TextAlign>(node.textAlign),
-                        .wrap = node.textWrap == 0};
-}
-
 /// The window's root and each view's: what they do not cover passes
 /// through.
 constexpr ui::Interaction kThrough{.hits = ui::Interaction::Hits::Children, .passThrough = true};
@@ -168,24 +97,6 @@ std::uint64_t keyOf(world::EntityHandle entity) noexcept {
 /// (D430), until a style's focused variant says otherwise.
 constexpr ui::ShadowLook kFocusRing{.color = 0xFFD24AFF, .spread = 2};
 
-/// The parts of its look a styled node sets itself (D431): those it gives
-/// a value other than nought. An inner shadow it has no field for.
-ui::LookParts ownPartsOf(const ui::NodeFields& node) noexcept {
-    ui::LookParts parts = 0;
-    const auto kOwn = [&parts](bool given, ui::LookPart part) {
-        parts |= given ? static_cast<ui::LookParts>(part) : 0;
-    };
-    kOwn(node.fill != 0, ui::LookPart::Fill);
-    kOwn(node.borderColor != 0, ui::LookPart::BorderColor);
-    kOwn(node.radius != 0, ui::LookPart::Radius);
-    kOwn(node.clip != 0, ui::LookPart::Clip);
-    kOwn(node.image != 0, ui::LookPart::Image);
-    kOwn(node.imageTint != 0, ui::LookPart::ImageTint);
-    kOwn(node.shadowColor != 0, ui::LookPart::OuterShadow);
-    kOwn(node.gradientKind != 0, ui::LookPart::Gradient);
-    return parts;
-}
-
 /// The words `typed` holds; none when it holds none or says more than it
 /// can hold.
 std::optional<std::string_view> wordsOf(const Typed& typed) noexcept {
@@ -197,12 +108,12 @@ std::optional<std::string_view> wordsOf(const Typed& typed) noexcept {
 
 } // namespace
 
-/// How a field's text is edited: its kind and room, and its caret and
-/// selection in its text's color.
 std::uint64_t keyOf(ui::Node node) noexcept {
     return (std::uint64_t{node.index1} << 32U) | node.generation;
 }
 
+/// How a field's text is edited: its kind and room, and its caret and
+/// selection in its text's color.
 ui::EditSettings editSettingsOf(const ui::NodeFields& node) noexcept {
     const std::uint32_t kColor = node.textColor != 0 ? node.textColor : 0x000000FF;
     return ui::EditSettings{.multiline = node.edit == 3,
@@ -213,14 +124,14 @@ ui::EditSettings editSettingsOf(const ui::NodeFields& node) noexcept {
 }
 
 bool WorldUi::State::giveFocusLook(Entry& entry) {
-    ui::Look look = lookOf(entry.value);
+    ui::Look look = ui::lookOf(entry.value);
     // A styled node's class says how it looks focused; an unstyled one
     // is ringed.
     const bool kStyled = classes.contains(entry.value.style);
     if (!kStyled && focus.has_value() && focus->entry == &entry) {
         look.outerShadow = kFocusRing;
     }
-    const ui::LookParts kOwn = kStyled ? ownPartsOf(entry.value) : ui::kEveryLookPart;
+    const ui::LookParts kOwn = kStyled ? ui::ownPartsOf(entry.value) : ui::kEveryLookPart;
     return tree->setLook(*entry.node, look, kOwn).has_value() && (!entry.editable || giveFieldLook(entry));
 }
 
@@ -265,7 +176,7 @@ bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const ui::No
         entry.checkGiven = value.checked;
         entry.checkedNow = kKept.has_value() ? *kKept != 0 : value.checked != 0;
     }
-    const std::optional<ui::Layout> kLayout = layoutOf(value);
+    const std::optional<ui::Layout> kLayout = ui::layoutOf(value);
     const std::optional<ui::Interaction> kInteraction = interactionOf(value);
     // A node that becomes a text field, or stops being one, is made
     // again: a field's text is found by a key its node is made with.
@@ -400,7 +311,7 @@ bool WorldUi::State::giveFieldLook(Entry& entry) {
         return false;
     }
     const auto kFont = fonts.find(kValue.font);
-    ui::TextLook look = textLookOf(kValue, kFont != fonts.end() ? kFont->second : ui::Font{});
+    ui::TextLook look = ui::textLookOf(kValue, kFont != fonts.end() ? kFont->second : ui::Font{});
     std::string text = entry.placeholder ? std::string{} : std::string{tree->textOf(*entry.node)};
     const bool kHeld = focus.has_value() && focus->entry == &entry && focus->keyboard;
     std::optional<std::string> words;
@@ -464,14 +375,7 @@ bool WorldUi::State::giveWords(ui::Node node,
     }
     // A font not read yet is shown in the default until it is.
     const auto kFont = fonts.find(value.font);
-    return tree
-        ->setText(node,
-                  *words,
-                  {.font = kFont != fonts.end() ? kFont->second : ui::Font{},
-                   .size = value.textSize > 0 ? value.textSize : 16,
-                   .color = value.textColor,
-                   .align = static_cast<ui::TextAlign>(value.textAlign),
-                   .wrap = value.textWrap == 0})
+    return tree->setText(node, *words, ui::textLookOf(value, kFont != fonts.end() ? kFont->second : ui::Font{}))
         .has_value();
 }
 
