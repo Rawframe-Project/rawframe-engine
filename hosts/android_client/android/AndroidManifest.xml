@@ -5,10 +5,12 @@
      its server's, over QUIC. The on-screen keyboard stays hidden until the
      client asks for text input, which Maul Window shows it for (D552):
      otherwise the activity's input view, taking focus, brings it up at
-     start. -->
+     start. Vulkan 1.3 is Maul RHI's floor (mrhi-0003): a store offers the
+     package to no device below it, where the client would draw nothing
+     (D769). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="@PACKAGE@">
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x403000" android:required="true" />
     <application android:label="@LABEL@" android:hasCode="true">
         <activity android:name="rawframe.client.Activity" android:exported="true"
             android:windowSoftInputMode="stateAlwaysHidden">
