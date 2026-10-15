@@ -234,6 +234,8 @@ private:
     void tellHidden();
     /// Tells the preview the view mode (D794).
     void tellViewMode();
+    /// Tells the preview how many views it shows (D797).
+    void tellSplit();
 
     /// The locked layer's name `entity` is on, none if it is on no locked
     /// one.
@@ -959,6 +961,10 @@ private:
     /// Bookmarks kept and gone to (D796).
     std::uint64_t bookmarksKept_ = 0;
     std::uint64_t bookmarksVisited_ = 0;
+    /// How many views the preview shows, and how many times a preview
+    /// split so (D797).
+    std::uint8_t views_ = 1;
+    std::uint64_t splitsShown_ = 0;
     std::uint64_t layersHidden_ = 0;
     /// The layer each entity in `entities_` is on, nought for none.
     std::vector<std::uint32_t> entityLayers_;

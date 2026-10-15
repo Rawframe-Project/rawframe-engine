@@ -388,7 +388,9 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("mode", std::string_view{viewMode_}),
                   diagnostics::field("modesShown", modesShown_),
                   diagnostics::field("bookmarksKept", bookmarksKept_),
-                  diagnostics::field("bookmarksVisited", bookmarksVisited_)});
+                  diagnostics::field("bookmarksVisited", bookmarksVisited_),
+                  diagnostics::field("views", static_cast<std::uint64_t>(views_)),
+                  diagnostics::field("splitsShown", splitsShown_)});
     // And what the start screen did (D781): the games made from templates,
     // the game Studio ended on, if any, and the games kept as opened last.
     emitter_.log(diagnostics::Severity::Info,

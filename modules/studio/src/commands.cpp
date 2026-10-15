@@ -44,6 +44,10 @@ constexpr std::string_view kFrame = "Frame chosen";
 constexpr std::string_view kFlat = "2D view";
 constexpr std::string_view kTilted = "3D view";
 
+/// The preview split one, two, or three ways (D797).
+constexpr std::array<std::pair<std::string_view, std::uint8_t>, 3> kSplits = {
+    {{"One view", 1}, {"Two views", 2}, {"Three views", 3}}};
+
 /// A bookmark's commands, each followed by its slot (D796).
 constexpr std::string_view kGoTo = "Go to bookmark ";
 constexpr std::string_view kKeep = "Set bookmark ";
@@ -113,6 +117,9 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     for (const auto& [kName, kMode] : kModes) {
         commands_.push_back(Command{.name = std::string{kName}, .menu = "View", .keys = kKeys(kName, {})});
     }
+    for (const auto& [kName, kViews] : kSplits) {
+        commands_.push_back(Command{.name = std::string{kName}, .menu = "View", .keys = kKeys(kName, {})});
+    }
     // The scene's nine bookmarks (D796), on Control and a digit, kept with
     // Shift too: the keys and the palette, in no menu.
     for (char slot = '1'; slot <= '9'; ++slot) {
@@ -152,6 +159,14 @@ bool ShellParticipant::runCommand(std::string_view name) {
             bookmark(static_cast<std::uint8_t>(kCommand->name.back() - '0'), kGoes);
             return true;
         }
+    }
+    if (const auto kSplit =
+            std::ranges::find(kSplits, kCommand->name, &std::pair<std::string_view, std::uint8_t>::first);
+        kSplit != kSplits.end()) {
+        views_ = kSplit->second;
+        tellSplit();
+        say(std::to_string(views_) + (views_ == 1 ? " view" : " views"));
+        return true;
     }
     if (kCommand->name == kFlat || kCommand->name == kTilted) {
         seeIn2D(kCommand->name == kFlat);

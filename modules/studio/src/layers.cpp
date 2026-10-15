@@ -207,6 +207,16 @@ void ShellParticipant::tellViewMode() {
     }
 }
 
+void ShellParticipant::tellSplit() {
+    if (scene_.empty()) {
+        return;
+    }
+    const std::string kReply = ask(splitRecord(next(), scene_, views_));
+    if (kReply.find("\"shown\":true") != std::string::npos) {
+        ++splitsShown_;
+    }
+}
+
 std::optional<std::string> ShellParticipant::lockedOf(const std::string& entity) const {
     const auto kAt = std::ranges::find(entities_, entity);
     if (kAt == entities_.end()) {

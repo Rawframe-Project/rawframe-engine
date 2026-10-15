@@ -154,4 +154,13 @@ std::optional<Value> bookmarkIn(std::string_view reply, std::uint8_t slot) {
     return std::nullopt;
 }
 
+Value splitRecord(std::int64_t id, std::string_view scene, std::uint8_t views) {
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.split"));
+    made.add("id", Value::integer(id));
+    made.add("scene", Value::string(std::string{scene}));
+    made.add("views", Value::integer(views));
+    return made;
+}
+
 } // namespace rawframe::studio

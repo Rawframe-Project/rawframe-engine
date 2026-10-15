@@ -380,6 +380,10 @@ void ShellParticipant::attachPreview() {
         if (viewMode_ != "lit") {
             tellViewMode();
         }
+        // And split as it was (D797).
+        if (views_ != 1) {
+            tellSplit();
+        }
     }
 }
 
