@@ -54,9 +54,29 @@ fi
 "$1" --config "$work/studio.conf" >"$work/studio.log" 2>&1 &
 studio=$!
 echo "$studio" >"$work/studio.pid"
+# A machine with no device for the played client is a skip: Studio is
+# asked to stop as soon as either says so, not after every wait for a
+# preview that never comes runs out (the nightly arm64 job ran past its
+# time on them).
+if [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then
+    (
+        while kill -0 "$studio" 2>/dev/null; do
+            if grep -qs '"device_unavailable"' "$work/studio.log" "$work/play/client.log"; then
+                kill -TERM "$studio" 2>/dev/null
+                break
+            fi
+            sleep 1
+        done
+    ) &
+    watcher=$!
+fi
 python3 "$here/../../../tools/click.py" "$studio" "$work/studio.log" studio_shown "$work/studio.pid" "${@:7}"
 wait "$studio"
 status=$?
+if [ -n "${watcher:-}" ]; then
+    kill "$watcher" 2>/dev/null
+    wait "$watcher" 2>/dev/null
+fi
 if grep -q '"device_unavailable"' "$work/studio.log" "$work/play/client.log" 2>/dev/null && [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then
     echo "skip: no device"
     exit 0

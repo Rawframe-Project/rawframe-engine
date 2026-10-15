@@ -22,9 +22,28 @@ grep '^content\.root' "$3" >"$work/content.conf" || true
 RAWFRAME_PLAY_WORK="$work" bash "$here/../../bots/tests/play.sh" "$1" "$2" 0 1 36000 "$4" "$work/content.conf" "$3" \
     >"$log" 2>&1 &
 play=$!
+# A machine with no device is a skip: the client is asked to stop as
+# soon as it says so, not after every wait for what it never draws runs
+# out (the nightly arm64 job ran past its time on them).
+if [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then
+    (
+        while kill -0 "$play" 2>/dev/null; do
+            if grep -qs '"device_unavailable"' "$log" "$work/bots-1.log" && [ -s "$work/bots-1.pid" ]; then
+                kill -TERM "$(cat "$work/bots-1.pid")" 2>/dev/null
+                break
+            fi
+            sleep 1
+        done
+    ) &
+    watcher=$!
+fi
 python3 "$here/../../../tools/click.py" "$play" "$work/bots-1.log" bots_admitted "$work/bots-1.pid" "${@:5}"
 wait "$play"
 status=$?
+if [ -n "${watcher:-}" ]; then
+    kill "$watcher" 2>/dev/null
+    wait "$watcher" 2>/dev/null
+fi
 if grep -q '"device_unavailable"' "$log" && [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then
     echo "skip: no device"
     exit 0
