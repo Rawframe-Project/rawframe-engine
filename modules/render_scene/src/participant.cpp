@@ -51,6 +51,11 @@ constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        view::kHeadsetEyes.name,
                                        view::kHeadsetHands.name};
 
+/// The most looks a split preview draws beside its own (D797). A device
+/// drawing four region views at once stalled on lavapipe (its cause not
+/// yet found; three draw), so a preview splits at most three ways.
+constexpr std::size_t kMostOthers = 2;
+
 /// Draws one client's mirrored World in 3D each frame through its player's
 /// camera: the extract stage in `presentation_extract`, the queue stage in
 /// `present`. Idle without a game that has models or without clients. The
@@ -149,6 +154,12 @@ public:
             regions_.push_back(world_kest::GameRegion{});
             regionFrames_.resize(1);
         }
+        // A preview may be split three ways (D797): its regions are placed
+        // from the start, shown only while it is, as a device joins its
+        // regions' views once.
+        if (preview_ != nullptr && regionFrames_.size() < kMostOthers + 1) {
+            regionFrames_.resize(kMostOthers + 1);
+        }
         cameras_ = GameCameras(*game);
         textureViews_ = TextureViews(game->view, files->description().renderTextures);
         gameMeshes_ = game->meshes.size();
@@ -223,8 +234,20 @@ public:
         } else if (phase == composition::HostPhase::Present && extracted_) {
             extracted_ = false;
             camera_.aspect = static_cast<float>(width_) / static_cast<float>(height_);
-            if (!regions_.empty()) {
-                presentPlayers(frame.now);
+            if (splits_ > 0) {
+                presentSplits(frame.now);
+            } else {
+                // A split ended: its regions show nothing, as a game's own
+                // regions are placed again.
+                for (std::size_t at = regions_.size(); at < regionFrames_.size(); ++at) {
+                    regionFrames_[at] = RegionFrame{};
+                }
+                if (regions_.empty() && !regionFrames_.empty()) {
+                    regionFrames_[0] = RegionFrame{};
+                }
+                if (!regions_.empty()) {
+                    presentPlayers(frame.now);
+                }
             }
             // The seconds since the frame before, on the Host's timeline
             // (D293): nought for the first.
@@ -314,14 +337,15 @@ public:
         // Apart from the scene's summary, which holds as many fields as a
         // record may (D361).
         const std::uint64_t kHidden = scene_ != nullptr ? scene_->modelsHidden() : 0;
-        if (placed_ != 0 || tracked_ != 0 || kHidden != 0) {
+        if (placed_ != 0 || tracked_ != 0 || kHidden != 0 || splitFrames_ != 0) {
             emitter_.log(diagnostics::Severity::Info,
                          kPlacedSummary,
                          "what one client's scene drew where it was placed, where a headset's hand was, and what "
-                         "an editor's preview left out",
+                         "an editor's preview left out or split its window to show",
                          {diagnostics::field("modelsPlaced", placed_),
                           diagnostics::field("modelsTracked", tracked_),
-                          diagnostics::field("modelsHidden", kHidden)});
+                          diagnostics::field("modelsHidden", kHidden),
+                          diagnostics::field("splitFrames", splitFrames_)});
         }
         textureViews_.summarize(emitter_);
         const auto kParticles = particles_.fields();
@@ -466,6 +490,7 @@ private:
         scene_->hideLayers(preview_ != nullptr ? preview_->hidden() : std::vector<std::uint32_t>{});
         scene_->extract(*kView.world, posesOf(*kView.world), &hands);
         extracted_ = true;
+        extractSplits(*kView.world, kOwned);
         extractEyes(*kView.world, hands);
         if (!kOwned) {
             return;
@@ -591,6 +616,69 @@ private:
                 static_cast<void>(cameras_.read(*kView.world, kView.owned, each.camera));
             }
             each.extracted = true;
+        }
+    }
+
+    /// A split preview's other looks (D797), each extracted into a scene
+    /// of its own and seen as the preview's look is but from where it
+    /// looks; none while the preview is not split.
+    void extractSplits(world::World& world, bool owned) {
+        const bool kSplit = owned && preview_ != nullptr && preview_->looking().has_value();
+        splits_ = kSplit ? std::min(preview_->others().size(), kMostOthers) : 0;
+        for (std::size_t at = 0; at < splits_; ++at) {
+            if (at == splitScenes_.size()) {
+                auto made = Scene::create(world.registry(), settings_);
+                if (!made.has_value()) {
+                    splits_ = at;
+                    return;
+                }
+                splitScenes_.push_back(std::move(*made));
+                splitCameras_.emplace_back();
+            }
+            splitScenes_[at]->shownAt(shown_);
+            splitScenes_[at]->hideLayers(preview_->hidden());
+            splitScenes_[at]->extract(world, posesOf(world));
+            const view::Perspective& kOther = preview_->others()[at];
+            SceneCamera& camera = splitCameras_[at];
+            camera = camera_;
+            camera.eye = kOther.eye;
+            camera.yaw = kOther.yaw;
+            camera.pitch = kOther.pitch;
+            camera.fovY = kOther.fovY;
+        }
+    }
+
+    /// The preview's look in the first of the split's regions and the
+    /// others' frames in theirs (D797).
+    void presentSplits(execution::MonotonicInstant now) {
+        const std::size_t kCount = splits_ + 1;
+        if (regionFrames_.size() < kCount) {
+            regionFrames_.resize(kCount);
+        }
+        for (std::size_t at = 0; at < regionFrames_.size(); ++at) {
+            if (at >= kCount) {
+                regionFrames_[at] = RegionFrame{};
+                continue;
+            }
+            const view::Region kRegion = view::previewRegion(kCount, at);
+            regionFrames_[at] = RegionFrame{
+                .x = static_cast<std::uint32_t>(std::lround(kRegion.left * static_cast<float>(width_))),
+                .y = static_cast<std::uint32_t>(std::lround(kRegion.top * static_cast<float>(height_))),
+                .width =
+                    std::max(1U, static_cast<std::uint32_t>(std::lround(kRegion.width * static_cast<float>(width_)))),
+                .height = std::max(
+                    1U, static_cast<std::uint32_t>(std::lround(kRegion.height * static_cast<float>(height_))))};
+        }
+        camera_.aspect = static_cast<float>(regionFrames_[0].width) / static_cast<float>(regionFrames_[0].height);
+        for (std::size_t at = 0; at < splits_; ++at) {
+            RegionFrame& region = regionFrames_[at + 1];
+            SceneCamera& camera = splitCameras_[at];
+            camera.aspect = static_cast<float>(region.width) / static_cast<float>(region.height);
+            camera.elapsed = presented_.has_value() ? static_cast<float>((now - *presented_).nanoseconds) / 1e9F : 0.0F;
+            const SceneFrame& kFrame = splitScenes_[at]->queue(camera);
+            pictures_.askAll(kFrame);
+            region.frame = &kFrame;
+            ++splitFrames_;
         }
     }
 
@@ -725,6 +813,12 @@ private:
     /// bars (D369); none fills.
     std::optional<world_kest::GameAspect> aspect_;
     std::vector<LocalPlayer> localPlayers_;
+    /// A split preview's other looks (D797): how many this frame, each's
+    /// scene and camera, and the frames they drew.
+    std::size_t splits_ = 0;
+    std::vector<std::unique_ptr<Scene>> splitScenes_;
+    std::vector<SceneCamera> splitCameras_;
+    std::uint64_t splitFrames_ = 0;
     std::vector<RegionFrame> regionFrames_;
     /// A headset's eyes (D595): where they are told, their scenes, the
     /// eyes extracted for, and their frames.

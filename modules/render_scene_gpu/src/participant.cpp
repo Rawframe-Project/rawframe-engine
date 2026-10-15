@@ -139,8 +139,13 @@ public:
                 asked_ = true;
             }
         } else {
-            // In split-screen the players' views draw the scene.
-            renderer_->prepare(regions_.empty() ? scene_->queued() : nullptr, meshes_, textures_, viewPointers_);
+            // In split-screen the players' views draw the scene, as a
+            // split preview's do (D797).
+            const std::span<const render_scene::RegionFrame> kPlaced = scene_->regionFrames();
+            const bool kInRegions = std::ranges::any_of(kPlaced, [](const render_scene::RegionFrame& each) {
+                return each.width != 0 && each.height != 0;
+            });
+            renderer_->prepare(kInRegions ? nullptr : scene_->queued(), meshes_, textures_, viewPointers_);
         }
         const std::span<const render_scene::TextureFrame> kTextures = scene_->textureFrames();
         for (std::size_t at = 0; at < views_.size(); ++at) {
