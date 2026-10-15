@@ -230,12 +230,15 @@ result::Status Play::launch() {
                          "render.read_every",
                          "render.width",
                          "render.height",
-                         "render.stream"});
+                         "render.stream",
+                         "scene.preview_views"});
         const std::string kWidth = std::to_string((*settings_.viewport)[0]);
         const std::string kHeight = std::to_string((*settings_.viewport)[1]);
         viewported = "window.visible = false\nwindow.width = " + kWidth + "\nwindow.height = " + kHeight +
                      "\nrender.offscreen = true\nrender.read_every = 1\nrender.width = " + kWidth +
-                     "\nrender.height = " + kHeight + "\nrender.stream = " + (kAt / "picture").string() + "\n";
+                     "\nrender.height = " + kHeight + "\nrender.stream = " + (kAt / "picture").string() +
+                     // Split three ways at most, in the viewport only (D797).
+                     "\nscene.preview_views = 3\n";
     }
     RAWFRAME_TRY(written(kAt / "client.conf",
                          settingsOf(kWithContent(given),
