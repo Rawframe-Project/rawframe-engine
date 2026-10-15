@@ -28,6 +28,7 @@
 #include "rawframe/cook/cook.h"
 #include "rawframe/cook/font.h"
 #include "rawframe/cook/game.h"
+#include "rawframe/cook/importers.h"
 #include "rawframe/cook/kest.h"
 #include "rawframe/cook/material.h"
 #include "rawframe/cook/mesh.h"
@@ -162,19 +163,7 @@ int main(int argc, char** argv) {
         std::fputs("rawframe-cook: cannot read its own executable\n", stderr);
         return 1;
     }
-    const std::array<rawframe::cook::Importer, 13> kImporters = {rawframe::cook::animationImporter(),
-                                                                 rawframe::cook::audioImporter(),
-                                                                 rawframe::cook::canvasImporter(),
-                                                                 rawframe::cook::fontImporter(),
-                                                                 rawframe::cook::gameImporter(),
-                                                                 rawframe::cook::kestImporter(),
-                                                                 rawframe::cook::materialImporter(shaderTools()),
-                                                                 rawframe::cook::meshImporter(),
-                                                                 rawframe::cook::modImporter(),
-                                                                 rawframe::cook::postProcessImporter(),
-                                                                 rawframe::cook::sceneImporter(),
-                                                                 rawframe::cook::textImporter(),
-                                                                 rawframe::cook::textureImporter()};
+    const std::vector<rawframe::cook::Importer> kImporters = rawframe::cook::engineImporters(shaderTools());
     if (kMap) {
         // One source alone where named (D536), its path under the sources.
         const auto kReport = rawframe::cook::mapSubassets(

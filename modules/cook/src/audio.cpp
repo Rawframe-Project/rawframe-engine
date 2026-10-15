@@ -67,8 +67,13 @@ result::Result<Artifact> cookSound(std::span<const std::byte> source, std::strin
 
 } // namespace
 
+constexpr std::array<std::string_view, 2> kTiers = {"wave", "opus"};
+constexpr std::array<SettingField, 2> kFields = {
+    SettingField{.name = "tier", .kind = SettingField::Kind::Text, .fallback = "wave", .choices = kTiers},
+    SettingField{.name = "bitrate", .kind = SettingField::Kind::Integer, .fallback = "0"}};
+
 Importer audioImporter() noexcept {
-    return Importer{.identity = "rawframe.audio", .normalize = &normalize, .cook = &cookSound};
+    return Importer{.identity = "rawframe.audio", .fields = kFields, .normalize = &normalize, .cook = &cookSound};
 }
 
 } // namespace rawframe::cook

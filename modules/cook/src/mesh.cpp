@@ -86,8 +86,11 @@ result::Result<Artifact> cookMesh(std::span<const std::byte> source, std::string
 
 } // namespace
 
+constexpr std::array<SettingField, 1> kFields = {
+    SettingField{.name = "exact", .kind = SettingField::Kind::Truth, .fallback = "false"}};
+
 Importer meshImporter() noexcept {
-    return Importer{.identity = "rawframe.mesh", .normalize = &normalize, .cook = &cookMesh};
+    return Importer{.identity = "rawframe.mesh", .fields = kFields, .normalize = &normalize, .cook = &cookMesh};
 }
 
 } // namespace rawframe::cook

@@ -136,8 +136,16 @@ result::Result<Artifact> cookTexture(std::span<const std::byte> source, std::str
 
 } // namespace
 
+/// A picture's settings an editor offers (D800); an environment's and a
+/// grading's are kept as the sidecar has them.
+constexpr std::array<std::string_view, 2> kColors = {"srgb", "linear"};
+constexpr std::array<SettingField, 3> kFields = {
+    SettingField{.name = "color", .kind = SettingField::Kind::Text, .fallback = "srgb", .choices = kColors},
+    SettingField{.name = "exact", .kind = SettingField::Kind::Truth, .fallback = "false"},
+    SettingField{.name = "levels", .kind = SettingField::Kind::Truth, .fallback = "true"}};
+
 Importer textureImporter() noexcept {
-    return Importer{.identity = "rawframe.texture", .normalize = &normalize, .cook = &cookTexture};
+    return Importer{.identity = "rawframe.texture", .fields = kFields, .normalize = &normalize, .cook = &cookTexture};
 }
 
 } // namespace rawframe::cook

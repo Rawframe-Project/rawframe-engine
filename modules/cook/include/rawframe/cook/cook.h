@@ -118,10 +118,31 @@ private:
     std::map<std::string, content::ResourceId, std::less<>> assigned_;
 };
 
+/// A setting an importer takes at the top of a sidecar's `settings`, as an
+/// editor shows it (D800): its name, its kind, what it is when omitted (as
+/// text: `true`, `srgb`, `0`), and, for a text, the values it may be. A
+/// setting at its fallback is omitted from the sidecar: the importer
+/// refuses it written out.
+struct SettingField {
+    enum class Kind : std::uint8_t {
+        Truth,
+        Text,
+        Integer
+    };
+    std::string_view name;
+    Kind kind = Kind::Truth;
+    std::string_view fallback;
+    std::span<const std::string_view> choices;
+};
+
 /// One registered importer: who it is, what settings it takes, and how it
 /// cooks. Selection is by the sidecar's `importer`, never by extension.
 struct Importer {
     std::string_view identity;
+    /// The settings an editor offers (D800); none for an importer that
+    /// takes none, and a setting not here (a texture's environment) is
+    /// kept as the sidecar has it.
+    std::span<const SettingField> fields;
     /// The settings in the one form that enters the cook key, defaults
     /// written out; refused when they are not this importer's.
     result::Result<std::string> (*normalize)(const document::Value* settings) = nullptr;
