@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <numbers>
+#include <string_view>
 
 namespace rawframe::authoring_session {
 
@@ -24,6 +26,73 @@ authoring::SceneView movedView(const authoring::SceneView& view, double detents,
                  view.target[1] + (kFar * std::sin(kPitch)),
                  view.target[2] + (kFar * std::cos(kPitch) * std::cos(kYaw))};
     return moved;
+}
+
+authoring::SceneView framedView(const authoring::SceneView& view,
+                                std::span<const std::array<double, 3>> points) noexcept {
+    if (points.empty()) {
+        return view;
+    }
+    std::array<double, 3> middle{};
+    for (const auto& kPoint : points) {
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+            middle[axis] += kPoint[axis] / static_cast<double>(points.size());
+        }
+    }
+    double spread = 0;
+    for (const auto& kPoint : points) {
+        spread = std::max(spread, std::hypot(kPoint[0] - middle[0], kPoint[1] - middle[1], kPoint[2] - middle[2]));
+    }
+    std::array<double, 3> back = {
+        view.eye[0] - view.target[0], view.eye[1] - view.target[1], view.eye[2] - view.target[2]};
+    double length = std::hypot(back[0], back[1], back[2]);
+    if (!std::isfinite(length) || length <= 0) {
+        back = {0, 1, 1};
+        length = std::numbers::sqrt2;
+    }
+    const double kHalf = std::clamp(view.fieldOfView, 1.0, 179.0) * std::numbers::pi / 360;
+    const double kFar = std::clamp((spread + 1) / std::sin(kHalf), 3.0, 1e4);
+    authoring::SceneView framed = view;
+    framed.target = middle;
+    framed.eye = {middle[0] + (back[0] / length * kFar),
+                  middle[1] + (back[1] / length * kFar),
+                  middle[2] + (back[2] / length * kFar)};
+    return framed;
+}
+
+std::optional<std::array<double, 3>> standingOf(const scene::Scene& scene, base::Bits128 entity) {
+    // By name: the session knows no physics module's types.
+    constexpr std::string_view kPoses[] = {"rawframe.physics3d.pose", "rawframe.physics2d.pose"};
+    const auto kAt = [](std::span<const scene::SceneField> fields) {
+        std::array<double, 3> at{};
+        for (const scene::SceneField& kField : fields) {
+            const std::size_t kAxis = kField.name == "x" ? 0 : kField.name == "y" ? 1 : kField.name == "z" ? 2 : 3;
+            if (kAxis < 3 && kField.value.kind == scene::FieldValue::Kind::Number) {
+                at[kAxis] = std::strtod(kField.value.number.c_str(), nullptr);
+            }
+        }
+        return at;
+    };
+    for (const scene::SceneEntity& kEach : scene.entities) {
+        if (kEach.id != entity) {
+            continue;
+        }
+        for (const scene::SceneComponent& kComponent : kEach.components) {
+            if (std::ranges::contains(kPoses, kComponent.name)) {
+                return kAt(kComponent.fields);
+            }
+        }
+        return std::nullopt;
+    }
+    for (const scene::SceneInstance& kInstance : scene.instances) {
+        for (const scene::Override& kOverride : kInstance.overrides) {
+            if (kOverride.entity == entity && kOverride.kind != scene::Override::Kind::Remove &&
+                std::ranges::contains(kPoses, kOverride.component)) {
+                return kAt(kOverride.fields);
+            }
+        }
+    }
+    return std::nullopt;
 }
 
 authoring::SceneView lookedView(const authoring::SceneView& view, double across, double up) noexcept {

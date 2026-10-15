@@ -109,6 +109,9 @@ enum class SessionVerb : std::uint8_t {
     PreviewInput,
     /// The layers the scene's preview leaves out (D791).
     HideLayers,
+    /// The scene's view turned on what is chosen in it, from where it
+    /// looked, and near enough to hold it all (D792).
+    Frame,
     /// One atomic request over several scenes, one transaction (D497).
     ApplyTogether,
     /// The game's directory cooked, as a long-running operation (D502).

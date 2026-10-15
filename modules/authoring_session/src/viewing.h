@@ -10,6 +10,8 @@
 #include "rawframe/document/json.h"
 
 #include <array>
+#include <optional>
+#include <span>
 
 namespace rawframe::authoring_session {
 
@@ -32,6 +34,19 @@ movedView(const authoring::SceneView& view, double detents, double across, doubl
 /// turns back (toward the author positive, away forward), each a sixth of
 /// the eye's distance from the target.
 [[nodiscard]] authoring::SceneView flownView(const authoring::SceneView& view, double detents) noexcept;
+
+/// `view` turned on `points` (D792): its target their middle, its eye
+/// back along the way it looked from (from above and behind for a view
+/// with none) and far enough that a ball a meter wider than they spread
+/// fills its field of view, held between three meters and ten
+/// kilometers; `view` as it was for no points.
+[[nodiscard]] authoring::SceneView framedView(const authoring::SceneView& view,
+                                              std::span<const std::array<double, 3>> points) noexcept;
+
+/// Where `entity` of `scene` stands, by its 3D or 2D pose (a 2D one at
+/// nought depth): the scene's own entity's, an instance's entity's as its
+/// patch sets or adds it; none for one without, or not in the scene.
+[[nodiscard]] std::optional<std::array<double, 3>> standingOf(const scene::Scene& scene, base::Bits128 entity);
 
 /// What a preview's wheel and drags with the right button came to (D469,
 /// D472): as totals `tooling.clicked` answers, or their change since a

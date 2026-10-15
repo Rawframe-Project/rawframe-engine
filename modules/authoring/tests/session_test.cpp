@@ -80,6 +80,10 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
              .has_value());
     const auto kHistory = readSessionRecord(R"({"kind":"authoring.history","id":7,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kHistory.has_value() && kHistory->verb == SessionVerb::History && kHistory->scene == "b.scene");
+    // Framing what is chosen names only its scene (D792).
+    const auto kFrame = readSessionRecord(R"({"kind":"authoring.frame","id":8,"scene":"b.scene"})", id);
+    RAWFRAME_EXPECT(kFrame.has_value() && kFrame->verb == SessionVerb::Frame && kFrame->scene == "b.scene");
+    RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.frame","id":8})", id).has_value());
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.history","id":8})", id).has_value());
     const auto kCreate = readSessionRecord(R"({"kind":"authoring.create_scene","id":5,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kCreate.has_value() && kCreate->verb == SessionVerb::CreateScene && kCreate->scene == "b.scene");

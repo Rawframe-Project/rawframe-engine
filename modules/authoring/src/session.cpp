@@ -30,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 21> kVerbs = {
+constexpr std::array<VerbName, 22> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -47,6 +47,7 @@ constexpr std::array<VerbName, 21> kVerbs = {
     VerbName{.kind = "authoring.mark", .verb = SessionVerb::Mark},
     VerbName{.kind = "authoring.preview_input", .verb = SessionVerb::PreviewInput},
     VerbName{.kind = "authoring.hide_layers", .verb = SessionVerb::HideLayers},
+    VerbName{.kind = "authoring.frame", .verb = SessionVerb::Frame},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
@@ -85,6 +86,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::CreateScene:
     case SessionVerb::History:
     case SessionVerb::Pick:
+    case SessionVerb::Frame:
     case SessionVerb::ApplyTogether:
     case SessionVerb::Cancel:
         return Members{.required = 1, .optional = 0};
@@ -241,6 +243,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Mark:
     case SessionVerb::PreviewInput:
     case SessionVerb::HideLayers:
+    case SessionVerb::Frame:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {

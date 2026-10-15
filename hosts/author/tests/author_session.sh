@@ -145,6 +145,22 @@ reply 4 | grep -q '"view":{"eye":\[0,20,0.5\]'
 reply 6 | grep -q '"view":{"eye":\[0,20,0.5\]'
 reply 5 | grep -q '"view":{"eye":\[3,1,3\],"target":\[0,1,0\],"fieldOfView":70}'
 reply 7 | grep -q '"view":{"eye":\[0,20,0.5\]'
+# Framing what is chosen (D792): both walls, 80 meters apart, framed
+# from straight ahead of where the view looked, their middle its target
+# and far enough to hold them; nothing chosen is refused.
+cp "$work/original.scene" "$work/root/level.scene"
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.view","id":2,"scene":"level.scene","view":{"eye":[0,0,10],"target":[0,0,0],"fieldOfView":90}}'
+    echo '{"kind":"authoring.select","id":3,"scene":"level.scene","entities":["87e4430f-6ec1-4301-be72-ce8187494c34","0d077e42-123c-4358-b7e3-02e08c02e876"]}'
+    echo '{"kind":"authoring.frame","id":4,"scene":"level.scene"}'
+    echo '{"kind":"authoring.select","id":5,"scene":"level.scene","entities":[]}'
+    echo '{"kind":"authoring.frame","id":6,"scene":"level.scene"}'
+} | "$author" session "$game" "$work/root" >"$work/replies" || true
+reply 4 | grep -q '"kind":"authoring.view",.*"view":{"eye":\[0,10,57.98[0-9]*\],"target":\[0,10,0\],"fieldOfView":90},"previewing":false,"framed":2'
+reply 6 | grep -q '"code":"validation_failed".*nothing chosen in the scene has a pose to frame'
+cmp "$work/root/level.scene" "$work/original.scene"
+
 # A preview that cannot be reached is refused, and the session goes on
 # (D433).
 {

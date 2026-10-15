@@ -204,6 +204,8 @@ private:
             return preview_.inputted(record);
         case authoring::SessionVerb::HideLayers:
             return preview_.hid(record);
+        case authoring::SessionVerb::Frame:
+            return framed(record);
         case authoring::SessionVerb::Assets: {
             Value made = Value::object();
             made.add("kind", Value::string("authoring.assets"));
@@ -526,6 +528,34 @@ private:
         made.add("reopened", Value::boolean(reopened));
         made.add("view", viewOf(*open->document));
         made.add("previewing", Value::boolean(forward(record.scene, *open)));
+        return made;
+    }
+
+    /// `frame` (D792): the view turned on what is chosen, as `view` sets
+    /// it; refused while nothing chosen stands anywhere.
+    result::Result<Value> framed(const authoring::SessionRecord& record) {
+        bool reopened = false;
+        RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
+        std::vector<std::array<double, 3>> points;
+        for (const base::Bits128 kChosen : open->document->selection()) {
+            if (const auto kAt = standingOf(open->document->scene(), kChosen); kAt.has_value()) {
+                points.push_back(*kAt);
+            }
+        }
+        if (points.empty()) {
+            return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
+                                           result::ErrorClass::InvalidArgument,
+                                           "nothing chosen in the scene has a pose to frame")};
+        }
+        RAWFRAME_TRY(
+            open->document->setView(framedView(open->document->view().value_or(authoring::SceneView{}), points)));
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.view"));
+        made.add("document", Value::string(digestOf(open->document->text())));
+        made.add("reopened", Value::boolean(reopened));
+        made.add("view", viewOf(*open->document));
+        made.add("previewing", Value::boolean(forward(record.scene, *open)));
+        made.add("framed", Value::integer(static_cast<std::int64_t>(points.size())));
         return made;
     }
 
