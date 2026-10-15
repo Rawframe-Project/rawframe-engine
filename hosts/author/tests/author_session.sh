@@ -161,6 +161,30 @@ reply 4 | grep -q '"kind":"authoring.view",.*"view":{"eye":\[0,10,57.98[0-9]*\],
 reply 6 | grep -q '"code":"validation_failed".*nothing chosen in the scene has a pose to frame'
 cmp "$work/root/level.scene" "$work/original.scene"
 
+# Bookmarks (D796): kept in the scene's editor state beside it, not the
+# scene; listed in slot order; a slot cleared by null; a slot past nine
+# or an eye at its target refused.
+cp "$work/original.scene" "$work/root/level.scene"
+rm -f "$work/root/level.scene.editor"
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.bookmark","id":2,"scene":"level.scene","slot":3,"view":{"eye":[0,20,0.5],"target":[0,0,0],"fieldOfView":50}}'
+    echo '{"kind":"authoring.bookmark","id":3,"scene":"level.scene","slot":1,"view":{"eye":[3,1,3],"target":[0,1,0],"fieldOfView":70}}'
+    echo '{"kind":"authoring.bookmarks","id":4,"scene":"level.scene"}'
+    echo '{"kind":"authoring.bookmark","id":5,"scene":"level.scene","slot":3,"view":null}'
+    echo '{"kind":"authoring.bookmark","id":6,"scene":"level.scene","slot":10,"view":null}'
+    echo '{"kind":"authoring.bookmark","id":7,"scene":"level.scene","slot":2,"view":{"eye":[1,1,1],"target":[1,1,1],"fieldOfView":60}}'
+} | "$author" session "$game" "$work/root" >"$work/replies" || true
+reply 4 | grep -q '"bookmarks":\[{"slot":1,"view":{"eye":\[3,1,3\],"target":\[0,1,0\],"fieldOfView":70}},{"slot":3,'
+reply 5 | grep -q '"answer":{"kind":"authoring.bookmarks","bookmarks":\[{"slot":1,'
+reply 5 | grep -vq '"slot":3'
+reply 6 | grep -q '"code":"validation_failed"'
+reply 7 | grep -q '"code":"validation_failed"'
+grep -q '"kind": "rawframe.editor_state"' "$work/root/level.scene.editor"
+grep -q '"slot": 1' "$work/root/level.scene.editor"
+cmp "$work/root/level.scene" "$work/original.scene"
+rm -f "$work/root/level.scene.editor"
+
 # A preview that cannot be reached is refused, and the session goes on
 # (D433).
 {

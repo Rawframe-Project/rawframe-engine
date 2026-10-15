@@ -1,5 +1,6 @@
 #include "rawframe/authoring_session/session.h"
 
+#include "bookmarks.h"
 #include "cooking.h"
 #include "documents.h"
 #include "handles.h"
@@ -208,6 +209,10 @@ private:
             return framed(record);
         case authoring::SessionVerb::ViewMode:
             return preview_.moded(record);
+        case authoring::SessionVerb::Bookmark:
+            return bookmarked(record);
+        case authoring::SessionVerb::Bookmarks:
+            return bookmarksOf(record);
         case authoring::SessionVerb::Assets: {
             Value made = Value::object();
             made.add("kind", Value::string("authoring.assets"));
@@ -558,6 +563,44 @@ private:
         made.add("view", viewOf(*open->document));
         made.add("previewing", Value::boolean(forward(record.scene, *open)));
         made.add("framed", Value::integer(static_cast<std::int64_t>(points.size())));
+        return made;
+    }
+
+    /// `bookmark` (D796): a view kept in a slot of the scene's editor
+    /// state, or the slot cleared; the scene's bookmarks after.
+    result::Result<Value> bookmarked(const authoring::SessionRecord& record) {
+        bool reopened = false;
+        RAWFRAME_TRY(sceneOf(record.scene, reopened));
+        RAWFRAME_TRY_ASSIGN(const std::filesystem::path kPath, pathOf(record.scene));
+        if (!record.clears) {
+            RAWFRAME_TRY(authoring::checkView(record.view));
+        }
+        const std::filesystem::path kState = editorStateOf(kPath);
+        RAWFRAME_TRY_ASSIGN(std::vector<Bookmark> marks, readBookmarks(kState));
+        std::erase_if(marks, [&record](const Bookmark& each) {
+            return each.slot == record.slot;
+        });
+        if (!record.clears) {
+            marks.push_back(Bookmark{.slot = record.slot, .view = record.view});
+            std::ranges::sort(marks, {}, &Bookmark::slot);
+        }
+        RAWFRAME_TRY(writeBookmarks(kState, marks));
+        return bookmarksReply(marks);
+    }
+
+    /// `bookmarks` (D796): the scene's, in slot order.
+    result::Result<Value> bookmarksOf(const authoring::SessionRecord& record) {
+        bool reopened = false;
+        RAWFRAME_TRY(sceneOf(record.scene, reopened));
+        RAWFRAME_TRY_ASSIGN(const std::filesystem::path kPath, pathOf(record.scene));
+        RAWFRAME_TRY_ASSIGN(const std::vector<Bookmark> kMarks, readBookmarks(editorStateOf(kPath)));
+        return bookmarksReply(kMarks);
+    }
+
+    static Value bookmarksReply(const std::vector<Bookmark>& marks) {
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.bookmarks"));
+        made.add("bookmarks", bookmarksValue(marks));
         return made;
     }
 
