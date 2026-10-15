@@ -675,6 +675,23 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "clicked at [0-9]+,[0-9]+.*saw studio_previewing.*typed 0,30,0.5 at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,[^\n]*\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,.*\"code\":\"scene_followed\"[^\n]*\"scene\":\"gate.scene\",\"created\":1.*{\"endpoint\":\"127.0.0.1:[0-9]+\",\"pinFile\":\"[^\"]*/server.fingerprint\",\"tokenFile\":\"[^\"]*/token\"}")
+        # Played in the viewport (D789): the client's window kept hidden, its
+        # pictures drawn at the viewport's size and streamed to Studio,
+        # which shows them in the center.
+        add_test(NAME studio_plays_in_viewport
+                 COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.play_in_viewport = true"
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
+                         wait=4 @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_plays_in_viewport PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_viewport\"[^\n]*\"inViewport\":true,\"pictures\":[1-9][0-9]*,\"width\":[1-9][0-9]+,\"height\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"window\":false,[^\n]*\"streamed\":[1-9][0-9]*,\"streamFailures\":0}")
         # The Console (D778): Plaza played, the Console shown, its Server
         # lines hidden and shown again, and the game stopped; what Studio
         # said and the records its server and client logged reach its
@@ -924,12 +941,14 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # Each played test ends by stopping its game and waiting for Studio
         # to say so, so it is stopped half a second after, not five (D499).
         # A played game is three programs, Studio, its server, and a client
-        # drawing on the device: each counts as two of the tree's jobs, so a
-        # check starts fewer at once and none starves the others (D467;
-        # three until Studio and its client drew less, D496).
+        # drawing on the device: each counts as three of the tree's jobs, so
+        # a check starts fewer at once and none starves the others (D467;
+        # two from D496, three again after four of them failed together in
+        # one day's checks at a load of 50 to 80, D789).
         set_tests_properties(studio_plays_plaza studio_picks_plaza studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza studio_snaps_plaza studio_looks_plaza
                              studio_rings_plaza studio_raises_plaza studio_turns_plaza studio_previews_plaza studio_cooks_plaza
-                             PROPERTIES PROCESSORS 2)
+                             studio_plays_in_viewport
+                             PROPERTIES PROCESSORS 3)
     endif()
     # Every test here draws a window: labeled so the check can leave them
     # out of a tree they find nothing in (D493), and Studio's out of the

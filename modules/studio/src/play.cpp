@@ -61,6 +61,24 @@ bool sets(std::string_view text, std::string_view key) {
     return false;
 }
 
+/// `text` without its lines setting any of `keys`: settings a viewport's
+/// play owns (D789), which a game's own client settings may set too.
+std::string without(std::string_view text, std::initializer_list<std::string_view> keys) {
+    std::string kept;
+    std::size_t at = 0;
+    while (at < text.size()) {
+        const std::size_t kEnd = std::min(text.find('\n', at), text.size());
+        const std::string_view kLine = text.substr(at, kEnd - at);
+        if (!std::ranges::any_of(keys, [&](std::string_view key) {
+                return sets(kLine, key);
+            })) {
+            kept += std::string{kLine} + "\n";
+        }
+        at = kEnd + 1;
+    }
+    return kept;
+}
+
 /// The file at `path` whole, or nothing for an empty path.
 std::string contents(const std::filesystem::path& path) {
     if (path.empty()) {
@@ -162,7 +180,7 @@ result::Status Play::launch() {
     const auto kEndpointPort = static_cast<std::uint16_t>(kServerPort + 1);
     const auto kServerEndpointPort = static_cast<std::uint16_t>(kServerPort + 2);
     const std::filesystem::path& kAt = directory_;
-    for (const char* kLeft : {"server.fingerprint", "client.fingerprint"}) {
+    for (const char* kLeft : {"server.fingerprint", "client.fingerprint", "picture"}) {
         std::error_code error;
         std::filesystem::remove(kAt / kLeft, error);
     }
@@ -195,28 +213,44 @@ result::Status Play::launch() {
                                      {"tooling.token_file", (kAt / "token").string()},
                                      // Picked from (D456) and debugged (D460).
                                      {"tooling.grants", "inspect debug"}})));
-    RAWFRAME_TRY(written(kAt / "client.conf",
-                         settingsOf(kWithContent(contents(settings_.clientSettings)),
-                                    {{"host.iteration_rate", "120"},
-                                     {"kest.plan_only", "true"},
-                                     {"bots.count", "1"},
-                                     {"bots.player", "true"},
-                                     {"render.device", "any"},
-                                     // Its styles and UI document followed twice a
-                                     // second, an edited one given to the UI as it
-                                     // plays (D634, D761).
-                                     {"ui.reload_every", "60"},
-                                     // And its content, a material Studio cooks
-                                     // again drawn as it plays (D734).
-                                     {"content.reload_every", "60"}},
-                                    {{"kest.game", kGame},
-                                     {"network.quic.pin_file", (kAt / "server.fingerprint").string()},
-                                     {"bots.endpoint", "127.0.0.1:" + kPort},
-                                     {"network.quic.self_signed", "true"},
-                                     {"network.quic.fingerprint_file", (kAt / "client.fingerprint").string()},
-                                     {"tooling.endpoint", "127.0.0.1:" + std::to_string(kEndpointPort)},
-                                     {"tooling.token_file", (kAt / "token").string()},
-                                     {"tooling.grants", "view"}})));
+    RAWFRAME_TRY(written(
+        kAt / "client.conf",
+        settingsOf(kWithContent(settings_.viewport.has_value() ? without(contents(settings_.clientSettings),
+                                                                         {"window.visible",
+                                                                          "render.offscreen",
+                                                                          "render.read_every",
+                                                                          "render.width",
+                                                                          "render.height",
+                                                                          "render.stream"})
+                                                               : contents(settings_.clientSettings)),
+                   {{"host.iteration_rate", "120"},
+                    {"kest.plan_only", "true"},
+                    {"bots.count", "1"},
+                    {"bots.player", "true"},
+                    {"render.device", "any"},
+                    // Its styles and UI document followed twice a
+                    // second, an edited one given to the UI as it
+                    // plays (D634, D761).
+                    {"ui.reload_every", "60"},
+                    // And its content, a material Studio cooks
+                    // again drawn as it plays (D734).
+                    {"content.reload_every", "60"}},
+                   {{"kest.game", kGame},
+                    {"network.quic.pin_file", (kAt / "server.fingerprint").string()},
+                    {"bots.endpoint", "127.0.0.1:" + kPort},
+                    {"network.quic.self_signed", "true"},
+                    {"network.quic.fingerprint_file", (kAt / "client.fingerprint").string()},
+                    {"tooling.endpoint", "127.0.0.1:" + std::to_string(kEndpointPort)},
+                    {"tooling.token_file", (kAt / "token").string()},
+                    {"tooling.grants", "view"}}) +
+            // Played in Studio's viewport, its window kept
+            // hidden and each picture streamed (D789).
+            (settings_.viewport.has_value() ? "window.visible = false\nrender.offscreen = true\nrender.read_every = 1\n"
+                                              "render.width = " +
+                                                  std::to_string((*settings_.viewport)[0]) +
+                                                  "\nrender.height = " + std::to_string((*settings_.viewport)[1]) +
+                                                  "\nrender.stream = " + (kAt / "picture").string() + "\n"
+                                            : std::string{})));
     endpointPort_ = kEndpointPort;
     serverEndpointPort_ = kServerEndpointPort;
     // Where a debugger attaches, for rawframe-debug given the game (D462).

@@ -11,6 +11,7 @@
 #include "rawframe/result/result.h"
 #include "records.h"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <initializer_list>
@@ -37,6 +38,10 @@ struct PlaySettings {
     /// `content.root` where its settings name none, once it holds a
     /// manifest.
     std::filesystem::path content;
+    /// The viewport's size in pixels, to play in it (D789): the client's
+    /// window kept hidden, its pictures drawn at this size and streamed to
+    /// `picture()`; none to play in the client's own window.
+    std::optional<std::array<std::uint32_t, 2>> viewport;
 };
 
 /// Makes `path` a directory of this user's alone, or refuses one that is
@@ -76,6 +81,11 @@ public:
     /// Asks both to stop, as a Host stops on a stop request.
     void stop() noexcept;
 
+    /// Where the client streams its pictures when it plays in the
+    /// viewport (D789).
+    [[nodiscard]] std::filesystem::path picture() const {
+        return directory_ / "picture";
+    }
     /// Where its server and client write their logs, server.log and
     /// client.log, which Studio's Console reads (D778).
     [[nodiscard]] const std::filesystem::path& directory() const noexcept {

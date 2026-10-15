@@ -54,6 +54,8 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
                          .serverSettings = std::string{configuration.path("studio.play.server_settings").value_or("")},
                          .clientSettings = std::string{configuration.path("studio.play.client_settings").value_or("")}};
         playDirectory_ = std::string{configuration.path("studio.play.directory").value_or("")};
+        // Played in the viewport, or in the client's own window (D789).
+        RAWFRAME_TRY_ASSIGN(playInViewport_, configuration.truth("studio.play_in_viewport", false));
     }
     // The cook tool: named, or beside Studio, where an export puts it; the
     // content goes where the game plays (D502).
@@ -259,6 +261,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     attachPlayed(kSeconds);
     pollPicks(kSeconds);
     readLogs(kSeconds);
+    followPicture();
     followSplitter();
     // A press is acted on as the window's records come and may have
     // changed what a column holds; the wheel is turned over it laid out,
@@ -364,6 +367,14 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("layersChosen", layersChosen_),
                   diagnostics::field("locks", locks_),
                   diagnostics::field("lockRefused", lockRefused_)});
+    // What the viewport showed (D789).
+    emitter_.log(diagnostics::Severity::Info,
+                 kViewported,
+                 "what Studio's viewport showed",
+                 {diagnostics::field("inViewport", playInViewport_),
+                  diagnostics::field("pictures", picturesShown_),
+                  diagnostics::field("width", picture_ != nullptr ? std::uint64_t{picture_->levels[0].width} : 0),
+                  diagnostics::field("height", picture_ != nullptr ? std::uint64_t{picture_->levels[0].height} : 0)});
     // And what the start screen did (D781): the games made from templates,
     // the game Studio ended on, if any, and the games kept as opened last.
     emitter_.log(diagnostics::Severity::Info,
@@ -393,8 +404,9 @@ void ShellParticipant::resize(std::uint32_t width, std::uint32_t height, bool /*
     }
 }
 
-std::shared_ptr<const texture::Texture> ShellParticipant::image(std::uint64_t) const {
-    return nullptr;
+std::shared_ptr<const texture::Texture> ShellParticipant::image(std::uint64_t id) const {
+    // The played game's picture, in the viewport (D789).
+    return id == kViewportImage ? picture_ : nullptr;
 }
 
 namespace {

@@ -751,6 +751,7 @@ void ShellParticipant::showView() {
         viewFields_.push_back(
             FieldRow{.value = line->second, .role = FieldRow::Role::View, .field = std::string{kPart}});
     }
+    showViewport();
     showViewText();
     showHistoryList();
 }

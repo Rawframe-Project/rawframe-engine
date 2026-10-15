@@ -42,6 +42,11 @@ CONF
 if [ -n "${STUDIO_COOK:-}" ]; then
     echo "studio.cook = $STUDIO_COOK" >>"$work/studio.conf"
 fi
+# And settings of its own, in STUDIO_SETTINGS, as playing in the viewport
+# (D789).
+if [ -n "${STUDIO_SETTINGS:-}" ]; then
+    printf '%s\n' "$STUDIO_SETTINGS" >>"$work/studio.conf"
+fi
 "$1" --config "$work/studio.conf" >"$work/studio.log" 2>&1 &
 studio=$!
 echo "$studio" >"$work/studio.pid"

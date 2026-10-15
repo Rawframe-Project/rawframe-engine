@@ -47,6 +47,9 @@ inline constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"}
 inline constexpr diagnostics::EventIdentity kLayout{"studio", "studio_layout"};
 inline constexpr diagnostics::EventIdentity kStartScreen{"studio", "studio_start"};
 inline constexpr diagnostics::EventIdentity kSelection{"studio", "studio_selection"};
+inline constexpr diagnostics::EventIdentity kViewported{"studio", "studio_viewport"};
+/// The image key the viewport's picture is drawn under (D789).
+inline constexpr std::uint64_t kViewportImage = 0x5649455750ULL;
 inline constexpr diagnostics::EventIdentity kShown{"studio", "studio_shown"};
 /// Studio's window read by assistive technology (D575), or why not.
 inline constexpr diagnostics::EventIdentity kAccessible{"studio", "studio_accessibility_ready"};
@@ -193,6 +196,13 @@ private:
     /// A column under `parent` headed `heading`, sharing its row's width or
     /// `width` pixels wide.
     result::Result<ui::Node> column(ui::Node parent, std::string_view heading, float width = 0);
+
+    /// The played game's newest streamed picture taken, when it plays in
+    /// the viewport (D789).
+    void followPicture();
+
+    /// The viewport, under the view's fields, showing that picture.
+    void showViewport();
 
     /// The left dock's layout, `width` wide (D788).
     static ui::Layout leftLayout(float width);
@@ -923,6 +933,15 @@ private:
     std::uint64_t locks_ = 0;
     std::uint64_t layersChosen_ = 0;
     std::uint64_t lockRefused_ = 0;
+    /// The viewport, whether Studio plays a game in it, and the picture it
+    /// shows: when its file was written, its sequence, and how many were
+    /// shown (D789).
+    ui::Node viewport_{};
+    bool playInViewport_ = false;
+    std::shared_ptr<const texture::Texture> picture_;
+    std::optional<std::filesystem::file_time_type> pictureWritten_;
+    std::uint64_t pictureSequence_ = 0;
+    std::uint64_t picturesShown_ = 0;
     std::vector<ui::Node> sceneRows_;
     std::vector<ui::Node> entityRows_;
     std::vector<ui::Node> componentRows_;
