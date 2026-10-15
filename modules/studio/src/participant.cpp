@@ -159,7 +159,10 @@ bool ShellParticipant::openGame() {
     // What the session offers decides what Studio offers (ADR-0032).
     catalog_ = catalogOf(session_->answer(R"({"kind":"authoring.describe","id":2})", ended));
     ++records_;
-    assets_ = assetsOf(ask(assetsRecord(next())));
+    // The assets fields pick from, and the browser's sources (D799).
+    const std::string kAssets = ask(assetsRecord(next()));
+    assets_ = assetsOf(kAssets);
+    browser_.sources = sourcesOf(kAssets);
     std::vector<std::pair<std::string, std::string>> scenes;
     for (const auto& [kIdentity, kPath] : authoring_session::scenesBeside(description_)) {
         std::error_code error;
@@ -393,6 +396,14 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("splitsShown", shown_.splitsShown),
                   diagnostics::field("overlays", static_cast<std::uint64_t>(shown_.overlays.size())),
                   diagnostics::field("overlaysShown", shown_.overlaysShown)});
+    // And what the asset browser showed (D799).
+    emitter_.log(diagnostics::Severity::Info,
+                 kBrowsed,
+                 "what Studio's asset browser showed",
+                 {diagnostics::field("sources", static_cast<std::uint64_t>(browser_.sources.size())),
+                  diagnostics::field("sourcesChosen", browser_.chosenCount),
+                  diagnostics::field("narrowed", browser_.narrowed),
+                  diagnostics::field("chosen", std::string_view{browser_.chosen})});
     // And what the start screen did (D781): the games made from templates,
     // the game Studio ended on, if any, and the games kept as opened last.
     emitter_.log(diagnostics::Severity::Info,

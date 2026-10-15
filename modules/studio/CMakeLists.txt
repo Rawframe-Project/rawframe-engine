@@ -2,7 +2,7 @@
 # process, shown as a UI of its own. Toolchain only; no client or server
 # closure contains it.
 rawframe_module(NAME studio
-    SOURCES src/commands.cpp src/console.cpp src/console_panel.cpp src/documents.cpp src/editing.cpp src/hierarchy.cpp src/layers.cpp src/hints.cpp src/operations.cpp src/panels.cpp src/participant.cpp src/play.cpp src/playing.cpp src/preferences.cpp src/preferences_panel.cpp src/records.cpp src/reparenting.cpp src/selection.cpp src/viewing.cpp src/viewport.cpp src/views.cpp src/splitters.cpp src/start.cpp
+    SOURCES src/commands.cpp src/console.cpp src/console_panel.cpp src/documents.cpp src/editing.cpp src/hierarchy.cpp src/layers.cpp src/hints.cpp src/operations.cpp src/panels.cpp src/participant.cpp src/play.cpp src/playing.cpp src/preferences.cpp src/preferences_panel.cpp src/records.cpp src/reparenting.cpp src/selection.cpp src/viewing.cpp src/browser.cpp src/viewport.cpp src/views.cpp src/splitters.cpp src/start.cpp
     DEPS authoring_session world_tooling render material font_import process view ui texture document composition execution diagnostics result base
 )
 # Studio's own font (Inter, SIL Open Font License 1.1, fonts/Inter-LICENSE.txt).

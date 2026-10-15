@@ -108,6 +108,9 @@ void ShellParticipant::hearCook() {
         }
         cooking_.reset();
         static_cast<void>(pressWords(cookNode_, "Cook", kText, 14));
+        // Each source as the cook left it (D799).
+        listSources();
+        static_cast<void>(showScenes());
         if (std::exchange(recook_, false)) {
             cookOrStop();
         }

@@ -7,6 +7,7 @@
 // panels.cpp's, its presses, typing, and session records editing.cpp's,
 // and the game it plays playing.cpp's.
 
+#include "browser.h"
 #include "console.h"
 #include "play.h"
 #include "preferences.h"
@@ -50,6 +51,7 @@ inline constexpr diagnostics::EventIdentity kLayout{"studio", "studio_layout"};
 inline constexpr diagnostics::EventIdentity kStartScreen{"studio", "studio_start"};
 inline constexpr diagnostics::EventIdentity kSelection{"studio", "studio_selection"};
 inline constexpr diagnostics::EventIdentity kViewported{"studio", "studio_viewport"};
+inline constexpr diagnostics::EventIdentity kBrowsed{"studio", "studio_assets"};
 /// The image key the viewport's picture is drawn under (D789).
 inline constexpr std::uint64_t kViewportImage = 0x5649455750ULL;
 inline constexpr diagnostics::EventIdentity kShown{"studio", "studio_shown"};
@@ -239,6 +241,13 @@ private:
     void tellSplit();
     /// Tells the preview what it draws over its scene (D798).
     void tellOverlays();
+    /// The asset browser (D799): the sources asked again, its kind and
+    /// folder controls and the rows of sources that are no document, and
+    /// a press on one of them.
+    void listSources();
+    result::Status showBrowser();
+    result::Status showSources();
+    bool pressBrowser(ui::Node node);
 
     /// The locked layer's name `entity` is on, none if it is on no locked
     /// one.
@@ -956,6 +965,7 @@ private:
     std::vector<std::uint32_t> locked_;
     /// What the preview is told to show, told it again when one is attached.
     PreviewShown shown_;
+    AssetBrowser browser_;
     /// The layer each entity in `entities_` is on, nought for none.
     std::vector<std::uint32_t> entityLayers_;
     std::uint64_t locks_ = 0;

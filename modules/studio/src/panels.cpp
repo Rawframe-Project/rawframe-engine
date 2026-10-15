@@ -319,18 +319,26 @@ result::Status ShellParticipant::showScenes() {
         static_cast<void>(tree_->remove(newSceneRow_));
         newScene_.reset();
     }
+    // The browser's controls first, then the documents it shows (D799),
+    // one left out holding no row, then the other sources.
+    RAWFRAME_TRY(showBrowser());
+    // A new scene is the session's own verb, not an operation the catalog
+    // lists, so it is always offered, above the list so a long one does not
+    // hide it. A file's absolute path typed there imports it instead (D505).
+    RAWFRAME_TRY_ASSIGN(const auto kLine, fieldRow("new scene or import", "", scenesColumn_));
+    newSceneRow_ = kLine.first;
+    newScene_ = FieldRow{.value = kLine.second, .role = FieldRow::Role::NewScene, .field = "new scene"};
     for (std::size_t each = 0; each < scenes_.size(); ++each) {
+        if (!browser_.shows(scenes_[each])) {
+            sceneRows_.emplace_back();
+            continue;
+        }
         RAWFRAME_TRY_ASSIGN(
             const ui::Node kRowNode,
             row(scenesColumn_, scenes_[each], kText, each == sceneAt_ && !scene_.empty() ? kChosen : kRow, true));
         sceneRows_.push_back(kRowNode);
     }
-    // A new scene is the session's own verb, not an operation the catalog
-    // lists, so it is always offered.
-    // A file's absolute path typed there imports it instead (D505).
-    RAWFRAME_TRY_ASSIGN(const auto kLine, fieldRow("new scene or import", "", scenesColumn_));
-    newSceneRow_ = kLine.first;
-    newScene_ = FieldRow{.value = kLine.second, .role = FieldRow::Role::NewScene, .field = "new scene"};
+    RAWFRAME_TRY(showSources());
     showTabs();
     return {};
 }

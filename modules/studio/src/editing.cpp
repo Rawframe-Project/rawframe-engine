@@ -75,7 +75,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         return;
     }
     // The left dock's tabs and the Layers' rows (D788).
-    if (pressLayers(node)) {
+    if (pressLayers(node) || pressBrowser(node)) {
         return;
     }
     // A document's tab is pressed as its row in Assets is (D776).
@@ -83,6 +83,11 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         const auto kListed =
             std::ranges::find(scenes_, openDocuments_[static_cast<std::size_t>(kTab - tabRows_.begin())]);
         const auto kAt = static_cast<std::size_t>(kListed - scenes_.begin());
+        // Its row may be left out of the browser's list (D799).
+        if (kAt < sceneRows_.size() && sceneRows_[kAt] == ui::Node{}) {
+            showScene(kAt);
+            return;
+        }
         if (kAt < sceneRows_.size()) {
             node = sceneRows_[kAt];
         }
@@ -773,7 +778,9 @@ void ShellParticipant::makeScene(std::string text) {
             say(answeredOf(kReply).message);
         } else {
             ++applied_;
-            assets_ = assetsOf(ask(assetsRecord(next())));
+            const std::string kAssets = ask(assetsRecord(next()));
+            assets_ = assetsOf(kAssets);
+            browser_.sources = sourcesOf(kAssets);
             say("imported " + kImported);
         }
         static_cast<void>(showScenes());
