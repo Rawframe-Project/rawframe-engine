@@ -154,14 +154,12 @@ public:
             regions_.push_back(world_kest::GameRegion{});
             regionFrames_.resize(1);
         }
-        // A preview may be split up to `scene.preview_views` ways (D797),
+        // A preview may be split as many ways as its window allows (D797),
         // which an editor playing it asks for: its regions are placed from
         // the start, shown only while it is, as a device joins its regions'
         // views once. A client that holds idle region views draws its window
         // unlit, so no other client is given them.
-        RAWFRAME_TRY_ASSIGN(const std::uint64_t kViews,
-                            context.configuration().unsignedInteger("scene.preview_views", 1));
-        previewViews_ = preview_ != nullptr ? std::clamp<std::size_t>(kViews, 1, kMostOthers + 1) : 1;
+        previewViews_ = preview_ != nullptr ? std::clamp<std::size_t>(preview_->views(), 1, kMostOthers + 1) : 1;
         if (previewViews_ > 1 && regionFrames_.size() < previewViews_) {
             regionFrames_.resize(previewViews_);
         }
