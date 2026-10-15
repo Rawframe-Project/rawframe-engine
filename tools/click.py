@@ -23,7 +23,9 @@
 # nought, 0.15 seconds apart (D441), and `drag=` and two points presses the
 # left button at the first, carries it to the second, and lets it go there
 # (D457), holding the X key a fifth part names through it, Shift_L or
-# Control_L (D463). An argument `frozen=` and X key names presses them with
+# Control_L (D463). An argument `drop=`, a point, a colon, and paths apart
+# by colons drops those files there as a file manager does, by XDND
+# (tools/xdnd.py, D802). An argument `frozen=` and X key names presses them with
 # the program stopped, so it reads them in one frame (D458), and
 # `frozenclick=` and a point with its text clicks there and types it with
 # the program stopped, once the mouse is over the point (D477). The
@@ -253,6 +255,11 @@ def main():
             fromX, fromY, toX, toY = (int(part) for part in parts[:4])
             points.append((fromX, fromY, ("drag", toX, toY, parts[4] if len(parts) > 4 else "", 3)))
             continue
+        if argument.startswith("drop="):
+            place, _, paths = argument[len("drop="):].partition(":")
+            spot = (place, None) if place.startswith("@") else tuple(int(side) for side in place.split(","))
+            points.append((*spot, ("drop", paths.split(":"))))
+            continue
         if argument.startswith("wheel="):
             parts = argument[len("wheel="):].split(",")
             at, y, turns = (int(part) for part in parts[:3])
@@ -337,6 +344,14 @@ def main():
         elif os.environ.get("CLICK_NAME_POINTS") and isinstance(text, str):
             # Which control a point is on, for moving a test to names.
             print(f"point {at},{y} is on {point_name(at, y)}")
+        if isinstance(text, tuple) and text[0] == "drop":
+            # Files dropped there from outside, as a file manager drops them
+            # (D802).
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import xdnd
+            xdnd.drop(at, y, text[1])
+            time.sleep(1)
+            continue
         if isinstance(text, tuple) and text[0] == "wheel":
             # The wheel turned with a key held through it (D472).
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
