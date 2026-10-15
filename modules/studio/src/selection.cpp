@@ -46,6 +46,7 @@ void ShellParticipant::chooseEntity(std::size_t at) {
     }
     if (selected_.size() > 1) {
         showSelection(at);
+        say(std::to_string(selected_.size()) + " entities chosen");
     } else {
         const auto kOne = std::ranges::find(entities_, selected_.front());
         showEntity(kOne != entities_.end() ? static_cast<std::size_t>(kOne - entities_.begin()) : at);
