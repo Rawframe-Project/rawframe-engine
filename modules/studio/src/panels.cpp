@@ -571,7 +571,7 @@ void ShellParticipant::showEntity(std::size_t at) {
     actions_.clear();
     components_ = 0;
     // Chosen in the session, so undo and redo keep it (D417).
-    static_cast<void>(ask(selectRecord(next(), scene_, entity_)));
+    static_cast<void>(ask(selectRecord(next(), scene_, selected_)));
     // And marked in its preview, where it stands (D464).
     markChosen();
     // The scene's own entity is named; an instance's is its source's.

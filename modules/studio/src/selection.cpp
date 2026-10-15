@@ -58,6 +58,9 @@ void ShellParticipant::showSelection(std::size_t at) {
     fields_.clear();
     entityAt_ = at;
     entity_ = entities_[at];
+    // All of them chosen in the session too, so framing holds them all
+    // (D792).
+    static_cast<void>(ask(selectRecord(next(), scene_, selected_)));
     for (std::size_t each = 0; each < entityRows_.size(); ++each) {
         const bool kIn = std::ranges::contains(selected_, entities_[each]);
         static_cast<void>(tree_->setLook(entityRows_[each], ui::Look{.fill = kIn ? kChosen : kRow, .radius = 4}));

@@ -35,6 +35,10 @@ constexpr std::string_view kPalette = "Command palette";
 /// Studio's preferences, a dialog of its own with no button.
 constexpr std::string_view kPreferences = "Preferences";
 
+/// The view turned on what is chosen (D792), with no button: the key,
+/// the menu, or the palette.
+constexpr std::string_view kFrame = "Frame chosen";
+
 /// What the palette's field reads while it does not hold the keyboard.
 constexpr std::string_view kPaletteHint = "commands  Ctrl+K";
 
@@ -90,6 +94,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     }
     commands_.push_back(Command{.name = std::string{kPalette}, .menu = "Window", .keys = kKeys(kPalette, {"Ctrl+K"})});
     commands_.push_back(Command{.name = std::string{kPreferences}, .menu = "Window", .keys = kKeys(kPreferences, {})});
+    commands_.push_back(Command{.name = std::string{kFrame}, .menu = "Entity", .keys = kKeys(kFrame, {"F"})});
     // The palette's field, as a field named "commands" is read (D575).
     RAWFRAME_TRY_ASSIGN(const ui::Node kSearch, tree_->addEditable(++keys_));
     RAWFRAME_TRY(tree_->setLayout(
@@ -110,6 +115,10 @@ bool ShellParticipant::runCommand(std::string_view name) {
     }
     if (kCommand->name == kPalette) {
         openPalette();
+        return true;
+    }
+    if (kCommand->name == kFrame) {
+        frameChosen();
         return true;
     }
     if (kCommand->name == kPreferences) {

@@ -205,12 +205,18 @@ Value togetherRecord(std::int64_t id, std::vector<std::pair<std::string, std::ve
     return record;
 }
 
-Value selectRecord(std::int64_t id, std::string_view scene, std::string_view entity) {
-    Value entities = Value::array();
-    entities.push(Value::string(std::string{entity}));
+Value selectRecord(std::int64_t id, std::string_view scene, const std::vector<std::string>& entities) {
+    Value chosen = Value::array();
+    for (const std::string& kEntity : entities) {
+        chosen.push(Value::string(kEntity));
+    }
     Value record = recordOf("authoring.select", id, scene);
-    record.add("entities", std::move(entities));
+    record.add("entities", std::move(chosen));
     return record;
+}
+
+Value frameRecord(std::int64_t id, std::string_view scene) {
+    return recordOf("authoring.frame", id, scene);
 }
 
 Value stepRecord(std::int64_t id, std::string_view kind, std::string_view scene) {

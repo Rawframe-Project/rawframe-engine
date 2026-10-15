@@ -498,6 +498,26 @@ void ShellParticipant::setView(const std::string& part, const std::string& text)
     showViewText();
 }
 
+void ShellParticipant::frameChosen() {
+    if (scene_.empty() || entity_.empty()) {
+        say("choose an entity to frame");
+        return;
+    }
+    const std::string kReply = ask(frameRecord(next(), scene_));
+    const Answered kAnswered = answeredOf(kReply);
+    if (kAnswered.done) {
+        ++viewsSet_;
+        view_ = kAnswered.view;
+        previewing_ = kAnswered.previewing;
+        const std::size_t kCount = selected_.size();
+        say(kCount > 1 ? "framed " + std::to_string(kCount) + " entities" : "framed");
+    } else {
+        ++refused_;
+        say(kAnswered.message);
+    }
+    showViewText();
+}
+
 Value ShellParticipant::operationOn(std::string_view operation) const {
     Value made = Value::object();
     made.add("operation", Value::string(std::string{operation}));

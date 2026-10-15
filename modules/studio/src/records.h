@@ -256,8 +256,10 @@ readRecord(std::int64_t id, std::string_view scene, std::string_view operation, 
 /// `authoring.apply_together` (D497): each scene's operations, atomic, all
 /// kept or none.
 [[nodiscard]] Value togetherRecord(std::int64_t id, std::vector<std::pair<std::string, std::vector<Value>>> parts);
-/// `authoring.select` of `entity` in `scene`.
-[[nodiscard]] Value selectRecord(std::int64_t id, std::string_view scene, std::string_view entity);
+/// `authoring.select` of `entities` in `scene`.
+[[nodiscard]] Value selectRecord(std::int64_t id, std::string_view scene, const std::vector<std::string>& entities);
+/// `authoring.frame` of `scene` (D792): its view turned on what is chosen.
+[[nodiscard]] Value frameRecord(std::int64_t id, std::string_view scene);
 /// `authoring.undo` or `authoring.redo` (`kind`) of `scene`.
 [[nodiscard]] Value stepRecord(std::int64_t id, std::string_view kind, std::string_view scene);
 

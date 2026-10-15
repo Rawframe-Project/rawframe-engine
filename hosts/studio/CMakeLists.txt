@@ -209,6 +209,18 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                      keys=Control_L+z "until=studio_said,status=\"undone\"" @commands:redo "until=studio_said,status=\"redone\""
                      @Edit "@Undo  Ctrl+Z" "until=studio_said,status=\"undone\"" keys=Delete "until=studio_said,status=\"entity deleted\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    # Framing what is chosen (D792): the west wall chosen, F pressed with
+    # no field holding the keyboard, and the view turned on it by the
+    # session, its target where the wall stands.
+    add_test(NAME studio_frames
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene "@west wall" keys=f "until=studio_said,status=\"framed\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_frames PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "pressed f.*\"code\":\"studio_summary\"[^\n]*\"viewsSet\":1,[^\n]*\"status\":\"framed\".*\"exit\":\"clean_stop\"")
     set_tests_properties(studio_commands PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION

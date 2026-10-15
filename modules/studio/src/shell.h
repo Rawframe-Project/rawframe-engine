@@ -408,6 +408,8 @@ private:
     /// The scene's view with `part` as `text` says, set by the session
     /// (`authoring.view`), which hands it to a live preview.
     void setView(const std::string& part, const std::string& text);
+    /// The view turned on what is chosen, by the session (D792).
+    void frameChosen();
 
     /// `operation` with the chosen entity as its target.
     Value operationOn(std::string_view operation) const;
