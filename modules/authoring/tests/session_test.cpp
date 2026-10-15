@@ -89,6 +89,19 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     RAWFRAME_EXPECT(kSplit.has_value() && kSplit->verb == SessionVerb::Split && kSplit->views == 3);
     RAWFRAME_EXPECT(
         !readSessionRecord(R"({"kind":"authoring.split","id":10,"scene":"b.scene","views":4})", id).has_value());
+    // A source's import settings read and set by its path (D800); settings
+    // that are no object refused.
+    const auto kSettings =
+        readSessionRecord(R"({"kind":"authoring.import_settings","id":12,"asset":"paving.png"})", id);
+    RAWFRAME_EXPECT(kSettings.has_value() && kSettings->verb == SessionVerb::ImportSettings &&
+                    kSettings->asset == "paving.png");
+    const auto kSet = readSessionRecord(
+        R"({"kind":"authoring.set_import_settings","id":13,"asset":"paving.png","settings":{"exact":false}})", id);
+    RAWFRAME_EXPECT(kSet.has_value() && kSet->verb == SessionVerb::SetImportSettings &&
+                    kSet->settings.find("exact") != nullptr);
+    RAWFRAME_EXPECT(
+        !readSessionRecord(R"({"kind":"authoring.set_import_settings","id":13,"asset":"paving.png","settings":[]})", id)
+             .has_value());
     // Overlays by their names, bounded only (D798).
     const auto kOverlays =
         readSessionRecord(R"({"kind":"authoring.overlays","id":11,"scene":"b.scene","overlays":["colliders"]})", id);

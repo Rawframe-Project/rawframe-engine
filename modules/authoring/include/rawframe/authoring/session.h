@@ -124,6 +124,10 @@ enum class SessionVerb : std::uint8_t {
     /// What the scene's preview draws over it, by the overlays' names
     /// (D798).
     Overlays,
+    /// A source's import settings and the settings its importer offers
+    /// (D800); and settings given it, its importer's to accept.
+    ImportSettings,
+    SetImportSettings,
     /// One atomic request over several scenes, one transaction (D497).
     ApplyTogether,
     /// The game's directory cooked, as a long-running operation (D502).
@@ -204,6 +208,10 @@ struct SessionRecord {
     /// Import's: the file, and where under the game's directory it goes.
     std::string source;
     std::string as;
+    /// Import settings': the source's path under the game's directory, and
+    /// the settings given it, an object (D800).
+    std::string asset;
+    document::Value settings;
 };
 
 /// Reads one record; refuses (`ValidationFailed`) anything out of the form

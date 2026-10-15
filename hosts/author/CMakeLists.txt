@@ -93,6 +93,11 @@ if(RAWFRAME_BUILD_TESTS)
     add_test(NAME author_cooks
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_cooks.sh $<TARGET_FILE:rawframe_host_author>
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_cooks)
+    # A source's import settings read and set through a session (D800), the
+    # importer refusing what it does not take, and the copy cooked.
+    add_test(NAME author_settings
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_settings.sh $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_settings)
     # Files from outside made the game's assets through a session (D503):
     # a texture and a glTF with its image imported into a copy of the
     # plaza, declared, listed, and cooked; paths out of place refused.

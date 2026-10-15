@@ -495,6 +495,27 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"source", "as"}),
                                annotationsOf(false, false)));
     }
+    // A source's import settings, read and set (D800).
+    {
+        Value properties = Value::object();
+        properties.add("asset", property("string", false, "The source's path under the game's directory."));
+        tools.push_back(toolOf("asset_import_settings",
+                               "A source's importer, its settings, and the settings the importer offers, each with "
+                               "its type, fallback, and choices.",
+                               schemaOf(std::move(properties), {"asset"}),
+                               annotationsOf(true, false)));
+    }
+    {
+        Value properties = Value::object();
+        properties.add("asset", property("string", false, "The source's path under the game's directory."));
+        properties.add("settings",
+                       property("object", false, "The settings to change, each by its name; a fallback clears it."));
+        tools.push_back(toolOf("asset_set_import_settings",
+                               "Sets a source's import settings in its sidecar once its importer accepts them; the "
+                               "next cook cooks it again.",
+                               schemaOf(std::move(properties), {"asset", "settings"}),
+                               annotationsOf(false, true)));
+    }
 }
 
 Value McpBridge::State::initialize(const Value* params) const {
@@ -618,6 +639,11 @@ McpBridge::State::callSession(const Value& id, std::string_view name, const Valu
         made = record("authoring.import", recordId);
         copy("source", "source");
         copy("as", "as");
+    } else if (name == "asset_import_settings" || name == "asset_set_import_settings") {
+        made = record(name == "asset_import_settings" ? "authoring.import_settings" : "authoring.set_import_settings",
+                      recordId);
+        copy("asset", "asset");
+        copy("settings", "settings");
     } else {
         return std::nullopt;
     }

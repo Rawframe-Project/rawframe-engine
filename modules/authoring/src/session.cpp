@@ -30,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 27> kVerbs = {
+constexpr std::array<VerbName, 29> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -53,6 +53,8 @@ constexpr std::array<VerbName, 27> kVerbs = {
     VerbName{.kind = "authoring.bookmarks", .verb = SessionVerb::Bookmarks},
     VerbName{.kind = "authoring.split", .verb = SessionVerb::Split},
     VerbName{.kind = "authoring.overlays", .verb = SessionVerb::Overlays},
+    VerbName{.kind = "authoring.import_settings", .verb = SessionVerb::ImportSettings},
+    VerbName{.kind = "authoring.set_import_settings", .verb = SessionVerb::SetImportSettings},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
@@ -100,7 +102,10 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Bookmarks:
     case SessionVerb::ApplyTogether:
     case SessionVerb::Cancel:
+    case SessionVerb::ImportSettings:
         return Members{.required = 1, .optional = 0};
+    case SessionVerb::SetImportSettings:
+        return Members{.required = 2, .optional = 0};
     }
     return {};
 }
@@ -246,6 +251,24 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         record.output = *output;
         if (!kCache->isNull()) {
             record.cache = *kCache->text();
+        }
+        return record;
+    }
+    case SessionVerb::ImportSettings:
+    case SessionVerb::SetImportSettings: {
+        // A source by its path under the game's directory, which the
+        // session finds among those it lists (D800).
+        const std::string* kAsset = textOf(parsed->find("asset"));
+        if (kAsset == nullptr || kAsset->empty() || kAsset->size() > 1024) {
+            return malformed("import settings name an asset by its path under the game's directory");
+        }
+        record.asset = *kAsset;
+        if (record.verb == SessionVerb::SetImportSettings) {
+            const Value* kSettings = parsed->find("settings");
+            if (kSettings == nullptr || kSettings->kind() != Value::Kind::Object) {
+                return malformed("set_import_settings gives the settings to change, an object");
+            }
+            record.settings = *kSettings;
         }
         return record;
     }

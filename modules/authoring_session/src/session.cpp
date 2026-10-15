@@ -19,12 +19,14 @@
 #include "rawframe/authoring_session/link.h"
 #include "rawframe/base/bits128.h"
 #include "rawframe/content/sidecar.h"
+#include "rawframe/cook/importers.h"
 #include "rawframe/document/json.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world_kest/game_files.h"
 #include "references.h"
 #include "replies.h"
+#include "settings.h"
 #include "viewing.h"
 
 #include <algorithm>
@@ -176,6 +178,10 @@ private:
             RAWFRAME_TRY(load());
             return importedOf(kMade);
         }
+        case authoring::SessionVerb::ImportSettings:
+            return importSettingsOf(game_, record.asset, importers_);
+        case authoring::SessionVerb::SetImportSettings:
+            return setImportSettings(game_, record.asset, record.settings, importers_);
         case authoring::SessionVerb::Cancel: {
             Value made = Value::object();
             made.add("kind", Value::string("authoring.cancelling"));
@@ -777,6 +783,9 @@ private:
     /// runs (D502).
     std::filesystem::path cook_;
     Cooking cooking_;
+    /// The engine's importers, which describe and check a source's settings
+    /// (D800); materials need no toolchain for that.
+    std::vector<cook::Importer> importers_ = cook::engineImporters();
     /// The style sheets, UI documents, and material instances records name
     /// (D636, D641, D721).
     Documents<authoring::AuthoredStyles> sheets_;
