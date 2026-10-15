@@ -495,6 +495,27 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"source", "as"}),
                                annotationsOf(false, false)));
     }
+    // What a source uses and what uses it, by the last cook (D803).
+    {
+        Value properties = Value::object();
+        properties.add("asset", property("string", false, "The source's path under the game's directory."));
+        tools.push_back(toolOf("asset_references",
+                               "The sources a source read to cook, and those that read it, by the session's last "
+                               "cook; cook first.",
+                               schemaOf(std::move(properties), {"asset"}),
+                               annotationsOf(true, false)));
+    }
+    // A texture's thumbnail from the session's last cook (D801).
+    {
+        Value properties = Value::object();
+        properties.add("asset", property("string", false, "The texture's path under the game's directory."));
+        properties.add("size", property("integer", false, "The most pixels on the longer side, 16 to 256."));
+        tools.push_back(toolOf("asset_thumbnail",
+                               "Where the session's last cook holds a texture, and which of its levels is the "
+                               "first no larger than the size asked; cook first.",
+                               schemaOf(std::move(properties), {"asset", "size"}),
+                               annotationsOf(true, false)));
+    }
     // A source's import settings, read and set (D800).
     {
         Value properties = Value::object();
@@ -639,6 +660,13 @@ McpBridge::State::callSession(const Value& id, std::string_view name, const Valu
         made = record("authoring.import", recordId);
         copy("source", "source");
         copy("as", "as");
+    } else if (name == "asset_references") {
+        made = record("authoring.asset_references", recordId);
+        copy("asset", "asset");
+    } else if (name == "asset_thumbnail") {
+        made = record("authoring.thumbnail", recordId);
+        copy("asset", "asset");
+        copy("size", "size");
     } else if (name == "asset_import_settings" || name == "asset_set_import_settings") {
         made = record(name == "asset_import_settings" ? "authoring.import_settings" : "authoring.set_import_settings",
                       recordId);

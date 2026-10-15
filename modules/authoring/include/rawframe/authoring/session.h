@@ -128,6 +128,10 @@ enum class SessionVerb : std::uint8_t {
     /// (D800); and settings given it, its importer's to accept.
     ImportSettings,
     SetImportSettings,
+    /// A source's thumbnail from the session's last cook (D801).
+    Thumbnail,
+    /// What a source uses and what uses it, by the last cook (D803).
+    AssetReferences,
     /// One atomic request over several scenes, one transaction (D497).
     ApplyTogether,
     /// The game's directory cooked, as a long-running operation (D502).
@@ -212,6 +216,8 @@ struct SessionRecord {
     /// the settings given it, an object (D800).
     std::string asset;
     document::Value settings;
+    /// Thumbnail's: the most pixels on its longer side, 16 to 256 (D801).
+    std::uint32_t size = 64;
 };
 
 /// Reads one record; refuses (`ValidationFailed`) anything out of the form

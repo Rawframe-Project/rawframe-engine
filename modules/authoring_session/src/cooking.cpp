@@ -109,6 +109,7 @@ result::Status Cooking::start(const document::Value& id,
     }
     child_ = std::move(*child);
     id_ = id;
+    output_ = output;
     read_ = 0;
     partial_.clear();
     stopping_.clear();
@@ -209,6 +210,7 @@ std::vector<std::string> Cooking::poll(bool& failed) {
         return said;
     }
     if (*kExit == 0 && accounted_) {
+        lastCooked_ = output_;
         Value made = Value::object();
         made.add("kind", Value::string("authoring.cooked"));
         made.add("cooked", Value::integer(static_cast<std::int64_t>(cooked_)));

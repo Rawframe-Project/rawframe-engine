@@ -31,6 +31,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.assets","id":10}'
+    echo '{"kind":"authoring.thumbnail","id":12,"asset":"paving.png","size":64}'
     echo '{"kind":"authoring.cook","id":2,"output":"'"$work/content"'","cache":"'"$work/cache"'"}'
     echo '{"kind":"authoring.cook","id":3,"output":"'"$work/other"'","cache":null}'
     echo '{"kind":"authoring.cancel","id":4,"operation":"none"}'
@@ -42,6 +43,10 @@ reply() { grep "\"id\":$1," "$work/replies"; }
         sleep 0.1
     done
     echo '{"kind":"authoring.assets","id":11}'
+    echo '{"kind":"authoring.thumbnail","id":13,"asset":"paving.png","size":64}'
+    echo '{"kind":"authoring.thumbnail","id":14,"asset":"gate.scene","size":64}'
+    echo '{"kind":"authoring.asset_references","id":15,"asset":"paving.png"}'
+    echo '{"kind":"authoring.asset_references","id":16,"asset":"crate.gltf"}'
     echo '{"kind":"authoring.end","id":5}'
 } | "$author" session "$game" --cook "$cook" >"$work/replies" || true
 steps=$(grep -c '"kind":"authoring.progress","id":2,' "$work/replies")
@@ -56,6 +61,16 @@ reply 10 | grep -q '{"path":"blade/rig.rfanim","folder":"blade","importer":"rawf
 reply 10 | grep -q '{"path":"gate.scene","folder":"","importer":"rawframe.scene","id":"[0-9a-f]\{32\}","cook":"unknown"}'
 [[ $(reply 11 | grep -o '"cook":"cooked"' | wc -l) -eq $steps ]]
 reply 11 | grep -q '{"path":"gate.scene","folder":"","importer":"rawframe.scene","id":"[0-9a-f]\{32\}","cook":"cooked"}'
+# A texture's thumbnail once the game has cooked, the first level no wider
+# than 64 pixels, in the cooked object named; a scene has none (D801).
+reply 12 | grep -q '"code":"target_not_found"'
+reply 13 | grep -q '"answer":{"kind":"authoring.thumbnail","asset":"paving.png","object":"[^"]*/content/objects/[0-9a-f]\{64\}","level":[1-9][0-9]*,"width":64,"height":64}'
+reply 14 | grep -q '"code":"unsupported_operation"'
+# The paving read by the game's description, which declares it; the crate's
+# glTF reading its picture, which has no sidecar of its own, and read by the
+# description (D803).
+reply 15 | grep -q '"answer":{"kind":"authoring.asset_references","asset":"paving.png","uses":\[\],"usedBy":\[[^]]*"plaza.game"'
+reply 16 | grep -q '"uses":\["crate.png"\],"usedBy":\["plaza.game"\]}'
 [[ -s "$work/content/content.manifest" && -s "$work/content/cook.receipt" && -s "$work/content/cook.log" ]]
 
 # Again from the cache: every source reused. Then a cook stopped as asked,

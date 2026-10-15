@@ -102,6 +102,17 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     RAWFRAME_EXPECT(
         !readSessionRecord(R"({"kind":"authoring.set_import_settings","id":13,"asset":"paving.png","settings":[]})", id)
              .has_value());
+    // A thumbnail of 16 to 256 pixels (D801).
+    const auto kThumbnail =
+        readSessionRecord(R"({"kind":"authoring.thumbnail","id":14,"asset":"paving.png","size":64})", id);
+    RAWFRAME_EXPECT(kThumbnail.has_value() && kThumbnail->verb == SessionVerb::Thumbnail && kThumbnail->size == 64);
+    RAWFRAME_EXPECT(
+        !readSessionRecord(R"({"kind":"authoring.thumbnail","id":14,"asset":"paving.png","size":8})", id).has_value());
+    // A source's references by its path (D803).
+    const auto kReferences =
+        readSessionRecord(R"({"kind":"authoring.asset_references","id":15,"asset":"crate.png"})", id);
+    RAWFRAME_EXPECT(kReferences.has_value() && kReferences->verb == SessionVerb::AssetReferences &&
+                    kReferences->asset == "crate.png");
     // Overlays by their names, bounded only (D798).
     const auto kOverlays =
         readSessionRecord(R"({"kind":"authoring.overlays","id":11,"scene":"b.scene","overlays":["colliders"]})", id);

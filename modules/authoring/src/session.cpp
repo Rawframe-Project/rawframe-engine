@@ -30,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 29> kVerbs = {
+constexpr std::array<VerbName, 31> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -55,6 +55,8 @@ constexpr std::array<VerbName, 29> kVerbs = {
     VerbName{.kind = "authoring.overlays", .verb = SessionVerb::Overlays},
     VerbName{.kind = "authoring.import_settings", .verb = SessionVerb::ImportSettings},
     VerbName{.kind = "authoring.set_import_settings", .verb = SessionVerb::SetImportSettings},
+    VerbName{.kind = "authoring.thumbnail", .verb = SessionVerb::Thumbnail},
+    VerbName{.kind = "authoring.asset_references", .verb = SessionVerb::AssetReferences},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
@@ -103,8 +105,10 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::ApplyTogether:
     case SessionVerb::Cancel:
     case SessionVerb::ImportSettings:
+    case SessionVerb::AssetReferences:
         return Members{.required = 1, .optional = 0};
     case SessionVerb::SetImportSettings:
+    case SessionVerb::Thumbnail:
         return Members{.required = 2, .optional = 0};
     }
     return {};
@@ -254,7 +258,20 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         }
         return record;
     }
+    case SessionVerb::Thumbnail: {
+        const std::string* kAsset = textOf(parsed->find("asset"));
+        const Value* kSize = parsed->find("size");
+        const std::optional<std::int64_t> kPixels = kSize != nullptr ? kSize->integer() : std::nullopt;
+        if (kAsset == nullptr || kAsset->empty() || kAsset->size() > 1024 || !kPixels.has_value() || *kPixels < 16 ||
+            *kPixels > 256) {
+            return malformed("thumbnail names an asset by its path and a size of 16 to 256 pixels");
+        }
+        record.asset = *kAsset;
+        record.size = static_cast<std::uint32_t>(*kPixels);
+        return record;
+    }
     case SessionVerb::ImportSettings:
+    case SessionVerb::AssetReferences:
     case SessionVerb::SetImportSettings: {
         // A source by its path under the game's directory, which the
         // session finds among those it lists (D800).

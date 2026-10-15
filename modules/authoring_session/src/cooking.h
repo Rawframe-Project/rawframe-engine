@@ -79,6 +79,12 @@ public:
         return sources_;
     }
 
+    /// Where the last cook that ended cooked put its content (D801), if
+    /// one has.
+    [[nodiscard]] const std::optional<std::filesystem::path>& lastCooked() const noexcept {
+        return lastCooked_;
+    }
+
 private:
     std::filesystem::path program_;
     std::optional<process::Child> child_;
@@ -96,6 +102,8 @@ private:
     /// Why it was asked to stop, if it was: `requested` or `ended`.
     std::string stopping_;
     std::map<std::string, SourceCooked, std::less<>> sources_;
+    std::filesystem::path output_;
+    std::optional<std::filesystem::path> lastCooked_;
 };
 
 } // namespace rawframe::authoring_session

@@ -1,5 +1,6 @@
 #include "rawframe/authoring_session/session.h"
 
+#include "asset_references.h"
 #include "bookmarks.h"
 #include "cooking.h"
 #include "documents.h"
@@ -27,6 +28,7 @@
 #include "references.h"
 #include "replies.h"
 #include "settings.h"
+#include "thumbnails.h"
 #include "viewing.h"
 
 #include <algorithm>
@@ -182,6 +184,10 @@ private:
             return importSettingsOf(game_, record.asset, importers_);
         case authoring::SessionVerb::SetImportSettings:
             return setImportSettings(game_, record.asset, record.settings, importers_);
+        case authoring::SessionVerb::Thumbnail:
+            return thumbnailOf(game_, record.asset, cooking_.lastCooked(), record.size);
+        case authoring::SessionVerb::AssetReferences:
+            return assetReferencesOf(game_, record.asset, cooking_.lastCooked());
         case authoring::SessionVerb::Cancel: {
             Value made = Value::object();
             made.add("kind", Value::string("authoring.cancelling"));
