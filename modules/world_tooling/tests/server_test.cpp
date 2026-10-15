@@ -238,8 +238,13 @@ public:
         split_ = others;
         return true;
     }
+    bool overlay(const std::vector<std::string>& overlays) override {
+        overlays_ = overlays;
+        return true;
+    }
     std::optional<Look> kept;
     std::vector<Look> split_;
+    std::vector<std::string> overlays_;
 };
 
 } // namespace
@@ -297,6 +302,21 @@ RAWFRAME_TEST(LookingMovesThePreviewUnderTheViewGrant) {
         preview.split_.size() == 1 && preview.split_[0].eye == (std::array<double, 3>{0, 9, 0.1}));
     RAWFRAME_EXPECT(provider.sent[1].find(R"("id":8,"error":{"code":"malformed")") != std::string::npos &&
                     preview.split_.size() == 1);
+    // Overlays by their names, handed on (D798); a name that is no text
+    // refused.
+    provider.say(1,
+                 R"({"kind":"tooling.overlays","id":9,"overlays":["colliders","lights"]})"
+                 "\n");
+    server->serve(nullptr, {}, {});
+    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":9,"answer":{"kind":"tooling.overlays","shown":true})") !=
+                        std::string::npos &&
+                    (preview.overlays_ == std::vector<std::string>{"colliders", "lights"}));
+    provider.say(1,
+                 R"({"kind":"tooling.overlays","id":10,"overlays":[1]})"
+                 "\n");
+    server->serve(nullptr, {}, {});
+    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":10,"error":{"code":"malformed")") != std::string::npos &&
+                    preview.overlays_.size() == 2);
     // Granted but with no preview here: not found.
     FedProvider other;
     auto bare = *ToolingServer::create(other, {.token = kToken, .grants = {.view = true}});

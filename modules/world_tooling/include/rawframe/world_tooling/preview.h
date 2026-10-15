@@ -12,6 +12,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -97,6 +98,12 @@ public:
     /// at most three, none for the one look (D797); whether the Runtime
     /// splits its preview.
     virtual bool split(const std::vector<Look>& /*others*/) {
+        return false;
+    }
+    /// Draws the overlays named `overlays` over the preview (D798), the
+    /// names the Runtime's renderer owns, none for none; whether it knows
+    /// them all and draws them.
+    virtual bool overlay(const std::vector<std::string>& /*overlays*/) {
         return false;
     }
     /// Draws the preview in the view mode named `mode` (D794), the names

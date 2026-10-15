@@ -175,6 +175,19 @@ public:
         camera.split(std::move(made));
         return true;
     }
+    /// What is drawn over the scene, by the overlays' names (D798).
+    bool overlay(const std::vector<std::string>& overlays) override {
+        std::uint8_t bits = 0;
+        for (const std::string& kName : overlays) {
+            const std::optional<view::Overlay> kOverlay = view::overlayNamed(kName);
+            if (!kOverlay.has_value()) {
+                return false;
+            }
+            bits |= static_cast<std::uint8_t>(*kOverlay);
+        }
+        camera.overlay(bits);
+        return true;
+    }
     /// How the scene is drawn, by the view mode's name (D794).
     bool viewMode(std::string_view mode) override {
         const std::optional<view::ViewMode> kMode = view::viewModeNamed(mode);

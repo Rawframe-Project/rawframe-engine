@@ -618,6 +618,35 @@ struct ToolingServer::State {
             send(connection, client, replyLine(id, "answer", std::move(made)));
             return;
         }
+        if (kind != nullptr && *kind == "tooling.overlays") {
+            // What the preview draws over its scene (D798): the view's.
+            // The names are the renderer's; this only bounds them.
+            if (!settings.grants.view) {
+                send(connection, client, errorLine(id, ToolingError::NotGranted, "overlays need the view grant"));
+                return;
+            }
+            const Value* kOverlays = parsed->find("overlays");
+            std::vector<std::string> names;
+            bool sound =
+                kOverlays != nullptr && kOverlays->kind() == Value::Kind::Array && kOverlays->items().size() <= 8;
+            for (std::size_t at = 0; sound && at < kOverlays->items().size(); ++at) {
+                const Value& kItem = kOverlays->items()[at];
+                const std::string* kName = kItem.kind() == Value::Kind::String ? kItem.text() : nullptr;
+                sound = kName != nullptr && !kName->empty() && kName->size() <= 32;
+                if (sound) {
+                    names.push_back(*kName);
+                }
+            }
+            if (!sound) {
+                send(connection, client, errorLine(id, ToolingError::Malformed, "overlays are at most 8 names"));
+                return;
+            }
+            Value made = Value::object();
+            made.add("kind", Value::string("tooling.overlays"));
+            made.add("shown", Value::boolean(settings.previewer != nullptr && settings.previewer->overlay(names)));
+            send(connection, client, replyLine(id, "answer", std::move(made)));
+            return;
+        }
         if (kind != nullptr && *kind == "tooling.view_mode") {
             // How the preview is drawn (D794): the view's. The names are
             // the renderer's; this only bounds the text.
