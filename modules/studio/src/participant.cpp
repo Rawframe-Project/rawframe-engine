@@ -375,7 +375,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("locks", locks_),
                   diagnostics::field("lockRefused", lockRefused_),
                   diagnostics::field("hiddenTold", layersHidden_)});
-    // What the viewport showed (D789).
+    // What the viewport showed (D789), and how it drew (D794).
     emitter_.log(diagnostics::Severity::Info,
                  kViewported,
                  "what Studio's viewport showed",
@@ -384,7 +384,9 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("inputs", inputsForwarded_),
                   diagnostics::field("inputsTaken", inputsTaken_),
                   diagnostics::field("width", picture_ != nullptr ? std::uint64_t{picture_->levels[0].width} : 0),
-                  diagnostics::field("height", picture_ != nullptr ? std::uint64_t{picture_->levels[0].height} : 0)});
+                  diagnostics::field("height", picture_ != nullptr ? std::uint64_t{picture_->levels[0].height} : 0),
+                  diagnostics::field("mode", std::string_view{viewMode_}),
+                  diagnostics::field("modesShown", modesShown_)});
     // And what the start screen did (D781): the games made from templates,
     // the game Studio ended on, if any, and the games kept as opened last.
     emitter_.log(diagnostics::Severity::Info,

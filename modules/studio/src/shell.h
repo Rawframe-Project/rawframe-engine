@@ -232,6 +232,8 @@ private:
 
     /// The layers hidden told to the preview of the scene shown (D791).
     void tellHidden();
+    /// Tells the preview the view mode (D794).
+    void tellViewMode();
 
     /// The locked layer's name `entity` is on, none if it is on no locked
     /// one.
@@ -948,6 +950,10 @@ private:
     /// The layers the preview leaves out (D791), told it as they change
     /// and as it is attached, and how many times it was told.
     std::vector<std::uint32_t> hiddenLayers_;
+    /// How the preview draws, by the renderer's name (D794), and how many
+    /// times a preview took it.
+    std::string viewMode_ = "lit";
+    std::uint64_t modesShown_ = 0;
     std::uint64_t layersHidden_ = 0;
     /// The layer each entity in `entities_` is on, nought for none.
     std::vector<std::uint32_t> entityLayers_;

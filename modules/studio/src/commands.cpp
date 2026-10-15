@@ -44,6 +44,10 @@ constexpr std::string_view kFrame = "Frame chosen";
 constexpr std::string_view kFlat = "2D view";
 constexpr std::string_view kTilted = "3D view";
 
+/// How the preview draws (D794), each by the renderer's name for it.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 3> kModes = {
+    {{"Lit", "lit"}, {"Unlit", "unlit"}, {"Normals", "normals"}}};
+
 /// What the palette's field reads while it does not hold the keyboard.
 constexpr std::string_view kPaletteHint = "commands  Ctrl+K";
 
@@ -102,6 +106,9 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     commands_.push_back(Command{.name = std::string{kFrame}, .menu = "View", .keys = kKeys(kFrame, {"F"})});
     commands_.push_back(Command{.name = std::string{kFlat}, .menu = "View", .keys = kKeys(kFlat, {"Ctrl+2"})});
     commands_.push_back(Command{.name = std::string{kTilted}, .menu = "View", .keys = kKeys(kTilted, {"Ctrl+3"})});
+    for (const auto& [kName, kMode] : kModes) {
+        commands_.push_back(Command{.name = std::string{kName}, .menu = "View", .keys = kKeys(kName, {})});
+    }
     // The palette's field, as a field named "commands" is read (D575).
     RAWFRAME_TRY_ASSIGN(const ui::Node kSearch, tree_->addEditable(++keys_));
     RAWFRAME_TRY(tree_->setLayout(
@@ -130,6 +137,14 @@ bool ShellParticipant::runCommand(std::string_view name) {
     }
     if (kCommand->name == kFlat || kCommand->name == kTilted) {
         seeIn2D(kCommand->name == kFlat);
+        return true;
+    }
+    if (const auto kMode =
+            std::ranges::find(kModes, kCommand->name, &std::pair<std::string_view, std::string_view>::first);
+        kMode != kModes.end()) {
+        viewMode_ = std::string{kMode->second};
+        tellViewMode();
+        say(viewMode_ + " view");
         return true;
     }
     if (kCommand->name == kPreferences) {

@@ -263,6 +263,8 @@ readRecord(std::int64_t id, std::string_view scene, std::string_view operation, 
 /// else from above and behind the target as far; none for a view that
 /// does not read.
 [[nodiscard]] std::optional<Value> flatView(const std::optional<Value>& view, bool flat);
+/// `authoring.view_mode` of `scene` (D794): its preview drawn in `mode`.
+[[nodiscard]] Value viewModeRecord(std::int64_t id, std::string_view scene, std::string_view mode);
 /// `authoring.frame` of `scene` (D792): its view turned on what is chosen.
 [[nodiscard]] Value frameRecord(std::int64_t id, std::string_view scene);
 /// `authoring.undo` or `authoring.redo` (`kind`) of `scene`.

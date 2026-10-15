@@ -786,6 +786,23 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"cooked .*saw studio_previewing.*\"code\":\"studio_said\"[^\n]*\"status\":\"cooked [1-9][0-9]* sources, 0 reused\".*\"code\":\"scene_summary\"[^\n]*\"gameMeshes\":[1-9][0-9]*,[^\n]*\"texturesReady\":[1-9][0-9]*,")
+        # A view mode (D794): Plaza played in the viewport and drawn unlit
+        # from the View menu, which its client's preview takes.
+        add_test(NAME studio_view_modes
+                 COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.play_in_viewport = true"
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
+                         @View @Unlit "until=studio_said,status=\"unlit view" wait=2 @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_view_modes PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             PROCESSORS 3
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "saw studio_said,status=\"unlit view.*\"code\":\"studio_viewport\"[^\n]*\"mode\":\"unlit\",\"modesShown\":[1-9]")
         # A 2D game seen in 2D (D793): Runners played in the viewport, the
         # view seen in 2D from the View menu, and the client's canvas drawn
         # from where the preview's eye is, not the player's camera.

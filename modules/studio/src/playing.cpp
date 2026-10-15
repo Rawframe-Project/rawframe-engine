@@ -376,6 +376,10 @@ void ShellParticipant::attachPreview() {
         if (!hiddenLayers_.empty()) {
             tellHidden();
         }
+        // And drawn as it was asked to be (D794).
+        if (viewMode_ != "lit") {
+            tellViewMode();
+        }
     }
 }
 
