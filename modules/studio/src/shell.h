@@ -129,7 +129,9 @@ struct FieldRow {
         /// A command's keys, `field` its name, and the editor's command, in
         /// the Preferences dialog (D782).
         Shortcut,
-        Editor
+        Editor,
+        /// A chosen source's import setting, `field` its name (D800).
+        ImportSetting
     };
     ui::Node value{};
     Role role = Role::Field;
@@ -248,6 +250,10 @@ private:
     result::Status showBrowser();
     result::Status showSources();
     bool pressBrowser(ui::Node node);
+    /// The chosen source's import settings in the Inspector, one set, and
+    /// the source cooked again (D800).
+    void showImportSettings();
+    void setImportSetting(const FieldRow& row, const std::string& text);
 
     /// The locked layer's name `entity` is on, none if it is on no locked
     /// one.
@@ -975,16 +981,7 @@ private:
     /// shows: when its file was written, its sequence, and how many were
     /// shown (D789).
     ui::Node viewport_{};
-    bool playInViewport_ = false;
-    std::shared_ptr<const texture::Texture> picture_;
-    std::optional<std::filesystem::file_time_type> pictureWritten_;
-    std::uint64_t pictureSequence_ = 0;
-    std::uint64_t picturesShown_ = 0;
-    /// What lands on the viewport while the game plays there, handed to
-    /// it: how many events, and how many records the preview took (D790).
-    world_tooling::Forwarding* forwarding_ = nullptr;
-    std::uint64_t inputsForwarded_ = 0;
-    std::uint64_t inputsTaken_ = 0;
+    PlayedViewport inViewport_;
     std::vector<ui::Node> sceneRows_;
     std::vector<ui::Node> entityRows_;
     std::vector<ui::Node> componentRows_;

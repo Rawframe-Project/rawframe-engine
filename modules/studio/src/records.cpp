@@ -271,6 +271,23 @@ Value assetsRecord(std::int64_t id) {
     return record;
 }
 
+Value importSettingsRecord(std::int64_t id, std::string_view asset) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.import_settings"));
+    record.add("id", Value::integer(id));
+    record.add("asset", Value::string(std::string{asset}));
+    return record;
+}
+
+Value setImportSettingsRecord(std::int64_t id, std::string_view asset, Value settings) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.set_import_settings"));
+    record.add("id", Value::integer(id));
+    record.add("asset", Value::string(std::string{asset}));
+    record.add("settings", std::move(settings));
+    return record;
+}
+
 std::vector<Asset> assetsOf(std::string_view reply) {
     std::vector<Asset> made;
     const auto kParsed = document::parse(reply);

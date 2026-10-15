@@ -85,6 +85,10 @@ struct Asset {
 /// `authoring.assets`, and the assets its answer lists; none for a refusal
 /// or an entry out of shape.
 [[nodiscard]] Value assetsRecord(std::int64_t id);
+/// `authoring.import_settings` of the source at `asset`, and
+/// `authoring.set_import_settings` giving it `settings` (D800).
+[[nodiscard]] Value importSettingsRecord(std::int64_t id, std::string_view asset);
+[[nodiscard]] Value setImportSettingsRecord(std::int64_t id, std::string_view asset, Value settings);
 [[nodiscard]] std::vector<Asset> assetsOf(std::string_view reply);
 
 /// The asset an unsigned field's value names, its number as the scene

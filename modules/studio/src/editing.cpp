@@ -490,6 +490,10 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
         setOverride(text);
         return;
     }
+    if (row.role == FieldRow::Role::ImportSetting) {
+        setImportSetting(row, text);
+        return;
+    }
     if (row.role == FieldRow::Role::GraphParam || row.role == FieldRow::Role::GraphInput) {
         setGraphMember(row, text);
         return;

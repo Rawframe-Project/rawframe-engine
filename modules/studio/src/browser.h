@@ -8,6 +8,7 @@
 
 #include "rawframe/ui/tree.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -52,6 +53,11 @@ struct AssetBrowser {
     std::vector<std::pair<ui::Node, std::string>> folderRows;
     std::vector<std::pair<ui::Node, std::string>> sourceRows;
     std::vector<ui::Node> boxes;
+    /// The Inspector's Reimport for the chosen source, and how many times
+    /// its settings were set and refused (D800).
+    ui::Node reimport{};
+    std::uint64_t settingsSet = 0;
+    std::uint64_t settingsRefused = 0;
     /// How many times a source was chosen, and the folder and kind narrowed.
     std::uint64_t chosenCount = 0;
     std::uint64_t narrowed = 0;

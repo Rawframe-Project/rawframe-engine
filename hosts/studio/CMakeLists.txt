@@ -816,7 +816,24 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_browses_assets PROPERTIES
                              PASS_REGULAR_EXPRESSION
-                             "saw studio_said,status=\"paving.png: texture, cooked.*\"code\":\"studio_assets\"[^\n]*\"sources\":[1-9][0-9]*,\"sourcesChosen\":2,\"narrowed\":1,\"chosen\":\"paving.png\"}")
+                             "saw studio_said,status=\"paving.png: texture, cooked.*\"code\":\"studio_assets\"[^\n]*\"sources\":[1-9][0-9]*,\"sourcesChosen\":2,\"narrowed\":1,\"chosen\":\"paving.png\",")
+        # Import settings (D800): Plaza's paving chosen in the browser, its
+        # texture's exact set false in the Inspector, then cooked again by
+        # Reimport.
+        add_test(NAME studio_sets_import_settings
+                 COMMAND ${CMAKE_COMMAND} -E env STUDIO_COOK=$<TARGET_FILE:rawframe_host_cook_tool>
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game /dev/null /dev/null
+                         @Textures "until=studio_said,status=\"Textures in all folders"
+                         @paving.png "until=studio_said,status=\"paving.png: texture"
+                         "@exact#2:false" "until=studio_said,status=\"paving.png: exact set"
+                         @Reimport "until=studio_said,status=\"cooked "
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_sets_import_settings PROPERTIES
+                             PASS_REGULAR_EXPRESSION
+                             "saw studio_said,status=\"cooked .*\"code\":\"studio_assets\"[^\n]*\"settingsSet\":1,\"settingsRefused\":0")
         # A view mode (D794): Plaza played in the viewport and drawn unlit
         # from the View menu, which its client's preview takes.
         add_test(NAME studio_view_modes

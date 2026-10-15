@@ -9,13 +9,21 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <set>
+#include <span>
 
 namespace rawframe::studio {
 
 namespace {
 
 using document::Value;
+
+/// A setting's value as a field shows it: a text as it is, anything else
+/// as JSON.
+std::string shownText(const Value& value) {
+    return value.text() != nullptr ? *value.text() : document::writeCompact(value);
+}
 
 /// What `cook` says shown beside a source.
 std::string_view cookWords(std::string_view cook) {
@@ -176,6 +184,14 @@ result::Status ShellParticipant::showSources() {
 }
 
 bool ShellParticipant::pressBrowser(ui::Node node) {
+    // The chosen source cooked again, its settings as the sidecar now has
+    // them (D800): the game's cook, which reuses every other source.
+    if (node == browser_.reimport && browser_.reimport != ui::Node{}) {
+        if (!cooking_.has_value()) {
+            cookOrStop();
+        }
+        return true;
+    }
     const auto kNarrow = [&](std::vector<std::pair<ui::Node, std::string>>& rows, std::optional<std::string>& into) {
         const auto kFound = std::ranges::find(rows, node, &std::pair<ui::Node, std::string>::first);
         if (kFound == rows.end()) {
@@ -197,6 +213,7 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
     }
     browser_.chosen = kSource->second;
     ++browser_.chosenCount;
+    showImportSettings();
     for (const auto& [kRowNode, kPath] : browser_.sourceRows) {
         static_cast<void>(
             tree_->setLook(kRowNode, ui::Look{.fill = kPath == browser_.chosen ? kChosen : kRow, .radius = 4}));
@@ -206,6 +223,90 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
             (kListed->problem.empty() ? "" : ": " + kListed->problem));
     }
     return true;
+}
+
+void ShellParticipant::showImportSettings() {
+    endEdit();
+    clear(componentRows_);
+    actions_.clear();
+    fields_.clear();
+    browser_.reimport = ui::Node{};
+    const auto kParsed = document::parse(ask(importSettingsRecord(next(), browser_.chosen)));
+    const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* kImporter = kAnswer != nullptr ? kAnswer->find("importer") : nullptr;
+    if (kImporter == nullptr || kImporter->text() == nullptr) {
+        return;
+    }
+    const auto kHeader = row(componentsColumn_, browser_.chosen + "  " + *kImporter->text(), kText, kPanel);
+    if (kHeader.has_value()) {
+        componentRows_.push_back(*kHeader);
+    }
+    // Each setting its importer offers, as the sidecar has it or at its
+    // fallback, chosen from its choices where it has them.
+    const Value* kSettings = kAnswer->find("settings");
+    const Value* kOffereds = kAnswer->find("fields");
+    for (const Value& kOffered : kOffereds != nullptr ? kOffereds->items() : std::span<const Value>{}) {
+        const Value* kName = kOffered.find("name");
+        const Value* kType = kOffered.find("type");
+        if (kName == nullptr || kName->text() == nullptr || kType == nullptr || kType->text() == nullptr) {
+            continue;
+        }
+        const Value* kKept = kSettings != nullptr && kSettings->kind() == Value::Kind::Object
+                                 ? kSettings->find(*kName->text())
+                                 : nullptr;
+        const Value* kValue = kKept != nullptr ? kKept : kOffered.find("fallback");
+        Catalog::Field type{.name = *kName->text(), .kind = *kType->text()};
+        if (const Value* kChoices = kOffered.find("choices"); kChoices != nullptr) {
+            for (const Value& kChoice : kChoices->items()) {
+                if (kChoice.text() != nullptr) {
+                    type.cases.push_back(*kChoice.text());
+                }
+            }
+        }
+        auto line = fieldRow(
+            *kName->text(), kValue != nullptr ? shownText(*kValue) : std::string{}, std::nullopt, kKept != nullptr);
+        if (!line.has_value()) {
+            return;
+        }
+        componentRows_.push_back(line->first);
+        fields_.push_back(FieldRow{.value = line->second,
+                                   .role = FieldRow::Role::ImportSetting,
+                                   .field = *kName->text(),
+                                   .kind = *kType->text(),
+                                   .type = std::move(type)});
+    }
+    if (auto made = button(componentsColumn_, "Reimport"); made.has_value()) {
+        browser_.reimport = *made;
+        componentRows_.push_back(*made);
+    }
+}
+
+void ShellParticipant::setImportSetting(const FieldRow& row, const std::string& text) {
+    // The text as its setting's kind; the importer says whether it takes it.
+    Value value = Value::string(text);
+    if (row.kind == "truth" && (text == "true" || text == "false")) {
+        value = Value::boolean(text == "true");
+    } else if (row.kind == "integer") {
+        std::int64_t number = 0;
+        if (std::from_chars(text.data(), text.data() + text.size(), number).ec != std::errc{}) {
+            ++browser_.settingsRefused;
+            say(row.field + " is a whole number");
+            return;
+        }
+        value = Value::integer(number);
+    }
+    Value settings = Value::object();
+    settings.add(row.field, std::move(value));
+    const std::string kReply = ask(setImportSettingsRecord(next(), browser_.chosen, std::move(settings)));
+    const Answered kAnswered = answeredOf(kReply);
+    if (!kAnswered.done) {
+        ++browser_.settingsRefused;
+        say(kAnswered.message);
+        return;
+    }
+    ++browser_.settingsSet;
+    say(browser_.chosen + ": " + row.field + " set");
+    showImportSettings();
 }
 
 } // namespace rawframe::studio

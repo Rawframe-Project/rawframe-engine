@@ -57,7 +57,7 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         playDirectory_ = std::string{configuration.path("studio.play.directory").value_or("")};
         // Played in the viewport, or in the client's own window (D789),
         // the viewport by default now its input reaches the game (D790).
-        RAWFRAME_TRY_ASSIGN(playInViewport_, configuration.truth("studio.play_in_viewport", true));
+        RAWFRAME_TRY_ASSIGN(inViewport_.inViewport, configuration.truth("studio.play_in_viewport", true));
     }
     // The cook tool: named, or beside Studio, where an export puts it; the
     // content goes where the game plays (D502).
@@ -95,7 +95,7 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     }
     // What lands on the viewport, for the game played there (D790).
     if (context.has(world_tooling::kForwarding.name)) {
-        RAWFRAME_TRY_ASSIGN(forwarding_, context.capability(world_tooling::kForwarding));
+        RAWFRAME_TRY_ASSIGN(inViewport_.forwarding, context.capability(world_tooling::kForwarding));
     }
     if (context.has(view::kUiTyping.name)) {
         RAWFRAME_TRY_ASSIGN(typing_, context.capability(view::kUiTyping));
@@ -379,23 +379,25 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("lockRefused", lockRefused_),
                   diagnostics::field("hiddenTold", shown_.layersHidden)});
     // What the viewport showed (D789), and how it drew (D794).
-    emitter_.log(diagnostics::Severity::Info,
-                 kViewported,
-                 "what Studio's viewport showed",
-                 {diagnostics::field("inViewport", playInViewport_),
-                  diagnostics::field("pictures", picturesShown_),
-                  diagnostics::field("inputs", inputsForwarded_),
-                  diagnostics::field("inputsTaken", inputsTaken_),
-                  diagnostics::field("width", picture_ != nullptr ? std::uint64_t{picture_->levels[0].width} : 0),
-                  diagnostics::field("height", picture_ != nullptr ? std::uint64_t{picture_->levels[0].height} : 0),
-                  diagnostics::field("mode", std::string_view{shown_.viewMode}),
-                  diagnostics::field("modesShown", shown_.modesShown),
-                  diagnostics::field("bookmarksKept", shown_.bookmarksKept),
-                  diagnostics::field("bookmarksVisited", shown_.bookmarksVisited),
-                  diagnostics::field("views", static_cast<std::uint64_t>(shown_.views)),
-                  diagnostics::field("splitsShown", shown_.splitsShown),
-                  diagnostics::field("overlays", static_cast<std::uint64_t>(shown_.overlays.size())),
-                  diagnostics::field("overlaysShown", shown_.overlaysShown)});
+    emitter_.log(
+        diagnostics::Severity::Info,
+        kViewported,
+        "what Studio's viewport showed",
+        {diagnostics::field("inViewport", inViewport_.inViewport),
+         diagnostics::field("pictures", inViewport_.picturesShown),
+         diagnostics::field("inputs", inViewport_.inputsForwarded),
+         diagnostics::field("inputsTaken", inViewport_.inputsTaken),
+         diagnostics::field("width", inViewport_.picture != nullptr ? std::uint64_t{inViewport_.picture->levels[0].width} : 0),
+         diagnostics::field("height",
+                            inViewport_.picture != nullptr ? std::uint64_t{inViewport_.picture->levels[0].height} : 0),
+         diagnostics::field("mode", std::string_view{shown_.viewMode}),
+         diagnostics::field("modesShown", shown_.modesShown),
+         diagnostics::field("bookmarksKept", shown_.bookmarksKept),
+         diagnostics::field("bookmarksVisited", shown_.bookmarksVisited),
+         diagnostics::field("views", static_cast<std::uint64_t>(shown_.views)),
+         diagnostics::field("splitsShown", shown_.splitsShown),
+         diagnostics::field("overlays", static_cast<std::uint64_t>(shown_.overlays.size())),
+         diagnostics::field("overlaysShown", shown_.overlaysShown)});
     // And what the asset browser showed (D799).
     emitter_.log(diagnostics::Severity::Info,
                  kBrowsed,
@@ -403,7 +405,9 @@ void ShellParticipant::stop() noexcept {
                  {diagnostics::field("sources", static_cast<std::uint64_t>(browser_.sources.size())),
                   diagnostics::field("sourcesChosen", browser_.chosenCount),
                   diagnostics::field("narrowed", browser_.narrowed),
-                  diagnostics::field("chosen", std::string_view{browser_.chosen})});
+                  diagnostics::field("chosen", std::string_view{browser_.chosen}),
+                  diagnostics::field("settingsSet", browser_.settingsSet),
+                  diagnostics::field("settingsRefused", browser_.settingsRefused)});
     // And what the start screen did (D781): the games made from templates,
     // the game Studio ended on, if any, and the games kept as opened last.
     emitter_.log(diagnostics::Severity::Info,
@@ -435,7 +439,7 @@ void ShellParticipant::resize(std::uint32_t width, std::uint32_t height, bool /*
 
 std::shared_ptr<const texture::Texture> ShellParticipant::image(std::uint64_t id) const {
     // The played game's picture, in the viewport (D789).
-    return id == kViewportImage ? picture_ : nullptr;
+    return id == kViewportImage ? inViewport_.picture : nullptr;
 }
 
 namespace {
