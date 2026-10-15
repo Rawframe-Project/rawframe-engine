@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -26,6 +27,19 @@ namespace rawframe::view {
 /// the pieces it is drawn in.
 inline constexpr double kMarkRingRadius = 1.25;
 inline constexpr std::size_t kMarkRingPieces = 48;
+
+/// How a preview's scene is drawn (D794): lit as the game is, its
+/// surfaces' own colors unlit, or their normals as colors. Named by
+/// `viewModeNamed`'s names, which are what a tool sends.
+enum class ViewMode : std::uint8_t {
+    Lit,
+    Unlit,
+    Normals
+};
+
+/// The view mode named `name` ("lit", "unlit", "normals"), none for
+/// another.
+[[nodiscard]] std::optional<ViewMode> viewModeNamed(std::string_view name) noexcept;
 
 /// A part of a mark: none, an axis (X, Y, Z), or the ring (D468).
 enum class MarkPart : std::uint8_t {
@@ -77,6 +91,14 @@ public:
     }
     [[nodiscard]] const std::vector<std::uint32_t>& hidden() const noexcept {
         return hidden_;
+    }
+
+    /// How the preview's scene is drawn while it looks (D794).
+    void show(ViewMode mode) noexcept {
+        mode_ = mode;
+    }
+    [[nodiscard]] ViewMode mode() const noexcept {
+        return mode_;
     }
 
     /// Where the pointer is while the preview looks, as its ray, none once
@@ -170,6 +192,7 @@ private:
     std::optional<Ray> lastRelease_;
     std::uint64_t releases_ = 0;
     std::vector<std::uint32_t> hidden_;
+    ViewMode mode_ = ViewMode::Lit;
 };
 
 inline constexpr composition::Capability<PreviewCamera> kPreviewCamera{"rawframe.view.preview_camera"};

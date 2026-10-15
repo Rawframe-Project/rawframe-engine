@@ -1,5 +1,7 @@
 #include "rawframe/view/view.h"
 
+#include "rawframe/view/preview.h"
+
 #include <algorithm>
 #include <cmath>
 #include <numbers>
@@ -162,6 +164,19 @@ worldToPoint(const Orthographic& view, ViewSize size, const std::array<double, 2
     const double kHalfWidth = kHalfHeight * size.width / size.height;
     return ViewPoint{.x = static_cast<float>(((world[0] - view.middle[0]) / kHalfWidth + 1) / 2 * size.width),
                      .y = static_cast<float>((1 - ((world[1] - view.middle[1]) / kHalfHeight)) / 2 * size.height)};
+}
+
+std::optional<ViewMode> viewModeNamed(std::string_view name) noexcept {
+    if (name == "lit") {
+        return ViewMode::Lit;
+    }
+    if (name == "unlit") {
+        return ViewMode::Unlit;
+    }
+    if (name == "normals") {
+        return ViewMode::Normals;
+    }
+    return std::nullopt;
 }
 
 } // namespace rawframe::view

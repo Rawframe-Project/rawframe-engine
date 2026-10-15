@@ -1,8 +1,10 @@
 // A view's geometry (ADR-0052, D366): the eye's axes, the perspective and
 // orthographic verbs each the other's inverse, an eye aimed at a point
-// (D432), and every failure one of the closed set.
+// (D432), every failure one of the closed set, and the view modes by
+// their names (D794).
 
 #include "rawframe/test/test.h"
+#include "rawframe/view/preview.h"
 #include "rawframe/view/view.h"
 
 #include <array>
@@ -107,4 +109,11 @@ RAWFRAME_TEST(EveryFailureIsOneOfTheClosedSet) {
     RAWFRAME_EXPECT(view::pointToWorld(view::Orthographic{.height = 0}, kSize, 1, 1).error() == Failure::SeesNothing);
     RAWFRAME_EXPECT(view::pointToWorld(view::Orthographic{}, {.width = 10, .height = 0}, 1, 1).error() ==
                     Failure::NoViewSize);
+}
+
+RAWFRAME_TEST(ViewModesGoByTheirNames) {
+    RAWFRAME_EXPECT(view::viewModeNamed("lit") == view::ViewMode::Lit);
+    RAWFRAME_EXPECT(view::viewModeNamed("unlit") == view::ViewMode::Unlit);
+    RAWFRAME_EXPECT(view::viewModeNamed("normals") == view::ViewMode::Normals);
+    RAWFRAME_EXPECT(!view::viewModeNamed("Lit").has_value() && !view::viewModeNamed("").has_value());
 }
