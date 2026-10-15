@@ -154,11 +154,16 @@ public:
             regions_.push_back(world_kest::GameRegion{});
             regionFrames_.resize(1);
         }
-        // A preview may be split three ways (D797): its regions are placed
-        // from the start, shown only while it is, as a device joins its
-        // regions' views once.
-        if (preview_ != nullptr && regionFrames_.size() < kMostOthers + 1) {
-            regionFrames_.resize(kMostOthers + 1);
+        // A preview may be split up to `scene.preview_views` ways (D797),
+        // which an editor playing it asks for: its regions are placed from
+        // the start, shown only while it is, as a device joins its regions'
+        // views once. A client that holds idle region views draws its window
+        // unlit, so no other client is given them.
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kViews,
+                            context.configuration().unsignedInteger("scene.preview_views", 1));
+        previewViews_ = preview_ != nullptr ? std::clamp<std::size_t>(kViews, 1, kMostOthers + 1) : 1;
+        if (previewViews_ > 1 && regionFrames_.size() < previewViews_) {
+            regionFrames_.resize(previewViews_);
         }
         cameras_ = GameCameras(*game);
         textureViews_ = TextureViews(game->view, files->description().renderTextures);
@@ -624,7 +629,7 @@ private:
     /// looks; none while the preview is not split.
     void extractSplits(world::World& world, bool owned) {
         const bool kSplit = owned && preview_ != nullptr && preview_->looking().has_value();
-        splits_ = kSplit ? std::min(preview_->others().size(), kMostOthers) : 0;
+        splits_ = kSplit ? std::min(preview_->others().size(), previewViews_ - 1) : 0;
         for (std::size_t at = 0; at < splits_; ++at) {
             if (at == splitScenes_.size()) {
                 auto made = Scene::create(world.registry(), settings_);
@@ -815,6 +820,7 @@ private:
     std::vector<LocalPlayer> localPlayers_;
     /// A split preview's other looks (D797): how many this frame, each's
     /// scene and camera, and the frames they drew.
+    std::size_t previewViews_ = 1;
     std::size_t splits_ = 0;
     std::vector<std::unique_ptr<Scene>> splitScenes_;
     std::vector<SceneCamera> splitCameras_;
