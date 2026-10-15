@@ -163,4 +163,17 @@ Value splitRecord(std::int64_t id, std::string_view scene, std::uint8_t views) {
     return made;
 }
 
+Value overlaysRecord(std::int64_t id, std::string_view scene, const std::vector<std::string>& overlays) {
+    Value names = Value::array();
+    for (const std::string& kName : overlays) {
+        names.push(Value::string(kName));
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.overlays"));
+    made.add("id", Value::integer(id));
+    made.add("scene", Value::string(std::string{scene}));
+    made.add("overlays", std::move(names));
+    return made;
+}
+
 } // namespace rawframe::studio

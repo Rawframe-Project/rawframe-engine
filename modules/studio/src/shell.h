@@ -25,6 +25,7 @@
 #include "rawframe/view/typing.h"
 #include "rawframe/world_tooling/forwarding.h"
 #include "records.h"
+#include "viewing.h"
 
 #include <algorithm>
 #include <array>
@@ -236,6 +237,8 @@ private:
     void tellViewMode();
     /// Tells the preview how many views it shows (D797).
     void tellSplit();
+    /// Tells the preview what it draws over its scene (D798).
+    void tellOverlays();
 
     /// The locked layer's name `entity` is on, none if it is on no locked
     /// one.
@@ -951,21 +954,8 @@ private:
     std::vector<ui::Node> layerRows_;
     std::vector<std::pair<ui::Node, LayerPress>> layerPresses_;
     std::vector<std::uint32_t> locked_;
-    /// The layers the preview leaves out (D791), told it as they change
-    /// and as it is attached, and how many times it was told.
-    std::vector<std::uint32_t> hiddenLayers_;
-    /// How the preview draws, by the renderer's name (D794), and how many
-    /// times a preview took it.
-    std::string viewMode_ = "lit";
-    std::uint64_t modesShown_ = 0;
-    /// Bookmarks kept and gone to (D796).
-    std::uint64_t bookmarksKept_ = 0;
-    std::uint64_t bookmarksVisited_ = 0;
-    /// How many views the preview shows, and how many times a preview
-    /// split so (D797).
-    std::uint8_t views_ = 1;
-    std::uint64_t splitsShown_ = 0;
-    std::uint64_t layersHidden_ = 0;
+    /// What the preview is told to show, told it again when one is attached.
+    PreviewShown shown_;
     /// The layer each entity in `entities_` is on, nought for none.
     std::vector<std::uint32_t> entityLayers_;
     std::uint64_t locks_ = 0;

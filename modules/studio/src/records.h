@@ -263,6 +263,8 @@ readRecord(std::int64_t id, std::string_view scene, std::string_view operation, 
 /// else from above and behind the target as far; none for a view that
 /// does not read.
 [[nodiscard]] std::optional<Value> flatView(const std::optional<Value>& view, bool flat);
+/// `authoring.overlays` of `scene` (D798): what its preview draws over it.
+[[nodiscard]] Value overlaysRecord(std::int64_t id, std::string_view scene, const std::vector<std::string>& overlays);
 /// `authoring.split` of `scene` (D797): its preview in `views` views.
 [[nodiscard]] Value splitRecord(std::int64_t id, std::string_view scene, std::uint8_t views);
 /// `authoring.bookmark` of `scene` (D796): `view` kept in `slot`.

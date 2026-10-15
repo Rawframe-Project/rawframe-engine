@@ -837,6 +837,26 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"3 views.*\"code\":\"studio_viewport\"[^\n]*\"views\":3,\"splitsShown\":[1-9].*\"code\":\"scene_placed_summary\"[^\n]*\"splitFrames\":[1-9]")
+        # Overlays (D798): Plaza played in the viewport with its colliders and
+        # lights shown from the View menu, the client drawing their lines
+        # over the scene.
+        add_test(NAME studio_shows_overlays
+                 COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.play_in_viewport = true"
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
+                         "@eye#2:0,30,0.5" "until=studio_said,status=\"view set" @View "@Show colliders"
+                         "until=studio_said,status=\"colliders shown" @View "@Show lights"
+                         "until=studio_said,status=\"lights shown" wait=3 @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_shows_overlays PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             PROCESSORS 3
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "saw studio_said,status=\"lights shown.*\"code\":\"studio_viewport\"[^\n]*\"overlays\":2,\"overlaysShown\":[1-9].*\"code\":\"scene_placed_summary\"[^\n]*\"overlayLines\":[1-9]")
         # A 2D game seen in 2D (D793): Runners played in the viewport, the
         # view seen in 2D from the View menu, and the client's canvas drawn
         # from where the preview's eye is, not the player's camera.

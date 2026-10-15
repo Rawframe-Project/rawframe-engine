@@ -374,7 +374,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("layersChosen", layersChosen_),
                   diagnostics::field("locks", locks_),
                   diagnostics::field("lockRefused", lockRefused_),
-                  diagnostics::field("hiddenTold", layersHidden_)});
+                  diagnostics::field("hiddenTold", shown_.layersHidden)});
     // What the viewport showed (D789), and how it drew (D794).
     emitter_.log(diagnostics::Severity::Info,
                  kViewported,
@@ -385,12 +385,14 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("inputsTaken", inputsTaken_),
                   diagnostics::field("width", picture_ != nullptr ? std::uint64_t{picture_->levels[0].width} : 0),
                   diagnostics::field("height", picture_ != nullptr ? std::uint64_t{picture_->levels[0].height} : 0),
-                  diagnostics::field("mode", std::string_view{viewMode_}),
-                  diagnostics::field("modesShown", modesShown_),
-                  diagnostics::field("bookmarksKept", bookmarksKept_),
-                  diagnostics::field("bookmarksVisited", bookmarksVisited_),
-                  diagnostics::field("views", static_cast<std::uint64_t>(views_)),
-                  diagnostics::field("splitsShown", splitsShown_)});
+                  diagnostics::field("mode", std::string_view{shown_.viewMode}),
+                  diagnostics::field("modesShown", shown_.modesShown),
+                  diagnostics::field("bookmarksKept", shown_.bookmarksKept),
+                  diagnostics::field("bookmarksVisited", shown_.bookmarksVisited),
+                  diagnostics::field("views", static_cast<std::uint64_t>(shown_.views)),
+                  diagnostics::field("splitsShown", shown_.splitsShown),
+                  diagnostics::field("overlays", static_cast<std::uint64_t>(shown_.overlays.size())),
+                  diagnostics::field("overlaysShown", shown_.overlaysShown)});
     // And what the start screen did (D781): the games made from templates,
     // the game Studio ended on, if any, and the games kept as opened last.
     emitter_.log(diagnostics::Severity::Info,

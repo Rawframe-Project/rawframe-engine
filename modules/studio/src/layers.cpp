@@ -108,7 +108,7 @@ void ShellParticipant::showLayers() {
         if (!chosen.has_value() || !hide.has_value() || !lock.has_value()) {
             return;
         }
-        const bool kHidden = std::ranges::contains(hiddenLayers_, kLayer);
+        const bool kHidden = std::ranges::contains(shown_.hiddenLayers, kLayer);
         static_cast<void>(
             pressWords(*hide, kHidden ? "Show " + layerName(kLayer) : "Hide " + layerName(kLayer), kText, 14));
         static_cast<void>(
@@ -138,11 +138,12 @@ bool ShellParticipant::pressLayers(ui::Node node) {
     if (kLayer.does == LayerPress::Does::Hide) {
         // Left out of the preview, or shown again; how an author looks,
         // kept while Studio runs as a lock is.
-        if (const auto kThere = std::ranges::find(hiddenLayers_, kLayer.layer); kThere != hiddenLayers_.end()) {
-            hiddenLayers_.erase(kThere);
+        if (const auto kThere = std::ranges::find(shown_.hiddenLayers, kLayer.layer);
+            kThere != shown_.hiddenLayers.end()) {
+            shown_.hiddenLayers.erase(kThere);
             say(layerName(kLayer.layer) + " shown");
         } else {
-            hiddenLayers_.push_back(kLayer.layer);
+            shown_.hiddenLayers.push_back(kLayer.layer);
             say(layerName(kLayer.layer) + " hidden");
         }
         tellHidden();
@@ -191,9 +192,9 @@ void ShellParticipant::tellHidden() {
     if (scene_.empty()) {
         return;
     }
-    const std::string kReply = ask(hideLayersRecord(next(), scene_, hiddenLayers_));
+    const std::string kReply = ask(hideLayersRecord(next(), scene_, shown_.hiddenLayers));
     if (kReply.find("\"hidden\":true") != std::string::npos) {
-        ++layersHidden_;
+        ++shown_.layersHidden;
     }
 }
 
@@ -201,9 +202,19 @@ void ShellParticipant::tellViewMode() {
     if (scene_.empty()) {
         return;
     }
-    const std::string kReply = ask(viewModeRecord(next(), scene_, viewMode_));
+    const std::string kReply = ask(viewModeRecord(next(), scene_, shown_.viewMode));
     if (kReply.find("\"shown\":true") != std::string::npos) {
-        ++modesShown_;
+        ++shown_.modesShown;
+    }
+}
+
+void ShellParticipant::tellOverlays() {
+    if (scene_.empty()) {
+        return;
+    }
+    const std::string kReply = ask(overlaysRecord(next(), scene_, shown_.overlays));
+    if (kReply.find("\"shown\":true") != std::string::npos) {
+        ++shown_.overlaysShown;
     }
 }
 
@@ -211,9 +222,9 @@ void ShellParticipant::tellSplit() {
     if (scene_.empty()) {
         return;
     }
-    const std::string kReply = ask(splitRecord(next(), scene_, views_));
+    const std::string kReply = ask(splitRecord(next(), scene_, shown_.views));
     if (kReply.find("\"shown\":true") != std::string::npos) {
-        ++splitsShown_;
+        ++shown_.splitsShown;
     }
 }
 

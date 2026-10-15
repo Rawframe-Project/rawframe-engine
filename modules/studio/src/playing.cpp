@@ -373,16 +373,20 @@ void ShellParticipant::attachPreview() {
                      {diagnostics::field("scene", std::string_view{scene_})});
         markChosen();
         // And without the layers hidden before it was attached (D791).
-        if (!hiddenLayers_.empty()) {
+        if (!shown_.hiddenLayers.empty()) {
             tellHidden();
         }
         // And drawn as it was asked to be (D794).
-        if (viewMode_ != "lit") {
+        if (shown_.viewMode != "lit") {
             tellViewMode();
         }
         // And split as it was (D797).
-        if (views_ != 1) {
+        if (shown_.views != 1) {
             tellSplit();
+        }
+        // And with its overlays (D798).
+        if (!shown_.overlays.empty()) {
+            tellOverlays();
         }
     }
 }

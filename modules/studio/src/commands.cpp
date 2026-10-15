@@ -44,6 +44,11 @@ constexpr std::string_view kFrame = "Frame chosen";
 constexpr std::string_view kFlat = "2D view";
 constexpr std::string_view kTilted = "3D view";
 
+/// What the preview draws over its scene, each toggled (D798), by the
+/// renderer's name.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 2> kOverlays = {
+    {{"Show colliders", "colliders"}, {"Show lights", "lights"}}};
+
 /// The preview split one, two, or three ways (D797).
 constexpr std::array<std::pair<std::string_view, std::uint8_t>, 3> kSplits = {
     {{"One view", 1}, {"Two views", 2}, {"Three views", 3}}};
@@ -117,6 +122,9 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     for (const auto& [kName, kMode] : kModes) {
         commands_.push_back(Command{.name = std::string{kName}, .menu = "View", .keys = kKeys(kName, {})});
     }
+    for (const auto& [kName, kOverlay] : kOverlays) {
+        commands_.push_back(Command{.name = std::string{kName}, .menu = "View", .keys = kKeys(kName, {})});
+    }
     for (const auto& [kName, kViews] : kSplits) {
         commands_.push_back(Command{.name = std::string{kName}, .menu = "View", .keys = kKeys(kName, {})});
     }
@@ -160,12 +168,26 @@ bool ShellParticipant::runCommand(std::string_view name) {
             return true;
         }
     }
+    if (const auto kOverlay =
+            std::ranges::find(kOverlays, kCommand->name, &std::pair<std::string_view, std::string_view>::first);
+        kOverlay != kOverlays.end()) {
+        const std::string kName{kOverlay->second};
+        const bool kOn = !std::ranges::contains(shown_.overlays, kName);
+        if (kOn) {
+            shown_.overlays.push_back(kName);
+        } else {
+            std::erase(shown_.overlays, kName);
+        }
+        tellOverlays();
+        say(kName + (kOn ? " shown" : " hidden"));
+        return true;
+    }
     if (const auto kSplit =
             std::ranges::find(kSplits, kCommand->name, &std::pair<std::string_view, std::uint8_t>::first);
         kSplit != kSplits.end()) {
-        views_ = kSplit->second;
+        shown_.views = kSplit->second;
         tellSplit();
-        say(std::to_string(views_) + (views_ == 1 ? " view" : " views"));
+        say(std::to_string(shown_.views) + (shown_.views == 1 ? " view" : " views"));
         return true;
     }
     if (kCommand->name == kFlat || kCommand->name == kTilted) {
@@ -175,9 +197,9 @@ bool ShellParticipant::runCommand(std::string_view name) {
     if (const auto kMode =
             std::ranges::find(kModes, kCommand->name, &std::pair<std::string_view, std::string_view>::first);
         kMode != kModes.end()) {
-        viewMode_ = std::string{kMode->second};
+        shown_.viewMode = std::string{kMode->second};
         tellViewMode();
-        say(viewMode_ + " view");
+        say(shown_.viewMode + " view");
         return true;
     }
     if (kCommand->name == kPreferences) {
