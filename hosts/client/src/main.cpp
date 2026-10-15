@@ -161,6 +161,14 @@ public:
         camera.hide(layers);
         return true;
     }
+    /// How the scene is drawn, by the view mode's name (D794).
+    bool viewMode(std::string_view mode) override {
+        const std::optional<view::ViewMode> kMode = view::viewModeNamed(mode);
+        if (kMode.has_value()) {
+            camera.show(*kMode);
+        }
+        return kMode.has_value();
+    }
 
     view::PreviewCamera camera;
     world_tooling::Injection injection;

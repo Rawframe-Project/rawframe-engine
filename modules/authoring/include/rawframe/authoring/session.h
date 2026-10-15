@@ -112,6 +112,8 @@ enum class SessionVerb : std::uint8_t {
     /// The scene's view turned on what is chosen in it, from where it
     /// looked, and near enough to hold it all (D792).
     Frame,
+    /// How the scene's preview is drawn, by the view mode's name (D794).
+    ViewMode,
     /// One atomic request over several scenes, one transaction (D497).
     ApplyTogether,
     /// The game's directory cooked, as a long-running operation (D502).
@@ -172,6 +174,8 @@ struct SessionRecord {
     document::Value events;
     /// `hide_layers`' layers, each above nought, at most 64.
     std::vector<std::uint32_t> layers;
+    /// `view_mode`'s name, at most 32 bytes (D794).
+    std::string mode;
     /// Apply together's, two or more, each scene named once (D497).
     std::vector<SessionPart> parts;
     /// Cook's: where it cooks to, and the cache it reuses, if any (D502).

@@ -64,6 +64,9 @@ public:
     /// `hide_layers` (D791): the layers handed to the preview of
     /// `record.scene` to leave out, if it is previewed.
     [[nodiscard]] document::Value hid(const authoring::SessionRecord& record);
+    /// `view_mode` (D794): the mode handed to the preview of `record.scene`
+    /// by its name, if it is previewed; whether it draws so.
+    [[nodiscard]] document::Value moded(const authoring::SessionRecord& record);
     [[nodiscard]] result::Result<document::Value> picked(const authoring::SessionRecord& record,
                                                          authoring::AuthoredScene* previewed);
 

@@ -167,9 +167,12 @@ cmp "$work/root/level.scene" "$work/original.scene"
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.preview","id":2,"scene":"level.scene","preview":{"endpoint":"127.0.0.1:9","pinFile":"'"$work"'/none","tokenFile":"'"$work"'/none"}}'
     echo '{"kind":"authoring.preview","id":3,"scene":"level.scene","preview":null}'
+    echo '{"kind":"authoring.view_mode","id":4,"scene":"level.scene","mode":"unlit"}'
 } | "$author" session "$game" "$work/root" >"$work/replies" || true
 reply 2 | grep -q '"code":"capability_denied".*"said":"the pin and token files must read"'
 reply 3 | grep -q '"answer":{"kind":"authoring.preview","reopened":false,"previewing":false}'
+# A view mode with no preview to take it is not shown (D794).
+reply 4 | grep -q '"answer":{"kind":"authoring.view_mode","mode":"unlit","shown":false}'
 # Nor is one off this machine, or a file that is not a small regular one.
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'

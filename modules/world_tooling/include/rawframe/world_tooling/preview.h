@@ -12,6 +12,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 namespace rawframe::world_tooling {
@@ -90,6 +91,11 @@ public:
     /// what the preview draws, none for none (D791); whether the Runtime
     /// hides layers.
     virtual bool hide(const std::vector<std::uint32_t>& /*layers*/) {
+        return false;
+    }
+    /// Draws the preview in the view mode named `mode` (D794), the names
+    /// the Runtime's renderer owns; whether it knows the name and draws so.
+    virtual bool viewMode(std::string_view /*mode*/) {
         return false;
     }
 };

@@ -412,4 +412,24 @@ Value Preview::hid(const authoring::SessionRecord& record) {
     return made;
 }
 
+Value Preview::moded(const authoring::SessionRecord& record) {
+    bool shown = false;
+    if (preview_ != nullptr && record.scene == scene_) {
+        Value asked = Value::object();
+        asked.add("kind", Value::string("tooling.view_mode"));
+        asked.add("id", Value::integer(0));
+        asked.add("mode", Value::string(record.mode));
+        const auto kReply = preview_->ask(rawframe::document::writeCompact(asked));
+        const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
+        const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+        const Value* kShown = kAnswer != nullptr ? kAnswer->find("shown") : nullptr;
+        shown = kShown != nullptr && kShown->truth().value_or(false);
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.view_mode"));
+    made.add("mode", Value::string(record.mode));
+    made.add("shown", Value::boolean(shown));
+    return made;
+}
+
 } // namespace rawframe::authoring_session

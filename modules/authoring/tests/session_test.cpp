@@ -84,6 +84,12 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     const auto kFrame = readSessionRecord(R"({"kind":"authoring.frame","id":8,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kFrame.has_value() && kFrame->verb == SessionVerb::Frame && kFrame->scene == "b.scene");
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.frame","id":8})", id).has_value());
+    // A view mode by its name, bounded only (D794).
+    const auto kMode =
+        readSessionRecord(R"({"kind":"authoring.view_mode","id":9,"scene":"b.scene","mode":"unlit"})", id);
+    RAWFRAME_EXPECT(kMode.has_value() && kMode->verb == SessionVerb::ViewMode && kMode->mode == "unlit");
+    RAWFRAME_EXPECT(
+        !readSessionRecord(R"({"kind":"authoring.view_mode","id":9,"scene":"b.scene","mode":""})", id).has_value());
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.history","id":8})", id).has_value());
     const auto kCreate = readSessionRecord(R"({"kind":"authoring.create_scene","id":5,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kCreate.has_value() && kCreate->verb == SessionVerb::CreateScene && kCreate->scene == "b.scene");

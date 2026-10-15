@@ -596,6 +596,25 @@ struct ToolingServer::State {
             send(connection, client, replyLine(id, "answer", std::move(made)));
             return;
         }
+        if (kind != nullptr && *kind == "tooling.view_mode") {
+            // How the preview is drawn (D794): the view's. The names are
+            // the renderer's; this only bounds the text.
+            if (!settings.grants.view) {
+                send(connection, client, errorLine(id, ToolingError::NotGranted, "a view mode needs the view grant"));
+                return;
+            }
+            const Value* kMode = parsed->find("mode");
+            if (kMode == nullptr || kMode->text() == nullptr || kMode->text()->empty() || kMode->text()->size() > 32) {
+                send(connection, client, errorLine(id, ToolingError::Malformed, "a view mode is a name"));
+                return;
+            }
+            Value made = Value::object();
+            made.add("kind", Value::string("tooling.view_mode"));
+            made.add("shown",
+                     Value::boolean(settings.previewer != nullptr && settings.previewer->viewMode(*kMode->text())));
+            send(connection, client, replyLine(id, "answer", std::move(made)));
+            return;
+        }
         if (kind != nullptr && *kind == "tooling.input") {
             // What an author did in an editor's viewport showing the
             // preview (D790): the view's, as its look is.

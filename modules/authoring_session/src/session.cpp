@@ -206,6 +206,8 @@ private:
             return preview_.hid(record);
         case authoring::SessionVerb::Frame:
             return framed(record);
+        case authoring::SessionVerb::ViewMode:
+            return preview_.moded(record);
         case authoring::SessionVerb::Assets: {
             Value made = Value::object();
             made.add("kind", Value::string("authoring.assets"));

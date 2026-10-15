@@ -30,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 22> kVerbs = {
+constexpr std::array<VerbName, 23> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -48,6 +48,7 @@ constexpr std::array<VerbName, 22> kVerbs = {
     VerbName{.kind = "authoring.preview_input", .verb = SessionVerb::PreviewInput},
     VerbName{.kind = "authoring.hide_layers", .verb = SessionVerb::HideLayers},
     VerbName{.kind = "authoring.frame", .verb = SessionVerb::Frame},
+    VerbName{.kind = "authoring.view_mode", .verb = SessionVerb::ViewMode},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
@@ -77,6 +78,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Mark:
     case SessionVerb::PreviewInput:
     case SessionVerb::HideLayers:
+    case SessionVerb::ViewMode:
     case SessionVerb::Cook:
     case SessionVerb::Import:
         return Members{.required = 2, .optional = 0};
@@ -244,6 +246,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::PreviewInput:
     case SessionVerb::HideLayers:
     case SessionVerb::Frame:
+    case SessionVerb::ViewMode:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -313,6 +316,13 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         if (!sound) {
             return malformed("layers are at most 64 layer numbers, each above nought");
         }
+    } else if (record.verb == SessionVerb::ViewMode) {
+        // Only bounded: the names are the renderer's.
+        const Value* kMode = parsed->find("mode");
+        if (textOf(kMode) == nullptr || kMode->text()->empty() || kMode->text()->size() > 32) {
+            return malformed("mode names a view mode");
+        }
+        record.mode = *kMode->text();
     } else if (record.verb == SessionVerb::PreviewInput) {
         // An array, read event by event where it is handed on.
         const Value* kEvents = parsed->find("events");
