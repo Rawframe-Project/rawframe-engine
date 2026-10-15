@@ -1,6 +1,7 @@
 #include "camera.h"
 #include "cameras.h"
 #include "loading.h"
+#include "overlays.h"
 #include "pictures.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/game_content/game_content.h"
@@ -340,7 +341,7 @@ public:
         // Apart from the scene's summary, which holds as many fields as a
         // record may (D361).
         const std::uint64_t kHidden = scene_ != nullptr ? scene_->modelsHidden() : 0;
-        if (placed_ != 0 || tracked_ != 0 || kHidden != 0 || splitFrames_ != 0) {
+        if (placed_ != 0 || tracked_ != 0 || kHidden != 0 || splitFrames_ != 0 || overlayLines_ != 0) {
             emitter_.log(diagnostics::Severity::Info,
                          kPlacedSummary,
                          "what one client's scene drew where it was placed, where a headset's hand was, and what "
@@ -348,7 +349,8 @@ public:
                          {diagnostics::field("modelsPlaced", placed_),
                           diagnostics::field("modelsTracked", tracked_),
                           diagnostics::field("modelsHidden", kHidden),
-                          diagnostics::field("splitFrames", splitFrames_)});
+                          diagnostics::field("splitFrames", splitFrames_),
+                          diagnostics::field("overlayLines", overlayLines_)});
         }
         textureViews_.summarize(emitter_);
         const auto kParticles = particles_.fields();
@@ -501,9 +503,10 @@ private:
         // What the preview marks, as three axes a meter long, red along X,
         // green along Y, blue along Z, and a ring about it, drawn over
         // everything at a width the view keeps (D464, D467).
+        bool linesChanged = false;
         if (preview_ != nullptr && preview_->marks() != marksShown_) {
             marksShown_ = preview_->marks();
-            lines_.clear();
+            markLines_.clear();
             if (const auto& kAt = preview_->marked(); kAt.has_value()) {
                 ++marksDrawn_;
                 // The part under the pointer drawn white and wider (D468).
@@ -523,12 +526,12 @@ private:
                     }
                     // A hundred and fiftieth of the view wide, over
                     // everything: the mark stands out as a gizmo does.
-                    lines_.push_back(SceneLine{.from = *kAt,
-                                               .to = to,
-                                               .color = color,
-                                               .width = kWidth(kAxisLit),
-                                               .ofView = true,
-                                               .over = true});
+                    markLines_.push_back(SceneLine{.from = *kAt,
+                                                   .to = to,
+                                                   .color = color,
+                                                   .width = kWidth(kAxisLit),
+                                                   .ofView = true,
+                                                   .over = true});
                 }
                 // And a yellow ring about it on the level plane, its turn's
                 // handle (D467).
@@ -540,16 +543,28 @@ private:
                                                      (*kAt)[1],
                                                      (*kAt)[2] + (view::kMarkRingRadius * std::sin(kAngle))};
                     };
-                    lines_.push_back(SceneLine{.from = kOn(piece),
-                                               .to = kOn(piece + 1),
-                                               .color = kLit == view::MarkPart::Ring
-                                                            ? std::array<float, 4>{1, 1, 1, 1}
-                                                            : std::array<float, 4>{1, 0.8F, 0, 1},
-                                               .width = kWidth(kLit == view::MarkPart::Ring),
-                                               .ofView = true,
-                                               .over = true});
+                    markLines_.push_back(SceneLine{.from = kOn(piece),
+                                                   .to = kOn(piece + 1),
+                                                   .color = kLit == view::MarkPart::Ring
+                                                                ? std::array<float, 4>{1, 1, 1, 1}
+                                                                : std::array<float, 4>{1, 0.8F, 0, 1},
+                                                   .width = kWidth(kLit == view::MarkPart::Ring),
+                                                   .ofView = true,
+                                                   .over = true});
                 }
             }
+            linesChanged = true;
+        }
+        // And what the preview draws over its scene, kind by kind, each
+        // frame (D798).
+        const std::uint8_t kOverlays =
+            preview_ != nullptr && preview_->looking().has_value() ? preview_->overlays() : 0;
+        if (linesChanged || kOverlays != 0 || overlaid_) {
+            lines_ = markLines_;
+            if (kOverlays != 0) {
+                addOverlays(*kView.world, kOverlays);
+            }
+            overlaid_ = kOverlays != 0;
             scene_->show(lines_);
         }
         textureViews_.extract(*kView.world, settings_, shown_, posesOf(*kView.world), cameras_, emitter_);
@@ -620,6 +635,48 @@ private:
             }
             each.extracted = true;
         }
+    }
+
+    /// The overlays' lines after the mark's (D798): each body's collider,
+    /// each light's reach, as many as the scene draws.
+    void addOverlays(world::World& world, std::uint8_t overlays) {
+        const std::size_t kBefore = lines_.size();
+        if ((overlays & static_cast<std::uint8_t>(view::Overlay::Colliders)) != 0) {
+            if (!bodies_.has_value()) {
+                const auto kBody = world.registry().find(physics3d::Body3D::kComponentTypeId);
+                const auto kPose = world.registry().find(physics3d::Pose3D::kComponentTypeId);
+                if (kBody.has_value() && kPose.has_value()) {
+                    const std::array<world::ColumnTerm, 2> kTerms = {world::ColumnTerm{*kBody, world::Access::Read},
+                                                                     world::ColumnTerm{*kPose, world::Access::Read}};
+                    if (auto made = world::ColumnQuery::resolve(kTerms, world.registry()); made.has_value()) {
+                        bodies_ = std::move(*made);
+                    }
+                }
+            }
+            if (bodies_.has_value()) {
+                bodies_->forEachChunk(world, [this](const world::ColumnChunk& chunk) {
+                    for (std::size_t row = 0; row < chunk.entities.size() && lines_.size() < kMostSceneLines; ++row) {
+                        physics3d::Body3D body;
+                        physics3d::Pose3D pose;
+                        std::memcpy(&body, chunk.columns[0] + (row * sizeof(body)), sizeof(body));
+                        std::memcpy(&pose, chunk.columns[1] + (row * sizeof(pose)), sizeof(pose));
+                        addColliderLines(body, pose, lines_);
+                    }
+                });
+            }
+        }
+        if ((overlays & static_cast<std::uint8_t>(view::Overlay::Lights)) != 0) {
+            for (const LightInstance& kLight : scene_->extractedLights()) {
+                if (lines_.size() >= kMostSceneLines) {
+                    break;
+                }
+                addLightLines(kLight, lines_);
+            }
+        }
+        if (lines_.size() > kMostSceneLines) {
+            lines_.resize(kMostSceneLines);
+        }
+        overlayLines_ += lines_.size() - kBefore;
     }
 
     /// A split preview's other looks (D797), each extracted into a scene
@@ -850,6 +907,12 @@ private:
     double shown_ = 0;
     /// The lines the player's view shows (D464).
     std::vector<SceneLine> lines_;
+    /// The mark's lines, and whether the overlays drew the frame before,
+    /// the bodies they outline, and the lines they drew (D798).
+    std::vector<SceneLine> markLines_;
+    bool overlaid_ = false;
+    std::optional<world::ColumnQuery> bodies_;
+    std::uint64_t overlayLines_ = 0;
     bool extracted_ = false;
     const SceneFrame* queued_ = nullptr;
     std::uint32_t width_ = 1280;

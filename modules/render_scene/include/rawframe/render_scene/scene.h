@@ -843,8 +843,9 @@ struct SceneLine {
     bool over = false;
 };
 
-/// The lines a scene draws at most (a limit point, ADR-0014).
-inline constexpr std::size_t kMostSceneLines = 256;
+/// The lines a scene draws at most (a limit point, ADR-0014): enough for an
+/// editor's overlays to outline a level's bodies (D798).
+inline constexpr std::size_t kMostSceneLines = 1024;
 
 class Scene {
 public:
