@@ -369,6 +369,12 @@ result::Status WindowHost::start(window::Windows& windows) {
         // Kept hidden, as an editor keeps a game it shows in its own
         // viewport, the pictures streamed to it (D789).
         RAWFRAME_TRY_ASSIGN(made.visible, kConfiguration->truth("window.visible", true));
+        // The views a preview of it may be split into, which an editor
+        // playing it in its viewport allows (D797).
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kViews, kConfiguration->unsignedInteger("preview.views", 1));
+        if (settings_.preview != nullptr) {
+            settings_.preview->allow(static_cast<std::size_t>(std::min<std::uint64_t>(kViews, 4)));
+        }
         // A game's own name over its window, as an export gives it (D519).
         if (const auto kTitle = kConfiguration->text("window.title")) {
             made.title = std::string{*kTitle};
