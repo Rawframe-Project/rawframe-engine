@@ -1,9 +1,16 @@
 #pragma once
 
-// What Studio tells a scene's preview to show (D791 to D797): kept apart
-// from the shell, as the preview is told it again whenever one is attached.
+// What Studio tells a scene's preview to show (D791 to D798), kept apart
+// from the shell, as the preview is told it again whenever one is attached;
+// and the game played in the viewport (D789, D790).
+
+#include "rawframe/texture/texture.h"
+#include "rawframe/world_tooling/forwarding.h"
 
 #include <cstdint>
+#include <filesystem>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -29,6 +36,21 @@ struct PreviewShown {
     /// preview took them (D798).
     std::vector<std::string> overlays;
     std::uint64_t overlaysShown = 0;
+};
+
+/// The game played in the viewport (D789, D790): whether it plays there,
+/// the picture shown, when its file was written, its sequence, and how many
+/// were shown; and what lands on the viewport handed to it, how many events,
+/// and how many records the preview took.
+struct PlayedViewport {
+    bool inViewport = false;
+    std::shared_ptr<const texture::Texture> picture;
+    std::optional<std::filesystem::file_time_type> pictureWritten;
+    std::uint64_t pictureSequence = 0;
+    std::uint64_t picturesShown = 0;
+    world_tooling::Forwarding* forwarding = nullptr;
+    std::uint64_t inputsForwarded = 0;
+    std::uint64_t inputsTaken = 0;
 };
 
 } // namespace rawframe::studio
