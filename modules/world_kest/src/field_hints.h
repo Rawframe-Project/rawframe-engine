@@ -12,7 +12,7 @@
 namespace rawframe::world_kest {
 
 /// The words of a `field` line after `field`: `<component> <field>`, then
-/// any of `range <least> <most>`, `unit <word>`, `color`, and `labels`
+/// any of `range <least> <most>`, `unit <word>`, `color`, `asset <kind>`, and `labels`
 /// followed by number and name pairs, each at most once, read into `hint`;
 /// why not, when they do not read.
 [[nodiscard]] std::optional<std::string_view> readFieldLine(std::span<const std::string_view> words,

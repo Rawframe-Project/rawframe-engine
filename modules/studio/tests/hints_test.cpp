@@ -42,3 +42,14 @@ RAWFRAME_TEST(ARangeIsSaidAndAValuePastItTold) {
     RAWFRAME_EXPECT(pastRange(kSide, "101") && pastRange(kSide, "3.5") && !pastRange(kSide, "20"));
     RAWFRAME_EXPECT(!pastRange(kSide, "wide"));
 }
+
+RAWFRAME_TEST(AnAssetFieldIsChosenFromItsKindsAssets) {
+    const Catalog::Field kTexture{.name = "texture", .kind = "unsigned", .asset = "texture"};
+    const std::vector<Asset> kAssets{{.kind = "texture", .id = 7, .name = "brick.png"},
+                                     {.kind = "sound", .id = 8, .name = "jump.sound"},
+                                     {.kind = "texture", .id = 9, .name = "hud.png"}};
+    RAWFRAME_EXPECT((assetChoices(kTexture, kAssets) == std::vector<std::string>{"none", "brick.png", "hud.png"}));
+    RAWFRAME_EXPECT(assetChoices(Catalog::Field{.kind = "unsigned"}, kAssets).empty());
+    RAWFRAME_EXPECT(typedAs(kTexture, "none") == "0");
+    RAWFRAME_EXPECT(typedAs(kTexture, "brick.png") == "brick.png");
+}

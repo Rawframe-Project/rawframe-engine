@@ -653,6 +653,9 @@ std::string writeDiscovery(const ComponentCatalog* catalog) {
                 if (field.color) {
                     each.add("color", Value::boolean(true));
                 }
+                if (!field.asset.empty()) {
+                    each.add("asset", Value::string(field.asset));
+                }
                 if (!field.labels.empty()) {
                     Value labels = Value::array();
                     for (const auto& [kValue, kName] : field.labels) {

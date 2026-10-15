@@ -116,14 +116,14 @@ result::Result<authoring::ComponentCatalog> catalogOf(const rawframe::world_kest
                                                                    kField->kind == authoring::FieldKind::Unsigned ||
                                                                    kField->kind == authoring::FieldKind::Real);
             const bool kWhole = kNumber && kField->kind != authoring::FieldKind::Real;
-            if (!kNumber || (hint.color && kField->kind != authoring::FieldKind::Unsigned) ||
+            if (!kNumber || ((hint.color || !hint.asset.empty()) && kField->kind != authoring::FieldKind::Unsigned) ||
                 (!hint.labels.empty() && !kWhole)) {
                 return std::unexpected{
                     result::fail(result::ErrorClass::InvalidArgument,
                                  authoring::kAuthoringDomain,
                                  code(authoring::AuthoringError::ValidationFailed),
-                                 "a field line names a number field of its component: a color an unsigned one, "
-                                 "labels a whole one")
+                                 "a field line names a number field of its component: a color or an asset an "
+                                 "unsigned one, labels a whole one")
                         .error()
                         .withContext("component", component.name)
                         .withContext("field", hint.field)};
@@ -133,6 +133,7 @@ result::Result<authoring::ComponentCatalog> catalogOf(const rawframe::world_kest
             kField->unit = std::move(hint.unit);
             kField->color = hint.color;
             kField->labels = std::move(hint.labels);
+            kField->asset = std::move(hint.asset);
         }
         RAWFRAME_TRY(catalog.add(std::move(schema)));
     }

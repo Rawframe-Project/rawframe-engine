@@ -78,6 +78,9 @@ struct FieldSchema {
     std::string unit;
     bool color = false;
     std::vector<std::pair<std::int64_t, std::string>> labels;
+    /// The kind of the game's asset an unsigned field holds by its
+    /// identity, empty for none (D786).
+    std::string asset;
 };
 
 /// A component as authoring knows it: its identity, the name and layout

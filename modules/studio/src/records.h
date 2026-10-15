@@ -274,6 +274,8 @@ struct Catalog {
         std::string unit;
         bool color = false;
         std::vector<std::pair<std::int64_t, std::string>> labels;
+        /// The kind of asset it holds by identity, empty for none (D786).
+        std::string asset;
     };
     struct Component {
         std::string id;

@@ -97,19 +97,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          "level.scene written: yes.*\"name\": \"west wall\".*\"rawframe.physics2d.attach\": {[ \n]*\"parent\": \"c5400cf8-4b07-4d16-84c2-951852c66b40\".*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":1,.*\"exit\":\"clean_stop\"")
     # Typed controls (D784): the ground's body's motion chosen from its
     # labels, its tile's color typed as hex digits, and its friction given a
-    # value past its range, which is set and said so.
+    # value past its range, which is set and said so; and its tile's
+    # texture chosen from the game's textures (D786).
     add_test(NAME studio_typed
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game level.scene @level.scene @ground "@motion#2" @kinematic
                      "until=studio_said,status=\"motion set to kinematic"
                      "@friction#2:3" "until=studio_said,status=\"friction set to 3, past 0 to 1"
-                     wheel=1100,500,30 "@color#2:#ff0000" "until=studio_said,status=\"color set to #ff0000"
+                     wheel=1100,500,30 "@color#2:#ff0000" "until=studio_said,status=\"color set to"
+                     "@texture#2" @hud.png "until=studio_said,status=\"texture set to hud.png"
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_typed PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":3,\"refused\":0,.*\"exit\":\"clean_stop\"")
+                         "level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":4,\"refused\":0,.*\"exit\":\"clean_stop\"")
     # Commands' keys set in the Preferences dialog (D782): Duplicate given
     # Ctrl+Shift+D, which then duplicates; Redo given Ctrl+Z, which is said
     # to be Undo's too; text that is no chord refused; the keys kept in the

@@ -55,6 +55,9 @@ void readHints(const Value& field, Catalog::Field& into) {
     if (const Value* unit = field.find("unit"); unit != nullptr && unit->kind() == Value::Kind::String) {
         into.unit = *unit->text();
     }
+    if (const Value* asset = field.find("asset"); asset != nullptr && asset->kind() == Value::Kind::String) {
+        into.asset = *asset->text();
+    }
     if (const Value* color = field.find("color"); color != nullptr) {
         into.color = color->truth().value_or(false);
     }
@@ -88,6 +91,9 @@ std::string typedAs(const Catalog::Field& type, std::string_view typed) {
     const auto kLabel = std::ranges::find(type.labels, typed, &std::pair<std::int64_t, std::string>::second);
     if (kLabel != type.labels.end()) {
         return std::to_string(kLabel->first);
+    }
+    if (!type.asset.empty() && typed == "none") {
+        return "0";
     }
     if (type.color) {
         if (const std::optional<std::uint32_t> kColor = colorOf(typed); kColor.has_value()) {
@@ -130,6 +136,19 @@ std::vector<std::string> choicesOf(const Catalog::Field& type) {
         return {"true", "false"};
     }
     return {};
+}
+
+std::vector<std::string> assetChoices(const Catalog::Field& type, std::span<const Asset> assets) {
+    if (type.asset.empty()) {
+        return {};
+    }
+    std::vector<std::string> names{"none"};
+    for (const Asset& each : assets) {
+        if (each.kind == type.asset) {
+            names.push_back(each.name);
+        }
+    }
+    return names;
 }
 
 std::optional<std::uint32_t> colorOf(std::string_view text) {

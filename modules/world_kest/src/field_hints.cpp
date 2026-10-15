@@ -25,6 +25,7 @@ struct EngineHint {
     std::span<const std::pair<std::int64_t, std::string_view>> labels;
     std::optional<double> least;
     std::optional<double> most;
+    std::string_view asset;
 };
 
 constexpr std::array<std::pair<std::int64_t, std::string_view>, 3> kMotions{
@@ -34,8 +35,13 @@ constexpr std::array<std::pair<std::int64_t, std::string_view>, 3> kShapes2d{
 constexpr std::array<std::pair<std::int64_t, std::string_view>, 5> kShapes3d{
     {{0, "sphere"}, {1, "box"}, {2, "capsule"}, {3, "cylinder"}, {4, "mesh"}}};
 
-const std::array<EngineHint, 19> kEngineHints{{
+const std::array<EngineHint, 24> kEngineHints{{
     {.type = "rawframe.canvas.Sprite", .field = "color", .color = true},
+    {.type = "rawframe.canvas.Sprite", .field = "texture", .asset = "texture"},
+    {.type = "rawframe.canvas.Sprite", .field = "material", .asset = "material"},
+    {.type = "rawframe.model.Model", .field = "mesh", .asset = "mesh"},
+    {.type = "rawframe.model.Model", .field = "material", .asset = "material"},
+    {.type = "rawframe.sound.Emitter", .field = "sound", .asset = "sound"},
     {.type = "rawframe.model.Model", .field = "color", .color = true},
     {.type = "rawframe.model.Sun", .field = "color", .color = true},
     {.type = "rawframe.model.Sun", .field = "illuminance", .unit = "lux", .least = 0.0},
@@ -70,7 +76,7 @@ std::optional<std::int64_t> integerOf(std::string_view word) {
 std::optional<std::string_view> readFieldLine(std::span<const std::string_view> words, GameFieldHint& hint) {
     constexpr std::string_view kShape =
         "a field line is `field <component> <field>` and any of `range <least> <most>`, "
-        "`unit <word>`, `color`, and `labels <number> <name>...`";
+        "`unit <word>`, `color`, `asset <kind>`, and `labels <number> <name>...`";
     if (words.size() < 3) {
         return kShape;
     }
@@ -79,6 +85,7 @@ std::optional<std::string_view> readFieldLine(std::span<const std::string_view> 
     bool ranged = false;
     bool united = false;
     bool labelled = false;
+    bool kinded = false;
     std::size_t at = 2;
     while (at < words.size()) {
         const std::string_view kWhat = words[at++];
@@ -94,6 +101,15 @@ std::optional<std::string_view> readFieldLine(std::span<const std::string_view> 
         } else if (kWhat == "unit" && !united && at < words.size()) {
             hint.unit = std::string{words[at++]};
             united = true;
+        } else if (kWhat == "asset" && !kinded && at < words.size()) {
+            // The kinds of asset a game's lines declare (assetsOf).
+            constexpr std::array<std::string_view, 7> kKinds{
+                "texture", "mesh", "material", "sound", "font", "prefab", "label"};
+            if (std::ranges::find(kKinds, words[at]) == kKinds.end()) {
+                return "a field's asset is a texture, mesh, material, sound, font, prefab, or label";
+            }
+            hint.asset = std::string{words[at++]};
+            kinded = true;
         } else if (kWhat == "color" && !hint.color) {
             hint.color = true;
         } else if (kWhat == "labels" && !labelled) {
@@ -130,7 +146,9 @@ std::vector<GameFieldHint> fieldHintsOf(const GameDescription& game, const GameC
                            .least = kEngine.least,
                            .most = kEngine.most,
                            .unit = std::string{kEngine.unit},
-                           .color = kEngine.color};
+                           .color = kEngine.color,
+                           .labels = {},
+                           .asset = std::string{kEngine.asset}};
         for (const auto& [kValue, kName] : kEngine.labels) {
             hint.labels.emplace_back(kValue, std::string{kName});
         }

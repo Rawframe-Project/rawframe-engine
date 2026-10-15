@@ -23,7 +23,8 @@ assert side["least"] == 4 and side["most"] == 100 and side["unit"] == "m", side
 assert fields[("starter.mover", "x")]["unit"] == "m"
 assert fields[("starter.look", "color")].get("color") is True
 assert "unit" not in fields[("starter.look", "scaleX")]
-print("hinted: side 4 to 100 m, a box's look a color")
+assert fields[("starter.look", "mesh")]["asset"] == "mesh"
+print("hinted: side 4 to 100 m, a box's look a color, its mesh an asset")
 PY
 cp -R "$work/hinted" "$work/body"
 printf "%s\n" "field starter.ground side range 10 2" >>"$work/body/hinted.game"
@@ -46,3 +47,10 @@ if "$author" describe "$work/real/hinted.game" >"$work/refused"; then
     exit 1
 fi
 grep -q '"field": "side"' "$work/refused" && echo "refused: a color that is not an unsigned number"
+cp -R "$work/hinted" "$work/kind"
+printf '%s\n' "field starter.ground side asset picture" >>"$work/kind/hinted.game"
+if "$author" describe "$work/kind/hinted.game" >"$work/refused"; then
+    echo "an asset of no kind read"
+    exit 1
+fi
+grep -q 'texture, mesh, material' "$work/refused" && echo "refused: an asset of no kind there is"

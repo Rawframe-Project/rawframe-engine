@@ -8,6 +8,7 @@
 #include "records.h"
 
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -36,6 +37,10 @@ void readHints(const document::Value& field, Catalog::Field& into);
 /// cases, a labelled number's labels, or true and false; none for a field
 /// typed into.
 [[nodiscard]] std::vector<std::string> choicesOf(const Catalog::Field& type);
+
+/// The game's assets an asset field is chosen from (D786): none, then each
+/// of its kind by name; nothing for a field that holds no asset.
+[[nodiscard]] std::vector<std::string> assetChoices(const Catalog::Field& type, std::span<const Asset> assets);
 
 /// A color's number as its four bytes, red first, for a swatch; none for
 /// text that is not one.

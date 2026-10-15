@@ -89,6 +89,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         const FieldRow kChosenField = *choosing_;
         const std::string kName = kChoice->second;
         closePopup();
+        endEdit();
         apply(kChosenField, kName);
         return;
     }
@@ -327,10 +328,13 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         if (kConnecting.has_value() && kFieldAt->role == FieldRow::Role::GraphInput) {
             endEdit();
             connectGraphInput(*kFieldAt, *kConnecting);
-        } else if (const std::vector<std::string> kChoices = choicesOf(kFieldAt->type);
+        } else if (const std::vector<std::string> kChoices = choicesOf(kFieldAt->type).empty()
+                                                                 ? assetChoices(kFieldAt->type, assets_)
+                                                                 : choicesOf(kFieldAt->type);
                    kFieldAt->role == FieldRow::Role::Field && !kChoices.empty()) {
-            // A field of a few values is chosen, not typed (D784).
-            endEdit();
+            // A field of a few values is chosen from its list, or typed
+            // still, as a name always was (D455, D784).
+            beginEdit(*kFieldAt);
             showChoices(*kFieldAt, kChoices);
         } else {
             beginEdit(*kFieldAt);
@@ -392,6 +396,10 @@ void ShellParticipant::take(const view::Typing& typing) {
     if (editing_->role == FieldRow::Role::Palette) {
         paletteTyped(kLeft);
         return;
+    }
+    // Typing given or dismissed closes the list it was beside (D784).
+    if ((kLeft == view::TypingKey::Submit || kLeft == view::TypingKey::Dismiss) && choosing_.has_value()) {
+        closePopup();
     }
     if (kLeft == view::TypingKey::Submit) {
         const FieldRow kEdited = *editing_;

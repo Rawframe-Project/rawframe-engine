@@ -344,6 +344,10 @@ struct GameFieldHint {
     std::string unit;
     bool color = false;
     std::vector<std::pair<std::int64_t, std::string>> labels;
+    /// The kind of the game's asset the field holds by its identity
+    /// (`texture`, `mesh`, `material`, `sound`, `font`, `prefab`, `label`;
+    /// D786), empty for none.
+    std::string asset;
 };
 
 /// How a client makes its input from a player's controls (ADR-0037): an
