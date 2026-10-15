@@ -72,8 +72,9 @@ constexpr std::array<InputType, 15> kInputTypes = {
     InputType{"resource", "string", false, "A resource id, 32 hexadecimal digits, as game_assets gives."}};
 
 const InputType* inputTypeOf(std::string_view name) {
-    const auto* found = std::ranges::find(kInputTypes, name, &InputType::name);
-    return found == kInputTypes.end() ? nullptr : found;
+    // An iterator, not a pointer, on every standard library (MSVC's).
+    const auto kFound = std::ranges::find(kInputTypes, name, &InputType::name);
+    return kFound == kInputTypes.end() ? nullptr : &*kFound;
 }
 
 Value text(std::string_view said) {
