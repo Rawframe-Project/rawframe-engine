@@ -224,11 +224,39 @@ private:
             Value made = Value::object();
             made.add("kind", Value::string("authoring.assets"));
             made.add("assets", assets_);
+            made.add("sources", sourcesValue());
             return made;
         }
         }
         return std::unexpected{failure(
             authoring::AuthoringError::Internal, result::ErrorClass::Internal, "a session record went unhandled")};
+    }
+
+    /// Every source the game's directory holds as it stands (D799), each
+    /// with its folder, importer, identity, and how this session's cooks
+    /// left it: `cooked`, `failed` with the cook's words, or `unknown`.
+    Value sourcesValue() const {
+        Value made = Value::array();
+        for (const SourceListed& kSource : sourcesBeside(game_)) {
+            Value each = Value::object();
+            const std::size_t kSlash = kSource.path.rfind('/');
+            each.add("path", Value::string(kSource.path));
+            each.add("folder", Value::string(kSlash == std::string::npos ? "" : kSource.path.substr(0, kSlash)));
+            each.add("importer", Value::string(kSource.importer));
+            each.add("id", Value::string(kSource.id));
+            const auto kCooked = cooking_.sources().find(kSource.path);
+            if (kCooked == cooking_.sources().end()) {
+                each.add("cook", Value::string("unknown"));
+            } else if (kCooked->second.state == SourceCooked::State::Failed) {
+                each.add("cook", Value::string("failed"));
+                each.add("problem", Value::string(kCooked->second.problem));
+            } else {
+                each.add("cook",
+                         Value::string(kCooked->second.state == SourceCooked::State::Cooked ? "cooked" : "cooking"));
+            }
+            made.push(std::move(each));
+        }
+        return made;
     }
 
     /// The game's catalog and the scenes an instance may name, read once.

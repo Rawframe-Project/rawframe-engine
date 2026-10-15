@@ -234,4 +234,33 @@ document::Value assetsOf(const world_kest::GameDescription& game) {
     return made;
 }
 
+std::vector<SourceListed> sourcesBeside(const std::filesystem::path& game) {
+    std::vector<SourceListed> made;
+    const std::filesystem::path kRoot = game.parent_path();
+    std::error_code error;
+    for (auto entry = std::filesystem::recursive_directory_iterator{kRoot, error};
+         !error && entry != std::filesystem::recursive_directory_iterator{};
+         entry.increment(error)) {
+        if (!entry->is_regular_file() || entry->path().extension() == rawframe::content::kSidecarSuffix) {
+            continue;
+        }
+        const auto kText = readFile(entry->path().string() + std::string{rawframe::content::kSidecarSuffix});
+        if (!kText.has_value()) {
+            continue;
+        }
+        const auto kSidecar = rawframe::content::readSidecar(*kText);
+        if (!kSidecar.has_value()) {
+            continue;
+        }
+        std::array<char, rawframe::base::kBits128HexDigits> digits{};
+        rawframe::base::formatBits128Hex(kSidecar->id.value, digits);
+        std::error_code relative;
+        made.push_back(SourceListed{.path = std::filesystem::relative(entry->path(), kRoot, relative).generic_string(),
+                                    .importer = kSidecar->importer,
+                                    .id = std::string{digits.data(), digits.size()}});
+    }
+    std::ranges::sort(made, {}, &SourceListed::path);
+    return made;
+}
+
 } // namespace rawframe::authoring_session

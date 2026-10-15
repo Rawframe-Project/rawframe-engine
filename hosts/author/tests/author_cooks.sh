@@ -5,7 +5,8 @@
 # by the session's limit; a cook asked to stop answering cancelled, which
 # is no error; a cook the tool refuses (into the game's own directory)
 # answering its error; and a cook running when the input ends stopped and
-# answering before the session does.
+# answering before the session does. Its sources listed, each as the
+# cook left it (D799).
 #
 # usage: author_cooks.sh <rawframe-author> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -29,6 +30,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
 # answered between them; the session ends once the first has answered.
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.assets","id":10}'
     echo '{"kind":"authoring.cook","id":2,"output":"'"$work/content"'","cache":"'"$work/cache"'"}'
     echo '{"kind":"authoring.cook","id":3,"output":"'"$work/other"'","cache":null}'
     echo '{"kind":"authoring.cancel","id":4,"operation":"none"}'
@@ -39,6 +41,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
         grep -q '"id":2,"answer"\|"id":2,"error"' "$work/replies" 2>/dev/null && break
         sleep 0.1
     done
+    echo '{"kind":"authoring.assets","id":11}'
     echo '{"kind":"authoring.end","id":5}'
 } | "$author" session "$game" --cook "$cook" >"$work/replies" || true
 steps=$(grep -c '"kind":"authoring.progress","id":2,' "$work/replies")
@@ -47,6 +50,12 @@ grep -q '"id":2,"step":'"$steps"',"steps":'"$steps"',' "$work/replies"
 reply 3 | grep -q '"code":"limit_exceeded"'
 reply 4 | grep -q '"found":false'
 reply 5 | grep -q '"authoring.ended"'
+# Each source listed with its folder, importer, and identity, unknown to the
+# cook until it cooked, then cooked (D799).
+reply 10 | grep -q '{"path":"blade/rig.rfanim","folder":"blade","importer":"rawframe.animation","id":"[0-9a-f]\{32\}","cook":"unknown"}'
+reply 10 | grep -q '{"path":"gate.scene","folder":"","importer":"rawframe.scene","id":"[0-9a-f]\{32\}","cook":"unknown"}'
+[[ $(reply 11 | grep -o '"cook":"cooked"' | wc -l) -eq $steps ]]
+reply 11 | grep -q '{"path":"gate.scene","folder":"","importer":"rawframe.scene","id":"[0-9a-f]\{32\}","cook":"cooked"}'
 [[ -s "$work/content/content.manifest" && -s "$work/content/cook.receipt" && -s "$work/content/cook.log" ]]
 
 # Again from the cache: every source reused. Then a cook stopped as asked,

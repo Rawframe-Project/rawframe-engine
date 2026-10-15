@@ -160,9 +160,24 @@ std::vector<std::string> Cooking::poll(bool& failed) {
     }
     for (const std::string& kLine : lines) {
         if (std::optional<std::string> progress = progressOf(id_, kLine)) {
+            // The source it reached, as `cooking <n>/<count> <source>` names
+            // it (D799).
+            const std::size_t kSpace = kLine.find(' ', std::string_view{"cooking "}.size());
+            if (kSpace != std::string::npos) {
+                sources_[kLine.substr(kSpace + 1)] = SourceCooked{};
+            }
             said.push_back(std::move(*progress));
         } else if (constexpr std::string_view kTool = "rawframe-cook: "; kLine.starts_with(kTool)) {
             firstFailure_ = failures_++ == 0 ? kLine.substr(kTool.size()) : firstFailure_;
+            // `rawframe-cook: <source>: <why>`: that source failed.
+            const std::string_view kSaid = std::string_view{kLine}.substr(kTool.size());
+            const std::size_t kColon = kSaid.find(": ");
+            if (kColon != std::string_view::npos) {
+                if (const auto kSource = sources_.find(kSaid.substr(0, kColon)); kSource != sources_.end()) {
+                    kSource->second = SourceCooked{.state = SourceCooked::State::Failed,
+                                                   .problem = std::string{kSaid.substr(kColon + 2)}};
+                }
+            }
         } else if (counted(kLine, "cooked ", cooked_, reused_)) {
             accounted_ = true;
         }
@@ -170,8 +185,25 @@ std::vector<std::string> Cooking::poll(bool& failed) {
     if (!kExit.has_value()) {
         return said;
     }
-    // Its last words read; it has ended.
+    // Its last words read; it has ended. Whatever it reached and did not
+    // fail on cooked, unless it was stopped (D799).
     child_.reset();
+    const bool kStopped = !stopping_.empty() && *kExit != 0;
+    for (auto at = sources_.begin(); at != sources_.end();) {
+        if (at->second.state == SourceCooked::State::Cooking && kStopped) {
+            at = sources_.erase(at);
+            continue;
+        }
+        // 0: all cooked; 1: those it named failed. Past those, the tool
+        // ended without its account, which says nothing of a source.
+        if (at->second.state == SourceCooked::State::Cooking) {
+            at->second = *kExit == 0 || *kExit == 1
+                             ? SourceCooked{.state = SourceCooked::State::Cooked}
+                             : SourceCooked{.state = SourceCooked::State::Failed,
+                                            .problem = "the cook tool ended without its account"};
+        }
+        ++at;
+    }
     if (!stopping_.empty() && *kExit != 0) {
         said.push_back(authoring::writeCancelled(id_, stopping_));
         return said;

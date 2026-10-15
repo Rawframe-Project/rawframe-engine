@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -21,6 +22,18 @@ namespace rawframe::authoring_session {
 /// SPEC-0040's limit point for a session's asynchronous operations in
 /// flight: one cook at a time.
 inline constexpr std::size_t kMaximumSessionOperations = 1;
+
+/// A source as the session's cooks left it (D799): cooking now, cooked,
+/// or failed with the cook's words.
+struct SourceCooked {
+    enum class State : std::uint8_t {
+        Cooking,
+        Cooked,
+        Failed
+    };
+    State state = State::Cooking;
+    std::string problem;
+};
 
 class Cooking {
 public:
@@ -59,6 +72,13 @@ public:
         return child_.has_value();
     }
 
+    /// Each source a cook in this session reached, by its path under the
+    /// sources, as the latest left it (D799); one it never reached is not
+    /// here.
+    [[nodiscard]] const std::map<std::string, SourceCooked, std::less<>>& sources() const noexcept {
+        return sources_;
+    }
+
 private:
     std::filesystem::path program_;
     std::optional<process::Child> child_;
@@ -75,6 +95,7 @@ private:
     bool accounted_ = false;
     /// Why it was asked to stop, if it was: `requested` or `ended`.
     std::string stopping_;
+    std::map<std::string, SourceCooked, std::less<>> sources_;
 };
 
 } // namespace rawframe::authoring_session

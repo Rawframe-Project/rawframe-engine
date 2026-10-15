@@ -50,4 +50,18 @@ std::vector<std::pair<base::Bits128, std::filesystem::path>> scenesBeside(const 
 /// description's directory, in path order (D637, D643).
 std::vector<std::filesystem::path> filesBeside(const std::filesystem::path& game, std::string_view extension);
 
+/// A source under a game description's directory as its sidecar names it
+/// (D799): its path from that directory, with forward slashes, its
+/// importer, and the resource it becomes, as hexadecimal digits.
+struct SourceListed {
+    std::string path;
+    std::string importer;
+    std::string id;
+};
+
+/// Every source under the game description's directory that has a sidecar
+/// that reads, in path order: what the cook cooks, and an asset browser
+/// shows.
+[[nodiscard]] std::vector<SourceListed> sourcesBeside(const std::filesystem::path& game);
+
 } // namespace rawframe::authoring_session
