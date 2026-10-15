@@ -1,11 +1,13 @@
 #include "overlays.h"
 
+#include "rawframe/view/preview.h"
 #include "space.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstring>
 #include <numbers>
 
 namespace rawframe::render_scene {
@@ -129,6 +131,48 @@ void addLightLines(const LightInstance& light, std::vector<SceneLine>& lines) {
     line(light.position, kEnd, kLit, lines);
     const double kOuter = std::clamp(static_cast<double>(light.light.outer), 0.0, 1.5);
     ring(kEnd, kAxes[0], kAxes[1], kRange * std::tan(kOuter), kLit, lines);
+}
+
+void drawOverlays(world::World& world,
+                  std::uint8_t overlays,
+                  std::span<const LightInstance> lights,
+                  std::optional<world::ColumnQuery>& bodies,
+                  std::vector<SceneLine>& lines) {
+    if ((overlays & static_cast<std::uint8_t>(view::Overlay::Colliders)) != 0) {
+        if (!bodies.has_value()) {
+            const auto kBody = world.registry().find(physics3d::Body3D::kComponentTypeId);
+            const auto kPose = world.registry().find(physics3d::Pose3D::kComponentTypeId);
+            if (kBody.has_value() && kPose.has_value()) {
+                const std::array<world::ColumnTerm, 2> kTerms = {world::ColumnTerm{*kBody, world::Access::Read},
+                                                                 world::ColumnTerm{*kPose, world::Access::Read}};
+                if (auto made = world::ColumnQuery::resolve(kTerms, world.registry()); made.has_value()) {
+                    bodies = std::move(*made);
+                }
+            }
+        }
+        if (bodies.has_value()) {
+            bodies->forEachChunk(world, [&lines](const world::ColumnChunk& chunk) {
+                for (std::size_t row = 0; row < chunk.entities.size() && lines.size() < kMostSceneLines; ++row) {
+                    physics3d::Body3D body;
+                    physics3d::Pose3D pose;
+                    std::memcpy(&body, chunk.columns[0] + (row * sizeof(body)), sizeof(body));
+                    std::memcpy(&pose, chunk.columns[1] + (row * sizeof(pose)), sizeof(pose));
+                    addColliderLines(body, pose, lines);
+                }
+            });
+        }
+    }
+    if ((overlays & static_cast<std::uint8_t>(view::Overlay::Lights)) != 0) {
+        for (const LightInstance& kLight : lights) {
+            if (lines.size() >= kMostSceneLines) {
+                break;
+            }
+            addLightLines(kLight, lines);
+        }
+    }
+    if (lines.size() > kMostSceneLines) {
+        lines.resize(kMostSceneLines);
+    }
 }
 
 } // namespace rawframe::render_scene

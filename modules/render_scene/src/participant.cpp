@@ -637,45 +637,10 @@ private:
         }
     }
 
-    /// The overlays' lines after the mark's (D798): each body's collider,
-    /// each light's reach, as many as the scene draws.
+    /// The overlays' lines after the mark's (D798).
     void addOverlays(world::World& world, std::uint8_t overlays) {
         const std::size_t kBefore = lines_.size();
-        if ((overlays & static_cast<std::uint8_t>(view::Overlay::Colliders)) != 0) {
-            if (!bodies_.has_value()) {
-                const auto kBody = world.registry().find(physics3d::Body3D::kComponentTypeId);
-                const auto kPose = world.registry().find(physics3d::Pose3D::kComponentTypeId);
-                if (kBody.has_value() && kPose.has_value()) {
-                    const std::array<world::ColumnTerm, 2> kTerms = {world::ColumnTerm{*kBody, world::Access::Read},
-                                                                     world::ColumnTerm{*kPose, world::Access::Read}};
-                    if (auto made = world::ColumnQuery::resolve(kTerms, world.registry()); made.has_value()) {
-                        bodies_ = std::move(*made);
-                    }
-                }
-            }
-            if (bodies_.has_value()) {
-                bodies_->forEachChunk(world, [this](const world::ColumnChunk& chunk) {
-                    for (std::size_t row = 0; row < chunk.entities.size() && lines_.size() < kMostSceneLines; ++row) {
-                        physics3d::Body3D body;
-                        physics3d::Pose3D pose;
-                        std::memcpy(&body, chunk.columns[0] + (row * sizeof(body)), sizeof(body));
-                        std::memcpy(&pose, chunk.columns[1] + (row * sizeof(pose)), sizeof(pose));
-                        addColliderLines(body, pose, lines_);
-                    }
-                });
-            }
-        }
-        if ((overlays & static_cast<std::uint8_t>(view::Overlay::Lights)) != 0) {
-            for (const LightInstance& kLight : scene_->extractedLights()) {
-                if (lines_.size() >= kMostSceneLines) {
-                    break;
-                }
-                addLightLines(kLight, lines_);
-            }
-        }
-        if (lines_.size() > kMostSceneLines) {
-            lines_.resize(kMostSceneLines);
-        }
+        drawOverlays(world, overlays, scene_->extractedLights(), bodies_, lines_);
         overlayLines_ += lines_.size() - kBefore;
     }
 

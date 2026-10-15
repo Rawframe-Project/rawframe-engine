@@ -6,7 +6,12 @@
 
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/scene.h"
+#include "rawframe/world/column_query.h"
+#include "rawframe/world/world.h"
 
+#include <cstdint>
+#include <optional>
+#include <span>
 #include <vector>
 
 namespace rawframe::render_scene {
@@ -21,5 +26,15 @@ void addColliderLines(const physics3d::Body3D& body, const physics3d::Pose3D& po
 /// it, and a spot's way to its range and the ring its cone reaches there.
 /// Yellow.
 void addLightLines(const LightInstance& light, std::vector<SceneLine>& lines);
+
+/// The overlays `overlays` asks for (`view::Overlay` bits), appended to
+/// `lines` until it holds `kMostSceneLines`: each body's collider in
+/// `world`, `bodies` resolved on first need and kept, and each light in
+/// `lights`.
+void drawOverlays(world::World& world,
+                  std::uint8_t overlays,
+                  std::span<const LightInstance> lights,
+                  std::optional<world::ColumnQuery>& bodies,
+                  std::vector<SceneLine>& lines);
 
 } // namespace rawframe::render_scene
