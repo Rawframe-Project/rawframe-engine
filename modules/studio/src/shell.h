@@ -46,6 +46,7 @@ namespace rawframe::studio {
 inline constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"};
 inline constexpr diagnostics::EventIdentity kLayout{"studio", "studio_layout"};
 inline constexpr diagnostics::EventIdentity kStartScreen{"studio", "studio_start"};
+inline constexpr diagnostics::EventIdentity kSelection{"studio", "studio_selection"};
 inline constexpr diagnostics::EventIdentity kShown{"studio", "studio_shown"};
 /// Studio's window read by assistive technology (D575), or why not.
 inline constexpr diagnostics::EventIdentity kAccessible{"studio", "studio_accessibility_ready"};
@@ -424,6 +425,20 @@ private:
     void openPreferences();
     void closePreferences();
 
+    /// An entity row pressed (D787): with Control held, added to the
+    /// selection or taken from it; with Shift, the rows from the last one
+    /// chosen to it; else it alone.
+    void chooseEntity(std::size_t at);
+
+    /// The Inspector over every entity chosen, `at` (a place in
+    /// `entities_`) the one pressed last: the components they all have,
+    /// each field's value where they agree, empty where they differ.
+    void showSelection(std::size_t at);
+
+    /// `operation`, done to the entity chosen, or to each of several as one
+    /// step (D787).
+    void commitChosen(Value operation, const std::string& done);
+
     /// An entity row let go after a drag (D785): onto another entity, it
     /// follows that one; onto the Hierarchy below its entities, none.
     void dropEntity();
@@ -677,6 +692,11 @@ private:
     std::array<float, 2> pressedAt_{};
     /// The entity row pressed, until the press is let go (D785).
     std::optional<std::size_t> heldEntity_;
+    /// The entities chosen, the place a Shift press extends from, and the
+    /// edits made to several at once (D787).
+    std::vector<std::string> selected_;
+    std::optional<std::size_t> anchor_;
+    std::uint64_t together_ = 0;
     bool pointerPress_ = false;
     bool released_ = false;
     Preferences preferences_;

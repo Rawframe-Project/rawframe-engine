@@ -342,6 +342,9 @@ void ShellParticipant::showScene(std::size_t at) {
     fields_.clear();
     const bool kChanged = scene_ != scenes_[at];
     if (kChanged) {
+        // What was chosen was the other scene's (D787).
+        selected_.clear();
+        anchor_.reset();
         // Each scene its own history.
         undoable_ = 0;
         redoable_ = 0;
@@ -537,6 +540,9 @@ void ShellParticipant::showEntity(std::size_t at) {
         static_cast<void>(tree_->scrollTo(componentsColumn_, 0, 0));
     }
     entity_ = entities_[at];
+    // One entity shown is the one chosen, so an edit reaches no other
+    // (D787).
+    selected_ = {entity_};
     for (std::size_t each = 0; each < entityRows_.size(); ++each) {
         static_cast<void>(
             tree_->setLook(entityRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));

@@ -354,6 +354,13 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("hierarchyWidth", static_cast<std::int64_t>(preferences_.hierarchyWidth)),
                   diagnostics::field("inspectorWidth", static_cast<std::int64_t>(preferences_.inspectorWidth)),
                   diagnostics::field("dockHeight", static_cast<std::int64_t>(preferences_.dockHeight))});
+    // How many entities were chosen at the end, and the edits made to
+    // several at once (D787).
+    emitter_.log(diagnostics::Severity::Info,
+                 kSelection,
+                 "what Studio's selection was",
+                 {diagnostics::field("chosen", static_cast<std::uint64_t>(selected_.size())),
+                  diagnostics::field("together", together_)});
     // And what the start screen did (D781): the games made from templates,
     // the game Studio ended on, if any, and the games kept as opened last.
     emitter_.log(diagnostics::Severity::Info,

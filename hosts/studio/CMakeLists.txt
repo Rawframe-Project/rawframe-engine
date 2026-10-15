@@ -80,6 +80,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"code\":\"studio_layout\"[^\n]*\"resized\":0,\"hierarchyWidth\":420,\"inspectorWidth\":300,\"dockHeight\":300}.*\"exit\":\"clean_stop\"")
+    # Several entities chosen (D787): the west wall, then the east wall
+    # with Control held, their shared friction set together as one step;
+    # then the rows from the east wall to the steep slope with Shift held,
+    # deleted as one step.
+    add_test(NAME studio_chooses_many
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene "@west wall" drag=186,288,186,288,Control_L
+                     wait=1 "@friction#2:0.25" "until=studio_said,status=\"friction set to 0.25 on 2"
+                     drag=186,384,186,384,Shift_L @Delete "until=studio_said,status=\"4 entities deleted"
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_chooses_many PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "level.scene written: yes.*\"code\":\"studio_selection\"[^\n]*\"chosen\":[01],\"together\":2}")
     # The Hierarchy as a tree (D785): the west wall dragged onto the ground
     # follows it, given runners' 2D attachment and shown under the ground;
     # the ground dragged onto the west wall, which follows it, is refused.

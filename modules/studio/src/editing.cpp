@@ -233,6 +233,20 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (node == newNode_ && !scene_.empty()) {
         endEdit();
         create();
+    } else if (node == deleteNode_ && !entity_.empty() && selected_.size() > 1) {
+        // Every entity chosen, as one step (D787).
+        endEdit();
+        std::vector<Value> operations;
+        for (const std::string& kEach : selected_) {
+            Value destroyed = Value::object();
+            destroyed.add("operation", Value::string("scene.destroy_entity"));
+            destroyed.add("entity", Value::string(kEach));
+            operations.push_back(std::move(destroyed));
+        }
+        const std::size_t kCount = selected_.size();
+        selected_.clear();
+        ++together_;
+        commitAll(std::move(operations), std::to_string(kCount) + " entities deleted", std::nullopt);
     } else if (node == deleteNode_ && !entity_.empty()) {
         endEdit();
         // An entity an instance brought is removed through its patch, so
@@ -319,6 +333,9 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         }
         if (moving && uiChosen()) {
             moveNodeInto(entities_[static_cast<std::size_t>(kEntity - entityRows_.begin())]);
+        } else if (!sheetChosen() && !uiChosen() && !materialChosen() && !graphChosen()) {
+            // A scene's entities are chosen one or several at a time (D787).
+            chooseEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
         } else {
             showEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
             // Its input is pressed next.
@@ -571,6 +588,12 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
         if (pastRange(row.type, kTyped)) {
             done += ", past " + hintText(row.type);
         }
+    }
+    // A field set or a reference given is done to every entity chosen
+    // (D787); the rest is the one entity's.
+    if (row.role == FieldRow::Role::Field) {
+        commitChosen(std::move(operation), done);
+        return;
     }
     commit(std::move(operation), done, entity_);
 }
@@ -829,10 +852,18 @@ void ShellParticipant::commitAll(std::vector<Value> operations,
 void ShellParticipant::refresh(const std::optional<std::string>& entity) {
     const std::array<float, 2> kEntities = tree_->scrollOf(entitiesColumn_);
     const std::array<float, 2> kComponents = tree_->scrollOf(componentsColumn_);
+    const std::vector<std::string> kChosenBefore = selected_;
     showScene(sceneAt_);
     if (entity.has_value()) {
         if (const auto kAt = std::ranges::find(entities_, *entity); kAt != entities_.end()) {
             showEntity(static_cast<std::size_t>(kAt - entities_.begin()));
+            // Several chosen stay chosen while they are all still there.
+            if (kChosenBefore.size() > 1 && std::ranges::all_of(kChosenBefore, [&](const std::string& each) {
+                    return std::ranges::contains(entities_, each);
+                })) {
+                selected_ = kChosenBefore;
+                showSelection(static_cast<std::size_t>(kAt - entities_.begin()));
+            }
         }
     }
     static_cast<void>(tree_->scrollTo(entitiesColumn_, kEntities[0], kEntities[1]));
