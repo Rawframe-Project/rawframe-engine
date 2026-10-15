@@ -181,7 +181,11 @@ void ShellParticipant::pollPicks(double seconds) {
     const std::optional<std::string> kSource = pickedIn(kReply, scene_);
     const std::optional<Moved> kMoved = movedIn(kReply, scene_);
     if (kSource.has_value()) {
-        if (const auto kAt = std::ranges::find(entities_, *kSource); kAt != entities_.end()) {
+        if (const std::optional<std::string> kLayer = lockedOf(*kSource); kLayer.has_value()) {
+            // Not picked in the viewport, nor moved there (D788).
+            ++lockRefused_;
+            say(*kLayer + " is locked");
+        } else if (const auto kAt = std::ranges::find(entities_, *kSource); kAt != entities_.end()) {
             ++picked_;
             showEntity(static_cast<std::size_t>(kAt - entities_.begin()));
             say("picked " + (names_[static_cast<std::size_t>(kAt - entities_.begin())].empty()
@@ -189,7 +193,7 @@ void ShellParticipant::pollPicks(double seconds) {
                                  : names_[static_cast<std::size_t>(kAt - entities_.begin())]));
         }
     }
-    if (kMoved.has_value()) {
+    if (kMoved.has_value() && !lockedOf(kMoved->source).has_value()) {
         moveDragged(*kMoved);
     }
     // The view moved in the played game, shown in the view's fields

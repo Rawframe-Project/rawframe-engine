@@ -31,6 +31,13 @@ ui::Layout ShellParticipant::columnLayout(float width) {
                       .scroll = ui::Scroll::Vertical};
 }
 
+ui::Layout ShellParticipant::leftLayout(float width) {
+    return ui::Layout{.width = ui::pixels(width),
+                      .direction = ui::Direction::Column,
+                      .grow = width > 0 ? 0.0F : 1.0F,
+                      .shrink = width > 0 ? 0.0F : 1.0F};
+}
+
 ui::Layout ShellParticipant::dockLayout(float height) {
     return ui::Layout{.height = ui::pixels(height),
                       .minHeight = ui::pixels(0),
@@ -158,7 +165,13 @@ result::Status ShellParticipant::build() {
             kBackground));
     // The docks at the sizes the author left them (D779), each with a
     // splitter on its inner edge in place of the gap it had.
-    RAWFRAME_TRY_ASSIGN(entitiesColumn_, column(kUpper, "Hierarchy", preferences_.hierarchyWidth));
+    // The left dock holds the Hierarchy, or the Layers in its place, each
+    // heading naming the other (D788).
+    RAWFRAME_TRY_ASSIGN(leftDock_, box(kUpper, leftLayout(preferences_.hierarchyWidth), kBackground));
+    RAWFRAME_TRY_ASSIGN(entitiesColumn_, tabbedColumn(leftDock_, "Hierarchy", "Layers", layersTab_));
+    RAWFRAME_TRY_ASSIGN(layersColumn_, tabbedColumn(leftDock_, "Layers", "Hierarchy", hierarchyTab_));
+    RAWFRAME_TRY(tree_->detach(layersColumn_));
+    layersShown_ = false;
     RAWFRAME_TRY(splitter(kUpper, Edge::Hierarchy));
     // The entities' operations above their rows, in two rows: what makes
     // and copies, then what restores and orders.
@@ -389,6 +402,7 @@ void ShellParticipant::showScene(std::size_t at) {
     removed_.clear();
     places_.clear();
     parents_.clear();
+    entityLayers_.clear();
     entity_.clear();
     components_ = 0;
     findField_.reset();
@@ -474,12 +488,18 @@ void ShellParticipant::showScene(std::size_t at) {
         }
         entityRows_.push_back(*added);
         parents_.push_back(parents[kLine.at]);
+        const Value* layer = each.find("layer");
+        entityLayers_.push_back(layer != nullptr ? static_cast<std::uint32_t>(layer->integer().value_or(0)) : 0);
         entities_.push_back(*id->text());
         names_.push_back(name != nullptr && name->text() != nullptr ? *name->text() : std::string{});
         brought_.push_back(brought != nullptr);
         removed_.push_back(kRemoved);
         const Value* place = each.find("place");
         places_.push_back(place != nullptr ? place->integer() : std::nullopt);
+    }
+    // The Layers count what the scene has now.
+    if (layersShown_) {
+        showLayers();
     }
 }
 

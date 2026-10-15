@@ -74,6 +74,10 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     if (pressPreferences(node)) {
         return;
     }
+    // The left dock's tabs and the Layers' rows (D788).
+    if (pressLayers(node)) {
+        return;
+    }
     // A document's tab is pressed as its row in Assets is (D776).
     if (const auto kTab = std::ranges::find(tabRows_, node); kTab != tabRows_.end()) {
         const auto kListed =
@@ -517,6 +521,17 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
     if (row.role == FieldRow::Role::GraphParam || row.role == FieldRow::Role::GraphInput) {
         setGraphMember(row, text);
         return;
+    }
+    // An entity on a locked layer is not edited (D788).
+    if (row.role == FieldRow::Role::Field || row.role == FieldRow::Role::Name) {
+        for (const std::string& kEach : selected_.empty() ? std::vector<std::string>{entity_} : selected_) {
+            if (const std::optional<std::string> kLayer = lockedOf(kEach); kLayer.has_value()) {
+                ++lockRefused_;
+                say(*kLayer + " is locked");
+                refresh(entity_);
+                return;
+            }
+        }
     }
     if (row.role == FieldRow::Role::Name && sheetChosen()) {
         Value operation = Value::object();

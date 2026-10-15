@@ -24,6 +24,11 @@ trap '[ -n "$bus" ] && kill "$bus" 2>/dev/null; rm -rf "$work"' EXIT
 if [ "$2" != none ]; then
     cp -R "$(dirname "$2")" "$work/game"
 fi
+# Or put a scene of its own in its place: a file in STUDIO_SCENE_FILE,
+# as one with entities on layers (D788).
+if [ -n "${STUDIO_SCENE_FILE:-}" ] && [ "$2" != none ]; then
+    cp "$STUDIO_SCENE_FILE" "$work/game/$3"
+fi
 # A test may change the copy's scene first: a sed expression in
 # STUDIO_SCENE_EDIT, as a scene authored against an older layout (D452).
 if [ -n "${STUDIO_SCENE_EDIT:-}" ] && [ "$2" != none ]; then

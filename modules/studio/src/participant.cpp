@@ -360,7 +360,10 @@ void ShellParticipant::stop() noexcept {
                  kSelection,
                  "what Studio's selection was",
                  {diagnostics::field("chosen", static_cast<std::uint64_t>(selected_.size())),
-                  diagnostics::field("together", together_)});
+                  diagnostics::field("together", together_),
+                  diagnostics::field("layersChosen", layersChosen_),
+                  diagnostics::field("locks", locks_),
+                  diagnostics::field("lockRefused", lockRefused_)});
     // And what the start screen did (D781): the games made from templates,
     // the game Studio ended on, if any, and the games kept as opened last.
     emitter_.log(diagnostics::Severity::Info,

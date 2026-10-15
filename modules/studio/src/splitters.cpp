@@ -61,7 +61,7 @@ void ShellParticipant::followSplitter() {
         break;
     }
     preferences_ = held(preferences_);
-    static_cast<void>(tree_->setLayout(entitiesColumn_, columnLayout(preferences_.hierarchyWidth)));
+    static_cast<void>(tree_->setLayout(leftDock_, leftLayout(preferences_.hierarchyWidth)));
     static_cast<void>(tree_->setLayout(componentsColumn_, columnLayout(preferences_.inspectorWidth)));
     static_cast<void>(tree_->setLayout(bottomDock_, dockLayout(preferences_.dockHeight)));
     if (kReleased) {

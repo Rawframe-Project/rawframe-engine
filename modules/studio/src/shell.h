@@ -194,6 +194,31 @@ private:
     /// `width` pixels wide.
     result::Result<ui::Node> column(ui::Node parent, std::string_view heading, float width = 0);
 
+    /// The left dock's layout, `width` wide (D788).
+    static ui::Layout leftLayout(float width);
+
+    /// A column of the left dock headed `heading`, `tab` the press in its
+    /// heading that shows `other` in its place (D788).
+    result::Result<ui::Node>
+    tabbedColumn(ui::Node parent, std::string_view heading, std::string_view other, ui::Node& tab);
+
+    /// The Hierarchy, or with `layers` the Layers, in the left dock.
+    void showLeft(bool layers);
+
+    /// The Layers: each layer the game names or an entity is on, with how
+    /// many are on it, pressed to choose them, and its lock (D788).
+    void showLayers();
+
+    /// A press on the left dock's tabs or the Layers' rows; whether it was.
+    bool pressLayers(ui::Node node);
+
+    /// `layer`'s name, as the game's field line names it, else its number.
+    [[nodiscard]] std::string layerName(std::uint32_t layer) const;
+
+    /// The locked layer's name `entity` is on, none if it is on no locked
+    /// one.
+    [[nodiscard]] std::optional<std::string> lockedOf(const std::string& entity) const;
+
     /// A column's layout, sharing its row's width or `width` pixels wide.
     [[nodiscard]] static ui::Layout columnLayout(float width);
 
@@ -878,6 +903,26 @@ private:
     ui::Node scenesColumn_{};
     ui::Node entitiesColumn_{};
     ui::Node componentsColumn_{};
+    /// The left dock, its Layers in place of the Hierarchy, each heading's
+    /// press for the other, the Layers' rows with what they do, and the
+    /// layers locked (D788).
+    ui::Node leftDock_{};
+    ui::Node layersColumn_{};
+    ui::Node layersTab_{};
+    ui::Node hierarchyTab_{};
+    bool layersShown_ = false;
+    struct LayerPress {
+        std::uint32_t layer = 0;
+        bool lock = false;
+    };
+    std::vector<ui::Node> layerRows_;
+    std::vector<std::pair<ui::Node, LayerPress>> layerPresses_;
+    std::vector<std::uint32_t> locked_;
+    /// The layer each entity in `entities_` is on, nought for none.
+    std::vector<std::uint32_t> entityLayers_;
+    std::uint64_t locks_ = 0;
+    std::uint64_t layersChosen_ = 0;
+    std::uint64_t lockRefused_ = 0;
     std::vector<ui::Node> sceneRows_;
     std::vector<ui::Node> entityRows_;
     std::vector<ui::Node> componentRows_;

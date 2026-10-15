@@ -24,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":35,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":37,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its menus and the palette's field (D777), its buttons, its
     # docks as scroll panes named by their headings or tabs in SPEC-0051's
@@ -94,7 +94,24 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_chooses_many PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "level.scene written: yes.*\"code\":\"studio_selection\"[^\n]*\"chosen\":[01],\"together\":2}")
+                         "level.scene written: yes.*\"code\":\"studio_selection\"[^\n]*\"chosen\":[01],\"together\":2,")
+    # Layers (D788): runners' scene with the ground on layer 1 and the walls
+    # on layer 2 (tests/layered.scene, written by rawframe-author apply);
+    # the Layers tab lists them, choosing layer 2 chooses both
+    # walls, and with it locked, a wall's field is not set.
+    add_test(NAME studio_layers
+             COMMAND ${CMAKE_COMMAND} -E env
+                     "STUDIO_SCENE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/layered.scene"
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene @Layers "@layer 2  2"
+                     "until=studio_said,status=\"layer 2 chosen" "@Lock layer 2" "until=studio_said,status=\"layer 2 locked"
+                     @Hierarchy "@west wall" "@friction#2:0.25" "until=studio_said,status=\"layer 2 is locked"
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_layers PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"code\":\"studio_selection\"[^\n]*\"layersChosen\":1,\"locks\":1,\"lockRefused\":[1-9]")
     # The Hierarchy as a tree (D785): the west wall dragged onto the ground
     # follows it, given runners' 2D attachment and shown under the ground;
     # the ground dragged onto the west wall, which follows it, is refused.
