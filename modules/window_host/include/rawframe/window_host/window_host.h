@@ -105,6 +105,9 @@ private:
     bool forwardedOver_ = false;
     /// Whether `event` was handed over, in place of acted on.
     bool forwarded(const window::Event& event);
+    /// The ray from the preview's look through window point (`x`, `y`),
+    /// in its region of a split window (D797); none outside it.
+    [[nodiscard]] std::optional<view::Ray> previewRay(float x, float y) const;
     view::UiTyping typing_;
     view::UiNavigation navigation_;
     /// Where the window's UI is read for assistive technology (D571), and

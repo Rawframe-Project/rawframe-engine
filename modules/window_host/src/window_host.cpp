@@ -235,6 +235,19 @@ std::optional<window::Event> windowEventOf(const world_tooling::WindowInput& giv
 
 } // namespace
 
+std::optional<view::Ray> WindowHost::previewRay(float x, float y) const {
+    const view::ViewSize kWindow = views_.window();
+    const view::Region kRegion = view::previewRegion(settings_.preview->others().size() + 1, 0);
+    const float kLeft = kRegion.left * kWindow.width;
+    const float kTop = kRegion.top * kWindow.height;
+    const view::ViewSize kSize{.width = kRegion.width * kWindow.width, .height = kRegion.height * kWindow.height};
+    if (x < kLeft || y < kTop || x >= kLeft + kSize.width || y >= kTop + kSize.height) {
+        return std::nullopt;
+    }
+    const auto kRay = view::pointToRay(*settings_.preview->looking(), kSize, x - kLeft, y - kTop);
+    return kRay.has_value() ? std::optional<view::Ray>{*kRay} : std::nullopt;
+}
+
 bool WindowHost::forwarded(const window::Event& event) {
     if (!forwarding_.area().has_value()) {
         forwardedPress_ = false;
@@ -483,10 +496,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             // Where an author clicked in the preview, as a ray (D456).
             if (settings_.preview != nullptr && settings_.preview->looking().has_value() &&
                 event->pointer.button == window::MouseButton::Left) {
-                if (const auto kRay = view::pointToRay(*settings_.preview->looking(),
-                                                       views_.window(),
-                                                       event->pointer.position.x,
-                                                       event->pointer.position.y);
+                if (const auto kRay = previewRay(event->pointer.position.x, event->pointer.position.y);
                     kRay.has_value()) {
                     settings_.preview->clicked(*kRay, event->pointer.modifiers);
                 }
@@ -505,10 +515,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             // And where the press was let go, for a drag (D457).
             if (settings_.preview != nullptr && settings_.preview->looking().has_value() &&
                 event->pointer.button == window::MouseButton::Left) {
-                if (const auto kRay = view::pointToRay(*settings_.preview->looking(),
-                                                       views_.window(),
-                                                       event->pointer.position.x,
-                                                       event->pointer.position.y);
+                if (const auto kRay = previewRay(event->pointer.position.x, event->pointer.position.y);
                     kRay.has_value()) {
                     settings_.preview->released(*kRay);
                 }
@@ -523,11 +530,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             // And where it points in a preview, so the handle under it is
             // drawn lit (D468).
             if (settings_.preview != nullptr && settings_.preview->looking().has_value()) {
-                const auto kRay = view::pointToRay(*settings_.preview->looking(),
-                                                   views_.window(),
-                                                   event->pointer.position.x,
-                                                   event->pointer.position.y);
-                settings_.preview->pointed(kRay.has_value() ? std::optional<view::Ray>{*kRay} : std::nullopt);
+                settings_.preview->pointed(previewRay(event->pointer.position.x, event->pointer.position.y));
             }
         } else if (event->kind == window::EventKind::CursorLeft || event->kind == window::EventKind::FocusLost) {
             pointing_.left();
