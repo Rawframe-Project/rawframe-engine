@@ -10,6 +10,7 @@
 #include "rawframe/render_canvas/frames.h"
 #include "rawframe/render_canvas/registrar.h"
 #include "rawframe/view/players.h"
+#include "rawframe/view/preview.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/client_worlds.h"
 
@@ -37,7 +38,8 @@ constexpr std::string_view kProvided[] = {kCanvasFrames.name};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        game_content::kGameContent.name,
-                                       view::kPlayerViews.name};
+                                       view::kPlayerViews.name,
+                                       view::kPreviewCamera.name};
 /// The decoded levels the canvas holds at most.
 /// A client's view without a camera of its own: 10 meters tall.
 constexpr float kDefaultViewHeight = 10;
@@ -119,6 +121,10 @@ public:
             // (D367); a canvas of a client named by configuration is no
             // player's.
             RAWFRAME_TRY_ASSIGN(views_, context.capability(view::kPlayerViews));
+        }
+        // A preview's camera, where an authoring client sets one (D793).
+        if (!client_.has_value() && context.has(view::kPreviewCamera.name)) {
+            RAWFRAME_TRY_ASSIGN(preview_, context.capability(view::kPreviewCamera));
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kWidth, configuration.unsignedInteger("canvas.width", 1280));
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeight, configuration.unsignedInteger("canvas.height", 720));
@@ -331,6 +337,8 @@ public:
         std::vector<diagnostics::Field> fields = {
             diagnostics::field("frames", frames_),
             diagnostics::field("framesViewed", viewed_),
+            diagnostics::field("framesPreviewed", previewed_),
+            diagnostics::field("spritesHidden", canvas_ != nullptr ? canvas_->spritesHidden() : 0),
             diagnostics::field("viewWidth", width_),
             diagnostics::field("viewHeight", height_),
             diagnostics::field("spritesDrawn", drawn_),
@@ -412,11 +420,17 @@ private:
             }
             canvas_ = std::move(*made);
         }
+        canvas_->hideLayers(preview_ != nullptr ? preview_->hidden() : std::vector<std::uint32_t>{});
         canvas_->extract(*kView.world);
         extracted_ = true;
         if (!kView.owned.isNull() && kView.world->alive(kView.owned) &&
             readCamera(*kView.world, kView.owned, camera_)) {
             ++viewed_;
+        }
+        // Where an editor's preview looks, in place of the player's camera.
+        if (preview_ != nullptr && preview_->looking().has_value()) {
+            camera_ = previewedCamera(*preview_->looking(), camera_);
+            ++previewed_;
         }
         extractPlayers();
     }
@@ -530,6 +544,7 @@ private:
     std::optional<std::size_t> client_;
     /// The local players' views, told each frame (D367).
     view::PlayerViews* views_ = nullptr;
+    view::PreviewCamera* preview_ = nullptr;
     CanvasSettings settings_;
     CanvasCamera camera_;
     std::optional<execution::MonotonicInstant> presented_;
@@ -567,6 +582,7 @@ private:
     std::uint64_t drawn_ = 0;
     std::uint64_t animated_ = 0;
     std::uint64_t culled_ = 0;
+    std::uint64_t previewed_ = 0;
     std::uint64_t hidden_ = 0;
     std::uint64_t malformed_ = 0;
     std::uint64_t unknownTextures_ = 0;

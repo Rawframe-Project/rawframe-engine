@@ -5,16 +5,20 @@
 // their layers, then entities, and batch only where the order allows, by
 // texture and material (D356); the limits leave out a suffix of the order;
 // particles, trails, and beams sit in the canvas's plane, seen through its
-// rectangle (D357); and a game's canvas loads against its program.
+// rectangle (D357); and a game's canvas loads against its program. A
+// sprite on a layer an editor's preview hides is left out, and the
+// preview's eye places the view (D793).
 
 #include "rawframe/physics2d/components.h"
 #include "rawframe/render_canvas/canvas.h"
 #include "rawframe/render_canvas/errors.h"
 #include "rawframe/test/test.h"
+#include "rawframe/world/layer.h"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numbers>
 #include <string>
 #include <utility>
 #include <vector>
@@ -52,6 +56,11 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
                                             .alignment = alignof(particles::Trail),
                                             .plainData = true});
     builder.add<physics2d::Pose2D>();
+    builder.add(schema::ComponentDescriptor{.id = world::Layer::kComponentTypeId,
+                                            .name = std::string{world::Layer::kComponentName},
+                                            .size = sizeof(world::Layer),
+                                            .alignment = alignof(world::Layer),
+                                            .plainData = true});
     return *builder.freeze();
 }
 
@@ -372,5 +381,35 @@ RAWFRAME_TEST(ParticlesSitInTheCanvasPlane) {
     if (kFrame.particles.ribbonPoints.size() == 2) {
         const particles::RibbonPoint& kHead = kFrame.particles.ribbonPoints[0];
         RAWFRAME_EXPECT(near(kHead.place[0], 1) && near(kHead.place[1], -2) && near(kHead.place[2], 0));
+    }
+}
+
+RAWFRAME_TEST(ASpriteOnAHiddenLayerIsLeftOut) {
+    Rig rig;
+    const Sprite kBox{.texture = kRunner, .width = 1, .height = 1};
+    rig.spawn(kBox, physics2d::Pose2D{.x = -1});
+    const world::EntityHandle kLayered = rig.spawn(kBox, physics2d::Pose2D{.x = 1});
+    world::Layer onTwo{.layer = 2};
+    RAWFRAME_EXPECT(
+        rig.world.insertErased(kLayered, *rig.schema->find(world::Layer::kComponentTypeId), &onTwo).has_value());
+    const CanvasCamera kCamera{.height = 10, .aspect = 1};
+    RAWFRAME_EXPECT(rig.frame(kCamera).drawn == 2);
+    rig.canvas->hideLayers({3});
+    RAWFRAME_EXPECT(rig.frame(kCamera).drawn == 2);
+    rig.canvas->hideLayers({2});
+    RAWFRAME_EXPECT(rig.frame(kCamera).drawn == 1 && rig.canvas->spritesHidden() == 1);
+    rig.canvas->hideLayers({});
+    RAWFRAME_EXPECT(rig.frame(kCamera).drawn == 2);
+}
+
+RAWFRAME_TEST(APreviewsEyePlacesTheView) {
+    // Ten meters over (3, 4), 90 degrees high: twenty meters of the plane
+    // seen, the aspect and clock kept.
+    const auto kLook = view::lookingAt({3, 4, 10}, {3, 4, 0}, static_cast<float>(std::numbers::pi / 2));
+    RAWFRAME_EXPECT(kLook.has_value());
+    if (kLook.has_value()) {
+        const CanvasCamera kSeen = previewedCamera(*kLook, {.height = 10, .aspect = 2, .elapsed = 0.5F});
+        RAWFRAME_EXPECT(kSeen.x == 3 && kSeen.y == 4 && near(kSeen.height, 20) && kSeen.aspect == 2 &&
+                        kSeen.elapsed == 0.5F);
     }
 }

@@ -86,6 +86,12 @@ struct CanvasCamera {
     float elapsed = 0;
 };
 
+/// `camera` seeing as an editor's preview looks (D793): around where its
+/// eye is over the canvas's plane, as tall as a perspective from there
+/// sees the plane at the middle of its view, the aspect and clock as they
+/// were. A 2D view looks straight down at the plane from its eye.
+[[nodiscard]] CanvasCamera previewedCamera(const view::Perspective& look, CanvasCamera camera) noexcept;
+
 /// A camera's view geometry for picking (ADR-0052, D366): the World point
 /// at the view's middle and how many meters it sees from top to bottom;
 /// the view's size is the caller's.
@@ -191,6 +197,13 @@ public:
     const CanvasFrame& queue(const CanvasCamera& camera);
 
     [[nodiscard]] std::span<const SpriteInstance> extracted() const noexcept;
+
+    /// The layers whose sprites are left out from the next extract on, as
+    /// an editor's preview hides them (D791, D793): a sprite whose entity's
+    /// `rawframe.world.layer` is one of them. None leaves nothing out.
+    void hideLayers(const std::vector<std::uint32_t>& layers);
+    /// How many sprites were left out so, summed over the extracts.
+    [[nodiscard]] std::uint64_t spritesHidden() const noexcept;
 
 private:
     struct State;

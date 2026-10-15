@@ -3,6 +3,7 @@
 #include "rawframe/physics2d/components.h"
 #include "rawframe/render_canvas/errors.h"
 #include "rawframe/world/column_query.h"
+#include "rawframe/world/layer.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/layouts.h"
 
@@ -68,6 +69,9 @@ struct Canvas::State {
     std::vector<BeamInstance> beams;
     rawframe::particles::Particles particles;
     std::optional<schema::ComponentRuntimeId> pose;
+    std::optional<schema::ComponentRuntimeId> layer;
+    std::vector<std::uint32_t> hiddenLayers;
+    std::uint64_t spritesHidden = 0;
     std::vector<SpriteInstance> extracted;
     std::vector<const SpriteInstance*> order;
     CanvasFrame frame;
@@ -258,6 +262,9 @@ result::Result<std::unique_ptr<Canvas>> Canvas::create(const schema::SchemaRegis
     if (const auto kPose = registry.find(physics2d::Pose2D::kComponentTypeId)) {
         state->pose = *kPose;
     }
+    if (const auto kLayer = registry.find(world::Layer::kComponentTypeId)) {
+        state->layer = *kLayer;
+    }
     return std::unique_ptr<Canvas>{new Canvas{std::move(state)}};
 }
 
@@ -269,6 +276,15 @@ void Canvas::extract(world::World& world) {
             for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
                 SpriteInstance instance{.entity = chunk.entities[row],
                                         .component = static_cast<std::uint32_t>(component)};
+                // Left out where an editor's preview hides its layer (D793).
+                if (!state.hiddenLayers.empty() && state.layer.has_value()) {
+                    if (const auto* layer =
+                            static_cast<const world::Layer*>(world.getErased(instance.entity, *state.layer));
+                        layer != nullptr && std::ranges::contains(state.hiddenLayers, layer->layer)) {
+                        ++state.spritesHidden;
+                        continue;
+                    }
+                }
                 std::memcpy(&instance.sprite, chunk.columns[0] + (row * sizeof(Sprite)), sizeof(Sprite));
                 if (state.pose) {
                     if (const auto* pose =
@@ -327,6 +343,24 @@ void Canvas::extract(world::World& world) {
     };
     kRibbons(state.trailQueries, state.trails);
     kRibbons(state.beamQueries, state.beams);
+}
+
+void Canvas::hideLayers(const std::vector<std::uint32_t>& layers) {
+    state_->hiddenLayers = layers;
+}
+
+std::uint64_t Canvas::spritesHidden() const noexcept {
+    return state_->spritesHidden;
+}
+
+CanvasCamera previewedCamera(const view::Perspective& look, CanvasCamera camera) noexcept {
+    camera.x = look.eye[0];
+    camera.y = look.eye[1];
+    const double kTall = 2 * std::abs(look.eye[2]) * std::tan(static_cast<double>(look.fovY) / 2);
+    if (std::isfinite(kTall)) {
+        camera.height = static_cast<float>(std::clamp(kTall, 0.01, 1e5));
+    }
+    return camera;
 }
 
 const CanvasFrame& Canvas::queue(const CanvasCamera& camera) {
