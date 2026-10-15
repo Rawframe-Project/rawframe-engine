@@ -677,7 +677,10 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              "clicked at [0-9]+,[0-9]+.*saw studio_previewing.*typed 0,30,0.5 at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"viewsSet\":1,[^\n]*\"previewing\":false,\"played\":1,\"playing\":false,[^\n]*\"status\":\"game stopped\".*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,.*\"code\":\"scene_followed\"[^\n]*\"scene\":\"gate.scene\",\"created\":1.*{\"endpoint\":\"127.0.0.1:[0-9]+\",\"pinFile\":\"[^\"]*/server.fingerprint\",\"tokenFile\":\"[^\"]*/token\"}")
         # Played in the viewport (D789): the client's window kept hidden, its
         # pictures drawn at the viewport's size and streamed to Studio,
-        # which shows them in the center.
+        # which shows them in the center; and a click in the viewport handed
+        # to the hidden client as its own window's (D790), which keeps it as
+        # a ray the server picks the gate's post with, as studio_picks_plaza
+        # clicks the client's own window.
         add_test(NAME studio_plays_in_viewport
                  COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.play_in_viewport = true"
                          ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
@@ -685,13 +688,14 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         wait=4 @Stop until=studio_game_ended
+                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" wait=3 @Viewport "until=studio_said,status=\"picked "
+                         @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_plays_in_viewport PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"studio_viewport\"[^\n]*\"inViewport\":true,\"pictures\":[1-9][0-9]*,\"width\":[1-9][0-9]+,\"height\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"window\":false,[^\n]*\"streamed\":[1-9][0-9]*,\"streamFailures\":0}")
+                             "\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"picked\":1,.*\"code\":\"studio_viewport\"[^\n]*\"inViewport\":true,\"pictures\":[1-9][0-9]*,\"inputs\":[1-9][0-9]*,\"inputsTaken\":[1-9][0-9]*,\"width\":[1-9][0-9]+,\"height\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"window\":false,[^\n]*\"streamed\":[1-9][0-9]*,\"streamFailures\":0}")
         # The Console (D778): Plaza played, the Console shown, its Server
         # lines hidden and shown again, and the game stopped; what Studio
         # said and the records its server and client logged reach its

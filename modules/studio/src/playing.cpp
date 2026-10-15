@@ -20,7 +20,7 @@ void ShellParticipant::startPlaying() {
     // In the viewport at its size, where one is shown (D789).
     play_->viewport.reset();
     if (playInViewport_) {
-        const ui::Rect kAt = tree_->contains(viewport_) ? tree_->rectOf(viewport_) : ui::Rect{};
+        const ui::Rect kAt = tree_->contains(viewport_) ? tree_->placedRectOf(viewport_) : ui::Rect{};
         play_->viewport =
             std::array<std::uint32_t, 2>{kAt.width >= 64 ? static_cast<std::uint32_t>(kAt.width) : 640U,
                                          kAt.height >= 64 ? static_cast<std::uint32_t>(kAt.height) : 360U};

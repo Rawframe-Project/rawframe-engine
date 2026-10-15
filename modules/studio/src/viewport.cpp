@@ -1,6 +1,8 @@
 #include "rawframe/render/capture.h"
+#include "rawframe/world_tooling/window_input.h"
 #include "shell.h"
 
+#include <algorithm>
 #include <fstream>
 #include <iterator>
 
@@ -47,6 +49,35 @@ void ShellParticipant::showViewport() {
     viewRows_.push_back(viewport_);
     static_cast<void>(tree_->setLook(viewport_, ui::Look{.fill = kBackground, .image = kViewportImage}));
     static_cast<void>(tree_->setName(viewport_, "Viewport"));
+}
+
+void ShellParticipant::forwardInput() {
+    if (forwarding_ == nullptr) {
+        return;
+    }
+    // While the game plays in the viewport and shows there, its area is
+    // the game's; else the window host acts on all of it.
+    const bool kPlaysHere = playing_.has_value() && play_.has_value() && play_->viewport.has_value() &&
+                            picture_ != nullptr && tree_->contains(viewport_) && !scene_.empty();
+    if (!kPlaysHere) {
+        forwarding_->forwardOver(std::nullopt);
+        static_cast<void>(forwarding_->take());
+        return;
+    }
+    const ui::Rect kAt = tree_->placedRectOf(viewport_);
+    forwarding_->forwardOver(std::array<float, 4>{kAt.x, kAt.y, kAt.width, kAt.height});
+    std::vector<world_tooling::WindowInput> events = forwarding_->take();
+    // In records of at most the most one carries.
+    for (std::size_t from = 0; from < events.size(); from += world_tooling::kMostWindowInputs) {
+        const std::size_t kTo = std::min(events.size(), from + world_tooling::kMostWindowInputs);
+        const std::vector<world_tooling::WindowInput> kPart{events.begin() + static_cast<std::ptrdiff_t>(from),
+                                                            events.begin() + static_cast<std::ptrdiff_t>(kTo)};
+        inputsForwarded_ += kPart.size();
+        const std::string kReply = ask(previewInputRecord(next(), scene_, world_tooling::windowInputsValue(kPart)));
+        if (kReply.find("\"taken\":true") != std::string::npos) {
+            ++inputsTaken_;
+        }
+    }
 }
 
 } // namespace rawframe::studio

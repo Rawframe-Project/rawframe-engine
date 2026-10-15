@@ -12,7 +12,8 @@ namespace rawframe::studio {
 namespace {
 
 constexpr std::string_view kProvided[] = {ui::kUiFrames.name};
-constexpr std::string_view kMaybe[] = {view::kUiPointing.name, view::kUiTyping.name, ui::kAccessSeat.name};
+constexpr std::string_view kMaybe[] = {
+    view::kUiPointing.name, view::kUiTyping.name, ui::kAccessSeat.name, world_tooling::kForwarding.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 result::Status misconfigured(std::string_view why) {
@@ -54,8 +55,9 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
                          .serverSettings = std::string{configuration.path("studio.play.server_settings").value_or("")},
                          .clientSettings = std::string{configuration.path("studio.play.client_settings").value_or("")}};
         playDirectory_ = std::string{configuration.path("studio.play.directory").value_or("")};
-        // Played in the viewport, or in the client's own window (D789).
-        RAWFRAME_TRY_ASSIGN(playInViewport_, configuration.truth("studio.play_in_viewport", false));
+        // Played in the viewport, or in the client's own window (D789),
+        // the viewport by default now its input reaches the game (D790).
+        RAWFRAME_TRY_ASSIGN(playInViewport_, configuration.truth("studio.play_in_viewport", true));
     }
     // The cook tool: named, or beside Studio, where an export puts it; the
     // content goes where the game plays (D502).
@@ -90,6 +92,10 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     }
     if (context.has(view::kUiPointing.name)) {
         RAWFRAME_TRY_ASSIGN(pointing_, context.capability(view::kUiPointing));
+    }
+    // What lands on the viewport, for the game played there (D790).
+    if (context.has(world_tooling::kForwarding.name)) {
+        RAWFRAME_TRY_ASSIGN(forwarding_, context.capability(world_tooling::kForwarding));
     }
     if (context.has(view::kUiTyping.name)) {
         RAWFRAME_TRY_ASSIGN(typing_, context.capability(view::kUiTyping));
@@ -262,6 +268,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     pollPicks(kSeconds);
     readLogs(kSeconds);
     followPicture();
+    forwardInput();
     followSplitter();
     // A press is acted on as the window's records come and may have
     // changed what a column holds; the wheel is turned over it laid out,
@@ -373,6 +380,8 @@ void ShellParticipant::stop() noexcept {
                  "what Studio's viewport showed",
                  {diagnostics::field("inViewport", playInViewport_),
                   diagnostics::field("pictures", picturesShown_),
+                  diagnostics::field("inputs", inputsForwarded_),
+                  diagnostics::field("inputsTaken", inputsTaken_),
                   diagnostics::field("width", picture_ != nullptr ? std::uint64_t{picture_->levels[0].width} : 0),
                   diagnostics::field("height", picture_ != nullptr ? std::uint64_t{picture_->levels[0].height} : 0)});
     // And what the start screen did (D781): the games made from templates,

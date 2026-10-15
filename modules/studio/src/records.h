@@ -142,6 +142,9 @@ struct Heard {
 /// `authoring.mark` for `scene` (D464): the point its preview marks, or
 /// none.
 [[nodiscard]] Value markRecord(std::int64_t id, std::string_view scene, const std::optional<std::array<double, 3>>& at);
+/// `authoring.preview_input` (D790): what landed on the viewport, for the
+/// game played there.
+[[nodiscard]] Value previewInputRecord(std::int64_t id, std::string_view scene, Value events);
 [[nodiscard]] std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene);
 
 /// The part of the preview's mark a pick's answer says the pointer has

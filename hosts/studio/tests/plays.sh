@@ -43,9 +43,13 @@ if [ -n "${STUDIO_COOK:-}" ]; then
     echo "studio.cook = $STUDIO_COOK" >>"$work/studio.conf"
 fi
 # And settings of its own, in STUDIO_SETTINGS, as playing in the viewport
-# (D789).
+# (D789); else the game plays in its own window, where these tests click
+# (D790 made the viewport Studio's default).
 if [ -n "${STUDIO_SETTINGS:-}" ]; then
     printf '%s\n' "$STUDIO_SETTINGS" >>"$work/studio.conf"
+fi
+if ! grep -q '^studio.play_in_viewport' "$work/studio.conf"; then
+    echo "studio.play_in_viewport = false" >>"$work/studio.conf"
 fi
 "$1" --config "$work/studio.conf" >"$work/studio.log" 2>&1 &
 studio=$!

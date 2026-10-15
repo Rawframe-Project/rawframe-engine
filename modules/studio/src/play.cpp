@@ -213,44 +213,50 @@ result::Status Play::launch() {
                                      {"tooling.token_file", (kAt / "token").string()},
                                      // Picked from (D456) and debugged (D460).
                                      {"tooling.grants", "inspect debug"}})));
-    RAWFRAME_TRY(written(
-        kAt / "client.conf",
-        settingsOf(kWithContent(settings_.viewport.has_value() ? without(contents(settings_.clientSettings),
-                                                                         {"window.visible",
-                                                                          "render.offscreen",
-                                                                          "render.read_every",
-                                                                          "render.width",
-                                                                          "render.height",
-                                                                          "render.stream"})
-                                                               : contents(settings_.clientSettings)),
-                   {{"host.iteration_rate", "120"},
-                    {"kest.plan_only", "true"},
-                    {"bots.count", "1"},
-                    {"bots.player", "true"},
-                    {"render.device", "any"},
-                    // Its styles and UI document followed twice a
-                    // second, an edited one given to the UI as it
-                    // plays (D634, D761).
-                    {"ui.reload_every", "60"},
-                    // And its content, a material Studio cooks
-                    // again drawn as it plays (D734).
-                    {"content.reload_every", "60"}},
-                   {{"kest.game", kGame},
-                    {"network.quic.pin_file", (kAt / "server.fingerprint").string()},
-                    {"bots.endpoint", "127.0.0.1:" + kPort},
-                    {"network.quic.self_signed", "true"},
-                    {"network.quic.fingerprint_file", (kAt / "client.fingerprint").string()},
-                    {"tooling.endpoint", "127.0.0.1:" + std::to_string(kEndpointPort)},
-                    {"tooling.token_file", (kAt / "token").string()},
-                    {"tooling.grants", "view"}}) +
-            // Played in Studio's viewport, its window kept
-            // hidden and each picture streamed (D789).
-            (settings_.viewport.has_value() ? "window.visible = false\nrender.offscreen = true\nrender.read_every = 1\n"
-                                              "render.width = " +
-                                                  std::to_string((*settings_.viewport)[0]) +
-                                                  "\nrender.height = " + std::to_string((*settings_.viewport)[1]) +
-                                                  "\nrender.stream = " + (kAt / "picture").string() + "\n"
-                                            : std::string{})));
+    // Played in Studio's viewport (D789, D790): its window kept hidden at
+    // the viewport's size, so a point there is the same point here, and
+    // each picture streamed; those settings Studio's, not the game's.
+    std::string given = contents(settings_.clientSettings);
+    std::string viewported;
+    if (settings_.viewport.has_value()) {
+        given = without(given,
+                        {"window.visible",
+                         "window.width",
+                         "window.height",
+                         "render.offscreen",
+                         "render.read_every",
+                         "render.width",
+                         "render.height",
+                         "render.stream"});
+        const std::string kWidth = std::to_string((*settings_.viewport)[0]);
+        const std::string kHeight = std::to_string((*settings_.viewport)[1]);
+        viewported = "window.visible = false\nwindow.width = " + kWidth + "\nwindow.height = " + kHeight +
+                     "\nrender.offscreen = true\nrender.read_every = 1\nrender.width = " + kWidth +
+                     "\nrender.height = " + kHeight + "\nrender.stream = " + (kAt / "picture").string() + "\n";
+    }
+    RAWFRAME_TRY(written(kAt / "client.conf",
+                         settingsOf(kWithContent(given),
+                                    {{"host.iteration_rate", "120"},
+                                     {"kest.plan_only", "true"},
+                                     {"bots.count", "1"},
+                                     {"bots.player", "true"},
+                                     {"render.device", "any"},
+                                     // Its styles and UI document followed twice a
+                                     // second, an edited one given to the UI as it
+                                     // plays (D634, D761).
+                                     {"ui.reload_every", "60"},
+                                     // And its content, a material Studio cooks
+                                     // again drawn as it plays (D734).
+                                     {"content.reload_every", "60"}},
+                                    {{"kest.game", kGame},
+                                     {"network.quic.pin_file", (kAt / "server.fingerprint").string()},
+                                     {"bots.endpoint", "127.0.0.1:" + kPort},
+                                     {"network.quic.self_signed", "true"},
+                                     {"network.quic.fingerprint_file", (kAt / "client.fingerprint").string()},
+                                     {"tooling.endpoint", "127.0.0.1:" + std::to_string(kEndpointPort)},
+                                     {"tooling.token_file", (kAt / "token").string()},
+                                     {"tooling.grants", "view"}}) +
+                             viewported));
     endpointPort_ = kEndpointPort;
     serverEndpointPort_ = kServerEndpointPort;
     // Where a debugger attaches, for rawframe-debug given the game (D462).

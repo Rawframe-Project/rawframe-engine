@@ -23,6 +23,7 @@
 #include "rawframe/ui/tree.h"
 #include "rawframe/view/pointing.h"
 #include "rawframe/view/typing.h"
+#include "rawframe/world_tooling/forwarding.h"
 #include "records.h"
 
 #include <algorithm>
@@ -203,6 +204,10 @@ private:
 
     /// The viewport, under the view's fields, showing that picture.
     void showViewport();
+
+    /// What landed on the viewport handed to the game played there, and
+    /// the viewport's area told the window host while it plays (D790).
+    void forwardInput();
 
     /// The left dock's layout, `width` wide (D788).
     static ui::Layout leftLayout(float width);
@@ -942,6 +947,11 @@ private:
     std::optional<std::filesystem::file_time_type> pictureWritten_;
     std::uint64_t pictureSequence_ = 0;
     std::uint64_t picturesShown_ = 0;
+    /// What lands on the viewport while the game plays there, handed to
+    /// it: how many events, and how many records the preview took (D790).
+    world_tooling::Forwarding* forwarding_ = nullptr;
+    std::uint64_t inputsForwarded_ = 0;
+    std::uint64_t inputsTaken_ = 0;
     std::vector<ui::Node> sceneRows_;
     std::vector<ui::Node> entityRows_;
     std::vector<ui::Node> componentRows_;

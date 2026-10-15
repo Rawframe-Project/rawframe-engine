@@ -357,6 +357,12 @@ Value markRecord(std::int64_t id, std::string_view scene, const std::optional<st
     return made;
 }
 
+Value previewInputRecord(std::int64_t id, std::string_view scene, Value events) {
+    Value made = recordOf("authoring.preview_input", id, scene);
+    made.add("events", std::move(events));
+    return made;
+}
+
 std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene) {
     const auto kParsed = document::parse(reply);
     const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
