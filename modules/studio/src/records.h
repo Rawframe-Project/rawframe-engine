@@ -145,6 +145,8 @@ struct Heard {
 /// `authoring.preview_input` (D790): what landed on the viewport, for the
 /// game played there.
 [[nodiscard]] Value previewInputRecord(std::int64_t id, std::string_view scene, Value events);
+/// `authoring.hide_layers` (D791): the layers the preview leaves out.
+[[nodiscard]] Value hideLayersRecord(std::int64_t id, std::string_view scene, const std::vector<std::uint32_t>& layers);
 [[nodiscard]] std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene);
 
 /// The part of the preview's mark a pick's answer says the pointer has

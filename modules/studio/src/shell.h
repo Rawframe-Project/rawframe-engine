@@ -230,6 +230,9 @@ private:
     /// `layer`'s name, as the game's field line names it, else its number.
     [[nodiscard]] std::string layerName(std::uint32_t layer) const;
 
+    /// The layers hidden told to the preview of the scene shown (D791).
+    void tellHidden();
+
     /// The locked layer's name `entity` is on, none if it is on no locked
     /// one.
     [[nodiscard]] std::optional<std::string> lockedOf(const std::string& entity) const;
@@ -927,12 +930,21 @@ private:
     ui::Node hierarchyTab_{};
     bool layersShown_ = false;
     struct LayerPress {
+        enum class Does : std::uint8_t {
+            Choose,
+            Lock,
+            Hide,
+        };
         std::uint32_t layer = 0;
-        bool lock = false;
+        Does does = Does::Choose;
     };
     std::vector<ui::Node> layerRows_;
     std::vector<std::pair<ui::Node, LayerPress>> layerPresses_;
     std::vector<std::uint32_t> locked_;
+    /// The layers the preview leaves out (D791), told it as they change
+    /// and as it is attached, and how many times it was told.
+    std::vector<std::uint32_t> hiddenLayers_;
+    std::uint64_t layersHidden_ = 0;
     /// The layer each entity in `entities_` is on, nought for none.
     std::vector<std::uint32_t> entityLayers_;
     std::uint64_t locks_ = 0;

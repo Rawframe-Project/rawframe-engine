@@ -101,12 +101,16 @@ void ShellParticipant::showLayers() {
         }
         layerRows_.push_back(*line);
         // Its name and count, pressed to choose its entities: the named
-        // selection; then its lock.
+        // selection; then whether the preview shows it, and its lock.
         auto chosen = box(*line, ui::Layout{.grow = 1, .padding = {8, 4, 8, 4}}, kRow);
+        auto hide = box(*line, ui::Layout{.padding = {10, 4, 10, 4}}, kRow);
         auto lock = box(*line, ui::Layout{.padding = {10, 4, 10, 4}}, kRow);
-        if (!chosen.has_value() || !lock.has_value()) {
+        if (!chosen.has_value() || !hide.has_value() || !lock.has_value()) {
             return;
         }
+        const bool kHidden = std::ranges::contains(hiddenLayers_, kLayer);
+        static_cast<void>(
+            pressWords(*hide, kHidden ? "Show " + layerName(kLayer) : "Hide " + layerName(kLayer), kText, 14));
         static_cast<void>(
             pressWords(*chosen,
                        layerName(kLayer) + "  " + std::to_string(kEntities.size()) + (kLocked ? "  (locked)" : ""),
@@ -114,8 +118,9 @@ void ShellParticipant::showLayers() {
                        14));
         static_cast<void>(
             pressWords(*lock, kLocked ? "Unlock " + layerName(kLayer) : "Lock " + layerName(kLayer), kText, 14));
-        layerPresses_.push_back({*chosen, LayerPress{.layer = kLayer, .lock = false}});
-        layerPresses_.push_back({*lock, LayerPress{.layer = kLayer, .lock = true}});
+        layerPresses_.push_back({*chosen, LayerPress{.layer = kLayer, .does = LayerPress::Does::Choose}});
+        layerPresses_.push_back({*hide, LayerPress{.layer = kLayer, .does = LayerPress::Does::Hide}});
+        layerPresses_.push_back({*lock, LayerPress{.layer = kLayer, .does = LayerPress::Does::Lock}});
     }
 }
 
@@ -130,7 +135,21 @@ bool ShellParticipant::pressLayers(ui::Node node) {
         return false;
     }
     const LayerPress kLayer = kPress->second;
-    if (kLayer.lock) {
+    if (kLayer.does == LayerPress::Does::Hide) {
+        // Left out of the preview, or shown again; how an author looks,
+        // kept while Studio runs as a lock is.
+        if (const auto kThere = std::ranges::find(hiddenLayers_, kLayer.layer); kThere != hiddenLayers_.end()) {
+            hiddenLayers_.erase(kThere);
+            say(layerName(kLayer.layer) + " shown");
+        } else {
+            hiddenLayers_.push_back(kLayer.layer);
+            say(layerName(kLayer.layer) + " hidden");
+        }
+        tellHidden();
+        showLayers();
+        return true;
+    }
+    if (kLayer.does == LayerPress::Does::Lock) {
         // Kept while Studio runs: how an author works, not the game's.
         if (const auto kThere = std::ranges::find(locked_, kLayer.layer); kThere != locked_.end()) {
             locked_.erase(kThere);
@@ -166,6 +185,16 @@ bool ShellParticipant::pressLayers(ui::Node node) {
     }
     say(layerName(kLayer.layer) + " chosen");
     return true;
+}
+
+void ShellParticipant::tellHidden() {
+    if (scene_.empty()) {
+        return;
+    }
+    const std::string kReply = ask(hideLayersRecord(next(), scene_, hiddenLayers_));
+    if (kReply.find("\"hidden\":true") != std::string::npos) {
+        ++layersHidden_;
+    }
 }
 
 std::optional<std::string> ShellParticipant::lockedOf(const std::string& entity) const {

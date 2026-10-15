@@ -212,7 +212,10 @@ result::Status Play::launch() {
                                      {"tooling.endpoint", "127.0.0.1:" + std::to_string(kServerEndpointPort)},
                                      {"tooling.token_file", (kAt / "token").string()},
                                      // Picked from (D456) and debugged (D460).
-                                     {"tooling.grants", "inspect debug"}})));
+                                     {"tooling.grants", "inspect debug"},
+                                     // Layers replicated, so the client hides
+                                     // one (D791); the client is told so too.
+                                     {"kest.replicate_layers", "true"}})));
     // Played in Studio's viewport (D789, D790): its window kept hidden at
     // the viewport's size, so a point there is the same point here, and
     // each picture streamed; those settings Studio's, not the game's.
@@ -255,7 +258,8 @@ result::Status Play::launch() {
                                      {"network.quic.fingerprint_file", (kAt / "client.fingerprint").string()},
                                      {"tooling.endpoint", "127.0.0.1:" + std::to_string(kEndpointPort)},
                                      {"tooling.token_file", (kAt / "token").string()},
-                                     {"tooling.grants", "view"}}) +
+                                     {"tooling.grants", "view"},
+                                     {"kest.replicate_layers", "true"}}) +
                              viewported));
     endpointPort_ = kEndpointPort;
     serverEndpointPort_ = kServerEndpointPort;

@@ -372,6 +372,10 @@ void ShellParticipant::attachPreview() {
                      "a scene's preview is live in a running game",
                      {diagnostics::field("scene", std::string_view{scene_})});
         markChosen();
+        // And without the layers hidden before it was attached (D791).
+        if (!hiddenLayers_.empty()) {
+            tellHidden();
+        }
     }
 }
 

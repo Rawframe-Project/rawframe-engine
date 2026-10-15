@@ -363,6 +363,16 @@ Value previewInputRecord(std::int64_t id, std::string_view scene, Value events) 
     return made;
 }
 
+Value hideLayersRecord(std::int64_t id, std::string_view scene, const std::vector<std::uint32_t>& layers) {
+    Value made = recordOf("authoring.hide_layers", id, scene);
+    Value listed = Value::array();
+    for (const std::uint32_t kLayer : layers) {
+        listed.push(Value::integer(kLayer));
+    }
+    made.add("layers", std::move(listed));
+    return made;
+}
+
 std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene) {
     const auto kParsed = document::parse(reply);
     const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;

@@ -373,7 +373,8 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("together", together_),
                   diagnostics::field("layersChosen", layersChosen_),
                   diagnostics::field("locks", locks_),
-                  diagnostics::field("lockRefused", lockRefused_)});
+                  diagnostics::field("lockRefused", lockRefused_),
+                  diagnostics::field("hiddenTold", layersHidden_)});
     // What the viewport showed (D789).
     emitter_.log(diagnostics::Severity::Info,
                  kViewported,

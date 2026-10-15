@@ -696,6 +696,31 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"picked\":1,.*\"code\":\"studio_viewport\"[^\n]*\"inViewport\":true,\"pictures\":[1-9][0-9]*,\"inputs\":[1-9][0-9]*,\"inputsTaken\":[1-9][0-9]*,\"width\":[1-9][0-9]+,\"height\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"window\":false,[^\n]*\"streamed\":[1-9][0-9]*,\"streamFailures\":0}")
+        # A layer hidden in the viewport (D791): the game played in the
+        # viewport with layers replicated, the gate's post put on layer 1
+        # as it plays (the scene written, which the server takes), and
+        # Hide on the Layers' layer 1 told the preview, which takes it.
+        # Whether the post's model is then left out is render_scene's test:
+        # the gate lies past the played player's interest, so its client
+        # holds none of it.
+        add_test(NAME studio_hides_layer
+                 COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.play_in_viewport = true"
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
+                         "@gate post" wheel=1100,400,20 "@add#2:rawframe.world.layer" "until=studio_said,status=\"rawframe.world.layer added"
+                         wheel=1100,400,20 "@layer#2:1" "until=studio_said,status=\"layer set to 1" wait=3
+                         @Layers "@Hide layer 1" "until=studio_said,status=\"layer 1 hidden" wait=3
+                         @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_hides_layer PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             PROCESSORS 3
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "saw studio_said,status=\"layer set to 1.*saw studio_said,status=\"layer 1 hidden.*\"code\":\"studio_selection\"[^\n]*\"hiddenTold\":[1-9].*\"code\":\"scene_followed\"[^\n]*\"scene\":\"gate.scene\",\"created\":0,\"destroyed\":0,\"changed\":1")
         # The Console (D778): Plaza played, the Console shown, its Server
         # lines hidden and shown again, and the game stopped; what Studio
         # said and the records its server and client logged reach its
