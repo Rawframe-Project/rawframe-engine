@@ -3,6 +3,8 @@
 // where a material names the render texture; before the view has drawn,
 // the material samples white; a split-screen view is placed in its
 // region, and one drawn at a render scale is scaled to fill it (D373).
+// An editor's view modes draw a surface's own color unlit, or its normal
+// as a color (D794).
 // Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU is set.
 
 #include "fixture.h"
@@ -12,6 +14,8 @@
 #include "rawframe/test/test.h"
 
 #include <array>
+#include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <optional>
 
@@ -233,4 +237,60 @@ RAWFRAME_TEST(AViewDrawnAtItsRenderScaleFillsItsRegion) {
         RAWFRAME_EXPECT(kRed(at(*pixels, 1, 1)) && kRed(at(*pixels, kSide - 2, kSide - 2)) &&
                         kRed(at(*pixels, kSide / 2, kSide / 2)));
     }
+}
+
+RAWFRAME_TEST(AnEditorsViewModesDrawColorsAndNormals) {
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto scene = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(scene.has_value() && framer.has_value());
+    if (!scene.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    // A red box filling the middle, lit by the sky alone, mapped linearly.
+    SceneFrame frame = looking();
+    frame.shadows.count = 0;
+    frame.dither = false;
+    frame.tonemapper = render_scene::Tonemapper::Linear;
+    frame.lights.sun = {0, 0, 0};
+    frame.lights.ground = {0, 0, 0};
+    frame.draws = {box(5, 1, {1, 0, 0, 1})};
+    const auto kMiddle = [&]() -> std::optional<std::array<int, 3>> {
+        const auto kPixels = drawn(**framer, **scene, frame, kMeshes);
+        if (!kPixels.has_value()) {
+            return std::nullopt;
+        }
+        const auto [kRed, kGreen, kBlue] = at(*kPixels, kSide / 2, kSide / 2);
+        return std::array<int, 3>{kRed, kGreen, kBlue};
+    };
+    const auto kLit = kMiddle();
+    frame.mode = view::ViewMode::Unlit;
+    const auto kUnlit = kMiddle();
+    frame.mode = view::ViewMode::Normals;
+    const auto kNormals = kMiddle();
+    RAWFRAME_EXPECT(kLit.has_value() && kUnlit.has_value() && kNormals.has_value());
+    if (!kLit.has_value() || !kUnlit.has_value() || !kNormals.has_value()) {
+        return;
+    }
+    std::printf("lit %d %d %d, unlit %d %d %d, normals %d %d %d\n",
+                (*kLit)[0],
+                (*kLit)[1],
+                (*kLit)[2],
+                (*kUnlit)[0],
+                (*kUnlit)[1],
+                (*kUnlit)[2],
+                (*kNormals)[0],
+                (*kNormals)[1],
+                (*kNormals)[2]);
+    // Unlit: its own red, brighter than the sky alone lights it.
+    RAWFRAME_EXPECT((*kUnlit)[0] > 200 && (*kUnlit)[1] < 30 && (*kUnlit)[0] > (*kLit)[0] + 20);
+    // Normals: the face toward the eye along +Z, half red and green, blue.
+    RAWFRAME_EXPECT(std::abs((*kNormals)[0] - (*kNormals)[1]) < 12 && (*kNormals)[2] > (*kNormals)[0] + 30 &&
+                    (*kNormals)[0] > 60);
 }

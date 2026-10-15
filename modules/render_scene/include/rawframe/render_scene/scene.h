@@ -21,6 +21,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
 #include "rawframe/view/headset.h"
+#include "rawframe/view/preview.h"
 #include "rawframe/view/view.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_animation/animation.h"
@@ -197,6 +198,8 @@ struct SceneCamera {
     /// w), rolled as a head is: a headset's eye (D595), for which `yaw` and
     /// `pitch` say nothing; none for the eye `yaw` and `pitch` aim.
     std::optional<std::array<float, 4>> orientation;
+    /// How an editor's preview draws the scene (D794).
+    view::ViewMode mode = view::ViewMode::Lit;
 };
 
 /// Column-major, as shaders read them.
@@ -630,6 +633,8 @@ struct SceneFrame {
     /// Whether the tonemapped picture is antialiased by FXAA (D296): never
     /// with the temporal inputs, which are then off.
     bool fxaa = false;
+    /// The camera's view mode (D794).
+    view::ViewMode mode = view::ViewMode::Lit;
     /// The samples a pixel of the models' passes takes: one, or more where
     /// multisampling antialiases the frame (D343), never with the temporal
     /// inputs or FXAA.

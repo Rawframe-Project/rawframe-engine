@@ -441,12 +441,15 @@ private:
         }
         // Seen from where the preview looks, exposed as the player's camera
         // says (D432).
+        // Lit, but where the preview draws otherwise while it looks (D794).
+        camera_.mode = view::ViewMode::Lit;
         if (kOwned && preview_ != nullptr && preview_->looking().has_value()) {
             const view::Perspective& kLook = *preview_->looking();
             camera_.eye = kLook.eye;
             camera_.yaw = kLook.yaw;
             camera_.pitch = kLook.pitch;
             camera_.fovY = kLook.fovY;
+            camera_.mode = preview_->mode();
             ++previewed_;
         }
         HandsInWorld hands;

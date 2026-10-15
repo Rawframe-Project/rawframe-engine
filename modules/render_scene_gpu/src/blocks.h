@@ -67,8 +67,11 @@ struct FrameBlock {
     /// The view's turn from the World's axes to the eye's, which a
     /// material's transform reads (D714).
     Matrix4 view{};
+    /// How an editor's preview draws (D794): nought lit, one unlit, two
+    /// normals.
+    std::array<float, 4> mode{};
 };
-static_assert(sizeof(FrameBlock) == 944, "the scene's shaders read the frame as 944 bytes");
+static_assert(sizeof(FrameBlock) == 960, "the scene's shaders read the frame as 960 bytes");
 
 /// A shadow square's view as the shadow's shaders read it (std140): the
 /// cascade's or the light's view and projection, then the frame's eye and

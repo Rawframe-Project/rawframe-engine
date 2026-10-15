@@ -85,6 +85,9 @@ struct Frame
     // The view's turn from the World's axes to the eye's, which a
     // material's transform reads (D714).
     float4x4 view;
+    // How an editor's preview draws (D794): nought lit, one its surfaces'
+    // own colors, two their normals as colors.
+    float4 mode;
 }
 
 // A point or spot light (D290): its place relative to the eye and its
@@ -792,6 +795,13 @@ Lit shaded(Corner corner, bool decaled, bool front)
     if (evaluated.unlit)
     {
         lit.color = float4(color, opacity);
+        return lit;
+    }
+    // An editor's view modes (D794): every surface's own color standing
+    // as an unlit material's does, or its normal as a color.
+    if (frame.mode.x > 0.5)
+    {
+        lit.color = float4(frame.mode.x > 1.5 ? normal * 0.5 + 0.5 : color, opacity);
         return lit;
     }
     const float reflectance = (evaluated.ior - 1.0) / (evaluated.ior + 1.0);

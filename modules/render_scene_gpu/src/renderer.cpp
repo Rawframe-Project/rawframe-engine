@@ -395,6 +395,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY_ASSIGN(const bool kDecaling, made(!frame->decals.empty(), Effect::Decals));
         RAWFRAME_TRY(decalAtlas->declare(*frame, kDecaling, *textures, writes));
         now.block.decals = {decalAtlas->drawn() > 0 ? 1.0F : 0.0F, 0, 0, 0};
+        now.block.mode = {static_cast<float>(frame->mode), 0, 0, 0};
         RAWFRAME_TRY_ASSIGN(const bool kProbing, made(!frame->probes.empty(), Effect::Probes));
         RAWFRAME_TRY(probeAtlas->declare(
             *frame,
