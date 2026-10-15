@@ -726,8 +726,12 @@ public:
     /// Classes' transitions move to `seconds`, a monotonic clock's time; an
     /// earlier time than the last counts as none passed.
     [[nodiscard]] result::Status layOut(Node root, float width, float height, double seconds = 0);
-    /// `node`'s rectangle from the last layout that reached it.
+    /// `node`'s rectangle from the last layout that reached it, from its
+    /// parent's border box.
     [[nodiscard]] Rect rectOf(Node node) const noexcept;
+    /// The same from its root's top left, every container above it
+    /// scrolled as it is (D790): where the node is in the window.
+    [[nodiscard]] Rect placedRectOf(Node node) const noexcept;
 
     /// `node`'s look; refused for a negative radius. Only its `parts` are
     /// the node's own: the others come from its classes (D431).

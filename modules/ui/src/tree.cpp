@@ -248,6 +248,21 @@ Rect Tree::rectOf(Node node) const noexcept {
     return ui::rectOf(muiNode_GetRect(state_->context, idOf(node)));
 }
 
+Rect Tree::placedRectOf(Node node) const noexcept {
+    Rect placed = rectOf(node);
+    muiNodeId above = muiNode_GetParent(state_->context, idOf(node));
+    while (above.index1 != 0) {
+        const Rect kAbove = ui::rectOf(muiNode_GetRect(state_->context, above));
+        float scrollX = 0;
+        float scrollY = 0;
+        static_cast<void>(muiNode_GetScroll(state_->context, above, &scrollX, &scrollY));
+        placed.x += kAbove.x - scrollX;
+        placed.y += kAbove.y - scrollY;
+        above = muiNode_GetParent(state_->context, above);
+    }
+    return placed;
+}
+
 muiVisualStyle visualOf(const Look& look) noexcept {
     muiVisualStyle style = muiDefaultVisualStyle();
     style.background = colorOf(look.fill);
