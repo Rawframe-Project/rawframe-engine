@@ -541,6 +541,43 @@ void ShellParticipant::seeIn2D(bool flat) {
     showViewText();
 }
 
+void ShellParticipant::bookmark(std::uint8_t slot, bool go) {
+    if (scene_.empty()) {
+        return;
+    }
+    const std::string kSlot = std::to_string(slot);
+    if (!go) {
+        // The view as it is, or as a scene not yet looked at starts.
+        const std::optional<Value> kView =
+            view_.has_value() && !view_->isNull() ? view_ : viewWith(std::nullopt, "fieldOfView", "60");
+        const Answered kAnswered = answeredOf(ask(bookmarkRecord(next(), scene_, slot, *kView)));
+        if (kAnswered.done) {
+            ++bookmarksKept_;
+        } else {
+            ++refused_;
+        }
+        say(kAnswered.done ? "bookmark " + kSlot + " set" : kAnswered.message);
+        return;
+    }
+    const std::optional<Value> kView = bookmarkIn(ask(bookmarksRecord(next(), scene_)), slot);
+    if (!kView.has_value()) {
+        say("no bookmark " + kSlot);
+        return;
+    }
+    const Answered kAnswered = answeredOf(ask(viewRecord(next(), scene_, *kView)));
+    if (kAnswered.done) {
+        ++viewsSet_;
+        ++bookmarksVisited_;
+        view_ = kAnswered.view;
+        previewing_ = kAnswered.previewing;
+        say("bookmark " + kSlot);
+    } else {
+        ++refused_;
+        say(kAnswered.message);
+    }
+    showViewText();
+}
+
 Value ShellParticipant::operationOn(std::string_view operation) const {
     Value made = Value::object();
     made.add("operation", Value::string(std::string{operation}));

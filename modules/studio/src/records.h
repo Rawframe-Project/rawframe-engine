@@ -263,6 +263,12 @@ readRecord(std::int64_t id, std::string_view scene, std::string_view operation, 
 /// else from above and behind the target as far; none for a view that
 /// does not read.
 [[nodiscard]] std::optional<Value> flatView(const std::optional<Value>& view, bool flat);
+/// `authoring.bookmark` of `scene` (D796): `view` kept in `slot`.
+[[nodiscard]] Value bookmarkRecord(std::int64_t id, std::string_view scene, std::uint8_t slot, const Value& view);
+/// `authoring.bookmarks` of `scene`.
+[[nodiscard]] Value bookmarksRecord(std::int64_t id, std::string_view scene);
+/// Bookmark `slot`'s view in an `authoring.bookmarks` reply, if it has one.
+[[nodiscard]] std::optional<Value> bookmarkIn(std::string_view reply, std::uint8_t slot);
 /// `authoring.view_mode` of `scene` (D794): its preview drawn in `mode`.
 [[nodiscard]] Value viewModeRecord(std::int64_t id, std::string_view scene, std::string_view mode);
 /// `authoring.frame` of `scene` (D792): its view turned on what is chosen.

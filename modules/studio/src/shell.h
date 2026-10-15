@@ -414,6 +414,8 @@ private:
     void frameChosen();
     /// The view seen in 2D or out of it (D793).
     void seeIn2D(bool flat);
+    /// The scene's bookmark `slot` gone to, or kept from the view (D796).
+    void bookmark(std::uint8_t slot, bool go);
 
     /// `operation` with the chosen entity as its target.
     Value operationOn(std::string_view operation) const;
@@ -954,6 +956,9 @@ private:
     /// times a preview took it.
     std::string viewMode_ = "lit";
     std::uint64_t modesShown_ = 0;
+    /// Bookmarks kept and gone to (D796).
+    std::uint64_t bookmarksKept_ = 0;
+    std::uint64_t bookmarksVisited_ = 0;
     std::uint64_t layersHidden_ = 0;
     /// The layer each entity in `entities_` is on, nought for none.
     std::vector<std::uint32_t> entityLayers_;

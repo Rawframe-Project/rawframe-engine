@@ -44,6 +44,10 @@ constexpr std::string_view kFrame = "Frame chosen";
 constexpr std::string_view kFlat = "2D view";
 constexpr std::string_view kTilted = "3D view";
 
+/// A bookmark's commands, each followed by its slot (D796).
+constexpr std::string_view kGoTo = "Go to bookmark ";
+constexpr std::string_view kKeep = "Set bookmark ";
+
 /// How the preview draws (D794), each by the renderer's name for it.
 constexpr std::array<std::pair<std::string_view, std::string_view>, 3> kModes = {
     {{"Lit", "lit"}, {"Unlit", "unlit"}, {"Normals", "normals"}}};
@@ -104,10 +108,18 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     commands_.push_back(Command{.name = std::string{kPalette}, .menu = "Window", .keys = kKeys(kPalette, {"Ctrl+K"})});
     commands_.push_back(Command{.name = std::string{kPreferences}, .menu = "Window", .keys = kKeys(kPreferences, {})});
     commands_.push_back(Command{.name = std::string{kFrame}, .menu = "View", .keys = kKeys(kFrame, {"F"})});
-    commands_.push_back(Command{.name = std::string{kFlat}, .menu = "View", .keys = kKeys(kFlat, {"Ctrl+2"})});
-    commands_.push_back(Command{.name = std::string{kTilted}, .menu = "View", .keys = kKeys(kTilted, {"Ctrl+3"})});
+    commands_.push_back(Command{.name = std::string{kFlat}, .menu = "View", .keys = kKeys(kFlat, {})});
+    commands_.push_back(Command{.name = std::string{kTilted}, .menu = "View", .keys = kKeys(kTilted, {})});
     for (const auto& [kName, kMode] : kModes) {
         commands_.push_back(Command{.name = std::string{kName}, .menu = "View", .keys = kKeys(kName, {})});
+    }
+    // The scene's nine bookmarks (D796), on Control and a digit, kept with
+    // Shift too: the keys and the palette, in no menu.
+    for (char slot = '1'; slot <= '9'; ++slot) {
+        const std::string kGo = std::string{kGoTo} + slot;
+        const std::string kSet = std::string{kKeep} + slot;
+        commands_.push_back(Command{.name = kGo, .keys = kKeys(kGo, {std::string{"Ctrl+"} + slot})});
+        commands_.push_back(Command{.name = kSet, .keys = kKeys(kSet, {std::string{"Ctrl+Shift+"} + slot})});
     }
     // The palette's field, as a field named "commands" is read (D575).
     RAWFRAME_TRY_ASSIGN(const ui::Node kSearch, tree_->addEditable(++keys_));
@@ -134,6 +146,12 @@ bool ShellParticipant::runCommand(std::string_view name) {
     if (kCommand->name == kFrame) {
         frameChosen();
         return true;
+    }
+    for (const auto& [kPrefix, kGoes] : {std::pair{kGoTo, true}, std::pair{kKeep, false}}) {
+        if (kCommand->name.starts_with(kPrefix) && kCommand->name.size() == kPrefix.size() + 1) {
+            bookmark(static_cast<std::uint8_t>(kCommand->name.back() - '0'), kGoes);
+            return true;
+        }
     }
     if (kCommand->name == kFlat || kCommand->name == kTilted) {
         seeIn2D(kCommand->name == kFlat);

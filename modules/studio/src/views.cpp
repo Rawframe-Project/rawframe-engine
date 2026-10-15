@@ -119,4 +119,39 @@ std::optional<Value> flatView(const std::optional<Value>& view, bool flat) {
     return made;
 }
 
+Value bookmarkRecord(std::int64_t id, std::string_view scene, std::uint8_t slot, const Value& view) {
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.bookmark"));
+    made.add("id", Value::integer(id));
+    made.add("scene", Value::string(std::string{scene}));
+    made.add("slot", Value::integer(slot));
+    made.add("view", view);
+    return made;
+}
+
+Value bookmarksRecord(std::int64_t id, std::string_view scene) {
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.bookmarks"));
+    made.add("id", Value::integer(id));
+    made.add("scene", Value::string(std::string{scene}));
+    return made;
+}
+
+std::optional<Value> bookmarkIn(std::string_view reply, std::uint8_t slot) {
+    const auto kParsed = document::parse(reply);
+    const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* marks = answer != nullptr ? answer->find("bookmarks") : nullptr;
+    if (marks == nullptr || marks->kind() != Value::Kind::Array) {
+        return std::nullopt;
+    }
+    for (const Value& kEach : marks->items()) {
+        const Value* at = kEach.find("slot");
+        const Value* view = kEach.find("view");
+        if (at != nullptr && at->integer() == slot && view != nullptr) {
+            return *view;
+        }
+    }
+    return std::nullopt;
+}
+
 } // namespace rawframe::studio

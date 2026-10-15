@@ -221,6 +221,20 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "pressed f.*\"code\":\"studio_summary\"[^\n]*\"viewsSet\":1,[^\n]*\"status\":\"framed\".*\"exit\":\"clean_stop\"")
+    # Bookmarks (D796): a view kept in bookmark 2 by Control Shift 2, the
+    # view moved, and Control 2 going back to it, through the session's
+    # records into the scene's editor state.
+    add_test(NAME studio_bookmarks
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene "@eye#2:0,30,0.5" "until=studio_said,status=\"view set\""
+                     keys=Control_L+Shift_L+2 "until=studio_said,status=\"bookmark 2 set\"" "@eye#2:5,5,5"
+                     "until=studio_said,status=\"view set\"#2" keys=Control_L+2 "until=studio_said,status=\"bookmark 2\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_bookmarks PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "saw studio_said,status=\"bookmark 2\".*\"code\":\"studio_viewport\"[^\n]*\"bookmarksKept\":1,\"bookmarksVisited\":1")
     set_tests_properties(studio_commands PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
@@ -812,7 +826,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/runners/runners.game /dev/null ${PROJECT_BINARY_DIR}/hosts/client/runners_clicked.conf
-                         @level.scene @Play until=studio_previewing @View "@2D view  Ctrl+2"
+                         @level.scene @Play until=studio_previewing @View "@2D view"
                          "until=studio_said,status=\"2D view" wait=3 @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_sees_in_2d PROPERTIES
