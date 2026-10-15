@@ -67,6 +67,9 @@ public:
     /// `view_mode` (D794): the mode handed to the preview of `record.scene`
     /// by its name, if it is previewed; whether it draws so.
     [[nodiscard]] document::Value moded(const authoring::SessionRecord& record);
+    /// `overlays` (D798): what the preview of `record.scene` draws over it,
+    /// by name, if it is previewed; whether it draws them.
+    [[nodiscard]] document::Value overlaid(const authoring::SessionRecord& record);
     /// `split` (D797): the preview of `record.scene` shown in one, two,
     /// or four views, told with its look from now on; whether it splits.
     [[nodiscard]] document::Value split(const authoring::SessionRecord& record, const authoring::AuthoredScene& scene);

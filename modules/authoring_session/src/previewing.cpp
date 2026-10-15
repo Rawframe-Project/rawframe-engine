@@ -458,4 +458,28 @@ Value Preview::split(const authoring::SessionRecord& record, const authoring::Au
     return made;
 }
 
+Value Preview::overlaid(const authoring::SessionRecord& record) {
+    bool shown = false;
+    Value names = Value::array();
+    for (const std::string& kName : record.overlays) {
+        names.push(Value::string(kName));
+    }
+    if (preview_ != nullptr && record.scene == scene_) {
+        Value asked = Value::object();
+        asked.add("kind", Value::string("tooling.overlays"));
+        asked.add("id", Value::integer(0));
+        asked.add("overlays", names);
+        const auto kReply = preview_->ask(rawframe::document::writeCompact(asked));
+        const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
+        const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+        const Value* kShown = kAnswer != nullptr ? kAnswer->find("shown") : nullptr;
+        shown = kShown != nullptr && kShown->truth().value_or(false);
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.overlays"));
+    made.add("overlays", std::move(names));
+    made.add("shown", Value::boolean(shown));
+    return made;
+}
+
 } // namespace rawframe::authoring_session

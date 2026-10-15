@@ -209,6 +209,8 @@ private:
             return framed(record);
         case authoring::SessionVerb::ViewMode:
             return preview_.moded(record);
+        case authoring::SessionVerb::Overlays:
+            return preview_.overlaid(record);
         case authoring::SessionVerb::Bookmark:
             return bookmarked(record);
         case authoring::SessionVerb::Bookmarks:

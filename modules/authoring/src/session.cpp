@@ -30,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 26> kVerbs = {
+constexpr std::array<VerbName, 27> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -52,6 +52,7 @@ constexpr std::array<VerbName, 26> kVerbs = {
     VerbName{.kind = "authoring.bookmark", .verb = SessionVerb::Bookmark},
     VerbName{.kind = "authoring.bookmarks", .verb = SessionVerb::Bookmarks},
     VerbName{.kind = "authoring.split", .verb = SessionVerb::Split},
+    VerbName{.kind = "authoring.overlays", .verb = SessionVerb::Overlays},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
@@ -83,6 +84,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::HideLayers:
     case SessionVerb::ViewMode:
     case SessionVerb::Split:
+    case SessionVerb::Overlays:
     case SessionVerb::Cook:
     case SessionVerb::Import:
         return Members{.required = 2, .optional = 0};
@@ -285,6 +287,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Bookmark:
     case SessionVerb::Bookmarks:
     case SessionVerb::Split:
+    case SessionVerb::Overlays:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -320,6 +323,20 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         // The scene's checks its ranges; the record only its form.
         if (!readView(parsed->find("view"), record.view)) {
             return malformed("view holds an eye and a target of three numbers each and a fieldOfView");
+        }
+    } else if (record.verb == SessionVerb::Overlays) {
+        // Only bounded: the names are the renderer's.
+        const Value* kOverlays = parsed->find("overlays");
+        bool sound = kOverlays != nullptr && kOverlays->kind() == Value::Kind::Array && kOverlays->items().size() <= 8;
+        for (std::size_t at = 0; sound && at < kOverlays->items().size(); ++at) {
+            const std::string* kName = textOf(&kOverlays->items()[at]);
+            sound = kName != nullptr && !kName->empty() && kName->size() <= 32;
+            if (sound) {
+                record.overlays.push_back(*kName);
+            }
+        }
+        if (!sound) {
+            return malformed("overlays are at most 8 names");
         }
     } else if (record.verb == SessionVerb::Split) {
         const Value* kViews = parsed->find("views");

@@ -89,6 +89,13 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     RAWFRAME_EXPECT(kSplit.has_value() && kSplit->verb == SessionVerb::Split && kSplit->views == 3);
     RAWFRAME_EXPECT(
         !readSessionRecord(R"({"kind":"authoring.split","id":10,"scene":"b.scene","views":4})", id).has_value());
+    // Overlays by their names, bounded only (D798).
+    const auto kOverlays =
+        readSessionRecord(R"({"kind":"authoring.overlays","id":11,"scene":"b.scene","overlays":["colliders"]})", id);
+    RAWFRAME_EXPECT(kOverlays.has_value() && kOverlays->verb == SessionVerb::Overlays &&
+                    kOverlays->overlays == std::vector<std::string>{"colliders"});
+    RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.overlays","id":11,"scene":"b.scene","overlays":[""]})", id)
+                         .has_value());
     // A view mode by its name, bounded only (D794).
     const auto kMode =
         readSessionRecord(R"({"kind":"authoring.view_mode","id":9,"scene":"b.scene","mode":"unlit"})", id);

@@ -121,6 +121,9 @@ enum class SessionVerb : std::uint8_t {
     Bookmarks,
     /// The scene's preview split into one, two, or three views (D797).
     Split,
+    /// What the scene's preview draws over it, by the overlays' names
+    /// (D798).
+    Overlays,
     /// One atomic request over several scenes, one transaction (D497).
     ApplyTogether,
     /// The game's directory cooked, as a long-running operation (D502).
@@ -189,6 +192,8 @@ struct SessionRecord {
     bool clears = false;
     /// `split`'s views: 1, 2, or 3 (D797).
     std::uint8_t views = 1;
+    /// `overlays`' names, at most 8 of at most 32 bytes (D798).
+    std::vector<std::string> overlays;
     /// Apply together's, two or more, each scene named once (D497).
     std::vector<SessionPart> parts;
     /// Cook's: where it cooks to, and the cache it reuses, if any (D502).
