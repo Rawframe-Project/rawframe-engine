@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <utility>
 
 namespace rawframe::authoring {
@@ -29,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 20> kVerbs = {
+constexpr std::array<VerbName, 21> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -45,6 +46,7 @@ constexpr std::array<VerbName, 20> kVerbs = {
     VerbName{.kind = "authoring.pick", .verb = SessionVerb::Pick},
     VerbName{.kind = "authoring.mark", .verb = SessionVerb::Mark},
     VerbName{.kind = "authoring.preview_input", .verb = SessionVerb::PreviewInput},
+    VerbName{.kind = "authoring.hide_layers", .verb = SessionVerb::HideLayers},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
@@ -73,6 +75,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Preview:
     case SessionVerb::Mark:
     case SessionVerb::PreviewInput:
+    case SessionVerb::HideLayers:
     case SessionVerb::Cook:
     case SessionVerb::Import:
         return Members{.required = 2, .optional = 0};
@@ -237,6 +240,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Pick:
     case SessionVerb::Mark:
     case SessionVerb::PreviewInput:
+    case SessionVerb::HideLayers:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -293,6 +297,19 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             return malformed("view holds an eye and a target of three numbers each and a fieldOfView");
         }
         record.view.fieldOfView = *kDegrees;
+    } else if (record.verb == SessionVerb::HideLayers) {
+        const Value* kLayers = parsed->find("layers");
+        bool sound = kLayers != nullptr && kLayers->kind() == Value::Kind::Array && kLayers->items().size() <= 64;
+        for (std::size_t at = 0; sound && at < kLayers->items().size(); ++at) {
+            const std::optional<std::int64_t> kLayer = kLayers->items()[at].integer();
+            sound = kLayer.has_value() && *kLayer > 0 && *kLayer <= std::numeric_limits<std::uint32_t>::max();
+            if (sound) {
+                record.layers.push_back(static_cast<std::uint32_t>(*kLayer));
+            }
+        }
+        if (!sound) {
+            return malformed("layers are at most 64 layer numbers, each above nought");
+        }
     } else if (record.verb == SessionVerb::PreviewInput) {
         // An array, read event by event where it is handed on.
         const Value* kEvents = parsed->find("events");

@@ -61,6 +61,9 @@ public:
     /// to the preview of `record.scene`, if it is previewed; refused
     /// (`validation_failed`) where they do not read.
     [[nodiscard]] result::Result<document::Value> inputted(const authoring::SessionRecord& record);
+    /// `hide_layers` (D791): the layers handed to the preview of
+    /// `record.scene` to leave out, if it is previewed.
+    [[nodiscard]] document::Value hid(const authoring::SessionRecord& record);
     [[nodiscard]] result::Result<document::Value> picked(const authoring::SessionRecord& record,
                                                          authoring::AuthoredScene* previewed);
 

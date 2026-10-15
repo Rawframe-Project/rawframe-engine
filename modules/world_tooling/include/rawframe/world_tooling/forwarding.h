@@ -58,20 +58,20 @@ public:
                y < (*area_)[1] + (*area_)[3];
     }
     /// The host's side: `event` handed over, its point already the area's.
-    void give(world_tooling::WindowInput event) {
+    void give(WindowInput event) {
         given_.push_back(std::move(event));
     }
 
     /// The editor's side: what was handed over since it last took, oldest
     /// first.
-    [[nodiscard]] std::vector<world_tooling::WindowInput> take() {
+    [[nodiscard]] std::vector<WindowInput> take() {
         return std::exchange(given_, {});
     }
 
 private:
     std::optional<std::array<float, 4>> area_;
     bool focused_ = false;
-    std::vector<world_tooling::WindowInput> given_;
+    std::vector<WindowInput> given_;
 };
 
 class Injection {
@@ -81,16 +81,16 @@ public:
     Injection& operator=(const Injection&) = delete;
 
     /// The tooling's side: `events`, to be the window's input next.
-    void inject(const std::vector<world_tooling::WindowInput>& events) {
+    void inject(const std::vector<WindowInput>& events) {
         held_.insert(held_.end(), events.begin(), events.end());
     }
     /// The window host's side: what to act on, oldest first.
-    [[nodiscard]] std::vector<world_tooling::WindowInput> take() {
+    [[nodiscard]] std::vector<WindowInput> take() {
         return std::exchange(held_, {});
     }
 
 private:
-    std::vector<world_tooling::WindowInput> held_;
+    std::vector<WindowInput> held_;
 };
 
 inline constexpr composition::Capability<Forwarding> kForwarding{"rawframe.tooling.forwarding"};

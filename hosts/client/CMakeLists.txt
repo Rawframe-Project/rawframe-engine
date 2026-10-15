@@ -525,7 +525,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                                  FIXTURES_REQUIRED reach_content
                                  PROCESSORS 2
                                  PASS_REGULAR_EXPRESSION
-                                 "\"domain\":\"physics3d\",\"code\":\"summary\"[^\n]*\"jointsMade\":([2-9]|[1-9][0-9]+),\"jointsRemoved\":([2-9]|[1-9][0-9]+),.*\"code\":\"xr_profiles\"[^\n]*\"right\":\"/interaction_profiles/valve/index_controller\".*\"code\":\"scene_placed_summary\"[^\n]*\"modelsPlaced\":[0-9]+,\"modelsTracked\":[1-9][0-9]*}.*\"code\":\"xr_summary\"[^\n]*\"framesHandTracked\":[1-9][0-9]*,[^\n]*\"failed\":false}")
+                                 "\"domain\":\"physics3d\",\"code\":\"summary\"[^\n]*\"jointsMade\":([2-9]|[1-9][0-9]+),\"jointsRemoved\":([2-9]|[1-9][0-9]+),.*\"code\":\"xr_profiles\"[^\n]*\"right\":\"/interaction_profiles/valve/index_controller\".*\"code\":\"scene_placed_summary\"[^\n]*\"modelsPlaced\":[0-9]+,\"modelsTracked\":[1-9][0-9]*,\"modelsHidden\":0}.*\"code\":\"xr_summary\"[^\n]*\"framesHandTracked\":[1-9][0-9]*,[^\n]*\"failed\":false}")
         endif()
         # Each draws a window on lavapipe beside a server, and bots or a
         # second client in some: two of a preset's processors each, so a full

@@ -155,6 +155,12 @@ public:
         injection.inject(events);
         return true;
     }
+    /// The layers an editor hides, left out of what the scene draws
+    /// (D791).
+    bool hide(const std::vector<std::uint32_t>& layers) override {
+        camera.hide(layers);
+        return true;
+    }
 
     view::PreviewCamera camera;
     world_tooling::Injection injection;

@@ -83,7 +83,13 @@ public:
     /// Takes what an author did in an editor's viewport showing the
     /// preview as its own window's (D790), in order; whether the Runtime
     /// takes such input.
-    virtual bool input(const std::vector<world_tooling::WindowInput>& /*events*/) {
+    virtual bool input(const std::vector<WindowInput>& /*events*/) {
+        return false;
+    }
+    /// Leaves out the entities of `layers` (`rawframe.world.layer`) from
+    /// what the preview draws, none for none (D791); whether the Runtime
+    /// hides layers.
+    virtual bool hide(const std::vector<std::uint32_t>& /*layers*/) {
         return false;
     }
 };

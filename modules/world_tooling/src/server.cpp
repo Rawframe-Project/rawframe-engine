@@ -568,6 +568,34 @@ struct ToolingServer::State {
             send(connection, client, replyLine(id, "answer", std::move(made)));
             return;
         }
+        if (kind != nullptr && *kind == "tooling.hide") {
+            // The layers the preview leaves out (D791): the view's.
+            if (!settings.grants.view) {
+                send(connection, client, errorLine(id, ToolingError::NotGranted, "hiding needs the view grant"));
+                return;
+            }
+            const Value* kLayers = parsed->find("layers");
+            std::vector<std::uint32_t> layers;
+            bool sound = kLayers != nullptr && kLayers->kind() == Value::Kind::Array && kLayers->items().size() <= 64;
+            for (std::size_t at = 0; sound && at < kLayers->items().size(); ++at) {
+                const std::optional<std::int64_t> kLayer = kLayers->items()[at].integer();
+                sound = kLayer.has_value() && *kLayer > 0 && *kLayer <= std::numeric_limits<std::uint32_t>::max();
+                if (sound) {
+                    layers.push_back(static_cast<std::uint32_t>(*kLayer));
+                }
+            }
+            if (!sound) {
+                send(connection,
+                     client,
+                     errorLine(id, ToolingError::Malformed, "layers are at most 64 layer numbers, each above nought"));
+                return;
+            }
+            Value made = Value::object();
+            made.add("kind", Value::string("tooling.hidden"));
+            made.add("hidden", Value::boolean(settings.previewer != nullptr && settings.previewer->hide(layers)));
+            send(connection, client, replyLine(id, "answer", std::move(made)));
+            return;
+        }
         if (kind != nullptr && *kind == "tooling.input") {
             // What an author did in an editor's viewport showing the
             // preview (D790): the view's, as its look is.
@@ -576,7 +604,7 @@ struct ToolingServer::State {
                 return;
             }
             const Value* kEvents = parsed->find("events");
-            const auto kRead = kEvents != nullptr ? world_tooling::windowInputsOf(*kEvents) : std::nullopt;
+            const auto kRead = kEvents != nullptr ? windowInputsOf(*kEvents) : std::nullopt;
             if (!kRead.has_value()) {
                 send(connection,
                      client,

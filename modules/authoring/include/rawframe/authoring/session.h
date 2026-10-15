@@ -107,6 +107,8 @@ enum class SessionVerb : std::uint8_t {
     /// What an author did in an editor's viewport showing the scene's
     /// preview, handed to it as its own window's (D790).
     PreviewInput,
+    /// The layers the scene's preview leaves out (D791).
+    HideLayers,
     /// One atomic request over several scenes, one transaction (D497).
     ApplyTogether,
     /// The game's directory cooked, as a long-running operation (D502).
@@ -165,6 +167,8 @@ struct SessionRecord {
     /// `preview_input`'s events, as the record gave them, which the
     /// session reads as tooling input before it hands them on.
     document::Value events;
+    /// `hide_layers`' layers, each above nought, at most 64.
+    std::vector<std::uint32_t> layers;
     /// Apply together's, two or more, each scene named once (D497).
     std::vector<SessionPart> parts;
     /// Cook's: where it cooks to, and the cache it reuses, if any (D502).

@@ -389,4 +389,27 @@ result::Result<Value> Preview::inputted(const authoring::SessionRecord& record) 
     return made;
 }
 
+Value Preview::hid(const authoring::SessionRecord& record) {
+    bool hidden = false;
+    if (preview_ != nullptr && record.scene == scene_) {
+        Value asked = Value::object();
+        asked.add("kind", Value::string("tooling.hide"));
+        asked.add("id", Value::integer(0));
+        Value layers = Value::array();
+        for (const std::uint32_t kLayer : record.layers) {
+            layers.push(Value::integer(kLayer));
+        }
+        asked.add("layers", std::move(layers));
+        const auto kReply = preview_->ask(rawframe::document::writeCompact(asked));
+        const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
+        const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+        const Value* kHidden = kAnswer != nullptr ? kAnswer->find("hidden") : nullptr;
+        hidden = kHidden != nullptr && kHidden->truth().value_or(false);
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.layers_hidden"));
+    made.add("hidden", Value::boolean(hidden));
+    return made;
+}
+
 } // namespace rawframe::authoring_session
