@@ -707,7 +707,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"picked\":1,.*\"code\":\"studio_viewport\"[^\n]*\"inViewport\":true,\"pictures\":[1-9][0-9]*,\"inputs\":[1-9][0-9]*,\"inputsTaken\":[1-9][0-9]*,\"width\":[1-9][0-9]+,\"height\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"window\":false,[^\n]*\"streamed\":[1-9][0-9]*,\"streamFailures\":0}")
+                             "\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"picked\":1,.*\"code\":\"studio_viewport\"[^\n]*\"inViewport\":true,\"pictures\":[1-9][0-9]*,\"inputs\":[1-9][0-9]*,\"inputsTaken\":[1-9][0-9]*,\"width\":[1-9][0-9]+,\"height\":[1-9][0-9]+,.*\"code\":\"frame_summary\"[^\n]*\"window\":false,[^\n]*\"streamed\":[1-9][0-9]*,\"streamFailures\":0}")
         # A layer hidden in the viewport (D791): the game played in the
         # viewport with layers replicated, the gate's post put on layer 1
         # as it plays (the scene written, which the server takes), and
