@@ -1,9 +1,11 @@
 #include "rawframe/world_tooling/server.h"
 
+#include "previewing.h"
 #include "rawframe/document/json.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world_tooling/errors.h"
 #include "rawframe/world_tooling/window_input.h"
+#include "replies.h"
 
 #include <algorithm>
 #include <array>
@@ -34,87 +36,11 @@ bool sameSecret(std::string_view given, std::string_view expected) noexcept {
     return difference == 0;
 }
 
-std::string_view codeName(ToolingError error) noexcept {
-    switch (error) {
-    case ToolingError::Malformed:
-        return "malformed";
-    case ToolingError::Unauthenticated:
-        return "unauthenticated";
-    case ToolingError::NotGranted:
-        return "not_granted";
-    case ToolingError::Unsupported:
-        return "unsupported";
-    case ToolingError::LimitExceeded:
-        return "limit_exceeded";
-    case ToolingError::Configuration:
-        return "configuration";
-    case ToolingError::NotFound:
-        return "not_found";
-    case ToolingError::Stopped:
-        return "stopped";
-    }
-    return "malformed";
-}
-
-/// One reply line, its line feed included.
-std::string replyLine(const Value& id, std::string_view member, Value value) {
-    Value made = Value::object();
-    made.add("kind", Value::string("tooling.reply"));
-    made.add("id", id);
-    made.add(std::string{member}, std::move(value));
-    return document::writeCompact(made) + "\n";
-}
-
-std::string errorLine(const Value& id, ToolingError error, std::string_view why) {
-    Value record = Value::object();
-    record.add("code", Value::string(std::string{codeName(error)}));
-    record.add("message", Value::string(std::string{why}));
-    return replyLine(id, "error", std::move(record));
-}
-
 std::string entityName(world::EntityHandle entity) {
     return std::to_string(entity.slot) + ":" + std::to_string(entity.generation);
 }
 
 /// `slot:generation`, both decimal.
-/// A point of three finite numbers within a million metres, as `tooling.look`
-/// and `tooling.pick` give one; none otherwise.
-std::optional<std::array<double, 3>> pointOf(const Value* point) {
-    if (point == nullptr || point->kind() != Value::Kind::Array || point->items().size() != 3) {
-        return std::nullopt;
-    }
-    std::array<double, 3> at{};
-    for (std::size_t each = 0; each < 3; ++each) {
-        const std::optional<double> kNumber = point->items()[each].real();
-        if (!kNumber.has_value() || !std::isfinite(*kNumber) || std::abs(*kNumber) > 1e6) {
-            return std::nullopt;
-        }
-        at[each] = *kNumber;
-    }
-    return at;
-}
-
-/// What `tooling.look` asks: an eye looking at a target with a field of
-/// view in degrees (1 to 179), or none to give the player's camera back;
-/// nothing, with `refusal` said, for a record out of form (D432).
-std::optional<std::optional<Look>> lookOf(const Value& record, std::string& refusal) {
-    const Value* kView = record.find("view");
-    if (kView != nullptr && kView->isNull()) {
-        return std::optional<Look>{};
-    }
-    const bool kObject = kView != nullptr && kView->kind() == Value::Kind::Object && kView->names().size() == 3;
-    const auto kEye = kObject ? pointOf(kView->find("eye")) : std::nullopt;
-    const auto kTarget = kObject ? pointOf(kView->find("target")) : std::nullopt;
-    const Value* kAngle = kObject ? kView->find("fieldOfView") : nullptr;
-    const std::optional<double> kDegrees = kAngle != nullptr ? kAngle->real() : std::nullopt;
-    if (!kEye.has_value() || !kTarget.has_value() || !kDegrees.has_value() || !(*kDegrees >= 1 && *kDegrees <= 179)) {
-        refusal = "view is null, or an eye and a target of three numbers within a million metres and a fieldOfView "
-                  "of 1 to 179 degrees";
-        return std::nullopt;
-    }
-    return std::optional<Look>{Look{.eye = *kEye, .target = *kTarget, .fieldOfView = *kDegrees}};
-}
-
 std::optional<world::EntityHandle> entityNamed(std::string_view text) {
     const std::size_t kColon = text.find(':');
     if (kColon == std::string_view::npos || kColon == 0 || kColon + 1 == text.size()) {
@@ -511,160 +437,12 @@ struct ToolingServer::State {
             }
             return;
         }
-        if (kind != nullptr && *kind == "tooling.look") {
-            if (!settings.grants.view) {
-                send(connection, client, errorLine(id, ToolingError::NotGranted, "looking needs the view grant"));
+        // The preview's verbs (D432 to D798), answered where the preview is.
+        if (kind != nullptr) {
+            if (std::optional<std::string> answered = answerPreview(*kind, *parsed, id, settings)) {
+                send(connection, client, *answered);
                 return;
             }
-            if (settings.previewer == nullptr) {
-                send(connection, client, errorLine(id, ToolingError::NotFound, "this Runtime shows no preview"));
-                return;
-            }
-            std::string refusal;
-            const std::optional<std::optional<Look>> kLook = lookOf(*parsed, refusal);
-            if (!kLook.has_value()) {
-                send(connection, client, errorLine(id, ToolingError::Malformed, refusal));
-                return;
-            }
-            // And the looks the window is split to show beside it (D797):
-            // at most three, each a view as `view` is.
-            std::vector<Look> others;
-            if (const Value* kOthers = parsed->find("others"); kOthers != nullptr) {
-                bool sound = kOthers->kind() == Value::Kind::Array && kOthers->items().size() <= 3;
-                for (std::size_t at = 0; sound && at < kOthers->items().size(); ++at) {
-                    Value one = Value::object();
-                    one.add("view", kOthers->items()[at]);
-                    std::string ignored;
-                    const std::optional<std::optional<Look>> kOther = lookOf(one, ignored);
-                    sound = kOther.has_value() && kOther->has_value();
-                    if (sound) {
-                        others.push_back(**kOther);
-                    }
-                }
-                if (!sound) {
-                    send(connection, client, errorLine(id, ToolingError::Malformed, "others are at most three views"));
-                    return;
-                }
-            }
-            if (!settings.previewer->look(*kLook)) {
-                send(connection, client, errorLine(id, ToolingError::Malformed, "a view's eye is at its target"));
-                return;
-            }
-            const bool kSplit = settings.previewer->split(others);
-            Value made = Value::object();
-            made.add("kind", Value::string("tooling.looking"));
-            made.add("previewing", Value::boolean(kLook->has_value()));
-            made.add("split", Value::integer(kSplit ? static_cast<std::int64_t>(others.size()) : 0));
-            send(connection, client, replyLine(id, "answer", std::move(made)));
-            return;
-        }
-        if (kind != nullptr && *kind == "tooling.mark") {
-            // A point the preview marks, or none (D464): the view's.
-            if (!settings.grants.view) {
-                send(connection, client, errorLine(id, ToolingError::NotGranted, "marking needs the view grant"));
-                return;
-            }
-            const Value* kAt = parsed->find("at");
-            const std::optional<std::array<double, 3>> kPoint = pointOf(kAt);
-            if (kAt == nullptr || (!kAt->isNull() && !kPoint.has_value())) {
-                send(connection,
-                     client,
-                     errorLine(id, ToolingError::Malformed, "at is a point of three finite numbers, or null"));
-                return;
-            }
-            Value made = Value::object();
-            made.add("kind", Value::string("tooling.marked"));
-            // The part drawn lit, by name; none unless named (D468).
-            const Value* kLit = parsed->find("lit");
-            constexpr std::array<std::string_view, 5> kParts = {"", "x", "y", "z", "ring"};
-            std::uint8_t lit = 0;
-            if (kLit != nullptr && !kLit->isNull()) {
-                const auto kNamed = kLit->text() != nullptr ? std::ranges::find(kParts, *kLit->text()) : kParts.end();
-                if (kNamed == kParts.end() || kNamed == kParts.begin()) {
-                    send(connection, client, errorLine(id, ToolingError::Malformed, "lit is x, y, z, ring, or null"));
-                    return;
-                }
-                lit = static_cast<std::uint8_t>(kNamed - kParts.begin());
-            }
-            made.add("marked", Value::boolean(settings.previewer != nullptr && settings.previewer->mark(kPoint, lit)));
-            send(connection, client, replyLine(id, "answer", std::move(made)));
-            return;
-        }
-        if (kind != nullptr && *kind == "tooling.hide") {
-            // The layers the preview leaves out (D791): the view's.
-            if (!settings.grants.view) {
-                send(connection, client, errorLine(id, ToolingError::NotGranted, "hiding needs the view grant"));
-                return;
-            }
-            const Value* kLayers = parsed->find("layers");
-            std::vector<std::uint32_t> layers;
-            bool sound = kLayers != nullptr && kLayers->kind() == Value::Kind::Array && kLayers->items().size() <= 64;
-            for (std::size_t at = 0; sound && at < kLayers->items().size(); ++at) {
-                const std::optional<std::int64_t> kLayer = kLayers->items()[at].integer();
-                sound = kLayer.has_value() && *kLayer > 0 && *kLayer <= std::numeric_limits<std::uint32_t>::max();
-                if (sound) {
-                    layers.push_back(static_cast<std::uint32_t>(*kLayer));
-                }
-            }
-            if (!sound) {
-                send(connection,
-                     client,
-                     errorLine(id, ToolingError::Malformed, "layers are at most 64 layer numbers, each above nought"));
-                return;
-            }
-            Value made = Value::object();
-            made.add("kind", Value::string("tooling.hidden"));
-            made.add("hidden", Value::boolean(settings.previewer != nullptr && settings.previewer->hide(layers)));
-            send(connection, client, replyLine(id, "answer", std::move(made)));
-            return;
-        }
-        if (kind != nullptr && *kind == "tooling.overlays") {
-            // What the preview draws over its scene (D798): the view's.
-            // The names are the renderer's; this only bounds them.
-            if (!settings.grants.view) {
-                send(connection, client, errorLine(id, ToolingError::NotGranted, "overlays need the view grant"));
-                return;
-            }
-            const Value* kOverlays = parsed->find("overlays");
-            std::vector<std::string> names;
-            bool sound =
-                kOverlays != nullptr && kOverlays->kind() == Value::Kind::Array && kOverlays->items().size() <= 8;
-            for (std::size_t at = 0; sound && at < kOverlays->items().size(); ++at) {
-                const Value& kItem = kOverlays->items()[at];
-                const std::string* kName = kItem.kind() == Value::Kind::String ? kItem.text() : nullptr;
-                sound = kName != nullptr && !kName->empty() && kName->size() <= 32;
-                if (sound) {
-                    names.push_back(*kName);
-                }
-            }
-            if (!sound) {
-                send(connection, client, errorLine(id, ToolingError::Malformed, "overlays are at most 8 names"));
-                return;
-            }
-            Value made = Value::object();
-            made.add("kind", Value::string("tooling.overlays"));
-            made.add("shown", Value::boolean(settings.previewer != nullptr && settings.previewer->overlay(names)));
-            send(connection, client, replyLine(id, "answer", std::move(made)));
-            return;
-        }
-        if (kind != nullptr && *kind == "tooling.view_mode") {
-            // How the preview is drawn (D794): the view's. The names are
-            // the renderer's; this only bounds the text.
-            if (!settings.grants.view) {
-                send(connection, client, errorLine(id, ToolingError::NotGranted, "a view mode needs the view grant"));
-                return;
-            }
-            const Value* kMode = parsed->find("mode");
-            if (kMode == nullptr || kMode->text() == nullptr || kMode->text()->empty() || kMode->text()->size() > 32) {
-                send(connection, client, errorLine(id, ToolingError::Malformed, "a view mode is a name"));
-                return;
-            }
-            Value made = Value::object();
-            made.add("kind", Value::string("tooling.view_mode"));
-            made.add("shown",
-                     Value::boolean(settings.previewer != nullptr && settings.previewer->viewMode(*kMode->text())));
-            send(connection, client, replyLine(id, "answer", std::move(made)));
-            return;
         }
         if (kind != nullptr && *kind == "tooling.input") {
             // What an author did in an editor's viewport showing the
