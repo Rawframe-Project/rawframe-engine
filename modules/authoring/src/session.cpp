@@ -30,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 23> kVerbs = {
+constexpr std::array<VerbName, 25> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -49,6 +49,8 @@ constexpr std::array<VerbName, 23> kVerbs = {
     VerbName{.kind = "authoring.hide_layers", .verb = SessionVerb::HideLayers},
     VerbName{.kind = "authoring.frame", .verb = SessionVerb::Frame},
     VerbName{.kind = "authoring.view_mode", .verb = SessionVerb::ViewMode},
+    VerbName{.kind = "authoring.bookmark", .verb = SessionVerb::Bookmark},
+    VerbName{.kind = "authoring.bookmarks", .verb = SessionVerb::Bookmarks},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
@@ -85,15 +87,46 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Undo:
     case SessionVerb::Redo:
         return Members{.required = 1, .optional = 1};
+    case SessionVerb::Bookmark:
+        return Members{.required = 3, .optional = 0};
     case SessionVerb::CreateScene:
     case SessionVerb::History:
     case SessionVerb::Pick:
     case SessionVerb::Frame:
+    case SessionVerb::Bookmarks:
     case SessionVerb::ApplyTogether:
     case SessionVerb::Cancel:
         return Members{.required = 1, .optional = 0};
     }
     return {};
+}
+
+/// A view's form, as `view` and `bookmark` give it: an eye and a target of
+/// three numbers each and a field of view; the scene checks its ranges.
+bool readView(const Value* view, SceneView& into) {
+    const auto kPoint = [](const Value* point, std::array<double, 3>& at) {
+        if (point == nullptr || point->kind() != Value::Kind::Array || point->items().size() != 3) {
+            return false;
+        }
+        for (std::size_t each = 0; each < 3; ++each) {
+            const std::optional<double> kNumber = point->items()[each].real();
+            if (!kNumber.has_value()) {
+                return false;
+            }
+            at[each] = *kNumber;
+        }
+        return true;
+    };
+    if (view == nullptr || view->kind() != Value::Kind::Object || view->names().size() != 3) {
+        return false;
+    }
+    const Value* kAngle = view->find("fieldOfView");
+    const std::optional<double> kDegrees = kAngle != nullptr ? kAngle->real() : std::nullopt;
+    if (!kPoint(view->find("eye"), into.eye) || !kPoint(view->find("target"), into.target) || !kDegrees.has_value()) {
+        return false;
+    }
+    into.fieldOfView = *kDegrees;
+    return true;
 }
 
 /// Whether `path` is absolute in POSIX's form (`/a`) or Windows' (`C:/a`,
@@ -247,6 +280,8 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::HideLayers:
     case SessionVerb::Frame:
     case SessionVerb::ViewMode:
+    case SessionVerb::Bookmark:
+    case SessionVerb::Bookmarks:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -280,29 +315,21 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         }
     } else if (record.verb == SessionVerb::View) {
         // The scene's checks its ranges; the record only its form.
-        const Value* kView = parsed->find("view");
-        const auto kPoint = [](const Value* point, std::array<double, 3>& into) {
-            if (point == nullptr || point->kind() != Value::Kind::Array || point->items().size() != 3) {
-                return false;
-            }
-            for (std::size_t at = 0; at < 3; ++at) {
-                const std::optional<double> kNumber = point->items()[at].real();
-                if (!kNumber.has_value()) {
-                    return false;
-                }
-                into[at] = *kNumber;
-            }
-            return true;
-        };
-        const Value* kAngle =
-            kView != nullptr && kView->kind() == Value::Kind::Object ? kView->find("fieldOfView") : nullptr;
-        const std::optional<double> kDegrees = kAngle != nullptr ? kAngle->real() : std::nullopt;
-        if (kView == nullptr || kView->kind() != Value::Kind::Object || kView->names().size() != 3 ||
-            !kPoint(kView->find("eye"), record.view.eye) || !kPoint(kView->find("target"), record.view.target) ||
-            !kDegrees.has_value()) {
+        if (!readView(parsed->find("view"), record.view)) {
             return malformed("view holds an eye and a target of three numbers each and a fieldOfView");
         }
-        record.view.fieldOfView = *kDegrees;
+    } else if (record.verb == SessionVerb::Bookmark) {
+        // A slot of one to nine, and the view kept there or null to
+        // clear it (D796).
+        const Value* kSlot = parsed->find("slot");
+        const std::optional<std::int64_t> kNumber = kSlot != nullptr ? kSlot->integer() : std::nullopt;
+        const Value* kView = parsed->find("view");
+        if (!kNumber.has_value() || *kNumber < 1 || *kNumber > 9 || kView == nullptr ||
+            (!kView->isNull() && !readView(kView, record.view))) {
+            return malformed("bookmark names a slot from 1 to 9 and a view, or null to clear it");
+        }
+        record.slot = static_cast<std::uint8_t>(*kNumber);
+        record.clears = kView->isNull();
     } else if (record.verb == SessionVerb::HideLayers) {
         const Value* kLayers = parsed->find("layers");
         bool sound = kLayers != nullptr && kLayers->kind() == Value::Kind::Array && kLayers->items().size() <= 64;

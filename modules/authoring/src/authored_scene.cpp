@@ -323,6 +323,12 @@ result::Status AuthoredScene::select(std::span<const base::Bits128> entities) {
 }
 
 result::Status AuthoredScene::setView(const SceneView& view) {
+    RAWFRAME_TRY(checkView(view));
+    view_ = view;
+    return {};
+}
+
+result::Status checkView(const SceneView& view) {
     constexpr double kFarthest = 1e6;
     const auto kPlace = [](const std::array<double, 3>& at) {
         return std::ranges::all_of(at, [](double each) {
@@ -335,7 +341,6 @@ result::Status AuthoredScene::setView(const SceneView& view) {
                       AuthoringError::ValidationFailed,
                       "a view's eye and target are apart within a million metres, its field of view 1 to 179 degrees");
     }
-    view_ = view;
     return {};
 }
 

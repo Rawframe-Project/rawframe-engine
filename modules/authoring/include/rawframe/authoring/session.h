@@ -114,6 +114,11 @@ enum class SessionVerb : std::uint8_t {
     Frame,
     /// How the scene's preview is drawn, by the view mode's name (D794).
     ViewMode,
+    /// A view kept in one of the scene's nine bookmarks, or one cleared,
+    /// in the scene's editor state (D796).
+    Bookmark,
+    /// The scene's bookmarks.
+    Bookmarks,
     /// One atomic request over several scenes, one transaction (D497).
     ApplyTogether,
     /// The game's directory cooked, as a long-running operation (D502).
@@ -176,6 +181,10 @@ struct SessionRecord {
     std::vector<std::uint32_t> layers;
     /// `view_mode`'s name, at most 32 bytes (D794).
     std::string mode;
+    /// `bookmark`'s slot, 1 to 9, and whether it clears the slot in place
+    /// of keeping `view` there (D796).
+    std::uint8_t slot = 0;
+    bool clears = false;
     /// Apply together's, two or more, each scene named once (D497).
     std::vector<SessionPart> parts;
     /// Cook's: where it cooks to, and the cache it reuses, if any (D502).

@@ -68,6 +68,12 @@ struct SceneView {
     friend bool operator==(const SceneView&, const SceneView&) = default;
 };
 
+/// Refuses (`ValidationFailed`) a view with a coordinate that is not
+/// finite or past a million metres, an eye at its target, or a field of
+/// view outside one to 179 degrees: what a scene looks from, or keeps in a
+/// bookmark (D796).
+[[nodiscard]] result::Status checkView(const SceneView& view);
+
 class AuthoredScene;
 
 /// An open transaction's scope token. Moving it moves the scope; dropping
