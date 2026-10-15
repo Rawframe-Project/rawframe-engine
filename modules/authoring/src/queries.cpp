@@ -3,6 +3,7 @@
 #include "rawframe/authoring/errors.h"
 
 #include <algorithm>
+#include <charconv>
 
 namespace rawframe::authoring {
 
@@ -11,9 +12,21 @@ namespace {
 std::vector<EntityEntry> entriesOf(const scene::Scene& scene) {
     std::vector<EntityEntry> made;
     for (std::size_t at = 0; at < scene.entities.size(); ++at) {
-        // Its parent, where an attachment names one.
+        // Its parent, where an attachment names one, and its layer.
         std::optional<base::Bits128> parent;
+        std::uint32_t layer = 0;
         for (const scene::SceneComponent& component : scene.entities[at].components) {
+            if (component.name == "rawframe.world.layer") {
+                for (const scene::SceneField& field : component.fields) {
+                    std::uint32_t read = 0;
+                    if (field.name == "layer" && field.value.kind == scene::FieldValue::Kind::Number &&
+                        std::from_chars(
+                            field.value.number.data(), field.value.number.data() + field.value.number.size(), read)
+                                .ec == std::errc{}) {
+                        layer = read;
+                    }
+                }
+            }
             if (component.name != "rawframe.physics2d.attach" && component.name != "rawframe.physics3d.attach") {
                 continue;
             }
@@ -28,7 +41,8 @@ std::vector<EntityEntry> entriesOf(const scene::Scene& scene) {
                                    .place = at,
                                    .brought = std::nullopt,
                                    .removed = false,
-                                   .parent = parent});
+                                   .parent = parent,
+                                   .layer = layer});
     }
     for (std::size_t at = 0; at < scene.instances.size(); ++at) {
         const scene::SceneInstance& instance = scene.instances[at];

@@ -479,6 +479,9 @@ Value entryValue(const EntityEntry& entry) {
     if (entry.parent.has_value()) {
         made.add("parent", Value::string(idText(*entry.parent)));
     }
+    if (entry.layer != 0) {
+        made.add("layer", Value::integer(entry.layer));
+    }
     if (entry.brought.has_value()) {
         Value brought = Value::object();
         brought.add("instance", Value::integer(static_cast<std::int64_t>(entry.brought->instance)));

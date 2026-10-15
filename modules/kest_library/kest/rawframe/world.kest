@@ -47,6 +47,13 @@ struct Persistent {
 
 extern fn Persistent.insert(entity: Entity, value: Persistent)
 
+// The layer an entity's scene put it on (D788), which an editor shows,
+// hides, locks, and chooses together; nought for none. The game's
+// `field rawframe.world.layer layer labels ...` line names the layers.
+struct Layer {
+    layer: u32
+}
+
 // Records that the entity is to be persistent. At the next barrier it is
 // named, from the World's own stream, unless it already has a name, which it
 // keeps.

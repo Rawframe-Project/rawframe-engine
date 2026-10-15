@@ -6,6 +6,7 @@
 #include "navigation.h"
 #include "physics_facts.h"
 #include "rawframe/base/hex64.h"
+#include "rawframe/world/layer.h"
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_animation/components.h"
 #include "rawframe/world_kest/errors.h"
@@ -805,6 +806,9 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     game.components.push_back(GameComponent{.id = world::Persistent::kComponentTypeId,
                                             .name = std::string{world::Persistent::kComponentName},
                                             .kestType = "Persistent"});
+    // And be put on a layer, which an editor groups it by (D788).
+    game.components.push_back(GameComponent{
+        .id = world::Layer::kComponentTypeId, .name = std::string{world::Layer::kComponentName}, .kestType = "Layer"});
     // A game that navigates has agents to steer round each other (D411).
     if (game.navigation.has_value()) {
         game.components.push_back(GameComponent{.id = NavigationAgent::kComponentTypeId,

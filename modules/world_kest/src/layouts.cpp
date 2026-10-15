@@ -3,6 +3,7 @@
 #include "navigation.h"
 #include "physics_facts.h"
 #include "rawframe/base/sha256.h"
+#include "rawframe/world/layer.h"
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_animation/components.h"
 #include "rawframe/world_kest/errors.h"
@@ -40,6 +41,17 @@ kest::TypeLayout persistentLayout() {
         .mark = 0,
         .fields = {kest::Field{.name = "high", .offset = offsetof(Persistent, high), .kind = kest::FieldKind::U64},
                    kest::Field{.name = "low", .offset = offsetof(Persistent, low), .kind = kest::FieldKind::U64}}};
+    made.mark = engineLayoutMark(made);
+    return made;
+}
+
+kest::TypeLayout layerLayout() {
+    using world::Layer;
+    kest::TypeLayout made{
+        .size = sizeof(Layer),
+        .alignment = alignof(Layer),
+        .mark = 0,
+        .fields = {kest::Field{.name = "layer", .offset = offsetof(Layer, layer), .kind = kest::FieldKind::U32}}};
     made.mark = engineLayoutMark(made);
     return made;
 }
@@ -144,6 +156,8 @@ componentLayout(const GameDescription& game, const kest::Program& program, const
         engine = perceptionLayout();
     } else if (component.id == world::Persistent::kComponentTypeId) {
         engine = persistentLayout();
+    } else if (component.id == world::Layer::kComponentTypeId) {
+        engine = layerLayout();
     } else if (const auto kAnimation =
                    std::ranges::find(world_animation::componentLayouts(), component.id, &schema::ComponentLayout::id);
                kAnimation != world_animation::componentLayouts().end()) {

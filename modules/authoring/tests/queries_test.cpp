@@ -135,6 +135,23 @@ RAWFRAME_TEST(AnAttachedEntityIsListedWithItsParent) {
                     !entities[2].parent.has_value());
 }
 
+RAWFRAME_TEST(AnEntityIsListedWithTheLayerItIsOn) {
+    // A tree on layer 3, a rock on none (D788).
+    const scene::Scene kWood{.schema = {},
+                             .entities = {{.id = base::Bits128{3, 1},
+                                           .name = "tree",
+                                           .components = {{.name = "rawframe.world.layer",
+                                                           .fields = {{.name = "layer", .value = number("3")}}}}},
+                                          {.id = base::Bits128{3, 2}, .name = "rock", .components = {}}}};
+    const auto kList = answer(kWood, ListEntities{}, catalog());
+    RAWFRAME_EXPECT(kList.has_value());
+    if (!kList.has_value()) {
+        return;
+    }
+    const std::vector<EntityEntry>& entities = std::get<EntityList>(*kList).entities;
+    RAWFRAME_EXPECT(entities.size() == 2 && entities[0].layer == 3 && entities[1].layer == 0);
+}
+
 RAWFRAME_TEST(AnEntityIsReadWholeAndWhatIsUnknownIsMarked) {
     const ComponentCatalog kCatalog = catalog();
     const auto kSpawnRead = answer(room(), ReadEntity{.entity = kSpawn}, kCatalog);

@@ -56,10 +56,11 @@ RAWFRAME_TEST(AGameDescriptionParses) {
         return;
     }
     RAWFRAME_EXPECT(game->program == "movers.kest");
-    // The two declared, then the engine's persistent identity, which any
-    // entity may carry.
-    RAWFRAME_EXPECT(game->components.size() == 3 && game->components[1].kestType == "Velocity" &&
-                    game->components[2].name == "rawframe.world.persistent");
+    // The two declared, then the engine's persistent identity and layer,
+    // which any entity may carry (D788).
+    RAWFRAME_EXPECT(game->components.size() == 4 && game->components[1].kestType == "Velocity" &&
+                    game->components[2].name == "rawframe.world.persistent" &&
+                    game->components[3].name == "rawframe.world.layer");
     RAWFRAME_EXPECT(game->systems.size() == 1 && game->systems[0].columns.size() == 3);
     RAWFRAME_EXPECT(game->systems[0].columns[0].entities);
     RAWFRAME_EXPECT(game->systems[0].columns[1].access == world::Access::Write);
@@ -206,8 +207,8 @@ RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     RAWFRAME_EXPECT(game->physics->dimensions == 2 && game->physics->gravityX == 0.5F &&
                     game->physics->gravityY == -9.8F && game->physics->substeps == 8);
     // The engine's nine components, under their engine names, and its
-    // persistent identity.
-    RAWFRAME_EXPECT(game->components.size() == 10 && game->components[0].name == "rawframe.physics2d.body" &&
+    // persistent identity and layer.
+    RAWFRAME_EXPECT(game->components.size() == 11 && game->components[0].name == "rawframe.physics2d.body" &&
                     game->components[1].kestType == "Pose2D");
     const auto kDefaults = parseGame("program p.kest\nphysics2d\n");
     RAWFRAME_EXPECT(kDefaults.has_value() && kDefaults->physics->gravityY == -10.0F &&
@@ -216,7 +217,7 @@ RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     // components.
     const auto kThree = parseGame("program p.kest\nphysics3d gravity 0 -9.8 1.5\n");
     RAWFRAME_EXPECT(kThree.has_value() && kThree->physics->dimensions == 3 && kThree->physics->gravityZ == 1.5F &&
-                    kThree->components.size() == 11 && kThree->components[1].name == "rawframe.physics3d.pose");
+                    kThree->components.size() == 12 && kThree->components[1].name == "rawframe.physics3d.pose");
     for (const std::string_view kLine : {"physics2d gravity 1\n",
                                          "physics2d spin 3\n",
                                          "physics2d substeps four\n",

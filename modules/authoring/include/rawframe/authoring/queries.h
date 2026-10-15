@@ -47,6 +47,9 @@ struct EntityEntry {
     /// attachment, `rawframe.physics2d.attach` or `rawframe.physics3d.attach`,
     /// the scene's one parenting; none without one.
     std::optional<base::Bits128> parent;
+    /// The layer a scene's own entity is put on (D788), its
+    /// `rawframe.world.layer` component's; nought for none.
+    std::uint32_t layer = 0;
 
     friend bool operator==(const EntityEntry&, const EntityEntry&) = default;
 };

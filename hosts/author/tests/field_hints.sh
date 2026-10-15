@@ -26,6 +26,18 @@ assert "unit" not in fields[("starter.look", "scaleX")]
 assert fields[("starter.look", "mesh")]["asset"] == "mesh"
 print("hinted: side 4 to 100 m, a box's look a color, its mesh an asset")
 PY
+# The game names its layers on the engine's layer field (D788).
+cp -R "$work/hinted" "$work/layered"
+printf "%s\n" "field rawframe.world.layer layer labels 1 ground 2 props" >>"$work/layered/hinted.game"
+"$author" describe "$work/layered/hinted.game" >"$work/described"
+python3 - "$work/described" <<'PY'
+import json, sys
+described = json.load(open(sys.argv[1]))
+layer = next(c for c in described["components"] if c["name"] == "rawframe.world.layer")
+labels = layer["fields"][0]["labels"]
+assert [l["name"] for l in labels] == ["ground", "props"], labels
+print("layers named: ground, props")
+PY
 cp -R "$work/hinted" "$work/body"
 printf "%s\n" "field starter.ground side range 10 2" >>"$work/body/hinted.game"
 if "$author" describe "$work/body/hinted.game" >"$work/refused"; then
