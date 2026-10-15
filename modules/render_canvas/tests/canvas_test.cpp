@@ -57,7 +57,7 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
                                             .plainData = true});
     builder.add<physics2d::Pose2D>();
     builder.add(schema::ComponentDescriptor{.id = world::Layer::kComponentTypeId,
-                                            .name = std::string{world::Layer::kComponentName},
+                                            .name = world::Layer::kComponentName,
                                             .size = sizeof(world::Layer),
                                             .alignment = alignof(world::Layer),
                                             .plainData = true});

@@ -49,7 +49,7 @@ inline std::shared_ptr<const schema::SchemaRegistry> registry() {
     builder.add(plain<particles::ParticleEmitter>(kEmitterId, "test.emitter"));
     builder.add(plain<Placed>(kPlacedId, "test.placed"));
     builder.add(plain<Tracked>(kTrackedId, "test.tracked"));
-    builder.add(plain<world::Layer>(world::Layer::kComponentTypeId, std::string{world::Layer::kComponentName}));
+    builder.add(plain<world::Layer>(world::Layer::kComponentTypeId, world::Layer::kComponentName));
     builder.add<physics3d::Pose3D>();
     return *builder.freeze();
 }
