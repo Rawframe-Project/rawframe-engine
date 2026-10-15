@@ -161,6 +161,20 @@ public:
         camera.hide(layers);
         return true;
     }
+    /// The looks beside the preview's own (D797).
+    bool split(const std::vector<world_tooling::Look>& others) override {
+        std::vector<view::Perspective> made;
+        for (const world_tooling::Look& kOther : others) {
+            const std::optional<view::Perspective> kView = view::lookingAt(
+                kOther.eye, kOther.target, static_cast<float>(kOther.fieldOfView * std::numbers::pi / 180));
+            if (!kView.has_value()) {
+                return false;
+            }
+            made.push_back(*kView);
+        }
+        camera.split(std::move(made));
+        return true;
+    }
     /// How the scene is drawn, by the view mode's name (D794).
     bool viewMode(std::string_view mode) override {
         const std::optional<view::ViewMode> kMode = view::viewModeNamed(mode);

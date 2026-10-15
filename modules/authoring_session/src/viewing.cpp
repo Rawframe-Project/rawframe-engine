@@ -192,4 +192,37 @@ authoring::SceneView movedBy(const authoring::SceneView& view, const ViewMotion&
         change.fly);
 }
 
+std::vector<authoring::SceneView> othersOf(const authoring::SceneView& view, std::size_t views) {
+    if (views <= 1) {
+        return {};
+    }
+    const std::array<double, 3>& kAt = view.target;
+    const double kFar = std::max(std::hypot(view.eye[0] - kAt[0], view.eye[1] - kAt[1], view.eye[2] - kAt[2]), 1.0);
+    const auto kFrom = [&](double x, double y, double z) {
+        return authoring::SceneView{
+            .eye = {kAt[0] + x, kAt[1] + y, kAt[2] + z}, .target = kAt, .fieldOfView = view.fieldOfView};
+    };
+    // Straight down but a hair toward +Z, so the view knows which way is up.
+    std::vector<authoring::SceneView> made{kFrom(0, kFar, kFar * 1e-3)};
+    if (views >= 3) {
+        made.push_back(kFrom(0, 0, kFar));
+    }
+    return made;
+}
+
+document::Value viewValue(const authoring::SceneView& view) {
+    const auto kPoint = [](const std::array<double, 3>& at) {
+        document::Value made = document::Value::array();
+        for (const double kEach : at) {
+            made.push(document::Value::real(kEach));
+        }
+        return made;
+    };
+    document::Value made = document::Value::object();
+    made.add("eye", kPoint(view.eye));
+    made.add("target", kPoint(view.target));
+    made.add("fieldOfView", document::Value::real(view.fieldOfView));
+    return made;
+}
+
 } // namespace rawframe::authoring_session

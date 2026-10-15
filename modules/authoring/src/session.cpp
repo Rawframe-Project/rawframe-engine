@@ -30,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 25> kVerbs = {
+constexpr std::array<VerbName, 26> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -51,6 +51,7 @@ constexpr std::array<VerbName, 25> kVerbs = {
     VerbName{.kind = "authoring.view_mode", .verb = SessionVerb::ViewMode},
     VerbName{.kind = "authoring.bookmark", .verb = SessionVerb::Bookmark},
     VerbName{.kind = "authoring.bookmarks", .verb = SessionVerb::Bookmarks},
+    VerbName{.kind = "authoring.split", .verb = SessionVerb::Split},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
@@ -81,6 +82,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::PreviewInput:
     case SessionVerb::HideLayers:
     case SessionVerb::ViewMode:
+    case SessionVerb::Split:
     case SessionVerb::Cook:
     case SessionVerb::Import:
         return Members{.required = 2, .optional = 0};
@@ -282,6 +284,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::ViewMode:
     case SessionVerb::Bookmark:
     case SessionVerb::Bookmarks:
+    case SessionVerb::Split:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -318,6 +321,13 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         if (!readView(parsed->find("view"), record.view)) {
             return malformed("view holds an eye and a target of three numbers each and a fieldOfView");
         }
+    } else if (record.verb == SessionVerb::Split) {
+        const Value* kViews = parsed->find("views");
+        const std::optional<std::int64_t> kCount = kViews != nullptr ? kViews->integer() : std::nullopt;
+        if (!kCount.has_value() || *kCount < 1 || *kCount > 3) {
+            return malformed("split's views are 1, 2, or 3");
+        }
+        record.views = static_cast<std::uint8_t>(*kCount);
     } else if (record.verb == SessionVerb::Bookmark) {
         // A slot of one to nine, and the view kept there or null to
         // clear it (D796).

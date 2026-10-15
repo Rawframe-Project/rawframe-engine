@@ -93,6 +93,12 @@ public:
     virtual bool hide(const std::vector<std::uint32_t>& /*layers*/) {
         return false;
     }
+    /// Splits the preview's window to show `others` beside its own look,
+    /// at most three, none for the one look (D797); whether the Runtime
+    /// splits its preview.
+    virtual bool split(const std::vector<Look>& /*others*/) {
+        return false;
+    }
     /// Draws the preview in the view mode named `mode` (D794), the names
     /// the Runtime's renderer owns; whether it knows the name and draws so.
     virtual bool viewMode(std::string_view /*mode*/) {

@@ -67,6 +67,9 @@ public:
     /// `view_mode` (D794): the mode handed to the preview of `record.scene`
     /// by its name, if it is previewed; whether it draws so.
     [[nodiscard]] document::Value moded(const authoring::SessionRecord& record);
+    /// `split` (D797): the preview of `record.scene` shown in one, two,
+    /// or four views, told with its look from now on; whether it splits.
+    [[nodiscard]] document::Value split(const authoring::SessionRecord& record, const authoring::AuthoredScene& scene);
     [[nodiscard]] result::Result<document::Value> picked(const authoring::SessionRecord& record,
                                                          authoring::AuthoredScene* previewed);
 
@@ -105,6 +108,10 @@ private:
     std::string scene_;
     std::optional<authoring::SceneView> previewed_;
     bool told_ = false;
+    /// How many views the preview shows, and how many beside its own the
+    /// preview last took (D797).
+    std::size_t views_ = 1;
+    std::int64_t splitShown_ = 0;
     std::uint64_t looks_ = 0;
     /// The previewed game's server, for picking (D456), and the presses
     /// already answered.

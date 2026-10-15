@@ -526,13 +526,35 @@ struct ToolingServer::State {
                 send(connection, client, errorLine(id, ToolingError::Malformed, refusal));
                 return;
             }
+            // And the looks the window is split to show beside it (D797):
+            // at most three, each a view as `view` is.
+            std::vector<Look> others;
+            if (const Value* kOthers = parsed->find("others"); kOthers != nullptr) {
+                bool sound = kOthers->kind() == Value::Kind::Array && kOthers->items().size() <= 3;
+                for (std::size_t at = 0; sound && at < kOthers->items().size(); ++at) {
+                    Value one = Value::object();
+                    one.add("view", kOthers->items()[at]);
+                    std::string ignored;
+                    const std::optional<std::optional<Look>> kOther = lookOf(one, ignored);
+                    sound = kOther.has_value() && kOther->has_value();
+                    if (sound) {
+                        others.push_back(**kOther);
+                    }
+                }
+                if (!sound) {
+                    send(connection, client, errorLine(id, ToolingError::Malformed, "others are at most three views"));
+                    return;
+                }
+            }
             if (!settings.previewer->look(*kLook)) {
                 send(connection, client, errorLine(id, ToolingError::Malformed, "a view's eye is at its target"));
                 return;
             }
+            const bool kSplit = settings.previewer->split(others);
             Value made = Value::object();
             made.add("kind", Value::string("tooling.looking"));
             made.add("previewing", Value::boolean(kLook->has_value()));
+            made.add("split", Value::integer(kSplit ? static_cast<std::int64_t>(others.size()) : 0));
             send(connection, client, replyLine(id, "answer", std::move(made)));
             return;
         }

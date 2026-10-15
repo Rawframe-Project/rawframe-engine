@@ -127,11 +127,25 @@ bool Preview::forward(const std::string& name, const authoring::AuthoredScene& s
     look.add("kind", Value::string("tooling.look"));
     look.add("id", Value::integer(static_cast<std::int64_t>(++looks_)));
     look.add("view", viewOf(scene));
+    // The views beside it, from the top, the front, and the side of its
+    // target, as far as its eye is (D797).
+    if (views_ > 1 && kView.has_value()) {
+        Value others = Value::array();
+        for (const authoring::SceneView& kOther : othersOf(*kView, views_)) {
+            others.push(viewValue(kOther));
+        }
+        look.add("others", std::move(others));
+    }
     const auto kReply = preview_->ask(rawframe::document::writeCompact(look));
-    const bool kAnswered = kReply.has_value() && [&kReply] {
+    std::int64_t split = 0;
+    const bool kAnswered = kReply.has_value() && [&kReply, &split] {
         const auto kParsed = rawframe::document::parse(*kReply);
-        return kParsed.has_value() && kParsed->find("answer") != nullptr;
+        const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+        const Value* kSplit = answer != nullptr ? answer->find("split") : nullptr;
+        split = kSplit != nullptr ? kSplit->integer().value_or(0) : 0;
+        return answer != nullptr;
     }();
+    splitShown_ = split;
     if (!kAnswered) {
         preview_.reset();
         scene_.clear();
@@ -429,6 +443,18 @@ Value Preview::moded(const authoring::SessionRecord& record) {
     made.add("kind", Value::string("authoring.view_mode"));
     made.add("mode", Value::string(record.mode));
     made.add("shown", Value::boolean(shown));
+    return made;
+}
+
+Value Preview::split(const authoring::SessionRecord& record, const authoring::AuthoredScene& scene) {
+    views_ = record.views;
+    told_ = false;
+    splitShown_ = 0;
+    const bool kLive = forward(record.scene, scene);
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.split"));
+    made.add("views", Value::integer(static_cast<std::int64_t>(views_)));
+    made.add("shown", Value::boolean(kLive && splitShown_ + 1 == static_cast<std::int64_t>(views_)));
     return made;
 }
 

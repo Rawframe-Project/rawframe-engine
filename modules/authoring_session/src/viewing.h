@@ -12,6 +12,7 @@
 #include <array>
 #include <optional>
 #include <span>
+#include <vector>
 
 namespace rawframe::authoring_session {
 
@@ -55,6 +56,14 @@ movedView(const authoring::SceneView& view, double detents, double across, doubl
 /// A 2D view carried `across` pixels left and `up` pixels down over its
 /// plane, as a drag moves it, eye and target together.
 [[nodiscard]] authoring::SceneView pannedView(const authoring::SceneView& view, double across, double up) noexcept;
+
+/// The views a preview split `views` ways shows beside `view` (D797):
+/// from straight over its target, then before it along +Z, each as far
+/// from it as `view`'s eye and as wide; none for one.
+[[nodiscard]] std::vector<authoring::SceneView> othersOf(const authoring::SceneView& view, std::size_t views);
+
+/// `view` as a record gives it: its eye, target, and field of view.
+[[nodiscard]] document::Value viewValue(const authoring::SceneView& view);
 
 /// What a preview's wheel and drags with the right button came to (D469,
 /// D472): as totals `tooling.clicked` answers, or their change since a

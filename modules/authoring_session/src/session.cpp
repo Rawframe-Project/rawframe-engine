@@ -213,6 +213,11 @@ private:
             return bookmarked(record);
         case authoring::SessionVerb::Bookmarks:
             return bookmarksOf(record);
+        case authoring::SessionVerb::Split: {
+            bool reopened = false;
+            RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
+            return preview_.split(record, *open->document);
+        }
         case authoring::SessionVerb::Assets: {
             Value made = Value::object();
             made.add("kind", Value::string("authoring.assets"));

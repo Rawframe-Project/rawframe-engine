@@ -84,6 +84,11 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     const auto kFrame = readSessionRecord(R"({"kind":"authoring.frame","id":8,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kFrame.has_value() && kFrame->verb == SessionVerb::Frame && kFrame->scene == "b.scene");
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.frame","id":8})", id).has_value());
+    // A preview split one, two, or three ways (D797).
+    const auto kSplit = readSessionRecord(R"({"kind":"authoring.split","id":10,"scene":"b.scene","views":3})", id);
+    RAWFRAME_EXPECT(kSplit.has_value() && kSplit->verb == SessionVerb::Split && kSplit->views == 3);
+    RAWFRAME_EXPECT(
+        !readSessionRecord(R"({"kind":"authoring.split","id":10,"scene":"b.scene","views":4})", id).has_value());
     // A view mode by its name, bounded only (D794).
     const auto kMode =
         readSessionRecord(R"({"kind":"authoring.view_mode","id":9,"scene":"b.scene","mode":"unlit"})", id);

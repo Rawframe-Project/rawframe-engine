@@ -234,7 +234,12 @@ public:
         kept = look;
         return true;
     }
+    bool split(const std::vector<Look>& others) override {
+        split_ = others;
+        return true;
+    }
     std::optional<Look> kept;
+    std::vector<Look> split_;
 };
 
 } // namespace
@@ -256,8 +261,9 @@ RAWFRAME_TEST(LookingMovesThePreviewUnderTheViewGrant) {
                      "\n");
     server->serve(nullptr, {}, {});
     RAWFRAME_EXPECT(provider.sent[1].find(R"("grants":["view"])") != std::string::npos);
-    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":2,"answer":{"kind":"tooling.looking","previewing":true})") !=
-                    std::string::npos);
+    RAWFRAME_EXPECT(
+        provider.sent[1].find(R"("id":2,"answer":{"kind":"tooling.looking","previewing":true,"split":0})") !=
+        std::string::npos);
     RAWFRAME_EXPECT(preview.kept.has_value() && preview.kept->eye == (std::array<double, 3>{0, 10, 10}) &&
                     preview.kept->fieldOfView == 90);
     // An eye at its target, a view out of form, and a verb past the grant
@@ -271,9 +277,26 @@ RAWFRAME_TEST(LookingMovesThePreviewUnderTheViewGrant) {
                  R"({"kind":"tooling.look","id":6,"view":null})"
                  "\n");
     server->serve(nullptr, {}, {});
-    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":6,"answer":{"kind":"tooling.looking","previewing":false})") !=
-                        std::string::npos &&
-                    !preview.kept.has_value());
+    RAWFRAME_EXPECT(
+        provider.sent[1].find(R"("id":6,"answer":{"kind":"tooling.looking","previewing":false,"split":0})") !=
+            std::string::npos &&
+        !preview.kept.has_value());
+    // Split with the views beside it (D797); more than three, or one out
+    // of form, refused.
+    provider.say(1,
+                 R"({"kind":"tooling.look","id":7,"view":{"eye":[0,10,10],"target":[0,0,0],"fieldOfView":90},)"
+                 R"("others":[{"eye":[0,9,0.1],"target":[0,0,0],"fieldOfView":90}]})"
+                 "\n"
+                 R"({"kind":"tooling.look","id":8,"view":{"eye":[0,10,10],"target":[0,0,0],"fieldOfView":90},)"
+                 R"("others":[{"eye":[0,9,0.1],"target":[0,0,0]}]})"
+                 "\n");
+    server->serve(nullptr, {}, {});
+    RAWFRAME_EXPECT(
+        provider.sent[1].find(R"("id":7,"answer":{"kind":"tooling.looking","previewing":true,"split":1})") !=
+            std::string::npos &&
+        preview.split_.size() == 1 && preview.split_[0].eye == (std::array<double, 3>{0, 9, 0.1}));
+    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":8,"error":{"code":"malformed")") != std::string::npos &&
+                    preview.split_.size() == 1);
     // Granted but with no preview here: not found.
     FedProvider other;
     auto bare = *ToolingServer::create(other, {.token = kToken, .grants = {.view = true}});
