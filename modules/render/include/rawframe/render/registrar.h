@@ -48,6 +48,10 @@ namespace rawframe::render {
 ///   render.capture     a TGA file the last picture read back that holds
 ///                      more than one color is written to when the World
 ///                      stops
+///   render.stream      a file each picture read back is put in, whole
+///                      (capture.h's stream file), for an editor showing
+///                      them (D789); with render.offscreen, drawn
+///                      offscreen though a window is lent
 ///   render.frame_rate  the most frames made a second, as a game's frame
 ///                      limit (0, as many as the Host's iterations; D495)
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;

@@ -16,6 +16,7 @@
 #include <vector>
 
 #if RAWFRAME_FILE_SYSTEM
+#include <filesystem>
 #include <fstream>
 #endif
 
@@ -99,14 +100,16 @@ public:
             framePeriod_ = execution::MonotonicDuration{static_cast<std::int64_t>(1'000'000'000 / kFrameRate)};
         }
         capture_ = configuration.path("render.capture");
+        stream_ = configuration.path("render.stream");
 #if !RAWFRAME_FILE_SYSTEM
-        if (capture_.has_value()) {
+        if (capture_.has_value() || stream_.has_value()) {
             // A capture is a file, and there are none here.
-            return std::unexpected<result::Error>{result::fail(result::ErrorClass::FailedPrecondition,
-                                                               composition::kCompositionDomain,
-                                                               code(composition::CompositionError::BadConfiguration),
-                                                               "render.capture names a file, and there are none here")
-                                                      .error()};
+            return std::unexpected<result::Error>{
+                result::fail(result::ErrorClass::FailedPrecondition,
+                             composition::kCompositionDomain,
+                             code(composition::CompositionError::BadConfiguration),
+                             "render.capture and render.stream name files, and there are none here")
+                    .error()};
         }
 #endif
         if (!context.has(kDevice.name)) {
@@ -120,7 +123,9 @@ public:
                 headset_ = nullptr;
             }
         }
-        if (context.has(window::kSurfaces.name)) {
+        // Asked offscreen, it draws offscreen with a window too: a window
+        // an editor keeps hidden while it shows the stream (D789).
+        if (context.has(window::kSurfaces.name) && kOffscreen != "true") {
             RAWFRAME_TRY_ASSIGN(windows_, context.capability(window::kSurfaces));
         } else if (kOffscreen != "true" && headset_ == nullptr) {
             return {};
@@ -283,7 +288,9 @@ public:
                       diagnostics::field("colors", lastColors_),
                       diagnostics::field("captured", captured),
                       diagnostics::field("readBacksTooLarge", readBacksTooLarge_),
-                      diagnostics::field("headsetFrames", headsetFrames_)});
+                      diagnostics::field("headsetFrames", headsetFrames_),
+                      diagnostics::field("streamed", streamed_),
+                      diagnostics::field("streamFailures", streamFailures_)});
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -438,12 +445,43 @@ private:
             // A frame of one color, the target as cleared (a stopping
             // host's last, once what drew in it has stopped), does not take
             // the capture's place.
+            // Streamed whole to whoever shows it (D789): written apart, then
+            // put in the stream's place, so a reader never meets half of
+            // one.
+            if (stream_.has_value()) {
+                stream(*pixels);
+            }
             if (capture_.has_value() && lastColors_ > 1) {
                 last_ = std::move(*pixels);
                 capturedWidth_ = readWidth_;
                 capturedHeight_ = readHeight_;
             }
         }
+    }
+
+    void stream(const std::vector<std::byte>& pixels) {
+#if RAWFRAME_FILE_SYSTEM
+        const std::vector<std::byte> kBytes = streamedOf(
+            StreamedPicture{.sequence = streamed_ + 1, .width = readWidth_, .height = readHeight_, .pixels = pixels});
+        const std::string kWriting = *stream_ + ".writing";
+        {
+            std::ofstream file{kWriting, std::ios::binary | std::ios::trunc};
+            file.write(reinterpret_cast<const char*>(kBytes.data()), static_cast<std::streamsize>(kBytes.size()));
+            if (!file) {
+                ++streamFailures_;
+                return;
+            }
+        }
+        std::error_code error;
+        std::filesystem::rename(kWriting, *stream_, error);
+        if (error) {
+            ++streamFailures_;
+            return;
+        }
+        ++streamed_;
+#else
+        static_cast<void>(pixels);
+#endif
     }
 
     /// Reported once; no more frames are made.
@@ -495,6 +533,11 @@ private:
     std::uint32_t height_ = 720;
     std::uint64_t readEvery_ = 60;
     std::optional<std::string> capture_;
+    /// Where each picture read back is streamed, how many were, and how
+    /// many could not be (D789).
+    std::optional<std::string> stream_;
+    std::uint64_t streamed_ = 0;
+    std::uint64_t streamFailures_ = 0;
     /// The last frame read back, kept for the capture.
     std::optional<std::vector<std::byte>> last_;
     std::uint32_t lastWidth_ = 0;

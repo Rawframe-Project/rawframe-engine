@@ -215,6 +215,9 @@ result::Status WindowHost::start(window::Windows& windows) {
             made.mode = window::Mode::BorderlessFullscreen;
         }
         made.size = {.width = static_cast<float>(kWidth), .height = static_cast<float>(kHeight)};
+        // Kept hidden, as an editor keeps a game it shows in its own
+        // viewport, the pictures streamed to it (D789).
+        RAWFRAME_TRY_ASSIGN(made.visible, kConfiguration->truth("window.visible", true));
         // A game's own name over its window, as an export gives it (D519).
         if (const auto kTitle = kConfiguration->text("window.title")) {
             made.title = std::string{*kTitle};
