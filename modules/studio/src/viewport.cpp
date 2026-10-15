@@ -56,9 +56,12 @@ void ShellParticipant::forwardInput() {
         return;
     }
     // While the game plays in the viewport and shows there, its area is
-    // the game's; else the window host acts on all of it.
+    // the game's; else the window host acts on all of it. A menu, popup,
+    // or dialog open over it takes what lands on it (D797: the View
+    // menu's lower rows lie over the viewport).
     const bool kPlaysHere = playing_.has_value() && play_.has_value() && play_->viewport.has_value() &&
-                            picture_ != nullptr && tree_->contains(viewport_) && !scene_.empty();
+                            picture_ != nullptr && tree_->contains(viewport_) && !scene_.empty() &&
+                            !popup_.has_value() && !dialog_.has_value();
     if (!kPlaysHere) {
         forwarding_->forwardOver(std::nullopt);
         static_cast<void>(forwarding_->take());
