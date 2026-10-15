@@ -179,4 +179,17 @@ std::optional<ViewMode> viewModeNamed(std::string_view name) noexcept {
     return std::nullopt;
 }
 
+Region previewRegion(std::size_t count, std::size_t at) noexcept {
+    if (count <= 1) {
+        return Region{};
+    }
+    if (count == 2 || (count == 3 && at == 0)) {
+        return Region{.left = at == 0 ? 0.0F : 0.5F, .top = 0, .width = 0.5F, .height = 1};
+    }
+    if (count == 3) {
+        return Region{.left = 0.5F, .top = at == 1 ? 0.0F : 0.5F, .width = 0.5F, .height = 0.5F};
+    }
+    return Region{.left = at % 2 == 0 ? 0.0F : 0.5F, .top = at < 2 ? 0.0F : 0.5F, .width = 0.5F, .height = 0.5F};
+}
+
 } // namespace rawframe::view

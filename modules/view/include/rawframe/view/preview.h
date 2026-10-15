@@ -10,6 +10,7 @@
 // (D456), so what they clicked can be found.
 
 #include "rawframe/composition/participant.h"
+#include "rawframe/view/players.h"
 #include "rawframe/view/view.h"
 
 #include <array>
@@ -40,6 +41,13 @@ enum class ViewMode : std::uint8_t {
 /// The view mode named `name` ("lit", "unlit", "normals"), none for
 /// another.
 [[nodiscard]] std::optional<ViewMode> viewModeNamed(std::string_view name) noexcept;
+
+/// Where view `at` of a preview split `count` ways lies in its window
+/// (D797): one fills it, two stand side by side, three are its left half
+/// and the right half's top and bottom, four its quarters from the top
+/// left across. The first is where the preview's own look is drawn,
+/// picked in, and moved.
+[[nodiscard]] Region previewRegion(std::size_t count, std::size_t at) noexcept;
 
 /// A part of a mark: none, an axis (X, Y, Z), or the ring (D468).
 enum class MarkPart : std::uint8_t {
@@ -91,6 +99,16 @@ public:
     }
     [[nodiscard]] const std::vector<std::uint32_t>& hidden() const noexcept {
         return hidden_;
+    }
+
+    /// The looks the preview's window is split to show beside its own,
+    /// at most three, drawn in `previewRegion`'s places after the first
+    /// (D797); none shows the one look in the whole window.
+    void split(std::vector<Perspective> others) {
+        others_ = std::move(others);
+    }
+    [[nodiscard]] const std::vector<Perspective>& others() const noexcept {
+        return others_;
     }
 
     /// How the preview's scene is drawn while it looks (D794).
@@ -193,6 +211,7 @@ private:
     std::uint64_t releases_ = 0;
     std::vector<std::uint32_t> hidden_;
     ViewMode mode_ = ViewMode::Lit;
+    std::vector<Perspective> others_;
 };
 
 inline constexpr composition::Capability<PreviewCamera> kPreviewCamera{"rawframe.view.preview_camera"};
