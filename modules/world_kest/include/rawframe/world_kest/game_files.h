@@ -21,9 +21,11 @@
 #include "rawframe/kest/program.h"
 #include "rawframe/physics3d/physics.h"
 #include "rawframe/result/result.h"
+#include "rawframe/world/layer.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/mod.h"
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -160,6 +162,15 @@ public:
     }
     [[nodiscard]] const GameDescription& description() const noexcept {
         return description_;
+    }
+    /// Replicates each entity's layer too, as an editor's preview asks of
+    /// both its server and its client so the client hides a layer
+    /// (D791); a game that replicates nothing is left as it is.
+    void replicateLayers() {
+        if (!description_.replicated.empty() &&
+            !std::ranges::contains(description_.replicated, std::string{world::Layer::kComponentName})) {
+            description_.replicated.emplace_back(world::Layer::kComponentName);
+        }
     }
     /// The document the description names `name`; refused (`unreadable_file`)
     /// for a name it does not use.

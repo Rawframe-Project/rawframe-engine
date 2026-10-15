@@ -78,6 +78,12 @@ result::Result<composition::ParticipantOwner> makeGameFiles(composition::Partici
         RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
         RAWFRAME_TRY_ASSIGN(participant->files, GameFiles::fromContent(*content, content::ResourceId{kId.value}));
     }
+    // An editor's preview hides a layer, which its client sees only
+    // replicated (D791); its server is told the same, so both agree.
+    RAWFRAME_TRY_ASSIGN(const bool kLayers, context.configuration().truth("kest.replicate_layers", false));
+    if (kLayers) {
+        participant->files.replicateLayers();
+    }
     return composition::ParticipantOwner{participant.release()};
 }
 
