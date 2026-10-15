@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdlib>
 #include <numbers>
 #include <string_view>
@@ -159,7 +160,33 @@ ViewMotion motionSince(const ViewMotion& now, const ViewMotion& read) noexcept {
                       .look = {now.look[0] - read.look[0], now.look[1] - read.look[1]}};
 }
 
+bool flat(const authoring::SceneView& view) noexcept {
+    return view.eye[0] == view.target[0] && view.eye[1] == view.target[1] && view.eye[2] > view.target[2];
+}
+
+authoring::SceneView pannedView(const authoring::SceneView& view, double across, double up) noexcept {
+    // A pixel a two hundredth of the eye's height, as an orbit's is of a
+    // radian: what is under the pointer stays near it.
+    const double kPerPixel = (view.eye[2] - view.target[2]) / 200;
+    authoring::SceneView panned = view;
+    for (const std::size_t kAxis : {0U, 1U}) {
+        const double kBy = kAxis == 0 ? -across * kPerPixel : up * kPerPixel;
+        panned.eye[kAxis] += kBy;
+        panned.target[kAxis] += kBy;
+    }
+    return panned;
+}
+
 authoring::SceneView movedBy(const authoring::SceneView& view, const ViewMotion& change) noexcept {
+    // A 2D view stays one: the drag pans it, the wheel brings it nearer
+    // the plane or farther (D793).
+    if (flat(view)) {
+        // Not by orbiting, which holds a view short of straight down.
+        authoring::SceneView moved = pannedView(view, change.orbit[0], change.orbit[1]);
+        moved.eye[2] = moved.target[2] +
+                       std::clamp((view.eye[2] - view.target[2]) * std::pow(1 + (1.0 / 6), change.wheel), 0.5, 1e4);
+        return moved;
+    }
     return flownView(
         lookedView(movedView(view, change.wheel, change.orbit[0], change.orbit[1]), change.look[0], change.look[1]),
         change.fly);

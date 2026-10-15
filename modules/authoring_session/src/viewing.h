@@ -48,6 +48,14 @@ movedView(const authoring::SceneView& view, double detents, double across, doubl
 /// patch sets or adds it; none for one without, or not in the scene.
 [[nodiscard]] std::optional<std::array<double, 3>> standingOf(const scene::Scene& scene, base::Bits128 entity);
 
+/// Whether `view` is a 2D one (D793): its eye straight over its target
+/// along +Z, looking down at the plane a 2D game draws in.
+[[nodiscard]] bool flat(const authoring::SceneView& view) noexcept;
+
+/// A 2D view carried `across` pixels left and `up` pixels down over its
+/// plane, as a drag moves it, eye and target together.
+[[nodiscard]] authoring::SceneView pannedView(const authoring::SceneView& view, double across, double up) noexcept;
+
 /// What a preview's wheel and drags with the right button came to (D469,
 /// D472): as totals `tooling.clicked` answers, or their change since a
 /// reading.
