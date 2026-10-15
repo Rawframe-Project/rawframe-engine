@@ -518,6 +518,29 @@ void ShellParticipant::frameChosen() {
     showViewText();
 }
 
+void ShellParticipant::seeIn2D(bool flat) {
+    if (scene_.empty()) {
+        return;
+    }
+    const std::optional<Value> kView = flatView(view_, flat);
+    if (!kView.has_value()) {
+        ++refused_;
+        say("the view does not read");
+        return;
+    }
+    const Answered kAnswered = answeredOf(ask(viewRecord(next(), scene_, *kView)));
+    if (kAnswered.done) {
+        ++viewsSet_;
+        view_ = kAnswered.view;
+        previewing_ = kAnswered.previewing;
+        say(flat ? "2D view" : "3D view");
+    } else {
+        ++refused_;
+        say(kAnswered.message);
+    }
+    showViewText();
+}
+
 Value ShellParticipant::operationOn(std::string_view operation) const {
     Value made = Value::object();
     made.add("operation", Value::string(std::string{operation}));

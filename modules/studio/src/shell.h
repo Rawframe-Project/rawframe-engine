@@ -410,6 +410,8 @@ private:
     void setView(const std::string& part, const std::string& text);
     /// The view turned on what is chosen, by the session (D792).
     void frameChosen();
+    /// The view seen in 2D or out of it (D793).
+    void seeIn2D(bool flat);
 
     /// `operation` with the chosen entity as its target.
     Value operationOn(std::string_view operation) const;

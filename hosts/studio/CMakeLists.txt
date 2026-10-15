@@ -786,6 +786,24 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"cooked .*saw studio_previewing.*\"code\":\"studio_said\"[^\n]*\"status\":\"cooked [1-9][0-9]* sources, 0 reused\".*\"code\":\"scene_summary\"[^\n]*\"gameMeshes\":[1-9][0-9]*,[^\n]*\"texturesReady\":[1-9][0-9]*,")
+        # A 2D game seen in 2D (D793): Runners played in the viewport, the
+        # view seen in 2D from the View menu, and the client's canvas drawn
+        # from where the preview's eye is, not the player's camera.
+        add_test(NAME studio_sees_in_2d
+                 COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.play_in_viewport = true"
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/runners/runners.game /dev/null ${PROJECT_BINARY_DIR}/hosts/client/runners_clicked.conf
+                         @level.scene @Play until=studio_previewing @View "@2D view  Ctrl+2"
+                         "until=studio_said,status=\"2D view" wait=3 @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_sees_in_2d PROPERTIES
+                             FIXTURES_REQUIRED runners_content
+                             PROCESSORS 3
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "saw studio_said,status=\"2D view.*\"code\":\"canvas_summary\"[^\n]*\"framesPreviewed\":[1-9]")
         # A material edited while the game plays (D734): Gale cooked by
         # Studio and played from that content, its shore's tint typed, and
         # Studio cooks again on its own; the played client, following its

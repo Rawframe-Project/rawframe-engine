@@ -26,7 +26,7 @@ std::string lowered(std::string_view text) {
 
 /// The menus in the menu bar's order, none named as a command is, so a
 /// screen reader's "Play" is the button (D777).
-constexpr std::string_view kMenus[] = {"Edit", "Entity", "Game", "Window"};
+constexpr std::string_view kMenus[] = {"Edit", "Entity", "Game", "View", "Window"};
 
 /// The palette's own command, which has no button: it gives the palette's
 /// field the keyboard.
@@ -38,6 +38,11 @@ constexpr std::string_view kPreferences = "Preferences";
 /// The view turned on what is chosen (D792), with no button: the key,
 /// the menu, or the palette.
 constexpr std::string_view kFrame = "Frame chosen";
+
+/// The view seen in 2D, straight down at a 2D game's plane, or out of it
+/// again (D793); no buttons either.
+constexpr std::string_view kFlat = "2D view";
+constexpr std::string_view kTilted = "3D view";
 
 /// What the palette's field reads while it does not hold the keyboard.
 constexpr std::string_view kPaletteHint = "commands  Ctrl+K";
@@ -85,7 +90,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
                                  [&](const Command& command) {
                                      return command.menu == kMenu;
                                  }) &&
-            kMenu != "Window") {
+            kMenu != "Window" && kMenu != "View") {
             continue;
         }
         RAWFRAME_TRY_ASSIGN(const ui::Node kButton, box(bar, ui::Layout{.shrink = 0, .padding = {8, 3, 8, 3}}, 0));
@@ -94,7 +99,9 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     }
     commands_.push_back(Command{.name = std::string{kPalette}, .menu = "Window", .keys = kKeys(kPalette, {"Ctrl+K"})});
     commands_.push_back(Command{.name = std::string{kPreferences}, .menu = "Window", .keys = kKeys(kPreferences, {})});
-    commands_.push_back(Command{.name = std::string{kFrame}, .menu = "Entity", .keys = kKeys(kFrame, {"F"})});
+    commands_.push_back(Command{.name = std::string{kFrame}, .menu = "View", .keys = kKeys(kFrame, {"F"})});
+    commands_.push_back(Command{.name = std::string{kFlat}, .menu = "View", .keys = kKeys(kFlat, {"Ctrl+2"})});
+    commands_.push_back(Command{.name = std::string{kTilted}, .menu = "View", .keys = kKeys(kTilted, {"Ctrl+3"})});
     // The palette's field, as a field named "commands" is read (D575).
     RAWFRAME_TRY_ASSIGN(const ui::Node kSearch, tree_->addEditable(++keys_));
     RAWFRAME_TRY(tree_->setLayout(
@@ -119,6 +126,10 @@ bool ShellParticipant::runCommand(std::string_view name) {
     }
     if (kCommand->name == kFrame) {
         frameChosen();
+        return true;
+    }
+    if (kCommand->name == kFlat || kCommand->name == kTilted) {
+        seeIn2D(kCommand->name == kFlat);
         return true;
     }
     if (kCommand->name == kPreferences) {

@@ -986,4 +986,36 @@ std::string mintedHexIdentity() {
     return text;
 }
 
+std::optional<Value> flatView(const std::optional<Value>& view, bool flat) {
+    // A scene not yet looked at is looked at as `viewWith` starts one.
+    const std::optional<Value> kView =
+        view.has_value() && !view->isNull() ? view : viewWith(std::nullopt, "fieldOfView", "60");
+    std::array<double, 3> eye{};
+    std::array<double, 3> target{};
+    for (const auto& [kName, kInto] : {std::pair{"eye", &eye}, std::pair{"target", &target}}) {
+        const Value* held = kView->find(kName);
+        if (held == nullptr || held->kind() != Value::Kind::Array || held->items().size() != 3) {
+            return std::nullopt;
+        }
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+            const std::optional<double> kReal = held->items()[axis].real();
+            if (!kReal.has_value()) {
+                return std::nullopt;
+            }
+            (*kInto)[axis] = *kReal;
+        }
+    }
+    const double kFar = std::max(std::hypot(eye[0] - target[0], eye[1] - target[1], eye[2] - target[2]), 3.0);
+    Value made = Value::object();
+    if (flat) {
+        made.add("eye", point(target[0], target[1], target[2] + kFar));
+    } else {
+        made.add("eye", point(target[0], target[1] + (kFar * 0.6), target[2] + (kFar * 0.8)));
+    }
+    made.add("target", point(target[0], target[1], target[2]));
+    const Value* degrees = kView->find("fieldOfView");
+    made.add("fieldOfView", degrees != nullptr ? *degrees : Value::real(60));
+    return made;
+}
+
 } // namespace rawframe::studio

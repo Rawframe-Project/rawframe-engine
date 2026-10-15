@@ -258,6 +258,11 @@ readRecord(std::int64_t id, std::string_view scene, std::string_view operation, 
 [[nodiscard]] Value togetherRecord(std::int64_t id, std::vector<std::pair<std::string, std::vector<Value>>> parts);
 /// `authoring.select` of `entities` in `scene`.
 [[nodiscard]] Value selectRecord(std::int64_t id, std::string_view scene, const std::vector<std::string>& entities);
+/// `view` (an `authoring.view` record's) seen in 2D or not (D793): in 2D
+/// its eye straight over its target along +Z, as far as it was from it;
+/// else from above and behind the target as far; none for a view that
+/// does not read.
+[[nodiscard]] std::optional<Value> flatView(const std::optional<Value>& view, bool flat);
 /// `authoring.frame` of `scene` (D792): its view turned on what is chosen.
 [[nodiscard]] Value frameRecord(std::int64_t id, std::string_view scene);
 /// `authoring.undo` or `authoring.redo` (`kind`) of `scene`.
