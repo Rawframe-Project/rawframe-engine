@@ -153,6 +153,17 @@ std::optional<view::Typing> chordOf(const window::Key& key) {
 
 /// A window's record as typing for the field that holds focus, if it is
 /// any: a key that edits, typed or committed text, or a composition.
+/// A letter going down with no modifier, as a chord of its capital.
+std::optional<view::Typing> letterOf(const window::Event& event) {
+    if (event.kind != window::EventKind::KeyDown || event.key.usage < kUsageA || event.key.usage > kUsageZ ||
+        held(event.key, window::Modifier::Control) || held(event.key, window::Modifier::Meta) ||
+        held(event.key, window::Modifier::Alt) || held(event.key, window::Modifier::Shift) || event.key.repeat) {
+        return std::nullopt;
+    }
+    return view::Typing{.kind = view::Typing::Kind::Chord,
+                        .text = std::string(1, static_cast<char>('A' + (event.key.usage - kUsageA)))};
+}
+
 std::optional<view::Typing> typingOf(const window::Event& event) {
     switch (event.kind) {
     case window::EventKind::KeyDown:
@@ -528,10 +539,15 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         // reach the players' input, whose gated actions they no longer move.
         // A chord goes to the UI whether or not a field holds focus, and
         // Delete with none holding it is one: what is chosen goes (D777).
+        // So is a letter alone with none holding it, an editor's F framing
+        // what is chosen (D792); a game's UI holds no such chord.
         std::optional<view::Typing> typed = typingOf(*event);
         if (typed.has_value() && !typing_.editing() && typed->kind == view::Typing::Kind::Key &&
             typed->key == view::TypingKey::Delete) {
             typed = view::Typing{.kind = view::Typing::Kind::Chord, .text = "Delete"};
+        }
+        if (!typed.has_value() && !typing_.editing()) {
+            typed = letterOf(*event);
         }
         if (typed.has_value() && (typing_.editing() || typed->kind == view::Typing::Kind::Chord)) {
             typing_.type(*typed);
