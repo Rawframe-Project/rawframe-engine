@@ -13,6 +13,7 @@
 #include "rawframe/view/players.h"
 #include "rawframe/view/view.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -102,10 +103,22 @@ public:
     }
 
     /// The looks the preview's window is split to show beside its own,
-    /// at most three, drawn in `previewRegion`'s places after the first
-    /// (D797); none shows the one look in the whole window.
+    /// as many as it allows, drawn in `previewRegion`'s places after the
+    /// first (D797); none shows the one look in the whole window.
     void split(std::vector<Perspective> others) {
         others_ = std::move(others);
+        if (others_.size() + 1 > views_) {
+            others_.resize(views_ - 1);
+        }
+    }
+    /// The views its window may be split into, its host's to allow before
+    /// the renderer starts, which places their regions then (D797): one,
+    /// none split, unless the window's settings say more.
+    void allow(std::size_t views) noexcept {
+        views_ = std::max<std::size_t>(views, 1);
+    }
+    [[nodiscard]] std::size_t views() const noexcept {
+        return views_;
     }
     [[nodiscard]] const std::vector<Perspective>& others() const noexcept {
         return others_;
@@ -212,6 +225,7 @@ private:
     std::vector<std::uint32_t> hidden_;
     ViewMode mode_ = ViewMode::Lit;
     std::vector<Perspective> others_;
+    std::size_t views_ = 1;
 };
 
 inline constexpr composition::Capability<PreviewCamera> kPreviewCamera{"rawframe.view.preview_camera"};
