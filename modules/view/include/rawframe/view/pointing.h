@@ -53,13 +53,31 @@ public:
     void onPress(Pressed pressed) noexcept {
         pressed_ = std::move(pressed);
     }
-    /// The host's side: a mouse button or a touch went down at `x`, `y`,
-    /// told in the order of the window's records, so the keys that follow
-    /// find the keyboard where the press put it.
-    void pressed(float x, float y) const {
+    /// The keys held as a press went down (D787): Control (or Command) and
+    /// Shift, which an editor takes as adding to a selection or extending
+    /// it.
+    struct Held {
+        bool control = false;
+        bool shift = false;
+    };
+
+    /// The host's side: a mouse button or a touch went down at `x`, `y`
+    /// with `held` held, told in the order of the window's records, so the
+    /// keys that follow find the keyboard where the press put it.
+    void pressed(float x, float y, Held held) {
+        held_ = held;
         if (pressed_) {
             pressed_(x, y);
         }
+    }
+    /// A press with no keys held.
+    void pressed(float x, float y) {
+        pressed(x, y, Held{});
+    }
+
+    /// The UI's side, as a press is told: the keys held as it went down.
+    [[nodiscard]] Held held() const noexcept {
+        return held_;
     }
 
     /// What the UI does as a press is let go (D431): the node it went down
@@ -182,6 +200,7 @@ private:
     Valued valued_;
     std::array<float, 2> pointer_{};
     bool pointed_ = false;
+    Held held_;
     /// The finger that is the pointer while it touches.
     std::optional<std::uint64_t> finger_;
 };

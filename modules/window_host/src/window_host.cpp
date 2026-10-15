@@ -307,7 +307,16 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         // press went down, for the field that takes the keyboard (D426),
         // and the wheel turned there, for what scrolls (D441).
         if (event->kind == window::EventKind::ButtonDown) {
-            pointing_.pressed(event->pointer.position.x, event->pointer.position.y);
+            // With the keys held, which an editor reads (D787).
+            const std::uint16_t kHeld = event->pointer.modifiers;
+            const auto kHolds = [kHeld](window::Modifier modifier) {
+                return (kHeld & static_cast<std::uint16_t>(modifier)) != 0;
+            };
+            pointing_.pressed(
+                event->pointer.position.x,
+                event->pointer.position.y,
+                view::UiPointing::Held{.control = kHolds(window::Modifier::Control) || kHolds(window::Modifier::Meta),
+                                       .shift = kHolds(window::Modifier::Shift)});
             // Where an author clicked in the preview, as a ray (D456).
             if (settings_.preview != nullptr && settings_.preview->looking().has_value() &&
                 event->pointer.button == window::MouseButton::Left) {
