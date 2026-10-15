@@ -18,6 +18,10 @@ build=$3
 repository=$4
 work=$5
 
+# A step that fails says where and what the last run said, so a failure
+# under load is read, not guessed at (it ended silently in CI twice).
+trap 'echo "failed at line $LINENO" >&2; tail -n 5 "$work/errors.txt" >&2 2>/dev/null; grep -m 3 "\"severity\":\"\(error\|warning\)\"" "$work/log.ndjson" >&2 2>/dev/null' ERR
+
 rm -rf "$work"
 mkdir -p "$work/game" "$work/mod" "$work/sting" "$work/penalty" "$work/lenient" "$work/swift" "$work/late" "$work/wide" "$work/elsewhere"
 cp -r "$repository/games/runners/." "$work/game/"
