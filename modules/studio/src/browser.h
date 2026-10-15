@@ -6,9 +6,12 @@
 // the documents Studio edits open from it as before; another source is
 // chosen, and said with its kind and cook state.
 
+#include "rawframe/texture/texture.h"
 #include "rawframe/ui/tree.h"
 
 #include <cstdint>
+#include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -36,6 +39,10 @@ struct ListedSource {
 /// `rawframe.`.
 [[nodiscard]] std::string kindOf(std::string_view importer);
 
+/// The image key a source's thumbnail is shown by (D801): its path's,
+/// apart from Studio's other images.
+[[nodiscard]] std::uint64_t thumbnailKey(std::string_view path) noexcept;
+
 /// The browser's filter control for `kind`: "Textures" for `texture`, the
 /// kind itself for one it does not name.
 [[nodiscard]] std::string kindLabel(std::string_view kind);
@@ -56,6 +63,23 @@ struct AssetBrowser {
     /// The Inspector's Reimport for the chosen source, and how many times
     /// its settings were set and refused (D800).
     ui::Node reimport{};
+    /// The thumbnails' size, none, small, or large (D801), its controls,
+    /// and each texture's picture by the image key its row shows, made from
+    /// the last cook, and how many were made.
+    std::uint32_t thumbnail = 0;
+    std::vector<std::pair<ui::Node, std::uint32_t>> sizeRows;
+    std::map<std::uint64_t, std::shared_ptr<const texture::Texture>> pictures;
+    std::uint64_t thumbnailsMade = 0;
+    /// Files dropped on the window, and those imported (D802).
+    /// The Inspector's References, the center's rows of what the chosen
+    /// source uses and what uses it, and how many times they were shown
+    /// (D803).
+    ui::Node references{};
+    std::vector<std::pair<ui::Node, std::string>> referenceRows;
+    std::vector<ui::Node> referenceBoxes;
+    std::uint64_t referencesShown = 0;
+    std::uint64_t dropped = 0;
+    std::uint64_t droppedImported = 0;
     std::uint64_t settingsSet = 0;
     std::uint64_t settingsRefused = 0;
     /// How many times a source was chosen, and the folder and kind narrowed.

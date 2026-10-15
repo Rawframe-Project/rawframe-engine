@@ -12,8 +12,11 @@ namespace rawframe::studio {
 namespace {
 
 constexpr std::string_view kProvided[] = {ui::kUiFrames.name};
-constexpr std::string_view kMaybe[] = {
-    view::kUiPointing.name, view::kUiTyping.name, ui::kAccessSeat.name, world_tooling::kForwarding.name};
+constexpr std::string_view kMaybe[] = {view::kUiPointing.name,
+                                       view::kUiTyping.name,
+                                       ui::kAccessSeat.name,
+                                       world_tooling::kForwarding.name,
+                                       view::kFilesDropped.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 result::Status misconfigured(std::string_view why) {
@@ -99,6 +102,10 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     }
     if (context.has(view::kUiTyping.name)) {
         RAWFRAME_TRY_ASSIGN(typing_, context.capability(view::kUiTyping));
+    }
+    // Files dropped on the window from outside (D802).
+    if (context.has(view::kFilesDropped.name)) {
+        RAWFRAME_TRY_ASSIGN(dropped_, context.capability(view::kFilesDropped));
     }
     if (context.has(ui::kAccessSeat.name)) {
         RAWFRAME_TRY_ASSIGN(seat_, context.capability(ui::kAccessSeat));
@@ -272,6 +279,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     readLogs(kSeconds);
     followPicture();
     forwardInput();
+    takeDrops();
     followSplitter();
     // A press is acted on as the window's records come and may have
     // changed what a column holds; the wheel is turned over it laid out,
@@ -408,7 +416,12 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("narrowed", browser_.narrowed),
                   diagnostics::field("chosen", std::string_view{browser_.chosen}),
                   diagnostics::field("settingsSet", browser_.settingsSet),
-                  diagnostics::field("settingsRefused", browser_.settingsRefused)});
+                  diagnostics::field("settingsRefused", browser_.settingsRefused),
+                  diagnostics::field("thumbnail", std::uint64_t{browser_.thumbnail}),
+                  diagnostics::field("thumbnailsMade", browser_.thumbnailsMade),
+                  diagnostics::field("referencesShown", browser_.referencesShown),
+                  diagnostics::field("dropped", browser_.dropped),
+                  diagnostics::field("droppedImported", browser_.droppedImported)});
     // And what the start screen did (D781): the games made from templates,
     // the game Studio ended on, if any, and the games kept as opened last.
     emitter_.log(diagnostics::Severity::Info,
@@ -440,7 +453,12 @@ void ShellParticipant::resize(std::uint32_t width, std::uint32_t height, bool /*
 
 std::shared_ptr<const texture::Texture> ShellParticipant::image(std::uint64_t id) const {
     // The played game's picture, in the viewport (D789).
-    return id == kViewportImage ? inViewport_.picture : nullptr;
+    if (id == kViewportImage) {
+        return inViewport_.picture;
+    }
+    // A source's thumbnail in the browser (D801).
+    const auto kPicture = browser_.pictures.find(id);
+    return kPicture != browser_.pictures.end() ? kPicture->second : nullptr;
 }
 
 namespace {

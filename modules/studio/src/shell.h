@@ -22,6 +22,7 @@
 #include "rawframe/ui/frames.h"
 #include "rawframe/ui/text_edit.h"
 #include "rawframe/ui/tree.h"
+#include "rawframe/view/dropping.h"
 #include "rawframe/view/pointing.h"
 #include "rawframe/view/typing.h"
 #include "rawframe/world_tooling/forwarding.h"
@@ -253,6 +254,17 @@ private:
     /// The chosen source's import settings in the Inspector, one set, and
     /// the source cooked again (D800).
     void showImportSettings();
+    /// Imports the file at `path` (absolute) as `as` under the game's
+    /// directory (D505), saying what came of it; whether it was imported.
+    bool importFile(const std::string& path, const std::string& as);
+    /// Each file dropped on the window imported into the browser's folder
+    /// (D802).
+    void takeDrops();
+    /// The chosen source's references in the center, read only (D803).
+    void showReferences();
+    /// `source`'s thumbnail at the browser's size, from the last cook, made
+    /// once (D801); none for a source that has none.
+    std::shared_ptr<const texture::Texture> thumbnailOf(const ListedSource& source);
     void setImportSetting(const FieldRow& row, const std::string& text);
 
     /// The locked layer's name `entity` is on, none if it is on no locked
@@ -852,6 +864,7 @@ private:
     std::vector<ActionButton> actions_;
     view::UiPointing* pointing_ = nullptr;
     view::UiTyping* typing_ = nullptr;
+    view::FilesDropped* dropped_ = nullptr;
     /// Where the window is read for assistive technology, if its program
     /// lends one (D575).
     ui::AccessSeat* seat_ = nullptr;

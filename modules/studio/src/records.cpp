@@ -279,6 +279,23 @@ Value importSettingsRecord(std::int64_t id, std::string_view asset) {
     return record;
 }
 
+Value assetReferencesRecord(std::int64_t id, std::string_view asset) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.asset_references"));
+    record.add("id", Value::integer(id));
+    record.add("asset", Value::string(std::string{asset}));
+    return record;
+}
+
+Value thumbnailRecord(std::int64_t id, std::string_view asset, std::uint32_t size) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.thumbnail"));
+    record.add("id", Value::integer(id));
+    record.add("asset", Value::string(std::string{asset}));
+    record.add("size", Value::integer(size));
+    return record;
+}
+
 Value setImportSettingsRecord(std::int64_t id, std::string_view asset, Value settings) {
     Value record = Value::object();
     record.add("kind", Value::string("authoring.set_import_settings"));

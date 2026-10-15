@@ -24,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":65,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":68,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its menus and the palette's field (D777), its buttons, its
     # docks as scroll panes named by their headings or tabs in SPEC-0051's
@@ -817,6 +817,55 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set_tests_properties(studio_browses_assets PROPERTIES
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"paving.png: texture, cooked.*\"code\":\"studio_assets\"[^\n]*\"sources\":[1-9][0-9]*,\"sourcesChosen\":2,\"narrowed\":1,\"chosen\":\"paving.png\",")
+        # References (D803): Plaza cooked by Studio, the paving chosen in the
+        # browser and its References shown, the game's description that reads
+        # it listed and chosen from there, its own shown in turn.
+        add_test(NAME studio_shows_references
+                 COMMAND ${CMAKE_COMMAND} -E env STUDIO_COOK=$<TARGET_FILE:rawframe_host_cook_tool>
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game /dev/null /dev/null
+                         @Cook "until=studio_said,status=\"cooked " @Textures
+                         "until=studio_said,status=\"Textures in all folders" @paving.png
+                         "until=studio_said,status=\"paving.png: texture" @References
+                         "until=studio_said,status=\"paving.png: 1 references" @plaza.game
+                         "until=studio_said,status=\"plaza.game: "
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_shows_references PROPERTIES
+                             PASS_REGULAR_EXPRESSION
+                             "saw studio_said,status=\"plaza.game: .*\"code\":\"studio_assets\"[^\n]*\"referencesShown\":2,")
+        # Files dropped from outside (D802): a picture dropped on Studio's
+        # Assets, by XDND as a file manager drops one, imported into the
+        # game, then listed among its textures.
+        add_test(NAME studio_imports_dropped
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game /dev/null /dev/null
+                         "drop=@Assets:${PROJECT_SOURCE_DIR}/games/gale/stone.png"
+                         "until=studio_said,status=\"imported " @Textures
+                         "until=studio_said,status=\"Textures in all folders" @stone.png
+                         "until=studio_said,status=\"stone.png: texture"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_imports_dropped PROPERTIES
+                             PASS_REGULAR_EXPRESSION
+                             "dropped [^\n]*stone.png at [0-9]+,[0-9]+: finished.*saw studio_said,status=\"stone.png: texture.*\"code\":\"studio_assets\"[^\n]*\"dropped\":1,\"droppedImported\":1")
+        # Thumbnails (D801): Plaza cooked by Studio, its textures shown in the
+        # browser with large thumbnails from that cook.
+        add_test(NAME studio_shows_thumbnails
+                 COMMAND ${CMAKE_COMMAND} -E env STUDIO_COOK=$<TARGET_FILE:rawframe_host_cook_tool>
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game /dev/null /dev/null
+                         @Cook "until=studio_said,status=\"cooked " @Textures
+                         "until=studio_said,status=\"Textures in all folders" "@Large thumbnails"
+                         "until=studio_said,status=\"64 pixel thumbnails" wait=2
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_shows_thumbnails PROPERTIES
+                             PASS_REGULAR_EXPRESSION
+                             "saw studio_said,status=\"64 pixel thumbnails.*\"code\":\"studio_assets\"[^\n]*\"thumbnail\":64,\"thumbnailsMade\":[1-9]")
         # Import settings (D800): Plaza's paving chosen in the browser, its
         # texture's exact set false in the Inspector, then cooked again by
         # Reimport.

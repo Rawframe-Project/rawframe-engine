@@ -88,6 +88,11 @@ struct Asset {
 /// `authoring.import_settings` of the source at `asset`, and
 /// `authoring.set_import_settings` giving it `settings` (D800).
 [[nodiscard]] Value importSettingsRecord(std::int64_t id, std::string_view asset);
+/// `authoring.thumbnail` of the source at `asset`, `size` pixels at most
+/// (D801).
+[[nodiscard]] Value thumbnailRecord(std::int64_t id, std::string_view asset, std::uint32_t size);
+/// `authoring.asset_references` of the source at `asset` (D803).
+[[nodiscard]] Value assetReferencesRecord(std::int64_t id, std::string_view asset);
 [[nodiscard]] Value setImportSettingsRecord(std::int64_t id, std::string_view asset, Value settings);
 [[nodiscard]] std::vector<Asset> assetsOf(std::string_view reply);
 
