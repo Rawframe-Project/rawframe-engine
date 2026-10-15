@@ -57,6 +57,10 @@ public:
     /// server as a pick; what it moved when let go; the mark's part lit;
     /// and the view the wheel and drags moved, `previewed` being the
     /// previewed scene, open, if it is.
+    /// `preview_input` (D790): the events read as tooling input and handed
+    /// to the preview of `record.scene`, if it is previewed; refused
+    /// (`validation_failed`) where they do not read.
+    [[nodiscard]] result::Result<document::Value> inputted(const authoring::SessionRecord& record);
     [[nodiscard]] result::Result<document::Value> picked(const authoring::SessionRecord& record,
                                                          authoring::AuthoredScene* previewed);
 

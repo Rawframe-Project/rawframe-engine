@@ -7,10 +7,12 @@
 // knows no camera.
 
 #include "rawframe/composition/participant.h"
+#include "rawframe/world_tooling/window_input.h"
 
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace rawframe::world_tooling {
 
@@ -76,6 +78,12 @@ public:
     /// to 3 the X, Y, and Z axes, 4 the ring (D468); whether the Runtime
     /// shows a mark.
     virtual bool mark(const std::optional<std::array<double, 3>>& /*at*/, std::uint8_t /*lit*/) {
+        return false;
+    }
+    /// Takes what an author did in an editor's viewport showing the
+    /// preview as its own window's (D790), in order; whether the Runtime
+    /// takes such input.
+    virtual bool input(const std::vector<world_tooling::WindowInput>& /*events*/) {
         return false;
     }
 };

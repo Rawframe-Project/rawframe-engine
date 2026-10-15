@@ -178,7 +178,133 @@ std::optional<view::Typing> typingOf(const window::Event& event) {
     }
 }
 
+/// An editor's input as the window's own record, for `window` (D790).
+std::optional<window::Event> windowEventOf(const world_tooling::WindowInput& given, window::WindowId window) {
+    window::Event made{.window = window};
+    made.pointer.position = {.x = given.x, .y = given.y};
+    made.pointer.modifiers = given.modifiers;
+    made.pointer.button = given.button == 1   ? window::MouseButton::Right
+                          : given.button == 2 ? window::MouseButton::Middle
+                                              : window::MouseButton::Left;
+    switch (given.kind) {
+    case world_tooling::WindowInput::Kind::Move:
+        made.kind = window::EventKind::CursorMoved;
+        made.pointer.button = window::MouseButton::None;
+        break;
+    case world_tooling::WindowInput::Kind::Press:
+        made.kind = window::EventKind::ButtonDown;
+        made.pointer.clicks = 1;
+        break;
+    case world_tooling::WindowInput::Kind::Release:
+        made.kind = window::EventKind::ButtonUp;
+        break;
+    case world_tooling::WindowInput::Kind::Wheel:
+        made.kind = window::EventKind::Wheel;
+        made.motion = {.x = given.deltaX, .y = given.deltaY};
+        break;
+    case world_tooling::WindowInput::Kind::KeyDown:
+    case world_tooling::WindowInput::Kind::KeyUp:
+        made.kind = given.kind == world_tooling::WindowInput::Kind::KeyDown ? window::EventKind::KeyDown
+                                                                            : window::EventKind::KeyUp;
+        made.key = {.usage = given.usage,
+                    .meaning = window::kNamedKey | given.usage,
+                    .modifiers = given.modifiers,
+                    .repeat = given.repeat};
+        break;
+    case world_tooling::WindowInput::Kind::Text:
+        made.kind = window::EventKind::TextInput;
+        made.text = given.text;
+        break;
+    case world_tooling::WindowInput::Kind::Leave:
+        made.kind = window::EventKind::CursorLeft;
+        break;
+    }
+    return made;
+}
+
 } // namespace
+
+bool WindowHost::forwarded(const window::Event& event) {
+    if (!forwarding_.area().has_value()) {
+        forwardedPress_ = false;
+        forwardedOver_ = false;
+        return false;
+    }
+    const std::array<float, 4> kArea = *forwarding_.area();
+    const float kX = event.pointer.position.x - kArea[0];
+    const float kY = event.pointer.position.y - kArea[1];
+    const auto kButton = [&event]() -> std::uint8_t {
+        return event.pointer.button == window::MouseButton::Right    ? 1
+               : event.pointer.button == window::MouseButton::Middle ? 2
+                                                                     : 0;
+    };
+    switch (event.kind) {
+    case window::EventKind::ButtonDown:
+        if (!forwarding_.pressed(event.pointer.position.x, event.pointer.position.y)) {
+            return false;
+        }
+        forwardedPress_ = true;
+        forwarding_.give({.kind = world_tooling::WindowInput::Kind::Press,
+                          .x = kX,
+                          .y = kY,
+                          .button = kButton(),
+                          .modifiers = event.pointer.modifiers});
+        return true;
+    case window::EventKind::ButtonUp:
+        // A press handed over is let go there too, wherever it ends.
+        if (!forwardedPress_) {
+            return false;
+        }
+        forwardedPress_ = false;
+        forwarding_.give({.kind = world_tooling::WindowInput::Kind::Release,
+                          .x = kX,
+                          .y = kY,
+                          .button = kButton(),
+                          .modifiers = event.pointer.modifiers});
+        return true;
+    case window::EventKind::CursorMoved: {
+        const bool kOver = forwarding_.over(event.pointer.position.x, event.pointer.position.y);
+        if (kOver || forwardedPress_) {
+            forwardedOver_ = kOver;
+            forwarding_.give({.kind = world_tooling::WindowInput::Kind::Move,
+                              .x = kX,
+                              .y = kY,
+                              .modifiers = event.pointer.modifiers});
+            return true;
+        }
+        if (std::exchange(forwardedOver_, false)) {
+            forwarding_.give({.kind = world_tooling::WindowInput::Kind::Leave});
+        }
+        return false;
+    }
+    case window::EventKind::Wheel:
+        if (!forwardedOver_) {
+            return false;
+        }
+        forwarding_.give(
+            {.kind = world_tooling::WindowInput::Kind::Wheel, .deltaX = event.motion.x, .deltaY = event.motion.y});
+        return true;
+    case window::EventKind::KeyDown:
+    case window::EventKind::KeyUp:
+        if (!forwarding_.focused()) {
+            return false;
+        }
+        forwarding_.give({.kind = event.kind == window::EventKind::KeyDown ? world_tooling::WindowInput::Kind::KeyDown
+                                                                           : world_tooling::WindowInput::Kind::KeyUp,
+                          .usage = event.key.usage,
+                          .repeat = event.key.repeat,
+                          .modifiers = event.key.modifiers});
+        return true;
+    case window::EventKind::TextInput:
+        if (!forwarding_.focused() || event.text.empty() || event.text.size() > world_tooling::kMostText) {
+            return forwarding_.focused();
+        }
+        forwarding_.give({.kind = world_tooling::WindowInput::Kind::Text, .text = event.text});
+        return true;
+    default:
+        return false;
+    }
+}
 
 WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings settings)
     : request_(request), settings_(std::move(settings)) {
@@ -186,6 +312,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     lent_.push_back(composition::LentCapability{window::kSurfaces.name, composition::provideAs(surfaces_)});
     lent_.push_back(composition::LentCapability{view::kPlayerViews.name, composition::provideAs(views_)});
     lent_.push_back(composition::LentCapability{view::kUiPointing.name, composition::provideAs(pointing_)});
+    lent_.push_back(composition::LentCapability{world_tooling::kForwarding.name, composition::provideAs(forwarding_)});
     lent_.push_back(composition::LentCapability{view::kUiTyping.name, composition::provideAs(typing_)});
     lent_.push_back(composition::LentCapability{view::kUiNavigation.name, composition::provideAs(navigation_)});
     lent_.push_back(composition::LentCapability{ui::kAccessSeat.name, composition::provideAs(access_)});
@@ -226,6 +353,7 @@ result::Status WindowHost::start(window::Windows& windows) {
             place = window::Position{.x = static_cast<float>(kX), .y = static_cast<float>(kY)};
         }
     }
+    asked_ = made.size;
     RAWFRAME_TRY_ASSIGN(const window::WindowId kWindow, windows.create(made));
     if (place.has_value()) {
         static_cast<void>(windows.requestPosition(kWindow, *place));
@@ -270,10 +398,31 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     // reading: a frame may come before the host is due, and an iteration
     // may run no world tick, and the keys after it would then be read in
     // the same tick after all (D506).
+    // What an editor's viewport handed this preview is acted on first,
+    // as the window's (D790).
+    // Kept until acted on: a frame that waits on the players' reading acts
+    // on none.
+    if (settings_.injection != nullptr) {
+        for (const world_tooling::WindowInput& kEach : settings_.injection->take()) {
+            if (std::optional<window::Event> made = windowEventOf(kEach, window_); made.has_value()) {
+                injected_.push_back(std::move(*made));
+            }
+        }
+    }
     while (!awaitingRead_) {
-        const std::optional<window::Event> event = windows.next();
+        std::optional<window::Event> event;
+        if (!injected_.empty()) {
+            event = std::move(injected_.front());
+            injected_.pop_front();
+        } else {
+            event = windows.next();
+        }
         if (!event.has_value()) {
             break;
+        }
+        // What lands on an editor's viewport is the game's it shows.
+        if (forwarded(*event)) {
+            continue;
         }
         closing = closing || event->kind == window::EventKind::CloseRequested;
         if (event->kind == window::EventKind::Suspending || event->kind == window::EventKind::Resumed) {
@@ -408,7 +557,11 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     }
     surfaces_.update(windows);
     if (const auto kState = windows.state(window_); kState.has_value()) {
-        views_.window({.width = kState->size.width, .height = kState->size.height});
+        // A window kept hidden is told no size: it is the size it was
+        // asked to be, as an editor's viewport is (D790).
+        const bool kSized = kState->size.width > 0 && kState->size.height > 0;
+        views_.window({.width = kSized ? kState->size.width : asked_.width,
+                       .height = kSized ? kState->size.height : asked_.height});
         views_.safeArea({.top = kState->safeArea.top,
                          .right = kState->safeArea.right,
                          .bottom = kState->safeArea.bottom,

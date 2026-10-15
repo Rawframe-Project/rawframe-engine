@@ -104,6 +104,9 @@ enum class SessionVerb : std::uint8_t {
     /// A point the scene's preview marks, where the author chose
     /// something, or none (D464).
     Mark,
+    /// What an author did in an editor's viewport showing the scene's
+    /// preview, handed to it as its own window's (D790).
+    PreviewInput,
     /// One atomic request over several scenes, one transaction (D497).
     ApplyTogether,
     /// The game's directory cooked, as a long-running operation (D502).
@@ -159,6 +162,9 @@ struct SessionRecord {
     std::optional<PreviewTarget> preview;
     /// Mark's: the point, or none (D464).
     std::optional<std::array<double, 3>> mark;
+    /// `preview_input`'s events, as the record gave them, which the
+    /// session reads as tooling input before it hands them on.
+    document::Value events;
     /// Apply together's, two or more, each scene named once (D497).
     std::vector<SessionPart> parts;
     /// Cook's: where it cooks to, and the cache it reuses, if any (D502).

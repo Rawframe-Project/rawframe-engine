@@ -3,6 +3,7 @@
 #include "rawframe/authoring/errors.h"
 #include "rawframe/document/json.h"
 #include "rawframe/schema/stable_id.h"
+#include "rawframe/world_tooling/window_input.h"
 #include "replies.h"
 
 #include <algorithm>
@@ -359,6 +360,32 @@ Value Preview::marked(const authoring::SessionRecord& record) {
     Value made = Value::object();
     made.add("kind", Value::string("authoring.marked"));
     made.add("marked", Value::boolean(shown));
+    return made;
+}
+
+result::Result<Value> Preview::inputted(const authoring::SessionRecord& record) {
+    // Read whole before anything is handed on: hostile input, refused whole.
+    const std::optional<std::vector<world_tooling::WindowInput>> kEvents = world_tooling::windowInputsOf(record.events);
+    if (!kEvents.has_value()) {
+        return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
+                                       result::ErrorClass::InvalidArgument,
+                                       "events are at most 64 input events that read")};
+    }
+    bool taken = false;
+    if (preview_ != nullptr && record.scene == scene_ && !kEvents->empty()) {
+        Value asked = Value::object();
+        asked.add("kind", Value::string("tooling.input"));
+        asked.add("id", Value::integer(0));
+        asked.add("events", world_tooling::windowInputsValue(*kEvents));
+        const auto kReply = preview_->ask(rawframe::document::writeCompact(asked));
+        const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
+        const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+        const Value* kTaken = kAnswer != nullptr ? kAnswer->find("taken") : nullptr;
+        taken = kTaken != nullptr && kTaken->truth().value_or(false);
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.preview_inputted"));
+    made.add("taken", Value::boolean(taken));
     return made;
 }
 

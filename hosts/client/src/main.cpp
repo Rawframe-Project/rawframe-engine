@@ -149,7 +149,15 @@ public:
         return made;
     }
 
+    /// What an editor's viewport showing this preview handed it, acted on
+    /// as the window's (D790).
+    bool input(const std::vector<world_tooling::WindowInput>& events) override {
+        injection.inject(events);
+        return true;
+    }
+
     view::PreviewCamera camera;
+    world_tooling::Injection injection;
 };
 
 host::HostExit play(const host::HostRequest& request) noexcept {
@@ -160,7 +168,8 @@ host::HostExit play(const host::HostRequest& request) noexcept {
             .lent = {composition::LentCapability{view::kPreviewCamera.name, composition::provideAs(previewer.camera)},
                      composition::LentCapability{world_tooling::kPreviewer.name,
                                                  composition::provideAs<world_tooling::Previewer>(previewer)}},
-            .preview = &previewer.camera}};
+            .preview = &previewer.camera,
+            .injection = &previewer.injection}};
     const result::Status kRan = window::run(client, window::RunSettings{});
     if (client.exit().has_value()) {
         return *client.exit();

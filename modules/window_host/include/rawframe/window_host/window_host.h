@@ -32,9 +32,11 @@
 #include "rawframe/view/typing.h"
 #include "rawframe/window/surfaces.h"
 #include "rawframe/window/windows.h"
+#include "rawframe/world_tooling/forwarding.h"
 
 #include <array>
 #include <atomic>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <string>
@@ -51,6 +53,10 @@ struct WindowHostSettings {
     /// one: a left press while it looks is kept as the ray it makes
     /// (D456). It outlives the WindowHost.
     view::PreviewCamera* preview = nullptr;
+    /// Input to act on as the window's, before the window's own, if the
+    /// host shows a preview an editor plays in its viewport (D790). It
+    /// outlives the WindowHost.
+    world_tooling::Injection* injection = nullptr;
 };
 
 class WindowHost final : public window::Program {
@@ -87,6 +93,18 @@ private:
     window::Surfaces surfaces_;
     view::PlayerViews views_;
     view::UiPointing pointing_;
+    /// What lands on the area an editor shows a game over, handed to it
+    /// (D790): whether the press held was handed over, and whether the
+    /// pointer is over the area.
+    world_tooling::Forwarding forwarding_;
+    /// An editor's input to act on as the window's, oldest first.
+    std::deque<window::Event> injected_;
+    /// The size the window was asked to be.
+    window::LogicalSize asked_;
+    bool forwardedPress_ = false;
+    bool forwardedOver_ = false;
+    /// Whether `event` was handed over, in place of acted on.
+    bool forwarded(const window::Event& event);
     view::UiTyping typing_;
     view::UiNavigation navigation_;
     /// Where the window's UI is read for assistive technology (D571), and

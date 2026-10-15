@@ -3,6 +3,7 @@
 #include "rawframe/document/json.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world_tooling/errors.h"
+#include "rawframe/world_tooling/window_input.h"
 
 #include <algorithm>
 #include <array>
@@ -564,6 +565,27 @@ struct ToolingServer::State {
                 lit = static_cast<std::uint8_t>(kNamed - kParts.begin());
             }
             made.add("marked", Value::boolean(settings.previewer != nullptr && settings.previewer->mark(kPoint, lit)));
+            send(connection, client, replyLine(id, "answer", std::move(made)));
+            return;
+        }
+        if (kind != nullptr && *kind == "tooling.input") {
+            // What an author did in an editor's viewport showing the
+            // preview (D790): the view's, as its look is.
+            if (!settings.grants.view) {
+                send(connection, client, errorLine(id, ToolingError::NotGranted, "input needs the view grant"));
+                return;
+            }
+            const Value* kEvents = parsed->find("events");
+            const auto kRead = kEvents != nullptr ? world_tooling::windowInputsOf(*kEvents) : std::nullopt;
+            if (!kRead.has_value()) {
+                send(connection,
+                     client,
+                     errorLine(id, ToolingError::Malformed, "events are at most 64 input events that read"));
+                return;
+            }
+            Value made = Value::object();
+            made.add("kind", Value::string("tooling.inputted"));
+            made.add("taken", Value::boolean(settings.previewer != nullptr && settings.previewer->input(*kRead)));
             send(connection, client, replyLine(id, "answer", std::move(made)));
             return;
         }

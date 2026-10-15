@@ -200,6 +200,8 @@ private:
             return preview_.picked(record, previewedScene());
         case authoring::SessionVerb::Mark:
             return preview_.marked(record);
+        case authoring::SessionVerb::PreviewInput:
+            return preview_.inputted(record);
         case authoring::SessionVerb::Assets: {
             Value made = Value::object();
             made.add("kind", Value::string("authoring.assets"));

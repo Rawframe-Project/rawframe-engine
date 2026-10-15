@@ -36,7 +36,7 @@ window: composition result base
 render: texture window composition diagnostics result base
 xr: render view input_kest input composition diagnostics execution result base
 input_window: input window result base
-window_host: host view input_kest input_window input window ui composition execution result base
+window_host: host world_tooling view input_kest input_window input window ui composition execution result base
 schema: result base
 world: schema execution diagnostics result base
 kest: execution result base
@@ -44,7 +44,7 @@ kest_library: kest document result base
 scene: schema document result base
 authoring: material graph ui scene schema document result base
 authoring_session: authoring material graph ui process world_tooling view network_quic network world_kest kest content scene schema document execution result base
-studio: authoring_session render material font_import process view ui texture document composition execution diagnostics result base
+studio: authoring_session world_tooling render material font_import process view ui texture document composition execution diagnostics result base
 network: composition execution diagnostics result base
 network_loopback: network composition execution diagnostics result base
 network_quic: network composition execution diagnostics result base

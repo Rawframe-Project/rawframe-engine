@@ -29,7 +29,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 19> kVerbs = {
+constexpr std::array<VerbName, 20> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -44,6 +44,7 @@ constexpr std::array<VerbName, 19> kVerbs = {
     VerbName{.kind = "authoring.assets", .verb = SessionVerb::Assets},
     VerbName{.kind = "authoring.pick", .verb = SessionVerb::Pick},
     VerbName{.kind = "authoring.mark", .verb = SessionVerb::Mark},
+    VerbName{.kind = "authoring.preview_input", .verb = SessionVerb::PreviewInput},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
@@ -71,6 +72,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::View:
     case SessionVerb::Preview:
     case SessionVerb::Mark:
+    case SessionVerb::PreviewInput:
     case SessionVerb::Cook:
     case SessionVerb::Import:
         return Members{.required = 2, .optional = 0};
@@ -234,6 +236,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::History:
     case SessionVerb::Pick:
     case SessionVerb::Mark:
+    case SessionVerb::PreviewInput:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -290,6 +293,13 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             return malformed("view holds an eye and a target of three numbers each and a fieldOfView");
         }
         record.view.fieldOfView = *kDegrees;
+    } else if (record.verb == SessionVerb::PreviewInput) {
+        // An array, read event by event where it is handed on.
+        const Value* kEvents = parsed->find("events");
+        if (kEvents == nullptr || kEvents->kind() != Value::Kind::Array) {
+            return malformed("events is an array of input events");
+        }
+        record.events = *kEvents;
     } else if (record.verb == SessionVerb::Mark) {
         // A point of three finite numbers, or null for none.
         const Value* kAt = parsed->find("at");
