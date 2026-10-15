@@ -862,6 +862,13 @@ public:
                  const world_animation::AnimationQueries* poses = nullptr,
                  const HandsInWorld* hands = nullptr);
 
+    /// The layers whose models are left out from the next extract on, as
+    /// an editor's preview hides them (D791): a model whose entity's
+    /// `rawframe.world.layer` is one of them. None leaves nothing out.
+    void hideLayers(const std::vector<std::uint32_t>& layers);
+    /// How many models were left out so, summed over the extracts.
+    [[nodiscard]] std::uint64_t modelsHidden() const noexcept;
+
     /// The presented World's time on its simulation timeline, in seconds
     /// (ADR-0010, D691), which the frames queued from now show: what a
     /// material that moves its vertices reads. Nought until told, and for

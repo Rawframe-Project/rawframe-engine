@@ -11,6 +11,7 @@
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/errors.h"
 #include "rawframe/world/column_query.h"
+#include "rawframe/world/layer.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/layouts.h"
 #include "scene_state.h"
@@ -629,6 +630,9 @@ result::Result<std::unique_ptr<Scene>> Scene::create(const schema::SchemaRegistr
     state->settings = std::move(settings);
     if (const auto kPose = registry.find(physics3d::Pose3D::kComponentTypeId)) {
         state->pose = *kPose;
+    }
+    if (const auto kLayer = registry.find(world::Layer::kComponentTypeId)) {
+        state->layer = *kLayer;
     }
     return std::unique_ptr<Scene>{new Scene{std::move(state)}};
 }

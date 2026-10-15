@@ -313,11 +313,15 @@ public:
         }
         // Apart from the scene's summary, which holds as many fields as a
         // record may (D361).
-        if (placed_ != 0 || tracked_ != 0) {
+        const std::uint64_t kHidden = scene_ != nullptr ? scene_->modelsHidden() : 0;
+        if (placed_ != 0 || tracked_ != 0 || kHidden != 0) {
             emitter_.log(diagnostics::Severity::Info,
                          kPlacedSummary,
-                         "what one client's scene drew where it was placed, and where a headset's hand was",
-                         {diagnostics::field("modelsPlaced", placed_), diagnostics::field("modelsTracked", tracked_)});
+                         "what one client's scene drew where it was placed, where a headset's hand was, and what "
+                         "an editor's preview left out",
+                         {diagnostics::field("modelsPlaced", placed_),
+                          diagnostics::field("modelsTracked", tracked_),
+                          diagnostics::field("modelsHidden", kHidden)});
         }
         textureViews_.summarize(emitter_);
         const auto kParticles = particles_.fields();
@@ -455,6 +459,8 @@ private:
         }
         shown_ = kView.seconds.value_or(0);
         scene_->shownAt(shown_);
+        // Without the layers an editor's preview hides (D791).
+        scene_->hideLayers(preview_ != nullptr ? preview_->hidden() : std::vector<std::uint32_t>{});
         scene_->extract(*kView.world, posesOf(*kView.world), &hands);
         extracted_ = true;
         extractEyes(*kView.world, hands);

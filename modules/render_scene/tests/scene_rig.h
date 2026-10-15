@@ -6,6 +6,7 @@
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/test/test.h"
+#include "rawframe/world/layer.h"
 
 #include <array>
 #include <cmath>
@@ -48,6 +49,7 @@ inline std::shared_ptr<const schema::SchemaRegistry> registry() {
     builder.add(plain<particles::ParticleEmitter>(kEmitterId, "test.emitter"));
     builder.add(plain<Placed>(kPlacedId, "test.placed"));
     builder.add(plain<Tracked>(kTrackedId, "test.tracked"));
+    builder.add(plain<world::Layer>(world::Layer::kComponentTypeId, std::string{world::Layer::kComponentName}));
     builder.add<physics3d::Pose3D>();
     return *builder.freeze();
 }

@@ -51,6 +51,11 @@ struct Scene::State {
     std::vector<SceneLine> lines;
     std::vector<LightInstance> punctual;
     std::optional<schema::ComponentRuntimeId> pose;
+    /// Each entity's layer, and the layers whose models are left out
+    /// (D791).
+    std::optional<schema::ComponentRuntimeId> layer;
+    std::vector<std::uint32_t> hiddenLayers;
+    std::uint64_t modelsHidden = 0;
     /// The game's placements (D665), and its tracking (D676).
     std::vector<schema::ComponentRuntimeId> placements;
     std::vector<schema::ComponentRuntimeId> tracking;

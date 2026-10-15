@@ -1,7 +1,9 @@
 #include "rawframe/physics3d/components.h"
 #include "rawframe/render_scene/scene.h"
+#include "rawframe/world/layer.h"
 #include "scene_state.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace rawframe::render_scene {
@@ -61,6 +63,14 @@ void extractRibbons(world::World& world,
 
 } // namespace
 
+void Scene::hideLayers(const std::vector<std::uint32_t>& layers) {
+    state_->hiddenLayers = layers;
+}
+
+std::uint64_t Scene::modelsHidden() const noexcept {
+    return state_->modelsHidden;
+}
+
 void Scene::extract(world::World& world, const world_animation::AnimationQueries* poses, const HandsInWorld* hands) {
     State& state = *state_;
     state.extracted.clear();
@@ -70,6 +80,15 @@ void Scene::extract(world::World& world, const world_animation::AnimationQueries
             for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
                 ModelInstance instance{.entity = chunk.entities[row],
                                        .component = static_cast<std::uint32_t>(component)};
+                // Left out where an editor's preview hides its layer (D791).
+                if (!state.hiddenLayers.empty() && state.layer.has_value()) {
+                    if (const auto* layer =
+                            static_cast<const world::Layer*>(world.getErased(instance.entity, *state.layer));
+                        layer != nullptr && std::ranges::contains(state.hiddenLayers, layer->layer)) {
+                        ++state.modelsHidden;
+                        continue;
+                    }
+                }
                 std::memcpy(&instance.model, chunk.columns[0] + (row * sizeof(Model)), sizeof(Model));
                 if (state.pose) {
                     if (const auto* pose =

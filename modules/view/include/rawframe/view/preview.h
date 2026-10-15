@@ -16,6 +16,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <utility>
+#include <vector>
 
 namespace rawframe::view {
 
@@ -66,6 +68,15 @@ public:
     }
     [[nodiscard]] std::uint64_t marks() const noexcept {
         return marks_;
+    }
+
+    /// The layers whose entities the preview leaves out (D791), as
+    /// `rawframe.world.layer` numbers them; none hides nothing.
+    void hide(std::vector<std::uint32_t> layers) {
+        hidden_ = std::move(layers);
+    }
+    [[nodiscard]] const std::vector<std::uint32_t>& hidden() const noexcept {
+        return hidden_;
     }
 
     /// Where the pointer is while the preview looks, as its ray, none once
@@ -158,6 +169,7 @@ private:
     double fly_ = 0;
     std::optional<Ray> lastRelease_;
     std::uint64_t releases_ = 0;
+    std::vector<std::uint32_t> hidden_;
 };
 
 inline constexpr composition::Capability<PreviewCamera> kPreviewCamera{"rawframe.view.preview_camera"};

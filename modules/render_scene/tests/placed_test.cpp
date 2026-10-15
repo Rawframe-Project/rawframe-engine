@@ -3,7 +3,8 @@
 // up; at the pose again once it is not placed. And where a headset's hand
 // is this frame, moved as it says, before its place, and placed again
 // where the hand is not located (D676); a headset's hand placed in the
-// World by the player's camera as its eyes are.
+// World by the player's camera as its eyes are. And left out while an
+// editor's preview hides its layer (D791).
 
 #include "../src/camera.h"
 #include "rawframe/render_scene/components.h"
@@ -83,4 +84,23 @@ RAWFRAME_TEST(AModelFollowsAHeadsetsHandBeforeItsPlace) {
     const std::array<double, 3> kAhead = inPlaySpace(kSeated, {0, -0.3F, -0.5F});
     RAWFRAME_EXPECT(near(static_cast<float>(kAhead[0]), 1.5F) && near(static_cast<float>(kAhead[1]), 0.9F) &&
                     near(static_cast<float>(kAhead[2]), 3));
+}
+
+RAWFRAME_TEST(AModelOnAHiddenLayerIsLeftOut) {
+    // Two boxes ahead of the eye, one on layer 2 (D791).
+    Rig rig;
+    rig.spawn(Model{.mesh = kBox, .color = 0xFF0000FF}, physics3d::Pose3D{.x = -1, .z = -5, .qw = 1});
+    const world::EntityHandle kLayered =
+        rig.spawn(Model{.mesh = kBox, .color = 0xFF0000FF}, physics3d::Pose3D{.x = 1, .z = -5, .qw = 1});
+    world::Layer onTwo{.layer = 2};
+    RAWFRAME_EXPECT(
+        rig.world.insertErased(kLayered, *rig.schema->find(world::Layer::kComponentTypeId), &onTwo).has_value());
+    RAWFRAME_EXPECT(rig.frame({.eye = {0, 0, 0}}).draws.size() == 2);
+    // Layer 3 hidden leaves both; layer 2 hidden leaves one.
+    rig.scene->hideLayers({3});
+    RAWFRAME_EXPECT(rig.frame({.eye = {0, 0, 0}}).draws.size() == 2);
+    rig.scene->hideLayers({2});
+    RAWFRAME_EXPECT(rig.frame({.eye = {0, 0, 0}}).draws.size() == 1 && rig.scene->modelsHidden() == 1);
+    rig.scene->hideLayers({});
+    RAWFRAME_EXPECT(rig.frame({.eye = {0, 0, 0}}).draws.size() == 2);
 }
