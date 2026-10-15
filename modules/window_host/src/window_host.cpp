@@ -341,6 +341,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     lent_.push_back(composition::LentCapability{view::kUiNavigation.name, composition::provideAs(navigation_)});
     lent_.push_back(composition::LentCapability{ui::kAccessSeat.name, composition::provideAs(access_)});
     lent_.push_back(composition::LentCapability{view::kHeadsetAway.name, composition::provideAs(away_)});
+    lent_.push_back(composition::LentCapability{view::kFilesDropped.name, composition::provideAs(dropped_)});
     lent_.insert(lent_.end(), settings_.lent.begin(), settings_.lent.end());
     request_.lent = lent_;
     request_.suspended = &suspended_;
@@ -485,6 +486,11 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             continue;
         }
         bridge_->take(*event);
+        // Files dropped from outside, for an editor (D802).
+        if (event->kind == window::EventKind::FilesDropped) {
+            dropped_.dropped(view::FilesDropped::Drop{
+                .x = event->position.x, .y = event->position.y, .paths = event->paths, .truncated = event->truncated});
+        }
         // Where the mouse is, for what the UI shows under it (D422), where a
         // press went down, for the field that takes the keyboard (D426),
         // and the wheel turned there, for what scrolls (D441).

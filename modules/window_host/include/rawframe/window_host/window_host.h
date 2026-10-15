@@ -24,6 +24,7 @@
 #include "rawframe/input_window/bridge.h"
 #include "rawframe/result/result.h"
 #include "rawframe/ui/access.h"
+#include "rawframe/view/dropping.h"
 #include "rawframe/view/headset.h"
 #include "rawframe/view/navigation.h"
 #include "rawframe/view/players.h"
@@ -148,6 +149,8 @@ private:
     /// while a headset shows the person nothing (D679).
     bool platformSuspended_ = false;
     view::HeadsetAway away_;
+    /// Files dropped on the window, held for an editor (D802).
+    view::FilesDropped dropped_;
     /// Either, as the Host's frames tell its participants.
     std::atomic<bool> suspended_{false};
     std::vector<composition::LentCapability> lent_;

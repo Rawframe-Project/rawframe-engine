@@ -4,6 +4,7 @@
 // their names (D794), as the overlays are (D798).
 
 #include "rawframe/test/test.h"
+#include "rawframe/view/dropping.h"
 #include "rawframe/view/preview.h"
 #include "rawframe/view/view.h"
 
@@ -122,4 +123,16 @@ RAWFRAME_TEST(OverlaysGoByTheirNames) {
     RAWFRAME_EXPECT(view::overlayNamed("colliders") == view::Overlay::Colliders);
     RAWFRAME_EXPECT(view::overlayNamed("lights") == view::Overlay::Lights);
     RAWFRAME_EXPECT(!view::overlayNamed("Lights").has_value() && !view::overlayNamed("").has_value());
+}
+
+// Files dropped on a window held for an editor, oldest first, the oldest
+// let go past the most held (D802).
+RAWFRAME_TEST(DroppedFilesAreTakenOldestFirst) {
+    view::FilesDropped dropped;
+    RAWFRAME_EXPECT(!dropped.take().has_value());
+    for (std::size_t at = 0; at < view::FilesDropped::kMostHeld + 2; ++at) {
+        dropped.dropped(view::FilesDropped::Drop{.x = static_cast<float>(at), .paths = {"/a/" + std::to_string(at)}});
+    }
+    const auto kFirst = dropped.take();
+    RAWFRAME_EXPECT(kFirst.has_value() && kFirst->x == 2 && kFirst->paths == std::vector<std::string>{"/a/2"});
 }
