@@ -50,6 +50,17 @@ enum class ViewMode : std::uint8_t {
 /// picked in, and moved.
 [[nodiscard]] Region previewRegion(std::size_t count, std::size_t at) noexcept;
 
+/// What a preview draws over its scene (D798), a bit each: each body's
+/// collider, each light's reach. Named by `overlayNamed`'s names, which
+/// are what a tool sends.
+enum class Overlay : std::uint8_t {
+    Colliders = 1,
+    Lights = 2
+};
+
+/// The overlay named `name` ("colliders", "lights"), none for another.
+[[nodiscard]] std::optional<Overlay> overlayNamed(std::string_view name) noexcept;
+
 /// A part of a mark: none, an axis (X, Y, Z), or the ring (D468).
 enum class MarkPart : std::uint8_t {
     None,
@@ -122,6 +133,15 @@ public:
     }
     [[nodiscard]] const std::vector<Perspective>& others() const noexcept {
         return others_;
+    }
+
+    /// What the preview draws over its scene while it looks (D798), as
+    /// `Overlay` bits.
+    void overlay(std::uint8_t overlays) noexcept {
+        overlays_ = overlays;
+    }
+    [[nodiscard]] std::uint8_t overlays() const noexcept {
+        return overlays_;
     }
 
     /// How the preview's scene is drawn while it looks (D794).
@@ -224,6 +244,7 @@ private:
     std::uint64_t releases_ = 0;
     std::vector<std::uint32_t> hidden_;
     ViewMode mode_ = ViewMode::Lit;
+    std::uint8_t overlays_ = 0;
     std::vector<Perspective> others_;
     std::size_t views_ = 1;
 };

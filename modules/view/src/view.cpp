@@ -192,4 +192,14 @@ Region previewRegion(std::size_t count, std::size_t at) noexcept {
     return Region{.left = at % 2 == 0 ? 0.0F : 0.5F, .top = at < 2 ? 0.0F : 0.5F, .width = 0.5F, .height = 0.5F};
 }
 
+std::optional<Overlay> overlayNamed(std::string_view name) noexcept {
+    if (name == "colliders") {
+        return Overlay::Colliders;
+    }
+    if (name == "lights") {
+        return Overlay::Lights;
+    }
+    return std::nullopt;
+}
+
 } // namespace rawframe::view

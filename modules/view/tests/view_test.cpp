@@ -1,7 +1,7 @@
 // A view's geometry (ADR-0052, D366): the eye's axes, the perspective and
 // orthographic verbs each the other's inverse, an eye aimed at a point
 // (D432), every failure one of the closed set, and the view modes by
-// their names (D794).
+// their names (D794), as the overlays are (D798).
 
 #include "rawframe/test/test.h"
 #include "rawframe/view/preview.h"
@@ -116,4 +116,10 @@ RAWFRAME_TEST(ViewModesGoByTheirNames) {
     RAWFRAME_EXPECT(view::viewModeNamed("unlit") == view::ViewMode::Unlit);
     RAWFRAME_EXPECT(view::viewModeNamed("normals") == view::ViewMode::Normals);
     RAWFRAME_EXPECT(!view::viewModeNamed("Lit").has_value() && !view::viewModeNamed("").has_value());
+}
+
+RAWFRAME_TEST(OverlaysGoByTheirNames) {
+    RAWFRAME_EXPECT(view::overlayNamed("colliders") == view::Overlay::Colliders);
+    RAWFRAME_EXPECT(view::overlayNamed("lights") == view::Overlay::Lights);
+    RAWFRAME_EXPECT(!view::overlayNamed("Lights").has_value() && !view::overlayNamed("").has_value());
 }
