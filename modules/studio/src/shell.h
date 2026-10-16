@@ -126,12 +126,10 @@ private:
     /// Words on `node`, in Studio's font.
     result::Status words(ui::Node node, std::string_view text, std::uint32_t color, float size = 15);
 
-    /// A column under `parent` headed `heading`, sharing its row's width or
-    /// `width` pixels wide.
+    /// A column under `parent` headed `heading`, its row's width or `width`.
     result::Result<ui::Node> column(ui::Node parent, std::string_view heading, float width = 0);
 
-    /// The played game's newest streamed picture taken, when it plays in
-    /// the viewport (D789).
+    /// The played game's newest picture, when it plays in the viewport (D789).
     void followPicture();
 
     /// The viewport, under the view's fields, showing that picture.
@@ -144,8 +142,7 @@ private:
     /// The left dock's layout, `width` wide (D788).
     static ui::Layout leftLayout(float width);
 
-    /// A column of the left dock headed `heading`, `tab` the press in its
-    /// heading that shows `other` in its place (D788).
+    /// A left dock column headed `heading`, `tab` showing `other` (D788).
     result::Result<ui::Node> tabbedColumn(ui::Node parent,
                                           std::string_view heading,
                                           std::string_view other,
@@ -156,8 +153,7 @@ private:
     /// The Hierarchy, or with `layers` the Layers, in the left dock.
     void showLeft(bool layers);
 
-    /// The Layers: each layer the game names or an entity is on, with how
-    /// many are on it, pressed to choose them, and its lock (D788).
+    /// The Layers: each layer, how many are on it, its choosing and lock (D788).
     void showLayers();
 
     /// A press on the left dock's tabs or the Layers' rows; whether it was.
@@ -181,11 +177,9 @@ private:
     result::Status showBrowser();
     result::Status showSources();
     bool pressBrowser(ui::Node node);
-    /// The chosen source's import settings in the Inspector, one set, and
-    /// the source cooked again (D800).
+    /// The chosen source's import settings, one set, and a recook (D800).
     void showImportSettings();
-    /// Imports the file at `path` (absolute) as `as` under the game's
-    /// directory (D505), saying what came of it; whether it was imported.
+    /// Imports `path` (absolute) as `as` in the game's directory, saying how (D505).
     bool importFile(const std::string& path, const std::string& as);
     /// Each file dropped on the window imported into its folder (D802).
     void takeDrops();
@@ -245,7 +239,8 @@ private:
         Assets,
         History,
         Console,
-        Network
+        Network,
+        Environment
     };
 
     /// The bottom dock showing `pane`.
@@ -670,6 +665,10 @@ private:
     /// The Network panel made, a link button pressed, the server's traffic
     /// read once a second while it is shown, and its lines (D807).
     result::Status makeNetwork();
+    /// The environment panel: the scene's sun, sky, probes, and passes (D834).
+    result::Status makeEnvironment();
+    void showEnvironment();
+    bool pressEnvironment(ui::Node node);
     bool pressNetwork(ui::Node node);
     void readNetwork(double seconds);
     void showNetwork(const std::vector<std::string>& lines);
@@ -775,6 +774,7 @@ private:
     ui::Node consoleColumn_{};
     /// The Network panel (D807).
     ui::Node networkColumn_{};
+    ui::Node environmentTab_{};
     NetworkShown network_;
     LiveShown live_;
     ui::Node consoleList_{};

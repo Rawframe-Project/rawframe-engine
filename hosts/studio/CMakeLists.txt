@@ -24,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":14,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":72,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":14,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":73,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its menus and the palette's field (D777), its buttons, its
     # docks as scroll panes named by their headings or tabs in SPEC-0051's
@@ -39,7 +39,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_read_aloud PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no"
                          PASS_REGULAR_EXPRESSION
-                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 panel Dock edge\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 push button Console\na11y: 2 push button Network\na11y: 2 scroll pane Assets\n.*a11y: 3 entry new scene or import\n.*a11y: 3 push button level.scene\n.*a11y: 2 panel Inspector edge\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 panel Dock edge\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 push button Console\na11y: 2 push button Network\na11y: 2 push button Environment\na11y: 2 scroll pane Assets\n.*a11y: 3 entry new scene or import\n.*a11y: 3 push button level.scene\n.*a11y: 2 panel Inspector edge\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
     # Studio typed into by a screen reader (D613): the new scene's entry
     # takes a name inserted through AT-SPI's EditableText as typing, the
     # field begun as a press begins it, and reads it back.
@@ -688,6 +688,19 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # A UI document laid out as its game would show it (D832): Tycoon's
     # ten nodes on a screen in the center, its sign pressed there and its
     # row chosen, its width typed, and the screen laid out again.
+    # The environment panel (D834): Plaza's gate scene holds none of its
+    # sky or warmth, which the panel offers; the sky added as an entity of
+    # its own, then found there and pressed to choose it.
+    add_test(NAME studio_environment
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/plaza/plaza.game gate.scene @gate.scene @Environment "@  Add plaza.sky"
+                     "until=studio_said,status=\"plaza.sky added" "@  plaza.sky plaza.sky" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_environment PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "found   plaza.sky plaza.sky at [0-9]+,[0-9]+.*gate.scene written: yes.*\"code\":\"studio_environment\"[^\n]*\"components\":[2-9],\"held\":0,.*\"code\":\"studio_environment\"[^\n]*\"held\":1,.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"gate.scene\",[^\n]*\"entity\":\"[0-9a-f-]+\",[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
     add_test(NAME studio_ui_preview
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>

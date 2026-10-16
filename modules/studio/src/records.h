@@ -324,6 +324,8 @@ struct Catalog {
         /// Of `rawframe.ui.Node`: a UI document's node may be made of it
         /// (D672).
         bool uiNode = false;
+        /// The Kest type the game declares it of (D834).
+        std::string type;
     };
     std::vector<std::string> operations;
     std::vector<Component> components;

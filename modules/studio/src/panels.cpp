@@ -232,10 +232,12 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(historyTab_, button(kDockTabs, "History"));
     RAWFRAME_TRY_ASSIGN(consoleTab_, button(kDockTabs, "Console"));
     RAWFRAME_TRY_ASSIGN(networkTab_, button(kDockTabs, "Network"));
+    RAWFRAME_TRY_ASSIGN(environmentTab_, button(kDockTabs, "Environment"));
     RAWFRAME_TRY_ASSIGN(scenesColumn_, pane("Assets"));
     RAWFRAME_TRY_ASSIGN(historyColumn_, pane("History"));
     RAWFRAME_TRY(makeConsole());
     RAWFRAME_TRY(makeNetwork());
+    RAWFRAME_TRY(makeEnvironment());
     RAWFRAME_TRY(tree_->attach(bottomDock_, scenesColumn_));
     dockShown_ = Dock::Assets;
     showDock(Dock::Assets);
@@ -250,7 +252,8 @@ void ShellParticipant::showDock(Dock pane) {
         return dock == Dock::Assets    ? scenesColumn_
                : dock == Dock::History ? historyColumn_
                : dock == Dock::Console ? consoleColumn_
-                                       : networkColumn_;
+               : dock == Dock::Network ? networkColumn_
+                                       : held_.environmentColumn;
     };
     if (pane != dockShown_) {
         static_cast<void>(tree_->detach(kPaneOf(dockShown_)));
@@ -264,8 +267,12 @@ void ShellParticipant::showDock(Dock pane) {
         tree_->setLook(consoleTab_, ui::Look{.fill = pane == Dock::Console ? kChosen : kRow, .radius = 4}));
     static_cast<void>(
         tree_->setLook(networkTab_, ui::Look{.fill = pane == Dock::Network ? kChosen : kRow, .radius = 4}));
+    static_cast<void>(
+        tree_->setLook(environmentTab_, ui::Look{.fill = pane == Dock::Environment ? kChosen : kRow, .radius = 4}));
     if (pane == Dock::Console) {
         showConsole();
+    } else if (pane == Dock::Environment) {
+        showEnvironment();
     }
 }
 
@@ -532,9 +539,13 @@ void ShellParticipant::showScene(std::size_t at) {
         const Value* place = each.find("place");
         places_.push_back(place != nullptr ? place->integer() : std::nullopt);
     }
-    // The Layers count what the scene has now.
+    // The Layers count what the scene has now, and the environment says
+    // what holds its light.
     if (layersShown_) {
         showLayers();
+    }
+    if (dockShown_ == Dock::Environment) {
+        showEnvironment();
     }
 }
 

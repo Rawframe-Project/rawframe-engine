@@ -22,6 +22,8 @@ inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canva
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
 /// A UI document laid out as its game would show it (D832).
 inline constexpr diagnostics::EventIdentity kUiPreviewShown{"studio", "studio_ui_preview"};
+/// The environment panel's components and their entities (D834).
+inline constexpr diagnostics::EventIdentity kEnvironmentShown{"studio", "studio_environment"};
 
 /// What each document listed with the scenes is (D637, D643, D722, D730,
 /// D812, D818).
@@ -54,6 +56,12 @@ struct EditorsHeld {
     std::optional<ui::Node> previewFrame;
     /// The game's classes made in Studio's tree for the preview.
     std::vector<ui::Style> previewStyles;
+    /// The environment panel: its pane, its rows, each entity's button and
+    /// row, and each component it offers to add, by its identity (D834).
+    ui::Node environmentColumn{};
+    std::vector<ui::Node> environmentRows;
+    std::vector<std::pair<ui::Node, std::size_t>> environmentParts;
+    std::vector<std::pair<ui::Node, std::string>> environmentAdds;
 };
 
 } // namespace rawframe::studio

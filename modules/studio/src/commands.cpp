@@ -112,6 +112,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     kOffer("History", "Window", {}, historyTab_);
     kOffer("Console", "Window", {}, consoleTab_);
     kOffer("Network", "Window", {}, networkTab_);
+    kOffer("Environment", "Window", {}, environmentTab_);
     for (const std::string_view kMenu : kMenus) {
         if (std::ranges::none_of(commands_,
                                  [&](const Command& command) {

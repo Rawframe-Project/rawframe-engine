@@ -198,8 +198,14 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
 }
 
 std::optional<std::size_t> ShellParticipant::canvasEntityOf(ui::Node node) const {
-    const auto kPart = std::ranges::find(held_.canvasParts, node, &std::pair<ui::Node, std::size_t>::first);
-    return kPart != held_.canvasParts.end() ? std::optional{kPart->second} : std::nullopt;
+    // The center's parts, and the environment panel's entities (D834).
+    for (const auto* kParts : {&held_.canvasParts, &held_.environmentParts}) {
+        const auto kPart = std::ranges::find(*kParts, node, &std::pair<ui::Node, std::size_t>::first);
+        if (kPart != kParts->end()) {
+            return kPart->second;
+        }
+    }
+    return std::nullopt;
 }
 
 void ShellParticipant::markCanvas() {

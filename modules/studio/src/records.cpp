@@ -644,10 +644,12 @@ Catalog catalogOf(std::string_view reply) {
             continue;
         }
         const Value* uiNode = each.find("uiNode");
+        const Value* type = each.find("type");
         Catalog::Component made{.id = *id->text(),
                                 .name = *name->text(),
                                 .fields = {},
-                                .uiNode = uiNode != nullptr && uiNode->truth() == true};
+                                .uiNode = uiNode != nullptr && uiNode->truth() == true,
+                                .type = type != nullptr && type->text() != nullptr ? *type->text() : std::string{}};
         const Value* fields = each.find("fields");
         for (const Value& field :
              fields != nullptr && fields->kind() == Value::Kind::Array ? fields->items() : std::span<const Value>{}) {
