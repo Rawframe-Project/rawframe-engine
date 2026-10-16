@@ -22,7 +22,8 @@ native() {
 work="$(native "$4")"
 # A check that fails says which, and what the session answered, so a run
 # on a machine of another system can be read (D813).
-trap 'echo "author_cooks: failed at line $LINENO"; grep -v "\"kind\":\"authoring.progress\"" "$work/replies" 2>/dev/null | cut -c1-600' ERR
+trap 'echo "author_cooks: failed at line $LINENO"; grep -v "\"kind\":\"authoring.progress\"" "$work/replies" 2>/dev/null | cut -c1-600
+      grep "\"id\":11," "$work/replies" 2>/dev/null | grep -o "\"path\":\"[^\"]*\"\|\"cook\":\"[a-z]*\"" | paste - - | head -40' ERR
 rm -rf "$work"
 mkdir -p "$work"
 game="$(native "$repository")/games/plaza/plaza.game"

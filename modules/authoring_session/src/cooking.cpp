@@ -156,7 +156,9 @@ std::vector<std::string> Cooking::poll(bool& failed) {
     partial_ += text;
     std::vector<std::string> lines;
     for (std::size_t at = partial_.find('\n'); at != std::string::npos; at = partial_.find('\n')) {
-        lines.push_back(partial_.substr(0, at));
+        // A line without its end: on Windows the tool's text output ends
+        // each in a carriage return too, which named no source (D828).
+        lines.push_back(partial_.substr(0, at > 0 && partial_[at - 1] == '\r' ? at - 1 : at));
         partial_.erase(0, at + 1);
     }
     for (const std::string& kLine : lines) {
