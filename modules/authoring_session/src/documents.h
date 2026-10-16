@@ -10,7 +10,9 @@
 // its query, undo and redo step its history, and history lists it (D638).
 // A played game follows the files (D634).
 
+#include "rawframe/authoring/json_document.h"
 #include "rawframe/authoring/session.h"
+#include "rawframe/base/bits128.h"
 #include "rawframe/document/json.h"
 #include "rawframe/result/result.h"
 
@@ -28,6 +30,13 @@ public:
     /// in what is said of them (`style sheet`).
     Documents(std::filesystem::path root, std::string_view extension, std::string_view called)
         : root_(std::move(root)), extension_(extension), called_(called) {
+    }
+    /// Data documents (D811), read by `reads`.
+    Documents(std::filesystem::path root,
+              std::string_view extension,
+              std::string_view called,
+              authoring::DocumentReader reads)
+        : root_(std::move(root)), extension_(extension), called_(called), reads_(reads) {
     }
 
     /// Whether a record's document is one of these.
@@ -53,10 +62,14 @@ private:
 
     [[nodiscard]] result::Result<Open*> open(const std::string& name, bool& reopened);
     [[nodiscard]] result::Result<bool> save(const std::string& name, Open& open);
+    /// A document of these opened from `text`.
+    [[nodiscard]] result::Result<std::unique_ptr<Authored>> made(rawframe::base::Bits128 identity,
+                                                                 std::string_view text) const;
 
     std::filesystem::path root_;
     std::string extension_;
     std::string called_;
+    authoring::DocumentReader reads_ = nullptr;
     std::map<std::string, Open> opened_;
 };
 

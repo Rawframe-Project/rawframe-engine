@@ -1,5 +1,6 @@
 #include "documents.h"
 
+#include "rawframe/authoring/authored_data.h"
 #include "rawframe/authoring/authored_material.h"
 #include "rawframe/authoring/authored_styles.h"
 #include "rawframe/authoring/authored_ui.h"
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <span>
+#include <type_traits>
 #include <utility>
 
 namespace rawframe::authoring_session {
@@ -86,10 +88,19 @@ result::Result<typename Documents<Authored>::Open*> Documents<Authored>::open(co
         return &open;
     }
     reopened = open.document != nullptr;
-    RAWFRAME_TRY_ASSIGN(open.document,
-                        Authored::open(sidecarIdentity(kPath).value_or(rawframe::base::Bits128{}), *kText));
+    RAWFRAME_TRY_ASSIGN(open.document, made(sidecarIdentity(kPath).value_or(rawframe::base::Bits128{}), *kText));
     open.onDisk = kDigest;
     return &open;
+}
+
+template <class Authored>
+result::Result<std::unique_ptr<Authored>> Documents<Authored>::made(rawframe::base::Bits128 identity,
+                                                                    std::string_view text) const {
+    if constexpr (std::is_same_v<Authored, authoring::AuthoredData>) {
+        return Authored::open(identity, text, reads_);
+    } else {
+        return Authored::open(identity, text);
+    }
 }
 
 template <class Authored> result::Result<bool> Documents<Authored>::save(const std::string& name, Open& open) {
@@ -125,7 +136,7 @@ result::Result<Value> Documents<Authored>::applied(const authoring::SessionRecor
     // by the same code (D650).
     std::unique_ptr<Authored> copy;
     if (record.dryRun) {
-        RAWFRAME_TRY_ASSIGN(copy, Authored::open(authored.identity(), authored.text()));
+        RAWFRAME_TRY_ASSIGN(copy, made(authored.identity(), authored.text()));
     }
     Authored& target = copy != nullptr ? *copy : authored;
     Value results = Value::array();
@@ -219,6 +230,7 @@ template <class Authored> result::Result<Value> Documents<Authored>::history(con
     return made;
 }
 
+template class Documents<authoring::AuthoredData>;
 template class Documents<authoring::AuthoredMaterial>;
 template class Documents<authoring::AuthoredStyles>;
 template class Documents<authoring::AuthoredUi>;
