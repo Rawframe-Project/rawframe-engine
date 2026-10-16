@@ -142,7 +142,12 @@ build_and_test() {
     if [ "$tier" = full ] && [[ "${leave[1]:-}" != window* ]] && [[ "$preset" != wasm-* ]]; then
         run=$((jobs * 2))
     fi
-    if ! ctest --test-dir "out/$preset" "${leave[@]}" --output-on-failure -j "$run" >"out/$preset.test.log" 2>&1; then
+    # A test that sets no limit of its own has none under ctest: twenty
+    # minutes, three times the slowest sanitized test, so one that hangs
+    # (a played client waiting for a click that never came) ends the check
+    # rather than holding it for hours (D816).
+    if ! ctest --test-dir "out/$preset" "${leave[@]}" --output-on-failure --timeout 1200 -j "$run" \
+        >"out/$preset.test.log" 2>&1; then
         # Each failed test's status and its output's last lines, cut short
         # (its records are long), so a failure seen only under CI's load can
         # be read there.
