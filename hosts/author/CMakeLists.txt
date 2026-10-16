@@ -76,7 +76,7 @@ if(RAWFRAME_BUILD_TESTS)
     add_test(NAME author_data
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_data.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_data)
-    set_tests_properties(author_data PROPERTIES PASS_REGULAR_EXPRESSION "authored plaza's action map in a session")
+    set_tests_properties(author_data PROPERTIES PASS_REGULAR_EXPRESSION "authored plaza's action map, a skeleton, and a clip in a session")
     # A game's description, its settings, authored in a session (D817).
     add_test(NAME author_game
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_game.sh $<TARGET_FILE:rawframe_host_author>

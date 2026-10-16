@@ -4,7 +4,9 @@
 # and written, its members kept in their order; undone back to its very
 # bytes and redone; a value the map's reader refuses, a path through an
 # action it does not hold, and a scene's operation refused with the file
-# untouched.
+# untouched. And a skeleton and a clip of Plaza's walker (D827): read, a
+# bone's translation and a key's time set through their places, a key taken
+# away by its place and a place past the tracks refused.
 #
 # usage: author_data.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -63,4 +65,22 @@ reply 7 | grep -q '"code":"validation_failed",.*"message":"a data document'"'"'s
 cmp "$work/root/plaza.actions" "$work/redone.actions"
 # The redone map differs from the original only in the shown name.
 [[ "$(diff "$work/original.actions" "$work/redone.actions" | grep -c '^[<>]')" -eq 2 ]]
-echo "authored plaza's action map in a session"
+
+mkdir -p "$work/root/stroll"
+cp "$repository/games/plaza/stroll/rig.rfanim" "$repository/games/plaza/stroll/walk.rfanim" "$work/root/stroll/"
+{
+    echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
+    echo '{"kind":"authoring.read","id":2,"scene":"stroll/rig.rfanim","queries":'"$read_data"'}'
+    echo '{"kind":"authoring.apply","id":3,"scene":"stroll/rig.rfanim","request":'"$(request "$(set_value "bones[1].translation" '[0,0.55,0]')")"'}'
+    echo '{"kind":"authoring.apply","id":4,"scene":"stroll/walk.rfanim","request":'"$(request "$(set_value "tracks[0].keys[1].time" '0.25')")"'}'
+    echo '{"kind":"authoring.apply","id":5,"scene":"stroll/walk.rfanim","request":'"$(request "$(set_value "tracks[0].keys[0]" 'null')")"'}'
+    echo '{"kind":"authoring.apply","id":6,"scene":"stroll/walk.rfanim","request":'"$(request "$(set_value "tracks[9].channel" '"rotation"')")"'}'
+} | "$author" session "$game" "$work/root" >"$work/replies" || true
+reply 2 | grep -q '"answer":{"data":{"formatVersion":1,"kind":"animation.skeleton","bones":\[{'
+reply 3 | grep -q '"written":true,'
+python3 -c 'import json,sys; b=json.load(open(sys.argv[1]))["bones"][1]; assert b["name"]=="spine" and b["translation"]==[0,0.55,0]' "$work/root/stroll/rig.rfanim"
+reply 4 | grep -q '"written":true,'
+python3 -c 'import json,sys; k=json.load(open(sys.argv[1]))["tracks"][0]["keys"]; assert [e["time"] for e in k]==[0,0.25]' "$work/root/stroll/walk.rfanim"
+reply 5 | grep -q '"code":"validation_failed",.*"message":"an item named by its place is set, never taken away'
+reply 6 | grep -q '"code":"target_not_found"'
+echo "authored plaza's action map, a skeleton, and a clip in a session"

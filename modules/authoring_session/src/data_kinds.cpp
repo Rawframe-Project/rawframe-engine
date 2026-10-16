@@ -2,6 +2,7 @@
 
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/graph.h"
+#include "rawframe/animation/skeleton.h"
 #include "rawframe/audio/layout.h"
 #include "rawframe/authoring/errors.h"
 #include "rawframe/document/json.h"
@@ -56,13 +57,21 @@ result::Status readsTranslations(std::string_view text) {
         return localization::readTranslations(text);
     });
 }
-/// An animation document is a graph or a clip, as its kind says.
+/// An animation document is a graph, a clip, or a skeleton (D827), as its
+/// kind says.
 result::Status readsAnimation(std::string_view text) {
     const auto kParsed = document::parse(text);
     const document::Value* kKind = kParsed.has_value() ? kParsed->find("kind") : nullptr;
-    if (kKind != nullptr && kKind->kind() == document::Value::Kind::String && *kKind->text() == "animation.clip") {
+    const std::string_view kNamed =
+        kKind != nullptr && kKind->kind() == document::Value::Kind::String ? *kKind->text() : std::string_view{};
+    if (kNamed == "animation.clip") {
         return readsAs("animation clip", [text] {
             return animation::readClip(text);
+        });
+    }
+    if (kNamed == "animation.skeleton") {
+        return readsAs("skeleton", [text] {
+            return animation::readSkeleton(text);
         });
     }
     return readsAs("animation graph", [text] {
