@@ -596,6 +596,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "found blend_space_1d 51a0000000000004 at [0-9]+,[0-9]+.*amble.rfanim written: no.*\"code\":\"studio_canvas\"[^\n]*\"nodes\":5,\"wires\":4,\"columns\":3}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"amble.rfanim\",[^\n]*\"entity\":\"graph.51a0000000000004\",.*\"exit\":\"clean_stop\"")
+    # A clip on its timeline (D827): Tycoon's walk, its six tracks named by
+    # their skeleton's bones, its keys and its two footsteps marks at their
+    # times; the hips' second translation key pressed on the timeline and
+    # moved to a quarter second by its row's field (`data.set` through the
+    # key's place), then pressed again where it went.
+    add_test(NAME studio_edits_clip
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/tycoon/tycoon.game amble/walk.rfanim @Animations wheel=457,650,4 @amble/walk.rfanim
+                     "@hips translation at 0.5" "@time#2:0.25" "until=studio_said,status=\"tracks[0].keys[1].time set"
+                     "@hips translation at 0.25" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_edits_clip PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "typed 0.25 at [0-9]+,[0-9]+.*found hips translation at 0.25 at.*amble/walk.rfanim written: yes.*\"code\":\"studio_timeline\"[^\n]*\"tracks\":6,\"keys\":11,\"events\":2,\"markers\":0,\"named\":7,\"marks\":13}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"amble/walk.rfanim\",[^\n]*\"entity\":\"tracks.0..keys.1.\",[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
     # A node the surface reads is not deleted: the session refuses what
     # leaves a graph that does not read (D728), and Studio says so.
     add_test(NAME studio_graph_keeps

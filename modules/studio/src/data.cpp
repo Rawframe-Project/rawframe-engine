@@ -27,15 +27,35 @@ bool keyed(const Value& array) {
     });
 }
 
-/// How a row names an item: its name where it has one, else its key,
-/// followed by the array it is in, as `aim (actions)`.
-std::string labelOf(const Value& item, const std::string& key) {
+/// Whether `array`'s items are objects known by nothing of their own, so
+/// each is a row named by its place (a clip's tracks and keys, a skeleton's
+/// bones, D827).
+bool placed(const Value& array) {
+    return !array.items().empty() && !keyed(array) && std::ranges::all_of(array.items(), [](const Value& item) {
+        return item.kind() == Value::Kind::Object;
+    });
+}
+
+/// Whether `value` is a row of its own, not a field of its holder's.
+bool listed(const Value& value) {
+    return value.kind() == Value::Kind::Object ||
+           (value.kind() == Value::Kind::Array && (keyed(value) || placed(value)));
+}
+
+/// What an item is named, if it says: its name, else its display name.
+std::optional<std::string> nameOf(const Value& item) {
     for (const std::string_view kNamed : {"name", "displayName"}) {
         if (const Value* kName = item.find(kNamed); kName != nullptr && kName->kind() == Value::Kind::String) {
             return *kName->text();
         }
     }
-    return *item.find(key)->text();
+    return std::nullopt;
+}
+
+/// How a row names an item: its name where it has one, else its key,
+/// followed by the array it is in, as `aim (actions)`.
+std::string labelOf(const Value& item, const std::string& key) {
+    return nameOf(item).value_or(*item.find(key)->text());
 }
 
 std::string joined(const std::string& path, const std::string& step) {
@@ -84,16 +104,39 @@ void ShellParticipant::showData() {
                          labelOf(kItem, kKey) + " (" + kMember + ")",
                          depth + 1);
                 }
+            } else if (kHeld.kind() == Value::Kind::Array && placed(kHeld)) {
+                // Each by its place, named where it says a name, as
+                // `hips (bones)`, else counted from one, as `keys 2`; one
+                // whose `parent` is an earlier item's place under it.
+                std::vector<std::size_t> under(kHeld.items().size(), 0);
+                for (std::size_t item = 0; item < kHeld.items().size(); ++item) {
+                    const Value& kItem = kHeld.items()[item];
+                    const Value* kParent = kItem.find("parent");
+                    const std::optional<std::int64_t> kAt =
+                        kParent != nullptr ? kParent->integer() : std::optional<std::int64_t>{};
+                    if (kAt.has_value() && *kAt >= 0 && static_cast<std::size_t>(*kAt) < item) {
+                        under[item] = under[static_cast<std::size_t>(*kAt)] + 1;
+                    }
+                    const std::optional<std::string> kName = nameOf(kItem);
+                    self(self,
+                         kItem,
+                         joined(path, kMember + "[" + std::to_string(item) + "]"),
+                         kName.has_value() ? *kName + " (" + kMember + ")" : kMember + " " + std::to_string(item + 1),
+                         depth + 1 + std::min<std::size_t>(under[item], 8));
+                }
             }
         }
     };
     kList(kList, *sheet_, "", std::filesystem::path{scene_}.filename().string(), 0);
-    // An animation graph's nodes on the canvas too (D819).
+    // An animation graph's nodes on the canvas too (D819), and a clip's
+    // keys on its timeline (D827).
     const Value* kKind = sheet_->find("kind");
     const Value* kGraph = sheet_->find("graph");
-    if (kKind != nullptr && kKind->kind() == Value::Kind::String && *kKind->text() == "animation.graph" &&
-        kGraph != nullptr) {
+    const std::string kNamed = kKind != nullptr && kKind->kind() == Value::Kind::String ? *kKind->text() : "";
+    if (kNamed == "animation.graph" && kGraph != nullptr) {
         showCanvas(*kGraph, "graph.");
+    } else if (kNamed == "animation.clip") {
+        showTimeline(*sheet_);
     }
 }
 
@@ -126,7 +169,7 @@ void ShellParticipant::showDataEntry(std::size_t at) {
     for (std::size_t each = 0; each < kHeld.names().size(); ++each) {
         const std::string& kMember = kHeld.names()[each];
         const Value& kValue = kHeld.items()[each];
-        if (kValue.kind() == Value::Kind::Object || (kValue.kind() == Value::Kind::Array && keyed(kValue))) {
+        if (listed(kValue)) {
             continue;
         }
         const bool kTextual = kValue.kind() == Value::Kind::String;

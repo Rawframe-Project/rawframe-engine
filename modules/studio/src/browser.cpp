@@ -68,7 +68,8 @@ std::vector<ListedSource> sourcesOf(std::string_view reply) {
                                     .folder = *kFolder,
                                     .importer = *kImporter,
                                     .cook = *kCook,
-                                    .problem = kProblem != nullptr ? *kProblem : std::string{}});
+                                    .problem = kProblem != nullptr ? *kProblem : std::string{},
+                                    .id = kTextOf(kEach, "id") != nullptr ? *kTextOf(kEach, "id") : std::string{}});
     }
     return made;
 }

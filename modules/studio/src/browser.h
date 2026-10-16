@@ -29,6 +29,8 @@ struct ListedSource {
     std::string importer;
     std::string cook;
     std::string problem;
+    /// Its resource identity, as a document names it (D827).
+    std::string id;
 };
 
 /// The sources an `authoring.assets` answer lists; none for a refusal, and

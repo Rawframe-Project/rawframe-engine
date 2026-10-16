@@ -68,7 +68,6 @@ inline constexpr diagnostics::EventIdentity kPreviewing{"studio", "studio_previe
 /// The preview shows where the chosen entity stands (D464), so its handles
 /// can be grabbed (D466).
 inline constexpr diagnostics::EventIdentity kMarked{"studio", "studio_marked"};
-inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canvas"};
 inline constexpr diagnostics::EventIdentity kNetworkRead{"studio", "studio_network"};
 /// A part of the mark lit under the pointer, as the session says (D504).
 inline constexpr diagnostics::EventIdentity kLit{"studio", "studio_lit"};
@@ -563,6 +562,9 @@ private:
     /// object of nodes by id, `prefix` what each id is among the rows'
     /// entities. A node pressed is its row pressed; the chosen one marked.
     void showCanvas(const Value& nodes, const std::string& prefix);
+    /// A clip's tracks, events, and sync markers as lanes over its time,
+    /// each key a mark at its time standing for its row (D827).
+    void showTimeline(const Value& clip);
     [[nodiscard]] std::optional<std::size_t> canvasEntityOf(ui::Node node) const;
     void markCanvas();
     void showDataEntry(std::size_t at);

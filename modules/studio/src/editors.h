@@ -1,9 +1,10 @@
 #pragma once
 
-// What Studio's document editors keep between frames (D812, D818, D819):
-// the kinds of document listed with the scenes, and what the data, settings,
-// and graph editors last read and laid out.
+// What Studio's document editors keep between frames (D812, D818, D819,
+// D827): the kinds of document listed with the scenes, and what the data,
+// settings, graph, and clip editors last read and laid out.
 
+#include "rawframe/diagnostics/identity.h"
 #include "rawframe/document/json.h"
 #include "rawframe/ui/tree.h"
 
@@ -14,6 +15,10 @@
 #include <vector>
 
 namespace rawframe::studio {
+
+/// A graph laid out on the canvas (D819), a clip on its timeline (D827).
+inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canvas"};
+inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
 
 /// What each document listed with the scenes is (D637, D643, D722, D730,
 /// D812, D818).
@@ -36,7 +41,8 @@ struct EditorsHeld {
     /// lines by their places (D818).
     std::vector<std::string> settingsLines;
     std::vector<std::vector<std::size_t>> settings;
-    /// The canvas's parts and each one's row, and its nodes' boxes (D819).
+    /// The canvas's or the timeline's parts and each one's row, and its
+    /// nodes' or keys' boxes (D819, D827).
     std::vector<std::pair<ui::Node, std::size_t>> canvasParts;
     std::vector<std::pair<ui::Node, std::size_t>> canvasBoxes;
 };
