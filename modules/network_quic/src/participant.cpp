@@ -105,7 +105,10 @@ public:
     /// (D805): a game played on one machine as it would be over the world.
     result::Result<std::unique_ptr<network::Provider>> provider(const network::ProviderProfile& profile) override {
         RAWFRAME_TRY_ASSIGN(std::unique_ptr<network::Provider> made, network_->provider(profile));
-        if (!conditions_.any()) {
+        // The game's connections only: a tool's endpoint (an editor's
+        // preview) answers at this machine's speed, or every question an
+        // editor asks it waits the slowed link's round trip.
+        if (!conditions_.any() || profile.application != network::kGameApplication) {
             return made;
         }
         return network::withConditions(std::move(made), conditions_, profile, *clock_);
