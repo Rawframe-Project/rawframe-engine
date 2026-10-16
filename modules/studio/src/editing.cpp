@@ -26,6 +26,11 @@ ShellParticipant::read(const std::string& scene, std::string_view operation, std
 }
 
 void ShellParticipant::pressAt(float x, float y) {
+    // A release no frame has taken yet is the last press's, taken before
+    // this one is (D833).
+    if (released_) {
+        followSplitter();
+    }
     pressedAt_ = {x, y};
     const bool kMoving = beforePress();
     const auto kHit = tree_->hit(root_, x, y);

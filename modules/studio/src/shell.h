@@ -187,8 +187,7 @@ private:
     /// Imports the file at `path` (absolute) as `as` under the game's
     /// directory (D505), saying what came of it; whether it was imported.
     bool importFile(const std::string& path, const std::string& as);
-    /// Each file dropped on the window imported into the browser's folder
-    /// (D802).
+    /// Each file dropped on the window imported into its folder (D802).
     void takeDrops();
     /// The chosen source's references in the center, read only (D803).
     void showReferences();
@@ -758,13 +757,14 @@ private:
     std::array<float, 2> pressedAt_{};
     /// The entity row pressed, until the press is let go (D785).
     std::optional<std::size_t> heldEntity_;
-    /// The entities chosen, the place a Shift press extends from, and the
-    /// edits made to several at once (D787).
+    /// The entities chosen, a Shift press's start, edits to many (D787).
     std::vector<std::string> selected_;
     std::optional<std::size_t> anchor_;
     std::uint64_t together_ = 0;
     bool pointerPress_ = false;
+    /// A press let go, and where (D833).
     bool released_ = false;
+    std::optional<std::array<float, 2>> releasedAt_;
     Preferences preferences_;
     std::filesystem::path preferencesFile_;
     std::uint64_t resized_ = 0;

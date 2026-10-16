@@ -248,8 +248,11 @@ result::Status ShellParticipant::start(composition::ParticipantContext& context)
             wheels_.push_back({x, y, deltaX, deltaY});
         });
         // A splitter held is let go with the press (D779).
+        // Where it was let go is read as it is told: a loaded Studio's next
+        // frame may come after the pointer has gone on to the next press.
         pointing_->onRelease([this] {
             released_ = true;
+            releasedAt_ = pointing_->pointer();
         });
     }
     if (typing_ != nullptr) {
