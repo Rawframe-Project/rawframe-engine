@@ -23,7 +23,8 @@
 # nought, 0.15 seconds apart (D441), and `drag=` and two points presses the
 # left button at the first, carries it to the second, and lets it go there
 # (D457), holding the X key a fifth part names through it, Shift_L or
-# Control_L (D463). An argument `drop=`, a point, a colon, and paths apart
+# Control_L (D463); a press is held longer, as a drag is, the more loaded
+# the machine is (D815). An argument `drop=`, a point, a colon, and paths apart
 # by colons drops those files there as a file manager does, by XDND
 # (tools/xdnd.py, D802). An argument `frozen=` and X key names presses them with
 # the program stopped, so it reads them in one frame (D458), and
@@ -103,6 +104,17 @@ KEYS = {".": "period", ",": "comma", "-": "minus", " ": "space", "/": "slash", "
 SHIFTED = {":": "semicolon", "_": "underscore", "#": "3", "+": "equal"}
 # Capitals typed with Shift held, as a path may hold them (D505).
 SHIFTED.update({letter: letter.lower() for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"})
+
+
+def stretched(seconds):
+    """`seconds` stretched by how far the machine's runnable work passes
+    its processors: a game drawing a frame every few seconds on a loaded
+    machine still sees a press and its release in frames apart (D815)."""
+    try:
+        busy = os.getloadavg()[0] / (os.cpu_count() or 1)
+    except OSError:
+        busy = 1
+    return seconds * max(1.0, busy)
 
 
 def alive(pid):
@@ -396,7 +408,8 @@ def main():
             # ten steps a tenth of a second apart, held a second, and let go
             # there (D457): a played game drawing a frame a second on a
             # loaded machine sees the press, the motion, and the release
-            # in frames of their own (D814).
+            # in frames of their own (D814), each wait longer the more
+            # loaded the machine is (D815).
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
             x.XFlush(display)
             time.sleep(0.5)
@@ -408,13 +421,13 @@ def main():
                 time.sleep(0.2)
             xtest.XTestFakeButtonEvent(display, text[4], 1, 0)
             x.XFlush(display)
-            time.sleep(1)
+            time.sleep(stretched(1))
             for step in range(1, 11):
-                time.sleep(0.1)
+                time.sleep(stretched(0.1))
                 xtest.XTestFakeMotionEvent(display, -1, at + (text[1] - at) * step // 10,
                                            y + (text[2] - y) * step // 10, 0)
                 x.XFlush(display)
-            time.sleep(1)
+            time.sleep(stretched(1))
             xtest.XTestFakeButtonEvent(display, text[4], 0, 0)
             x.XFlush(display)
             if held:
@@ -525,7 +538,9 @@ def main():
             os.kill(stopped, signal.SIGSTOP)
         xtest.XTestFakeButtonEvent(display, 1, 1, 0)
         x.XFlush(display)
-        time.sleep(0.2)
+        # Not stretched while the program is stopped, which reads the press
+        # and the release in one frame (D458).
+        time.sleep(0.2 if stopped else stretched(0.2))
         xtest.XTestFakeButtonEvent(display, 1, 0, 0)
         x.XFlush(display)
         print(f"{'clicked frozen' if stopped else 'clicked'} at {at},{y}")
