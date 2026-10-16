@@ -9,13 +9,20 @@ on:
   schedule:
     - cron: '17 1 * * *'
   workflow_dispatch:
+    # One platform's job alone, to see a failure again within its own run
+    # time rather than the slowest job's (D813); empty runs them all.
+    inputs:
+      only:
+        description: 'macos, linux-arm64, android, fuzz, or windows; empty for all'
+        required: false
+        default: ''
 
 permissions:
   contents: read
 
 jobs:
   macos:
-    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    if: github.repository == 'Rawframe-Project/rawframe-engine' && (inputs.only == '' || inputs.only == null || inputs.only == 'macos')
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -80,7 +87,7 @@ jobs:
   # The dedicated server's next target after x86-64 Linux (ADR-0006): ARM
   # servers are the cheaper ones to host on (D241).
   linux-arm64:
-    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    if: github.repository == 'Rawframe-Project/rawframe-engine' && (inputs.only == '' || inputs.only == null || inputs.only == 'linux-arm64')
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
     steps:
@@ -105,7 +112,7 @@ jobs:
   # application made (D551), the tests run on an emulator (D561), and a game
   # exported and played there (D590).
   android:
-    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    if: github.repository == 'Rawframe-Project/rawframe-engine' && (inputs.only == '' || inputs.only == null || inputs.only == 'android')
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
@@ -186,7 +193,7 @@ jobs:
   # A longer search than the check's fixed runs (D242): five minutes a fuzz
   # target from an empty corpus, each finding printed so it can be replayed.
   fuzz:
-    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    if: github.repository == 'Rawframe-Project/rawframe-engine' && (inputs.only == '' || inputs.only == null || inputs.only == 'fuzz')
     runs-on: ubuntu-24.04
     # The targets in three shards, each running every third: five minutes
     # a target, the tools, and the build (26 targets in one job passed its
@@ -236,7 +243,7 @@ jobs:
           exit "$status"
 
   windows:
-    if: github.repository == 'Rawframe-Project/rawframe-engine'
+    if: github.repository == 'Rawframe-Project/rawframe-engine' && (inputs.only == '' || inputs.only == null || inputs.only == 'windows')
     runs-on: windows-2025
     timeout-minutes: 120
     steps:

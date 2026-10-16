@@ -20,6 +20,9 @@ native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }
 work="$(native "$4")"
+# A check that fails says which, and what the session answered, so a run
+# on a machine of another system can be read (D813).
+trap 'echo "author_cooks: failed at line $LINENO"; grep -v "\"kind\":\"authoring.progress\"" "$work/replies" 2>/dev/null | cut -c1-600' ERR
 rm -rf "$work"
 mkdir -p "$work"
 game="$(native "$repository")/games/plaza/plaza.game"
