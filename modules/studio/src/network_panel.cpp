@@ -82,6 +82,7 @@ void ShellParticipant::readNetwork(double seconds) {
                            .stateDatagrams = kCount("stateDatagrams"),
                            .inputWindows = kCount("inputWindows")};
     network_.connections = kCount("connections");
+    network_.mostConnections = std::max(network_.mostConnections, network_.connections);
     std::vector<std::string> lines;
     lines.push_back("server at tick " + std::to_string(kCount("tick")) + ", " + std::to_string(network_.connections) +
                     (network_.connections == 1 ? " connection" : " connections"));

@@ -933,7 +933,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"studio_played\"[^\n]*\"link\":\"Lossy link\",\"networkReads\":[2-9][0-9]*,\"connections\":[1-9],.*\"latencyMs\":150,\"jitterMs\":30,\"lossPpm\":50000,")
+                             "\"code\":\"studio_played\"[^\n]*\"link\":\"Lossy link\",\"networkReads\":[2-9][0-9]*,\"mostConnections\":[1-9],.*\"latencyMs\":150,\"jitterMs\":30,\"lossPpm\":50000,")
         # Paused and stepped (D806): Plaza played from Studio, its World
         # paused on its server, stepped three ticks one by one, each a tick
         # on, and let run again.

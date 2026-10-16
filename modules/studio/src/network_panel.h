@@ -47,7 +47,10 @@ struct NetworkShown {
     std::optional<TrafficRead> last;
     /// Times the server's traffic was read and shown.
     std::uint64_t reads = 0;
+    /// Connections the server held when last read, and the most any read
+    /// saw (the last may come as the game stops).
     std::int64_t connections = 0;
+    std::int64_t mostConnections = 0;
 };
 
 } // namespace rawframe::studio
