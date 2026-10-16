@@ -292,6 +292,7 @@ def main():
     x.XGetImage.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_int, ctypes.c_uint,
                             ctypes.c_uint, ctypes.c_ulong, ctypes.c_int]
     x.XFlush.argtypes = [ctypes.c_void_p]
+    x.XDisplayHeight.argtypes = [ctypes.c_void_p, ctypes.c_int]
     xtest.XTestFakeMotionEvent.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_ulong]
     xtest.XTestFakeButtonEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
     xtest.XTestFakeKeyEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
@@ -472,8 +473,12 @@ def main():
             # What scrolls eases into place over frames, slower on a loaded
             # machine: wait until the column about the wheel holds still,
             # four looks in a row, before the next step (D475).
+            # Looks off the screen are kept on its edge: X refuses them.
+            tall = x.XDisplayHeight(display, 0)
+
             def column():
-                return [brightness(x, display, root, at, y + offset) for offset in (-150, -75, 0, 75, 150)]
+                return [brightness(x, display, root, at, min(max(y + offset, 2), tall - 3))
+                        for offset in (-150, -75, 0, 75, 150)]
             before = column()
             steady = 0
             for _ in range(60):
