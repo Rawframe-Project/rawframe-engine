@@ -51,6 +51,18 @@ struct PlayedViewport {
     world_tooling::Forwarding* forwarding = nullptr;
     std::uint64_t inputsForwarded = 0;
     std::uint64_t inputsTaken = 0;
+    /// Whether the played game's World is paused, the tick its server last
+    /// said, and how many times it was paused and stepped (D806).
+    bool paused = false;
+    std::int64_t tick = 0;
+    std::uint64_t pauses = 0;
+    std::uint64_t steps = 0;
+    /// The tick it was paused at, and how many ran while it was, once let
+    /// run: those stepped, and no more.
+    std::int64_t pausedAt = 0;
+    std::int64_t ranPaused = 0;
+    /// The other players' clients the last play started (D804).
+    std::uint64_t othersStarted = 0;
 };
 
 } // namespace rawframe::studio

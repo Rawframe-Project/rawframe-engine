@@ -165,6 +165,12 @@ result::Status Play::launch() {
         }
         each->reset();
     }
+    for (process::Child& other : others_) {
+        if (!other.exited().has_value()) {
+            other.kill();
+        }
+    }
+    others_.clear();
     ++launches_;
     admitted_ = false;
     clientLogRead_ = 0;
@@ -212,14 +218,21 @@ result::Status Play::launch() {
                                      {"tooling.endpoint", "127.0.0.1:" + std::to_string(kServerEndpointPort)},
                                      {"tooling.token_file", (kAt / "token").string()},
                                      // Picked from (D456) and debugged (D460).
-                                     {"tooling.grants", "inspect debug"},
+                                     {"tooling.grants", "inspect debug run"},
                                      // Layers replicated, so the client hides
                                      // one (D791); the client is told so too.
                                      {"kest.replicate_layers", "true"}})));
     // Played in Studio's viewport (D789, D790): its window kept hidden at
     // the viewport's size, so a point there is the same point here, and
     // each picture streamed; those settings Studio's, not the game's.
-    std::string given = contents(settings_.clientSettings);
+    std::string given = contents(settings_.clientSettings) + settings_.link;
+    // As a phone or a tablet (D809): its size in a window of its own, and
+    // the mouse its finger, whatever the game's settings say of either.
+    if (settings_.device.has_value()) {
+        given = without(given, {"window.width", "window.height", "input.touch_from_mouse"}) +
+                "window.width = " + std::to_string((*settings_.device)[0]) +
+                "\nwindow.height = " + std::to_string((*settings_.device)[1]) + "\ninput.touch_from_mouse = true\n";
+    }
     std::string viewported;
     if (settings_.viewport.has_value()) {
         given = without(given,
@@ -266,6 +279,37 @@ result::Status Play::launch() {
                              viewported));
     endpointPort_ = kEndpointPort;
     serverEndpointPort_ = kServerEndpointPort;
+    // The other players (D804): clients as the first, each in a window of
+    // its own set down and right of the last, with no tooling endpoint and
+    // nothing of the viewport's.
+    const std::string kOthersGiven = settings_.link + without(contents(settings_.clientSettings),
+                                                              {"window.visible",
+                                                               "window.x",
+                                                               "window.y",
+                                                               "render.offscreen",
+                                                               "render.read_every",
+                                                               "render.stream",
+                                                               "preview.views"});
+    for (std::uint32_t player = 2; player <= std::min<std::uint32_t>(settings_.players, 4); ++player) {
+        const std::string kName = "client-" + std::to_string(player);
+        RAWFRAME_TRY(written(kAt / (kName + ".conf"),
+                             settingsOf(kWithContent(kOthersGiven),
+                                        {{"host.iteration_rate", "120"},
+                                         {"kest.plan_only", "true"},
+                                         {"bots.count", "1"},
+                                         {"bots.player", "true"},
+                                         {"render.device", "any"},
+                                         {"window.width", "640"},
+                                         {"window.height", "360"}},
+                                        {{"kest.game", kGame},
+                                         {"network.quic.pin_file", (kAt / "server.fingerprint").string()},
+                                         {"bots.endpoint", "127.0.0.1:" + kPort},
+                                         {"network.quic.self_signed", "true"},
+                                         {"network.quic.fingerprint_file", (kAt / (kName + ".fingerprint")).string()},
+                                         {"kest.replicate_layers", "true"},
+                                         {"window.x", std::to_string(40 * player)},
+                                         {"window.y", std::to_string(30 * player)}})));
+    }
     // Where a debugger attaches, for rawframe-debug given the game (D462).
     RAWFRAME_TRY(written(kAt / authoring_session::kAttachFile,
                          authoring_session::attachText(authoring_session::AttachRecord{
@@ -294,12 +338,31 @@ result::Status Play::advance() {
     if (client_.has_value() || std::filesystem::file_size(directory_ / "server.fingerprint", error) == 0 || error) {
         return {};
     }
-    RAWFRAME_TRY_ASSIGN(client_,
-                        process::Child::start({.program = settings_.client,
-                                               .arguments = {"--config", (directory_ / "client.conf").string()},
-                                               .output = directory_ / "client.log",
-                                               .stopsWithThis = true}));
+    if (!client_.has_value()) {
+        RAWFRAME_TRY_ASSIGN(client_,
+                            process::Child::start({.program = settings_.client,
+                                                   .arguments = {"--config", (directory_ / "client.conf").string()},
+                                                   .output = directory_ / "client.log",
+                                                   .stopsWithThis = true}));
+        return {};
+    }
     return {};
+}
+
+void Play::startOthers() {
+    if (!admitted_ || !others_.empty()) {
+        return;
+    }
+    for (std::uint32_t player = 2; player <= std::min<std::uint32_t>(settings_.players, 4); ++player) {
+        const std::string kName = "client-" + std::to_string(player);
+        auto started = process::Child::start({.program = settings_.client,
+                                              .arguments = {"--config", (directory_ / (kName + ".conf")).string()},
+                                              .output = directory_ / (kName + ".log"),
+                                              .stopsWithThis = true});
+        if (started.has_value()) {
+            others_.push_back(std::move(*started));
+        }
+    }
 }
 
 std::optional<Preview> Play::preview() {
@@ -330,6 +393,7 @@ std::optional<Preview> Play::preview() {
             return std::nullopt;
         }
     }
+    startOthers();
     return Preview{.endpoint = "127.0.0.1:" + std::to_string(endpointPort_),
                    .pinFile = (directory_ / "client.fingerprint").string(),
                    .tokenFile = (directory_ / "token").string(),
@@ -339,15 +403,26 @@ std::optional<Preview> Play::preview() {
 
 bool Play::running() noexcept {
     return server_.has_value() && !server_->exited().has_value() &&
-           (!client_.has_value() || !client_->exited().has_value());
+           (!client_.has_value() || !client_->exited().has_value()) &&
+           std::ranges::none_of(others_, [](process::Child& other) {
+               return other.exited().has_value();
+           });
 }
 
 bool Play::ended() noexcept {
     return (!server_.has_value() || server_->exited().has_value()) &&
-           (!client_.has_value() || client_->exited().has_value());
+           (!client_.has_value() || client_->exited().has_value()) &&
+           std::ranges::all_of(others_, [](process::Child& other) {
+               return other.exited().has_value();
+           });
 }
 
 void Play::stop() noexcept {
+    for (process::Child& other : others_) {
+        if (!other.exited().has_value()) {
+            static_cast<void>(other.requestStop());
+        }
+    }
     for (std::optional<process::Child>* each : {&client_, &server_}) {
         if (each->has_value() && !(*each)->exited().has_value()) {
             static_cast<void>((*each)->requestStop());

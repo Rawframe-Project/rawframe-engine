@@ -44,6 +44,15 @@ constexpr std::string_view kFrame = "Frame chosen";
 constexpr std::string_view kFlat = "2D view";
 constexpr std::string_view kTilted = "3D view";
 
+/// The device a play's first client is tried as (D809): this machine,
+/// or a window of a phone's or a small tablet's size, the mouse a finger.
+constexpr std::array<std::pair<std::string_view, std::array<std::uint32_t, 2>>, 3> kDevices = {
+    {{"As this machine", {0, 0}}, {"As a phone", {360, 640}}, {"As a tablet", {960, 600}}}};
+
+/// How many players a play has, each a client (D804).
+constexpr std::array<std::pair<std::string_view, std::uint32_t>, 4> kPlayers = {
+    {{"One player", 1}, {"Two players", 2}, {"Three players", 3}, {"Four players", 4}}};
+
 /// What the preview draws over its scene, each toggled (D798), by the
 /// renderer's name.
 constexpr std::array<std::pair<std::string_view, std::string_view>, 2> kOverlays = {
@@ -102,6 +111,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     kOffer("Assets", "Window", {}, assetsTab_);
     kOffer("History", "Window", {}, historyTab_);
     kOffer("Console", "Window", {}, consoleTab_);
+    kOffer("Network", "Window", {}, networkTab_);
     for (const std::string_view kMenu : kMenus) {
         if (std::ranges::none_of(commands_,
                                  [&](const Command& command) {
@@ -121,6 +131,15 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     commands_.push_back(Command{.name = std::string{kTilted}, .menu = "View", .keys = kKeys(kTilted, {})});
     for (const auto& [kName, kMode] : kModes) {
         commands_.push_back(Command{.name = std::string{kName}, .menu = "View", .keys = kKeys(kName, {})});
+    }
+    commands_.push_back(Command{.name = "Pause", .menu = "Game", .keys = kKeys("Pause", {"F6"})});
+    commands_.push_back(Command{.name = "Live World", .menu = "Game", .keys = kKeys("Live World", {"F8"})});
+    commands_.push_back(Command{.name = "Step", .menu = "Game", .keys = kKeys("Step", {"F7"})});
+    for (const auto& [kName, kSize] : kDevices) {
+        commands_.push_back(Command{.name = std::string{kName}, .menu = "Game", .keys = kKeys(kName, {})});
+    }
+    for (const auto& [kName, kCount] : kPlayers) {
+        commands_.push_back(Command{.name = std::string{kName}, .menu = "Game", .keys = kKeys(kName, {})});
     }
     for (const auto& [kName, kOverlay] : kOverlays) {
         commands_.push_back(Command{.name = std::string{kName}, .menu = "View", .keys = kKeys(kName, {})});
@@ -167,6 +186,29 @@ bool ShellParticipant::runCommand(std::string_view name) {
             bookmark(static_cast<std::uint8_t>(kCommand->name.back() - '0'), kGoes);
             return true;
         }
+    }
+    if (kCommand->name == "Live World") {
+        switchLive();
+        return true;
+    }
+    if (kCommand->name == "Pause" || kCommand->name == "Step") {
+        runPlayed(kCommand->name == "Step");
+        return true;
+    }
+    if (const auto kDevice = std::ranges::find(
+            kDevices, kCommand->name, &std::pair<std::string_view, std::array<std::uint32_t, 2>>::first);
+        kDevice != kDevices.end()) {
+        device_ = kDevice->second[0] == 0 ? std::nullopt : std::optional{kDevice->second};
+        say(std::string{kDevice->first} + (playing_.has_value() ? " from the next play" : ""));
+        return true;
+    }
+    if (const auto kPlayed =
+            std::ranges::find(kPlayers, kCommand->name, &std::pair<std::string_view, std::uint32_t>::first);
+        kPlayed != kPlayers.end()) {
+        players_ = kPlayed->second;
+        say(std::to_string(players_) + (players_ == 1 ? " player" : " players") +
+            (playing_.has_value() ? " from the next play" : ""));
+        return true;
     }
     if (const auto kOverlay =
             std::ranges::find(kOverlays, kCommand->name, &std::pair<std::string_view, std::string_view>::first);

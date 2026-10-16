@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace rawframe::studio {
 
@@ -42,6 +43,16 @@ struct PlaySettings {
     /// window kept hidden, its pictures drawn at this size and streamed to
     /// `picture()`; none to play in the client's own window.
     std::optional<std::array<std::uint32_t, 2>> viewport;
+    /// The players, each a client of its own (D804): the first as above,
+    /// each other in a window of its own beside it, its log
+    /// `client-<n>.log`; one to four.
+    std::uint32_t players = 1;
+    /// The link conditions each client is given, settings lines, empty for
+    /// none (D807).
+    std::string link;
+    /// The device the first client is tried as (D809): its window's size,
+    /// the mouse played as a finger; none for this machine as it is.
+    std::optional<std::array<std::uint32_t, 2>> device;
 };
 
 /// Makes `path` a directory of this user's alone, or refuses one that is
@@ -69,11 +80,15 @@ public:
     /// its player is in, when its endpoint answers at once; none before.
     /// Its log is read from where it was last read.
     [[nodiscard]] std::optional<Preview> preview();
-    /// Whether both still run.
+    /// Whether the server and every client still run.
     [[nodiscard]] bool running() noexcept;
-    /// Whether both have ended.
+    /// Whether the server and every client have ended.
     [[nodiscard]] bool ended() noexcept;
 
+    /// How many of the other players' clients were started.
+    [[nodiscard]] std::size_t others() const noexcept {
+        return others_.size();
+    }
     /// How many times the game has been launched.
     [[nodiscard]] int launches() const noexcept {
         return launches_;
@@ -97,11 +112,15 @@ private:
     /// settings naming them, and starts the server, letting go of whatever
     /// a launch before left.
     result::Status launch();
+    /// The other players' clients, once the first's player is in (D804).
+    void startOthers();
 
     Play() = default;
 
     std::optional<process::Child> server_;
     std::optional<process::Child> client_;
+    /// The other players' clients, started once the first's player is in.
+    std::vector<process::Child> others_;
     std::filesystem::path directory_;
     PlaySettings settings_;
     /// How many times the server has been started, each on ports of its own.

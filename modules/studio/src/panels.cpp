@@ -168,7 +168,8 @@ result::Status ShellParticipant::build() {
     // The left dock holds the Hierarchy, or the Layers in its place, each
     // heading naming the other (D788).
     RAWFRAME_TRY_ASSIGN(leftDock_, box(kUpper, leftLayout(preferences_.hierarchyWidth), kBackground));
-    RAWFRAME_TRY_ASSIGN(entitiesColumn_, tabbedColumn(leftDock_, "Hierarchy", "Layers", layersTab_));
+    RAWFRAME_TRY_ASSIGN(entitiesColumn_,
+                        tabbedColumn(leftDock_, "Hierarchy", "Layers", layersTab_, "Live", &live_.button));
     RAWFRAME_TRY_ASSIGN(layersColumn_, tabbedColumn(leftDock_, "Layers", "Hierarchy", hierarchyTab_));
     RAWFRAME_TRY(tree_->detach(layersColumn_));
     layersShown_ = false;
@@ -230,9 +231,11 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(assetsTab_, button(kDockTabs, "Assets"));
     RAWFRAME_TRY_ASSIGN(historyTab_, button(kDockTabs, "History"));
     RAWFRAME_TRY_ASSIGN(consoleTab_, button(kDockTabs, "Console"));
+    RAWFRAME_TRY_ASSIGN(networkTab_, button(kDockTabs, "Network"));
     RAWFRAME_TRY_ASSIGN(scenesColumn_, pane("Assets"));
     RAWFRAME_TRY_ASSIGN(historyColumn_, pane("History"));
     RAWFRAME_TRY(makeConsole());
+    RAWFRAME_TRY(makeNetwork());
     RAWFRAME_TRY(tree_->attach(bottomDock_, scenesColumn_));
     dockShown_ = Dock::Assets;
     showDock(Dock::Assets);
@@ -244,7 +247,10 @@ result::Status ShellParticipant::build() {
 
 void ShellParticipant::showDock(Dock pane) {
     const auto kPaneOf = [this](Dock dock) {
-        return dock == Dock::Assets ? scenesColumn_ : dock == Dock::History ? historyColumn_ : consoleColumn_;
+        return dock == Dock::Assets    ? scenesColumn_
+               : dock == Dock::History ? historyColumn_
+               : dock == Dock::Console ? consoleColumn_
+                                       : networkColumn_;
     };
     if (pane != dockShown_) {
         static_cast<void>(tree_->detach(kPaneOf(dockShown_)));
@@ -256,6 +262,8 @@ void ShellParticipant::showDock(Dock pane) {
         tree_->setLook(historyTab_, ui::Look{.fill = pane == Dock::History ? kChosen : kRow, .radius = 4}));
     static_cast<void>(
         tree_->setLook(consoleTab_, ui::Look{.fill = pane == Dock::Console ? kChosen : kRow, .radius = 4}));
+    static_cast<void>(
+        tree_->setLook(networkTab_, ui::Look{.fill = pane == Dock::Network ? kChosen : kRow, .radius = 4}));
     if (pane == Dock::Console) {
         showConsole();
     }
@@ -414,6 +422,11 @@ void ShellParticipant::showScene(std::size_t at) {
     entity_.clear();
     components_ = 0;
     findField_.reset();
+    // The played game's World in place of the document's (D808).
+    if (live_.on) {
+        showLive();
+        return;
+    }
     if (sheetChosen()) {
         showSheet();
         return;

@@ -151,7 +151,7 @@ void ShellParticipant::rebuild() {
         seat_->leave();
     }
     // The dock's panes not shown are not under the root.
-    for (const ui::Node kPane : {scenesColumn_, historyColumn_, consoleColumn_}) {
+    for (const ui::Node kPane : {scenesColumn_, historyColumn_, consoleColumn_, networkColumn_}) {
         if (tree_->contains(kPane)) {
             static_cast<void>(tree_->remove(kPane));
         }

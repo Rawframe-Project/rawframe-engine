@@ -159,8 +159,13 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         }
     } else if (broken_.has_value()) {
         return;
-    } else if (node == assetsTab_ || node == historyTab_ || node == consoleTab_) {
-        showDock(node == assetsTab_ ? Dock::Assets : node == historyTab_ ? Dock::History : Dock::Console);
+    } else if (node == assetsTab_ || node == historyTab_ || node == consoleTab_ || node == networkTab_) {
+        showDock(node == assetsTab_    ? Dock::Assets
+                 : node == historyTab_ ? Dock::History
+                 : node == consoleTab_ ? Dock::Console
+                                       : Dock::Network);
+    } else if (pressNetwork(node)) {
+        return;
     } else if (const auto kFilter = std::ranges::find(consoleFilters_, node, &std::pair<ui::Node, int>::first);
                kFilter != consoleFilters_.end()) {
         // A source's button shows or hides its lines; the last shows
@@ -335,6 +340,8 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         } else {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         }
+    } else if (pressLive(node)) {
+        return;
     } else if (const auto kEntity = std::ranges::find(entityRows_, node); kEntity != entityRows_.end()) {
         // Held, it may be dragged onto another (D785).
         if (pointerPress_) {

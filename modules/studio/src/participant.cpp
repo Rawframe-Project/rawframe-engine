@@ -277,6 +277,11 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     attachPlayed(kSeconds);
     pollPicks(kSeconds);
     readLogs(kSeconds);
+    readNetwork(kSeconds);
+    if (playing_.has_value()) {
+        inViewport_.othersStarted = playing_->others();
+    }
+    readLive(kSeconds);
     followPicture();
     forwardInput();
     takeDrops();
@@ -407,6 +412,25 @@ void ShellParticipant::stop() noexcept {
          diagnostics::field("splitsShown", shown_.splitsShown),
          diagnostics::field("overlays", static_cast<std::uint64_t>(shown_.overlays.size())),
          diagnostics::field("overlaysShown", shown_.overlaysShown)});
+    // How the game was played: its players (D804).
+    emitter_.log(diagnostics::Severity::Info,
+                 kPlayedRecord,
+                 "how Studio played the game",
+                 {diagnostics::field("players", std::uint64_t{players_}),
+                  diagnostics::field("othersStarted", inViewport_.othersStarted),
+                  diagnostics::field("paused", inViewport_.paused),
+                  diagnostics::field("pauses", inViewport_.pauses),
+                  diagnostics::field("steps", inViewport_.steps),
+                  diagnostics::field("tick", inViewport_.tick),
+                  diagnostics::field("ranPaused", inViewport_.ranPaused),
+                  diagnostics::field("link", kLinks[network_.link].name),
+                  diagnostics::field("networkReads", network_.reads),
+                  diagnostics::field("connections", network_.connections),
+                  diagnostics::field("deviceWidth", device_.has_value() ? std::uint64_t{(*device_)[0]} : 0),
+                  diagnostics::field("live", live_.on),
+                  diagnostics::field("liveListed", live_.listed),
+                  diagnostics::field("liveReads", live_.reads),
+                  diagnostics::field("liveComponents", live_.components)});
     // And what the asset browser showed (D799).
     emitter_.log(diagnostics::Severity::Info,
                  kBrowsed,

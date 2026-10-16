@@ -17,14 +17,18 @@ void ShellParticipant::startPlaying() {
         say("the last game is still stopping");
         return;
     }
-    // In the viewport at its size, where one is shown (D789).
+    // In the viewport at its size, where one is shown (D789), unless it is
+    // tried as a device, in a window of the device's size (D809).
     play_->viewport.reset();
-    if (inViewport_.inViewport) {
+    play_->device = device_;
+    if (inViewport_.inViewport && !device_.has_value()) {
         const ui::Rect kAt = tree_->contains(viewport_) ? tree_->placedRectOf(viewport_) : ui::Rect{};
         play_->viewport =
             std::array<std::uint32_t, 2>{kAt.width >= 64 ? static_cast<std::uint32_t>(kAt.width) : 640U,
                                          kAt.height >= 64 ? static_cast<std::uint32_t>(kAt.height) : 360U};
     }
+    // With the players chosen, each a client (D804).
+    play_->players = players_;
     auto started = Play::start(*play_);
     if (!started.has_value()) {
         say(std::string{started.error().description()});
@@ -40,6 +44,39 @@ void ShellParticipant::startPlaying() {
     nextAttach_ = 0;
     static_cast<void>(pressWords(playNode_, "Stop", kText, 14));
     say("starting the game");
+}
+
+void ShellParticipant::runPlayed(bool step) {
+    if (!playing_.has_value() || scene_.empty()) {
+        say("play the game to pause it");
+        return;
+    }
+    // A step pauses first, as a debugger's does.
+    if (step && !inViewport_.paused) {
+        runPlayed(false);
+    }
+    const std::string kReply =
+        ask(step ? stepRecord(next(), scene_, 1) : runRecord(next(), scene_, !inViewport_.paused));
+    const auto kParsed = document::parse(kReply);
+    const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* kPaused = kAnswer != nullptr ? kAnswer->find("paused") : nullptr;
+    const Value* kTick = kAnswer != nullptr ? kAnswer->find("tick") : nullptr;
+    if (kPaused == nullptr || kTick == nullptr) {
+        say(answeredOf(kReply).message);
+        return;
+    }
+    const bool kWasPaused = inViewport_.paused;
+    inViewport_.paused = kPaused->truth().value_or(false);
+    inViewport_.tick = kTick->integer().value_or(0);
+    if (!kWasPaused && inViewport_.paused) {
+        inViewport_.pausedAt = inViewport_.tick;
+    } else if (kWasPaused && !inViewport_.paused) {
+        inViewport_.ranPaused = inViewport_.tick - inViewport_.pausedAt;
+    }
+    ++(step ? inViewport_.steps : inViewport_.pauses);
+    // The tick the step runs is the next one; it has run by the next frame.
+    say(step ? "stepped from tick " + std::to_string(inViewport_.tick)
+             : (inViewport_.paused ? "paused at tick " : "running from tick ") + std::to_string(inViewport_.tick));
 }
 
 void ShellParticipant::stopPlaying() {

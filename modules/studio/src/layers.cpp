@@ -11,8 +11,12 @@ constexpr std::string_view kLayerComponent = "rawframe.world.layer";
 
 } // namespace
 
-result::Result<ui::Node>
-ShellParticipant::tabbedColumn(ui::Node parent, std::string_view heading, std::string_view other, ui::Node& tab) {
+result::Result<ui::Node> ShellParticipant::tabbedColumn(ui::Node parent,
+                                                        std::string_view heading,
+                                                        std::string_view other,
+                                                        ui::Node& tab,
+                                                        std::string_view extra,
+                                                        ui::Node* extraButton) {
     // The left dock's height, scrolling what does not fit (D441), as
     // column() lays a column out across the window's width.
     RAWFRAME_TRY_ASSIGN(const ui::Node kColumn,
@@ -31,6 +35,11 @@ ShellParticipant::tabbedColumn(ui::Node parent, std::string_view heading, std::s
     RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeading, ui::Layout{.grow = 1}, 0));
     RAWFRAME_TRY(words(kTitle, heading, kQuiet, 13));
     // The other panel of the dock, named so a press finds it (D788).
+    // A switch of its own beside it, the Hierarchy's Live (D808).
+    if (extraButton != nullptr) {
+        RAWFRAME_TRY_ASSIGN(*extraButton, box(kHeading, ui::Layout{.padding = {6, 2, 6, 2}}, kRow));
+        RAWFRAME_TRY(pressWords(*extraButton, extra, kText, 13));
+    }
     RAWFRAME_TRY_ASSIGN(tab, box(kHeading, ui::Layout{.padding = {6, 2, 6, 2}}, kRow));
     RAWFRAME_TRY(pressWords(tab, other, kText, 13));
     RAWFRAME_TRY(tree_->setRole(kColumn, ui::Role::ScrollView));

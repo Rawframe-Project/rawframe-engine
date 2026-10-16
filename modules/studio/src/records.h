@@ -91,6 +91,12 @@ struct Asset {
 /// `authoring.thumbnail` of the source at `asset`, `size` pixels at most
 /// (D801).
 [[nodiscard]] Value thumbnailRecord(std::int64_t id, std::string_view asset, std::uint32_t size);
+/// `authoring.run` of the previewed `scene`, pausing or not; and
+/// `authoring.step`, `ticks` of its paused World (D806).
+[[nodiscard]] Value runRecord(std::int64_t id, std::string_view scene, bool paused);
+[[nodiscard]] Value stepRecord(std::int64_t id, std::string_view scene, std::uint32_t ticks);
+/// `authoring.traffic` of the previewed `scene`'s server (D807).
+[[nodiscard]] Value trafficRecord(std::int64_t id, std::string_view scene);
 /// `authoring.asset_references` of the source at `asset` (D803).
 [[nodiscard]] Value assetReferencesRecord(std::int64_t id, std::string_view asset);
 [[nodiscard]] Value setImportSettingsRecord(std::int64_t id, std::string_view asset, Value settings);

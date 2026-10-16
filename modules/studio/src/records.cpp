@@ -279,6 +279,32 @@ Value importSettingsRecord(std::int64_t id, std::string_view asset) {
     return record;
 }
 
+Value runRecord(std::int64_t id, std::string_view scene, bool paused) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.run"));
+    record.add("id", Value::integer(id));
+    record.add("scene", Value::string(std::string{scene}));
+    record.add("paused", Value::boolean(paused));
+    return record;
+}
+
+Value stepRecord(std::int64_t id, std::string_view scene, std::uint32_t ticks) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.step"));
+    record.add("id", Value::integer(id));
+    record.add("scene", Value::string(std::string{scene}));
+    record.add("ticks", Value::integer(ticks));
+    return record;
+}
+
+Value trafficRecord(std::int64_t id, std::string_view scene) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.traffic"));
+    record.add("id", Value::integer(id));
+    record.add("scene", Value::string(std::string{scene}));
+    return record;
+}
+
 Value assetReferencesRecord(std::int64_t id, std::string_view asset) {
     Value record = Value::object();
     record.add("kind", Value::string("authoring.asset_references"));

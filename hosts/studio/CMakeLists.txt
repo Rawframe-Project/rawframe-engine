@@ -24,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":68,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":5,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":70,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its menus and the palette's field (D777), its buttons, its
     # docks as scroll panes named by their headings or tabs in SPEC-0051's
@@ -39,7 +39,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_read_aloud PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no"
                          PASS_REGULAR_EXPRESSION
-                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 panel Dock edge\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 push button Console\na11y: 2 scroll pane Assets\n.*a11y: 3 entry new scene or import\n.*a11y: 3 push button level.scene\n.*a11y: 2 panel Inspector edge\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 panel Dock edge\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 push button Console\na11y: 2 push button Network\na11y: 2 scroll pane Assets\n.*a11y: 3 entry new scene or import\n.*a11y: 3 push button level.scene\n.*a11y: 2 panel Inspector edge\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
     # Studio typed into by a screen reader (D613): the new scene's entry
     # takes a name inserted through AT-SPI's EditableText as typing, the
     # field begun as a press begins it, and reads it back.
@@ -883,6 +883,95 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set_tests_properties(studio_sets_import_settings PROPERTIES
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"cooked .*\"code\":\"studio_assets\"[^\n]*\"settingsSet\":1,\"settingsRefused\":0")
+        # As a phone (D809): Plaza played from Studio as a phone, its client
+        # in a window of a phone's size, drawing at it, the mouse a finger.
+        add_test(NAME studio_plays_as_phone
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @Game "@As a phone"
+                         "until=studio_said,status=\"As a phone" @gate.scene @Play until=studio_previewing wait=2
+                         @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_plays_as_phone PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_played\"[^\n]*\"deviceWidth\":360,.*\"code\":\"frame_summary\"[^\n]*\"width\":360,\"height\":640,")
+        # The live World (D808): Plaza played, the Hierarchy switched to the
+        # server's World, its first entity read again and again in the
+        # Inspector, then the scene again.
+        add_test(NAME studio_inspects_live
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
+                         @Live "until=studio_said,status=\"live: " wait=3 @Live "until=studio_said,status=\"the scene again"
+                         @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_inspects_live PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"status\":\"live: [1-9][0-9]* entities on the server.*\"code\":\"studio_played\"[^\n]*\"live\":false,\"liveListed\":1,\"liveReads\":([2-9]|[1-9][0-9]+),\"liveComponents\":[1-9]")
+        # The Network panel (D807): the lossy link chosen, Plaza played, its
+        # client over QUIC at 150 ms with loss, the server's traffic read
+        # and shown while the panel is.
+        add_test(NAME studio_shows_network
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @Network "@Lossy link"
+                         "until=studio_said,status=\"Lossy link" @Assets @gate.scene @Play until=studio_previewing
+                         @Network "until=studio_said,status=\"network: server at tick" wait=3 @Stop
+                         until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_shows_network PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_played\"[^\n]*\"link\":\"Lossy link\",\"networkReads\":[2-9][0-9]*,\"connections\":[1-9],.*\"latencyMs\":150,\"jitterMs\":30,\"lossPpm\":50000,")
+        # Paused and stepped (D806): Plaza played from Studio, its World
+        # paused on its server, stepped three ticks one by one, each a tick
+        # on, and let run again.
+        add_test(NAME studio_pauses
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
+                         @Game "@Pause  F6" "until=studio_said,status=\"paused at tick" wait=1
+                         @Game "@Step  F7" "until=studio_said,status=\"stepped from tick" wait=1
+                         @Game "@Step  F7" "until=studio_said,status=\"stepped from tick" wait=1
+                         @Game "@Step  F7" "until=studio_said,status=\"stepped from tick" wait=1
+                         @Game "@Pause  F6" "until=studio_said,status=\"running from tick" @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_pauses PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_played\"[^\n]*\"paused\":false,\"pauses\":2,\"steps\":3,[^\n]*\"ranPaused\":3,")
+        # Two players (D804): Plaza played from Studio with two chosen in the
+        # Game menu, the second client joining from its own window, the
+        # server holding both at once.
+        add_test(NAME studio_plays_two
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @Game "@Two players"
+                         "until=studio_said,status=\"2 players" @gate.scene @Play until=studio_previewing wait=10
+                         @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_plays_two PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             PROCESSORS 4
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_played\"[^\n]*\"players\":2,\"othersStarted\":1.*\"code\":\"server_summary\"[^\n]*\"mostConnections\":[2-9],")
         # A view mode (D794): Plaza played in the viewport and drawn unlit
         # from the View menu, which its client's preview takes.
         add_test(NAME studio_view_modes
