@@ -28,6 +28,13 @@ else
     cat "$6" >"$work/client.conf"
 fi
 printf 'window.width = 560\nwindow.height = 360\nwindow.x = 700\nwindow.y = 340\n' >>"$work/client.conf"
+# A played client that falls behind keeps playing: under a full check's
+# crowd a sanitized one ran thirty seconds behind and stopped itself as
+# overloaded before Studio read its server, which then held no connection
+# (D825). A client's settings that say their own limit keep it.
+if ! grep -q '^world.overload_ms' "$work/client.conf"; then
+    echo "world.overload_ms = 0" >>"$work/client.conf"
+fi
 cat >"$work/studio.conf" <<CONF
 host.maximum_iterations = 36000
 host.iteration_rate = 120
