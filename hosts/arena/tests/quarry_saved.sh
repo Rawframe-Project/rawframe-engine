@@ -30,6 +30,9 @@ bots.endpoint = arena
 save.directory = $work/saves
 save.namespace = 71756172727900000000000000000001
 world.overload_ms = 0
+# Saves kept as it stops are synced to a disk a loaded machine shares
+# (D810).
+host.shutdown_budget_ms = 30000
 CONF
 cat >"$work/server.conf" <<CONF
 host.maximum_iterations = 120
@@ -40,6 +43,9 @@ kest.game = $here/games/quarry/quarry.game
 save.directory = $work/saves
 save.namespace = 71756172727900000000000000000001
 world.overload_ms = 0
+# Saves kept as it stops are synced to a disk a loaded machine shares
+# (D810).
+host.shutdown_budget_ms = 30000
 CONF
 
 # A record a run's log must hold, or which it lacked and the log's end:

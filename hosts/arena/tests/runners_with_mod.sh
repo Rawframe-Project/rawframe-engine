@@ -10,7 +10,9 @@
 # mod is refused without it, naming the mod removed (D197).
 #
 # usage: runners_with_mod.sh <rawframe-arena> <rawframe-cook> <rawframe-build> <repository> <work directory>
-set -euo pipefail
+# errtrace too: the trap below is a function's as well, where a run that
+# failed inside `run` once ended the script without a word (D810).
+set -Eeuo pipefail
 
 arena=$1
 cook=$2
@@ -113,6 +115,10 @@ ${3:-}
 # ticks (D516, D569): stopped as overloaded, the script ends before it.
 world.degraded_ms = 600000
 world.overload_ms = 0
+# Nor how fast its disk syncs: nine saves kept as it stopped took 5.1 s
+# under a full check and another session's builds, past the default
+# budget, and the run ended as a shutdown timeout (D615's cause; D810).
+host.shutdown_budget_ms = 30000
 CONF
     (cd "$work/elsewhere" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson" 2>"$work/errors.txt")
 }

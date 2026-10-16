@@ -35,6 +35,9 @@ save.namespace = 72756e6e657273000000000000000001
 # ticks (D516, D569): stopped as overloaded, the script ends before it.
 world.degraded_ms = 600000
 world.overload_ms = 0
+# Saves kept as it stops are synced to a disk a loaded machine shares
+# (D810).
+host.shutdown_budget_ms = 30000
 CONF
 
 # Each player's shots as kept, after checking the save and its slot.
