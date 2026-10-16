@@ -168,6 +168,9 @@ result::Result<Query> queryOf(const Value& value) {
     if (kIndex == kChanging + 8) {
         return Query{ReadData{}};
     }
+    if (kIndex == kChanging + 9) {
+        return Query{ReadLines{}};
+    }
     if (kIndex == kChanging + 2) {
         const std::string* named = textOf(value.find("named"));
         const Value* having = value.find("having");
@@ -207,6 +210,21 @@ result::Result<Operation> operationOf(const Value& value) {
             return kBad();
         }
         return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
+    }
+    if (kIndex == 31 || kIndex == 32) {
+        // A line document's line by its place (D817), set, taken away, or
+        // put in.
+        const std::optional<std::size_t> kLine = placeOf(value.find("line"));
+        const Value& given = *value.find("text");
+        const std::string* lineText = textOf(&given);
+        if (!kLine.has_value() || (lineText == nullptr && (kIndex == 32 || !given.isNull()))) {
+            return kBad();
+        }
+        if (kIndex == 32) {
+            return Operation{InsertLine{.line = *kLine, .text = *lineText}};
+        }
+        return Operation{SetLine{.line = *kLine,
+                                 .text = lineText != nullptr ? std::optional<std::string>{*lineText} : std::nullopt}};
     }
     if (kIndex == 30) {
         // A data document's value at a path (D811), read where it is kept.

@@ -334,6 +334,20 @@ struct SetDataValue {
     std::optional<document::Value> value;
 };
 
+/// A line document's line at `line`, from nought (D817), set to `text`,
+/// or taken away for none: a game description's, read by its game's
+/// reader before it is kept.
+struct SetLine {
+    std::size_t line = 0;
+    std::optional<std::string> text;
+};
+/// `text` put in a line document before its line at `line`, or after its
+/// last for one past it (D817).
+struct InsertLine {
+    std::size_t line = 0;
+    std::string text;
+};
+
 using Operation = std::variant<CreateEntity,
                                DestroyEntity,
                                RenameEntity,
@@ -364,13 +378,15 @@ using Operation = std::variant<CreateEntity,
                                RemoveMaterialNode,
                                SetMaterialInterfaceInput,
                                SetMaterialSwitch,
-                               SetDataValue>;
+                               SetDataValue,
+                               SetLine,
+                               InsertLine>;
 
 /// Whether `operation` changes a scene, rather than a style sheet (D636), a
 /// UI document (D641), or a material instance (D721), which follow the
 /// scene's in `Operation`.
 [[nodiscard]] constexpr bool changesScene(const Operation& operation) noexcept {
-    return operation.index() < std::variant_size_v<Operation> - 17;
+    return operation.index() < std::variant_size_v<Operation> - 19;
 }
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the
@@ -401,6 +417,8 @@ struct ReadMaterialGraph {};
 struct ListMaterialNodeTypes {};
 /// A data document read whole (D811).
 struct ReadData {};
+/// A line document's lines (D817).
+struct ReadLines {};
 
 using Query = std::variant<ListEntities,
                            ReadEntity,
@@ -410,7 +428,8 @@ using Query = std::variant<ListEntities,
                            ReadMaterialInstance,
                            ReadMaterialGraph,
                            ListMaterialNodeTypes,
-                           ReadData>;
+                           ReadData,
+                           ReadLines>;
 
 /// SPEC-0040's history classes: every operation that changes a scene is
 /// `Undoable`, and every query `ReadOnly`.
