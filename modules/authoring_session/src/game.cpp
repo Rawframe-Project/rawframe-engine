@@ -86,7 +86,8 @@ result::Result<authoring::ComponentCatalog> catalogOf(const rawframe::world_kest
                                           .name = component.name,
                                           .mark = kLayout->mark,
                                           .fields = {},
-                                          .uiNode = rawframe::world_kest::ofEngineType(component, "rawframe.ui.Node")};
+                                          .uiNode = rawframe::world_kest::ofEngineType(component, "rawframe.ui.Node"),
+                                          .type = component.kestType};
         std::vector<std::string> references;
         for (const rawframe::world_kest::GameEntityField& field : game.entityFields) {
             if (field.component == component.name) {

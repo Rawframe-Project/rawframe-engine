@@ -93,6 +93,9 @@ struct ComponentSchema {
     /// Of `rawframe.ui.Node`: a node of the game's UI document may be it
     /// (D672).
     bool uiNode = false;
+    /// The Kest type the game declares it of, as its line names it, so a
+    /// tool finds a game's sun or sky by the engine's type (D834).
+    std::string type;
 };
 
 class ComponentCatalog {

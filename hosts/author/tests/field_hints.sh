@@ -39,7 +39,9 @@ assert fountain("colorStart").get("color") is True and fountain("colorEnd").get(
 assert fountain("spread")["unit"] == "rad" and fountain("spread")["least"] == 0 and fountain("spread")["most"] > 3.14
 assert fountain("lifetime")["unit"] == "s" and fountain("variation")["most"] == 1
 assert fountain("material")["asset"] == "material" and "unit" not in fountain("seed")
-print("an emitter hinted: its colors, its spread 0 to pi rad, its material an asset")
+# Each component says the Kest type the game declares it of (D834).
+assert fields and next(c for c in described["components"] if c["name"] == "plaza.sky")["type"] == "rawframe.model.Sky"
+print("an emitter hinted: its colors, its spread 0 to pi rad, its material an asset; the sky a Sky")
 PY
 # The game names its layers on the engine's layer field (D788).
 cp -R "$work/hinted" "$work/layered"
