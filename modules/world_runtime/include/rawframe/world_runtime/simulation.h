@@ -67,6 +67,16 @@ public:
     /// Runs no tick at or past `limit` until the limit moves or is lifted, so
     /// something can happen at an exact tick between two of them.
     virtual void holdAt(std::optional<world::TickIndex> limit) noexcept = 0;
+    /// Pauses the World or lets it run again (D806). Paused, it runs no tick
+    /// but those stepped, and the time it stands is not owed, so it does not
+    /// hurry once let go; steps not yet run are dropped when it is.
+    virtual void pause(bool paused) noexcept = 0;
+    [[nodiscard]] virtual bool paused() const noexcept = 0;
+    /// While paused, `ticks` more to run, as many each Host iteration as a
+    /// running World catches up at most; nothing while running.
+    virtual void step(std::uint32_t ticks) noexcept = 0;
+    /// Stepped ticks not yet run.
+    [[nodiscard]] virtual std::uint32_t stepsLeft() const noexcept = 0;
     /// Time the World stood still on purpose inside a tick, a debugger's
     /// breakpoint holding it (D492): owed no ticks, so carrying on runs the
     /// game from where it stood, not ahead to catch up; nor is it behind.

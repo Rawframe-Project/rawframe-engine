@@ -145,6 +145,26 @@ public:
         hold_ = limit;
     }
 
+    void pause(bool paused) noexcept override {
+        if (paused_ && !paused) {
+            steps_ = 0;
+        }
+        paused_ = paused;
+    }
+    bool paused() const noexcept override {
+        return paused_;
+    }
+    void step(std::uint32_t ticks) noexcept override {
+        // Bounded, however many times it is asked: an hour at 60 a second.
+        constexpr std::uint32_t kMostSteps = 216'000;
+        if (paused_) {
+            steps_ = std::min(kMostSteps, steps_ + std::min(ticks, kMostSteps));
+        }
+    }
+    std::uint32_t stepsLeft() const noexcept override {
+        return steps_;
+    }
+
     result::Status start(composition::ParticipantContext& context) noexcept override {
         started_ = true;
         context_ = &context;
@@ -178,7 +198,16 @@ public:
         if (!running_) {
             return;
         }
-        const world::TickPacer::Due kDue = pacer_->due(frame.now);
+        // Paused (D806): the time since the last iteration excused, as a
+        // breakpoint's is, and only stepped ticks run, outside the pacer's
+        // count, so the World neither hurries nor waits once let go.
+        if (paused_ && lastFrame_.has_value()) {
+            pacer_->excuse(frame.now - *lastFrame_);
+        }
+        lastFrame_ = frame.now;
+        const world::TickPacer::Due kDue =
+            paused_ ? world::TickPacer::Due{.run = std::min(steps_, settings_.maximumTicksPerIteration)}
+                    : pacer_->due(frame.now);
         for (std::uint32_t index = 0; index < kDue.run && running_ && (!hold_ || tick_ < *hold_); ++index) {
             const execution::MonotonicInstant kStart = clock_->now();
             auto report = schedule_->runTick(*world_, tick_, settings_.rate, emitter_);
@@ -212,7 +241,11 @@ public:
                               diagnostics::field("errorClass", result::describe(failure.error.errorClass())),
                               diagnostics::field("context", std::string_view{context})});
             }
-            pacer_->ran(1);
+            if (paused_) {
+                --steps_;
+            } else {
+                pacer_->ran(1);
+            }
         }
         if (kDue.debt != 0) {
             emitter_.gauge(kTickDebt, diagnostics::Unit::Count, static_cast<double>(kDue.debt));
@@ -303,6 +336,11 @@ private:
     std::optional<world::TickPacer> pacer_;
     world::TickIndex tick_;
     std::uint64_t generation_ = 0;
+    /// Paused, the ticks stepped and not yet run, and when the last
+    /// iteration was (D806).
+    bool paused_ = false;
+    std::uint32_t steps_ = 0;
+    std::optional<execution::MonotonicInstant> lastFrame_;
     std::optional<world::TickIndex> hold_;
     composition::ParticipantContext* context_ = nullptr;
     diagnostics::Emitter emitter_;

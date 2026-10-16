@@ -258,6 +258,57 @@ RAWFRAME_TEST(TimeAWorldStoodStillForIsNotOwed) {
     movement = nullptr;
 }
 
+RAWFRAME_TEST(APausedWorldRunsOnlyItsStepsAndDoesNotHurryAfter) {
+    // Paused for two seconds (D806): no tick runs but the three stepped,
+    // one an iteration at this catch-up, and nothing is owed for the time
+    // it stood, so once let run it runs a tick a tenth of a second.
+    const auto kPlan = plan();
+    RAWFRAME_EXPECT(kPlan.has_value());
+    const auto kConfiguration =
+        composition::Configuration::parse("world.tick_rate = 10\nworld.maximum_ticks_per_iteration = 1\n");
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{*kPlan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
+    RAWFRAME_EXPECT(composition.start().has_value());
+    std::uint64_t iteration = 0;
+    iterate(composition, iteration++, clock.now());
+    world_runtime::Simulation& simulation = movement->simulation();
+    simulation.step(2);
+    RAWFRAME_EXPECT(simulation.stepsLeft() == 0);
+    simulation.pause(true);
+    const world::TickIndex kPaused = simulation.tick();
+    for (int round = 0; round < 10; ++round) {
+        clock.advance(MonotonicDuration::fromMilliseconds(200));
+        iterate(composition, iteration++, clock.now());
+    }
+    RAWFRAME_EXPECT(simulation.paused() && simulation.tick() == kPaused &&
+                    composition.health().health == composition::Health::Healthy);
+    simulation.step(3);
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(simulation.tick() == world::TickIndex{kPaused.value + 1} && simulation.stepsLeft() == 2);
+    iterate(composition, iteration++, clock.now());
+    iterate(composition, iteration++, clock.now());
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(simulation.tick() == world::TickIndex{kPaused.value + 3} && simulation.stepsLeft() == 0);
+    // Steps asked and not run are dropped as it runs again.
+    simulation.step(5);
+    simulation.pause(false);
+    RAWFRAME_EXPECT(simulation.stepsLeft() == 0);
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(simulation.tick() == world::TickIndex{kPaused.value + 3});
+    clock.advance(MonotonicDuration::fromMilliseconds(100));
+    iterate(composition, iteration++, clock.now());
+    RAWFRAME_EXPECT(simulation.tick() == world::TickIndex{kPaused.value + 4} &&
+                    composition.health().health == composition::Health::Healthy);
+    composition.stop();
+    movement = nullptr;
+}
+
 RAWFRAME_TEST(SpecThresholdsDegradeAndOverloadAWorldSooner) {
     // SPEC-0013's canonical thresholds (D212): 100 ms behind is degraded,
     // and 500 ms behind is overloaded at once, however briefly.
