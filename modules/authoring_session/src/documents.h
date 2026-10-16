@@ -38,6 +38,14 @@ public:
               authoring::DocumentReader reads)
         : root_(std::move(root)), extension_(extension), called_(called), reads_(reads) {
     }
+    // Moved, never copied: an open document is its own. Said outright, so
+    // a vector of these grows by moving them where a library would copy
+    // (MSVC's does, and an open document cannot be copied).
+    Documents(Documents&&) = default;
+    Documents& operator=(Documents&&) = default;
+    Documents(const Documents&) = delete;
+    Documents& operator=(const Documents&) = delete;
+    ~Documents() = default;
 
     /// Whether a record's document is one of these.
     [[nodiscard]] bool names(std::string_view document) const noexcept {
