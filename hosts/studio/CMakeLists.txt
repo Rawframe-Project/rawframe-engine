@@ -821,7 +821,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "found Console at.*found Server at.*found Server at.*found Problems only at.*\"code\":\"studio_summary\"[^\n]*\"played\":1,[^\n]*\"consoleLines\":[2-9][0-9]+,.*\"exit\":\"clean_stop\"")
+                             "found Console at.*found Server at.*found Server at.*found Problems only at.*\"code\":\"studio_summary\"[^\n]*\"played\":1,[^\n]*\"consoleLines\":([2-9][0-9]|[1-9][0-9][0-9]+),.*\"exit\":\"clean_stop\"")
         # Stalls played from Studio with its UI document edited as it plays
         # (D761): the document chosen, the game played, and once the played
         # client's UI is up (its log says what navigation reaches), the
