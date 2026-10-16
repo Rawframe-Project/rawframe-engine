@@ -414,7 +414,9 @@ def main():
             # loaded the machine is (D815).
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
             x.XFlush(display)
-            time.sleep(0.5)
+            # Where the press comes seen in a frame before it, or a loaded
+            # Studio found the last drag's end there (D826).
+            time.sleep(stretched(0.5))
             # A key held through the drag, Shift_L or Control_L (D463).
             held = x.XKeysymToKeycode(display, x.XStringToKeysym(text[3].encode())) if text[3] else 0
             if held:
@@ -438,7 +440,7 @@ def main():
                 x.XFlush(display)
             print(f"{'orbited' if text[4] == 3 else 'dragged'} from {at},{y} to {text[1]},{text[2]}"
                   f"{' holding ' + text[3] if text[3] else ''}")
-            time.sleep(1)
+            time.sleep(stretched(1))
             continue
         if isinstance(text, tuple):
             # Up to three minutes for the record, however loaded the machine,
