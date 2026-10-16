@@ -248,6 +248,42 @@ std::optional<view::Ray> WindowHost::previewRay(float x, float y) const {
     return kRay.has_value() ? std::optional<view::Ray>{*kRay} : std::nullopt;
 }
 
+bool WindowHost::asFinger(window::Event& event) noexcept {
+    // One finger, its id as a platform's are: stable from down to up.
+    constexpr std::uint64_t kFinger = 1;
+    switch (event.kind) {
+    case window::EventKind::ButtonDown:
+    case window::EventKind::ButtonUp:
+        if (event.pointer.button != window::MouseButton::Left) {
+            return false;
+        }
+        fingerDown_ = event.kind == window::EventKind::ButtonDown;
+        event.touch = window::Touch{.id = kFinger, .position = event.pointer.position};
+        event.kind = fingerDown_ ? window::EventKind::TouchDown : window::EventKind::TouchUp;
+        return true;
+    case window::EventKind::CursorMoved:
+        if (!fingerDown_) {
+            return false;
+        }
+        event.touch = window::Touch{.id = kFinger, .position = event.pointer.position};
+        event.kind = window::EventKind::TouchMoved;
+        return true;
+    case window::EventKind::CursorLeft:
+        if (!fingerDown_) {
+            return false;
+        }
+        fingerDown_ = false;
+        event.touch = window::Touch{.id = kFinger};
+        event.kind = window::EventKind::TouchCancelled;
+        return true;
+    case window::EventKind::CursorEntered:
+    case window::EventKind::Wheel:
+        return false;
+    default:
+        return true;
+    }
+}
+
 bool WindowHost::forwarded(const window::Event& event) {
     if (!forwarding_.area().has_value()) {
         forwardedPress_ = false;
@@ -361,6 +397,8 @@ result::Status WindowHost::start(window::Windows& windows) {
         // none keeps one lying there from moving them, or a test keeps the
         // pads another program made (D467).
         RAWFRAME_TRY_ASSIGN(gamepads_, kConfiguration->truth("input.gamepads", true));
+        // A game made for touch tried with a mouse (D809).
+        RAWFRAME_TRY_ASSIGN(touchFromMouse_, kConfiguration->truth("input.touch_from_mouse", false));
         // A player who plays on the whole screen (D523).
         RAWFRAME_TRY_ASSIGN(const bool kFullscreen, kConfiguration->truth("window.fullscreen", false));
         if (kFullscreen) {
@@ -453,6 +491,9 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         }
         // What lands on an editor's viewport is the game's it shows.
         if (forwarded(*event)) {
+            continue;
+        }
+        if (touchFromMouse_ && !asFinger(*event)) {
             continue;
         }
         closing = closing || event->kind == window::EventKind::CloseRequested;

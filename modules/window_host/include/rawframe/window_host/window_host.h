@@ -135,6 +135,13 @@ private:
     /// Whether the players' gamepads play: `input.gamepads`, true unless
     /// told false (D467).
     bool gamepads_ = true;
+    /// Whether the mouse is played as a finger, `input.touch_from_mouse`,
+    /// and whether that finger touches (D809).
+    bool touchFromMouse_ = false;
+    bool fingerDown_ = false;
+    /// `event` made a finger's where the mouse plays one; whether it is
+    /// still acted on, a touch screen having no hover or other buttons.
+    bool asFinger(window::Event& event) noexcept;
     /// Where the pointer was while the right button is held in a preview,
     /// so its moves orbit the preview's view (D469); none while it is not.
     std::optional<std::array<float, 2>> orbiting_;
