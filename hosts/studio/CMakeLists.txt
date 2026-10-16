@@ -685,6 +685,18 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # A game's UI document edited in Studio (D643): Stalls' listed after its
     # sheet and chosen, its purse's width typed, its tip deleted, and the
     # delete undone, so the document is written with the width.
+    # A UI document laid out as its game would show it (D832): Tycoon's
+    # ten nodes on a screen in the center, its sign pressed there and its
+    # row chosen, its width typed, and the screen laid out again.
+    add_test(NAME studio_ui_preview
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/tycoon/tycoon.game tycoon.ui @tycoon.ui "@tycoon.sign preview" "@widthOffset#2:300" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_ui_preview PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "found tycoon.sign preview at [0-9]+,[0-9]+.*typed 300 at.*tycoon.ui written: yes.*\"code\":\"studio_ui_preview\"[^\n]*\"nodes\":10,\"laid\":10,\"pressable\":10,\"classes\":[1-9][0-9]*}.*\"code\":\"studio_ui_preview\"[^\n]*\"nodes\":10,.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"tycoon.ui\",[^\n]*\"entity\":\"tycoon.sign\",[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
     add_test(NAME studio_ui
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>

@@ -222,6 +222,9 @@ void ShellParticipant::showUi() {
         }
     };
     kList(kList, sheet_.has_value() ? sheet_->find("nodes") : nullptr, 0);
+    if (sheet_.has_value()) {
+        showUiPreview(*sheet_);
+    }
 }
 
 void ShellParticipant::showNode(std::size_t at) {
@@ -239,6 +242,7 @@ void ShellParticipant::showNode(std::size_t at) {
     clear(componentRows_);
     actions_.clear();
     components_ = 0;
+    markUiPreview();
     const Value* chosen = nodeOf(sheet_.has_value() ? sheet_->find("nodes") : nullptr, entity_);
     if (chosen == nullptr) {
         return;

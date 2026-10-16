@@ -557,14 +557,15 @@ private:
     /// column, read whole (`data.read`); one of them, its values each a
     /// field; and a value set through `data.set` (D812).
     void showData();
-    /// A graph's nodes laid out in the center, columns by how far wires run
-    /// into them, its wires drawn between them (D819): `nodes` the graph's
-    /// object of nodes by id, `prefix` what each id is among the rows'
-    /// entities. A node pressed is its row pressed; the chosen one marked.
+    /// A graph's nodes laid out in the center by how far wires run into
+    /// them, wires drawn (D819); `prefix` what each node id is among the
+    /// rows' entities. A node pressed is its row pressed.
     void showCanvas(const Value& nodes, const std::string& prefix);
-    /// A clip's tracks, events, and sync markers as lanes over its time,
-    /// each key a mark at its time standing for its row (D827).
+    /// A clip's lanes (D827), a UI document laid out (D832): parts as rows.
     void showTimeline(const Value& clip);
+    void showUiPreview(const Value& document);
+    void markUiPreview();
+    void forgetUiPreview();
     [[nodiscard]] std::optional<std::size_t> canvasEntityOf(ui::Node node) const;
     void markCanvas();
     void showDataEntry(std::size_t at);

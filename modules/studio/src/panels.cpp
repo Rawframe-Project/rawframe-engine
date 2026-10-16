@@ -401,6 +401,7 @@ void ShellParticipant::showScene(std::size_t at) {
             viewFields_.clear();
             held_.canvasParts.clear();
             held_.canvasBoxes.clear();
+            forgetUiPreview();
             showHistoryList();
         } else {
             showView();
@@ -781,6 +782,7 @@ void ShellParticipant::showView() {
     viewFields_.clear();
     held_.canvasParts.clear();
     held_.canvasBoxes.clear();
+    forgetUiPreview();
     auto heading = row(centerColumn_, "View", kQuiet, kPanel);
     if (!heading.has_value()) {
         return;

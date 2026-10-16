@@ -2,7 +2,7 @@
 
 // What Studio's document editors keep between frames (D812, D818, D819,
 // D827): the kinds of document listed with the scenes, and what the data,
-// settings, graph, and clip editors last read and laid out.
+// settings, graph, clip, and UI editors last read and laid out.
 
 #include "rawframe/diagnostics/identity.h"
 #include "rawframe/document/json.h"
@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -19,6 +20,8 @@ namespace rawframe::studio {
 /// A graph laid out on the canvas (D819), a clip on its timeline (D827).
 inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canvas"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
+/// A UI document laid out as its game would show it (D832).
+inline constexpr diagnostics::EventIdentity kUiPreviewShown{"studio", "studio_ui_preview"};
 
 /// What each document listed with the scenes is (D637, D643, D722, D730,
 /// D812, D818).
@@ -45,6 +48,12 @@ struct EditorsHeld {
     /// nodes' or keys' boxes (D819, D827).
     std::vector<std::pair<ui::Node, std::size_t>> canvasParts;
     std::vector<std::pair<ui::Node, std::size_t>> canvasBoxes;
+    /// A UI document's preview: each node's box and its row, and the frame
+    /// laid over the chosen one (D832).
+    std::vector<std::pair<ui::Node, std::size_t>> previewBoxes;
+    std::optional<ui::Node> previewFrame;
+    /// The game's classes made in Studio's tree for the preview.
+    std::vector<ui::Style> previewStyles;
 };
 
 } // namespace rawframe::studio
