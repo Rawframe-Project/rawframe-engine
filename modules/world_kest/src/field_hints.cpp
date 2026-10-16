@@ -16,7 +16,8 @@ namespace {
 /// The engine's hints for its own types' fields, where a game declares a
 /// component of one: a color is a color wherever it is, and a body's motion
 /// and shape are named as rawframe.physics2d and rawframe.physics3d name
-/// them.
+/// them, and a particle emitter's, a trail's, and a beam's fields are in
+/// the units model.kest gives them.
 struct EngineHint {
     std::string_view type;
     std::string_view field;
@@ -35,7 +36,7 @@ constexpr std::array<std::pair<std::int64_t, std::string_view>, 3> kShapes2d{
 constexpr std::array<std::pair<std::int64_t, std::string_view>, 5> kShapes3d{
     {{0, "sphere"}, {1, "box"}, {2, "capsule"}, {3, "cylinder"}, {4, "mesh"}}};
 
-const std::array<EngineHint, 24> kEngineHints{{
+const std::array<EngineHint, 61> kEngineHints{{
     {.type = "rawframe.canvas.Sprite", .field = "color", .color = true},
     {.type = "rawframe.canvas.Sprite", .field = "texture", .asset = "texture"},
     {.type = "rawframe.canvas.Sprite", .field = "material", .asset = "material"},
@@ -60,6 +61,45 @@ const std::array<EngineHint, 24> kEngineHints{{
     {.type = "rawframe.physics3d.Body3D", .field = "motion", .labels = kMotions},
     {.type = "rawframe.physics3d.Body3D", .field = "shape", .labels = kShapes3d},
     {.type = "rawframe.physics3d.Body3D", .field = "friction", .least = 0.0, .most = 1.0},
+    // An emitter's, a trail's, and a beam's (D831): what each field is
+    // measured in, as model.kest says it, and its colors and material.
+    {.type = "rawframe.model.ParticleEmitter", .field = "material", .asset = "material"},
+    {.type = "rawframe.model.ParticleEmitter", .field = "colorStart", .color = true},
+    {.type = "rawframe.model.ParticleEmitter", .field = "colorEnd", .color = true},
+    {.type = "rawframe.model.Trail", .field = "material", .asset = "material"},
+    {.type = "rawframe.model.Trail", .field = "colorStart", .color = true},
+    {.type = "rawframe.model.Trail", .field = "colorEnd", .color = true},
+    {.type = "rawframe.model.Beam", .field = "material", .asset = "material"},
+    {.type = "rawframe.model.Beam", .field = "colorStart", .color = true},
+    {.type = "rawframe.model.Beam", .field = "colorEnd", .color = true},
+    {.type = "rawframe.model.ParticleEmitter", .field = "rate", .unit = "1/s", .least = 0.0},
+    {.type = "rawframe.model.ParticleEmitter", .field = "lifetime", .unit = "s", .least = 0.0},
+    {.type = "rawframe.model.ParticleEmitter", .field = "speed", .unit = "m/s", .least = 0.0},
+    {.type = "rawframe.model.ParticleEmitter", .field = "spread", .unit = "rad", .least = 0.0, .most = 3.14159},
+    {.type = "rawframe.model.ParticleEmitter", .field = "radius", .unit = "m", .least = 0.0},
+    {.type = "rawframe.model.ParticleEmitter", .field = "sizeStart", .unit = "m", .least = 0.0},
+    {.type = "rawframe.model.ParticleEmitter", .field = "sizeEnd", .unit = "m", .least = 0.0},
+    {.type = "rawframe.model.ParticleEmitter", .field = "accelerationX", .unit = "m/s2"},
+    {.type = "rawframe.model.ParticleEmitter", .field = "accelerationY", .unit = "m/s2"},
+    {.type = "rawframe.model.ParticleEmitter", .field = "accelerationZ", .unit = "m/s2"},
+    {.type = "rawframe.model.ParticleEmitter", .field = "drag", .unit = "1/s", .least = 0.0},
+    {.type = "rawframe.model.ParticleEmitter", .field = "variation", .least = 0.0, .most = 1.0},
+    {.type = "rawframe.model.ParticleEmitter", .field = "inherit", .least = 0.0, .most = 1.0},
+    {.type = "rawframe.model.ParticleEmitter", .field = "streak", .unit = "s", .least = 0.0},
+    {.type = "rawframe.model.Trail", .field = "lifetime", .unit = "s", .least = 0.0},
+    {.type = "rawframe.model.Trail", .field = "spacing", .unit = "m", .least = 0.0},
+    {.type = "rawframe.model.Trail", .field = "widthStart", .unit = "m", .least = 0.0},
+    {.type = "rawframe.model.Trail", .field = "widthEnd", .unit = "m", .least = 0.0},
+    {.type = "rawframe.model.Beam", .field = "toX", .unit = "m"},
+    {.type = "rawframe.model.Beam", .field = "toY", .unit = "m"},
+    {.type = "rawframe.model.Beam", .field = "toZ", .unit = "m"},
+    {.type = "rawframe.model.Beam", .field = "bendX", .unit = "m"},
+    {.type = "rawframe.model.Beam", .field = "bendY", .unit = "m"},
+    {.type = "rawframe.model.Beam", .field = "bendZ", .unit = "m"},
+    {.type = "rawframe.model.Beam", .field = "widthStart", .unit = "m", .least = 0.0},
+    {.type = "rawframe.model.Beam", .field = "widthEnd", .unit = "m", .least = 0.0},
+    {.type = "rawframe.model.Beam", .field = "textureLength", .unit = "m", .least = 0.0},
+    {.type = "rawframe.model.Beam", .field = "textureSpeed", .unit = "1/s"},
 }};
 
 std::optional<std::int64_t> integerOf(std::string_view word) {

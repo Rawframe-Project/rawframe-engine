@@ -26,7 +26,7 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(author_field_hints PROPERTIES
                          PASS_REGULAR_EXPRESSION
-                         "hinted: side 4 to 100 m.*its mesh an asset.*layers named: ground, props.*refused: a range backwards.*refused: a field the component does not have.*refused: a color that is not an unsigned number.*refused: an asset of no kind there is")
+                         "hinted: side 4 to 100 m.*its mesh an asset.*an emitter hinted.*layers named: ground, props.*refused: a range backwards.*refused: a field the component does not have.*refused: a color that is not an unsigned number.*refused: an asset of no kind there is")
     # A scene of the runners game changed through requests: a new entity
     # with a body at a place, stale and failing requests refused whole, and
     # a dry run that writes nothing.

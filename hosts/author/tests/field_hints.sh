@@ -3,6 +3,7 @@
 # `field` lines and the engine's own hints in `rawframe-author describe`, a
 # line that does not read refused at its line, and one naming a field its
 # component does not have, or a color on a real number, refused by name.
+# And an emitter of Plaza's hinted as model.kest measures it (D831).
 # Run from the repository root.
 #
 #   field_hints.sh <rawframe-author>
@@ -25,6 +26,20 @@ assert fields[("starter.look", "color")].get("color") is True
 assert "unit" not in fields[("starter.look", "scaleX")]
 assert fields[("starter.look", "mesh")]["asset"] == "mesh"
 print("hinted: side 4 to 100 m, a box's look a color, its mesh an asset")
+PY
+# An emitter's fields as model.kest measures them, its colors colors, and
+# its material an asset (D831): Plaza's fountain.
+"$author" describe games/plaza/plaza.game >"$work/described"
+python3 - "$work/described" <<'PY'
+import json, sys
+described = json.load(open(sys.argv[1]))
+fields = {(c["name"], f["name"]): f for c in described["components"] for f in c["fields"]}
+fountain = lambda name: fields[("plaza.fountain", name)]
+assert fountain("colorStart").get("color") is True and fountain("colorEnd").get("color") is True
+assert fountain("spread")["unit"] == "rad" and fountain("spread")["least"] == 0 and fountain("spread")["most"] > 3.14
+assert fountain("lifetime")["unit"] == "s" and fountain("variation")["most"] == 1
+assert fountain("material")["asset"] == "material" and "unit" not in fountain("seed")
+print("an emitter hinted: its colors, its spread 0 to pi rad, its material an asset")
 PY
 # The game names its layers on the engine's layer field (D788).
 cp -R "$work/hinted" "$work/layered"
