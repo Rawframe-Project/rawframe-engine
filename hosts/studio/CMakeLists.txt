@@ -815,6 +815,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          "until=studio_said,status=\"paving.png: texture, cooked"
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_browses_assets PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"paving.png: texture, cooked.*\"code\":\"studio_assets\"[^\n]*\"sources\":[1-9][0-9]*,\"sourcesChosen\":2,\"narrowed\":1,\"chosen\":\"paving.png\",")
         # References (D803): Plaza cooked by Studio, the paving chosen in the
@@ -833,6 +834,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          "until=studio_said,status=\"plaza.game: "
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_shows_references PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"plaza.game: .*\"code\":\"studio_assets\"[^\n]*\"referencesShown\":2,")
         # Files dropped from outside (D802): a picture dropped on Studio's
@@ -849,6 +851,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          "until=studio_said,status=\"stone.png: texture"
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_imports_dropped PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "dropped [^\n]*stone.png at [0-9]+,[0-9]+: finished.*saw studio_said,status=\"stone.png: texture.*\"code\":\"studio_assets\"[^\n]*\"dropped\":1,\"droppedImported\":1")
         # Thumbnails (D801): Plaza cooked by Studio, its textures shown in the
@@ -864,6 +867,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          "until=studio_said,status=\"64 pixel thumbnails" wait=2
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_shows_thumbnails PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"64 pixel thumbnails.*\"code\":\"studio_assets\"[^\n]*\"thumbnail\":64,\"thumbnailsMade\":[1-9]")
         # Import settings (D800): Plaza's paving chosen in the browser, its
@@ -881,6 +885,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          @Reimport "until=studio_said,status=\"cooked "
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_sets_import_settings PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"cooked .*\"code\":\"studio_assets\"[^\n]*\"settingsSet\":1,\"settingsRefused\":0")
         # As a phone (D809): Plaza played from Studio as a phone, its client
