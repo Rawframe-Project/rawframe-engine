@@ -392,8 +392,11 @@ def main():
             time.sleep(1)
             continue
         if isinstance(text, tuple) and text[0] == "drag":
-            # Pressed at the point, carried to the other in ten steps a
-            # twentieth of a second apart, and let go there (D457).
+            # Pressed at the point, held a second, carried to the other in
+            # ten steps a tenth of a second apart, held a second, and let go
+            # there (D457): a played game drawing a frame a second on a
+            # loaded machine sees the press, the motion, and the release
+            # in frames of their own (D814).
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
             x.XFlush(display)
             time.sleep(0.5)
@@ -405,12 +408,13 @@ def main():
                 time.sleep(0.2)
             xtest.XTestFakeButtonEvent(display, text[4], 1, 0)
             x.XFlush(display)
+            time.sleep(1)
             for step in range(1, 11):
-                time.sleep(0.05)
+                time.sleep(0.1)
                 xtest.XTestFakeMotionEvent(display, -1, at + (text[1] - at) * step // 10,
                                            y + (text[2] - y) * step // 10, 0)
                 x.XFlush(display)
-            time.sleep(0.2)
+            time.sleep(1)
             xtest.XTestFakeButtonEvent(display, text[4], 0, 0)
             x.XFlush(display)
             if held:
