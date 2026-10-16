@@ -1330,5 +1330,11 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set_tests_properties(studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza
                              studio_snaps_plaza studio_looks_plaza studio_rings_plaza studio_raises_plaza
                              studio_turns_plaza PROPERTIES LABELS "window;studio;gesture")
+        # A gesture played into Plaza is read as frames come: each holds six
+        # processors, as the arena's bot tests do, so the fast check does not
+        # lay them over one another and the other played tests (D821).
+        set_tests_properties(studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza
+                             studio_snaps_plaza studio_looks_plaza studio_rings_plaza studio_raises_plaza
+                             studio_turns_plaza PROPERTIES PROCESSORS 6)
     endif()
 endif()
