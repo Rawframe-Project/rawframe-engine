@@ -189,10 +189,16 @@ bool ShellParticipant::openGame() {
     }
     // The game's style sheets after its scenes, then its UI documents,
     // edited as they are (D637, D643), then its materials, instances
-    // (D722) and graphs (D730), each a kind of its own.
+    // (D722) and graphs (D730), each a kind of its own, then its data
+    // documents, edited value by value (D812).
     for (const auto& [kKind, kExtension] : {std::pair{Listed::Sheet, ".styles"},
                                             std::pair{Listed::Ui, ".ui"},
-                                            std::pair{Listed::Material, ".rfmaterial"}}) {
+                                            std::pair{Listed::Material, ".rfmaterial"},
+                                            std::pair{Listed::Data, ".actions"},
+                                            std::pair{Listed::Data, ".mixer"},
+                                            std::pair{Listed::Data, ".strings"},
+                                            std::pair{Listed::Data, ".translations"},
+                                            std::pair{Listed::Data, ".rfanim"}}) {
         for (const std::filesystem::path& kFile : authoring_session::filesBeside(description_, kExtension)) {
             const bool kGraph =
                 kKind == Listed::Material && !material::namesBase(authoring_session::readFile(kFile).value_or(""));

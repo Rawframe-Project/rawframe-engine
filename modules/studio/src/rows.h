@@ -50,7 +50,10 @@ struct FieldRow {
         Shortcut,
         Editor,
         /// A chosen source's import setting, `field` its name (D800).
-        ImportSetting
+        ImportSetting,
+        /// A data document's value, `field` its path, `kind` "string" for
+        /// text or "json" (D812).
+        DataValue
     };
     ui::Node value{};
     Role role = Role::Field;

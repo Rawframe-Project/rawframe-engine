@@ -349,7 +349,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         }
         if (moving && uiChosen()) {
             moveNodeInto(entities_[static_cast<std::size_t>(kEntity - entityRows_.begin())]);
-        } else if (!sheetChosen() && !uiChosen() && !materialChosen() && !graphChosen()) {
+        } else if (!documentChosen()) {
             // A scene's entities are chosen one or several at a time (D787).
             chooseEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
         } else {
@@ -499,6 +499,10 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
     }
     if (row.role == FieldRow::Role::ImportSetting) {
         setImportSetting(row, text);
+        return;
+    }
+    if (row.role == FieldRow::Role::DataValue) {
+        setDataValue(row, text);
         return;
     }
     if (row.role == FieldRow::Role::GraphParam || row.role == FieldRow::Role::GraphInput) {

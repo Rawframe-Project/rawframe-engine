@@ -528,9 +528,20 @@ private:
     [[nodiscard]] bool graphChosen() const noexcept {
         return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Graph;
     }
-    [[nodiscard]] bool documentChosen() const noexcept {
-        return sheetChosen() || uiChosen() || materialChosen() || graphChosen();
+    /// An action map, a mixer, a string table, its translations, or an
+    /// animation document (D812).
+    [[nodiscard]] bool dataChosen() const noexcept {
+        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Data;
     }
+    [[nodiscard]] bool documentChosen() const noexcept {
+        return sheetChosen() || uiChosen() || materialChosen() || graphChosen() || dataChosen();
+    }
+    /// The chosen data document's objects and keyed items in the entity
+    /// column, read whole (`data.read`); one of them, its values each a
+    /// field; and a value set through `data.set` (D812).
+    void showData();
+    void showDataEntry(std::size_t at);
+    void setDataValue(const FieldRow& row, const std::string& text);
     /// The chosen style sheet's classes in the entity column, read whole
     /// from the session (`styles.read_sheet`).
     void showSheet();
@@ -770,9 +781,14 @@ private:
         Ui,
         Material,
         Graph,
+        Data,
     };
     std::vector<Listed> listed_;
     std::optional<Value> sheet_;
+    /// What each entity row of a data document holds, as last read (D812),
+    /// and the most rows it lists.
+    std::vector<Value> dataHeld_;
+    static constexpr std::size_t kMostDataRows = 512;
     /// The node types a material graph may hold, each with its params and
     /// inputs, read once a graph is first shown (D732).
     std::optional<Value> nodeTypes_;
