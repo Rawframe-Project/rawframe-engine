@@ -128,12 +128,16 @@ if(RAWFRAME_BUILD_TESTS)
                          PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9],\"rollbacks\":[0-9][0-9]?,")
     # One bot predicts its own ship on Gale's sea (D685): hundreds of ticks
     # confirmed, a ship floated in Kest and resimulated alike, and its
-    # broadsides heard as it fires them (D686).
+    # broadsides heard as it fires them (D686). Its rollback bound is a
+    # real-time one, as Plaza's (D829): the thread tree's full check rolled
+    # back 107 times, so it plays alone, in the fast check (D835).
     add_test(NAME gale_prediction
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/gale_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(gale_prediction PROPERTIES
                          PROCESSORS 6
+                         LABELS alone
+                         RUN_SERIAL TRUE
                          PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9],\"rollbacks\":[0-9][0-9]?,[^\n]*\"effectsDelivered\":[1-9][0-9]*,")
     # Sixteen bots play the sample platformer: nine bodies of the level and
     # one runner for each player are made, and the runners move as
