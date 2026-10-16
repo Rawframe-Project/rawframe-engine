@@ -325,6 +325,15 @@ struct SetMaterialSwitch {
 /// `source`: a version 8 UUID from their SHA-256 (D156).
 [[nodiscard]] base::Bits128 instanceEntityId(base::Bits128 instance, base::Bits128 source) noexcept;
 
+/// A data document's value at `path` (D811), or none to take it away: an
+/// action map's, a mixer's, a string table's or its translations', or an
+/// animation graph's or clip's, read by its kind's reader before it is
+/// kept.
+struct SetDataValue {
+    std::string path;
+    std::optional<document::Value> value;
+};
+
 using Operation = std::variant<CreateEntity,
                                DestroyEntity,
                                RenameEntity,
@@ -354,13 +363,14 @@ using Operation = std::variant<CreateEntity,
                                CreateMaterialNode,
                                RemoveMaterialNode,
                                SetMaterialInterfaceInput,
-                               SetMaterialSwitch>;
+                               SetMaterialSwitch,
+                               SetDataValue>;
 
 /// Whether `operation` changes a scene, rather than a style sheet (D636), a
 /// UI document (D641), or a material instance (D721), which follow the
 /// scene's in `Operation`.
 [[nodiscard]] constexpr bool changesScene(const Operation& operation) noexcept {
-    return operation.index() < std::variant_size_v<Operation> - 16;
+    return operation.index() < std::variant_size_v<Operation> - 17;
 }
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the
@@ -389,6 +399,8 @@ struct ReadMaterialGraph {};
 /// The node types a material graph may hold and each one's params and
 /// inputs (D731, D732), as the material module lists them.
 struct ListMaterialNodeTypes {};
+/// A data document read whole (D811).
+struct ReadData {};
 
 using Query = std::variant<ListEntities,
                            ReadEntity,
@@ -397,7 +409,8 @@ using Query = std::variant<ListEntities,
                            ReadUiDocument,
                            ReadMaterialInstance,
                            ReadMaterialGraph,
-                           ListMaterialNodeTypes>;
+                           ListMaterialNodeTypes,
+                           ReadData>;
 
 /// SPEC-0040's history classes: every operation that changes a scene is
 /// `Undoable`, and every query `ReadOnly`.

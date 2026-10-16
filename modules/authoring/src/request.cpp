@@ -165,6 +165,9 @@ result::Result<Query> queryOf(const Value& value) {
     if (kIndex == kChanging + 7) {
         return Query{ListMaterialNodeTypes{}};
     }
+    if (kIndex == kChanging + 8) {
+        return Query{ReadData{}};
+    }
     if (kIndex == kChanging + 2) {
         const std::string* named = textOf(value.find("named"));
         const Value* having = value.find("having");
@@ -204,6 +207,16 @@ result::Result<Operation> operationOf(const Value& value) {
             return kBad();
         }
         return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
+    }
+    if (kIndex == 30) {
+        // A data document's value at a path (D811), read where it is kept.
+        const std::string* path = textOf(value.find("path"));
+        const Value& given = *value.find("value");
+        if (path == nullptr) {
+            return kBad();
+        }
+        return Operation{
+            SetDataValue{.path = *path, .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
     }
     if (kIndex == 28 || kIndex == 29) {
         // A material graph's interface input or switch, by its name (D729).

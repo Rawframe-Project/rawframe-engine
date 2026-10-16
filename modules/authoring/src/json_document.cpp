@@ -49,17 +49,21 @@ Value withMember(const Value& object,
                          (value->kind() == Value::Kind::Array && value->items().empty()));
     // A holder whose kind gives no order holds members of its own names, in
     // name order (an instance's overrides, D721).
+    // One that keeps its members as they stand takes a new one last (D811).
     std::vector<std::string> named;
-    if (order.empty()) {
+    const bool kAsHeld = order.size() == 1 && order.front() == kMembersAsHeld;
+    if (order.empty() || kAsHeld) {
         named.assign(object.names().begin(), object.names().end());
         if (std::ranges::find(named, name) == named.end()) {
             named.emplace_back(name);
         }
-        std::ranges::sort(named);
+        if (!kAsHeld) {
+            std::ranges::sort(named);
+        }
     }
     std::vector<std::string_view> owned{named.begin(), named.end()};
     Value made = Value::object();
-    for (const std::string_view kField : order.empty() ? std::span<const std::string_view>{owned} : order) {
+    for (const std::string_view kField : order.empty() || kAsHeld ? std::span<const std::string_view>{owned} : order) {
         if (kField == name) {
             if (value.has_value() && !kEmpty) {
                 made.add(std::string{kField}, *value);

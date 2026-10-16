@@ -48,6 +48,10 @@ struct JsonDelta {
     std::optional<document::Value> after;
 };
 
+/// The one name of an order that keeps an object's members as they stand,
+/// a new one last (a data document's, D811).
+inline constexpr std::string_view kMembersAsHeld = "*";
+
 /// An object's members in its document's order, by the path from the root
 /// to it (empty for the root, D729); none for an object whose members are
 /// names of its own, kept in name order (D721).

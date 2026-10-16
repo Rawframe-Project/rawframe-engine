@@ -39,6 +39,9 @@ constexpr std::array<InputDeclaration, 3> kRevertFieldInputs = {
 constexpr std::array<InputDeclaration, 2> kAddInstanceInputs = {
     {{"scene", InputType::Resource}, {"instance", InputType::Identity}}};
 
+constexpr std::array<InputDeclaration, 2> kDataInputs = {
+    {{"path", InputType::Text}, {"value", InputType::DocumentValue}}};
+
 constexpr std::array<InputDeclaration, 4> kStylePartInputs = {{{"style", InputType::Style},
                                                                {"variant", InputType::Text},
                                                                {"part", InputType::Text},
@@ -68,7 +71,7 @@ constexpr std::array<InputDeclaration, 2> kSwitchInputs = {
 constexpr std::array<InputDeclaration, 2> kRenameClassInputs = {
     {{"style", InputType::Style}, {"name", InputType::Text}}};
 
-constexpr std::array<OperationDeclaration, 38> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 40> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -99,6 +102,7 @@ constexpr std::array<OperationDeclaration, 38> kDeclarations = {{
     {.name = "materials.remove_node", .targets = "rawframe.material node", .inputs = kGraphNodeInputs},
     {.name = "materials.set_interface_input", .targets = "rawframe.material interface", .inputs = kOverrideInputs},
     {.name = "materials.set_interface_switch", .targets = "rawframe.material interface", .inputs = kSwitchInputs},
+    {.name = "data.set", .targets = "data value", .inputs = kDataInputs},
     {.name = "scene.list_entities", .history = HistoryClass::ReadOnly, .targets = "rawframe.scene", .inputs = {}},
     {.name = "scene.read_entity",
      .history = HistoryClass::ReadOnly,
@@ -122,6 +126,7 @@ constexpr std::array<OperationDeclaration, 38> kDeclarations = {{
      .history = HistoryClass::ReadOnly,
      .targets = "rawframe.material graph",
      .inputs = {}},
+    {.name = "data.read", .history = HistoryClass::ReadOnly, .targets = "data", .inputs = {}},
 }};
 static_assert(kDeclarations.size() == std::variant_size_v<Operation> + std::variant_size_v<Query>);
 
