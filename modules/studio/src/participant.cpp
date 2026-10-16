@@ -208,6 +208,15 @@ bool ShellParticipant::openGame() {
             listed_.push_back(kGraph ? Listed::Graph : kKind);
         }
     }
+    // Last, the game's own description, its settings (D818), where it is
+    // among the documents.
+    std::error_code error;
+    const std::string kSettings = std::filesystem::relative(description_, sceneRoot_, error).generic_string();
+    if (!error && !kSettings.empty() && !kSettings.starts_with("..")) {
+        scenes_.push_back(kSettings);
+        sceneSources_.emplace_back();
+        listed_.push_back(Listed::Settings);
+    }
     return true;
 }
 

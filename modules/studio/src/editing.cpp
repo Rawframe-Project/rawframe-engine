@@ -505,6 +505,14 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
         setDataValue(row, text);
         return;
     }
+    if (row.role == FieldRow::Role::SettingLine) {
+        setSettingLine(row, text);
+        return;
+    }
+    if (row.role == FieldRow::Role::NewSetting) {
+        putSettingLine(row, text);
+        return;
+    }
     if (row.role == FieldRow::Role::GraphParam || row.role == FieldRow::Role::GraphInput) {
         setGraphMember(row, text);
         return;

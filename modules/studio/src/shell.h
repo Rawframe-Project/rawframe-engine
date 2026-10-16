@@ -533,9 +533,24 @@ private:
     [[nodiscard]] bool dataChosen() const noexcept {
         return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Data;
     }
-    [[nodiscard]] bool documentChosen() const noexcept {
-        return sheetChosen() || uiChosen() || materialChosen() || graphChosen() || dataChosen();
+    /// The game's own description, its settings (D818).
+    [[nodiscard]] bool settingsChosen() const noexcept {
+        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Settings;
     }
+    [[nodiscard]] bool documentChosen() const noexcept {
+        return sheetChosen() || uiChosen() || materialChosen() || graphChosen() || dataChosen() || settingsChosen();
+    }
+    /// What a document's row and tab say: its path, or "Project settings"
+    /// for the game's description (D818).
+    [[nodiscard]] std::string documentLabel(const std::string& path) const;
+    /// The game's settings in the entity column, its lines grouped by the
+    /// word they begin with (`lines.read`); a group's lines each a field;
+    /// a line set, taken away, or put in through `lines.set` and
+    /// `lines.insert` (D818).
+    void showSettings();
+    void showSettingsGroup(std::size_t at);
+    void setSettingLine(const FieldRow& row, const std::string& text);
+    void putSettingLine(const FieldRow& row, const std::string& text);
     /// The chosen data document's objects and keyed items in the entity
     /// column, read whole (`data.read`); one of them, its values each a
     /// field; and a value set through `data.set` (D812).
@@ -782,6 +797,7 @@ private:
         Material,
         Graph,
         Data,
+        Settings,
     };
     std::vector<Listed> listed_;
     std::optional<Value> sheet_;
@@ -789,6 +805,10 @@ private:
     /// and the most rows it lists.
     std::vector<Value> dataHeld_;
     static constexpr std::size_t kMostDataRows = 512;
+    /// The game's description's lines as last read, and each settings row's
+    /// lines by their places (D818).
+    std::vector<std::string> settingsLines_;
+    std::vector<std::vector<std::size_t>> settingsHeld_;
     /// The node types a material graph may hold, each with its params and
     /// inputs, read once a graph is first shown (D732).
     std::optional<Value> nodeTypes_;

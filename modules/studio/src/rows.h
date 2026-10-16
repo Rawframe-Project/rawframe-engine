@@ -53,7 +53,13 @@ struct FieldRow {
         ImportSetting,
         /// A data document's value, `field` its path, `kind` "string" for
         /// text or "json" (D812).
-        DataValue
+        DataValue,
+        /// A line of the game's description, `field` its place, `kind` the
+        /// word it begins with (D818).
+        SettingLine,
+        /// A line to put in the game's description, `field` the place it
+        /// goes before (D818).
+        NewSetting
     };
     ui::Node value{};
     Role role = Role::Field;

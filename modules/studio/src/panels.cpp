@@ -285,7 +285,7 @@ void ShellParticipant::showTabs(std::optional<std::size_t> opened) {
     clear(tabRows_);
     for (const std::string& kPath : openDocuments_) {
         auto tab = box(tabsRow_, ui::Layout{.shrink = 0, .padding = {10, 4, 10, 4}}, kPath == scene_ ? kChosen : kRow);
-        if (!tab.has_value() || !pressWords(*tab, kPath, kText, 14).has_value()) {
+        if (!tab.has_value() || !pressWords(*tab, documentLabel(kPath), kText, 14).has_value()) {
             return;
         }
         tabRows_.push_back(*tab);
@@ -341,9 +341,12 @@ result::Status ShellParticipant::showScenes() {
             sceneRows_.emplace_back();
             continue;
         }
-        RAWFRAME_TRY_ASSIGN(
-            const ui::Node kRowNode,
-            row(scenesColumn_, scenes_[each], kText, each == sceneAt_ && !scene_.empty() ? kChosen : kRow, true));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode,
+                            row(scenesColumn_,
+                                documentLabel(scenes_[each]),
+                                kText,
+                                each == sceneAt_ && !scene_.empty() ? kChosen : kRow,
+                                true));
         sceneRows_.push_back(kRowNode);
     }
     RAWFRAME_TRY(showSources());
@@ -445,6 +448,10 @@ void ShellParticipant::showScene(std::size_t at) {
     }
     if (dataChosen()) {
         showData();
+        return;
+    }
+    if (settingsChosen()) {
+        showSettings();
         return;
     }
     // Over the scene's entities, the search that chooses them (D473), then
@@ -580,6 +587,10 @@ void ShellParticipant::showEntity(std::size_t at) {
     }
     if (dataChosen()) {
         showDataEntry(at);
+        return;
+    }
+    if (settingsChosen()) {
+        showSettingsGroup(at);
         return;
     }
     endEdit();

@@ -24,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":13,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":72,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":3,\"scenes\":14,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":72,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its menus and the palette's field (D777), its buttons, its
     # docks as scroll panes named by their headings or tabs in SPEC-0051's
@@ -312,7 +312,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_makes_scenes PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed crate at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*\"code\":\"studio_summary\"[^\n]*\"scenes\":14,\"scene\":\"crate.scene\",\"entities\":1,[^\n]*\"applied\":2,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+                         "typed crate at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*\"code\":\"studio_summary\"[^\n]*\"scenes\":15,\"scene\":\"crate.scene\",\"entities\":1,[^\n]*\"applied\":2,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
     # A file imported from Studio (D503, D505): the plaza's paving typed by
     # its absolute path into the field under runners' scenes, made one of
     # runners' textures under its own name.
@@ -394,7 +394,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ENVIRONMENT "STUDIO_SCENE_EDIT=$a this is not kest (;STUDIO_SETTINGS=studio.editor = ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixing_editor.sh --goto {file}:{line}:{column}"
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*controls.kest written: no.*editor opened --goto [^ ]*/game/controls.kest:[0-9]+:1.*\"code\":\"studio_summary\"[^\n]*\"scenes\":13,[^\n]*\"opened\":1,[^\n]*\"status\":\"the game reads\".*\"exit\":\"clean_stop\"")
+                         "clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*controls.kest written: no.*editor opened --goto [^ ]*/game/controls.kest:[0-9]+:1.*\"code\":\"studio_summary\"[^\n]*\"scenes\":14,[^\n]*\"opened\":1,[^\n]*\"status\":\"the game reads\".*\"exit\":\"clean_stop\"")
     # A search of the entity column (D473): in runners' level, slope finds
     # the three slopes, and the field, under them now, then takes a wall
     # holding runners.tile by its last part, which finds the two walls.
@@ -514,6 +514,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # name typed, set through the session's data.set and written; Undo and
     # Redo leave it standing. Quarry, whose two documents stay in view of
     # the Assets dock, where Plaza's sixteen run past it.
+    # The game's settings edited in Studio (D818): Quarry's description
+    # listed as Project settings and chosen, its mapped line chosen and
+    # typed, set through the session's lines.set and written; Undo and Redo
+    # leave it standing. A group in view: Quarry's sixteen run past the
+    # Hierarchy.
+    add_test(NAME studio_sets_settings
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/quarry/quarry.game quarry.game "@Project settings" @mapped "@mapped#3:8192"
+                     @Undo @Redo "until=studio_said,status=\"redone\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_sets_settings PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "typed 8192 at [0-9]+,[0-9]+.*quarry.game written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"quarry.game\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
     add_test(NAME studio_edits_data
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
@@ -537,7 +552,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_material PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed \\[0.6,0.2,0.1\\] at [0-9]+,[0-9]+.*shore.rfmaterial written: yes.*\"status\":\"tint set to \\[0.6,0.2,0.1\\]\".*\"code\":\"studio_summary\"[^\n]*\"scenes\":7,\"scene\":\"shore.rfmaterial\",\"entities\":2,\"entity\":\"tint\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+                         "typed \\[0.6,0.2,0.1\\] at [0-9]+,[0-9]+.*shore.rfmaterial written: yes.*\"status\":\"tint set to \\[0.6,0.2,0.1\\]\".*\"code\":\"studio_summary\"[^\n]*\"scenes\":8,\"scene\":\"shore.rfmaterial\",\"entities\":2,\"entity\":\"tint\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
     # A material graph edited in Studio (D730): Gale's rock listed, its
     # surface node chosen among its five, and its roughness typed, set
     # through the session's materials.set_node_input and written; Undo and
