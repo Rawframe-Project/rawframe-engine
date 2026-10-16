@@ -1,6 +1,7 @@
 #include "documents.h"
 
 #include "rawframe/authoring/authored_data.h"
+#include "rawframe/authoring/authored_lines.h"
 #include "rawframe/authoring/authored_material.h"
 #include "rawframe/authoring/authored_styles.h"
 #include "rawframe/authoring/authored_ui.h"
@@ -96,7 +97,8 @@ result::Result<typename Documents<Authored>::Open*> Documents<Authored>::open(co
 template <class Authored>
 result::Result<std::unique_ptr<Authored>> Documents<Authored>::made(rawframe::base::Bits128 identity,
                                                                     std::string_view text) const {
-    if constexpr (std::is_same_v<Authored, authoring::AuthoredData>) {
+    if constexpr (std::is_same_v<Authored, authoring::AuthoredData> ||
+                  std::is_same_v<Authored, authoring::AuthoredLines>) {
         return Authored::open(identity, text, reads_);
     } else {
         return Authored::open(identity, text);
@@ -216,10 +218,16 @@ template <class Authored> result::Result<Value> Documents<Authored>::history(con
     const Authored& authored = *open->document;
     Value entries = Value::array();
     for (std::size_t at = 0; at < authored.undoable() + authored.redoable(); ++at) {
-        const std::vector<authoring::JsonDelta>& kJournal = authored.journalAt(at);
+        // A line document's entry counts the lines it changed (D817).
+        std::size_t deltas = 0;
+        if constexpr (std::is_same_v<Authored, authoring::AuthoredLines>) {
+            deltas = authored.deltasAt(at);
+        } else {
+            deltas = authored.journalAt(at).size();
+        }
         Value entry = Value::object();
         entry.add("summary", Value::string(authored.summaryAt(at)));
-        entry.add("deltas", Value::integer(static_cast<std::int64_t>(kJournal.size())));
+        entry.add("deltas", Value::integer(static_cast<std::int64_t>(deltas)));
         entry.add("applied", Value::boolean(at < authored.undoable()));
         entries.push(std::move(entry));
     }
@@ -231,6 +239,7 @@ template <class Authored> result::Result<Value> Documents<Authored>::history(con
 }
 
 template class Documents<authoring::AuthoredData>;
+template class Documents<authoring::AuthoredLines>;
 template class Documents<authoring::AuthoredMaterial>;
 template class Documents<authoring::AuthoredStyles>;
 template class Documents<authoring::AuthoredUi>;

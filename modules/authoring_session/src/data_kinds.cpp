@@ -7,6 +7,7 @@
 #include "rawframe/document/json.h"
 #include "rawframe/input/actions.h"
 #include "rawframe/localization/table.h"
+#include "rawframe/world_kest/game.h"
 
 #include <string>
 
@@ -79,6 +80,12 @@ constexpr std::array<DataKind, 5> kKinds = {{{".actions", "action map", &readsAc
 
 std::span<const DataKind> dataKinds() noexcept {
     return kKinds;
+}
+
+result::Status readsGameDescription(std::string_view text) {
+    return readsAs("game description", [text] {
+        return world_kest::parseGame(text);
+    });
 }
 
 } // namespace rawframe::authoring_session

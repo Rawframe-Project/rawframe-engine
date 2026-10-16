@@ -9,6 +9,7 @@
 #include "importing.h"
 #include "previewing.h"
 #include "rawframe/authoring/authored_data.h"
+#include "rawframe/authoring/authored_lines.h"
 #include "rawframe/authoring/authored_material.h"
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/authored_styles.h"
@@ -68,7 +69,8 @@ public:
     Held(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook)
         : game_(std::move(game)), root_(std::filesystem::weakly_canonical(root)), cook_(cook),
           cooking_(std::move(cook)), sheets_(root_, ".styles", "style sheet"), uis_(root_, ".ui", "UI document"),
-          materials_(root_, ".rfmaterial", "material instance") {
+          materials_(root_, ".rfmaterial", "material instance"),
+          games_(root_, ".game", "game description", &readsGameDescription) {
         for (const DataKind& kKind : dataKinds()) {
             data_.emplace_back(root_, kKind.extension, kKind.called, kKind.reads);
         }
@@ -390,6 +392,9 @@ private:
     /// how many deltas it holds and whether it is applied (undoable) or
     /// undone (redoable). A read: nothing staged, nothing written.
     result::Result<Value> historyOf(const authoring::SessionRecord& record) {
+        if (games_.names(record.scene)) {
+            return games_.history(record);
+        }
         if (auto* data = dataOf(record.scene)) {
             return data->history(record);
         }
@@ -485,6 +490,9 @@ private:
     }
 
     result::Result<Value> applied(const authoring::SessionRecord& record) {
+        if (games_.names(record.scene)) {
+            return games_.applied(record, failed_);
+        }
         if (auto* data = dataOf(record.scene)) {
             return data->applied(record, failed_);
         }
@@ -711,6 +719,9 @@ private:
     }
 
     result::Result<Value> answered(const authoring::SessionRecord& record) {
+        if (games_.names(record.scene)) {
+            return games_.answered(record, failed_);
+        }
         if (auto* data = dataOf(record.scene)) {
             return data->answered(record, failed_);
         }
@@ -746,6 +757,9 @@ private:
     }
 
     result::Result<Value> stepped(const authoring::SessionRecord& record, bool undo) {
+        if (games_.names(record.scene)) {
+            return games_.stepped(record, undo, failed_);
+        }
         if (auto* data = dataOf(record.scene)) {
             return data->stepped(record, undo, failed_);
         }
@@ -824,6 +838,8 @@ private:
     Documents<authoring::AuthoredMaterial> materials_;
     /// Each data kind's documents (D811), in `dataKinds()`'s order.
     std::vector<Documents<authoring::AuthoredData>> data_;
+    /// The game's descriptions, its settings, as line documents (D817).
+    Documents<authoring::AuthoredLines> games_;
 
     /// The data documents `name` is one of, if any.
     Documents<authoring::AuthoredData>* dataOf(const std::string& name) {

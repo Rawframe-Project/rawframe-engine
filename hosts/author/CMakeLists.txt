@@ -77,6 +77,11 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_data.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_data)
     set_tests_properties(author_data PROPERTIES PASS_REGULAR_EXPRESSION "authored plaza's action map in a session")
+    # A game's description, its settings, authored in a session (D817).
+    add_test(NAME author_game
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_game.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_game)
+    set_tests_properties(author_game PROPERTIES PASS_REGULAR_EXPRESSION "authored quarry's description in a session")
     # A material instance authored (D721): Gale's shore, with its base's
     # interface read beside it.
     add_test(NAME author_material

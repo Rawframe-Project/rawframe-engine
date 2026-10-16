@@ -5,6 +5,7 @@
 // would read it.
 
 #include "rawframe/authoring/json_document.h"
+#include "rawframe/result/result.h"
 
 #include <array>
 #include <span>
@@ -22,5 +23,9 @@ struct DataKind {
 /// Action maps, mixers, string tables, their translations, and animation
 /// graphs and clips.
 [[nodiscard]] std::span<const DataKind> dataKinds() noexcept;
+
+/// Whether `text` reads as a game description, as world_kest reads it: the
+/// reader of a game's line document, its settings (D817).
+[[nodiscard]] result::Status readsGameDescription(std::string_view text);
 
 } // namespace rawframe::authoring_session
