@@ -21,8 +21,8 @@ using execution::MonotonicDuration;
 using network::ConnectionId;
 using network::Event;
 using network::EventKind;
+using network::LinkConditions;
 using network::NetworkError;
-using network_loopback::LoopbackConditions;
 using network_loopback::LoopbackNetwork;
 
 namespace {

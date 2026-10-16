@@ -12,6 +12,17 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots> 8 1 480
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(bots_over_quic PROPERTIES PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8")
+    # Bots over a slow, lossy link (D805): the conditions on QUIC between
+    # processes, the link said by the transport, every bot admitted and
+    # its world mirrored all the same.
+    add_test(NAME bots_over_slow_link
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/play.sh
+                     $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots> 4 1 480
+                     games/arena/arena.game /dev/null ${CMAKE_CURRENT_SOURCE_DIR}/tests/slow_link.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(bots_over_slow_link PROPERTIES
+                         PASS_REGULAR_EXPRESSION
+                         "\"latencyMs\":120,\"jitterMs\":20,\"lossPpm\":50000,.*\"bots\":4,\"admitted\":4,.*\"mirroredEntities\":[1-9]")
     # Two bots processes, one bot each, asking for the same session:
     # whichever is second is told that player is already playing.
     add_test(NAME bots_same_session

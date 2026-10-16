@@ -201,7 +201,7 @@ struct Scenario {
     MovePredictor predictor;
     MonotonicDuration stepLength;
 
-    explicit Scenario(network_loopback::LoopbackConditions conditions, Options options = {})
+    explicit Scenario(network::LinkConditions conditions, Options options = {})
         : network(clock, conditions), stepLength(options.stepLength) {
         serverSessions = *network::Sessions::server(
             *serverTransport,

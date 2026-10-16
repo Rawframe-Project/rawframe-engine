@@ -1,5 +1,6 @@
 #include "allocations.h"
 #include "rawframe/composition/composition.h"
+#include "rawframe/network/conditions.h"
 #include "rawframe/network/errors.h"
 #include "rawframe/network/transport.h"
 #include "rawframe/network_quic/errors.h"
@@ -93,13 +94,21 @@ public:
     QuicTransport(std::unique_ptr<QuicNetwork> network,
                   std::optional<Fingerprint> identity,
                   std::optional<std::string> fingerprintFile,
-                  std::optional<Renewal> renewal)
+                  std::optional<Renewal> renewal,
+                  const network::LinkConditions& conditions,
+                  const execution::MonotonicSource& clock)
         : network_(std::move(network)), identity_(identity), fingerprintFile_(std::move(fingerprintFile)),
-          renewal_(renewal) {
+          renewal_(renewal), conditions_(conditions), clock_(&clock) {
     }
 
+    /// Each provider over the conditions set, as a slower link would be
+    /// (D805): a game played on one machine as it would be over the world.
     result::Result<std::unique_ptr<network::Provider>> provider(const network::ProviderProfile& profile) override {
-        return network_->provider(profile);
+        RAWFRAME_TRY_ASSIGN(std::unique_ptr<network::Provider> made, network_->provider(profile));
+        if (!conditions_.any()) {
+            return made;
+        }
+        return network::withConditions(std::move(made), conditions_, profile, *clock_);
     }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
@@ -116,7 +125,11 @@ public:
         context.emitter().log(diagnostics::Severity::Info,
                               kReady,
                               "the QUIC transport is ready",
-                              {diagnostics::field("fingerprint", std::string_view{kFingerprint})});
+                              {diagnostics::field("fingerprint", std::string_view{kFingerprint}),
+                               diagnostics::field("latencyMs", conditions_.latency.nanoseconds / 1'000'000),
+                               diagnostics::field("jitterMs", conditions_.jitter.nanoseconds / 1'000'000),
+                               diagnostics::field("lossPpm", conditions_.datagramLossPerMillion),
+                               diagnostics::field("duplicatePpm", conditions_.datagramDuplicatePerMillion)});
         return {};
     }
 
@@ -202,6 +215,10 @@ private:
     bool unwritten_ = false;
     std::optional<Renewal> renewal_;
     std::optional<execution::MonotonicInstant> renewAt_;
+    /// The conditions each provider is made under (D805), and the clock
+    /// they hold by.
+    network::LinkConditions conditions_;
+    const execution::MonotonicSource* clock_ = nullptr;
 };
 
 result::Result<std::optional<Certificate>> identityOf(const composition::Configuration& configuration, bool browsers) {
@@ -261,6 +278,8 @@ result::Result<composition::ParticipantOwner> makeQuic(composition::ParticipantC
                             "a QUIC timeout is at most an hour");
     }
     RAWFRAME_TRY_ASSIGN(const std::uint64_t kProcessors, configuration.unsignedInteger("network.quic.processors", 0));
+    RAWFRAME_TRY_ASSIGN(const network::LinkConditions kConditions,
+                        network::conditionsOf(configuration, "network.quic"));
     if (kProcessors > 1024) {
         return result::fail(result::ErrorClass::InvalidArgument,
                             network::kNetworkDomain,
@@ -302,8 +321,8 @@ result::Result<composition::ParticipantOwner> makeQuic(composition::ParticipantC
     }
     std::optional<std::string> fingerprintFile = configuration.path("network.quic.fingerprint_file");
     RAWFRAME_TRY_ASSIGN(std::unique_ptr<QuicNetwork> network, QuicNetwork::create(std::move(settings)));
-    return composition::ParticipantOwner{
-        new QuicTransport{std::move(network), identity, std::move(fingerprintFile), renewal}};
+    return composition::ParticipantOwner{new QuicTransport{
+        std::move(network), identity, std::move(fingerprintFile), renewal, kConditions, context.clock()}};
 }
 
 } // namespace

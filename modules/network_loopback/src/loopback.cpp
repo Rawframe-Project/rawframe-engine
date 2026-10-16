@@ -67,7 +67,7 @@ std::size_t openLinks(const Side& side) noexcept {
 struct LoopbackNetwork::State {
     base::Mutex mutex;
     const execution::MonotonicSource* clock = nullptr;
-    LoopbackConditions conditions;
+    network::LinkConditions conditions;
     std::uint64_t random = 0;
     std::uint64_t order = 0;
     std::map<std::string, Side*, std::less<>> listeners;
@@ -261,7 +261,7 @@ public:
             return refuse(result::ErrorClass::InvalidArgument, NetworkError::TooLarge, "a datagram is too large");
         }
         ++side_.statistics.datagramsSent;
-        const LoopbackConditions& conditions = state_->conditions;
+        const network::LinkConditions& conditions = state_->conditions;
         if (link->peer == nullptr || state_->chance(conditions.datagramLossPerMillion)) {
             ++side_.statistics.datagramsDropped;
             return {};
@@ -364,7 +364,7 @@ private:
 
 } // namespace
 
-LoopbackNetwork::LoopbackNetwork(const execution::MonotonicSource& clock, LoopbackConditions conditions)
+LoopbackNetwork::LoopbackNetwork(const execution::MonotonicSource& clock, network::LinkConditions conditions)
     : state_(std::make_shared<State>()) {
     state_->clock = &clock;
     state_->conditions = conditions;

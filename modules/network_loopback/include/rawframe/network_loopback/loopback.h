@@ -8,6 +8,7 @@
 // calls delivers the same way every time.
 
 #include "rawframe/execution/time.h"
+#include "rawframe/network/conditions.h"
 #include "rawframe/network/provider.h"
 #include "rawframe/result/result.h"
 
@@ -16,23 +17,10 @@
 
 namespace rawframe::network_loopback {
 
-/// What the network does to traffic. Streams keep their order and lose
-/// nothing; datagrams may be delayed unevenly, lost, and duplicated.
-struct LoopbackConditions {
-    /// One way, for everything.
-    execution::MonotonicDuration latency;
-    /// Datagrams only: up to this much more, drawn per datagram, which is
-    /// what reorders them.
-    execution::MonotonicDuration jitter;
-    std::uint32_t datagramLossPerMillion = 0;
-    std::uint32_t datagramDuplicatePerMillion = 0;
-    std::uint64_t seed = 0;
-};
-
 class LoopbackNetwork {
 public:
     /// `clock` decides when sent bytes arrive and must outlive the network.
-    LoopbackNetwork(const execution::MonotonicSource& clock, LoopbackConditions conditions);
+    LoopbackNetwork(const execution::MonotonicSource& clock, network::LinkConditions conditions);
     LoopbackNetwork(const LoopbackNetwork&) = delete;
     LoopbackNetwork& operator=(const LoopbackNetwork&) = delete;
     /// Every provider must be gone first.
