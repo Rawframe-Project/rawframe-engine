@@ -49,8 +49,8 @@ std::string shortType(const Value& node) {
 void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix) {
     clear(viewRows_);
     viewFields_.clear();
-    canvasParts_.clear();
-    canvasBoxes_.clear();
+    held_.canvasParts.clear();
+    held_.canvasBoxes.clear();
     if (nodes.kind() != Value::Kind::Object || nodes.names().empty()) {
         return;
     }
@@ -165,8 +165,8 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
         if (!node.has_value()) {
             return;
         }
-        canvasBoxes_.emplace_back(*node, kEntity);
-        canvasParts_.emplace_back(*node, kEntity);
+        held_.canvasBoxes.emplace_back(*node, kEntity);
+        held_.canvasParts.emplace_back(*node, kEntity);
         auto header =
             box(*node, ui::Layout{.height = ui::pixels(kHeader), .shrink = 0, .padding = {8, 4, 8, 4}}, kHeaderFill);
         // It says its type; it is named by its type and its whole id, as
@@ -176,7 +176,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
             !tree_->setName(*header, shortType(nodes.items()[each]) + " " + kId).has_value()) {
             return;
         }
-        canvasParts_.emplace_back(*header, kEntity);
+        held_.canvasParts.emplace_back(*header, kEntity);
         for (std::size_t input = 0; kInputs != nullptr && input < kInputs->items().size(); ++input) {
             auto line =
                 box(*node, ui::Layout{.height = ui::pixels(kInputRow), .shrink = 0, .padding = {10, 2, 8, 2}}, 0);
@@ -186,24 +186,24 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
                 !tree_->setName(*line, kInputs->names()[input] + " input").has_value()) {
                 return;
             }
-            canvasParts_.emplace_back(*line, kEntity);
+            held_.canvasParts.emplace_back(*line, kEntity);
         }
     }
     emitter_.log(diagnostics::Severity::Info,
                  kCanvasShown,
                  "a graph's nodes and wires laid out in the center",
-                 {diagnostics::field("nodes", canvasBoxes_.size()),
+                 {diagnostics::field("nodes", held_.canvasBoxes.size()),
                   diagnostics::field("wires", wires),
                   diagnostics::field("columns", filled.size())});
 }
 
 std::optional<std::size_t> ShellParticipant::canvasEntityOf(ui::Node node) const {
-    const auto kPart = std::ranges::find(canvasParts_, node, &std::pair<ui::Node, std::size_t>::first);
-    return kPart != canvasParts_.end() ? std::optional{kPart->second} : std::nullopt;
+    const auto kPart = std::ranges::find(held_.canvasParts, node, &std::pair<ui::Node, std::size_t>::first);
+    return kPart != held_.canvasParts.end() ? std::optional{kPart->second} : std::nullopt;
 }
 
 void ShellParticipant::markCanvas() {
-    for (const auto& [kBox, kEntity] : canvasBoxes_) {
+    for (const auto& [kBox, kEntity] : held_.canvasBoxes) {
         static_cast<void>(tree_->setLook(kBox, ui::Look{.fill = kEntity == entityAt_ ? kChosen : kRow, .radius = 4}));
     }
 }

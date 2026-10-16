@@ -9,6 +9,7 @@
 
 #include "browser.h"
 #include "console.h"
+#include "editors.h"
 #include "live.h"
 #include "network_panel.h"
 #include "play.h"
@@ -796,30 +797,12 @@ private:
     ui::Node retryNode_{};
     std::uint64_t opened_ = 0;
     std::vector<std::string> scenes_;
-    /// What each document listed with the scenes is (D637, D643), and the
-    /// chosen sheet or UI document as the session last read it.
-    enum class Listed : std::uint8_t {
-        Scene,
-        Sheet,
-        Ui,
-        Material,
-        Graph,
-        Data,
-        Settings,
-    };
+    /// What each document listed with the scenes is, the chosen sheet or
+    /// UI document as the session last read it, and what the document
+    /// editors last read and laid out (editors.h).
     std::vector<Listed> listed_;
     std::optional<Value> sheet_;
-    /// What each entity row of a data document holds, as last read (D812),
-    /// and the most rows it lists.
-    std::vector<Value> dataHeld_;
-    static constexpr std::size_t kMostDataRows = 512;
-    /// The game's description's lines as last read, and each settings row's
-    /// lines by their places (D818).
-    std::vector<std::string> settingsLines_;
-    std::vector<std::vector<std::size_t>> settingsHeld_;
-    /// The canvas's parts and each one's row, and its nodes' boxes (D819).
-    std::vector<std::pair<ui::Node, std::size_t>> canvasParts_;
-    std::vector<std::pair<ui::Node, std::size_t>> canvasBoxes_;
+    EditorsHeld held_;
     /// The node types a material graph may hold, each with its params and
     /// inputs, read once a graph is first shown (D732).
     std::optional<Value> nodeTypes_;

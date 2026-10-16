@@ -48,7 +48,7 @@ void ShellParticipant::showData() {
     const std::optional<Value> kRead = read(scene_, "data.read");
     sheet_ =
         kRead.has_value() && kRead->find("data") != nullptr ? std::optional<Value>{*kRead->find("data")} : std::nullopt;
-    dataHeld_.clear();
+    held_.data.clear();
     if (!sheet_.has_value()) {
         return;
     }
@@ -60,7 +60,7 @@ void ShellParticipant::showData() {
                               const std::string& label,
                               std::size_t depth) -> void {
         auto added = row(entitiesColumn_, std::string(2 * depth, ' ') + label, kText, kRow, true);
-        if (!added.has_value() || entityRows_.size() >= kMostDataRows) {
+        if (!added.has_value() || entityRows_.size() >= EditorsHeld::kMostRows) {
             return;
         }
         entityRows_.push_back(*added);
@@ -69,7 +69,7 @@ void ShellParticipant::showData() {
         brought_.push_back(false);
         removed_.push_back(false);
         places_.push_back(std::nullopt);
-        dataHeld_.push_back(at);
+        held_.data.push_back(at);
         for (std::size_t each = 0; each < at.names().size(); ++each) {
             const std::string& kMember = at.names()[each];
             const Value& kHeld = at.items()[each];
@@ -113,10 +113,10 @@ void ShellParticipant::showDataEntry(std::size_t at) {
     clear(componentRows_);
     actions_.clear();
     components_ = 0;
-    if (at >= dataHeld_.size()) {
+    if (at >= held_.data.size()) {
         return;
     }
-    const Value& kHeld = dataHeld_[at];
+    const Value& kHeld = held_.data[at];
     auto heading = row(componentsColumn_, entity_.empty() ? names_[at] : entity_, kQuiet, kPanel);
     if (heading.has_value()) {
         componentRows_.push_back(*heading);

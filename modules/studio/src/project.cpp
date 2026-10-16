@@ -35,32 +35,32 @@ std::string ShellParticipant::documentLabel(const std::string& path) const {
 void ShellParticipant::showSettings() {
     const std::optional<Value> kRead = read(scene_, "lines.read");
     const Value* kLines = kRead.has_value() ? kRead->find("lines") : nullptr;
-    settingsLines_.clear();
-    settingsHeld_.clear();
+    held_.settingsLines.clear();
+    held_.settings.clear();
     if (kLines == nullptr || kLines->kind() != Value::Kind::Array) {
         return;
     }
     for (const Value& kLine : kLines->items()) {
-        settingsLines_.push_back(kLine.text() != nullptr ? *kLine.text() : std::string{});
+        held_.settingsLines.push_back(kLine.text() != nullptr ? *kLine.text() : std::string{});
     }
     // Each word the lines begin with a row, in the order it first comes,
     // holding the places of its lines; comments and blanks are no row.
     std::vector<std::string> words;
-    for (std::size_t each = 0; each < settingsLines_.size(); ++each) {
-        const std::string kWord = wordOf(settingsLines_[each]);
+    for (std::size_t each = 0; each < held_.settingsLines.size(); ++each) {
+        const std::string kWord = wordOf(held_.settingsLines[each]);
         if (kWord.empty()) {
             continue;
         }
         const auto kKnown = std::ranges::find(words, kWord);
         if (kKnown == words.end()) {
             words.push_back(kWord);
-            settingsHeld_.push_back({each});
+            held_.settings.push_back({each});
         } else {
-            settingsHeld_[static_cast<std::size_t>(kKnown - words.begin())].push_back(each);
+            held_.settings[static_cast<std::size_t>(kKnown - words.begin())].push_back(each);
         }
     }
-    for (std::size_t each = 0; each < words.size() && entityRows_.size() < kMostDataRows; ++each) {
-        const std::size_t kCount = settingsHeld_[each].size();
+    for (std::size_t each = 0; each < words.size() && entityRows_.size() < EditorsHeld::kMostRows; ++each) {
+        const std::size_t kCount = held_.settings[each].size();
         const std::string kLabel = kCount > 1 ? words[each] + " (" + std::to_string(kCount) + ")" : words[each];
         auto added = row(entitiesColumn_, kLabel, kText, kRow, true);
         if (!added.has_value()) {
@@ -90,7 +90,7 @@ void ShellParticipant::showSettingsGroup(std::size_t at) {
     clear(componentRows_);
     actions_.clear();
     components_ = 0;
-    if (at >= settingsHeld_.size()) {
+    if (at >= held_.settings.size()) {
         return;
     }
     auto heading = row(componentsColumn_, entity_ + " lines", kQuiet, kPanel);
@@ -99,10 +99,10 @@ void ShellParticipant::showSettingsGroup(std::size_t at) {
     }
     // Each line a field holding what follows its word, numbered where the
     // word begins several; an empty field takes the line away.
-    const std::vector<std::size_t>& kHeld = settingsHeld_[at];
+    const std::vector<std::size_t>& kHeld = held_.settings[at];
     for (std::size_t each = 0; each < kHeld.size(); ++each) {
         const std::string kLabel = kHeld.size() > 1 ? entity_ + " " + std::to_string(each + 1) : entity_;
-        auto line = fieldRow(kLabel, restOf(settingsLines_[kHeld[each]]));
+        auto line = fieldRow(kLabel, restOf(held_.settingsLines[kHeld[each]]));
         if (!line.has_value()) {
             return;
         }
