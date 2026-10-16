@@ -45,6 +45,11 @@ struct ProcessEntry {
 /// D502). Installing it again changes nothing.
 void installStopBridge();
 
+/// Lets this process's stop requests fall once it has stopped, its
+/// parent's going among them (D646): what `hostMain` does after its Host
+/// ends (D820).
+void settleStopBridge();
+
 /// Whether a stop has been requested of this process since its bridge was
 /// installed: the one process-wide value in the engine, only ever set.
 [[nodiscard]] const std::atomic<bool>& stopRequested() noexcept;

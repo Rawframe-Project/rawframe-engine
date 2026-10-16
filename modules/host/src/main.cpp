@@ -168,6 +168,20 @@ void installStopBridge() {
 #endif
 }
 
+void settleStopBridge() {
+#if defined(__unix__) || defined(__APPLE__)
+    // Stopped, a process has nothing left to stop: a stop signal or its
+    // parent's going is let fall rather than taken while the process ends,
+    // where the address sanitizer's leak check traces it and a signal that
+    // came then left that check waiting for good (D820).
+    std::signal(SIGINT, SIG_IGN);
+    std::signal(SIGTERM, SIG_IGN);
+#if defined(__linux__)
+    ::prctl(PR_SET_PDEATHSIG, 0);
+#endif
+#endif
+}
+
 const std::atomic<bool>& stopRequested() noexcept {
     return stopped;
 }
@@ -215,6 +229,7 @@ int hostMain(int argc, char** argv, const ProcessEntry& entry) {
         .defaultShutdownBudgetMs = entry.defaultShutdownBudgetMs,
     };
     const HostExit kExit = entry.drive != nullptr ? entry.drive(kRequest) : runHost(kRequest);
+    settleStopBridge();
     return exitCode(kExit);
 }
 
