@@ -2,8 +2,8 @@
 # composition selects, on a provider of its own, through which authoring
 # clients, test drivers, and agents inspect a running Runtime.
 rawframe_module(NAME world_tooling
-    SOURCES src/participant.cpp src/previewing.cpp src/replies.cpp src/server.cpp src/window_input.cpp
-    DEPS world_runtime network world composition schema execution diagnostics document result base
+    SOURCES src/participant.cpp src/previewing.cpp src/running.cpp src/traffic.cpp src/replies.cpp src/server.cpp src/window_input.cpp
+    DEPS world_replication world_runtime network world composition schema execution diagnostics document result base
 )
 
 rawframe_module_tests(NAME world_tooling SOURCES tests/server_test.cpp tests/window_input_test.cpp)

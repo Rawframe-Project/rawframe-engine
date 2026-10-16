@@ -56,12 +56,17 @@
 #include "rawframe/world_runtime/component_fields.h"
 #include "rawframe/world_runtime/debugging.h"
 #include "rawframe/world_runtime/picking.h"
+#include "rawframe/world_runtime/simulation.h"
 #include "rawframe/world_tooling/preview.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
+
+namespace rawframe::world_replication {
+class ReplicationTraffic;
+} // namespace rawframe::world_replication
 
 namespace rawframe::world_tooling {
 
@@ -76,6 +81,8 @@ struct ToolingGrants {
     /// Debug the game's scripts: breakpoints, a stopped game's frames, and
     /// carrying on (D460).
     bool debug = false;
+    /// Pause the World, let it run, and step it (D806).
+    bool run = false;
 };
 
 struct ToolingSettings {
@@ -98,6 +105,12 @@ struct ToolingSettings {
     /// The game's scripts debugged (D460), if the composition can; it
     /// outlives the server.
     world_runtime::Debugging* debugging = nullptr;
+    /// The World paused and stepped (D806), where the run grant is given
+    /// and the composition has one; it outlives the server.
+    world_runtime::Simulation* simulation = nullptr;
+    /// A replication server's traffic (D807), where the composition has
+    /// one; it outlives the server.
+    const world_replication::ReplicationTraffic* traffic = nullptr;
 };
 
 /// The provider bounds a tooling endpoint asks for, `clients` at once.

@@ -1,6 +1,7 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/execution/time.h"
 #include "rawframe/network/transport.h"
+#include "rawframe/world_replication/traffic.h"
 #include "rawframe/world_runtime/component_fields.h"
 #include "rawframe/world_runtime/debugging.h"
 #include "rawframe/world_runtime/simulation.h"
@@ -31,6 +32,7 @@ constexpr std::string_view kMaybe[] = {world_runtime::kSimulation.name,
                                        kPreviewer.name,
                                        world_runtime::kPicking.name,
                                        world_runtime::kDebugging.name,
+                                       world_replication::kReplicationTraffic.name,
                                        composition::kStopRequest.name};
 
 /// A token file's bytes at most.
@@ -92,13 +94,21 @@ public:
                 settings.grants.view = true;
             } else if (kGrant == "debug") {
                 settings.grants.debug = true;
+            } else if (kGrant == "run") {
+                settings.grants.run = true;
             } else if (!kGrant.empty()) {
-                return misconfigured("tooling.grants names inspect, view, and debug, apart by spaces");
+                return misconfigured("tooling.grants names inspect, view, debug, and run, apart by spaces");
             }
             at = kEnd + 1;
         }
         if (context.has(world_runtime::kComponentFields.name)) {
             RAWFRAME_TRY_ASSIGN(settings.fields, context.capability(world_runtime::kComponentFields));
+        }
+        if (settings.grants.run) {
+            settings.simulation = simulation_;
+        }
+        if (context.has(world_replication::kReplicationTraffic.name)) {
+            RAWFRAME_TRY_ASSIGN(settings.traffic, context.capability(world_replication::kReplicationTraffic));
         }
         if (context.has(world_runtime::kPicking.name)) {
             RAWFRAME_TRY_ASSIGN(settings.picking, context.capability(world_runtime::kPicking));

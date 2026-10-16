@@ -6,6 +6,8 @@
 #include "rawframe/world_tooling/errors.h"
 #include "rawframe/world_tooling/window_input.h"
 #include "replies.h"
+#include "running.h"
+#include "traffic.h"
 
 #include <algorithm>
 #include <array>
@@ -376,6 +378,9 @@ struct ToolingServer::State {
             if (settings.grants.debug && settings.debugging != nullptr) {
                 grants.push(Value::string("debug"));
             }
+            if (settings.grants.run && settings.simulation != nullptr) {
+                grants.push(Value::string("run"));
+            }
             Value made = Value::object();
             made.add("kind", Value::string("tooling.welcome"));
             made.add("protocolVersion", Value::integer(kToolingProtocolVersion));
@@ -437,8 +442,17 @@ struct ToolingServer::State {
             }
             return;
         }
-        // The preview's verbs (D432 to D798), answered where the preview is.
+        // The preview's verbs (D432 to D798), answered where the preview is;
+        // the run verbs (D806).
         if (kind != nullptr) {
+            if (std::optional<std::string> answered = answerRun(*kind, *parsed, id, settings)) {
+                send(connection, client, *answered);
+                return;
+            }
+            if (std::optional<std::string> answered = answerTraffic(*kind, id, settings, tick)) {
+                send(connection, client, *answered);
+                return;
+            }
             if (std::optional<std::string> answered = answerPreview(*kind, *parsed, id, settings)) {
                 send(connection, client, *answered);
                 return;

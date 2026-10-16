@@ -12,6 +12,7 @@
 #include "rawframe/world_replication/plan.h"
 #include "rawframe/world_replication/registrar.h"
 #include "rawframe/world_replication/server.h"
+#include "rawframe/world_replication/traffic.h"
 #include "rawframe/world_runtime/players.h"
 #include "rawframe/world_runtime/simulation.h"
 
@@ -40,11 +41,28 @@ constexpr std::string_view kMaybe[] = {network::kTransport.name,
                                        game_content::kGameContent.name,
                                        world_runtime::kPlayerPresence.name};
 constexpr std::string_view kBotsProvide[] = {kClientWorlds.name};
+constexpr std::string_view kServerProvide[] = {kReplicationTraffic.name};
 constexpr std::string_view kBotsMaybe[] = {
     network::kTransport.name, kReplicationPlan.name, kInputSourcePlan.name, game_content::kGameContent.name};
 
-class ServerParticipant final : public composition::Participant {
+class ServerParticipant final : public composition::Participant, public ReplicationTraffic {
 public:
+    /// What it has sent and taken, for a tool to watch (D807); nothing
+    /// before it starts.
+    ServerReplicationStatistics totals() const noexcept override {
+        return server_ != nullptr ? server_->statistics() : ServerReplicationStatistics{};
+    }
+    std::size_t connections() const noexcept override {
+        return server_ != nullptr ? server_->connections() : 0;
+    }
+
+    composition::CapabilityObject provide(std::string_view capability) noexcept override {
+        if (capability == kReplicationTraffic.name) {
+            return composition::provideAs<ReplicationTraffic>(*this);
+        }
+        return {};
+    }
+
     result::Status load(composition::ParticipantContext& context, std::string endpoint) {
         context_ = &context;
         endpoint_ = std::move(endpoint);
@@ -426,6 +444,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .identity = "rawframe.replication.server",
         .factory = &makeServer,
         .scope = composition::LifetimeScope::World,
+        .providedCapabilities = kServerProvide,
         .requiredCapabilities = kServerNeeds,
         .optionalCapabilities = kMaybe,
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
