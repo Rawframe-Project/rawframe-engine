@@ -24,6 +24,13 @@ const std::string* sourceOf(const Value& input) {
     return kNode != nullptr && kNode->kind() == Value::Kind::String ? kNode->text() : nullptr;
 }
 
+/// A node's inputs by name, or none where it holds no object of them: an
+/// array's items have no names to show.
+const Value* inputsOf(const Value& node) {
+    const Value* kInputs = node.kind() == Value::Kind::Object ? node.find("inputs") : nullptr;
+    return kInputs != nullptr && kInputs->kind() == Value::Kind::Object ? kInputs : nullptr;
+}
+
 /// A node's type said short: its namespace and version left off.
 std::string shortType(const Value& node) {
     const Value* kType = node.find("type");
@@ -56,7 +63,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
         bool moved = false;
         for (std::size_t each = 0; each < nodes.names().size(); ++each) {
             std::size_t at = 0;
-            const Value* kInputs = nodes.items()[each].find("inputs");
+            const Value* kInputs = inputsOf(nodes.items()[each]);
             for (std::size_t input = 0; kInputs != nullptr && input < kInputs->items().size(); ++input) {
                 const std::string* kFrom = sourceOf(kInputs->items()[input]);
                 if (kFrom != nullptr && nodes.find(*kFrom) != nullptr && *kFrom != nodes.names()[each]) {
@@ -82,7 +89,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
     for (std::size_t each = 0; each < nodes.names().size(); ++each) {
         const std::size_t kColumn = column[nodes.names()[each]];
         filled.resize(std::max(filled.size(), kColumn + 1), kMargin);
-        const Value* kInputs = nodes.items()[each].find("inputs");
+        const Value* kInputs = inputsOf(nodes.items()[each]);
         const float kHeight =
             kHeader + kInputRow * static_cast<float>(kInputs != nullptr ? kInputs->items().size() : 0);
         const float kX = kMargin + static_cast<float>(kColumn) * (kNodeWidth + kColumnGap);
@@ -119,7 +126,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
     // header across half the gap, along to the input's row, and in.
     for (std::size_t each = 0; each < nodes.names().size(); ++each) {
         const auto [kToX, kToY] = placed[nodes.names()[each]];
-        const Value* kInputs = nodes.items()[each].find("inputs");
+        const Value* kInputs = inputsOf(nodes.items()[each]);
         for (std::size_t input = 0; kInputs != nullptr && input < kInputs->items().size(); ++input) {
             const std::string* kFrom = sourceOf(kInputs->items()[input]);
             const auto kSource = kFrom != nullptr ? placed.find(*kFrom) : placed.end();
@@ -149,7 +156,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
         }
         const std::size_t kEntity = static_cast<std::size_t>(kListed - entities_.begin());
         const auto [kX, kY] = placed[kId];
-        const Value* kInputs = nodes.items()[each].find("inputs");
+        const Value* kInputs = inputsOf(nodes.items()[each]);
         const float kHeight =
             kHeader + kInputRow * static_cast<float>(kInputs != nullptr ? kInputs->items().size() : 0);
         ui::Layout placing = kPlace(kX, kY, kNodeWidth, kHeight);
