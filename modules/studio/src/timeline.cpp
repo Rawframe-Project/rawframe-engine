@@ -13,6 +13,12 @@ namespace {
 
 constexpr float kLabelWidth = 170;
 constexpr float kPerSecond = 480;
+/// What a clip of any length is drawn within: a sheet at most this wide,
+/// its ruler at most this many ticks, and at most this many lanes, so a
+/// clip that says it lasts a day lays out as one that lasts a second does.
+constexpr float kMostWide = 16'384;
+constexpr double kMostTicks = 200;
+constexpr std::size_t kMostLanes = 256;
 constexpr float kRuler = 22;
 constexpr float kLane = 24;
 constexpr float kMark = 9;
@@ -78,7 +84,7 @@ void ShellParticipant::showTimeline(const Value& clip) {
     std::vector<Lane> lanes;
     std::size_t keys = 0;
     const std::span<const Value> kTracks = itemsOf(clip, "tracks");
-    for (std::size_t track = 0; track < kTracks.size(); ++track) {
+    for (std::size_t track = 0; track < kTracks.size() && lanes.size() < kMostLanes; ++track) {
         const std::string* kBone = textOf(kTracks[track], "bone");
         const std::string* kChannel = textOf(kTracks[track], "channel");
         const auto kNamed = kBone != nullptr ? boneNames.find(*kBone) : boneNames.end();
@@ -98,7 +104,7 @@ void ShellParticipant::showTimeline(const Value& clip) {
     for (const auto& [kMember, kLaneName, kCount] :
          {std::tuple{"events", "events", &events}, std::tuple{"syncMarkers", "sync markers", &markers}}) {
         const std::span<const Value> kItems = itemsOf(clip, kMember);
-        if (kItems.empty()) {
+        if (kItems.empty() || lanes.size() >= kMostLanes) {
             continue;
         }
         Lane lane{.name = kLaneName, .marks = {}};
@@ -110,7 +116,9 @@ void ShellParticipant::showTimeline(const Value& clip) {
     }
     // A pane scrolling both ways over a sheet as long as the clip, its
     // ruler on top and its lanes under it.
-    const float kWide = kLabelWidth + static_cast<float>(kLength) * kPerSecond + 2 * kMargin;
+    const float kPerSecondShown =
+        std::min(kPerSecond, (kMostWide - kLabelWidth - 2 * kMargin) / static_cast<float>(kLength));
+    const float kWide = kLabelWidth + static_cast<float>(kLength) * kPerSecondShown + 2 * kMargin;
     const float kTall = kRuler + kLane * static_cast<float>(lanes.size()) + kMargin;
     auto pane = box(
         centerColumn_,
@@ -133,13 +141,23 @@ void ShellParticipant::showTimeline(const Value& clip) {
                           .shrink = 0,
                           .placement = ui::Placement{.absolute = true, .x = ui::pixels(x), .y = ui::pixels(y)}};
     };
-    const auto kAt = [](double seconds) {
-        return kLabelWidth + static_cast<float>(seconds) * kPerSecond;
+    const auto kAt = [kPerSecondShown](double seconds) {
+        return kLabelWidth + static_cast<float>(seconds) * kPerSecondShown;
     };
-    // A tick each tenth of a second, a quarter, a half, or a second, the
-    // most that leave each tick's words room; each said.
-    const double kStep = kLength <= 1.5 ? 0.1 : kLength <= 4 ? 0.25 : kLength <= 8 ? 0.5 : 1;
-    for (std::size_t tick = 0; static_cast<double>(tick) * kStep <= kLength + 1e-9; ++tick) {
+    // A tick each tenth of a second, a quarter, a half, a second, or more,
+    // the least that leaves each tick's words room and the ruler its most
+    // ticks; each said.
+    double step = kLength / kMostTicks;
+    for (const double kEach : {0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 300.0, 600.0, 3600.0}) {
+        if (kEach * static_cast<double>(kPerSecondShown) >= 48 && kLength / kEach <= kMostTicks) {
+            step = kEach;
+            break;
+        }
+    }
+    const double kStep = std::max(step, kLength / kMostTicks);
+    for (std::size_t tick = 0;
+         tick <= static_cast<std::size_t>(kMostTicks) && static_cast<double>(tick) * kStep <= kLength + 1e-9;
+         ++tick) {
         const double kSeconds = static_cast<double>(tick) * kStep;
         static_cast<void>(box(*sheet, kPlace(kAt(kSeconds), 0, 1, kTall), kTick));
         auto said = box(*sheet, kPlace(kAt(kSeconds) + 3, 2, 44, kRuler - 4), 0);
@@ -150,7 +168,7 @@ void ShellParticipant::showTimeline(const Value& clip) {
     for (std::size_t each = 0; each < lanes.size(); ++each) {
         const float kY = kRuler + kLane * static_cast<float>(each);
         static_cast<void>(
-            box(*sheet, kPlace(kAt(0), kY + 2, static_cast<float>(kLength) * kPerSecond, kLane - 4), kLaneFill));
+            box(*sheet, kPlace(kAt(0), kY + 2, static_cast<float>(kLength) * kPerSecondShown, kLane - 4), kLaneFill));
         auto label = box(*sheet, kPlace(0, kY, kLabelWidth - 6, kLane), 0);
         if (label.has_value()) {
             static_cast<void>(words(*label, lanes[each].name, kText, 12));
