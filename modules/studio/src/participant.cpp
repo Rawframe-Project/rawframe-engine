@@ -339,6 +339,10 @@ void ShellParticipant::stop() noexcept {
         pointing_->onWheel({});
         pointing_->onRelease({});
     }
+    // A splitter dragged as Studio ends is let go where it stands, its
+    // sizes kept: a loaded Studio could end before the frame that read
+    // the release (D830).
+    releaseSplitter();
     if (typing_ != nullptr) {
         typing_->focus(std::nullopt);
         typing_->answer({});
