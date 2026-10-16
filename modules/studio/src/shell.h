@@ -2,13 +2,15 @@
 
 // Studio's shell (D435): a participant holding an authoring session on a
 // game in its own process and showing it as a UI of its own. What its
-// parts share: Studio's colors, the rows and buttons it acts on, and the
-// shell itself, whose lifecycle is participant.cpp's, its panels
+// parts share: Studio's colors, and the shell itself (the rows and buttons
+// it acts on are rows.h's), whose lifecycle is participant.cpp's, its panels
 // panels.cpp's, its presses, typing, and session records editing.cpp's,
 // and the game it plays playing.cpp's.
 
 #include "browser.h"
 #include "console.h"
+#include "live.h"
+#include "network_panel.h"
 #include "play.h"
 #include "preferences.h"
 #include "rawframe/authoring_session/game.h"
@@ -27,6 +29,7 @@
 #include "rawframe/view/typing.h"
 #include "rawframe/world_tooling/forwarding.h"
 #include "records.h"
+#include "rows.h"
 #include "viewing.h"
 
 #include <algorithm>
@@ -53,6 +56,7 @@ inline constexpr diagnostics::EventIdentity kStartScreen{"studio", "studio_start
 inline constexpr diagnostics::EventIdentity kSelection{"studio", "studio_selection"};
 inline constexpr diagnostics::EventIdentity kViewported{"studio", "studio_viewport"};
 inline constexpr diagnostics::EventIdentity kBrowsed{"studio", "studio_assets"};
+inline constexpr diagnostics::EventIdentity kPlayedRecord{"studio", "studio_played"};
 /// The image key the viewport's picture is drawn under (D789).
 inline constexpr std::uint64_t kViewportImage = 0x5649455750ULL;
 inline constexpr diagnostics::EventIdentity kShown{"studio", "studio_shown"};
@@ -93,86 +97,6 @@ inline constexpr std::uint32_t kText = 0xE6E8EEFFU;
 inline constexpr std::uint32_t kQuiet = 0x9AA0ADFFU;
 /// Words that warn: a chord two commands share (D782).
 inline constexpr std::uint32_t kWarning = 0xE8B04AFFU;
-
-/// A field Studio edits and what the session needs to act on it: a
-/// component's field (its kind the read value's key), the chosen entity's
-/// name, the name of a component to add, or a part of the scene's view.
-struct FieldRow {
-    enum class Role : std::uint8_t {
-        Field,
-        Name,
-        Add,
-        View,
-        /// The scene an instance placed in the chosen scene is of.
-        Instance,
-        /// The path of a new scene (D449).
-        NewScene,
-        /// What the entity column shows of the scene (D473).
-        Find,
-        /// A part of a style class's look: `component` its variant, `field`
-        /// the part (D637); with no variant, the class's transitions
-        /// (D639).
-        Part,
-        /// A field of a UI document's node (D643).
-        NodeField,
-        /// A material instance's override of its base's input or switch
-        /// (D722).
-        Override,
-        /// A material graph's node's param, `field` its name (D730).
-        GraphParam,
-        /// A material graph's node's input, `field` its name (D730).
-        GraphInput,
-        /// The command palette's search (D777).
-        Palette,
-        /// The start screen's new game's name, and a game to open (D781).
-        NewGame,
-        OpenGame,
-        /// A command's keys, `field` its name, and the editor's command, in
-        /// the Preferences dialog (D782).
-        Shortcut,
-        Editor,
-        /// A chosen source's import setting, `field` its name (D800).
-        ImportSetting
-    };
-    ui::Node value{};
-    Role role = Role::Field;
-    std::string component;
-    std::string field;
-    std::string kind;
-    /// The catalog's field, its hints with it (D784).
-    Catalog::Field type{};
-};
-
-/// A button on a component or a field and the operation it asks: Remove,
-/// or an instance's Revert of a component or a field.
-struct ActionButton {
-    ui::Node node{};
-    std::string operation;
-    std::string component;
-    /// The field, for a field's.
-    std::string field;
-    /// What the header says once it is done.
-    std::string done;
-    /// The scene's operation, naming no entity: a component's remark.
-    bool whole = false;
-    /// A node of `component` made, not an operation: a UI node (D672), or
-    /// a material graph's node of that type (D731).
-    bool makesNode = false;
-    /// An output of the chosen graph node, `field` its name: the input
-    /// field pressed next, on this node or one chosen first, takes a
-    /// connection from it (D733).
-    bool connects = false;
-};
-
-/// A named action (SPEC-0051 Part 1, D777): its menu's row, its palette
-/// entry, and its chords do it as its button's press does.
-struct Command {
-    std::string name;
-    std::string menu;
-    /// Its chords as `view::Typing` names them, the first shown beside it.
-    std::vector<std::string> keys;
-    ui::Node button{};
-};
 
 /// The shell: a session on the game, and the UI that shows it.
 class ShellParticipant final : public composition::Participant, public ui::UiFrames {
@@ -220,8 +144,12 @@ private:
 
     /// A column of the left dock headed `heading`, `tab` the press in its
     /// heading that shows `other` in its place (D788).
-    result::Result<ui::Node>
-    tabbedColumn(ui::Node parent, std::string_view heading, std::string_view other, ui::Node& tab);
+    result::Result<ui::Node> tabbedColumn(ui::Node parent,
+                                          std::string_view heading,
+                                          std::string_view other,
+                                          ui::Node& tab,
+                                          std::string_view extra = {},
+                                          ui::Node* extraButton = nullptr);
 
     /// The Hierarchy, or with `layers` the Layers, in the left dock.
     void showLeft(bool layers);
@@ -315,7 +243,8 @@ private:
     enum class Dock : std::uint8_t {
         Assets,
         History,
-        Console
+        Console,
+        Network
     };
 
     /// The bottom dock showing `pane`.
@@ -698,6 +627,21 @@ private:
     /// The game played to preview it: its server and client started, the
     /// client attached as the chosen scene's preview once it says who it is.
     void startPlaying();
+    /// The played game's World paused or let run, or stepped a tick (D806).
+    void runPlayed(bool step);
+    /// The Network panel made, a link button pressed, the server's traffic
+    /// read once a second while it is shown, and its lines (D807).
+    result::Status makeNetwork();
+    bool pressNetwork(ui::Node node);
+    void readNetwork(double seconds);
+    void showNetwork(const std::vector<std::string>& lines);
+    /// The live World (D808): switched on or off, listed in the Hierarchy,
+    /// an entity of it shown and read again, and a press on its rows.
+    void switchLive();
+    void showLive();
+    void showLiveEntity(const std::string& entity);
+    void readLive(double seconds);
+    bool pressLive(ui::Node node);
 
     /// The game let go and asked to stop.
     void stopPlaying();
@@ -786,9 +730,14 @@ private:
     std::filesystem::path preferencesFile_;
     std::uint64_t resized_ = 0;
     ui::Node consoleTab_{};
+    ui::Node networkTab_{};
     /// The Console's pane: its filters over the list of its lines, which
     /// alone scrolls, so the filters stay in sight.
     ui::Node consoleColumn_{};
+    /// The Network panel (D807).
+    ui::Node networkColumn_{};
+    NetworkShown network_;
+    LiveShown live_;
     ui::Node consoleList_{};
     /// The Console's lines, oldest first, and the played game's logs.
     std::deque<ConsoleLine> console_;
@@ -995,6 +944,10 @@ private:
     /// shown (D789).
     ui::Node viewport_{};
     PlayedViewport inViewport_;
+    /// How many players a play has (D804), and the device its first is
+    /// tried as (D809).
+    std::uint32_t players_ = 1;
+    std::optional<std::array<std::uint32_t, 2>> device_;
     std::vector<ui::Node> sceneRows_;
     std::vector<ui::Node> entityRows_;
     std::vector<ui::Node> componentRows_;
