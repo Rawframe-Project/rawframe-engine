@@ -25,6 +25,9 @@ bool same(const std::optional<Value>& left, const std::optional<Value>& right) {
 
 /// Where the item of `array` known by `step` stands, if it is there.
 std::optional<std::size_t> itemOf(const Value* array, const JsonStep& step) {
+    if (step.place.has_value()) {
+        return array != nullptr && *step.place < array->items().size() ? step.place : std::nullopt;
+    }
     for (std::size_t at = 0; array != nullptr && at < array->items().size(); ++at) {
         const Value* key = array->items()[at].find(step.key);
         if (key != nullptr && key->text() != nullptr && *key->text() == step.id) {
@@ -88,7 +91,7 @@ result::Result<Value> setIn(const Value& object,
     const JsonStep& kStep = path.front();
     const std::span<const std::string_view> kOrder = order(full.first(depth));
     const bool kKept = depth == 0 || (keeps != nullptr && keeps(full.first(depth + 1)));
-    if (kStep.key.empty()) {
+    if (!namesItem(kStep)) {
         if (path.size() == 1) {
             return withMember(object, kOrder, kStep.member, to);
         }
@@ -101,7 +104,22 @@ result::Result<Value> setIn(const Value& object,
     const std::size_t kCount = array != nullptr ? array->items().size() : 0;
     const std::optional<std::size_t> kFound = itemOf(array, kStep);
     Value items = Value::array();
-    if (path.size() == 1) {
+    if (path.size() == 1 && kStep.place.has_value()) {
+        // An item named by its place is only ever replaced: one put in or
+        // taken away would move every place after it (D827).
+        if (!kFound.has_value()) {
+            return refuse(
+                result::ErrorClass::NotFound, AuthoringError::TargetNotFound, "the array has no item at that place");
+        }
+        if (!to.has_value()) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          AuthoringError::ValidationFailed,
+                          "an item named by its place is set, never taken away: its array is set whole for that");
+        }
+        for (std::size_t each = 0; each < kCount; ++each) {
+            items.push(each == *kFound ? *to : array->items()[each]);
+        }
+    } else if (path.size() == 1) {
         // The item itself, which comes or goes whole at its place.
         const std::size_t kAt = kFound.value_or(place);
         if (kAt > kCount) {
@@ -151,7 +169,7 @@ std::optional<Value> slotAt(const Value& root, std::span<const JsonStep> path) {
     const Value* held = &root;
     for (const JsonStep& kStep : path) {
         held = held->find(kStep.member);
-        if (held != nullptr && !kStep.key.empty()) {
+        if (held != nullptr && namesItem(kStep)) {
             const std::optional<std::size_t> kAt = itemOf(held, kStep);
             held = kAt.has_value() ? &held->items()[*kAt] : nullptr;
         }
@@ -163,7 +181,7 @@ std::optional<Value> slotAt(const Value& root, std::span<const JsonStep> path) {
 }
 
 std::optional<std::size_t> placeAt(const Value& root, std::span<const JsonStep> path) {
-    if (path.empty() || path.back().key.empty()) {
+    if (path.empty() || !namesItem(path.back())) {
         return std::nullopt;
     }
     const std::optional<Value> kHolder = slotAt(root, path.first(path.size() - 1));

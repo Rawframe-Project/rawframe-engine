@@ -31,13 +31,21 @@
 namespace rawframe::authoring {
 
 /// One step of a slot's path: the member `member`, or, with a `key`, the
-/// item of that member's array whose `key` holds the text `id`.
+/// item of that member's array whose `key` holds the text `id`, or, with a
+/// `place`, the item at that place of it (an array whose items are known
+/// by nothing of their own, D827).
 struct JsonStep {
     std::string member;
     std::string key;
     std::string id;
+    std::optional<std::size_t> place;
 };
 using JsonPath = std::vector<JsonStep>;
+
+/// Whether `step` names an item of an array, not a member.
+[[nodiscard]] inline bool namesItem(const JsonStep& step) noexcept {
+    return !step.key.empty() || step.place.has_value();
+}
 
 /// One slot, from what it holds to another; `place` is where an item that
 /// comes or goes whole stands among its array's.

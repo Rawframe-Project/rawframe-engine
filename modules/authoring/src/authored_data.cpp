@@ -3,6 +3,7 @@
 #include "rawframe/authoring/errors.h"
 
 #include <array>
+#include <charconv>
 #include <utility>
 
 namespace rawframe::authoring {
@@ -43,6 +44,8 @@ std::string pathText(const JsonPath& path) {
         made += (made.empty() ? "" : ".") + kStep.member;
         if (!kStep.key.empty()) {
             made += "[" + kStep.id + "]";
+        } else if (kStep.place.has_value()) {
+            made += "[" + std::to_string(*kStep.place) + "]";
         }
     }
     return made;
@@ -54,7 +57,7 @@ result::Result<JsonPath> dataPathOf(std::string_view text) {
     const auto kBad = [] {
         return refuse(result::ErrorClass::InvalidArgument,
                       AuthoringError::ValidationFailed,
-                      "a path is members apart by dots, an item as member[key=id]");
+                      "a path is members apart by dots, an item as member[key=id] or member[place]");
     };
     JsonPath path;
     std::size_t at = 0;
@@ -63,15 +66,27 @@ result::Result<JsonPath> dataPathOf(std::string_view text) {
         const std::string_view kPart = text.substr(at, kEnd - at);
         JsonStep step;
         if (const std::size_t kOpen = kPart.find('['); kOpen != std::string_view::npos) {
-            const std::size_t kEquals = kPart.find('=', kOpen);
-            if (!kPart.ends_with(']') || kEquals == std::string_view::npos) {
+            if (!kPart.ends_with(']')) {
                 return kBad();
             }
             step.member = kPart.substr(0, kOpen);
-            step.key = kPart.substr(kOpen + 1, kEquals - kOpen - 1);
-            step.id = kPart.substr(kEquals + 1, kPart.size() - kEquals - 2);
-            if (!named(step.key) || !named(step.id)) {
-                return kBad();
+            const std::string_view kInside = kPart.substr(kOpen + 1, kPart.size() - kOpen - 2);
+            const std::size_t kEquals = kInside.find('=');
+            if (kEquals != std::string_view::npos) {
+                step.key = kInside.substr(0, kEquals);
+                step.id = kInside.substr(kEquals + 1);
+                if (!named(step.key) || !named(step.id)) {
+                    return kBad();
+                }
+            } else {
+                // An item by its place from nought, as `keys[2]` (D827).
+                std::size_t place = 0;
+                const auto [kStop, kError] = std::from_chars(kInside.data(), kInside.data() + kInside.size(), place);
+                if (kInside.empty() || kInside.size() > 9 || kError != std::errc{} ||
+                    kStop != kInside.data() + kInside.size()) {
+                    return kBad();
+                }
+                step.place = place;
             }
         } else {
             step.member = kPart;

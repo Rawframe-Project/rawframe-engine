@@ -102,7 +102,7 @@ std::string hexOf(std::uint64_t id) {
 }
 
 JsonStep step(std::string member) {
-    return JsonStep{.member = std::move(member), .key = {}, .id = {}};
+    return JsonStep{.member = std::move(member), .key = {}, .id = {}, .place = {}};
 }
 
 JsonDelta setting(const Value& staged, JsonPath path, std::optional<Value> to) {

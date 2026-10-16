@@ -56,7 +56,8 @@ std::optional<JsonPath> found(const Value& held, std::string_view member, std::s
         if (component == nullptr || component->text() == nullptr) {
             continue;
         }
-        path.push_back(JsonStep{.member = std::string{member}, .key = "component", .id = *component->text()});
+        path.push_back(
+            JsonStep{.member = std::string{member}, .key = "component", .id = *component->text(), .place = {}});
         if (*component->text() == node) {
             return path;
         }
@@ -97,7 +98,8 @@ result::Result<JsonDelta> insertion(const Value& staged,
                       AuthoringError::ValidationFailed,
                       "a node's place is among its siblings or after them");
     }
-    path.push_back(JsonStep{.member = path.empty() ? "nodes" : "children", .key = "component", .id = node});
+    path.push_back(
+        JsonStep{.member = path.empty() ? "nodes" : "children", .key = "component", .id = node, .place = {}});
     return JsonDelta{
         .path = std::move(path), .place = place.value_or(kCount), .before = std::nullopt, .after = std::move(record)};
 }
@@ -120,7 +122,7 @@ result::Result<JsonDelta> deltaOf(const Value& staged, const Operation& operatio
         if (!path.has_value()) {
             return kUnknown();
         }
-        path->push_back(JsonStep{.member = set->field, .key = {}, .id = {}});
+        path->push_back(JsonStep{.member = set->field, .key = {}, .id = {}, .place = {}});
         std::optional<Value> before = slotAt(staged, *path);
         return JsonDelta{.path = std::move(*path), .place = 0, .before = std::move(before), .after = set->value};
     }

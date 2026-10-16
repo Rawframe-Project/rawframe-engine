@@ -63,12 +63,12 @@ std::string hexOf(std::uint64_t id) {
 
 /// The path to class `style`, and to its member or part under it.
 JsonPath classPath(std::uint64_t style) {
-    return {JsonStep{.member = "styles", .key = "styleId", .id = hexOf(style)}};
+    return {JsonStep{.member = "styles", .key = "styleId", .id = hexOf(style), .place = {}}};
 }
 JsonPath under(std::uint64_t style, std::initializer_list<std::string_view> members) {
     JsonPath path = classPath(style);
     for (const std::string_view kMember : members) {
-        path.push_back(JsonStep{.member = std::string{kMember}, .key = {}, .id = {}});
+        path.push_back(JsonStep{.member = std::string{kMember}, .key = {}, .id = {}, .place = {}});
     }
     return path;
 }

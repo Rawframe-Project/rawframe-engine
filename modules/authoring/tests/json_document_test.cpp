@@ -65,14 +65,15 @@ JsonPath nodePath(std::initializer_list<std::string_view> names) {
     JsonPath path;
     bool first = true;
     for (const std::string_view kName : names) {
-        path.push_back(JsonStep{.member = first ? "nodes" : "children", .key = "name", .id = std::string{kName}});
+        path.push_back(
+            JsonStep{.member = first ? "nodes" : "children", .key = "name", .id = std::string{kName}, .place = {}});
         first = false;
     }
     return path;
 }
 
 JsonPath memberOf(JsonPath path, std::string_view member) {
-    path.push_back(JsonStep{.member = std::string{member}, .key = {}, .id = {}});
+    path.push_back(JsonStep{.member = std::string{member}, .key = {}, .id = {}, .place = {}});
     return path;
 }
 
