@@ -530,13 +530,19 @@ if(RAWFRAME_BUILD_TESTS)
     # confirmed, fewer rollbacks than that, and no checksum diverged (D274).
     # Run alone it rolls back some thirty times; a loaded machine, whose
     # inputs arrive late, more than a hundred over twice the ticks; a
-    # prediction that missed every tick would roll back each (D511).
+    # prediction that missed every tick would roll back each (D511). Its
+    # bound is a real-time one: CI's full check at a load of 111, the
+    # server's ticks 20 ms at p95 in gcc's debug tree, rolled back 1,585
+    # times, past the bound in the run before it too, so it plays alone,
+    # in the fast check (D829).
     add_test(NAME plaza_prediction
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/plaza_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(plaza_prediction PROPERTIES
                          FIXTURES_REQUIRED plaza_content
                          PROCESSORS 6
+                         LABELS alone
+                         RUN_SERIAL TRUE
                          PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9]?[0-9],"
                          FAIL_REGULAR_EXPRESSION "\"checksumsDiverged\":[1-9]")
 endif()
