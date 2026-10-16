@@ -1,6 +1,9 @@
+#include "rawframe/animation/clip.h"
+#include "rawframe/animation/sample.h"
 #include "shell.h"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <map>
@@ -19,6 +22,11 @@ constexpr float kPerSecond = 480;
 constexpr float kMostWide = 16'384;
 constexpr double kMostTicks = 200;
 constexpr std::size_t kMostLanes = 256;
+/// The chosen track's curve under the lanes: its height, how many times it
+/// is sampled across the clip, and each value's color, x y z w.
+constexpr float kCurve = 150;
+constexpr std::size_t kSamples = 160;
+constexpr std::array<std::uint32_t, 4> kCurveColors = {0xE06C6CFFU, 0x7FC97FFFU, 0x6CA6E0FFU, 0xC8C8C8FFU};
 constexpr float kRuler = 22;
 constexpr float kLane = 24;
 constexpr float kMark = 9;
@@ -119,7 +127,19 @@ void ShellParticipant::showTimeline(const Value& clip) {
     const float kPerSecondShown =
         std::min(kPerSecond, (kMostWide - kLabelWidth - 2 * kMargin) / static_cast<float>(kLength));
     const float kWide = kLabelWidth + static_cast<float>(kLength) * kPerSecondShown + 2 * kMargin;
-    const float kTall = kRuler + kLane * static_cast<float>(lanes.size()) + kMargin;
+    // The track chosen, by its row's path (`tracks[2]` or one of its
+    // keys), whose curve is drawn under the lanes.
+    std::optional<std::size_t> curved;
+    if (entity_.starts_with("tracks[")) {
+        std::size_t place = 0;
+        const auto [kStop, kError] = std::from_chars(entity_.data() + 7, entity_.data() + entity_.size(), place);
+        if (kError == std::errc{} && kStop != entity_.data() + entity_.size() && *kStop == ']' &&
+            place < kTracks.size()) {
+            curved = place;
+        }
+    }
+    const float kLanesTall = kRuler + kLane * static_cast<float>(lanes.size());
+    const float kTall = kLanesTall + (curved.has_value() ? kCurve + kMargin : 0) + kMargin;
     auto pane = box(
         centerColumn_,
         ui::Layout{
@@ -192,6 +212,55 @@ void ShellParticipant::showTimeline(const Value& clip) {
             held_.canvasParts.emplace_back(*mark, kEntity);
         }
     }
+    // Its values over the clip as the engine samples them (sampleTrack, as
+    // a played clip is), each a line of dots between the least and the
+    // most any reaches: the shape of the motion, not its units.
+    std::size_t sampled = 0;
+    std::size_t values = 0;
+    std::optional<animation::Clip> read;
+    if (curved.has_value()) {
+        if (auto parsed = animation::readClip(document::write(clip)); parsed.has_value()) {
+            read = std::move(*parsed);
+        }
+    }
+    const std::optional<animation::Clip>& kClip = read;
+    if (kClip.has_value() && *curved < kClip->tracks.size()) {
+        const animation::Track& kTrack = kClip->tracks[*curved];
+        values = kTrack.channel == animation::Channel::Rotation                                                     ? 4
+                 : kTrack.channel == animation::Channel::Translation || kTrack.channel == animation::Channel::Scale ? 3
+                                                                                                                    : 1;
+        std::vector<std::array<double, 4>> samples;
+        double least = 0;
+        double most = 0;
+        for (std::size_t each = 0; each < kSamples; ++each) {
+            const double kTime = kLength * static_cast<double>(each) / static_cast<double>(kSamples - 1);
+            samples.push_back(each + 1 == kSamples ? animation::sampleTrackAtEnd(*kClip, kTrack)
+                                                   : animation::sampleTrack(*kClip, kTrack, kTime));
+            for (std::size_t value = 0; value < values; ++value) {
+                least = each == 0 && value == 0 ? samples.back()[value] : std::min(least, samples.back()[value]);
+                most = each == 0 && value == 0 ? samples.back()[value] : std::max(most, samples.back()[value]);
+            }
+        }
+        const float kTop = kLanesTall + kMargin;
+        static_cast<void>(
+            box(*sheet, kPlace(kAt(0), kTop, static_cast<float>(kLength) * kPerSecondShown, kCurve), kLaneFill));
+        const double kSpan = most - least > 1e-9 ? most - least : 1;
+        for (std::size_t each = 0; each < samples.size(); ++each) {
+            const double kTime = kLength * static_cast<double>(each) / static_cast<double>(kSamples - 1);
+            for (std::size_t value = 0; value < values; ++value) {
+                const double kHeight = (samples[each][value] - least) / kSpan;
+                const float kY = kTop + 4 + static_cast<float>(1 - kHeight) * (kCurve - 8);
+                static_cast<void>(box(*sheet, kPlace(kAt(kTime) - 1, kY - 1, 3, 3), kCurveColors[value]));
+            }
+        }
+        sampled = samples.size();
+    }
+    emitter_.log(diagnostics::Severity::Info,
+                 kCurveShown,
+                 "the chosen track's values over its clip",
+                 {diagnostics::field("track", curved.has_value() ? static_cast<std::int64_t>(*curved) : -1),
+                  diagnostics::field("values", values),
+                  diagnostics::field("samples", sampled)});
     emitter_.log(diagnostics::Severity::Info,
                  kTimelineShown,
                  "a clip's tracks, events, and markers laid out over its time",

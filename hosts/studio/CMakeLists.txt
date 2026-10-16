@@ -600,7 +600,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # their skeleton's bones, its keys and its two footsteps marks at their
     # times; the hips' second translation key pressed on the timeline and
     # moved to a quarter second by its row's field (`data.set` through the
-    # key's place), then pressed again where it went.
+    # key's place), then pressed again where it went; the hips' track drawn
+    # as a curve of three values under the lanes (D836).
     add_test(NAME studio_edits_clip
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
@@ -611,7 +612,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_edits_clip PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed 0.25 at [0-9]+,[0-9]+.*found hips translation at 0.25 at.*amble/walk.rfanim written: yes.*\"code\":\"studio_timeline\"[^\n]*\"tracks\":6,\"keys\":11,\"events\":2,\"markers\":0,\"named\":7,\"marks\":13}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"amble/walk.rfanim\",[^\n]*\"entity\":\"tracks.0..keys.1.\",[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
+                         "typed 0.25 at [0-9]+,[0-9]+.*found hips translation at 0.25 at.*amble/walk.rfanim written: yes.*\"code\":\"studio_curve\"[^\n]*\"track\":0,\"values\":3,\"samples\":160}.*\"code\":\"studio_timeline\"[^\n]*\"tracks\":6,\"keys\":11,\"events\":2,\"markers\":0,\"named\":7,\"marks\":13}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"amble/walk.rfanim\",[^\n]*\"entity\":\"tracks.0..keys.1.\",[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
     # A node the surface reads is not deleted: the session refuses what
     # leaves a graph that does not read (D728), and Studio says so.
     add_test(NAME studio_graph_keeps

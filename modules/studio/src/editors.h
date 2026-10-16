@@ -20,6 +20,7 @@ namespace rawframe::studio {
 /// A graph laid out on the canvas (D819), a clip on its timeline (D827).
 inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canvas"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
+inline constexpr diagnostics::EventIdentity kCurveShown{"studio", "studio_curve"};
 /// A UI document laid out as its game would show it (D832).
 inline constexpr diagnostics::EventIdentity kUiPreviewShown{"studio", "studio_ui_preview"};
 /// The environment panel's components and their entities (D834).

@@ -152,7 +152,14 @@ void ShellParticipant::showDataEntry(std::size_t at) {
         static_cast<void>(
             tree_->setLook(entityRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
     }
-    markCanvas();
+    // A clip's timeline laid out again, the chosen track's curve with it;
+    // a graph's canvas marked (D827, D836).
+    const Value* kKind = sheet_.has_value() ? sheet_->find("kind") : nullptr;
+    if (kKind != nullptr && kKind->kind() == Value::Kind::String && *kKind->text() == "animation.clip") {
+        showTimeline(*sheet_);
+    } else {
+        markCanvas();
+    }
     clear(componentRows_);
     actions_.clear();
     components_ = 0;
