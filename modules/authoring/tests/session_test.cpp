@@ -108,6 +108,24 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     RAWFRAME_EXPECT(kThumbnail.has_value() && kThumbnail->verb == SessionVerb::Thumbnail && kThumbnail->size == 64);
     RAWFRAME_EXPECT(
         !readSessionRecord(R"({"kind":"authoring.thumbnail","id":14,"asset":"paving.png","size":8})", id).has_value());
+    // The previewed game paused and stepped (D806), bounded.
+    const auto kRun = readSessionRecord(R"({"kind":"authoring.run","id":16,"scene":"gate.scene","paused":true})", id);
+    RAWFRAME_EXPECT(kRun.has_value() && kRun->verb == SessionVerb::Run && kRun->paused == std::optional<bool>{true});
+    const auto kAsked = readSessionRecord(R"({"kind":"authoring.run","id":17,"scene":"gate.scene"})", id);
+    RAWFRAME_EXPECT(kAsked.has_value() && !kAsked->paused.has_value());
+    const auto kStep = readSessionRecord(R"({"kind":"authoring.step","id":18,"scene":"gate.scene","ticks":3})", id);
+    RAWFRAME_EXPECT(kStep.has_value() && kStep->ticks == 3);
+    RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.step","id":19,"scene":"gate.scene","ticks":601})", id));
+    RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.run","id":20,"scene":"gate.scene","paused":1})", id));
+    const auto kTraffic = readSessionRecord(R"({"kind":"authoring.traffic","id":21,"scene":"gate.scene"})", id);
+    RAWFRAME_EXPECT(kTraffic.has_value() && kTraffic->verb == SessionVerb::Traffic);
+    // The live World's verbs (D808): shapes only.
+    const auto kLive = readSessionRecord(
+        R"({"kind":"authoring.live_entities","id":22,"scene":"gate.scene","after":"4:1","limit":16})", id);
+    RAWFRAME_EXPECT(kLive.has_value() && kLive->verb == SessionVerb::LiveEntities &&
+                    kLive->query.find("limit") != nullptr);
+    RAWFRAME_EXPECT(
+        !readSessionRecord(R"({"kind":"authoring.live_entity","id":23,"scene":"gate.scene","entity":7})", id));
     // A source's references by its path (D803).
     const auto kReferences =
         readSessionRecord(R"({"kind":"authoring.asset_references","id":15,"asset":"crate.png"})", id);

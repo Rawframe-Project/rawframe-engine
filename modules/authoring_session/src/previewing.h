@@ -75,6 +75,18 @@ public:
     [[nodiscard]] document::Value split(const authoring::SessionRecord& record, const authoring::AuthoredScene& scene);
     [[nodiscard]] result::Result<document::Value> picked(const authoring::SessionRecord& record,
                                                          authoring::AuthoredScene* previewed);
+    /// `run` and `step` (D806): the previewed game's World paused, let
+    /// run, or stepped on its server, which grants run; what it says of
+    /// itself after. Refused where `record.scene` is not previewed with
+    /// its server (`failed_precondition`), and as the server refuses.
+    [[nodiscard]] result::Result<document::Value> ran(const authoring::SessionRecord& record);
+    /// `traffic` (D807): the previewed game's server's replication totals
+    /// and connections, as `tooling.traffic` says them; refused as `ran`.
+    [[nodiscard]] result::Result<document::Value> trafficOf(const authoring::SessionRecord& record);
+    /// `live_entities` and `live_entity` (D808): the previewed game's World
+    /// read on its server, `tooling.entities` and `tooling.read_entity` as
+    /// they answer; refused as `ran`, and as the server refuses.
+    [[nodiscard]] result::Result<document::Value> live(const authoring::SessionRecord& record);
 
     /// `mark` (D464): the preview marks a point, or none; whether it shows
     /// it.

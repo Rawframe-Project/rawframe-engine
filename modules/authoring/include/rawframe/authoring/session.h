@@ -132,6 +132,16 @@ enum class SessionVerb : std::uint8_t {
     Thumbnail,
     /// What a source uses and what uses it, by the last cook (D803).
     AssetReferences,
+    /// The previewed game's World paused, let run, or asked (D806).
+    Run,
+    /// The paused World stepped some ticks (D806).
+    Step,
+    /// The played game's server's traffic so far (D807).
+    Traffic,
+    /// The played game's living entities, a page, and one of them, read on
+    /// its server (D808).
+    LiveEntities,
+    LiveEntity,
     /// One atomic request over several scenes, one transaction (D497).
     ApplyTogether,
     /// The game's directory cooked, as a long-running operation (D502).
@@ -218,6 +228,13 @@ struct SessionRecord {
     document::Value settings;
     /// Thumbnail's: the most pixels on its longer side, 16 to 256 (D801).
     std::uint32_t size = 64;
+    /// Run's: whether to pause, none to ask only; step's ticks, 1 to 600
+    /// (D806).
+    std::optional<bool> paused;
+    std::uint32_t ticks = 1;
+    /// Live entities' and live entity's: what is handed on to the server,
+    /// `after`, `component`, `limit`, and `entity`, as given (D808).
+    document::Value query;
 };
 
 /// Reads one record; refuses (`ValidationFailed`) anything out of the form

@@ -495,6 +495,63 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"source", "as"}),
                                annotationsOf(false, false)));
     }
+    // The played game paused, let run, and stepped (D806).
+    {
+        Value properties = Value::object();
+        properties.add("scene", property("string", false, "The scene previewed while the game plays."));
+        properties.add("paused",
+                       property("boolean",
+                                false,
+                                "True to pause the game's World, false to let it run; leave out "
+                                "to ask only."));
+        tools.push_back(toolOf("game_run",
+                               "Pause or resume the World of the game played for a previewed scene, on its server; "
+                               "answers whether it is paused and its next tick.",
+                               schemaOf(std::move(properties), {"scene"}),
+                               annotationsOf(false, false)));
+    }
+    {
+        Value properties = Value::object();
+        properties.add("scene", property("string", false, "The scene previewed while the game plays."));
+        properties.add("ticks", property("integer", false, "Ticks to run, 1 to 600."));
+        tools.push_back(toolOf("game_step",
+                               "Step the paused World of the played game some ticks, then hold it again.",
+                               schemaOf(std::move(properties), {"scene", "ticks"}),
+                               annotationsOf(false, false)));
+    }
+    // The played game's World as its server holds it (D808).
+    {
+        Value properties = Value::object();
+        properties.add("scene", property("string", false, "The scene previewed while the game plays."));
+        properties.add("after", property("string", false, "The last entity of the page before, as listed."));
+        properties.add("component", property("string", false, "Only entities holding this component."));
+        properties.add("limit", property("integer", false, "At most this many, 1 to 256; 64 by default."));
+        tools.push_back(toolOf("game_entities",
+                               "The played game's living entities on its server, in slot order, a page at a time, "
+                               "each with its components' names.",
+                               schemaOf(std::move(properties), {"scene"}),
+                               annotationsOf(true, false)));
+    }
+    {
+        Value properties = Value::object();
+        properties.add("scene", property("string", false, "The scene previewed while the game plays."));
+        properties.add("entity", property("string", false, "The entity as game_entities lists it."));
+        tools.push_back(toolOf("game_entity",
+                               "One living entity of the played game, its components field by field, as its "
+                               "server holds them now.",
+                               schemaOf(std::move(properties), {"scene", "entity"}),
+                               annotationsOf(true, false)));
+    }
+    // The played game's server's traffic (D807).
+    {
+        Value properties = Value::object();
+        properties.add("scene", property("string", false, "The scene previewed while the game plays."));
+        tools.push_back(toolOf("game_traffic",
+                               "The played game's server's replication totals so far and its connections now; ask "
+                               "twice to measure rates.",
+                               schemaOf(std::move(properties), {"scene"}),
+                               annotationsOf(true, false)));
+    }
     // What a source uses and what uses it, by the last cook (D803).
     {
         Value properties = Value::object();
@@ -660,6 +717,27 @@ McpBridge::State::callSession(const Value& id, std::string_view name, const Valu
         made = record("authoring.import", recordId);
         copy("source", "source");
         copy("as", "as");
+    } else if (name == "game_run") {
+        made = record("authoring.run", recordId);
+        copy("scene", "scene");
+        copy("paused", "paused");
+    } else if (name == "game_entities") {
+        made = record("authoring.live_entities", recordId);
+        copy("scene", "scene");
+        copy("after", "after");
+        copy("component", "component");
+        copy("limit", "limit");
+    } else if (name == "game_entity") {
+        made = record("authoring.live_entity", recordId);
+        copy("scene", "scene");
+        copy("entity", "entity");
+    } else if (name == "game_traffic") {
+        made = record("authoring.traffic", recordId);
+        copy("scene", "scene");
+    } else if (name == "game_step") {
+        made = record("authoring.step", recordId);
+        copy("scene", "scene");
+        copy("ticks", "ticks");
     } else if (name == "asset_references") {
         made = record("authoring.asset_references", recordId);
         copy("asset", "asset");

@@ -221,6 +221,14 @@ private:
             return framed(record);
         case authoring::SessionVerb::ViewMode:
             return preview_.moded(record);
+        case authoring::SessionVerb::Run:
+        case authoring::SessionVerb::Step:
+            return preview_.ran(record);
+        case authoring::SessionVerb::Traffic:
+            return preview_.trafficOf(record);
+        case authoring::SessionVerb::LiveEntities:
+        case authoring::SessionVerb::LiveEntity:
+            return preview_.live(record);
         case authoring::SessionVerb::Overlays:
             return preview_.overlaid(record);
         case authoring::SessionVerb::Bookmark:

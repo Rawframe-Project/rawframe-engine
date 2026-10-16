@@ -30,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 31> kVerbs = {
+constexpr std::array<VerbName, 36> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -57,6 +57,11 @@ constexpr std::array<VerbName, 31> kVerbs = {
     VerbName{.kind = "authoring.set_import_settings", .verb = SessionVerb::SetImportSettings},
     VerbName{.kind = "authoring.thumbnail", .verb = SessionVerb::Thumbnail},
     VerbName{.kind = "authoring.asset_references", .verb = SessionVerb::AssetReferences},
+    VerbName{.kind = "authoring.run", .verb = SessionVerb::Run},
+    VerbName{.kind = "authoring.step", .verb = SessionVerb::Step},
+    VerbName{.kind = "authoring.traffic", .verb = SessionVerb::Traffic},
+    VerbName{.kind = "authoring.live_entities", .verb = SessionVerb::LiveEntities},
+    VerbName{.kind = "authoring.live_entity", .verb = SessionVerb::LiveEntity},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
@@ -91,6 +96,15 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Overlays:
     case SessionVerb::Cook:
     case SessionVerb::Import:
+    case SessionVerb::Step:
+        return Members{.required = 2, .optional = 0};
+    case SessionVerb::Run:
+        return Members{.required = 1, .optional = 0};
+    case SessionVerb::Traffic:
+        return Members{.required = 1, .optional = 0};
+    case SessionVerb::LiveEntities:
+        return Members{.required = 1, .optional = 0};
+    case SessionVerb::LiveEntity:
         return Members{.required = 2, .optional = 0};
     case SessionVerb::Undo:
     case SessionVerb::Redo:
@@ -215,8 +229,18 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     const Value* scene = parsed->find("scene");
     const Value* expects = parsed->find("expects");
     const Value* dry = parsed->find("dryRun");
+    // A verb's own members it may leave out: run's paused (D806), and the
+    // live entities' page (D808).
+    std::size_t leftOutable = 0;
+    if (record.verb == SessionVerb::Run) {
+        leftOutable = parsed->find("paused") != nullptr ? 1 : 0;
+    } else if (record.verb == SessionVerb::LiveEntities) {
+        for (const char* kName : {"after", "component", "limit"}) {
+            leftOutable += parsed->find(kName) != nullptr ? 1 : 0;
+        }
+    }
     const std::size_t kGiven = parsed->names().size() - 1 - (parsed->find("id") != nullptr ? 1 : 0) -
-                               (expects != nullptr ? 1 : 0) - (dry != nullptr ? 1 : 0);
+                               (expects != nullptr ? 1 : 0) - (dry != nullptr ? 1 : 0) - leftOutable;
     if (kGiven != kMembers.required || (expects != nullptr && (kMembers.optional == 0 || textOf(expects) == nullptr))) {
         return malformed("a session record holds its verb's members and no others");
     }
@@ -328,6 +352,11 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Bookmarks:
     case SessionVerb::Split:
     case SessionVerb::Overlays:
+    case SessionVerb::Run:
+    case SessionVerb::Step:
+    case SessionVerb::Traffic:
+    case SessionVerb::LiveEntities:
+    case SessionVerb::LiveEntity:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -410,6 +439,38 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         if (!sound) {
             return malformed("layers are at most 64 layer numbers, each above nought");
         }
+    } else if (record.verb == SessionVerb::Run) {
+        // Paused true or false, or absent to ask only.
+        const Value* kPaused = parsed->find("paused");
+        if (kPaused != nullptr && !kPaused->truth().has_value()) {
+            return malformed("paused is true or false");
+        }
+        record.paused = kPaused != nullptr ? kPaused->truth() : std::nullopt;
+    } else if (record.verb == SessionVerb::LiveEntities || record.verb == SessionVerb::LiveEntity) {
+        // Handed on as given, the server's endpoint reading and bounding
+        // them; only their shapes are held here.
+        record.query = Value::object();
+        for (const char* kName : {"after", "component", "limit", "entity"}) {
+            if (const Value* kHanded = parsed->find(kName); kHanded != nullptr) {
+                const bool kShaped = std::string_view{kName} == "limit"
+                                         ? kHanded->integer().has_value()
+                                         : kHanded->kind() == Value::Kind::String && kHanded->text()->size() <= 128;
+                if (!kShaped) {
+                    return malformed("after, component, and entity are short text, and limit a number");
+                }
+                record.query.add(kName, *kHanded);
+            }
+        }
+        if (record.verb == SessionVerb::LiveEntity && record.query.find("entity") == nullptr) {
+            return malformed("live_entity names its entity as the server lists it");
+        }
+    } else if (record.verb == SessionVerb::Step) {
+        const Value* kTicks = parsed->find("ticks");
+        const std::optional<std::int64_t> kCount = kTicks != nullptr ? kTicks->integer() : std::nullopt;
+        if (!kCount.has_value() || *kCount < 1 || *kCount > 600) {
+            return malformed("ticks is from 1 to 600");
+        }
+        record.ticks = static_cast<std::uint32_t>(*kCount);
     } else if (record.verb == SessionVerb::ViewMode) {
         // Only bounded: the names are the renderer's.
         const Value* kMode = parsed->find("mode");

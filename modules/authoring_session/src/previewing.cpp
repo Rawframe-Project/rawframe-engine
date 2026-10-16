@@ -426,6 +426,105 @@ Value Preview::hid(const authoring::SessionRecord& record) {
     return made;
 }
 
+result::Result<Value> Preview::ran(const authoring::SessionRecord& record) {
+    if (server_ == nullptr || record.scene != scene_) {
+        return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
+                                       result::ErrorClass::FailedPrecondition,
+                                       "pausing and stepping need the scene previewed, with its game's server")
+                                   .withContext("scene", record.scene)};
+    }
+    Value asked = Value::object();
+    const bool kStep = record.verb == authoring::SessionVerb::Step;
+    asked.add("kind", Value::string(kStep ? "tooling.step" : "tooling.run"));
+    asked.add("id", Value::integer(0));
+    if (kStep) {
+        asked.add("ticks", Value::integer(record.ticks));
+    } else if (record.paused.has_value()) {
+        asked.add("paused", Value::boolean(*record.paused));
+    }
+    const auto kReply = server_->ask(rawframe::document::writeCompact(asked));
+    const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
+    const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    if (kAnswer == nullptr) {
+        const Value* kError = kParsed.has_value() ? kParsed->find("error") : nullptr;
+        const Value* kMessage = kError != nullptr ? kError->find("message") : nullptr;
+        return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
+                                       result::ErrorClass::FailedPrecondition,
+                                       kMessage != nullptr && kMessage->text() != nullptr
+                                           ? *kMessage->text()
+                                           : "the game's server did not answer")};
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.ran"));
+    for (const char* kMember : {"paused", "tick", "stepsLeft"}) {
+        const Value* kRead = kAnswer->find(kMember);
+        made.add(kMember, kRead != nullptr ? *kRead : Value{});
+    }
+    return made;
+}
+
+result::Result<Value> Preview::trafficOf(const authoring::SessionRecord& record) {
+    if (server_ == nullptr || record.scene != scene_) {
+        return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
+                                       result::ErrorClass::FailedPrecondition,
+                                       "traffic needs the scene previewed, with its game's server")
+                                   .withContext("scene", record.scene)};
+    }
+    const auto kReply = server_->ask(R"({"kind":"tooling.traffic","id":0})");
+    const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
+    const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    if (kAnswer == nullptr || kAnswer->kind() != Value::Kind::Object) {
+        return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
+                                       result::ErrorClass::Unavailable,
+                                       "the game's server did not say its traffic")};
+    }
+    // Its members as the server said them, under the session's kind.
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.traffic"));
+    for (std::size_t each = 0; each < kAnswer->names().size(); ++each) {
+        if (kAnswer->names()[each] != "kind") {
+            made.add(kAnswer->names()[each], kAnswer->items()[each]);
+        }
+    }
+    return made;
+}
+
+result::Result<Value> Preview::live(const authoring::SessionRecord& record) {
+    if (server_ == nullptr || record.scene != scene_) {
+        return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
+                                       result::ErrorClass::FailedPrecondition,
+                                       "the live World needs the scene previewed, with its game's server")
+                                   .withContext("scene", record.scene)};
+    }
+    const bool kOne = record.verb == authoring::SessionVerb::LiveEntity;
+    Value asked = Value::object();
+    asked.add("kind", Value::string(kOne ? "tooling.read_entity" : "tooling.entities"));
+    asked.add("id", Value::integer(0));
+    for (std::size_t each = 0; each < record.query.names().size(); ++each) {
+        asked.add(record.query.names()[each], record.query.items()[each]);
+    }
+    const auto kReply = server_->ask(rawframe::document::writeCompact(asked));
+    const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
+    const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    if (kAnswer == nullptr || kAnswer->kind() != Value::Kind::Object) {
+        const Value* kError = kParsed.has_value() ? kParsed->find("error") : nullptr;
+        const Value* kMessage = kError != nullptr ? kError->find("message") : nullptr;
+        return std::unexpected{failure(authoring::AuthoringError::TargetNotFound,
+                                       result::ErrorClass::NotFound,
+                                       kMessage != nullptr && kMessage->text() != nullptr
+                                           ? *kMessage->text()
+                                           : "the game's server did not answer")};
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string(kOne ? "authoring.live_entity" : "authoring.live_entities"));
+    for (std::size_t each = 0; each < kAnswer->names().size(); ++each) {
+        if (kAnswer->names()[each] != "kind") {
+            made.add(kAnswer->names()[each], kAnswer->items()[each]);
+        }
+    }
+    return made;
+}
+
 Value Preview::moded(const authoring::SessionRecord& record) {
     bool shown = false;
     if (preview_ != nullptr && record.scene == scene_) {
