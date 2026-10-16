@@ -164,4 +164,12 @@ std::optional<std::uint32_t> colorOf(std::string_view text) {
     return text.size() == 7 ? (value << 8U) | 0xFFU : value;
 }
 
+document::Value documentedValue(const std::string& text) {
+    if (text.empty()) {
+        return document::Value{};
+    }
+    auto read = document::parse(text);
+    return read.has_value() ? std::move(*read) : document::Value::string(text);
+}
+
 } // namespace rawframe::studio

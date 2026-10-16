@@ -25,6 +25,11 @@ void readHints(const document::Value& field, Catalog::Field& into);
 /// color's `#RRGGBBAA` or `#RRGGBB` (opaque) as its number, else as typed.
 [[nodiscard]] std::string typedAs(const Catalog::Field& type, std::string_view typed);
 
+/// Typed text as a document holds it: nothing for none, JSON as it reads,
+/// anything else as text, so a color is typed bare (a style sheet's part,
+/// a UI node's property, a material's parameter, a data document's value).
+[[nodiscard]] document::Value documentedValue(const std::string& text);
+
 /// What is said beside the field: its unit and its range, as `m, 4 to 100`,
 /// or nothing.
 [[nodiscard]] std::string hintText(const Catalog::Field& type);

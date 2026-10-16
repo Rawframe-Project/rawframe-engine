@@ -17,6 +17,7 @@
 // through `materials.set_node_param` or `materials.set_node_input` (D728),
 // and Delete removing it.
 
+#include "hints.h"
 #include "rawframe/ui/document.h"
 #include "rawframe/ui/styles.h"
 #include "shell.h"
@@ -41,16 +42,6 @@ const Value* classOf(const std::optional<Value>& sheet, const std::string& id) {
 /// anything else as JSON.
 std::string partText(const Value& value) {
     return value.text() != nullptr ? *value.text() : document::writeCompact(value);
-}
-
-/// Typed text as a document holds it: nothing for none, JSON as it reads,
-/// anything else as text, so a color is typed bare.
-Value documentedValue(const std::string& text) {
-    if (text.empty()) {
-        return Value{};
-    }
-    auto read = document::parse(text);
-    return read.has_value() ? std::move(*read) : Value::string(text);
 }
 
 /// Where node `component` stands: the node it is inside (none for a root),
