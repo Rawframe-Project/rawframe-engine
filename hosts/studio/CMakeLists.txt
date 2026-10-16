@@ -981,8 +981,10 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              "\"status\":\"live: [1-9][0-9]* entities on the server.*\"code\":\"studio_played\"[^\n]*\"live\":false,\"liveListed\":1,\"liveReads\":([2-9]|[1-9][0-9]+),\"liveComponents\":[1-9]")
         # The Network panel (D807): the lossy link chosen, Plaza played, its
         # client over QUIC at 150 ms with loss, the server's traffic read
-        # and shown while the panel is, once the client is in (a sanitized
-        # client over the lossy link took longer than a fixed wait).
+        # and shown while the panel is, once the server counts the client
+        # (a sanitized client over the lossy link took longer than a fixed
+        # wait, and the client's own log said it was in before the server
+        # counted it, D823).
         add_test(NAME studio_shows_network
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
@@ -990,7 +992,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @Network "@Lossy link"
                          "until=studio_said,status=\"Lossy link" @Assets @gate.scene @Play until=studio_previewing
-                         @Network until=bots_admitted@play/client.log~600 wait=3 @Stop
+                         @Network "until=studio_network,connections>=1~600" wait=3 @Stop
                          until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_shows_network PROPERTIES

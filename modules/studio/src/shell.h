@@ -69,6 +69,7 @@ inline constexpr diagnostics::EventIdentity kPreviewing{"studio", "studio_previe
 /// can be grabbed (D466).
 inline constexpr diagnostics::EventIdentity kMarked{"studio", "studio_marked"};
 inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canvas"};
+inline constexpr diagnostics::EventIdentity kNetworkRead{"studio", "studio_network"};
 /// A part of the mark lit under the pointer, as the session says (D504).
 inline constexpr diagnostics::EventIdentity kLit{"studio", "studio_lit"};
 /// A game asked to stop has ended, its server and its client both (D504).

@@ -81,8 +81,18 @@ void ShellParticipant::readNetwork(double seconds) {
                            .stateBytes = kCount("stateBytes"),
                            .stateDatagrams = kCount("stateDatagrams"),
                            .inputWindows = kCount("inputWindows")};
+    const std::int64_t kWere = network_.connections;
     network_.connections = kCount("connections");
     network_.mostConnections = std::max(network_.mostConnections, network_.connections);
+    // Said when the count changes, so what waits for a client to be in
+    // waits for the server's own count (D823).
+    if (network_.connections != kWere) {
+        emitter_.log(
+            diagnostics::Severity::Info,
+            kNetworkRead,
+            "the game's server holds another count of connections",
+            {diagnostics::field("connections", network_.connections), diagnostics::field("tick", kCount("tick"))});
+    }
     std::vector<std::string> lines;
     lines.push_back("server at tick " + std::to_string(kCount("tick")) + ", " + std::to_string(network_.connections) +
                     (network_.connections == 1 ? " connection" : " connections"));
