@@ -63,6 +63,11 @@ bool ShellParticipant::beforePress() {
 }
 
 void ShellParticipant::pressOn(ui::Node node, bool moving) {
+    // A graph's node on the canvas stands for its row (D819).
+    if (const std::optional<std::size_t> kStands = canvasEntityOf(node);
+        kStands.has_value() && *kStands < entityRows_.size()) {
+        node = entityRows_[*kStands];
+    }
     // An output pressed waits for the input to connect (D733).
     const std::optional<std::pair<std::string, std::string>> kConnecting = std::exchange(connecting_, std::nullopt);
     // The start screen's own presses (D781).

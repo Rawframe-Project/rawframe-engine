@@ -568,6 +568,34 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "typed 0.4 at [0-9]+,[0-9]+.*rock.rfmaterial written: yes.*\"status\":\"specular_roughness set to 0.4\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"rock.rfmaterial\",\"entities\":5,\"entity\":\"60c0000000000005\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+    # A material graph on the canvas (D819): Gale's rock's five nodes laid
+    # out in columns with its four wires, its triplanar projection chosen by
+    # its node there, and its tiling typed, set and written; Undo and Redo
+    # leave it standing.
+    add_test(NAME studio_graph_canvas
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial "@triplanar_projection 60c0000000000003" "@tile#2:0.5"
+                     @Undo @Redo "until=studio_said,status=\"redone\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_graph_canvas PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "typed 0.5 at [0-9]+,[0-9]+.*rock.rfmaterial written: yes.*\"code\":\"studio_canvas\"[^\n]*\"nodes\":5,\"wires\":4,\"columns\":[2-9].*\"status\":\"tile set to 0.5\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"rock.rfmaterial\",\"entities\":5,\"entity\":\"60c0000000000003\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+    # An animation graph on the canvas (D819): Tycoon's amble, a data
+    # document, its five nodes and four wires laid out, its blend space
+    # chosen by its node there. The browser narrowed to Animations and
+    # turned down first: Tycoon's clips come before the graph, past the
+    # Assets dock.
+    add_test(NAME studio_animation_canvas
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/tycoon/tycoon.game amble.rfanim @Animations wheel=457,650,4 @amble.rfanim "@blend_space_1d 51a0000000000004" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_animation_canvas PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "found blend_space_1d 51a0000000000004 at [0-9]+,[0-9]+.*amble.rfanim written: no.*\"code\":\"studio_canvas\"[^\n]*\"nodes\":5,\"wires\":4,\"columns\":3}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"amble.rfanim\",[^\n]*\"entity\":\"graph.51a0000000000004\",.*\"exit\":\"clean_stop\"")
     # A node the surface reads is not deleted: the session refuses what
     # leaves a graph that does not read (D728), and Studio says so.
     add_test(NAME studio_graph_keeps

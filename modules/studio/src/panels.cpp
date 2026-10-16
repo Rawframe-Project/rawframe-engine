@@ -399,6 +399,8 @@ void ShellParticipant::showScene(std::size_t at) {
         if (documentChosen()) {
             clear(viewRows_);
             viewFields_.clear();
+            canvasParts_.clear();
+            canvasBoxes_.clear();
             showHistoryList();
         } else {
             showView();
@@ -777,6 +779,8 @@ ShellParticipant::fieldRow(std::string_view name, std::string_view value, std::o
 void ShellParticipant::showView() {
     clear(viewRows_);
     viewFields_.clear();
+    canvasParts_.clear();
+    canvasBoxes_.clear();
     auto heading = row(centerColumn_, "View", kQuiet, kPanel);
     if (!heading.has_value()) {
         return;

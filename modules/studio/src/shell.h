@@ -67,6 +67,7 @@ inline constexpr diagnostics::EventIdentity kPreviewing{"studio", "studio_previe
 /// The preview shows where the chosen entity stands (D464), so its handles
 /// can be grabbed (D466).
 inline constexpr diagnostics::EventIdentity kMarked{"studio", "studio_marked"};
+inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canvas"};
 /// A part of the mark lit under the pointer, as the session says (D504).
 inline constexpr diagnostics::EventIdentity kLit{"studio", "studio_lit"};
 /// A game asked to stop has ended, its server and its client both (D504).
@@ -555,6 +556,13 @@ private:
     /// column, read whole (`data.read`); one of them, its values each a
     /// field; and a value set through `data.set` (D812).
     void showData();
+    /// A graph's nodes laid out in the center, columns by how far wires run
+    /// into them, its wires drawn between them (D819): `nodes` the graph's
+    /// object of nodes by id, `prefix` what each id is among the rows'
+    /// entities. A node pressed is its row pressed; the chosen one marked.
+    void showCanvas(const Value& nodes, const std::string& prefix);
+    [[nodiscard]] std::optional<std::size_t> canvasEntityOf(ui::Node node) const;
+    void markCanvas();
     void showDataEntry(std::size_t at);
     void setDataValue(const FieldRow& row, const std::string& text);
     /// The chosen style sheet's classes in the entity column, read whole
@@ -809,6 +817,9 @@ private:
     /// lines by their places (D818).
     std::vector<std::string> settingsLines_;
     std::vector<std::vector<std::size_t>> settingsHeld_;
+    /// The canvas's parts and each one's row, and its nodes' boxes (D819).
+    std::vector<std::pair<ui::Node, std::size_t>> canvasParts_;
+    std::vector<std::pair<ui::Node, std::size_t>> canvasBoxes_;
     /// The node types a material graph may hold, each with its params and
     /// inputs, read once a graph is first shown (D732).
     std::optional<Value> nodeTypes_;

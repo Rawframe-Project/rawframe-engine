@@ -88,6 +88,13 @@ void ShellParticipant::showData() {
         }
     };
     kList(kList, *sheet_, "", std::filesystem::path{scene_}.filename().string(), 0);
+    // An animation graph's nodes on the canvas too (D819).
+    const Value* kKind = sheet_->find("kind");
+    const Value* kGraph = sheet_->find("graph");
+    if (kKind != nullptr && kKind->kind() == Value::Kind::String && *kKind->text() == "animation.graph" &&
+        kGraph != nullptr) {
+        showCanvas(*kGraph, "graph.");
+    }
 }
 
 void ShellParticipant::showDataEntry(std::size_t at) {
@@ -102,6 +109,7 @@ void ShellParticipant::showDataEntry(std::size_t at) {
         static_cast<void>(
             tree_->setLook(entityRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
     }
+    markCanvas();
     clear(componentRows_);
     actions_.clear();
     components_ = 0;

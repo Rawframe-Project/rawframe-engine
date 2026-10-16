@@ -461,6 +461,9 @@ void ShellParticipant::showGraph() {
         removed_.push_back(false);
         places_.push_back(std::nullopt);
     }
+    if (nodes != nullptr) {
+        showCanvas(*nodes, "");
+    }
 }
 
 void ShellParticipant::showGraphNode(std::size_t at) {
@@ -475,6 +478,7 @@ void ShellParticipant::showGraphNode(std::size_t at) {
         static_cast<void>(
             tree_->setLook(entityRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
     }
+    markCanvas();
     clear(componentRows_);
     actions_.clear();
     components_ = 0;
