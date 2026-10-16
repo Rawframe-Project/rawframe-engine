@@ -190,8 +190,7 @@ private:
     std::shared_ptr<const texture::Texture> thumbnailOf(const ListedSource& source);
     void setImportSetting(const FieldRow& row, const std::string& text);
 
-    /// The locked layer's name `entity` is on, none if it is on no locked
-    /// one.
+    /// The locked layer's name `entity` is on, none if on no locked one.
     [[nodiscard]] std::optional<std::string> lockedOf(const std::string& entity) const;
 
     /// A column's layout, sharing its row's width or `width` pixels wide.
@@ -558,6 +557,7 @@ private:
     /// A clip's lanes (D827), a UI document laid out (D832): parts as rows.
     void showTimeline(const Value& clip);
     void showUiPreview(const Value& document);
+    void showSheetPreview(const Value& sheet);
     void markUiPreview();
     void forgetUiPreview();
     [[nodiscard]] std::optional<std::size_t> canvasEntityOf(ui::Node node) const;

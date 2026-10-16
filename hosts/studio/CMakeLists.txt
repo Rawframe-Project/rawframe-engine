@@ -509,6 +509,18 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*typed #c01818c0 at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*tycoon.styles written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"tycoon.styles\",[^\n]*\"applied\":1,\"refused\":0,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+    # A style sheet's classes shown (D837): Tycoon's four, each with a
+    # sample of each variant it sets, thirteen in all; the field's hovered
+    # one pressed chooses the field class.
+    add_test(NAME studio_style_preview
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/tycoon/tycoon.game tycoon.styles @tycoon.styles "@field hovered" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_style_preview PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "found field hovered at [0-9]+,[0-9]+.*\"code\":\"studio_style_preview\"[^\n]*\"classes\":4,\"swatches\":13}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"tycoon.styles\",[^\n]*\"entity\":\"139f1a51051d860e\",.*\"exit\":\"clean_stop\"")
     # A data document edited in Studio (D812): Quarry's action map listed
     # with its documents and chosen, its aim action chosen, and its shown
     # name typed, set through the session's data.set and written; Undo and

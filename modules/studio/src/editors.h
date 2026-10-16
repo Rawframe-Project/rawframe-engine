@@ -21,6 +21,8 @@ namespace rawframe::studio {
 inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canvas"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
 inline constexpr diagnostics::EventIdentity kCurveShown{"studio", "studio_curve"};
+/// A style sheet's classes as each variant looks (D837).
+inline constexpr diagnostics::EventIdentity kStylePreviewShown{"studio", "studio_style_preview"};
 /// A UI document laid out as its game would show it (D832).
 inline constexpr diagnostics::EventIdentity kUiPreviewShown{"studio", "studio_ui_preview"};
 /// The environment panel's components and their entities (D834).

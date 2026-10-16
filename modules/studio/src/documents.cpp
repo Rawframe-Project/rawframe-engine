@@ -108,6 +108,9 @@ void ShellParticipant::showSheet() {
         removed_.push_back(false);
         places_.push_back(std::nullopt);
     }
+    if (sheet_.has_value()) {
+        showSheetPreview(*sheet_);
+    }
 }
 
 void ShellParticipant::showClass(std::size_t at) {
@@ -125,6 +128,7 @@ void ShellParticipant::showClass(std::size_t at) {
     clear(componentRows_);
     actions_.clear();
     components_ = 0;
+    markUiPreview();
     const Value* chosen = classOf(sheet_, entity_);
     if (chosen == nullptr) {
         return;
