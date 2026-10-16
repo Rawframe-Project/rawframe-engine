@@ -24,8 +24,9 @@
 # left button at the first, carries it to the second, and lets it go there
 # (D457), holding the X key a fifth part names through it, Shift_L or
 # Control_L (D463); a press is held longer, as a drag is, the more loaded
-# the machine is (D815). An argument `drop=`, a point, a colon, and paths apart
-# by colons drops those files there as a file manager does, by XDND
+# the machine is (D815), and so is a wait (D822). An argument `drop=`, a
+# point, a colon, and paths apart by colons drops those files there as a
+# file manager does, by XDND
 # (tools/xdnd.py, D802). An argument `frozen=` and X key names presses them with
 # the program stopped, so it reads them in one frame (D458), and
 # `frozenclick=` and a point with its text clicks there and types it with
@@ -456,7 +457,9 @@ def main():
             seen = found
             continue
         if isinstance(text, float):
-            time.sleep(text)
+            # A wait stands for frames a game draws, so it stretches with
+            # the machine's load as a press does (D815, D822).
+            time.sleep(stretched(text))
             print(f"waited {text:g} seconds")
             continue
         if isinstance(text, int):
