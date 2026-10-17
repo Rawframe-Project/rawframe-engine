@@ -105,6 +105,8 @@ struct InstanceRecord {
     /// The marks of the components its patch names, each once, in name
     /// order.
     std::vector<scene::SchemaMark> marks;
+    /// How it reaches clients (D870).
+    scene::Streaming streaming = scene::Streaming::Each;
 
     friend bool operator==(const InstanceRecord&, const InstanceRecord&) = default;
 };

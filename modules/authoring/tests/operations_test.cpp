@@ -7,6 +7,7 @@
 #include "rawframe/authoring/operations.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <array>
 #include <limits>
 #include <memory>
@@ -496,6 +497,20 @@ RAWFRAME_TEST(AnInstanceIsAddedAndRemovedWhole) {
     RAWFRAME_EXPECT(refusedWith(kRun(RemoveInstance{.entity = kCrate}), AuthoringError::Conflict));
     RAWFRAME_EXPECT(refusedWith(kRun(RemoveInstance{.entity = kSpawn}), AuthoringError::TargetNotFound));
     RAWFRAME_EXPECT(scene::readScene(room.text()).has_value());
+    // Streamed as a district and back (D870): the instance keeps its place,
+    // its mapping, and its patch, and an undo takes the streaming away.
+    const std::string kBefore = room.text();
+    RAWFRAME_EXPECT(kRun(StreamInstance{.entity = kCrate, .streaming = scene::Streaming::Atomic}));
+    const auto kStreamed = std::ranges::find_if(room.scene().instances, [&](const scene::SceneInstance& each) {
+        return std::ranges::contains(each.entities, kCrate, &scene::IdentityMapping::instance);
+    });
+    RAWFRAME_EXPECT(kStreamed != room.scene().instances.end() && kStreamed->streaming == scene::Streaming::Atomic &&
+                    room.text().find("\"streaming\": \"atomic\"") != std::string::npos);
+    RAWFRAME_EXPECT(refusedWith(kRun(StreamInstance{.entity = kCrate, .streaming = scene::Streaming::Atomic}),
+                                AuthoringError::ValidationFailed));
+    RAWFRAME_EXPECT(refusedWith(kRun(StreamInstance{.entity = kSpawn, .streaming = scene::Streaming::Persistent}),
+                                AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(room.undo(room.generation()).has_value() && room.text() == kBefore);
 }
 
 RAWFRAME_TEST(ACaseFieldIsSetByItsCasesName) {

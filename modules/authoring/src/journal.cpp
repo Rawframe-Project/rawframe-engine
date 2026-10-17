@@ -100,6 +100,9 @@ Value instanceValue(const InstanceRecord& instance) {
     made.add("overrides", std::move(overrides));
     made.add("place", Value::integer(static_cast<std::int64_t>(instance.place)));
     made.add("scene", Value::string(sceneText(instance.scene)));
+    if (instance.streaming != scene::Streaming::Each) {
+        made.add("streaming", Value::string(instance.streaming == scene::Streaming::Atomic ? "atomic" : "persistent"));
+    }
     return made;
 }
 
@@ -239,12 +242,22 @@ std::optional<InstanceRecord> instanceOf(const Value& value) {
     const std::optional<std::size_t> kPlace = placeValue(value.find("place"));
     const std::string* scene = textOf(value.find("scene"));
     const base::Bits128Parse kScene = scene != nullptr ? base::parseBits128Hex(*scene) : base::Bits128Parse{};
-    if (!hasMembers(value, {"entities", "marks", "overrides", "place", "scene"}) ||
+    const std::string* streaming = textOf(value.find("streaming"));
+    if (!(streaming != nullptr ? hasMembers(value, {"entities", "marks", "overrides", "place", "scene", "streaming"})
+                               : hasMembers(value, {"entities", "marks", "overrides", "place", "scene"})) ||
+        (streaming != nullptr && *streaming != "atomic" && *streaming != "persistent") ||
         entities->kind() != Value::Kind::Array || marks->kind() != Value::Kind::Object ||
         overrides->kind() != Value::Kind::Array || !kPlace.has_value() || !kScene.parsed) {
         return std::nullopt;
     }
-    InstanceRecord made{.place = *kPlace, .scene = kScene.value, .entities = {}, .overrides = {}, .marks = {}};
+    InstanceRecord made{.place = *kPlace,
+                        .scene = kScene.value,
+                        .entities = {},
+                        .overrides = {},
+                        .marks = {},
+                        .streaming = streaming == nullptr     ? scene::Streaming::Each
+                                     : *streaming == "atomic" ? scene::Streaming::Atomic
+                                                              : scene::Streaming::Persistent};
     for (const Value& each : entities->items()) {
         const std::optional<base::Bits128> kInstance = idOf(each.find("instance"));
         const std::optional<base::Bits128> kSource = idOf(each.find("source"));

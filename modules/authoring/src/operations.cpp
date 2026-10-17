@@ -38,6 +38,8 @@ constexpr std::array<InputDeclaration, 3> kRevertFieldInputs = {
 
 constexpr std::array<InputDeclaration, 2> kAddInstanceInputs = {
     {{"scene", InputType::Resource}, {"instance", InputType::Identity}}};
+constexpr std::array<InputDeclaration, 2> kStreamInstanceInputs = {
+    {{"entity", InputType::Entity}, {"streaming", InputType::Text}}};
 
 constexpr std::array<InputDeclaration, 2> kSetLineInputs = {
     {{"line", InputType::Place}, {"text", InputType::OptionalText}}};
@@ -85,7 +87,7 @@ constexpr std::array<InputDeclaration, 2> kSwitchInputs = {
 constexpr std::array<InputDeclaration, 2> kRenameClassInputs = {
     {{"style", InputType::Style}, {"name", InputType::Text}}};
 
-constexpr std::array<OperationDeclaration, 45> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 46> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -100,6 +102,7 @@ constexpr std::array<OperationDeclaration, 45> kDeclarations = {{
     {.name = "scene.restore_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.add_instance", .targets = "rawframe.scene instance", .inputs = kAddInstanceInputs},
     {.name = "scene.remove_instance", .targets = "rawframe.scene instance", .inputs = kEntityInputs},
+    {.name = "scene.stream_instance", .targets = "rawframe.scene instance", .inputs = kStreamInstanceInputs},
     {.name = "styles.set_part", .targets = "ui.styles part", .inputs = kStylePartInputs},
     {.name = "styles.create_class", .targets = "ui.styles class", .inputs = kCreateClassInputs},
     {.name = "styles.remove_class", .targets = "ui.styles class", .inputs = kClassInputs},
@@ -250,7 +253,8 @@ result::Result<Journal> derive(const scene::Scene& scene,
                             code(AuthoringError::ValidationFailed),
                             "the operation changes a style sheet or a UI document, not a scene");
     }
-    if (std::holds_alternative<AddInstance>(operation) || std::holds_alternative<RemoveInstance>(operation)) {
+    if (std::holds_alternative<AddInstance>(operation) || std::holds_alternative<RemoveInstance>(operation) ||
+        std::holds_alternative<StreamInstance>(operation)) {
         return deriveInstance(scene, operation, sources, document);
     }
     const std::optional<base::Bits128> kNamed = std::visit(

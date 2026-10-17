@@ -190,6 +190,17 @@ result::Result<Query> queryOf(const Value& value) {
     return Query{ReadEntity{.entity = *kEntity}};
 }
 
+/// Where `Kind` is among the operations, so a request's operation is told
+/// by its type rather than by a number that moves when one is added.
+template <class Kind, class Variant> struct IndexIn;
+template <class Kind, class... Kinds> struct IndexIn<Kind, std::variant<Kinds...>> {
+    static constexpr std::size_t value = [] {
+        constexpr std::array<bool, sizeof...(Kinds)> kSame = {std::is_same_v<Kind, Kinds>...};
+        return static_cast<std::size_t>(std::ranges::find(kSame, true) - kSame.begin());
+    }();
+};
+template <class Kind> constexpr std::size_t kIndexOf = IndexIn<Kind, Operation>::value;
+
 /// The operation `value` names.
 result::Result<Operation> operationOf(const Value& value) {
     RAWFRAME_TRY_ASSIGN(const std::size_t kIndex, declaredOf(value));
@@ -203,7 +214,7 @@ result::Result<Operation> operationOf(const Value& value) {
     const auto kBad = [] {
         return malformed("an operation's inputs are of their declared types");
     };
-    if (kIndex == 12) {
+    if (kIndex == kIndexOf<AddInstance>) {
         const std::string* scene = textOf(value.find("scene"));
         const base::Bits128Parse kScene = scene != nullptr ? base::parseBits128Hex(*scene) : base::Bits128Parse{};
         const auto kInstance = idOf(value.find("instance"));
@@ -212,7 +223,19 @@ result::Result<Operation> operationOf(const Value& value) {
         }
         return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
     }
-    if (kIndex == 34) {
+    if (kIndex == kIndexOf<StreamInstance>) {
+        // A district's streaming (D870), by its word.
+        const std::string* streaming = textOf(value.find("streaming"));
+        if (!kEntity.has_value() || streaming == nullptr ||
+            (*streaming != "each" && *streaming != "atomic" && *streaming != "persistent")) {
+            return kBad();
+        }
+        return Operation{StreamInstance{.entity = *kEntity,
+                                        .streaming = *streaming == "each"     ? scene::Streaming::Each
+                                                     : *streaming == "atomic" ? scene::Streaming::Atomic
+                                                                              : scene::Streaming::Persistent}};
+    }
+    if (kIndex == kIndexOf<PaintTiles>) {
         // Tiles painted on a tilemap (D860), whole numbers checked by its
         // kind.
         const auto kNumber = [&value](std::string_view name) {
@@ -231,7 +254,7 @@ result::Result<Operation> operationOf(const Value& value) {
         return Operation{
             PaintTiles{.column = *kColumn, .row = *kRow, .width = *kWidth, .height = *kHeight, .tile = *kTile}};
     }
-    if (kIndex == 33) {
+    if (kIndex == kIndexOf<BrushTerrain>) {
         // A brush's stroke on a terrain (D855), its numbers any JSON number.
         const std::string* tool = textOf(value.find("tool"));
         const auto kNumber = [&value](std::string_view name) {
@@ -247,22 +270,22 @@ result::Result<Operation> operationOf(const Value& value) {
         }
         return Operation{BrushTerrain{.tool = *tool, .x = *kX, .z = *kZ, .radius = *kRadius, .amount = *kAmount}};
     }
-    if (kIndex == 31 || kIndex == 32) {
+    if (kIndex == kIndexOf<SetLine> || kIndex == kIndexOf<InsertLine>) {
         // A line document's line by its place (D817), set, taken away, or
         // put in.
         const std::optional<std::size_t> kLine = placeOf(value.find("line"));
         const Value& given = *value.find("text");
         const std::string* lineText = textOf(&given);
-        if (!kLine.has_value() || (lineText == nullptr && (kIndex == 32 || !given.isNull()))) {
+        if (!kLine.has_value() || (lineText == nullptr && (kIndex == kIndexOf<InsertLine> || !given.isNull()))) {
             return kBad();
         }
-        if (kIndex == 32) {
+        if (kIndex == kIndexOf<InsertLine>) {
             return Operation{InsertLine{.line = *kLine, .text = *lineText}};
         }
         return Operation{SetLine{.line = *kLine,
                                  .text = lineText != nullptr ? std::optional<std::string>{*lineText} : std::nullopt}};
     }
-    if (kIndex == 30) {
+    if (kIndex == kIndexOf<SetDataValue>) {
         // A data document's value at a path (D811), read where it is kept.
         const std::string* path = textOf(value.find("path"));
         const Value& given = *value.find("value");
@@ -272,20 +295,21 @@ result::Result<Operation> operationOf(const Value& value) {
         return Operation{
             SetDataValue{.path = *path, .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
     }
-    if (kIndex == 28 || kIndex == 29) {
+    if (kIndex == kIndexOf<SetMaterialInterfaceInput> || kIndex == kIndexOf<SetMaterialSwitch>) {
         // A material graph's interface input or switch, by its name (D729).
-        const std::string* named = textOf(value.find(kIndex == 28 ? "input" : "switch"));
+        const std::string* named =
+            textOf(value.find(kIndex == kIndexOf<SetMaterialInterfaceInput> ? "input" : "switch"));
         const Value& given = *value.find("value");
         if (named == nullptr) {
             return kBad();
         }
         const std::optional<Value> kGiven = given.isNull() ? std::nullopt : std::optional<Value>{given};
-        if (kIndex == 28) {
+        if (kIndex == kIndexOf<SetMaterialInterfaceInput>) {
             return Operation{SetMaterialInterfaceInput{.input = *named, .value = kGiven}};
         }
         return Operation{SetMaterialSwitch{.name = *named, .value = kGiven}};
     }
-    if (kIndex >= 24) {
+    if (kIndex >= kIndexOf<SetMaterialNodeInput>) {
         // A material graph's node, by its 16 hex digits (D728).
         const std::string* node = textOf(value.find("node"));
         const std::optional<std::uint64_t> kNode =
@@ -293,19 +317,19 @@ result::Result<Operation> operationOf(const Value& value) {
         if (!kNode.has_value()) {
             return kBad();
         }
-        if (kIndex == 24 || kIndex == 25) {
-            const std::string* named = textOf(value.find(kIndex == 24 ? "input" : "param"));
+        if (kIndex == kIndexOf<SetMaterialNodeInput> || kIndex == kIndexOf<SetMaterialNodeParam>) {
+            const std::string* named = textOf(value.find(kIndex == kIndexOf<SetMaterialNodeInput> ? "input" : "param"));
             const Value& given = *value.find("value");
             if (named == nullptr) {
                 return kBad();
             }
             const std::optional<Value> kGiven = given.isNull() ? std::nullopt : std::optional<Value>{given};
-            if (kIndex == 24) {
+            if (kIndex == kIndexOf<SetMaterialNodeInput>) {
                 return Operation{SetMaterialNodeInput{.node = *kNode, .input = *named, .value = kGiven}};
             }
             return Operation{SetMaterialNodeParam{.node = *kNode, .param = *named, .value = kGiven}};
         }
-        if (kIndex == 26) {
+        if (kIndex == kIndexOf<CreateMaterialNode>) {
             const std::string* type = textOf(value.find("type"));
             if (type == nullptr) {
                 return kBad();
@@ -314,7 +338,7 @@ result::Result<Operation> operationOf(const Value& value) {
         }
         return Operation{RemoveMaterialNode{.node = *kNode}};
     }
-    if (kIndex == 23) {
+    if (kIndex == kIndexOf<SetMaterialOverride>) {
         // A material instance's override, by its input's name (D721).
         const std::string* input = textOf(value.find("input"));
         const Value& given = *value.find("value");
@@ -324,13 +348,13 @@ result::Result<Operation> operationOf(const Value& value) {
         return Operation{
             SetMaterialOverride{.input = *input, .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
     }
-    if (kIndex >= 19) {
+    if (kIndex >= kIndexOf<SetUiField>) {
         // A UI document's node, by its component's name (D641).
         const std::string* node = textOf(value.find("node"));
         if (node == nullptr) {
             return kBad();
         }
-        if (kIndex == 19) {
+        if (kIndex == kIndexOf<SetUiField>) {
             const Value& given = *value.find("value");
             if (field == nullptr) {
                 return kBad();
@@ -338,7 +362,7 @@ result::Result<Operation> operationOf(const Value& value) {
             return Operation{SetUiField{
                 .node = *node, .field = *field, .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
         }
-        if (kIndex == 20 || kIndex == 22) {
+        if (kIndex == kIndexOf<CreateUiNode> || kIndex == kIndexOf<MoveUiNode>) {
             const Value* parent = value.find("parent");
             const Value* place = value.find("place");
             const std::optional<std::size_t> kPlace = place != nullptr ? placeOf(place) : std::nullopt;
@@ -348,18 +372,18 @@ result::Result<Operation> operationOf(const Value& value) {
                 return kBad();
             }
             const std::optional<std::string> kParent = named != nullptr ? std::optional{*named} : std::nullopt;
-            if (kIndex == 22) {
+            if (kIndex == kIndexOf<MoveUiNode>) {
                 return Operation{MoveUiNode{.node = *node, .parent = kParent, .place = kPlace}};
             }
             return Operation{CreateUiNode{.node = *node, .parent = kParent, .place = kPlace}};
         }
         return Operation{RemoveUiNode{.node = *node}};
     }
-    if (kIndex >= 14) {
+    if (kIndex >= kIndexOf<SetStylePart>) {
         const std::string* style = textOf(value.find("style"));
         const std::optional<std::uint64_t> kStyle =
             style != nullptr && style->size() == 16 ? base::parseHex64(*style) : std::nullopt;
-        if (kIndex == 18) {
+        if (kIndex == kIndexOf<SetStyleTransitions>) {
             const Value& given = *value.find("value");
             if (!kStyle.has_value()) {
                 return kBad();
@@ -367,16 +391,17 @@ result::Result<Operation> operationOf(const Value& value) {
             return Operation{SetStyleTransitions{.style = *kStyle,
                                                  .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
         }
-        if (kIndex > 14) {
+        if (kIndex > kIndexOf<SetStylePart>) {
             const Value* place = value.find("place");
             const std::optional<std::size_t> kPlace = place != nullptr ? placeOf(place) : std::nullopt;
-            if (!kStyle.has_value() || (kIndex != 16 && text == nullptr) || (place != nullptr && !kPlace.has_value())) {
+            if (!kStyle.has_value() || (kIndex != kIndexOf<RemoveStyleClass> && text == nullptr) ||
+                (place != nullptr && !kPlace.has_value())) {
                 return kBad();
             }
-            if (kIndex == 15) {
+            if (kIndex == kIndexOf<CreateStyleClass>) {
                 return Operation{CreateStyleClass{.style = *kStyle, .name = *text, .place = kPlace}};
             }
-            if (kIndex == 16) {
+            if (kIndex == kIndexOf<RemoveStyleClass>) {
                 return Operation{RemoveStyleClass{.style = *kStyle}};
             }
             return Operation{RenameStyleClass{.style = *kStyle, .name = *text}};
@@ -392,7 +417,7 @@ result::Result<Operation> operationOf(const Value& value) {
                                       .part = *part,
                                       .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
     }
-    if (kIndex == 8) {
+    if (kIndex == kIndexOf<RemarkComponent>) {
         if (!kComponent.has_value()) {
             return kBad();
         }
@@ -402,7 +427,7 @@ result::Result<Operation> operationOf(const Value& value) {
         return kBad();
     }
     switch (kIndex) {
-    case 0: {
+    case kIndexOf<CreateEntity>: {
         const Value* place = value.find("place");
         const std::optional<std::size_t> kPlace = place != nullptr ? placeOf(place) : std::nullopt;
         if (text == nullptr || (place != nullptr && !kPlace.has_value())) {
@@ -410,37 +435,37 @@ result::Result<Operation> operationOf(const Value& value) {
         }
         return Operation{CreateEntity{.entity = *kEntity, .name = *text, .place = kPlace}};
     }
-    case 1:
+    case kIndexOf<DestroyEntity>:
         return Operation{DestroyEntity{.entity = *kEntity}};
-    case 2:
+    case kIndexOf<RenameEntity>:
         if (text == nullptr) {
             return kBad();
         }
         return Operation{RenameEntity{.entity = *kEntity, .name = *text}};
-    case 3: {
+    case kIndexOf<MoveEntity>: {
         const std::optional<std::size_t> kPlace = placeOf(value.find("place"));
         if (!kPlace.has_value()) {
             return kBad();
         }
         return Operation{MoveEntity{.entity = *kEntity, .place = *kPlace}};
     }
-    case 4:
-    case 5:
+    case kIndexOf<AddComponent>:
+    case kIndexOf<RemoveComponent>:
         if (!kComponent.has_value()) {
             return kBad();
         }
-        if (kIndex == 4) {
+        if (kIndex == kIndexOf<AddComponent>) {
             return Operation{AddComponent{.entity = *kEntity, .component = {*kComponent}}};
         }
         return Operation{RemoveComponent{.entity = *kEntity, .component = {*kComponent}}};
-    case 6: {
+    case kIndexOf<SetField>: {
         const std::optional<FieldInput> kValue = fieldInputOf(*value.find("value"));
         if (!kComponent.has_value() || field == nullptr || !kValue.has_value()) {
             return kBad();
         }
         return Operation{SetField{.entity = *kEntity, .component = {*kComponent}, .field = *field, .value = *kValue}};
     }
-    case 7: {
+    case kIndexOf<SetReference>: {
         const Value& target = *value.find("target");
         const std::optional<base::Bits128> kTarget = target.isNull() ? std::nullopt : idOf(&target);
         if (!kComponent.has_value() || field == nullptr || (!target.isNull() && !kTarget.has_value())) {
@@ -449,19 +474,19 @@ result::Result<Operation> operationOf(const Value& value) {
         return Operation{
             SetReference{.entity = *kEntity, .component = {*kComponent}, .field = *field, .target = kTarget}};
     }
-    case 9:
+    case kIndexOf<RevertField>:
         if (!kComponent.has_value() || field == nullptr) {
             return kBad();
         }
         return Operation{RevertField{.entity = *kEntity, .component = {*kComponent}, .field = *field}};
-    case 10:
+    case kIndexOf<RevertComponent>:
         if (!kComponent.has_value()) {
             return kBad();
         }
         return Operation{RevertComponent{.entity = *kEntity, .component = {*kComponent}}};
-    case 11:
+    case kIndexOf<RestoreEntity>:
         return Operation{RestoreEntity{.entity = *kEntity}};
-    case 13:
+    case kIndexOf<RemoveInstance>:
         return Operation{RemoveInstance{.entity = *kEntity}};
     default:
         return kBad();

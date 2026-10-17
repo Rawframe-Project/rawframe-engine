@@ -213,7 +213,8 @@ std::optional<SlotValue> slotOf(const scene::Scene& scene, const Delta& delta) {
                                   .scene = instance.scene,
                                   .entities = instance.entities,
                                   .overrides = instance.overrides,
-                                  .marks = {}};
+                                  .marks = {},
+                                  .streaming = instance.streaming};
             for (const scene::Override& each : instance.overrides) {
                 if (!each.component.empty() &&
                     !std::ranges::contains(record.marks, each.component, &scene::SchemaMark::component)) {
@@ -374,7 +375,8 @@ result::Status writeSlot(scene::Scene& scene, const Delta& delta, const SlotValu
             scene.instances.insert(scene.instances.begin() + static_cast<std::ptrdiff_t>(to.instance->place),
                                    scene::SceneInstance{.scene = to.instance->scene,
                                                         .entities = to.instance->entities,
-                                                        .overrides = to.instance->overrides});
+                                                        .overrides = to.instance->overrides,
+                                                        .streaming = to.instance->streaming});
         }
         dropUnusedMarks(scene);
         return {};

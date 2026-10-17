@@ -216,6 +216,13 @@ struct AddInstance {
 struct RemoveInstance {
     base::Bits128 entity{};
 };
+/// Sets how the instance that brings `entity` reaches clients, as a
+/// district of a large world (D870): each entity by itself, all together,
+/// or all always.
+struct StreamInstance {
+    base::Bits128 entity{};
+    scene::Streaming streaming = scene::Streaming::Each;
+};
 
 /// One part of one variant's look of one class of a style sheet (D636),
 /// set to its value as the styles document holds it, or unset for none: a
@@ -390,6 +397,7 @@ using Operation = std::variant<CreateEntity,
                                RestoreEntity,
                                AddInstance,
                                RemoveInstance,
+                               StreamInstance,
                                SetStylePart,
                                CreateStyleClass,
                                RemoveStyleClass,

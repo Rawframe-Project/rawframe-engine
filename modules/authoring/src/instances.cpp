@@ -1,7 +1,8 @@
-// Whole instances added and removed (D156). Adding one is SPEC-0006's two
-// passes: the source resolved and its entities enumerated, then each given
-// its id here; there are no values to remap, since an instance's entities
-// are its source's until its patch says otherwise.
+// Whole instances added and removed (D156), and streamed as districts
+// (D870). Adding one is SPEC-0006's two passes: the source resolved and its
+// entities enumerated, then each given its id here; there are no values to
+// remap, since an instance's entities are its source's until its patch says
+// otherwise.
 
 #include "operation_parts.h"
 #include "rawframe/base/sha256.h"
@@ -108,6 +109,25 @@ result::Result<Journal> add(const scene::Scene& scene,
     return Journal{Delta{.kind = DeltaKind::CreateInstance, .entity = kNamed, .after = {.instance = std::move(made)}}};
 }
 
+/// The instance at `place` as a delta carries it.
+InstanceRecord recordOf(const scene::Scene& scene, std::size_t place) {
+    const scene::SceneInstance& instance = scene.instances[place];
+    InstanceRecord made{.place = place,
+                        .scene = instance.scene,
+                        .entities = instance.entities,
+                        .overrides = instance.overrides,
+                        .marks = {},
+                        .streaming = instance.streaming};
+    for (const scene::Override& each : instance.overrides) {
+        if (!each.component.empty() &&
+            !std::ranges::contains(made.marks, each.component, &scene::SchemaMark::component)) {
+            made.marks.push_back(scene::SchemaMark{.component = each.component, .mark = markOf(scene, each.component)});
+        }
+    }
+    std::ranges::sort(made.marks, {}, &scene::SchemaMark::component);
+    return made;
+}
+
 result::Result<Journal> remove(const scene::Scene& scene, const Operation& operation, const RemoveInstance& remove) {
     const auto kFound = std::ranges::find_if(scene.instances, [&remove](const scene::SceneInstance& instance) {
         return std::ranges::contains(instance.entities, remove.entity, &scene::IdentityMapping::instance);
@@ -143,21 +163,31 @@ result::Result<Journal> remove(const scene::Scene& scene, const Operation& opera
             }
         }
     }
-    InstanceRecord made{.place = static_cast<std::size_t>(kFound - scene.instances.begin()),
-                        .scene = instance.scene,
-                        .entities = instance.entities,
-                        .overrides = instance.overrides,
-                        .marks = {}};
-    for (const scene::Override& each : instance.overrides) {
-        if (!each.component.empty() &&
-            !std::ranges::contains(made.marks, each.component, &scene::SchemaMark::component)) {
-            made.marks.push_back(scene::SchemaMark{.component = each.component, .mark = markOf(scene, each.component)});
-        }
-    }
-    std::ranges::sort(made.marks, {}, &scene::SchemaMark::component);
+    InstanceRecord made = recordOf(scene, static_cast<std::size_t>(kFound - scene.instances.begin()));
     const base::Bits128 kNamed = made.entities.front().instance;
     return Journal{
         Delta{.kind = DeltaKind::DestroyInstance, .entity = kNamed, .before = {.instance = std::move(made)}}};
+}
+
+result::Result<Journal> stream(const scene::Scene& scene, const Operation& operation, const StreamInstance& stream) {
+    const auto kFound = std::ranges::find_if(scene.instances, [&stream](const scene::SceneInstance& instance) {
+        return std::ranges::contains(instance.entities, stream.entity, &scene::IdentityMapping::instance);
+    });
+    if (kFound == scene.instances.end()) {
+        return notFound(operation, "no instance of the scene brings that entity");
+    }
+    if (kFound->streaming == stream.streaming) {
+        return invalid(operation, "the instance already reaches clients so");
+    }
+    // The instance taken out and put back in its place, streamed anew, so
+    // undoing it is undoing any other change to an instance.
+    InstanceRecord before = recordOf(scene, static_cast<std::size_t>(kFound - scene.instances.begin()));
+    InstanceRecord after = before;
+    after.streaming = stream.streaming;
+    const base::Bits128 kNamed = before.entities.front().instance;
+    return Journal{
+        Delta{.kind = DeltaKind::DestroyInstance, .entity = kNamed, .before = {.instance = std::move(before)}},
+        Delta{.kind = DeltaKind::CreateInstance, .entity = kNamed, .after = {.instance = std::move(after)}}};
 }
 
 } // namespace
@@ -183,6 +213,9 @@ result::Result<Journal> deriveInstance(const scene::Scene& scene,
                                        base::Bits128 document) {
     if (const auto* adding = std::get_if<AddInstance>(&operation)) {
         return add(scene, operation, *adding, sources, document);
+    }
+    if (const auto* streaming = std::get_if<StreamInstance>(&operation)) {
+        return stream(scene, operation, *streaming);
     }
     return remove(scene, operation, std::get<RemoveInstance>(operation));
 }
