@@ -8,6 +8,7 @@
 #include "rawframe/cook/kest.h"
 #include "rawframe/cook/mesh.h"
 #include "rawframe/cook/mod.h"
+#include "rawframe/cook/scatter.h"
 #include "rawframe/cook/scene.h"
 #include "rawframe/cook/terrain.h"
 #include "rawframe/cook/text.h"
@@ -31,6 +32,7 @@ std::vector<Importer> engineImporters(std::optional<ShaderTools> tools) {
             meshImporter(),
             modImporter(),
             postProcessImporter(),
+            scatterImporter(),
             sceneImporter(),
             terrainImporter(),
             textImporter(),
