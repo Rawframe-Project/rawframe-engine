@@ -69,7 +69,10 @@ fi
 
 # The history lives as long as the session: made, undone, redone, a stale
 # undo refused; then the file changed under the session is opened again,
-# its history let go.
+# its history let go. The last session's replies go first: the wait below
+# would otherwise find its fifth reply before this session truncates the
+# file, and change the scene under the first undo (gate-57).
+rm -f "$work/replies"
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.apply","id":2,"scene":"level.scene","request":'"$create"'}'
