@@ -305,11 +305,25 @@ Value trafficRecord(std::int64_t id, std::string_view scene) {
     return record;
 }
 
-Value profileRecord(std::int64_t id, std::string_view scene) {
+Value profileRecord(std::int64_t id, std::string_view scene, std::string_view capture) {
     Value record = Value::object();
     record.add("kind", Value::string("authoring.profile"));
     record.add("id", Value::integer(id));
     record.add("scene", Value::string(std::string{scene}));
+    if (!capture.empty()) {
+        record.add("capture", Value::string(std::string{capture}));
+    }
+    return record;
+}
+
+Value drawnFrameRecord(std::int64_t id, std::string_view scene, std::string_view capture) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.drawn_frame"));
+    record.add("id", Value::integer(id));
+    record.add("scene", Value::string(std::string{scene}));
+    if (!capture.empty()) {
+        record.add("capture", Value::string(std::string{capture}));
+    }
     return record;
 }
 

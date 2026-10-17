@@ -161,11 +161,10 @@ private:
     /// `layer`'s name, as the game's field line names it, else its number.
     [[nodiscard]] std::string layerName(std::uint32_t layer) const;
 
-    /// The layers hidden told to the preview of the scene shown (D791).
+    /// Tells the preview of the scene shown the layers hidden (D791), the
+    /// view mode (D794), and how many views it shows (D797).
     void tellHidden();
-    /// Tells the preview the view mode (D794).
     void tellViewMode();
-    /// Tells the preview how many views it shows (D797).
     void tellSplit();
     /// Tells the preview what it draws over its scene (D798).
     void tellOverlays();
@@ -234,9 +233,9 @@ private:
         Console,
         Network,
         Environment,
-        Profiler
+        Profiler,
+        Frame
     };
-
     /// The bottom dock showing `pane`.
     void showDock(Dock pane);
 
@@ -295,11 +294,8 @@ private:
 
     /// Removes `rows` from the tree.
     void clear(std::vector<ui::Node>& rows);
-
-    /// One record to the session, counted; its reply.
+    /// One record to the session, counted; its reply; the next record's id.
     std::string ask(const Value& record);
-
-    /// The next record's id.
     std::int64_t next() const noexcept;
 
     /// A read of `scene`: one query, `operation`, with `entity` if given.
@@ -503,31 +499,15 @@ private:
     /// `why` in the header, nothing asked, the entity shown as it stands.
     void refuse(const std::string& why);
 
-    /// Whether the chosen document is a style sheet (D637), a UI document
-    /// (D643), or either: a document with no view or preview.
-    [[nodiscard]] bool sheetChosen() const noexcept {
-        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Sheet;
-    }
-    [[nodiscard]] bool uiChosen() const noexcept {
-        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Ui;
-    }
-    [[nodiscard]] bool materialChosen() const noexcept {
-        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Material;
-    }
-    [[nodiscard]] bool graphChosen() const noexcept {
-        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Graph;
-    }
-    /// An action map, a mixer, a string table, its translations, or an
-    /// animation document (D812).
-    [[nodiscard]] bool dataChosen() const noexcept {
-        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Data;
-    }
-    /// The game's own description, its settings (D818).
-    [[nodiscard]] bool settingsChosen() const noexcept {
-        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == Listed::Settings;
+    /// Whether the chosen document is of `kind`: a style sheet (D637), a UI
+    /// document (D643), a material (D722) or a graph (D730), a data document
+    /// (D812), the game's own description (D818), or a frame's capture,
+    /// read only (D843).
+    [[nodiscard]] bool chosen(Listed kind) const noexcept {
+        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == kind;
     }
     [[nodiscard]] bool documentChosen() const noexcept {
-        return sheetChosen() || uiChosen() || materialChosen() || graphChosen() || dataChosen() || settingsChosen();
+        return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] != Listed::Scene;
     }
     /// What a document's row and tab say: its path, or "Project settings"
     /// for the game's description (D818).
@@ -538,6 +518,10 @@ private:
     /// `lines.insert` (D818).
     void showSettings();
     void showSettingsGroup(std::size_t at);
+    /// A frame's capture (D843): its figures and its steps in the entity
+    /// column, the one chosen in the Inspector, nothing to edit.
+    void showCapture();
+    void showCaptureEntry(std::size_t at);
     void setSettingLine(const FieldRow& row, const std::string& text);
     void putSettingLine(const FieldRow& row, const std::string& text);
     /// The chosen data document's objects and keyed items in the entity
@@ -663,11 +647,15 @@ private:
     result::Status makeEnvironment();
     void showEnvironment();
     bool pressEnvironment(ui::Node node);
-    /// The Profiler: the played game's server's last ticks, once a second
-    /// while it shows (D838).
+    /// The Profiler (D838) and the Frame tab (D842): the played game's
+    /// server's last ticks and its preview's last frame, read once a second
+    /// while shown; each keeps a capture when its button is pressed (D844).
     result::Status makeProfiler();
     void readProfiler(double seconds);
     void showProfiler(const std::optional<Value>& profile);
+    result::Status makeFrame();
+    void readFrame(double seconds, std::string_view capture = {});
+    bool pressCapture(ui::Node node);
     bool pressNetwork(ui::Node node);
     void readNetwork(double seconds);
     void showNetwork(const std::vector<std::string>& lines);

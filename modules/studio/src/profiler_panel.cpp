@@ -23,6 +23,7 @@ std::string milliseconds(std::int64_t microseconds) {
 
 result::Status ShellParticipant::makeProfiler() {
     RAWFRAME_TRY_ASSIGN(held_.profilerColumn, pane("Profiler"));
+    RAWFRAME_TRY_ASSIGN(held_.profilerCapture, button(held_.profilerColumn, "Save capture"));
     showProfiler({});
     return {};
 }
@@ -89,7 +90,9 @@ void ShellParticipant::showProfiler(const std::optional<Value>& profile) {
     // The systems that took longest over those ticks, each its mean and
     // its longest.
     std::vector<std::pair<std::int64_t, std::string>> systems;
-    std::vector<std::int64_t> mosts;
+    // The game's own systems, each its own schedule entry by its identity
+    // (D841): those the engine does not name.
+    std::size_t gameSystems = 0;
     for (const Value& kSystem :
          kSystems != nullptr && kSystems->kind() == Value::Kind::Array ? kSystems->items() : std::span<const Value>{}) {
         const Value* kName = kSystem.find("system");
@@ -98,6 +101,7 @@ void ShellParticipant::showProfiler(const std::optional<Value>& profile) {
         if (kName == nullptr || kName->text() == nullptr || kTotal == nullptr || kLongest == nullptr) {
             continue;
         }
+        gameSystems += kName->text()->starts_with("rawframe.") ? 0 : 1;
         systems.emplace_back(kTotal->integer().value_or(0),
                              *kName->text() + ": mean " +
                                  milliseconds(kTotal->integer().value_or(0) / static_cast<std::int64_t>(ticks.size())) +
@@ -113,6 +117,7 @@ void ShellParticipant::showProfiler(const std::optional<Value>& profile) {
                  "the played game's server's last ticks, as its profile says",
                  {diagnostics::field("ticks", ticks.size()),
                   diagnostics::field("systems", systems.size()),
+                  diagnostics::field("gameSystems", gameSystems),
                   diagnostics::field("longestUs", kMost),
                   diagnostics::field("reads", held_.profilerReads)});
 }

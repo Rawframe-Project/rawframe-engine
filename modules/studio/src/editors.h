@@ -27,6 +27,11 @@ inline constexpr diagnostics::EventIdentity kStylePreviewShown{"studio", "studio
 inline constexpr diagnostics::EventIdentity kUiPreviewShown{"studio", "studio_ui_preview"};
 /// The played game's server's profile read (D838).
 inline constexpr diagnostics::EventIdentity kProfileRead{"studio", "studio_profile"};
+/// The Frame tab read the preview's last frame, or kept a capture (D842).
+inline constexpr diagnostics::EventIdentity kFrameRead{"studio", "studio_frame"};
+/// A capture kept (D842, D844), and one shown, read only (D843).
+inline constexpr diagnostics::EventIdentity kCaptureKept{"studio", "studio_capture_kept"};
+inline constexpr diagnostics::EventIdentity kCaptureShown{"studio", "studio_capture_shown"};
 /// The environment panel's components and their entities (D834).
 inline constexpr diagnostics::EventIdentity kEnvironmentShown{"studio", "studio_environment"};
 
@@ -40,6 +45,7 @@ enum class Listed : std::uint8_t {
     Graph,
     Data,
     Settings,
+    Capture,
 };
 
 struct EditorsHeld {
@@ -73,6 +79,22 @@ struct EditorsHeld {
     std::vector<ui::Node> profilerRows;
     double profilerNextRead = 0;
     std::uint64_t profilerReads = 0;
+    /// The Profiler's Save capture button, and the captures it has kept
+    /// (D844).
+    ui::Node profilerCapture{};
+    std::uint64_t profilerCaptures = 0;
+    /// The Frame tab: its tab and pane, its Capture button, its rows, when
+    /// it next reads, how many reads it has shown, and the captures it has
+    /// kept (D842).
+    ui::Node frameTab{};
+    ui::Node frameColumn{};
+    ui::Node frameCapture{};
+    std::vector<ui::Node> frameRows;
+    double frameNextRead = 0;
+    std::uint64_t frameReads = 0;
+    std::uint64_t frameCaptures = 0;
+    /// The capture shown, as its file holds it (D843).
+    document::Value capture;
 };
 
 } // namespace rawframe::studio

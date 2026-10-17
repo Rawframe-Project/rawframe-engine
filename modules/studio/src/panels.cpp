@@ -234,12 +234,14 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(networkTab_, button(kDockTabs, "Network"));
     RAWFRAME_TRY_ASSIGN(environmentTab_, button(kDockTabs, "Environment"));
     RAWFRAME_TRY_ASSIGN(profilerTab_, button(kDockTabs, "Profiler"));
+    RAWFRAME_TRY_ASSIGN(held_.frameTab, button(kDockTabs, "Frame"));
     RAWFRAME_TRY_ASSIGN(scenesColumn_, pane("Assets"));
     RAWFRAME_TRY_ASSIGN(historyColumn_, pane("History"));
     RAWFRAME_TRY(makeConsole());
     RAWFRAME_TRY(makeNetwork());
     RAWFRAME_TRY(makeEnvironment());
     RAWFRAME_TRY(makeProfiler());
+    RAWFRAME_TRY(makeFrame());
     RAWFRAME_TRY(tree_->attach(bottomDock_, scenesColumn_));
     dockShown_ = Dock::Assets;
     showDock(Dock::Assets);
@@ -256,7 +258,8 @@ void ShellParticipant::showDock(Dock pane) {
                : dock == Dock::Console     ? consoleColumn_
                : dock == Dock::Network     ? networkColumn_
                : dock == Dock::Environment ? held_.environmentColumn
-                                           : held_.profilerColumn;
+               : dock == Dock::Profiler    ? held_.profilerColumn
+                                           : held_.frameColumn;
     };
     if (pane != dockShown_) {
         static_cast<void>(tree_->detach(kPaneOf(dockShown_)));
@@ -274,6 +277,8 @@ void ShellParticipant::showDock(Dock pane) {
         tree_->setLook(environmentTab_, ui::Look{.fill = pane == Dock::Environment ? kChosen : kRow, .radius = 4}));
     static_cast<void>(
         tree_->setLook(profilerTab_, ui::Look{.fill = pane == Dock::Profiler ? kChosen : kRow, .radius = 4}));
+    static_cast<void>(
+        tree_->setLook(held_.frameTab, ui::Look{.fill = pane == Dock::Frame ? kChosen : kRow, .radius = 4}));
     if (pane == Dock::Console) {
         showConsole();
     } else if (pane == Dock::Environment) {
@@ -445,28 +450,32 @@ void ShellParticipant::showScene(std::size_t at) {
         showLive();
         return;
     }
-    if (sheetChosen()) {
+    if (chosen(Listed::Sheet)) {
         showSheet();
         return;
     }
-    if (uiChosen()) {
+    if (chosen(Listed::Ui)) {
         showUi();
         return;
     }
-    if (materialChosen()) {
+    if (chosen(Listed::Material)) {
         showMaterial();
         return;
     }
-    if (graphChosen()) {
+    if (chosen(Listed::Graph)) {
         showGraph();
         return;
     }
-    if (dataChosen()) {
+    if (chosen(Listed::Data)) {
         showData();
         return;
     }
-    if (settingsChosen()) {
+    if (chosen(Listed::Settings)) {
         showSettings();
+        return;
+    }
+    if (chosen(Listed::Capture)) {
+        showCapture();
         return;
     }
     // Over the scene's entities, the search that chooses them (D473), then
@@ -588,28 +597,32 @@ std::optional<Value> ShellParticipant::entitiesShown() {
 }
 
 void ShellParticipant::showEntity(std::size_t at) {
-    if (sheetChosen()) {
+    if (chosen(Listed::Sheet)) {
         showClass(at);
         return;
     }
-    if (uiChosen()) {
+    if (chosen(Listed::Ui)) {
         showNode(at);
         return;
     }
-    if (materialChosen()) {
+    if (chosen(Listed::Material)) {
         showInput(at);
         return;
     }
-    if (graphChosen()) {
+    if (chosen(Listed::Graph)) {
         showGraphNode(at);
         return;
     }
-    if (dataChosen()) {
+    if (chosen(Listed::Data)) {
         showDataEntry(at);
         return;
     }
-    if (settingsChosen()) {
+    if (chosen(Listed::Settings)) {
         showSettingsGroup(at);
+        return;
+    }
+    if (chosen(Listed::Capture)) {
+        showCaptureEntry(at);
         return;
     }
     endEdit();

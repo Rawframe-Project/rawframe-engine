@@ -1,0 +1,10 @@
+{
+  "kind": "authoring.drawn_frame",
+  "frames": 120,
+  "figures": {"draws": 5, "opaque": 4, "translucent": 1, "opaque_batches": 2, "culled": 3},
+  "steps": [
+    {"pass": "opaque", "mesh": "00000000000000a1", "material": 1, "instances": 3},
+    {"pass": "opaque", "mesh": "00000000000000b2", "material": 2, "instances": 1},
+    {"pass": "translucent", "mesh": "00000000000000c3", "material": 3, "instances": 1}
+  ]
+}

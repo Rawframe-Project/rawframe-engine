@@ -156,7 +156,8 @@ void ShellParticipant::rebuild() {
                                  consoleColumn_,
                                  networkColumn_,
                                  held_.environmentColumn,
-                                 held_.profilerColumn}) {
+                                 held_.profilerColumn,
+                                 held_.frameColumn}) {
         if (tree_->contains(kPane)) {
             static_cast<void>(tree_->remove(kPane));
         }

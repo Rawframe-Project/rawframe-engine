@@ -29,6 +29,14 @@ fi
 if [ -n "${STUDIO_SCENE_FILE:-}" ] && [ "$2" != none ]; then
     cp "$STUDIO_SCENE_FILE" "$work/game/$3"
 fi
+# And files of its own beside the game's: `from=to` pairs in
+# STUDIO_EXTRA_FILES, `to` under the copy, as a capture to open (D843).
+if [ -n "${STUDIO_EXTRA_FILES:-}" ] && [ "$2" != none ]; then
+    for pair in $STUDIO_EXTRA_FILES; do
+        mkdir -p "$work/game/$(dirname "${pair#*=}")"
+        cp "${pair%%=*}" "$work/game/${pair#*=}"
+    done
+fi
 # A test may change the copy's scene first: a sed expression in
 # STUDIO_SCENE_EDIT, as a scene authored against an older layout (D452).
 if [ -n "${STUDIO_SCENE_EDIT:-}" ] && [ "$2" != none ]; then

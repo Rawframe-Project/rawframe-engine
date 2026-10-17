@@ -170,14 +170,15 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (broken_.has_value()) {
         return;
     } else if (node == assetsTab_ || node == historyTab_ || node == consoleTab_ || node == networkTab_ ||
-               node == environmentTab_ || node == profilerTab_) {
+               node == environmentTab_ || node == profilerTab_ || node == held_.frameTab) {
         showDock(node == assetsTab_        ? Dock::Assets
                  : node == historyTab_     ? Dock::History
                  : node == consoleTab_     ? Dock::Console
                  : node == networkTab_     ? Dock::Network
                  : node == environmentTab_ ? Dock::Environment
-                                           : Dock::Profiler);
-    } else if (pressNetwork(node) || pressEnvironment(node)) {
+                 : node == profilerTab_    ? Dock::Profiler
+                                           : Dock::Frame);
+    } else if (pressNetwork(node) || pressEnvironment(node) || pressCapture(node)) {
         return;
     } else if (const auto kFilter = std::ranges::find(consoleFilters_, node, &std::pair<ui::Node, int>::first);
                kFilter != consoleFilters_.end()) {
@@ -200,7 +201,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (node == undoNode_ || node == redoNode_) {
         endEdit();
         step(node == undoNode_ ? "authoring.undo" : "authoring.redo");
-    } else if (sheetChosen() && node == newNode_) {
+    } else if (chosen(Listed::Sheet) && node == newNode_) {
         // A sheet's class is made and deleted as an entity is (D638).
         endEdit();
         const std::string kStyle = mintedHexIdentity();
@@ -210,21 +211,21 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         // Named as a class's name may be, from its identity, till renamed.
         operation.add("name", Value::string("class_" + kStyle.substr(0, 6)));
         commit(std::move(operation), "class made", kStyle);
-    } else if (sheetChosen() && node == deleteNode_ && !entity_.empty()) {
+    } else if (chosen(Listed::Sheet) && node == deleteNode_ && !entity_.empty()) {
         endEdit();
         Value operation = Value::object();
         operation.add("operation", Value::string("styles.remove_class"));
         operation.add("style", Value::string(entity_));
         commit(std::move(operation), "class deleted", std::nullopt);
-    } else if (uiChosen() && node == newNode_) {
+    } else if (chosen(Listed::Ui) && node == newNode_) {
         // Of a component the game declares a node, not one the document
         // holds (D672).
         showNodeForm();
-    } else if (graphChosen() && node == newNode_) {
+    } else if (chosen(Listed::Graph) && node == newNode_) {
         // Of a type the material module lists, with a fresh identity
         // (D731).
         showGraphForm();
-    } else if (graphChosen() && node == deleteNode_ && !entity_.empty()) {
+    } else if (chosen(Listed::Graph) && node == deleteNode_ && !entity_.empty()) {
         // A node another reads is refused by the session: the graph would
         // not read (D728).
         endEdit();
@@ -232,17 +233,17 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         operation.add("operation", Value::string("materials.remove_node"));
         operation.add("node", Value::string(entity_));
         commit(std::move(operation), "node deleted", std::nullopt);
-    } else if (uiChosen() && node == deleteNode_ && !entity_.empty()) {
+    } else if (chosen(Listed::Ui) && node == deleteNode_ && !entity_.empty()) {
         // A node is removed with what is inside it (D643).
         endEdit();
         Value operation = Value::object();
         operation.add("operation", Value::string("ui.remove_node"));
         operation.add("node", Value::string(entity_));
         commit(std::move(operation), "node deleted", std::nullopt);
-    } else if (uiChosen() && (node == upNode_ || node == downNode_) && !entity_.empty()) {
+    } else if (chosen(Listed::Ui) && (node == upNode_ || node == downNode_) && !entity_.empty()) {
         endEdit();
         moveNode(node == upNode_ ? -1 : 1);
-    } else if (uiChosen() && node == moveNode_ && !entity_.empty()) {
+    } else if (chosen(Listed::Ui) && node == moveNode_ && !entity_.empty()) {
         // Into the node pressed next, or to the document's top (D671).
         endEdit();
         moving_ = true;
@@ -253,10 +254,10 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         // The rest are an entity's (D637).
         endEdit();
         ++refused_;
-        say(sheetChosen()   ? "not done to a style class"
-            : uiChosen()    ? "not done to a UI node"
-            : graphChosen() ? "not done to a material's node"
-                            : "not done to a material's input");
+        say(chosen(Listed::Sheet)   ? "not done to a style class"
+            : chosen(Listed::Ui)    ? "not done to a UI node"
+            : chosen(Listed::Graph) ? "not done to a material's node"
+                                    : "not done to a material's input");
     } else if (node == newNode_ && !scene_.empty()) {
         endEdit();
         create();
@@ -312,7 +313,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
             say("choose the input to connect " + kAsked.field + " to");
             return;
         }
-        if (kAsked.makesNode && graphChosen()) {
+        if (kAsked.makesNode && chosen(Listed::Graph)) {
             const std::string kNode = mintedHexIdentity();
             Value operation = Value::object();
             operation.add("operation", Value::string("materials.create_node"));
@@ -343,9 +344,9 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         endEdit();
         stepTo(static_cast<std::size_t>(kEntry - entryRows_.begin()));
     } else if (const auto kScene = std::ranges::find(sceneRows_, node); kScene != sceneRows_.end()) {
-        if (moving && uiChosen() && static_cast<std::size_t>(kScene - sceneRows_.begin()) == sceneAt_) {
+        if (moving && chosen(Listed::Ui) && static_cast<std::size_t>(kScene - sceneRows_.begin()) == sceneAt_) {
             moveNodeInto(std::nullopt);
-        } else if (moving && uiChosen()) {
+        } else if (moving && chosen(Listed::Ui)) {
             ++refused_;
             say("a node moves within its document");
         } else if (moving) {
@@ -360,7 +361,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         if (pointerPress_) {
             heldEntity_ = static_cast<std::size_t>(kEntity - entityRows_.begin());
         }
-        if (moving && uiChosen()) {
+        if (moving && chosen(Listed::Ui)) {
             moveNodeInto(entities_[static_cast<std::size_t>(kEntity - entityRows_.begin())]);
         } else if (!documentChosen()) {
             // A scene's entities are chosen one or several at a time (D787).
@@ -368,7 +369,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         } else {
             showEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
             // Its input is pressed next.
-            connecting_ = graphChosen() ? kConnecting : std::nullopt;
+            connecting_ = chosen(Listed::Graph) ? kConnecting : std::nullopt;
         }
     } else if (const auto kFieldAt = std::ranges::find(fields_, node, &FieldRow::value); kFieldAt != fields_.end()) {
         if (kConnecting.has_value() && kFieldAt->role == FieldRow::Role::GraphInput) {
@@ -541,7 +542,7 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
             }
         }
     }
-    if (row.role == FieldRow::Role::Name && sheetChosen()) {
+    if (row.role == FieldRow::Role::Name && chosen(Listed::Sheet)) {
         Value operation = Value::object();
         operation.add("operation", Value::string("styles.rename_class"));
         operation.add("style", Value::string(entity_));

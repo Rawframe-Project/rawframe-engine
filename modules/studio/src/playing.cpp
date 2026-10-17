@@ -158,7 +158,7 @@ void ShellParticipant::hearCook() {
 
 void ShellParticipant::recookPlayed() {
     std::error_code error;
-    if ((!materialChosen() && !graphChosen()) || !playing_.has_value() || cookTool_.empty() ||
+    if ((!chosen(Listed::Material) && !chosen(Listed::Graph)) || !playing_.has_value() || cookTool_.empty() ||
         !std::filesystem::is_regular_file(cookAt_ / "content" / "content.manifest", error)) {
         return;
     }

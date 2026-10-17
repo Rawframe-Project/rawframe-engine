@@ -1,0 +1,9 @@
+{
+  "kind": "authoring.profile",
+  "tickUs": 16667,
+  "ticksUs": [1200, 1500, 900, 4100],
+  "systems": [
+    {"system": "rawframe.physics3d.step", "totalUs": 2400, "mostUs": 900},
+    {"system": "runners.run", "totalUs": 800, "mostUs": 300}
+  ]
+}

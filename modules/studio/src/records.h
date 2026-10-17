@@ -97,8 +97,12 @@ struct Asset {
 [[nodiscard]] Value stepRecord(std::int64_t id, std::string_view scene, std::uint32_t ticks);
 /// `authoring.traffic` of the previewed `scene`'s server (D807).
 [[nodiscard]] Value trafficRecord(std::int64_t id, std::string_view scene);
-/// `authoring.profile` of the previewed `scene`'s server (D838).
-[[nodiscard]] Value profileRecord(std::int64_t id, std::string_view scene);
+/// `authoring.profile` of the previewed `scene`'s server (D838), kept in
+/// `capture` (a .rfprofile path under the game) when one is given (D844).
+[[nodiscard]] Value profileRecord(std::int64_t id, std::string_view scene, std::string_view capture = {});
+/// `authoring.drawn_frame` of the previewed `scene` (D842), kept in
+/// `capture` (a .rfframe path under the game) when one is given.
+[[nodiscard]] Value drawnFrameRecord(std::int64_t id, std::string_view scene, std::string_view capture);
 /// `authoring.asset_references` of the source at `asset` (D803).
 [[nodiscard]] Value assetReferencesRecord(std::int64_t id, std::string_view asset);
 [[nodiscard]] Value setImportSettingsRecord(std::int64_t id, std::string_view asset, Value settings);
