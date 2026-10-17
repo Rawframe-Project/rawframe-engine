@@ -7,6 +7,7 @@
 #include "rawframe/test/test.h"
 
 #include <cmath>
+#include <optional>
 #include <string_view>
 
 using namespace rawframe;
@@ -100,6 +101,22 @@ RAWFRAME_TEST(BrushesChangeOnlyWhatTheyReach) {
     RAWFRAME_EXPECT(paint(ground, Brush{.x = 0.5, .z = 0.5, .radius = 0.6}, 7) == 0);
     // And it writes and reads back as it stands.
     RAWFRAME_EXPECT(read(writeTerrain(ground)) == ground);
+}
+
+RAWFRAME_TEST(TheGroundIsSampledOnItsMeshesTriangles) {
+    // The slope's heights where its samples are, and between them on the
+    // mesh's two triangles a cell, not blended across all four (D862).
+    const Terrain kGround = read(kSlope);
+    const auto kNear = [](std::optional<double> height, double expected) {
+        return height.has_value() && std::abs(*height - expected) < 1e-9;
+    };
+    RAWFRAME_EXPECT(kNear(heightAt(kGround, 0, 0), 0) && kNear(heightAt(kGround, 2, 2), 0.25));
+    RAWFRAME_EXPECT(kNear(heightAt(kGround, 6, 4), 2.125) && kNear(heightAt(kGround, 1, 1), 0));
+    RAWFRAME_EXPECT(kNear(heightAt(kGround, 1.5, 1.5), 0.125));
+    RAWFRAME_EXPECT(!heightAt(kGround, 6.1, 0).has_value() && !heightAt(kGround, -0.1, 0).has_value());
+    // Each cell's layer, the far edges the last cells'.
+    RAWFRAME_EXPECT(layerAt(kGround, 5, 1) == 1 && layerAt(kGround, 1, 3) == 0 && layerAt(kGround, 6, 4) == 1);
+    RAWFRAME_EXPECT(!layerAt(kGround, 0, 4.5).has_value());
 }
 
 RAWFRAME_TEST(WhatIsNotATerrainIsRefusedByItsLine) {

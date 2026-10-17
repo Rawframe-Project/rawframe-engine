@@ -33,6 +33,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -109,5 +110,15 @@ std::size_t smooth(Terrain& terrain, const Brush& brush, double strength);
 /// Paints the cells whose middles are within the brush with `layer`, which
 /// must be one the terrain names; how many changed.
 std::size_t paint(Terrain& terrain, const Brush& brush, std::uint8_t layer);
+
+/// The ground's height in meters at `x` `z` from the terrain's origin, on
+/// the two triangles of the cell there that its mesh is made of, so what
+/// stands there stands on what is drawn and collided with (D862); none off
+/// the grid.
+[[nodiscard]] std::optional<double> heightAt(const Terrain& terrain, double x, double z) noexcept;
+
+/// The place among the layers of the cell `x` `z` lies in; none off the
+/// grid.
+[[nodiscard]] std::optional<std::uint8_t> layerAt(const Terrain& terrain, double x, double z) noexcept;
 
 } // namespace rawframe::terrain

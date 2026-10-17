@@ -381,4 +381,58 @@ std::size_t paint(Terrain& terrain, const Brush& brush, std::uint8_t layer) {
     return changed;
 }
 
+namespace {
+
+/// The cell `x` `z` lies in and where in it, each from nought to one; none
+/// off the grid. The far edges belong to the last cells.
+struct InCell {
+    std::uint32_t column = 0;
+    std::uint32_t row = 0;
+    double across = 0;
+    double along = 0;
+};
+
+std::optional<InCell> cellOf(const Terrain& terrain, double x, double z) noexcept {
+    const double kColumns = static_cast<double>(terrain.columns - 1);
+    const double kRows = static_cast<double>(terrain.rows - 1);
+    const double kU = x / terrain.cell;
+    const double kV = z / terrain.cell;
+    if (!(kU >= 0 && kU <= kColumns && kV >= 0 && kV <= kRows) || terrain.columns < 2 || terrain.rows < 2) {
+        return std::nullopt;
+    }
+    const auto kColumn = static_cast<std::uint32_t>(std::min(std::floor(kU), kColumns - 1));
+    const auto kRow = static_cast<std::uint32_t>(std::min(std::floor(kV), kRows - 1));
+    return InCell{.column = kColumn, .row = kRow, .across = kU - kColumn, .along = kV - kRow};
+}
+
+} // namespace
+
+std::optional<double> heightAt(const Terrain& terrain, double x, double z) noexcept {
+    const std::optional<InCell> kIn = cellOf(terrain, x, z);
+    if (!kIn.has_value()) {
+        return std::nullopt;
+    }
+    const auto kHeight = [&terrain](std::uint32_t column, std::uint32_t row) {
+        return terrain.heights[(static_cast<std::size_t>(row) * terrain.columns) + column] / 1000.0;
+    };
+    // The mesh's triangles: A C B below the diagonal from B to C, and B C D
+    // above it.
+    const double kA = kHeight(kIn->column, kIn->row);
+    const double kB = kHeight(kIn->column + 1, kIn->row);
+    const double kC = kHeight(kIn->column, kIn->row + 1);
+    const double kD = kHeight(kIn->column + 1, kIn->row + 1);
+    if (kIn->across + kIn->along <= 1) {
+        return kA + (kIn->across * (kB - kA)) + (kIn->along * (kC - kA));
+    }
+    return kD + ((1 - kIn->across) * (kC - kD)) + ((1 - kIn->along) * (kB - kD));
+}
+
+std::optional<std::uint8_t> layerAt(const Terrain& terrain, double x, double z) noexcept {
+    const std::optional<InCell> kIn = cellOf(terrain, x, z);
+    if (!kIn.has_value()) {
+        return std::nullopt;
+    }
+    return terrain.painted[(static_cast<std::size_t>(kIn->row) * (terrain.columns - 1)) + kIn->column];
+}
+
 } // namespace rawframe::terrain
