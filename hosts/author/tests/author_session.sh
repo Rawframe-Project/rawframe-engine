@@ -16,6 +16,9 @@ set -euo pipefail
 author=$1
 repository=$2
 work=$3
+# Which check failed, and what the session answered: a run under a load
+# of 280 once failed saying neither.
+trap 'echo "author_session: failed at line $LINENO"; cut -c1-600 "$work/replies" 2>/dev/null' ERR
 
 rm -rf "$work"
 mkdir -p "$work/root"
