@@ -47,6 +47,10 @@ struct DataKind {
 /// line document.
 [[nodiscard]] result::Status readsScatter(std::string_view text);
 
+/// Whether `text` reads as a sequence (D869): the reader of a sequence's
+/// line document.
+[[nodiscard]] result::Status readsSequence(std::string_view text);
+
 /// Whether `text` reads as a tilemap (D860), and the lines tiles painted
 /// leave of one: the tilemap module's paint, its document written again.
 [[nodiscard]] result::Status readsTilemap(std::string_view text);

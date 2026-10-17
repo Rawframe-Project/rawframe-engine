@@ -134,6 +134,12 @@ if(RAWFRAME_BUILD_TESTS)
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_scatter)
     set_tests_properties(author_scatter PROPERTIES
                          PASS_REGULAR_EXPRESSION "edited a scatter in a session and undid it")
+    # A sequence edited line by line and undone (D869).
+    add_test(NAME author_sequence
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_sequence.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_sequence)
+    set_tests_properties(author_sequence PROPERTIES
+                         PASS_REGULAR_EXPRESSION "edited a sequence in a session and undid it")
     # A tilemap painted and cooked (D858, D860).
     add_test(NAME author_tilemap
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_tilemap.sh $<TARGET_FILE:rawframe_host_author>

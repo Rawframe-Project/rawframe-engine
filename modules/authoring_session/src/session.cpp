@@ -75,7 +75,8 @@ public:
           blockouts_(root_, ".blockout", "blockout", &readsBlockout),
           terrains_(root_, ".terrain", "terrain", &readsTerrain, &rewritesTerrain),
           tilemaps_(root_, ".tilemap", "tilemap", &readsTilemap, &rewritesTilemap),
-          scatters_(root_, ".scatter", "scatter", &readsScatter) {
+          scatters_(root_, ".scatter", "scatter", &readsScatter),
+          sequences_(root_, ".sequence", "sequence", &readsSequence) {
         for (const DataKind& kKind : dataKinds()) {
             data_.emplace_back(root_, kKind.extension, kKind.called, kKind.reads);
         }
@@ -879,17 +880,18 @@ private:
     std::vector<Documents<authoring::AuthoredData>> data_;
     /// The game's descriptions, its settings, as line documents (D817).
     Documents<authoring::AuthoredLines> games_;
-    /// Its blockouts (D849), terrains (D855), tilemaps (D860), and scatters
-    /// (D865), line documents too, a terrain's brush strokes and a
-    /// tilemap's painted tiles made lines by their kinds.
+    /// Its blockouts (D849), terrains (D855), tilemaps (D860), scatters
+    /// (D865), and sequences (D869), line documents too, a terrain's brush
+    /// strokes and a tilemap's painted tiles made lines by their kinds.
     Documents<authoring::AuthoredLines> blockouts_;
     Documents<authoring::AuthoredLines> terrains_;
     Documents<authoring::AuthoredLines> tilemaps_;
     Documents<authoring::AuthoredLines> scatters_;
+    Documents<authoring::AuthoredLines> sequences_;
 
     /// The line documents `name` is one of, if any.
     Documents<authoring::AuthoredLines>* linesOf(const std::string& name) {
-        for (auto* each : {&games_, &blockouts_, &terrains_, &tilemaps_, &scatters_}) {
+        for (auto* each : {&games_, &blockouts_, &terrains_, &tilemaps_, &scatters_, &sequences_}) {
             if (each->names(name)) {
                 return each;
             }

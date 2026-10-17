@@ -34,10 +34,8 @@ constexpr std::int64_t kInvalidParams = -32602;
 constexpr std::string_view kInstructions =
     "Rawframe's authoring session over one game. A game is made without Studio: its documents are "
     "text files under the game's directory (scenes .scene, UI .ui, style sheets .styles, materials "
-    ".rfmaterial, blockouts .blockout, terrains .terrain, tilemaps .tilemap, scatters .scatter), which you may read "
-    "directly. Change them "
-    "through these "
-    "tools so each change is "
+    ".rfmaterial, blockouts .blockout, terrains .terrain, tilemaps .tilemap, scatters .scatter, "
+    "sequences .sequence), which you may read directly. Change them through these tools so each change is "
     "validated, written, and kept in the document's undo history. Call game_describe first: it lists "
     "the game's components and their fields. A new entity needs a new random UUID (version 4). Field "
     "values are typed objects with one member: {\"real\": 1.5}, {\"unsigned\": 2}, {\"signed\": -3}, "

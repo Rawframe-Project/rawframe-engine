@@ -10,6 +10,7 @@
 #include "rawframe/input/actions.h"
 #include "rawframe/localization/table.h"
 #include "rawframe/scatter/scatter.h"
+#include "rawframe/sequence/sequence.h"
 #include "rawframe/terrain/terrain.h"
 #include "rawframe/tilemap/tilemap.h"
 #include "rawframe/world_kest/game.h"
@@ -170,6 +171,13 @@ result::Result<std::vector<std::string>> rewritesTerrain(std::span<const std::st
 result::Status readsScatter(std::string_view text) {
     return readsAs("scatter", [text]() -> result::Status {
         RAWFRAME_TRY(scatter::parseScatter(text));
+        return {};
+    });
+}
+
+result::Status readsSequence(std::string_view text) {
+    return readsAs("sequence", [text]() -> result::Status {
+        RAWFRAME_TRY(sequence::parseSequence(text));
         return {};
     });
 }
