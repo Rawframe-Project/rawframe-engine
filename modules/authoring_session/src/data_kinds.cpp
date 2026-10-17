@@ -5,6 +5,7 @@
 #include "rawframe/animation/skeleton.h"
 #include "rawframe/audio/layout.h"
 #include "rawframe/authoring/errors.h"
+#include "rawframe/blockout/blockout.h"
 #include "rawframe/document/json.h"
 #include "rawframe/input/actions.h"
 #include "rawframe/localization/table.h"
@@ -89,6 +90,14 @@ constexpr std::array<DataKind, 5> kKinds = {{{".actions", "action map", &readsAc
 
 std::span<const DataKind> dataKinds() noexcept {
     return kKinds;
+}
+
+result::Status readsBlockout(std::string_view text) {
+    return readsAs("blockout", [text]() -> result::Status {
+        RAWFRAME_TRY_ASSIGN(const blockout::Blockout kRead, blockout::parseBlockout(text));
+        RAWFRAME_TRY(blockout::meshOf(kRead));
+        return {};
+    });
 }
 
 result::Status readsGameDescription(std::string_view text) {

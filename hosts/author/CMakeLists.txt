@@ -116,6 +116,12 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_imports)
     set_tests_properties(author_imports PROPERTIES
                          PASS_REGULAR_EXPRESSION "imported a texture and a mesh into the plaza and cooked them")
+    # A blockout authored line by line and cooked as a mesh (D848, D849).
+    add_test(NAME author_blockout
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_blockout.sh $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_blockout)
+    set_tests_properties(author_blockout PROPERTIES
+                         PASS_REGULAR_EXPRESSION "authored a blockout in a session and cooked it as a mesh")
     set_tests_properties(author_cooks PROPERTIES
                          PASS_REGULAR_EXPRESSION "cooked the plaza through a session, [1-9][0-9]* sources")
     # An agent's tools over the Model Context Protocol (D773): the plaza

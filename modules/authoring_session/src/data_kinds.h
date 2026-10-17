@@ -28,4 +28,9 @@ struct DataKind {
 /// reader of a game's line document, its settings (D817).
 [[nodiscard]] result::Status readsGameDescription(std::string_view text);
 
+/// Whether `text` reads as a blockout and its solids make a mesh within
+/// the format's limits, as the cook makes it (D849): the reader of a
+/// blockout's line document.
+[[nodiscard]] result::Status readsBlockout(std::string_view text);
+
 } // namespace rawframe::authoring_session

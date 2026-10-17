@@ -36,7 +36,7 @@ struct Taken {
     std::string_view importer;
 };
 
-constexpr std::array<Taken, 15> kTaken = {Taken{".png", "texture", "rawframe.texture"},
+constexpr std::array<Taken, 16> kTaken = {Taken{".png", "texture", "rawframe.texture"},
                                           Taken{".jpg", "texture", "rawframe.texture"},
                                           Taken{".jpeg", "texture", "rawframe.texture"},
                                           Taken{".bmp", "texture", "rawframe.texture"},
@@ -44,6 +44,7 @@ constexpr std::array<Taken, 15> kTaken = {Taken{".png", "texture", "rawframe.tex
                                           Taken{".hdr", "texture", "rawframe.texture"},
                                           Taken{".gltf", "mesh", "rawframe.mesh"},
                                           Taken{".glb", "mesh", "rawframe.mesh"},
+                                          Taken{".blockout", "mesh", "rawframe.blockout"},
                                           Taken{".wav", "sound", "rawframe.audio"},
                                           Taken{".ogg", "sound", "rawframe.audio"},
                                           Taken{".opus", "sound", "rawframe.audio"},
@@ -192,7 +193,7 @@ result::Result<Imported> importAsset(const std::filesystem::path& game,
     const std::filesystem::path kTarget = kDirectory / std::string{as};
     const std::filesystem::path kSidecar = kTarget.string() + std::string{content::kSidecarSuffix};
     std::vector<std::pair<std::filesystem::path, std::filesystem::path>> copies;
-    if (made.kind == "mesh" && source.extension() != ".glb") {
+    if (made.kind == "mesh" && source.extension() != ".glb" && source.extension() != ".blockout") {
         RAWFRAME_TRY_ASSIGN(const std::vector<std::string> kNamed, namedBy(source));
         for (const std::string& kEach : kNamed) {
             copies.emplace_back(source.parent_path() / kEach, kTarget.parent_path() / kEach);
@@ -269,8 +270,8 @@ result::Result<Imported> importAsset(const std::filesystem::path& game,
     // on a loaded sanitized tree (D536). Five minutes only bounds a tool
     // that never ends: the mesh alone took past thirty seconds under the
     // thread sanitizer on a loaded runner, and a mesh left unmapped does
-    // not cook.
-    if (made.kind == "mesh" && !cook.empty()) {
+    // not cook. A blockout names no materials (D849).
+    if (made.kind == "mesh" && source.extension() != ".blockout" && !cook.empty()) {
         auto mapping = process::Child::start({.program = cook, .arguments = {"--map", kDirectory.string(), made.path}});
         if (mapping.has_value()) {
             const auto kUntil = std::chrono::steady_clock::now() + std::chrono::minutes{5};
