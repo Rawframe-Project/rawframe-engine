@@ -57,11 +57,14 @@ std::optional<std::vector<std::byte>> readFile(const std::filesystem::path& path
 }
 
 /// Written beside its place and renamed into it, so a reader sees all of it
-/// or none.
+/// or none. What is at the part's place first, one a crash left or a link
+/// the directory came with, is taken away, never written through (D847);
+/// not flushed, since a cook's output is made again from its sources.
 bool writeAtomically(const std::filesystem::path& path, std::span<const std::byte> bytes) {
     std::error_code error;
     std::filesystem::create_directories(path.parent_path(), error);
     const std::filesystem::path kPart = path.string() + ".part";
+    std::filesystem::remove(kPart, error);
     {
         std::ofstream file{kPart, std::ios::binary | std::ios::trunc};
         file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));

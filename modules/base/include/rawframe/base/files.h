@@ -17,7 +17,8 @@
 namespace rawframe::base {
 
 /// `bytes` written as the whole of the file at `path`, made or emptied
-/// first, and flushed to the disk; whether all of it was.
+/// first, and flushed to the disk; whether all of it was. A link at `path`
+/// is not written through: refused where the platform can tell (D847).
 [[nodiscard]] bool writeWholeFile(const std::filesystem::path& path, std::span<const std::byte> bytes) noexcept;
 
 /// The directory flushed, so a move in it survives a crash; nothing where
@@ -25,7 +26,8 @@ namespace rawframe::base {
 void flushDirectory(const std::filesystem::path& directory) noexcept;
 
 /// `bytes` put at `path` whole or not at all: written beside it under
-/// `.partial`, then moved over it. A file another handle holds open cannot
+/// `.partial`, made new there, then moved over it; a link at `path` is
+/// replaced, not followed (D847). A file another handle holds open cannot
 /// be replaced on Windows for that moment, so the move is tried again for
 /// up to half a second. Whether it is in place; the partial file is gone
 /// either way. The directory must exist.

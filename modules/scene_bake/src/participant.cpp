@@ -1,3 +1,4 @@
+#include "rawframe/base/files.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/graph/graph.h"
@@ -173,9 +174,7 @@ private:
         bool written = false;
         if (kPicture.has_value()) {
             const std::vector<std::byte> kBytes = texture_import::encodeRadiance(*kPicture);
-            std::ofstream file{kFile, std::ios::binary | std::ios::trunc};
-            file.write(reinterpret_cast<const char*>(kBytes.data()), static_cast<std::streamsize>(kBytes.size()));
-            written = static_cast<bool>(file);
+            written = base::replaceFile(kFile, kBytes);
         }
         if (!written) {
             ++notBaked_;

@@ -79,6 +79,7 @@
 #include "rawframe/authoring_session/mcp.h"
 #include "rawframe/authoring_session/new_game.h"
 #include "rawframe/authoring_session/session.h"
+#include "rawframe/base/files.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/content/sidecar.h"
 #include "rawframe/document/json.h"
@@ -207,11 +208,7 @@ int apply(const char* game, const std::filesystem::path& scenePath, const char* 
     const std::string kAfter = document.text();
     const bool kWrite = !dryRun && kAfter != *kSceneText;
     if (kWrite) {
-        const std::filesystem::path kStaged = scenePath.string() + ".authoring";
-        std::ofstream{kStaged, std::ios::binary | std::ios::trunc} << kAfter;
-        std::error_code renamed;
-        std::filesystem::rename(kStaged, scenePath, renamed);
-        if (renamed) {
+        if (!rawframe::base::replaceFile(scenePath, std::as_bytes(std::span{kAfter.data(), kAfter.size()}))) {
             return refused(result::fail(result::ErrorClass::Unavailable,
                                         authoring::kAuthoringDomain,
                                         code(authoring::AuthoringError::Internal),
@@ -374,11 +371,8 @@ int migrate(const char* game, std::span<char* const> scenes, bool dryRun) {
             continue;
         }
         if (!dryRun) {
-            const std::filesystem::path kStaged = kPath.string() + ".authoring";
-            std::ofstream{kStaged, std::ios::binary | std::ios::trunc} << (*scene)->text();
-            std::error_code renamed;
-            std::filesystem::rename(kStaged, kPath, renamed);
-            if (renamed) {
+            const std::string kWritten = (*scene)->text();
+            if (!rawframe::base::replaceFile(kPath, std::as_bytes(std::span{kWritten.data(), kWritten.size()}))) {
                 report.add("verdict", Value::string("failed"));
                 documents.push(std::move(report));
                 clean = false;

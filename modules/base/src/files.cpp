@@ -17,9 +17,13 @@
 
 namespace rawframe::base {
 
-bool writeWholeFile(const std::filesystem::path& path, std::span<const std::byte> bytes) noexcept {
+namespace {
+
 #if defined(__unix__) || defined(__APPLE__)
-    const int kFile = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+/// `bytes` written to the file `path` opened with `flags`, never through a
+/// link at it (D847), and flushed to the disk.
+bool writeOpened(const std::filesystem::path& path, std::span<const std::byte> bytes, int flags) noexcept {
+    const int kFile = ::open(path.c_str(), O_WRONLY | O_CLOEXEC | O_NOFOLLOW | flags, 0644);
     if (kFile < 0) {
         return false;
     }
@@ -34,6 +38,14 @@ bool writeWholeFile(const std::filesystem::path& path, std::span<const std::byte
     }
     const bool kFlushed = ::fsync(kFile) == 0;
     return ::close(kFile) == 0 && kFlushed;
+}
+#endif
+
+} // namespace
+
+bool writeWholeFile(const std::filesystem::path& path, std::span<const std::byte> bytes) noexcept {
+#if defined(__unix__) || defined(__APPLE__)
+    return writeOpened(path, bytes, O_CREAT | O_TRUNC);
 #else
     std::FILE* file = std::fopen(path.string().c_str(), "wb");
     if (file == nullptr) {
@@ -64,7 +76,16 @@ bool replaceFile(const std::filesystem::path& path, std::span<const std::byte> b
     std::filesystem::path partial = path;
     partial += ".partial";
     std::error_code error;
-    if (!writeWholeFile(partial, bytes)) {
+    // What is at the partial file's place, one a crash left or a link a
+    // directory came with, is taken away, and the partial file made new:
+    // never written through to what a link names (D847).
+    std::filesystem::remove(partial, error);
+#if defined(__unix__) || defined(__APPLE__)
+    const bool kWritten = writeOpened(partial, bytes, O_CREAT | O_EXCL);
+#else
+    const bool kWritten = writeWholeFile(partial, bytes);
+#endif
+    if (!kWritten) {
         std::filesystem::remove(partial, error);
         return false;
     }

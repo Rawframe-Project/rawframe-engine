@@ -47,3 +47,27 @@ RAWFRAME_TEST(AFileIsReplacedWhole) {
     RAWFRAME_EXPECT(!std::filesystem::exists(kDirectory / "absent"));
     std::filesystem::remove_all(kDirectory);
 }
+
+#if defined(__unix__) || defined(__APPLE__)
+RAWFRAME_TEST(AFileIsNeverWrittenThroughALink) {
+    // A directory from elsewhere, a game's, may hold links to files outside
+    // it where a write would go (D847): the file they name is kept.
+    const std::filesystem::path kDirectory = test::scratchDirectory("files_linked");
+    std::filesystem::create_directories(kDirectory);
+    const std::filesystem::path kElsewhere = kDirectory / "elsewhere.txt";
+    RAWFRAME_EXPECT(base::writeWholeFile(kElsewhere, bytesOf("kept")));
+    // Where the partial file goes: taken away, the file put whole.
+    std::filesystem::create_symlink(kElsewhere, kDirectory / "level.scene.partial");
+    RAWFRAME_EXPECT(base::replaceFile(kDirectory / "level.scene", bytesOf("written")));
+    RAWFRAME_EXPECT(contentsOf(kDirectory / "level.scene") == "written" && contentsOf(kElsewhere) == "kept");
+    // At the file itself: replaced, not followed.
+    std::filesystem::create_symlink(kElsewhere, kDirectory / "other.scene");
+    RAWFRAME_EXPECT(base::replaceFile(kDirectory / "other.scene", bytesOf("written")));
+    RAWFRAME_EXPECT(!std::filesystem::is_symlink(kDirectory / "other.scene") && contentsOf(kElsewhere) == "kept");
+    // Written whole in place: refused.
+    std::filesystem::create_symlink(kElsewhere, kDirectory / "linked.scene");
+    RAWFRAME_EXPECT(!base::writeWholeFile(kDirectory / "linked.scene", bytesOf("written")));
+    RAWFRAME_EXPECT(contentsOf(kElsewhere) == "kept");
+    std::filesystem::remove_all(kDirectory);
+}
+#endif

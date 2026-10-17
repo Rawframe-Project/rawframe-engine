@@ -22,6 +22,7 @@
 #include "rawframe/authoring_session/game.h"
 #include "rawframe/authoring_session/link.h"
 #include "rawframe/base/bits128.h"
+#include "rawframe/base/files.h"
 #include "rawframe/content/sidecar.h"
 #include "rawframe/cook/importers.h"
 #include "rawframe/document/json.h"
@@ -379,11 +380,8 @@ private:
         }
         std::error_code madeDirectory;
         std::filesystem::create_directories(kPath.parent_path(), madeDirectory);
-        const std::filesystem::path kStaged = kPath.string() + ".authoring";
-        std::ofstream{kStaged, std::ios::binary | std::ios::trunc} << rawframe::document::write(made);
-        std::error_code renamed;
-        std::filesystem::rename(kStaged, kPath, renamed);
-        if (madeDirectory || renamed) {
+        const std::string kText = rawframe::document::write(made);
+        if (madeDirectory || !base::replaceFile(kPath, std::as_bytes(std::span{kText.data(), kText.size()}))) {
             return std::unexpected{failure(authoring::AuthoringError::Internal,
                                            result::ErrorClass::Unavailable,
                                            "the capture could not be written")
@@ -400,11 +398,7 @@ private:
             return false;
         }
         const std::filesystem::path kPath = std::filesystem::weakly_canonical(root_ / name);
-        const std::filesystem::path kStaged = kPath.string() + ".authoring";
-        std::ofstream{kStaged, std::ios::binary | std::ios::trunc} << kText;
-        std::error_code renamed;
-        std::filesystem::rename(kStaged, kPath, renamed);
-        if (renamed) {
+        if (!base::replaceFile(kPath, std::as_bytes(std::span{kText.data(), kText.size()}))) {
             return std::unexpected{failure(authoring::AuthoringError::Internal,
                                            result::ErrorClass::Unavailable,
                                            "the scene could not be replaced")};
