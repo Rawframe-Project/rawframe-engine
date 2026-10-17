@@ -1117,6 +1117,26 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"studio_capture_shown\"[^\n]*\"ticks\":4,\"systems\":2}.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"system 1\",.*\"exit\":\"clean_stop\"")
+        # A blockout edited in Studio (D850): a yard beside a copy of Runners,
+        # its floor a row; a wall typed as a new solid and its size set by
+        # its field, each through the session's lines (D849) and written; a
+        # line that is no solid refused; the floor chosen in the plan the
+        # center draws of them (D851).
+        add_test(NAME studio_blockout
+                 COMMAND ${CMAKE_COMMAND} -E env
+                         "STUDIO_EXTRA_FILES=${CMAKE_CURRENT_SOURCE_DIR}/tests/blockouts/yard.blockout=yard.blockout"
+                         STUDIO_SHOW_WRITTEN=1
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/runners/runners.game yard.blockout wheel=457,650,4 @yard.blockout until=studio_blockout
+                         "@new solid#2:box wall at 0 0 3 size 4 2 0.2" "until=studio_said,status=\"wall added"
+                         "@wall (box)" "@size#2:4 3 0.2" "until=studio_said,status=\"wall size set"
+                         "@new solid#2:sphere ball at 0 0 0" wait=1 "@floor plan" wait=1
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_blockout PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "yard.blockout written: yes\nblockout 1\nbox floor at 0 0 0 size 8 0.5 8\nbox wall at 0 0 3 size 4 3 0.2\n.*\"code\":\"studio_blockout\"[^\n]*\"lines\":3,\"solids\":2}.*\"code\":\"studio_plan\"[^\n]*\"solids\":2,\"cuts\":0,\"centimetersWide\":800,\"centimetersDeep\":800}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"yard.blockout\",[^\n]*\"entity\":\"floor\",[^\n]*\"applied\":2,\"refused\":1,.*\"exit\":\"clean_stop\"")
         # Paused and stepped (D806): Plaza played from Studio, its World
         # paused on its server, stepped three ticks one by one, each a tick
         # on, and let run again.

@@ -59,7 +59,12 @@ struct FieldRow {
         SettingLine,
         /// A line to put in the game's description, `field` the place it
         /// goes before (D818).
-        NewSetting
+        NewSetting,
+        /// What follows a word of the chosen blockout solid's line, `field`
+        /// the word, or `line` for the whole line (D850).
+        SolidWord,
+        /// A solid's line to put in a blockout, `field` its place (D850).
+        NewSolid
     };
     ui::Node value{};
     Role role = Role::Field;

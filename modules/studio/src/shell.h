@@ -518,6 +518,11 @@ private:
     /// `lines.insert` (D818).
     void showSettings();
     void showSettingsGroup(std::size_t at);
+    /// A blockout's solids as rows, and the chosen one's words (D850).
+    void showBlockout();
+    void showPlan();
+    void showBlockoutSolid(std::size_t at);
+    void setSolid(const FieldRow& row, const std::string& text);
     /// A frame's capture (D843): its figures and its steps in the entity
     /// column, the one chosen in the Inspector, nothing to edit.
     void showCapture();

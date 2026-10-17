@@ -19,6 +19,8 @@ namespace rawframe::studio {
 
 /// A graph laid out on the canvas (D819), a clip on its timeline (D827).
 inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canvas"};
+inline constexpr diagnostics::EventIdentity kBlockoutShown{"studio", "studio_blockout"};
+inline constexpr diagnostics::EventIdentity kPlanShown{"studio", "studio_plan"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
 inline constexpr diagnostics::EventIdentity kCurveShown{"studio", "studio_curve"};
 /// A style sheet's classes as each variant looks (D837).
@@ -46,11 +48,14 @@ enum class Listed : std::uint8_t {
     Data,
     Settings,
     Capture,
+    Blockout,
 };
 
 struct EditorsHeld {
     /// The most rows a data document or the settings list.
     static constexpr std::size_t kMostRows = 512;
+    /// The chosen blockout's lines as last read (D850).
+    std::vector<std::string> blockoutLines;
     /// What each entity row of a data document holds, as last read (D812).
     std::vector<document::Value> data;
     /// The game's description's lines as last read, and each settings row's
