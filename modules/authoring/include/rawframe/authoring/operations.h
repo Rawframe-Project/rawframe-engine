@@ -364,6 +364,18 @@ struct BrushTerrain {
     double amount = 0;
 };
 
+/// Tiles painted on a tilemap (D860): `tile`, or nought less one for none,
+/// in the cells of the rectangle from `column` and `row`, `width` by
+/// `height`, counted from the map's top-left. The tilemap's kind makes it
+/// the lines it changes.
+struct PaintTiles {
+    double column = 0;
+    double row = 0;
+    double width = 1;
+    double height = 1;
+    double tile = 0;
+};
+
 using Operation = std::variant<CreateEntity,
                                DestroyEntity,
                                RenameEntity,
@@ -397,13 +409,14 @@ using Operation = std::variant<CreateEntity,
                                SetDataValue,
                                SetLine,
                                InsertLine,
-                               BrushTerrain>;
+                               BrushTerrain,
+                               PaintTiles>;
 
 /// Whether `operation` changes a scene, rather than a style sheet (D636), a
 /// UI document (D641), or a material instance (D721), which follow the
 /// scene's in `Operation`.
 [[nodiscard]] constexpr bool changesScene(const Operation& operation) noexcept {
-    return operation.index() < std::variant_size_v<Operation> - 19;
+    return operation.index() < std::variant_size_v<Operation> - 20;
 }
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the

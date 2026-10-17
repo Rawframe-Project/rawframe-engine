@@ -212,6 +212,25 @@ result::Result<Operation> operationOf(const Value& value) {
         }
         return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
     }
+    if (kIndex == 34) {
+        // Tiles painted on a tilemap (D860), whole numbers checked by its
+        // kind.
+        const auto kNumber = [&value](std::string_view name) {
+            const Value* kGiven = value.find(name);
+            return kGiven != nullptr ? kGiven->real() : std::nullopt;
+        };
+        const auto kColumn = kNumber("column");
+        const auto kRow = kNumber("row");
+        const auto kWidth = kNumber("width");
+        const auto kHeight = kNumber("height");
+        const auto kTile = kNumber("tile");
+        if (!kColumn.has_value() || !kRow.has_value() || !kWidth.has_value() || !kHeight.has_value() ||
+            !kTile.has_value()) {
+            return kBad();
+        }
+        return Operation{
+            PaintTiles{.column = *kColumn, .row = *kRow, .width = *kWidth, .height = *kHeight, .tile = *kTile}};
+    }
     if (kIndex == 33) {
         // A brush's stroke on a terrain (D855), its numbers any JSON number.
         const std::string* tool = textOf(value.find("tool"));
