@@ -522,6 +522,7 @@ private:
     void showBlockout();
     void showPlan();
     void showBlockoutSolid(std::size_t at);
+    void dropSolid(std::size_t at, std::array<float, 2> moved);
     void setSolid(const FieldRow& row, const std::string& text);
     /// A frame's capture (D843): its figures and its steps in the entity
     /// column, the one chosen in the Inspector, nothing to edit.

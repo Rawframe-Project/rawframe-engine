@@ -2,6 +2,7 @@
 #include "shell.h"
 
 #include <cmath>
+#include <utility>
 
 namespace rawframe::studio {
 
@@ -25,6 +26,14 @@ void ShellParticipant::dropEntity() {
     const std::optional<std::array<float, 2>> kPointer = releasedAt_.has_value() ? releasedAt_ : pointing_->pointer();
     if (!kPointer.has_value() ||
         std::hypot((*kPointer)[0] - pressedAt_[0], (*kPointer)[1] - pressedAt_[1]) < kDragAfter) {
+        return;
+    }
+    // A blockout's solids have no parents: a footprint dragged in its plan
+    // moves its solid (D852), and a row dragged does nothing.
+    if (chosen(Listed::Blockout)) {
+        if (std::exchange(held_.planPressed, false)) {
+            dropSolid(*kHeld, {(*kPointer)[0] - pressedAt_[0], (*kPointer)[1] - pressedAt_[1]});
+        }
         return;
     }
     const auto kHit = tree_->hit(root_, (*kPointer)[0], (*kPointer)[1]);

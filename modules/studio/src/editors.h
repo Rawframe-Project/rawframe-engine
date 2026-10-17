@@ -54,8 +54,12 @@ enum class Listed : std::uint8_t {
 struct EditorsHeld {
     /// The most rows a data document or the settings list.
     static constexpr std::size_t kMostRows = 512;
-    /// The chosen blockout's lines as last read (D850).
+    /// The chosen blockout's lines as last read (D850), the pixels a meter
+    /// is drawn in its plan (D851), and whether the last press was on a
+    /// footprint there, which a drag moves (D852).
     std::vector<std::string> blockoutLines;
+    float planScale = 1;
+    bool planPressed = false;
     /// What each entity row of a data document holds, as last read (D812).
     std::vector<document::Value> data;
     /// The game's description's lines as last read, and each settings row's

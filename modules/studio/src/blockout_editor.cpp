@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <span>
 
 namespace rawframe::studio {
@@ -187,6 +189,7 @@ void ShellParticipant::showPlan() {
         return;
     }
     viewRows_.push_back(*pane);
+    held_.planScale = kScale;
     static_cast<void>(tree_->setName(*pane, "Plan"));
     auto sheet = box(*pane,
                      ui::Layout{.width = ui::pixels((static_cast<float>(kWide) * kScale) + (2 * kPlanMargin)),
@@ -282,6 +285,53 @@ void ShellParticipant::showBlockoutSolid(std::size_t at) {
     }
     kWordField("line", *kLine);
     ++components_;
+}
+
+void ShellParticipant::dropSolid(std::size_t at, std::array<float, 2> moved) {
+    // Its footprint carried across the plan moves the solid as far, at the
+    // plan's scale, on a quarter-meter grid; its height stays (D852).
+    if (at >= entities_.size()) {
+        return;
+    }
+    const std::string kName = entities_[at];
+    const auto kLine = std::ranges::find_if(held_.blockoutLines, [&kName](const std::string& each) {
+        const std::optional<SolidLine> kSolid = solidOf(each);
+        return kSolid.has_value() && kSolid->name == kName;
+    });
+    if (kLine == held_.blockoutLines.end()) {
+        return;
+    }
+    SolidLine solid = *solidOf(*kLine);
+    const auto kAt = std::ranges::find(solid.words, std::string{"at"}, &std::pair<std::string, std::string>::first);
+    if (kAt == solid.words.end()) {
+        return;
+    }
+    std::array<double, 3> place{};
+    const char* reading = kAt->second.c_str();
+    for (double& each : place) {
+        char* end = nullptr;
+        each = std::strtod(reading, &end);
+        if (end == reading) {
+            return;
+        }
+        reading = end;
+    }
+    const auto kSnapped = [](double meters) {
+        return std::round(meters * 4) / 4;
+    };
+    place[0] = kSnapped(place[0] + (moved[0] / held_.planScale));
+    place[2] = kSnapped(place[2] + (moved[1] / held_.planScale));
+    const auto kNumber = [](double value) {
+        char made[32];
+        std::snprintf(made, sizeof made, "%.6g", value == 0 ? 0.0 : value);
+        return std::string{made};
+    };
+    kAt->second = kNumber(place[0]) + " " + kNumber(place[1]) + " " + kNumber(place[2]);
+    Value operation = Value::object();
+    operation.add("operation", Value::string("lines.set"));
+    operation.add("line", Value::integer(static_cast<std::int64_t>(kLine - held_.blockoutLines.begin())));
+    operation.add("text", Value::string(lineOf(solid)));
+    commit(std::move(operation), kName + " moved to " + kAt->second, kName);
 }
 
 void ShellParticipant::setSolid(const FieldRow& row, const std::string& text) {
