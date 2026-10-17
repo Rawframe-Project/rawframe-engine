@@ -11,9 +11,26 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace rawframe::world_runtime {
+
+/// What the World's last ticks took (D838), for a profiler: each tick's
+/// duration, oldest first, and each system's time over the same ticks.
+struct TickProfile {
+    /// The ticks counted, and the last one's index.
+    std::uint64_t ticks = 0;
+    std::uint64_t lastTick = 0;
+    std::vector<std::int64_t> tickNanoseconds;
+    struct SystemTime {
+        std::string system;
+        std::int64_t totalNanoseconds = 0;
+        std::int64_t mostNanoseconds = 0;
+    };
+    /// In execution order.
+    std::vector<SystemTime> systems;
+};
 
 /// Declares systems once the World's registry is frozen, since a system's
 /// declared access names runtime component IDs. The declarations, and the
@@ -81,6 +98,8 @@ public:
     /// breakpoint holding it (D492): owed no ticks, so carrying on runs the
     /// game from where it stood, not ahead to catch up; nor is it behind.
     virtual void excuse(execution::MonotonicDuration stood) noexcept = 0;
+    /// The last ticks' profile, at most a window's (D838).
+    [[nodiscard]] virtual TickProfile profile() const = 0;
 };
 
 inline constexpr composition::Capability<Simulation> kSimulation{"rawframe.world.simulation"};

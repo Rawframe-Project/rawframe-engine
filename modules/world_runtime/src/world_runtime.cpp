@@ -5,6 +5,7 @@
 #include "rawframe/world_runtime/simulation.h"
 
 #include <algorithm>
+#include <deque>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -141,6 +142,21 @@ public:
         }
     }
 
+    TickProfile profile() const override {
+        TickProfile made{.ticks = profiled_.size(), .lastTick = profiledTick_, .tickNanoseconds = {}, .systems = {}};
+        for (const std::string& kSystem : profiledSystems_) {
+            made.systems.push_back({.system = kSystem, .totalNanoseconds = 0, .mostNanoseconds = 0});
+        }
+        for (const auto& [kTick, kSystems] : profiled_) {
+            made.tickNanoseconds.push_back(kTick);
+            for (std::size_t each = 0; each < kSystems.size() && each < made.systems.size(); ++each) {
+                made.systems[each].totalNanoseconds += kSystems[each];
+                made.systems[each].mostNanoseconds = std::max(made.systems[each].mostNanoseconds, kSystems[each]);
+            }
+        }
+        return made;
+    }
+
     void holdAt(std::optional<world::TickIndex> limit) noexcept override {
         hold_ = limit;
     }
@@ -210,8 +226,11 @@ public:
                     : pacer_->due(frame.now);
         for (std::uint32_t index = 0; index < kDue.run && running_ && (!hold_ || tick_ < *hold_); ++index) {
             const execution::MonotonicInstant kStart = clock_->now();
-            auto report = schedule_->runTick(*world_, tick_, settings_.rate, emitter_);
+            auto report = schedule_->runTick(*world_, tick_, settings_.rate, emitter_, clock_);
             record(clock_->now() - kStart);
+            if (report.has_value()) {
+                profileTick(clock_->now() - kStart, *report);
+            }
             if (!report.has_value()) {
                 // The World's state is no longer trustworthy: stop ticking and
                 // say so once. The Host decides what happens next.
@@ -328,6 +347,32 @@ private:
     const execution::MonotonicSource* clock_ = nullptr;
     std::vector<std::int64_t> durations_;
     std::uint64_t recorded_ = 0;
+    /// The last ticks a profiler reads (D838): each one's duration and its
+    /// systems' times, in the order the schedule ran them.
+    static constexpr std::size_t kProfiledTicks = 120;
+    std::vector<std::string> profiledSystems_;
+    std::deque<std::pair<std::int64_t, std::vector<std::int64_t>>> profiled_;
+    std::uint64_t profiledTick_ = 0;
+
+    void profileTick(execution::MonotonicDuration duration, const world::TickReport& report) {
+        if (profiledSystems_.size() != report.times.size()) {
+            profiledSystems_.clear();
+            profiled_.clear();
+            for (const world::TickReport::SystemTime& kTime : report.times) {
+                profiledSystems_.emplace_back(kTime.system);
+            }
+        }
+        std::vector<std::int64_t> systems;
+        systems.reserve(report.times.size());
+        for (const world::TickReport::SystemTime& kTime : report.times) {
+            systems.push_back(kTime.nanoseconds);
+        }
+        profiled_.emplace_back(duration.nanoseconds, std::move(systems));
+        if (profiled_.size() > kProfiledTicks) {
+            profiled_.pop_front();
+        }
+        profiledTick_ = report.tick.value;
+    }
     schema::RegistryBuilder registryBuilder_;
     std::vector<SystemContributor*> contributors_;
     std::shared_ptr<const schema::SchemaRegistry> registry_;
