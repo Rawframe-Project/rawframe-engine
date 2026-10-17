@@ -24,6 +24,7 @@
 // event's identity is 16 lowercase hex digits and its name its machine
 // name, both one to each other within the sequence. `#` begins a comment.
 
+#include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
 
 #include <cstddef>
@@ -33,6 +34,11 @@
 #include <vector>
 
 namespace rawframe::sequence {
+
+/// The resource a sequence is cooked into (D869): its text, checked, as it
+/// was written, which a game reads as `parseSequence` reads it.
+inline constexpr base::Bits128 kSequenceType = base::parseBits128Hex("ad38f30cac629148c98553ed28b0a8b6").value;
+inline constexpr std::string_view kSequenceRepresentation = "rawframe.sequence.text";
 
 enum class KeyKind : std::uint8_t {
     Play,

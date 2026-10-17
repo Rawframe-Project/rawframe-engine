@@ -2,12 +2,12 @@
 # importers into content-addressed artifacts, a content manifest, and a
 # receipt. Import tooling only; no client or server closure may depend on it.
 rawframe_module(NAME cook
-    SOURCES src/animation.cpp src/audio.cpp src/blockout.cpp src/cook.cpp src/importers.cpp src/font.cpp src/game.cpp src/kest.cpp src/material.cpp src/mesh.cpp src/mod.cpp src/project.cpp src/scatter.cpp src/scene.cpp src/terrain.cpp
+    SOURCES src/animation.cpp src/audio.cpp src/blockout.cpp src/cook.cpp src/importers.cpp src/font.cpp src/game.cpp src/kest.cpp src/material.cpp src/mesh.cpp src/mod.cpp src/project.cpp src/scatter.cpp src/scene.cpp src/sequence.cpp src/terrain.cpp
             src/text.cpp src/texture.cpp src/tilemap.cpp
-    DEPS blockout terrain tilemap scatter process localization animation material graph mesh_import mesh texture_import texture font_import ui scene world_kest input kest_library kest audio_import audio content document result base
+    DEPS blockout terrain tilemap scatter sequence process localization animation material graph mesh_import mesh texture_import texture font_import ui scene world_kest input kest_library kest audio_import audio content document result base
 )
 
-rawframe_module_tests(NAME cook SOURCES tests/blockout_test.cpp tests/cook_test.cpp tests/font_test.cpp tests/material_test.cpp tests/scatter_test.cpp tests/terrain_test.cpp tests/texture_test.cpp tests/tilemap_test.cpp)
+rawframe_module_tests(NAME cook SOURCES tests/blockout_test.cpp tests/cook_test.cpp tests/font_test.cpp tests/material_test.cpp tests/scatter_test.cpp tests/sequence_test.cpp tests/terrain_test.cpp tests/texture_test.cpp tests/tilemap_test.cpp)
 if(TARGET rawframe_cook_tests)
     target_compile_definitions(rawframe_cook_tests PRIVATE
         RAWFRAME_COOK_DATA="${RAWFRAME_TEST_FILES}/modules/audio_import/tests/data/"

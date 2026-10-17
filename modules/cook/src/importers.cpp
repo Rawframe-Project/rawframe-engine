@@ -10,6 +10,7 @@
 #include "rawframe/cook/mod.h"
 #include "rawframe/cook/scatter.h"
 #include "rawframe/cook/scene.h"
+#include "rawframe/cook/sequence.h"
 #include "rawframe/cook/terrain.h"
 #include "rawframe/cook/text.h"
 #include "rawframe/cook/texture.h"
@@ -34,6 +35,7 @@ std::vector<Importer> engineImporters(std::optional<ShaderTools> tools) {
             postProcessImporter(),
             scatterImporter(),
             sceneImporter(),
+            sequenceImporter(),
             terrainImporter(),
             textImporter(),
             textureImporter(),
