@@ -614,6 +614,10 @@ struct GameDescription {
     /// Scene documents (rawframe/scene/scene.h) whose entities the World
     /// starts with, beside any `spawn` lines, from `scene <file>` lines.
     std::vector<std::string> scenes;
+    /// Scatter documents (rawframe/scatter/scatter.h) whose copies of a
+    /// prefab the World starts with, each placed, from `scatter <file>`
+    /// lines (D864).
+    std::vector<std::string> scatters;
     /// Scenes a program spawns at run time, from `prefab <16 hex digits>
     /// <file>` lines.
     std::vector<GamePrefab> prefabs;
@@ -717,6 +721,11 @@ struct GameDescription {
 /// for the engine type it is of, then the game's `field` lines for it, a
 /// line for a field in place of the engine's.
 [[nodiscard]] std::vector<GameFieldHint> fieldHintsOf(const GameDescription& game, const GameComponent& component);
+
+/// The path, as the description names its files, of the file `named` that
+/// the document at `document` names beside itself (D864): `named` from the
+/// document's directory, `.` and `..` taken away.
+[[nodiscard]] std::string pathBeside(std::string_view document, std::string_view named);
 
 /// Every scene file the description names: its scene lines', then its
 /// prefabs', each once.

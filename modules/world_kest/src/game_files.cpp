@@ -252,6 +252,10 @@ void GameFiles::seal() {
         field(digest, description_.meshes[at].path);
         digest.update(meshDigests_[at]);
     }
+    for (const GameScatterResource& scattered : scatters_) {
+        field(digest, scattered.path);
+        field(digest, scatter::writePlaced(scattered.placed));
+    }
     for (std::size_t at = 0; at < tilemapDigests_.size(); ++at) {
         field(digest, tilemaps_[at].path);
         digest.update(tilemapDigests_[at]);
@@ -690,6 +694,31 @@ result::Result<GameFiles> GameFiles::fromReader(std::string_view description,
     if (reading == MeshReading::Cooked) {
         RAWFRAME_TRY(game.readTilemaps(content));
     }
+    // Each scatter placed from its text and the terrain it names, beside
+    // it, as the cook places it (D864).
+    for (const std::string& path : game.description_.scatters) {
+        RAWFRAME_TRY_ASSIGN(const std::string kText, reader.read(path));
+        auto read = scatter::parseScatter(kText);
+        if (!read.has_value()) {
+            return std::unexpected<result::Error>{std::move(read).error().withContext("name", path)};
+        }
+        std::optional<terrain::Terrain> ground;
+        if (!read->terrain.empty()) {
+            const std::string kGround = pathBeside(path, read->terrain);
+            RAWFRAME_TRY_ASSIGN(const std::string kGroundText, reader.read(kGround));
+            auto parsed = terrain::parseTerrain(kGroundText);
+            if (!parsed.has_value()) {
+                return std::unexpected<result::Error>{std::move(parsed).error().withContext("name", kGround)};
+            }
+            ground = std::move(*parsed);
+        }
+        auto placed = scatter::placements(*read, ground.has_value() ? &*ground : nullptr);
+        if (!placed.has_value()) {
+            return std::unexpected<result::Error>{std::move(placed).error().withContext("name", path)};
+        }
+        game.scatters_.push_back(GameScatterResource{
+            .path = path, .placed = scatter::Placed{.prefab = read->prefab, .placements = std::move(*placed)}});
+    }
     // Each texture, by the resource its sidecar names.
     for (const GameTexture& texture : game.description_.textures) {
         const auto kSidecarText = reader.read(texture.path + std::string{content::kSidecarSuffix});
@@ -875,6 +904,30 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
             GameTilemapResource{.id = tilemap.id, .path = tilemap.path, .tilemap = kTilemap->tilemap});
     }
     RAWFRAME_TRY(game.readTilemaps(&content));
+    // Each scatter's placements as cooked (D864).
+    if (!game.description_.scatters.empty()) {
+        const content::ResourceTypeId kPlacedType{scatter::kPlacedType};
+        const std::array<content::AdmittedRepresentation, 1> kPlacedAdmitted = {content::AdmittedRepresentation{
+            .type = kPlacedType, .representation = *content::RepresentationId::parse(scatter::kPlacedRepresentation)}};
+        RAWFRAME_TRY(content.admit(kPlacedAdmitted));
+    }
+    for (const std::string& path : game.description_.scatters) {
+        const CookedGameScatter* const kScatter = kCooked.scatter(path);
+        if (kScatter == nullptr) {
+            return invalid("the cooked description does not name the resource of a scatter it names", path);
+        }
+        auto bytes = readResource(content.store(),
+                                  content::ResourceRef{.id = content::ResourceId{kScatter->placed},
+                                                       .type = content::ResourceTypeId{scatter::kPlacedType}});
+        if (!bytes.has_value()) {
+            return std::unexpected<result::Error>{std::move(bytes).error().withContext("name", path)};
+        }
+        auto placed = scatter::parsePlaced(*bytes);
+        if (!placed.has_value()) {
+            return std::unexpected<result::Error>{std::move(placed).error().withContext("name", path)};
+        }
+        game.scatters_.push_back(GameScatterResource{.path = path, .placed = std::move(*placed)});
+    }
     for (const GameTexture& texture : game.description_.textures) {
         const CookedGameTexture* const kTexture = kCooked.texture(texture.path);
         if (kTexture == nullptr) {

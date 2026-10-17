@@ -21,6 +21,7 @@
 #include "rawframe/kest/program.h"
 #include "rawframe/physics3d/physics.h"
 #include "rawframe/result/result.h"
+#include "rawframe/scatter/scatter.h"
 #include "rawframe/tilemap/tilemap.h"
 #include "rawframe/world/layer.h"
 #include "rawframe/world_kest/game.h"
@@ -63,6 +64,14 @@ struct GameTilemapResource {
     std::string path;
     base::Bits128 tilemap{};
     std::shared_ptr<const tilemap::Tilemap> map;
+};
+
+/// A scatter a `scatter` line names (D864) and its copies' placements:
+/// computed from its sources in development, its terrain read beside it,
+/// and read as cooked from content, so both place them alike.
+struct GameScatterResource {
+    std::string path;
+    scatter::Placed placed;
 };
 
 /// A font a `font` line names, by the identity the line gives it and the
@@ -221,6 +230,11 @@ public:
     [[nodiscard]] const std::vector<GameTilemapResource>& tilemaps() const noexcept {
         return tilemaps_;
     }
+    /// Every scatter the description names, placed, in the order of its
+    /// lines (D864).
+    [[nodiscard]] const std::vector<GameScatterResource>& scatters() const noexcept {
+        return scatters_;
+    }
     /// Every font the description names, by its resource, in the order of
     /// its lines: in development the identity its sidecar gives, which must
     /// name `rawframe.font`, and from content the one the record names. Only
@@ -348,6 +362,7 @@ private:
     std::vector<GameText> texts_;
     std::vector<GameTextureResource> textures_;
     std::vector<GameTilemapResource> tilemaps_;
+    std::vector<GameScatterResource> scatters_;
     std::vector<GameFontResource> fonts_;
     std::vector<content::BuildReference> modBuilds_;
     std::vector<SetAsideClaim> setAside_;

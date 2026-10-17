@@ -1,5 +1,7 @@
 #include "game_scenes.h"
 
+#include "rawframe/physics2d/components.h"
+#include "rawframe/physics3d/components.h"
 #include "rawframe/scene/resolve.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/world/persistent.h"
@@ -8,6 +10,8 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <iterator>
 #include <optional>
@@ -266,6 +270,105 @@ result::Status GameScenes::namePersistent(const GameFiles& files, const std::str
         const world::PersistentEntityId kId = world::persistentFromSource(*kScene, scene.ids[index]);
         kPart->fields = {GameFieldValue{.field = "high", .value = std::to_string(kId.value.high)},
                          GameFieldValue{.field = "low", .value = std::to_string(kId.value.low)}};
+    }
+    return {};
+}
+
+namespace {
+
+/// A spawn's field as a number, nought where it does not give it.
+double fieldOf(const GameSpawnComponent& component, std::string_view field) {
+    const auto kField = std::ranges::find(component.fields, field, &GameFieldValue::field);
+    double value = 0;
+    if (kField != component.fields.end()) {
+        std::from_chars(kField->value.data(), kField->value.data() + kField->value.size(), value);
+    }
+    return value;
+}
+
+void setField(GameSpawnComponent& component, std::string_view field, double value) {
+    char text[40];
+    std::snprintf(text, sizeof text, "%.17g", value);
+    const auto kField = std::ranges::find(component.fields, field, &GameFieldValue::field);
+    if (kField != component.fields.end()) {
+        kField->value = text;
+    } else {
+        component.fields.push_back(GameFieldValue{.field = std::string{field}, .value = text});
+    }
+}
+
+/// A pose put where a placement stands: moved by it, and turned about the
+/// vertical by its turn after its own rotation, all noughts being none.
+void place(GameSpawnComponent& pose, const scatter::Placement& at, bool threeDimensions) {
+    if (threeDimensions) {
+        setField(pose, "x", fieldOf(pose, "x") + at.x);
+        setField(pose, "y", fieldOf(pose, "y") + at.y);
+        setField(pose, "z", fieldOf(pose, "z") + at.z);
+        if (at.yaw == 0) {
+            return;
+        }
+        const double kQx = fieldOf(pose, "qx");
+        const double kQy = fieldOf(pose, "qy");
+        const double kQz = fieldOf(pose, "qz");
+        double qw = fieldOf(pose, "qw");
+        qw = kQx == 0 && kQy == 0 && kQz == 0 && qw == 0 ? 1 : qw;
+        // The turn's quaternion, (0, sin, 0, cos) of half the angle, times
+        // the pose's.
+        const double kS = std::sin(at.yaw / 2);
+        const double kC = std::cos(at.yaw / 2);
+        setField(pose, "qx", (kC * kQx) + (kS * kQz));
+        setField(pose, "qy", (kC * kQy) + (kS * qw));
+        setField(pose, "qz", (kC * kQz) - (kS * kQx));
+        setField(pose, "qw", (kC * qw) - (kS * kQy));
+        return;
+    }
+    // In two dimensions the area's second axis is Y.
+    setField(pose, "x", fieldOf(pose, "x") + at.x);
+    setField(pose, "y", fieldOf(pose, "y") + at.z);
+    if (at.yaw == 0) {
+        return;
+    }
+    double c = fieldOf(pose, "c");
+    const double kS0 = fieldOf(pose, "s");
+    c = c == 0 && kS0 == 0 ? 1 : c;
+    setField(pose, "c", (std::cos(at.yaw) * c) - (std::sin(at.yaw) * kS0));
+    setField(pose, "s", (std::sin(at.yaw) * c) + (std::cos(at.yaw) * kS0));
+}
+
+} // namespace
+
+result::Status GameScenes::addScatters(const GameFiles& files,
+                                       std::vector<GameSpawn>& spawns,
+                                       std::vector<SceneReference>& references) const {
+    for (const GameScatterResource& kScattered : files.scatters()) {
+        const std::string kPrefab = pathBeside(kScattered.path, kScattered.placed.prefab);
+        if (!game_.physics.has_value() || !std::ranges::contains(game_.prefabs, kPrefab, &GamePrefab::path)) {
+            return std::unexpected<result::Error>{
+                refuse(result::ErrorClass::InvalidArgument,
+                       WorldKestError::BadGameLine,
+                       "a scatter's prefab is one of the game's prefabs, placed by its pose in a game with physics")
+                    .error()
+                    .withContext("name", kScattered.path)};
+        }
+        RAWFRAME_TRY_ASSIGN(const SceneSpawns kScene, sceneSpawns(files, kPrefab));
+        const bool kThree = game_.physics->dimensions == 3;
+        const std::string_view kPose = kThree ? physics3d::Pose3D::kComponentName : physics2d::Pose2D::kComponentName;
+        for (const scatter::Placement& kAt : kScattered.placed.placements) {
+            const std::size_t kFirst = spawns.size();
+            for (const GameSpawn& kSpawn : kScene.spawns) {
+                GameSpawn copy = kSpawn;
+                const auto kPosed = std::ranges::find(copy.components, kPose, &GameSpawnComponent::component);
+                if (kPosed != copy.components.end()) {
+                    place(*kPosed, kAt, kThree);
+                }
+                spawns.push_back(std::move(copy));
+            }
+            for (SceneReference reference : kScene.references) {
+                reference.spawn += kFirst;
+                reference.target += kFirst;
+                references.push_back(reference);
+            }
+        }
     }
     return {};
 }

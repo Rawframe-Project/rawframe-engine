@@ -164,6 +164,7 @@ public:
         fieldSets_ = componentFieldSets(game_, layouts_);
         const GameScenes kScenes{game_, layouts_};
         RAWFRAME_TRY(kScenes.addScenes(files, game_.spawns, references_, &sceneRanges_));
+        RAWFRAME_TRY(kScenes.addScatters(files, game_.spawns, references_));
         RAWFRAME_TRY(kScenes.addModScenes(files, game_.spawns));
         RAWFRAME_TRY(kScenes.addPrefabs(files, prefabs_));
         RAWFRAME_TRY(planReplication(files.digest()));

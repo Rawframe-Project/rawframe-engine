@@ -367,6 +367,14 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a scene is named once");
             }
             game.scenes.emplace_back(kWords[1]);
+        } else if (kKeyword == "scatter") {
+            if (kWords.size() != 2) {
+                return badLine(number, WorldKestError::BadGameLine, "a scatter line is `scatter <file>`");
+            }
+            if (std::ranges::contains(game.scatters, kWords[1])) {
+                return badLine(number, WorldKestError::BadGameLine, "a scatter is named once");
+            }
+            game.scatters.emplace_back(kWords[1]);
         } else if (kKeyword == "text") {
             if (kWords.size() != 2) {
                 return badLine(number, WorldKestError::BadGameLine, "a text line is `text <file>`");
@@ -942,6 +950,31 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     }
     RAWFRAME_TRY(checkModApi(game, modLines));
     return game;
+}
+
+std::string pathBeside(std::string_view document, std::string_view named) {
+    const std::size_t kSlash = document.rfind('/');
+    const std::string kJoined =
+        (kSlash == std::string_view::npos ? std::string{} : std::string{document.substr(0, kSlash + 1)}) +
+        std::string{named};
+    std::vector<std::string_view> parts;
+    std::size_t at = 0;
+    const std::string_view kWhole = kJoined;
+    while (at <= kWhole.size()) {
+        const std::size_t kEnd = std::min(kWhole.find('/', at), kWhole.size());
+        const std::string_view kPart = kWhole.substr(at, kEnd - at);
+        if (kPart == ".." && !parts.empty() && parts.back() != "..") {
+            parts.pop_back();
+        } else if (!kPart.empty() && kPart != ".") {
+            parts.push_back(kPart);
+        }
+        at = kEnd + 1;
+    }
+    std::string made;
+    for (const std::string_view kPart : parts) {
+        made += (made.empty() ? "" : "/") + std::string{kPart};
+    }
+    return made;
 }
 
 std::vector<std::string> sceneNames(const GameDescription& game) {

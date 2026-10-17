@@ -86,6 +86,13 @@ public:
     /// holding the point's component and nothing else, so a mod adds values
     /// and never a behavior, a reference, or a persistent name.
     [[nodiscard]] result::Status addModScenes(const GameFiles& files, std::vector<GameSpawn>& spawns) const;
+    /// Appends each scatter's copies of its prefab (D864): the prefab's
+    /// entities once for each placement, each that has a pose placed there,
+    /// its own offset and turn within the prefab kept, and each copy's
+    /// references among its own entities. A copy is not persistent, as a
+    /// prefab's is not.
+    [[nodiscard]] result::Status
+    addScatters(const GameFiles& files, std::vector<GameSpawn>& spawns, std::vector<SceneReference>& references) const;
     /// Appends each prefab the description names, as a program spawns it.
     [[nodiscard]] result::Status addPrefabs(const GameFiles& files, std::vector<KestPrefab>& prefabs) const;
 
