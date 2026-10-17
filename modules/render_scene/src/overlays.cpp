@@ -21,8 +21,15 @@ using Point = std::array<double, 3>;
 /// mark's gizmo.
 constexpr float kWidth = 1.0F / 180;
 constexpr std::size_t kPieces = 16;
+/// A body's lines by what it is (D839): a dynamic body moving, one at
+/// rest (its replicated velocity under a few centimeters a second), a
+/// kinematic one, a static one, and a sensor.
 constexpr std::array<float, 4> kSolid{0.2F, 1, 0.3F, 1};
+constexpr std::array<float, 4> kResting{0.15F, 0.5F, 0.25F, 1};
+constexpr std::array<float, 4> kKinematic{0.45F, 0.6F, 1, 1};
+constexpr std::array<float, 4> kStatic{0.6F, 0.6F, 0.55F, 1};
 constexpr std::array<float, 4> kSensor{0.2F, 0.9F, 1, 1};
+constexpr float kRestingSpeed = 0.02F;
 constexpr std::array<float, 4> kLit{1, 0.85F, 0.2F, 1};
 
 Point along(const Point& from, const Vector& way, double by) {
@@ -52,14 +59,33 @@ void ring(const Point& middle,
 
 } // namespace
 
-void addColliderLines(const physics3d::Body3D& body, const physics3d::Pose3D& pose, std::vector<SceneLine>& lines) {
+std::array<float, 4> colliderColor(const physics3d::Body3D& body,
+                                   const std::optional<physics3d::Velocity3D>& velocity) noexcept {
+    if (body.sensor) {
+        return kSensor;
+    }
+    if (body.motion == 0) {
+        return kStatic;
+    }
+    if (body.motion == 1) {
+        return kKinematic;
+    }
+    const bool kStill = velocity.has_value() && std::hypot(velocity->x, velocity->y, velocity->z) < kRestingSpeed &&
+                        std::hypot(velocity->angularX, velocity->angularY, velocity->angularZ) < kRestingSpeed;
+    return kStill ? kResting : kSolid;
+}
+
+void addColliderLines(const physics3d::Body3D& body,
+                      const physics3d::Pose3D& pose,
+                      std::vector<SceneLine>& lines,
+                      const std::optional<physics3d::Velocity3D>& velocity) {
     const std::array<float, 4> kQuaternion{pose.qx, pose.qy, pose.qz, pose.qw};
     const bool kTurned = std::ranges::any_of(kQuaternion, [](float value) {
         return value != 0;
     });
     const std::array<Vector, 3> kAxes = turnOf(kTurned ? kQuaternion : std::array<float, 4>{0, 0, 0, 1});
     const Point kMiddle{pose.x, pose.y, pose.z};
-    const std::array<float, 4> kColor = body.sensor ? kSensor : kSolid;
+    const std::array<float, 4> kColor = colliderColor(body, velocity);
     const double kWide = body.width;
     const double kHigh = body.height;
     switch (static_cast<physics3d::Shape>(body.shape)) {
@@ -151,13 +177,17 @@ void drawOverlays(world::World& world,
             }
         }
         if (bodies.has_value()) {
-            bodies->forEachChunk(world, [&lines](const world::ColumnChunk& chunk) {
+            // Each body's velocity where it has one, to say whether it rests.
+            const auto kVelocity = world.registry().key<physics3d::Velocity3D>();
+            bodies->forEachChunk(world, [&](const world::ColumnChunk& chunk) {
                 for (std::size_t row = 0; row < chunk.entities.size() && lines.size() < kMostSceneLines; ++row) {
                     physics3d::Body3D body;
                     physics3d::Pose3D pose;
                     std::memcpy(&body, chunk.columns[0] + (row * sizeof(body)), sizeof(body));
                     std::memcpy(&pose, chunk.columns[1] + (row * sizeof(pose)), sizeof(pose));
-                    addColliderLines(body, pose, lines);
+                    const physics3d::Velocity3D* kMoving =
+                        kVelocity.has_value() ? world.get(chunk.entities[row], *kVelocity) : nullptr;
+                    addColliderLines(body, pose, lines, kMoving != nullptr ? std::optional{*kMoving} : std::nullopt);
                 }
             });
         }

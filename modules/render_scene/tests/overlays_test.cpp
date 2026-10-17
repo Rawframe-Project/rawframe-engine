@@ -1,7 +1,9 @@
 // What an editor's preview draws over its scene (D798): a box's twelve
 // edges at its corners, turned as its pose turns; a sphere's three great
 // circles; a mesh nothing; a point light's three circles of its range and
-// a spot's way and the ring its cone reaches.
+// a spot's way and the ring its cone reaches. Each body's lines are
+// colored by what it is (D839): static, kinematic, moving, at rest, or a
+// sensor.
 
 #include "../src/overlays.h"
 #include "rawframe/test/test.h"
@@ -42,6 +44,32 @@ RAWFRAME_TEST(ABoxIsOutlinedByItsTwelveEdges) {
                      physics3d::Pose3D{.qy = kHalf, .qw = kHalf},
                      lines);
     RAWFRAME_EXPECT(lines.size() == 12 && near(std::abs(lines[0].from[0]), 3) && near(std::abs(lines[0].from[2]), 1));
+}
+
+RAWFRAME_TEST(ABodysColorSaysHowItMoves) {
+    const auto kBody = [](std::uint8_t motion) {
+        return physics3d::Body3D{.motion = motion, .shape = 1};
+    };
+    const physics3d::Velocity3D kStill{};
+    const physics3d::Velocity3D kFalling{.y = -2};
+    const physics3d::Velocity3D kSpinning{.angularY = 1};
+    const auto kStatic = colliderColor(kBody(0), std::nullopt);
+    const auto kKinematic = colliderColor(kBody(1), kFalling);
+    const auto kMoving = colliderColor(kBody(2), kFalling);
+    const auto kResting = colliderColor(kBody(2), kStill);
+    // Four colors, none alike.
+    RAWFRAME_EXPECT(kStatic != kKinematic && kStatic != kMoving && kStatic != kResting && kKinematic != kMoving &&
+                    kKinematic != kResting && kMoving != kResting);
+    // Turning is moving; a body whose velocity is unknown is drawn moving.
+    RAWFRAME_EXPECT(colliderColor(kBody(2), kSpinning) == kMoving);
+    RAWFRAME_EXPECT(colliderColor(kBody(2), std::nullopt) == kMoving);
+    // A sensor is a sensor however it moves, and its lines take the color.
+    physics3d::Body3D sensor = kBody(2);
+    sensor.sensor = true;
+    RAWFRAME_EXPECT(colliderColor(sensor, kStill) == colliderColor(sensor, kFalling));
+    std::vector<SceneLine> lines;
+    addColliderLines(kBody(0), physics3d::Pose3D{}, lines, kStill);
+    RAWFRAME_EXPECT(!lines.empty() && lines[0].color == kStatic);
 }
 
 RAWFRAME_TEST(OtherShapesAndLightsAreOutlined) {
