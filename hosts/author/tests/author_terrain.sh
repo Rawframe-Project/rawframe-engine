@@ -4,7 +4,8 @@
 # strokes written as the terrain module makes them and undone back to the
 # file's very bytes; a tool no brush has and a layer the terrain does not
 # name refused with the file untouched; then imported from outside into a
-# copy of Runners as a mesh with the terrain importer and cooked (D854).
+# copy of Ledges, small enough to cook in time on a loaded machine, as a
+# mesh with the terrain importer and cooked (D854).
 #
 # usage: author_terrain.sh <rawframe-author> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -67,8 +68,8 @@ cmp "$work/root/field.terrain" "$work/shaped.terrain"
 reply 3 | grep -q '"undoable":0,"redoable":1'
 cmp "$work/root/field.terrain" "$work/shaped.terrain"
 
-# Imported from outside into a copy of Runners, declared, and cooked.
-cp -R "$repository/games/runners" "$work/runners"
+# Imported from outside into a copy of Ledges, declared, and cooked.
+cp -R "$repository/games/ledges" "$work/ledges"
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.import","id":2,"source":"'"$work/shaped.terrain"'","as":"ground/field.terrain"}'
@@ -78,10 +79,10 @@ cp -R "$repository/games/runners" "$work/runners"
         sleep 0.1
     done
     echo '{"kind":"authoring.end","id":4}'
-} | "$author" session "$work/runners/runners.game" --cook "$cook" >"$work/replies" || true
+} | "$author" session "$work/ledges/ledges.game" --cook "$cook" >"$work/replies" || true
 reply 2 | grep -q '"answer":{"kind":"authoring.imported","asset":"mesh",.*"path":"ground/field.terrain"'
-grep -q '"importer": "rawframe.terrain"' "$work/runners/ground/field.terrain.rfmeta"
-grep -q '^mesh [0-9a-f]\{16\} ground/field.terrain$' "$work/runners/runners.game"
+grep -q '"importer": "rawframe.terrain"' "$work/ledges/ground/field.terrain.rfmeta"
+grep -q '^mesh [0-9a-f]\{16\} ground/field.terrain$' "$work/ledges/ledges.game"
 reply 3 | grep -q '"answer":{"kind":"authoring.cooked"'
 grep -q 'ground/field.terrain' "$work/content/cook.receipt"
 echo "shaped a terrain in a session and cooked it as a mesh"
