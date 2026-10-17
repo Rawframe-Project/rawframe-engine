@@ -24,6 +24,7 @@ inline constexpr diagnostics::EventIdentity kPlanShown{"studio", "studio_plan"};
 inline constexpr diagnostics::EventIdentity kTerrainShown{"studio", "studio_terrain"};
 inline constexpr diagnostics::EventIdentity kTilemapShown{"studio", "studio_tilemap"};
 inline constexpr diagnostics::EventIdentity kScatterShown{"studio", "studio_scatter"};
+inline constexpr diagnostics::EventIdentity kSequenceShown{"studio", "studio_sequence"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
 inline constexpr diagnostics::EventIdentity kCurveShown{"studio", "studio_curve"};
 /// A style sheet's classes as each variant looks (D837).
@@ -55,6 +56,7 @@ enum class Listed : std::uint8_t {
     Terrain,
     Tilemap,
     Scatter,
+    Sequence,
 };
 
 struct EditorsHeld {
@@ -82,6 +84,8 @@ struct EditorsHeld {
     std::size_t tilesPainted = 0;
     /// The chosen scatter's lines as last read (D866).
     std::vector<std::string> scatterLines;
+    /// The chosen sequence's lines as last read (D869).
+    std::vector<std::string> sequenceLines;
     /// What each entity row of a data document holds, as last read (D812).
     std::vector<document::Value> data;
     /// The game's description's lines as last read, and each settings row's

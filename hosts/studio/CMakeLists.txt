@@ -1193,6 +1193,24 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "rocks.scatter written: yes\nscatter 1\nprefab rock.scene\nseed 8\narea -10 -10 20 20\nspacing 2\ncount 20\n.*\"code\":\"studio_scatter\"[^\n]*\"lines\":6,\"placed\":20,\"asked\":20}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"rocks.scatter\",[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
+        # A sequence edited in Studio (D869): an opening beside a copy of
+        # Runners, its lines as fields and its tracks and keys drawn along
+        # its duration; its duration set through the session's lines.set
+        # and a track added by the Add track row, and written.
+        add_test(NAME studio_sequence
+                 COMMAND ${CMAKE_COMMAND} -E env
+                         "STUDIO_EXTRA_FILES=${CMAKE_CURRENT_SOURCE_DIR}/tests/sequences/opening.sequence=opening.sequence"
+                         STUDIO_SHOW_WRITTEN=1
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/runners/runners.game opening.sequence wheel=457,650,4 @opening.sequence until=studio_sequence
+                         "@duration#2:6" "until=studio_said,status=\"duration set to 6"
+                         "@Add track" "until=studio_said,status=\"added track track2"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_sequence PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "opening.sequence written: yes\nsequence 1\nduration 6\ntrack gate\ntrack track2\nplay 1 gate 0000000000000000\nevent 2 0000000000000001 opened\n.*\"code\":\"studio_sequence\"[^\n]*\"lines\":6,\"tracks\":2,\"plays\":1,\"events\":1}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"opening.sequence\",[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
         # Paused and stepped (D806): Plaza played from Studio, its World
         # paused on its server, stepped three ticks one by one, each a tick
         # on, and let run again.

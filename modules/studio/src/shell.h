@@ -539,6 +539,11 @@ private:
     void showScatter();
     void showScatterLines();
     void reseedScatter();
+    /// A sequence's lines as fields, its tracks and keys along its
+    /// duration, and a row that adds a track (D869).
+    void showSequence();
+    void showSequenceLines();
+    void addSequenceTrack();
     void setSolid(const FieldRow& row, const std::string& text);
     /// A frame's capture (D843): its figures and its steps in the entity
     /// column, the one chosen in the Inspector, nothing to edit.
