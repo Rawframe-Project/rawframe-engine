@@ -76,6 +76,12 @@ fi
     echo '{"kind":"authoring.undo","id":3,"scene":"level.scene"}'
     echo '{"kind":"authoring.redo","id":4,"scene":"level.scene"}'
     echo '{"kind":"authoring.undo","id":5,"scene":"level.scene","expects":"sha256:00"}'
+    # The file changed only once the session answered all before: a fixed
+    # second let a loaded run change it before the first undo (gate-46).
+    for _ in $(seq 1200); do
+        grep -q '"id":5,' "$work/replies" 2>/dev/null && break
+        sleep 0.1
+    done
     sleep 1
     cp "$work/original.scene" "$work/root/level.scene"
     echo '{"kind":"authoring.undo","id":6,"scene":"level.scene"}'
