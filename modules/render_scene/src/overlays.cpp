@@ -30,6 +30,10 @@ constexpr std::array<float, 4> kKinematic{0.45F, 0.6F, 1, 1};
 constexpr std::array<float, 4> kStatic{0.6F, 0.6F, 0.55F, 1};
 constexpr std::array<float, 4> kSensor{0.2F, 0.9F, 1, 1};
 constexpr float kRestingSpeed = 0.02F;
+/// A body touching another, where its contacts replicate, and its hardest
+/// hit's normal, drawn this long from its place (D845).
+constexpr std::array<float, 4> kTouching{1, 0.55F, 0.1F, 1};
+constexpr double kHitLength = 0.5;
 constexpr std::array<float, 4> kLit{1, 0.85F, 0.2F, 1};
 
 Point along(const Point& from, const Vector& way, double by) {
@@ -60,9 +64,14 @@ void ring(const Point& middle,
 } // namespace
 
 std::array<float, 4> colliderColor(const physics3d::Body3D& body,
-                                   const std::optional<physics3d::Velocity3D>& velocity) noexcept {
+                                   const std::optional<physics3d::Velocity3D>& velocity,
+                                   const std::optional<physics3d::Contact3D>& contact) noexcept {
     if (body.sensor) {
         return kSensor;
+    }
+    // Touching something, where the game replicates its contacts (D845).
+    if (contact.has_value() && contact->touching > 0) {
+        return kTouching;
     }
     if (body.motion == 0) {
         return kStatic;
@@ -75,17 +84,34 @@ std::array<float, 4> colliderColor(const physics3d::Body3D& body,
     return kStill ? kResting : kSolid;
 }
 
+void addContactLines(const physics3d::Pose3D& pose,
+                     const physics3d::Contact3D& contact,
+                     std::vector<SceneLine>& lines) {
+    const double kNormal = std::hypot(contact.hitNormalX, contact.hitNormalY, contact.hitNormalZ);
+    if (contact.hit.isNull() || !std::isfinite(kNormal) || kNormal < 1e-6) {
+        return;
+    }
+    const double kScale = kHitLength / kNormal;
+    lines.push_back(SceneLine{.from = {pose.x, pose.y, pose.z},
+                              .to = {pose.x + (contact.hitNormalX * kScale),
+                                     pose.y + (contact.hitNormalY * kScale),
+                                     pose.z + (contact.hitNormalZ * kScale)},
+                              .color = kTouching,
+                              .ofView = true});
+}
+
 void addColliderLines(const physics3d::Body3D& body,
                       const physics3d::Pose3D& pose,
                       std::vector<SceneLine>& lines,
-                      const std::optional<physics3d::Velocity3D>& velocity) {
+                      const std::optional<physics3d::Velocity3D>& velocity,
+                      const std::optional<physics3d::Contact3D>& contact) {
     const std::array<float, 4> kQuaternion{pose.qx, pose.qy, pose.qz, pose.qw};
     const bool kTurned = std::ranges::any_of(kQuaternion, [](float value) {
         return value != 0;
     });
     const std::array<Vector, 3> kAxes = turnOf(kTurned ? kQuaternion : std::array<float, 4>{0, 0, 0, 1});
     const Point kMiddle{pose.x, pose.y, pose.z};
-    const std::array<float, 4> kColor = colliderColor(body, velocity);
+    const std::array<float, 4> kColor = colliderColor(body, velocity, contact);
     const double kWide = body.width;
     const double kHigh = body.height;
     switch (static_cast<physics3d::Shape>(body.shape)) {
@@ -177,8 +203,10 @@ void drawOverlays(world::World& world,
             }
         }
         if (bodies.has_value()) {
-            // Each body's velocity where it has one, to say whether it rests.
+            // Each body's velocity where it has one, to say whether it rests,
+            // and its contacts where the game replicates them (D845).
             const auto kVelocity = world.registry().key<physics3d::Velocity3D>();
+            const auto kContact = world.registry().key<physics3d::Contact3D>();
             bodies->forEachChunk(world, [&](const world::ColumnChunk& chunk) {
                 for (std::size_t row = 0; row < chunk.entities.size() && lines.size() < kMostSceneLines; ++row) {
                     physics3d::Body3D body;
@@ -187,7 +215,16 @@ void drawOverlays(world::World& world,
                     std::memcpy(&pose, chunk.columns[1] + (row * sizeof(pose)), sizeof(pose));
                     const physics3d::Velocity3D* kMoving =
                         kVelocity.has_value() ? world.get(chunk.entities[row], *kVelocity) : nullptr;
-                    addColliderLines(body, pose, lines, kMoving != nullptr ? std::optional{*kMoving} : std::nullopt);
+                    const physics3d::Contact3D* kTouched =
+                        kContact.has_value() ? world.get(chunk.entities[row], *kContact) : nullptr;
+                    addColliderLines(body,
+                                     pose,
+                                     lines,
+                                     kMoving != nullptr ? std::optional{*kMoving} : std::nullopt,
+                                     kTouched != nullptr ? std::optional{*kTouched} : std::nullopt);
+                    if (kTouched != nullptr) {
+                        addContactLines(pose, *kTouched, lines);
+                    }
                 }
             });
         }

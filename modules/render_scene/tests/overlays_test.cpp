@@ -3,7 +3,8 @@
 // circles; a mesh nothing; a point light's three circles of its range and
 // a spot's way and the ring its cone reaches. Each body's lines are
 // colored by what it is (D839): static, kinematic, moving, at rest, or a
-// sensor.
+// sensor; and one touching another so, its hardest hit along its normal
+// (D845).
 
 #include "../src/overlays.h"
 #include "rawframe/test/test.h"
@@ -70,6 +71,27 @@ RAWFRAME_TEST(ABodysColorSaysHowItMoves) {
     std::vector<SceneLine> lines;
     addColliderLines(kBody(0), physics3d::Pose3D{}, lines, kStill);
     RAWFRAME_EXPECT(!lines.empty() && lines[0].color == kStatic);
+}
+
+RAWFRAME_TEST(ATouchingBodyIsDrawnSoAndItsHitAlongItsNormal) {
+    const physics3d::Body3D kBody{.motion = 2, .shape = 1};
+    physics3d::Contact3D touching{
+        .touching = 1, .hit = world::EntityHandle{.slot = 3, .generation = 1}, .hitNormalY = 2};
+    // Touching is told apart from moving and resting; a sensor stays one.
+    RAWFRAME_EXPECT(colliderColor(kBody, std::nullopt, touching) != colliderColor(kBody, std::nullopt));
+    physics3d::Body3D sensor = kBody;
+    sensor.sensor = true;
+    RAWFRAME_EXPECT(colliderColor(sensor, std::nullopt, touching) == colliderColor(sensor, std::nullopt));
+    // The hit half a meter up from the body, however long its normal.
+    std::vector<SceneLine> lines;
+    addContactLines(physics3d::Pose3D{.x = 1, .y = 2, .z = 3}, touching, lines);
+    RAWFRAME_EXPECT(lines.size() == 1 && near(lines[0].from[1], 2) && near(lines[0].to[1], 2.5) &&
+                    near(lines[0].to[0], 1) && near(lines[0].to[2], 3));
+    // Nothing hit, nothing drawn.
+    lines.clear();
+    touching.hit = world::EntityHandle{};
+    addContactLines(physics3d::Pose3D{}, touching, lines);
+    RAWFRAME_EXPECT(lines.empty());
 }
 
 RAWFRAME_TEST(OtherShapesAndLightsAreOutlined) {
