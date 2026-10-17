@@ -138,6 +138,9 @@ enum class SessionVerb : std::uint8_t {
     Step,
     /// The played game's server's traffic so far (D807).
     Traffic,
+    /// What the played game's World's last ticks took, each tick and each
+    /// system, read on its server (D838).
+    Profile,
     /// The played game's living entities, a page, and one of them, read on
     /// its server (D808).
     LiveEntities,

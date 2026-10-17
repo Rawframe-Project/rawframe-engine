@@ -233,6 +233,8 @@ private:
             return preview_.ran(record);
         case authoring::SessionVerb::Traffic:
             return preview_.trafficOf(record);
+        case authoring::SessionVerb::Profile:
+            return preview_.profileOf(record);
         case authoring::SessionVerb::LiveEntities:
         case authoring::SessionVerb::LiveEntity:
             return preview_.live(record);

@@ -21,6 +21,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace rawframe::authoring_session {
 
@@ -83,6 +84,9 @@ public:
     /// `traffic` (D807): the previewed game's server's replication totals
     /// and connections, as `tooling.traffic` says them; refused as `ran`.
     [[nodiscard]] result::Result<document::Value> trafficOf(const authoring::SessionRecord& record);
+    /// The previewed game's server's profile of its last ticks, as
+    /// `tooling.profile` says it, under `authoring.profile` (D838).
+    [[nodiscard]] result::Result<document::Value> profileOf(const authoring::SessionRecord& record);
     /// `live_entities` and `live_entity` (D808): the previewed game's World
     /// read on its server, `tooling.entities` and `tooling.read_entity` as
     /// they answer; refused as `ran`, and as the server refuses.
@@ -93,6 +97,12 @@ public:
     [[nodiscard]] document::Value marked(const authoring::SessionRecord& record);
 
 private:
+    /// What the previewed game's server answers to `asked`, under the
+    /// session's kind `answered`; refused, saying `what` it lacks.
+    [[nodiscard]] result::Result<document::Value> serverSays(const authoring::SessionRecord& record,
+                                                             std::string_view asked,
+                                                             std::string_view answered,
+                                                             std::string_view what);
     /// A press in a preview that met an authored entity or grabbed a
     /// handle of the mark (D457, D466).
     struct Pressed {

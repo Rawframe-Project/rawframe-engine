@@ -464,23 +464,34 @@ result::Result<Value> Preview::ran(const authoring::SessionRecord& record) {
 }
 
 result::Result<Value> Preview::trafficOf(const authoring::SessionRecord& record) {
+    return serverSays(record, "tooling.traffic", "authoring.traffic", "traffic");
+}
+
+result::Result<Value> Preview::profileOf(const authoring::SessionRecord& record) {
+    return serverSays(record, "tooling.profile", "authoring.profile", "profile");
+}
+
+result::Result<Value> Preview::serverSays(const authoring::SessionRecord& record,
+                                          std::string_view asked,
+                                          std::string_view answered,
+                                          std::string_view what) {
     if (server_ == nullptr || record.scene != scene_) {
         return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
                                        result::ErrorClass::FailedPrecondition,
-                                       "traffic needs the scene previewed, with its game's server")
+                                       std::string{what} + " needs the scene previewed, with its game's server")
                                    .withContext("scene", record.scene)};
     }
-    const auto kReply = server_->ask(R"({"kind":"tooling.traffic","id":0})");
+    const auto kReply = server_->ask(R"({"kind":")" + std::string{asked} + R"(","id":0})");
     const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
     const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
     if (kAnswer == nullptr || kAnswer->kind() != Value::Kind::Object) {
         return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
                                        result::ErrorClass::Unavailable,
-                                       "the game's server did not say its traffic")};
+                                       "the game's server did not say its " + std::string{what})};
     }
     // Its members as the server said them, under the session's kind.
     Value made = Value::object();
-    made.add("kind", Value::string("authoring.traffic"));
+    made.add("kind", Value::string(std::string{answered}));
     for (std::size_t each = 0; each < kAnswer->names().size(); ++each) {
         if (kAnswer->names()[each] != "kind") {
             made.add(kAnswer->names()[each], kAnswer->items()[each]);

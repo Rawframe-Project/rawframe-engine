@@ -30,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 36> kVerbs = {
+constexpr std::array<VerbName, 37> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -60,6 +60,7 @@ constexpr std::array<VerbName, 36> kVerbs = {
     VerbName{.kind = "authoring.run", .verb = SessionVerb::Run},
     VerbName{.kind = "authoring.step", .verb = SessionVerb::Step},
     VerbName{.kind = "authoring.traffic", .verb = SessionVerb::Traffic},
+    VerbName{.kind = "authoring.profile", .verb = SessionVerb::Profile},
     VerbName{.kind = "authoring.live_entities", .verb = SessionVerb::LiveEntities},
     VerbName{.kind = "authoring.live_entity", .verb = SessionVerb::LiveEntity},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
@@ -101,6 +102,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Run:
         return Members{.required = 1, .optional = 0};
     case SessionVerb::Traffic:
+    case SessionVerb::Profile:
         return Members{.required = 1, .optional = 0};
     case SessionVerb::LiveEntities:
         return Members{.required = 1, .optional = 0};
@@ -355,6 +357,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Run:
     case SessionVerb::Step:
     case SessionVerb::Traffic:
+    case SessionVerb::Profile:
     case SessionVerb::LiveEntities:
     case SessionVerb::LiveEntity:
         break;

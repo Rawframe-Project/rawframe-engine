@@ -66,6 +66,7 @@ reply 1 | grep -q '"protocolVersion":"2025-06-18"'
 reply 2 | grep -q '"name":"scene_set_field"'
 reply 2 | grep -q '"name":"materials_set_node_input"'
 reply 2 | grep -q '"name":"game_describe"'
+reply 2 | grep -q '"name":"game_profile"'
 for id in 3 4 5 8 9; do
     reply $id | grep -q '"isError":false'
 done
