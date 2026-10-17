@@ -1,6 +1,7 @@
 #include "rawframe/world_tooling/server.h"
 
 #include "previewing.h"
+#include "profile.h"
 #include "rawframe/document/json.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world_tooling/errors.h"
@@ -450,6 +451,10 @@ struct ToolingServer::State {
                 return;
             }
             if (std::optional<std::string> answered = answerTraffic(*kind, id, settings, tick)) {
+                send(connection, client, *answered);
+                return;
+            }
+            if (std::optional<std::string> answered = answerProfile(*kind, id, settings)) {
                 send(connection, client, *answered);
                 return;
             }
