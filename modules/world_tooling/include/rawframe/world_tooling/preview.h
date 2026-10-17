@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace rawframe::world_tooling {
@@ -55,6 +56,25 @@ struct Clicked {
     /// wheel's detents (D472).
     std::array<double, 2> look{};
     double fly = 0;
+};
+
+/// One step of the frame a preview last drew (D842): a pass by its
+/// renderer's name, a mesh by its identity, a material by its place, and
+/// how many instances.
+struct DrawnStep {
+    std::string pass;
+    std::uint64_t mesh = 0;
+    std::uint32_t material = 0;
+    std::uint32_t instances = 0;
+};
+
+/// What the frame a preview last drew holds (D842): how many frames its
+/// renderer has described, its figures by the renderer's names, and its
+/// steps in the order they were drawn.
+struct DrawnFrame {
+    std::uint64_t frames = 0;
+    std::vector<std::pair<std::string, std::int64_t>> figures;
+    std::vector<DrawnStep> steps;
 };
 
 class Previewer {
@@ -110,6 +130,12 @@ public:
     /// the Runtime's renderer owns; whether it knows the name and draws so.
     virtual bool viewMode(std::string_view /*mode*/) {
         return false;
+    }
+    /// What the frame the preview last drew holds (D842), its steps only
+    /// with `steps`; none before the first frame, or for a Runtime whose
+    /// renderer says nothing.
+    [[nodiscard]] virtual std::optional<DrawnFrame> drawn(bool /*steps*/) const {
+        return std::nullopt;
     }
 };
 

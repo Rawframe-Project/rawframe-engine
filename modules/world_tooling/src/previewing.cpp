@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <limits>
 #include <utility>
 #include <vector>
@@ -128,6 +129,48 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         Value made = Value::object();
         made.add("kind", Value::string("tooling.overlays"));
         made.add("shown", Value::boolean(settings.previewer != nullptr && settings.previewer->overlay(names)));
+        return replyLine(id, "answer", std::move(made));
+    }
+    if (kind == "tooling.drawn_frame") {
+        // What the frame the preview last drew holds (D842), its steps
+        // when asked: the renderer's figures and passes, by its names.
+        if (!settings.grants.view) {
+            return errorLine(id, ToolingError::NotGranted, "a drawn frame needs the view grant");
+        }
+        const Value* kSteps = record.find("steps");
+        if (kSteps != nullptr && !kSteps->truth().has_value()) {
+            return errorLine(id, ToolingError::Malformed, "steps is true or false");
+        }
+        const bool kWithSteps = kSteps != nullptr && *kSteps->truth();
+        const std::optional<DrawnFrame> kDrawn =
+            settings.previewer != nullptr ? settings.previewer->drawn(kWithSteps) : std::nullopt;
+        if (!kDrawn.has_value()) {
+            return errorLine(id, ToolingError::NotFound, "this Runtime's preview has drawn no frame it describes");
+        }
+        Value figures = Value::object();
+        for (const auto& [kName, kValue] : kDrawn->figures) {
+            figures.add(kName, Value::integer(kValue));
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("tooling.drawn_frame"));
+        made.add("frames", Value::integer(static_cast<std::int64_t>(kDrawn->frames)));
+        made.add("figures", std::move(figures));
+        if (kWithSteps) {
+            Value steps = Value::array();
+            for (const DrawnStep& kStep : kDrawn->steps) {
+                Value step = Value::object();
+                step.add("pass", Value::string(kStep.pass));
+                // A mesh's identity as sixteen hexadecimal digits: a
+                // number past what a JSON reader holds exactly.
+                char mesh[17];
+                std::snprintf(mesh, sizeof mesh, "%016llx", static_cast<unsigned long long>(kStep.mesh));
+                step.add("mesh", Value::string(mesh));
+                step.add("material", Value::integer(kStep.material));
+                step.add("instances", Value::integer(kStep.instances));
+                steps.push(std::move(step));
+            }
+            made.add("steps", std::move(steps));
+        }
         return replyLine(id, "answer", std::move(made));
     }
     if (kind == "tooling.view_mode") {

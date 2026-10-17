@@ -46,6 +46,8 @@
 #include <cstdio>
 #include <numbers>
 #include <optional>
+#include <span>
+#include <string>
 
 namespace {
 
@@ -195,6 +197,23 @@ public:
             camera.show(*kMode);
         }
         return kMode.has_value();
+    }
+    /// What the frame the scene last drew from the preview holds (D842).
+    std::optional<world_tooling::DrawnFrame> drawn(bool steps) const override {
+        if (camera.descriptions() == 0) {
+            return std::nullopt;
+        }
+        world_tooling::DrawnFrame made{.frames = camera.descriptions()};
+        for (const view::FrameFigure& kFigure : camera.figures()) {
+            made.figures.emplace_back(std::string{kFigure.name}, kFigure.value);
+        }
+        for (const view::FrameStep& kStep : steps ? camera.steps() : std::span<const view::FrameStep>{}) {
+            made.steps.push_back(world_tooling::DrawnStep{.pass = std::string{kStep.pass},
+                                                          .mesh = kStep.mesh,
+                                                          .material = kStep.material,
+                                                          .instances = kStep.instances});
+        }
+        return made;
     }
 
     view::PreviewCamera camera;
