@@ -246,7 +246,8 @@ private:
         Network,
         Environment,
         Profiler,
-        Frame
+        Frame,
+        Changes
     };
     /// The bottom dock showing `pane`.
     void showDock(Dock pane);
@@ -695,6 +696,17 @@ private:
     result::Status makeFrame();
     void readFrame(double seconds, std::string_view capture = {});
     bool pressCapture(ui::Node node);
+    /// The Changes tab (D871): git run in the game's directory, one at a
+    /// time in order, each heard when it ends; the branch, the game's
+    /// changes, a file's diff, and a commit of them all.
+    result::Status makeChanges();
+    void runGit(std::string purpose, std::vector<std::string> arguments);
+    void startGit();
+    void pollGit();
+    void readChanges();
+    void showChanges();
+    bool pressChanges(ui::Node node);
+    void commitChanges(const std::string& message);
     bool pressNetwork(ui::Node node);
     void readNetwork(double seconds);
     void showNetwork(const std::vector<std::string>& lines);
@@ -911,6 +923,8 @@ private:
     std::size_t templateAt_ = 0;
     std::vector<std::pair<ui::Node, std::filesystem::path>> recentRows_;
     std::optional<FieldRow> newGameField_;
+    /// The Changes tab's commit message (D871).
+    std::optional<FieldRow> commitField_;
     std::optional<FieldRow> openGameField_;
     std::uint64_t made_ = 0;
     /// The Preferences dialog while open, its fields, and its Close; each

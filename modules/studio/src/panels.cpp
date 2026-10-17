@@ -141,6 +141,10 @@ result::Status ShellParticipant::build() {
                 .height = ui::pixels(24), .alignItems = ui::Align::Center, .shrink = 0, .padding = {10, 2, 10, 2}},
             kHeaderFill));
     RAWFRAME_TRY_ASSIGN(statusNode_, box(kStatusBar, ui::Layout{}, 0));
+    // Then, at its end, the game's branch, where it is under version
+    // control (D871).
+    RAWFRAME_TRY(box(kStatusBar, ui::Layout{.grow = 1}, 0));
+    RAWFRAME_TRY_ASSIGN(held_.branchNode, box(kStatusBar, ui::Layout{}, 0));
     // A menu or the matches, and the splitters, went with the tree they
     // were in.
     splitters_ = {};
@@ -238,6 +242,7 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(environmentTab_, button(kDockTabs, "Environment"));
     RAWFRAME_TRY_ASSIGN(profilerTab_, button(kDockTabs, "Profiler"));
     RAWFRAME_TRY_ASSIGN(held_.frameTab, button(kDockTabs, "Frame"));
+    RAWFRAME_TRY_ASSIGN(held_.changesTab, button(kDockTabs, "Changes"));
     RAWFRAME_TRY_ASSIGN(scenesColumn_, pane("Assets"));
     RAWFRAME_TRY_ASSIGN(historyColumn_, pane("History"));
     RAWFRAME_TRY(makeConsole());
@@ -245,6 +250,7 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY(makeEnvironment());
     RAWFRAME_TRY(makeProfiler());
     RAWFRAME_TRY(makeFrame());
+    RAWFRAME_TRY(makeChanges());
     RAWFRAME_TRY(tree_->attach(bottomDock_, scenesColumn_));
     dockShown_ = Dock::Assets;
     showDock(Dock::Assets);
@@ -262,7 +268,8 @@ void ShellParticipant::showDock(Dock pane) {
                : dock == Dock::Network     ? networkColumn_
                : dock == Dock::Environment ? held_.environmentColumn
                : dock == Dock::Profiler    ? held_.profilerColumn
-                                           : held_.frameColumn;
+               : dock == Dock::Frame       ? held_.frameColumn
+                                           : held_.changesColumn;
     };
     if (pane != dockShown_) {
         static_cast<void>(tree_->detach(kPaneOf(dockShown_)));
@@ -282,10 +289,14 @@ void ShellParticipant::showDock(Dock pane) {
         tree_->setLook(profilerTab_, ui::Look{.fill = pane == Dock::Profiler ? kChosen : kRow, .radius = 4}));
     static_cast<void>(
         tree_->setLook(held_.frameTab, ui::Look{.fill = pane == Dock::Frame ? kChosen : kRow, .radius = 4}));
+    static_cast<void>(
+        tree_->setLook(held_.changesTab, ui::Look{.fill = pane == Dock::Changes ? kChosen : kRow, .radius = 4}));
     if (pane == Dock::Console) {
         showConsole();
     } else if (pane == Dock::Environment) {
         showEnvironment();
+    } else if (pane == Dock::Changes) {
+        readChanges();
     }
 }
 

@@ -462,3 +462,19 @@ RAWFRAME_TEST(AnImportIsAskedForAndWhatItMadeSaid) {
                     "texture bark.png");
     RAWFRAME_EXPECT(importedIn(R"({"kind":"authoring.reply","id":3,"error":{"message":"taken"}})").empty());
 }
+
+RAWFRAME_TEST(VersionControlsChangesAreTheGamesFiles) {
+    // D871: git's status from the repository's top, read as the game's
+    // own files, a rename by its new name, the rest left out.
+    const std::string_view kPorcelain = " M games/runners/level.scene\n"
+                                        "?? games/runners/new.scene\n"
+                                        "R  games/runners/old.ui -> games/runners/hud.ui\n"
+                                        "M  modules/other.cpp\n"
+                                        "not a status line\n";
+    const std::vector<ChangedFile> kChanged = changedFiles(kPorcelain, "games/runners/");
+    RAWFRAME_EXPECT((kChanged == std::vector<ChangedFile>{{.state = " M", .path = "level.scene"},
+                                                          {.state = "??", .path = "new.scene"},
+                                                          {.state = "R ", .path = "hud.ui"}}));
+    RAWFRAME_EXPECT(changedFiles(kPorcelain, "").size() == 4);
+    RAWFRAME_EXPECT(changedFiles("", "games/").empty());
+}

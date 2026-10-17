@@ -68,7 +68,9 @@ struct FieldRow {
         /// The terrain brush's tool, radius, or amount, `field` which (D856).
         BrushSetting,
         /// The tile a tilemap's block pressed paints (D861).
-        TileSetting
+        TileSetting,
+        /// The message a commit of the game's changes is made with (D871).
+        CommitMessage
     };
     ui::Node value{};
     Role role = Role::Field;

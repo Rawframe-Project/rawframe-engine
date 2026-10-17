@@ -432,4 +432,21 @@ editorCommand(std::string_view command, const std::string& file, std::int64_t li
 /// graph node's (D731), from the system's random device, never all nought.
 [[nodiscard]] std::string mintedHexIdentity();
 
+/// A document version control sees changed (D871): its state as `git
+/// status --porcelain` writes it, two letters (`M ` staged, ` M` not, `??`
+/// new, `D ` gone), and its path under the game's directory.
+struct ChangedFile {
+    std::string state;
+    std::string path;
+
+    friend bool operator==(const ChangedFile&, const ChangedFile&) = default;
+};
+
+/// The files `porcelain` (`git status --porcelain=v1` output, paths from
+/// the repository's top) names under `prefix` (`git rev-parse
+/// --show-prefix`, the game's directory from the top, ending in a slash or
+/// empty), their paths taken from the game's directory; a renamed file by
+/// its new name. Lines of another form, and files elsewhere, are left out.
+[[nodiscard]] std::vector<ChangedFile> changedFiles(std::string_view porcelain, std::string_view prefix);
+
 } // namespace rawframe::studio

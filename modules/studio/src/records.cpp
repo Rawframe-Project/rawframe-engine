@@ -1000,4 +1000,27 @@ std::string mintedHexIdentity() {
     return text;
 }
 
+std::vector<ChangedFile> changedFiles(std::string_view porcelain, std::string_view prefix) {
+    std::vector<ChangedFile> made;
+    std::size_t at = 0;
+    while (at < porcelain.size()) {
+        const std::size_t kEnd = std::min(porcelain.find('\n', at), porcelain.size());
+        const std::string_view kLine = porcelain.substr(at, kEnd - at);
+        at = kEnd + 1;
+        if (kLine.size() < 4 || kLine[2] != ' ') {
+            continue;
+        }
+        std::string_view path = kLine.substr(3);
+        if (const std::size_t kArrow = path.find(" -> "); kArrow != std::string_view::npos) {
+            path = path.substr(kArrow + 4);
+        }
+        if (!path.starts_with(prefix) || path.size() == prefix.size()) {
+            continue;
+        }
+        made.push_back(
+            ChangedFile{.state = std::string{kLine.substr(0, 2)}, .path = std::string{path.substr(prefix.size())}});
+    }
+    return made;
+}
+
 } // namespace rawframe::studio

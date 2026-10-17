@@ -308,6 +308,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     readNetwork(kSeconds);
     readProfiler(kSeconds);
     readFrame(kSeconds);
+    pollGit();
     if (playing_.has_value()) {
         inViewport_.othersStarted = playing_->others();
     }
@@ -358,6 +359,12 @@ void ShellParticipant::stop() noexcept {
     // sizes kept: a loaded Studio could end before the frame that read
     // the release (D830).
     releaseSplitter();
+    // Git ended, and the directory its output went to taken away (D871).
+    held_.git.reset();
+    if (!held_.gitOutput.empty()) {
+        std::error_code error;
+        std::filesystem::remove_all(held_.gitOutput.parent_path(), error);
+    }
     if (typing_ != nullptr) {
         typing_->focus(std::nullopt);
         typing_->answer({});

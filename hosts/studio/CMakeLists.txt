@@ -39,7 +39,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_read_aloud PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no"
                          PASS_REGULAR_EXPRESSION
-                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 panel Dock edge\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 push button Console\na11y: 2 push button Network\na11y: 2 push button Environment\na11y: 2 push button Profiler\na11y: 2 push button Frame\na11y: 2 scroll pane Assets\n.*a11y: 3 entry new scene or import\n.*a11y: 3 push button level.scene\n.*a11y: 2 panel Inspector edge\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 panel Dock edge\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 push button Console\na11y: 2 push button Network\na11y: 2 push button Environment\na11y: 2 push button Profiler\na11y: 2 push button Frame\na11y: 2 push button Changes\na11y: 2 scroll pane Assets\n.*a11y: 3 entry new scene or import\n.*a11y: 3 push button level.scene\n.*a11y: 2 panel Inspector edge\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
     # Studio typed into by a screen reader (D613): the new scene's entry
     # takes a name inserted through AT-SPI's EditableText as typing, the
     # field begun as a press begins it, and reads it back.
@@ -1226,6 +1226,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "level.scene written: yes\n.*\"streaming\": \"persistent\".*\"code\":\"studio_world\"[^\n]*\"instances\":3,\"districts\":1}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
+        # Version control (D871): a copy of Runners kept in git, an entity
+        # made in its level, the Changes tab running git only once the
+        # repository is trusted, then listing the level changed and its diff,
+        # and a commit of it with the message typed, leaving nothing changed.
+        add_test(NAME studio_changes
+                 COMMAND ${CMAKE_COMMAND} -E env STUDIO_GIT=1
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/runners/runners.game level.scene @level.scene @New "until=studio_said,status=\"entity created"
+                         @Changes "@Trust this repository" "until=studio_changes" "@M  level.scene" "until=studio_changes"
+                         "@commit message#2:a new entity" "until=studio_committed"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_changes PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "level.scene written: yes\ncommit: a new entity\ncommit: the game as it was\n.*\"code\":\"studio_changes\"[^\n]*\"changed\":1,\"commits\":0}.*\"code\":\"studio_committed\"[^\n]*\"commits\":1}.*\"code\":\"studio_changes\"[^\n]*\"changed\":0,\"commits\":1}.*\"exit\":\"clean_stop\"")
         # Paused and stepped (D806): Plaza played from Studio, its World
         # paused on its server, stepped three ticks one by one, each a tick
         # on, and let run again.

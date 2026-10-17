@@ -42,6 +42,16 @@ fi
 if [ -n "${STUDIO_SCENE_EDIT:-}" ] && [ "$2" != none ]; then
     sed -i "$STUDIO_SCENE_EDIT" "$work/game/$3"
 fi
+# Or put the copy under version control first, in STUDIO_GIT, its files
+# one commit, as a game kept in git (D871); its log and status are told
+# after Studio ends.
+if [ -n "${STUDIO_GIT:-}" ] && [ "$2" != none ]; then
+    git -C "$work/game" init -q
+    git -C "$work/game" config user.name "Studio test"
+    git -C "$work/game" config user.email "studio@test.invalid"
+    git -C "$work/game" add -A
+    git -C "$work/game" commit -q -m "the game as it was"
+fi
 cat >"$work/studio.conf" <<CONF
 host.maximum_iterations = 7200
 host.iteration_rate = 120
@@ -89,6 +99,10 @@ if [ -n "${STUDIO_ALSO_WRITTEN:-}" ]; then
     else
         echo "$STUDIO_ALSO_WRITTEN written: yes"
     fi
+fi
+if [ -n "${STUDIO_GIT:-}" ] && [ "$2" != none ]; then
+    git -C "$work/game" log --format='commit: %s'
+    git -C "$work/game" status --porcelain | sed 's/^/left: /'
 fi
 if grep -q '"device_unavailable"' "$work/log" && [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then
     echo "skip: no device"

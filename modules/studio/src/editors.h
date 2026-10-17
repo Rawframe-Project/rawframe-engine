@@ -6,10 +6,13 @@
 
 #include "rawframe/diagnostics/identity.h"
 #include "rawframe/document/json.h"
+#include "rawframe/process/child.h"
 #include "rawframe/ui/tree.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <utility>
@@ -27,6 +30,9 @@ inline constexpr diagnostics::EventIdentity kScatterShown{"studio", "studio_scat
 inline constexpr diagnostics::EventIdentity kSequenceShown{"studio", "studio_sequence"};
 /// A scene's instances listed as districts (D870).
 inline constexpr diagnostics::EventIdentity kWorldShown{"studio", "studio_world"};
+/// Version control's changes read, and a commit made (D871).
+inline constexpr diagnostics::EventIdentity kChangesShown{"studio", "studio_changes"};
+inline constexpr diagnostics::EventIdentity kCommitted{"studio", "studio_committed"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
 inline constexpr diagnostics::EventIdentity kCurveShown{"studio", "studio_curve"};
 /// A style sheet's classes as each variant looks (D837).
@@ -132,6 +138,32 @@ struct EditorsHeld {
     std::uint64_t frameCaptures = 0;
     /// The capture shown, as its file holds it (D843).
     document::Value capture;
+    /// The Changes tab (D871): its tab and pane, its rows, each changed
+    /// file's press with its path, and git as Studio runs it: the one
+    /// running, what it is run for, those waiting their turn with their
+    /// purposes, and the file its output goes to; then what git last said:
+    /// the branch, the game's directory from the repository's top, the
+    /// changes, the diff shown and of what, and the commits made.
+    ui::Node changesTab{};
+    ui::Node changesColumn{};
+    /// The status bar's branch.
+    ui::Node branchNode{};
+    /// Whether the author trusts the game's repository, so git runs in it,
+    /// and the press that says so.
+    bool gitTrusted = false;
+    ui::Node trustPress{};
+    std::vector<ui::Node> changesRows;
+    std::vector<std::pair<ui::Node, std::string>> changedPresses;
+    std::optional<process::Child> git;
+    std::string gitFor;
+    std::deque<std::pair<std::string, std::vector<std::string>>> gitWaiting;
+    std::filesystem::path gitOutput;
+    std::string branch;
+    std::string gamePrefix;
+    std::string changes;
+    std::string diff;
+    std::string diffOf;
+    std::uint64_t commits = 0;
 };
 
 } // namespace rawframe::studio

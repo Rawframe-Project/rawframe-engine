@@ -174,15 +174,16 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (broken_.has_value()) {
         return;
     } else if (node == assetsTab_ || node == historyTab_ || node == consoleTab_ || node == networkTab_ ||
-               node == environmentTab_ || node == profilerTab_ || node == held_.frameTab) {
+               node == environmentTab_ || node == profilerTab_ || node == held_.frameTab || node == held_.changesTab) {
         showDock(node == assetsTab_        ? Dock::Assets
                  : node == historyTab_     ? Dock::History
                  : node == consoleTab_     ? Dock::Console
                  : node == networkTab_     ? Dock::Network
                  : node == environmentTab_ ? Dock::Environment
                  : node == profilerTab_    ? Dock::Profiler
-                                           : Dock::Frame);
-    } else if (pressNetwork(node) || pressEnvironment(node) || pressCapture(node)) {
+                 : node == held_.frameTab  ? Dock::Frame
+                                           : Dock::Changes);
+    } else if (pressNetwork(node) || pressEnvironment(node) || pressCapture(node) || pressChanges(node)) {
         return;
     } else if (const auto kFilter = std::ranges::find(consoleFilters_, node, &std::pair<ui::Node, int>::first);
                kFilter != consoleFilters_.end()) {
@@ -468,6 +469,8 @@ void ShellParticipant::take(const view::Typing& typing) {
             setKeys(kEdited.field, kTyped);
         } else if (kEdited.role == FieldRow::Role::Editor) {
             setEditor(kTyped);
+        } else if (kEdited.role == FieldRow::Role::CommitMessage) {
+            commitChanges(kTyped);
         } else if (kEdited.role == FieldRow::Role::OpenGame) {
             chooseGame(std::filesystem::path{kTyped});
         } else if (kEdited.role == FieldRow::Role::Find) {
@@ -480,7 +483,8 @@ void ShellParticipant::take(const view::Typing& typing) {
         const FieldRow::Role kRole = editing_->role;
         endEdit();
         if (kRole == FieldRow::Role::NewGame || kRole == FieldRow::Role::OpenGame ||
-            kRole == FieldRow::Role::Shortcut || kRole == FieldRow::Role::Editor) {
+            kRole == FieldRow::Role::Shortcut || kRole == FieldRow::Role::Editor ||
+            kRole == FieldRow::Role::CommitMessage) {
             return;
         }
         if (kRole == FieldRow::Role::View) {
