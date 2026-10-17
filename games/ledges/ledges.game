@@ -16,10 +16,20 @@ tilemap 8f5c1d2e3a4b6079 level.tilemap
 prefab 0f5f3b7f7d1ab49c crate.scene
 scatter crates.scatter
 
+# A lift riding a closed spline (D868): the path, its four points, and the
+# lift that follows it, in lift.scene.
+component f1dfa5a1-6e2f-48b0-a454-11c26d2582b8 ledges.path rawframe.spline.Spline
+component 1cb26c19-6c66-4fb1-8148-9cd5d0ebb588 ledges.point rawframe.spline.Point
+entity ledges.point spline
+component f1fffe34-df03-431e-be4d-58e61dd6c4ed ledges.ride Ride
+entity ledges.ride spline
+scene lift.scene
+
 component 5b0e7a51-38c4-4e5d-9d1f-2a6b8c4e0f13 ledges.steer Steer
 
 system ledges.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose with ledges.steer random spawn before rawframe.physics2d.step
 system ledges.push simulation push read ledges.steer write rawframe.physics2d.impulse read rawframe.physics2d.contact before rawframe.physics2d.step predicted
+system ledges.lift simulation lift write ledges.ride write rawframe.physics2d.target before rawframe.physics2d.step
 
 # The level, its top-left thirty meters left of the middle and twelve up.
 spawn 1 rawframe.physics2d.body motion=0 shape=3 friction=0.8 rawframe.physics2d.pose x=-30 y=12 rawframe.physics2d.velocity rawframe.physics2d.impulse rawframe.physics2d.tiles tilemap=level.tilemap

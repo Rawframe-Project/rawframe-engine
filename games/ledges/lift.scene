@@ -1,0 +1,101 @@
+{
+  "kind": "rawframe.scene",
+  "formatVersion": 1,
+  "schema": {
+    "ledges.path": "0242f2e08d43cdf3",
+    "ledges.point": "4a67c25addb2c708",
+    "ledges.ride": "84eff037c313e00d",
+    "rawframe.physics2d.body": "593035e6aa3af5e7",
+    "rawframe.physics2d.pose": "5c5cb2726bb85776",
+    "rawframe.physics2d.target": "65492de57101b0c1",
+    "rawframe.physics2d.velocity": "63c49a3a472d1997"
+  },
+  "entities": [
+    {
+      "id": "bf053b9f-cec4-41a1-9b88-a6e01de5cc8b",
+      "name": "lift path",
+      "components": {
+        "ledges.path": {
+          "closed": true
+        }
+      }
+    },
+    {
+      "id": "a92a40f1-8d7d-4ca6-a834-d7159f93fcce",
+      "name": "lift point 0",
+      "components": {
+        "ledges.point": {
+          "spline": "bf053b9f-cec4-41a1-9b88-a6e01de5cc8b"
+        },
+        "rawframe.physics2d.pose": {
+          "x": -6,
+          "y": 14
+        }
+      }
+    },
+    {
+      "id": "cb16d95c-0c92-4521-8be9-befb0cdb5954",
+      "name": "lift point 1",
+      "components": {
+        "ledges.point": {
+          "index": 1,
+          "spline": "bf053b9f-cec4-41a1-9b88-a6e01de5cc8b"
+        },
+        "rawframe.physics2d.pose": {
+          "x": 6,
+          "y": 14
+        }
+      }
+    },
+    {
+      "id": "f600749c-3307-4ab5-95a5-f867689b88dc",
+      "name": "lift point 2",
+      "components": {
+        "ledges.point": {
+          "index": 2,
+          "spline": "bf053b9f-cec4-41a1-9b88-a6e01de5cc8b"
+        },
+        "rawframe.physics2d.pose": {
+          "x": 6,
+          "y": 17
+        }
+      }
+    },
+    {
+      "id": "e1107daf-383c-46df-995b-c6848e876339",
+      "name": "lift point 3",
+      "components": {
+        "ledges.point": {
+          "index": 3,
+          "spline": "bf053b9f-cec4-41a1-9b88-a6e01de5cc8b"
+        },
+        "rawframe.physics2d.pose": {
+          "x": -6,
+          "y": 17
+        }
+      }
+    },
+    {
+      "id": "ea4e7d65-3de8-474f-afd7-9ad81bdd14a8",
+      "name": "lift",
+      "components": {
+        "ledges.ride": {
+          "spline": "bf053b9f-cec4-41a1-9b88-a6e01de5cc8b"
+        },
+        "rawframe.physics2d.body": {
+          "friction": 0.8,
+          "height": 0.3,
+          "motion": 1,
+          "shape": 1,
+          "width": 2
+        },
+        "rawframe.physics2d.pose": {
+          "x": -6,
+          "y": 14
+        },
+        "rawframe.physics2d.target": {},
+        "rawframe.physics2d.velocity": {}
+      }
+    }
+  ]
+}

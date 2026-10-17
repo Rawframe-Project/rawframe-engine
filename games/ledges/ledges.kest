@@ -6,6 +6,8 @@ module ledges
 
 import rawframe.physics2d
 import rawframe.random
+import rawframe.spline
+import rawframe.world
 
 // The balls' collision class (ledges.game): balls roll through each other.
 const BALL: u64 = 0x6e5c9a7569ee0ec9
@@ -41,4 +43,32 @@ fn push(count: i32, steers: [Steer], impulses: [physics2d.Impulse2D], contacts: 
         }
         i = i + 1
     }
+}
+
+// A lift's ride: the spline it follows and how far along it is.
+struct Ride {
+    spline: world.Entity
+    meters: f64
+}
+
+// Meters a second along its path.
+const LIFT_SPEED: f64 = 2.0
+
+// A lift rides its spline (D868): each tick a little further along it, its
+// kinematic body carried there by the physics step, pushing what it meets.
+fn lift(count: i32, rides: [Ride], targets: [physics2d.Target2D]) {
+    let i = 0
+    while i < count {
+        rides[i].meters = rides[i].meters + LIFT_SPEED / f64(60.0)
+        let at = spline.along(rides[i].spline, rides[i].meters)
+        if at.found {
+            targets[i] = physics2d.Target2D(at.x, at.y, 1.0, 0.0, true)
+        }
+        i = i + 1
+    }
+}
+
+// The spline types the game's path and points are, which the engine reads
+// and measures; a program lays out only the types it names.
+fn path(paths: [spline.Spline], points: [spline.Point]) {
 }
