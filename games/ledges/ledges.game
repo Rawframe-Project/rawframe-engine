@@ -1,5 +1,6 @@
 # The sample tile game (D859): players are balls rolling about a level made
-# of a tilemap, its solid tiles one static body stepped on the server. Each
+# of a tilemap, its solid tiles one static body stepped on the server, among
+# crates a scatter strews (D864). Each
 # client is sent what is within 40 meters of its ball, sees it between
 # states, and predicts its own ball among the level. The level is read from
 # the game's cooked content, so the game plays from content.
@@ -10,6 +11,10 @@ collision class ball 6e5c9a7569ee0ec9
 collision rule ball ball ignore
 
 tilemap 8f5c1d2e3a4b6079 level.tilemap
+
+# Crates strewn over it by a scatter of the crate prefab (D864).
+prefab 0f5f3b7f7d1ab49c crate.scene
+scatter crates.scatter
 
 component 5b0e7a51-38c4-4e5d-9d1f-2a6b8c4e0f13 ledges.steer Steer
 

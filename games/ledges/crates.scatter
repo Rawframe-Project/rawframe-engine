@@ -1,0 +1,9 @@
+# Crates strewn over the level (D864): in a 2D game the area is its X and
+# Y, so these fall from the level's upper half onto its floor and ledges.
+scatter 1
+prefab crate.scene
+seed 11
+area -27 6.5 54 3
+spacing 2
+count 12
+turn

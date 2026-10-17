@@ -552,8 +552,10 @@ if(RAWFRAME_BUILD_TESTS)
                          PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9]?[0-9],"
                          FAIL_REGULAR_EXPRESSION "\"checksumsDiverged\":[1-9]")
     # The ledges level cooked into the build tree (D859): sixteen bots play
-    # on its tiles, one static body of the level's solid runs, and one bot
-    # predicts its ball among the same tiles, read by its client.
+    # on its tiles, one static body of the level's solid runs, among twelve
+    # crates its scatter strews (D864), and one bot predicts its ball among
+    # the same tiles, read by its client: mispredicting where it meets the
+    # crates the server moves, as plaza's walkers do, and never diverging.
     set(LEDGES_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/ledges_content)
     add_test(NAME ledges_cooked
              COMMAND rawframe_host_cook_tool ${PROJECT_SOURCE_DIR}/games/ledges ${LEDGES_CONTENT}
@@ -568,13 +570,13 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(ledges_bots PROPERTIES
                          FIXTURES_REQUIRED ledges_content
-                         PASS_REGULAR_EXPRESSION "\"bodiesMade\":17,\"bodiesRemoved\":0,\"bodiesRefused\":0")
+                         PASS_REGULAR_EXPRESSION "\"bodiesMade\":29,\"bodiesRemoved\":0,\"bodiesRefused\":0")
     add_test(NAME ledges_prediction
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/ledges_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(ledges_prediction PROPERTIES
                          FIXTURES_REQUIRED ledges_content
                          PROCESSORS 6
-                         PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9],\"rollbacks\":[0-9][0-9]?,"
+                         PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9]?[0-9],"
                          FAIL_REGULAR_EXPRESSION "\"checksumsDiverged\":[1-9]")
 endif()

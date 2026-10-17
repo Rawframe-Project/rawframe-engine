@@ -1,0 +1,27 @@
+{
+  "kind": "rawframe.scene",
+  "formatVersion": 1,
+  "schema": {
+    "rawframe.physics2d.body": "593035e6aa3af5e7",
+    "rawframe.physics2d.pose": "5c5cb2726bb85776",
+    "rawframe.physics2d.velocity": "63c49a3a472d1997"
+  },
+  "entities": [
+    {
+      "id": "2e537f26-bf6d-49b5-beec-66cef523a2a7",
+      "name": "crate",
+      "components": {
+        "rawframe.physics2d.body": {
+          "density": 1,
+          "friction": 0.6,
+          "height": 0.4,
+          "motion": 2,
+          "shape": 1,
+          "width": 0.4
+        },
+        "rawframe.physics2d.pose": {},
+        "rawframe.physics2d.velocity": {}
+      }
+    }
+  ]
+}
