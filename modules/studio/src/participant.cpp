@@ -191,8 +191,9 @@ bool ShellParticipant::openGame() {
     // edited as they are (D637, D643), then its materials, instances
     // (D722) and graphs (D730), each a kind of its own, then its data
     // documents, edited value by value (D812), then its blockouts, edited
-    // solid by solid (D850), terrains, brushed (D856), and tilemaps, painted
-    // (D861), then its frames' captures, read only (D843).
+    // solid by solid (D850), terrains, brushed (D856), tilemaps, painted
+    // (D861), and scatters, line by line (D866), then its frames' captures,
+    // read only (D843).
     for (const auto& [kKind, kExtension] : {std::pair{Listed::Sheet, ".styles"},
                                             std::pair{Listed::Ui, ".ui"},
                                             std::pair{Listed::Material, ".rfmaterial"},
@@ -204,6 +205,7 @@ bool ShellParticipant::openGame() {
                                             std::pair{Listed::Blockout, ".blockout"},
                                             std::pair{Listed::Terrain, ".terrain"},
                                             std::pair{Listed::Tilemap, ".tilemap"},
+                                            std::pair{Listed::Scatter, ".scatter"},
                                             std::pair{Listed::Capture, ".rfframe"},
                                             std::pair{Listed::Capture, ".rfprofile"}}) {
         for (const std::filesystem::path& kFile : authoring_session::filesBeside(description_, kExtension)) {

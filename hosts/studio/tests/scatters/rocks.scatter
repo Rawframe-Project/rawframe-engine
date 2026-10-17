@@ -1,0 +1,6 @@
+scatter 1
+prefab rock.scene
+seed 7
+area -10 -10 20 20
+spacing 2
+count 30
