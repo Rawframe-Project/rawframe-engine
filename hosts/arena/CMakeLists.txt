@@ -551,4 +551,30 @@ if(RAWFRAME_BUILD_TESTS)
                          RUN_SERIAL TRUE
                          PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9]?[0-9],"
                          FAIL_REGULAR_EXPRESSION "\"checksumsDiverged\":[1-9]")
+    # The ledges level cooked into the build tree (D859): sixteen bots play
+    # on its tiles, one static body of the level's solid runs, and one bot
+    # predicts its ball among the same tiles, read by its client.
+    set(LEDGES_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/ledges_content)
+    add_test(NAME ledges_cooked
+             COMMAND rawframe_host_cook_tool ${PROJECT_SOURCE_DIR}/games/ledges ${LEDGES_CONTENT}
+                     ${CMAKE_CURRENT_BINARY_DIR}/ledges_cook_cache)
+    set_tests_properties(ledges_cooked PROPERTIES
+                         FIXTURES_SETUP ledges_content
+                         PASS_REGULAR_EXPRESSION "failed 0")
+    configure_file(tests/ledges.conf.in ${CMAKE_CURRENT_BINARY_DIR}/ledges.conf @ONLY)
+    configure_file(tests/ledges_prediction.conf.in ${CMAKE_CURRENT_BINARY_DIR}/ledges_prediction.conf @ONLY)
+    add_test(NAME ledges_bots
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/ledges.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(ledges_bots PROPERTIES
+                         FIXTURES_REQUIRED ledges_content
+                         PASS_REGULAR_EXPRESSION "\"bodiesMade\":17,\"bodiesRemoved\":0,\"bodiesRefused\":0")
+    add_test(NAME ledges_prediction
+             COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/ledges_prediction.conf
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(ledges_prediction PROPERTIES
+                         FIXTURES_REQUIRED ledges_content
+                         PROCESSORS 6
+                         PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9],\"rollbacks\":[0-9][0-9]?,"
+                         FAIL_REGULAR_EXPRESSION "\"checksumsDiverged\":[1-9]")
 endif()

@@ -1,0 +1,13 @@
+# Sixteen bots against the sample tile game for a second of play; the
+# server's physics summary shows the level's tiles one body and a ball for
+# each player made. The level is read from the game's content cooked into
+# the build tree.
+host.maximum_iterations = 120
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = @PROJECT_SOURCE_DIR@/games/ledges/ledges.game
+content.root = @LEDGES_CONTENT@
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 16
+bots.endpoint = arena

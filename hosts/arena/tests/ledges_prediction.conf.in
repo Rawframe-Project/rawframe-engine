@@ -1,0 +1,12 @@
+# One bot predicting its ball in the sample tile game for five seconds: the
+# client steps it among the level's tiles, made from the same content as the
+# server's, and mispredicts only while its input first arrives.
+host.maximum_iterations = 600
+host.iteration_rate = 120
+world.tick_rate = 60
+kest.game = @PROJECT_SOURCE_DIR@/games/ledges/ledges.game
+content.root = @LEDGES_CONTENT@
+network.loopback.latency_ms = 10
+replication.endpoint = arena
+bots.count = 1
+bots.endpoint = arena

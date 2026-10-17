@@ -1,0 +1,28 @@
+# The sample tile game (D859): players are balls rolling about a level made
+# of a tilemap, its solid tiles one static body stepped on the server. Each
+# client is sent what is within 40 meters of its ball, sees it between
+# states, and predicts its own ball among the level. The level is read from
+# the game's cooked content, so the game plays from content.
+program ledges.kest
+physics2d gravity 0 -10 substeps 4
+
+collision class ball 6e5c9a7569ee0ec9
+collision rule ball ball ignore
+
+tilemap 8f5c1d2e3a4b6079 level.tilemap
+
+component 5b0e7a51-38c4-4e5d-9d1f-2a6b8c4e0f13 ledges.steer Steer
+
+system ledges.join simulation join write rawframe.physics2d.body write rawframe.physics2d.pose with ledges.steer random spawn before rawframe.physics2d.step
+system ledges.push simulation push read ledges.steer write rawframe.physics2d.impulse read rawframe.physics2d.contact before rawframe.physics2d.step predicted
+
+# The level, its top-left thirty meters left of the middle and twelve up.
+spawn 1 rawframe.physics2d.body motion=0 shape=3 friction=0.8 rawframe.physics2d.pose x=-30 y=12 rawframe.physics2d.velocity rawframe.physics2d.impulse rawframe.physics2d.tiles tilemap=level.tilemap
+
+replicate rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity ledges.steer
+player ledges.steer rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity rawframe.physics2d.impulse rawframe.physics2d.contact
+input ledges.steer
+interest rawframe.physics2d.pose x y within 40
+interpolate rawframe.physics2d.pose
+predict rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity ledges.steer
+nearby rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.velocity
