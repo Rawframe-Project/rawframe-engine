@@ -257,7 +257,9 @@ result::Result<base::Bits128> idOf(const Value* value) {
 }
 
 result::Result<SceneInstance> instanceOf(const Value& each) {
-    const bool kShape = hasMembers(each, {"scene", "entities", "overrides"});
+    const Value* streaming = each.find("streaming");
+    const bool kShape = streaming != nullptr ? hasMembers(each, {"scene", "entities", "overrides", "streaming"})
+                                             : hasMembers(each, {"scene", "entities", "overrides"});
     const base::Bits128Parse kScene = kShape && each.find("scene")->text() != nullptr
                                           ? base::parseBits128Hex(*each.find("scene")->text())
                                           : base::Bits128Parse{};
@@ -266,6 +268,13 @@ result::Result<SceneInstance> instanceOf(const Value& each) {
         return invalid("an instance is its scene, its entities, and its overrides");
     }
     SceneInstance instance{.scene = kScene.value};
+    if (streaming != nullptr) {
+        const std::string* kHow = streaming->text();
+        if (kHow == nullptr || (*kHow != "atomic" && *kHow != "persistent")) {
+            return invalid("an instance's streaming is atomic or persistent");
+        }
+        instance.streaming = *kHow == "atomic" ? Streaming::Atomic : Streaming::Persistent;
+    }
     const Value& entities = *each.find("entities");
     for (std::size_t at = 0; at < entities.names().size(); ++at) {
         const base::Bits128Parse kSource = schema::parseStableIdText(entities.names()[at]);
@@ -364,6 +373,9 @@ result::Result<std::string> writeScene(const Scene& scene) {
         made.add("scene", Value::string(hexOf(instance.scene)));
         made.add("entities", std::move(mapping));
         made.add("overrides", std::move(overrides));
+        if (instance.streaming != Streaming::Each) {
+            made.add("streaming", Value::string(instance.streaming == Streaming::Atomic ? "atomic" : "persistent"));
+        }
         instances.push(std::move(made));
     }
     Value document = Value::object();

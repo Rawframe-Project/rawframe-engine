@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 using namespace rawframe;
@@ -182,6 +183,27 @@ RAWFRAME_TEST(AnInstanceIsItsSourceItsMappingAndItsPatch) {
     RAWFRAME_EXPECT(kRead.has_value() && *writeScene(*kRead) == *kWritten);
     // Without instances the member is left out, not written empty.
     RAWFRAME_EXPECT(writeScene(sample())->find("instances") == std::string::npos);
+}
+
+RAWFRAME_TEST(ADistrictIsAnInstanceStreamedAsAUnit) {
+    // Streaming after the overrides, left out for an instance sent entity
+    // by entity, and read back as written; any other word is refused.
+    RAWFRAME_EXPECT(writeScene(instancing())->find("streaming") == std::string::npos);
+    for (const auto& [kStreaming, kWord] :
+         {std::pair{Streaming::Atomic, "atomic"}, std::pair{Streaming::Persistent, "persistent"}}) {
+        Scene district = instancing();
+        district.instances[0].streaming = kStreaming;
+        const auto kWritten = writeScene(district);
+        RAWFRAME_EXPECT(kWritten.has_value() && kWritten->find("      ],\n      \"streaming\": \"" +
+                                                               std::string{kWord} + "\"\n") != std::string::npos);
+        const auto kRead = readScene(kWritten.value_or(std::string{}));
+        RAWFRAME_EXPECT(kRead.has_value() && *kRead == district);
+        if (kWritten.has_value()) {
+            std::string other = *kWritten;
+            other.replace(other.find(kWord), std::string_view{kWord}.size(), "lazy");
+            RAWFRAME_EXPECT(!readScene(other).has_value());
+        }
+    }
 }
 
 RAWFRAME_TEST(AnInstanceKeepsEveryRuleOfItsForm) {

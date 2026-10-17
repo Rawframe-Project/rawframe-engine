@@ -73,6 +73,12 @@
 // instances, and a reference, here or in an override, may name any entity
 // this scene holds. `schema` covers the components the overrides name too.
 //
+// An instance may be a district of a large world (ADR-0048, D870), streamed
+// as a unit: `"streaming": "atomic"` after its overrides sends a client all
+// of its entities together, while the client's player is near any of them,
+// and `"streaming": "persistent"` sends them to every client always. The
+// member is left out for an instance whose entities are sent one by one.
+//
 // The document is engine-neutral: which components exist, their fields,
 // and whether a value fits are the game's to check when it spawns a scene.
 
@@ -183,6 +189,16 @@ struct IdentityMapping {
     friend bool operator==(const IdentityMapping&, const IdentityMapping&) = default;
 };
 
+/// How an instance's entities reach clients (D870).
+enum class Streaming : std::uint8_t {
+    /// Each by itself, as the game's interest says.
+    Each,
+    /// All together, while the player is near any of them.
+    Atomic,
+    /// All, to every client, always.
+    Persistent,
+};
+
 struct SceneInstance {
     /// The source scene's resource identity.
     base::Bits128 scene{};
@@ -190,6 +206,7 @@ struct SceneInstance {
     std::vector<IdentityMapping> entities;
     /// In the order of entity, then component.
     std::vector<Override> overrides;
+    Streaming streaming = Streaming::Each;
 
     friend bool operator==(const SceneInstance&, const SceneInstance&) = default;
 };
