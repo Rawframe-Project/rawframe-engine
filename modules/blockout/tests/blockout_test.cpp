@@ -123,3 +123,20 @@ RAWFRAME_TEST(ABlockoutPastItsTrianglesIsRefused) {
     RAWFRAME_EXPECT(kRead.has_value());
     RAWFRAME_EXPECT(kRead.has_value() && !meshOf(*kRead, BlockoutLimits{.triangles = 100}).has_value());
 }
+
+RAWFRAME_TEST(ASolidsFootprintIsWhereItsCornersReachFromAbove) {
+    const auto kRead = parseBlockout("blockout 1\nbox a at 1 0 2 size 4 1 2\nbox b at 1 0 2 size 4 1 2 turn 90\n"
+                                     "cylinder c at 0 0 0 radius 1 height 1 sides 4\n");
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->solids.size() == 3);
+    if (!kRead.has_value() || kRead->solids.size() != 3) {
+        return;
+    }
+    const Footprint kA = footprintOf(kRead->solids[0]);
+    RAWFRAME_EXPECT(near(kA.minX, -1) && near(kA.maxX, 3) && near(kA.minZ, 1) && near(kA.maxZ, 3));
+    // Turned a quarter, its long side runs along Z.
+    const Footprint kB = footprintOf(kRead->solids[1]);
+    RAWFRAME_EXPECT(near(kB.minX, 0) && near(kB.maxX, 2) && near(kB.minZ, 0) && near(kB.maxZ, 4));
+    // Four sides: corners on the axes, a meter out.
+    const Footprint kC = footprintOf(kRead->solids[2]);
+    RAWFRAME_EXPECT(near(kC.minX, -1) && near(kC.maxX, 1) && near(kC.minZ, -1) && near(kC.maxZ, 1));
+}

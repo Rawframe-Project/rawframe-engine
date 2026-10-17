@@ -88,4 +88,15 @@ struct BlockoutLimits {
 /// (`OverLimit` of the mesh family) more triangles than the limit.
 [[nodiscard]] result::Result<mesh::Mesh> meshOf(const Blockout& blockout, const BlockoutLimits& limits = {});
 
+/// What a solid covers seen from above (D851): the least and the most X
+/// and Z its corners reach, placed and turned, as a plan draws it.
+struct Footprint {
+    double minX = 0;
+    double minZ = 0;
+    double maxX = 0;
+    double maxZ = 0;
+};
+
+[[nodiscard]] Footprint footprintOf(const Solid& solid);
+
 } // namespace rawframe::blockout

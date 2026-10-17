@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <utility>
@@ -361,6 +362,24 @@ std::unexpected<result::Error> overLimit(std::string_view why) {
 }
 
 } // namespace
+
+Footprint footprintOf(const Solid& solid) {
+    // The corners its faces use, as they are made, so the plan and the
+    // mesh agree on where a solid is.
+    Footprint made{.minX = std::numeric_limits<double>::infinity(),
+                   .minZ = std::numeric_limits<double>::infinity(),
+                   .maxX = -std::numeric_limits<double>::infinity(),
+                   .maxZ = -std::numeric_limits<double>::infinity()};
+    for (const Polygon& kFace : facesOf(solid)) {
+        for (const Point& kCorner : kFace.corners) {
+            made = {.minX = std::min(made.minX, kCorner[0]),
+                    .minZ = std::min(made.minZ, kCorner[2]),
+                    .maxX = std::max(made.maxX, kCorner[0]),
+                    .maxZ = std::max(made.maxZ, kCorner[2])};
+        }
+    }
+    return made;
+}
 
 result::Result<mesh::Mesh> meshOf(const Blockout& blockout, const BlockoutLimits& limits) {
     // Each solid's faces; a cut takes itself out of every solid above it.
