@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rawframe/diagnostics/emitter.h"
+#include "rawframe/execution/time.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
 #include "rawframe/world/command_buffer.h"
@@ -93,6 +94,13 @@ struct TickReport {
     };
     /// Systems that returned an Error; their commands were discarded.
     std::vector<Failure> failures;
+    /// How long each system ran, in execution order, where the tick was
+    /// timed (D838): what a profiler shows, never what a system sees.
+    struct SystemTime {
+        std::string_view system;
+        std::int64_t nanoseconds = 0;
+    };
+    std::vector<SystemTime> times;
 };
 
 /// A compiled, immutable system order. Each phase runs its systems in a
@@ -111,9 +119,13 @@ public:
                                                           const schema::SchemaRegistry& registry,
                                                           CommandBufferSettings commandSettings = {});
 
-    /// Runs one tick: every phase in order, then advances `tick`.
-    [[nodiscard]] result::Result<TickReport>
-    runTick(World& world, TickIndex& tick, TickRate rate, diagnostics::Emitter emitter = {});
+    /// Runs one tick: every phase in order, then advances `tick`. With a
+    /// `clock`, each system's run is timed into the report's `times`.
+    [[nodiscard]] result::Result<TickReport> runTick(World& world,
+                                                     TickIndex& tick,
+                                                     TickRate rate,
+                                                     diagnostics::Emitter emitter = {},
+                                                     const execution::MonotonicSource* clock = nullptr);
 
     /// Identities in execution order, phase by phase.
     [[nodiscard]] std::vector<std::string> order() const;

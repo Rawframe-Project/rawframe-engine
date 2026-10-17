@@ -191,10 +191,16 @@ result::Status Schedule::applyCommands(World& world, std::size_t firstPhase, std
     return {};
 }
 
-result::Result<TickReport>
-Schedule::runTick(World& world, TickIndex& tick, TickRate rate, diagnostics::Emitter emitter) {
+result::Result<TickReport> Schedule::runTick(World& world,
+                                             TickIndex& tick,
+                                             TickRate rate,
+                                             diagnostics::Emitter emitter,
+                                             const execution::MonotonicSource* clock) {
     TickReport report;
     report.tick = tick;
+    if (clock != nullptr) {
+        report.times.reserve(entries_.size());
+    }
     constexpr auto kCommit = static_cast<std::size_t>(Phase::Commit);
     for (std::size_t phase = 0; phase < kPhaseCount; ++phase) {
         if (phase == kCommit) {
@@ -206,7 +212,12 @@ Schedule::runTick(World& world, TickIndex& tick, TickRate rate, diagnostics::Emi
         for (std::size_t index = phaseStart_[phase]; index < phaseStart_[phase + 1]; ++index) {
             Entry& entry = entries_[index];
             SystemContext context{world, *entry.commands, tick, rate, emitter, entry.identity, entry.randomStreams};
-            if (auto ran = entry.system->run(context); !ran.has_value()) {
+            const execution::MonotonicInstant kStart = clock != nullptr ? clock->now() : execution::MonotonicInstant{};
+            auto ran = entry.system->run(context);
+            if (clock != nullptr) {
+                report.times.push_back({.system = entry.identity, .nanoseconds = (clock->now() - kStart).nanoseconds});
+            }
+            if (!ran.has_value()) {
                 entry.commands->clear();
                 report.failures.push_back(TickReport::Failure{entry.identity, std::move(ran).error()});
             }

@@ -1,5 +1,5 @@
 // The schedule and simulation time: order, refusals, the commit barrier,
-// failure isolation, determinism, and tick pacing.
+// failure isolation, determinism, tick pacing, and each system timed.
 
 #include "components.h"
 #include "rawframe/test/test.h"
@@ -34,6 +34,21 @@ private:
     std::vector<std::string>* log_;
 };
 
+/// Takes `takes` of a manual clock's time each time it runs.
+class Slow final : public System {
+public:
+    Slow(rawframe::execution::ManualClock& clock, MonotonicDuration takes) : clock_(&clock), takes_(takes) {
+    }
+    Status run(SystemContext&) noexcept override {
+        clock_->advance(takes_);
+        return {};
+    }
+
+private:
+    rawframe::execution::ManualClock* clock_;
+    MonotonicDuration takes_;
+};
+
 bool refusedWith(const auto& outcome, WorldError error) {
     return !outcome.has_value() && outcome.error().code() == code(error);
 }
@@ -64,6 +79,31 @@ RAWFRAME_TEST(SystemsRunByPhaseThenEdgesThenIdentity) {
     RAWFRAME_EXPECT(schedule->runTick(world, tick, TickRate{}).has_value());
     RAWFRAME_EXPECT(log == kExpected);
     RAWFRAME_EXPECT(tick.value == 1);
+}
+
+RAWFRAME_TEST(ATimedTickSaysWhatEachSystemTook) {
+    rawframe::execution::ManualClock clock;
+    Slow quick{clock, MonotonicDuration::fromMilliseconds(1)}, slow{clock, MonotonicDuration::fromMilliseconds(5)};
+    const SystemDeclaration kDeclarations[] = {
+        {.identity = "slow", .phase = Phase::Simulation, .system = &slow},
+        {.identity = "quick", .phase = Phase::BeginTick, .system = &quick},
+    };
+    const auto kRegistry = makeRegistry();
+    auto schedule = Schedule::compile(kDeclarations, *kRegistry);
+    RAWFRAME_EXPECT(schedule.has_value());
+    if (!schedule.has_value()) {
+        return;
+    }
+    World world{kRegistry};
+    TickIndex tick;
+    // Untimed, a report says nothing of time; timed, each system in the
+    // order it ran.
+    const auto kUntimed = schedule->runTick(world, tick, TickRate{});
+    RAWFRAME_EXPECT(kUntimed.has_value() && kUntimed->times.empty());
+    const auto kTimed = schedule->runTick(world, tick, TickRate{}, {}, &clock);
+    RAWFRAME_EXPECT(kTimed.has_value() && kTimed->times.size() == 2 && kTimed->times[0].system == "quick" &&
+                    kTimed->times[0].nanoseconds == 1'000'000 && kTimed->times[1].system == "slow" &&
+                    kTimed->times[1].nanoseconds == 5'000'000);
 }
 
 RAWFRAME_TEST(BadSchedulesAreRefused) {
