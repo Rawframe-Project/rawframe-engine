@@ -97,8 +97,9 @@ result::Result<typename Documents<Authored>::Open*> Documents<Authored>::open(co
 template <class Authored>
 result::Result<std::unique_ptr<Authored>> Documents<Authored>::made(rawframe::base::Bits128 identity,
                                                                     std::string_view text) const {
-    if constexpr (std::is_same_v<Authored, authoring::AuthoredData> ||
-                  std::is_same_v<Authored, authoring::AuthoredLines>) {
+    if constexpr (std::is_same_v<Authored, authoring::AuthoredLines>) {
+        return Authored::open(identity, text, reads_, {}, rewrites_);
+    } else if constexpr (std::is_same_v<Authored, authoring::AuthoredData>) {
         return Authored::open(identity, text, reads_);
     } else {
         return Authored::open(identity, text);

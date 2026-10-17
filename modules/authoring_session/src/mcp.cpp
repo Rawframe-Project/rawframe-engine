@@ -34,7 +34,8 @@ constexpr std::int64_t kInvalidParams = -32602;
 constexpr std::string_view kInstructions =
     "Rawframe's authoring session over one game. A game is made without Studio: its documents are "
     "text files under the game's directory (scenes .scene, UI .ui, style sheets .styles, materials "
-    ".rfmaterial, blockouts .blockout), which you may read directly. Change them through these tools so each change is "
+    ".rfmaterial, blockouts .blockout, terrains .terrain), which you may read directly. Change them through these "
+    "tools so each change is "
     "validated, written, and kept in the document's undo history. Call game_describe first: it lists "
     "the game's components and their fields. A new entity needs a new random UUID (version 4). Field "
     "values are typed objects with one member: {\"real\": 1.5}, {\"unsigned\": 2}, {\"signed\": -3}, "
@@ -50,7 +51,7 @@ struct InputType {
     std::string_view description;
 };
 
-constexpr std::array<InputType, 15> kInputTypes = {
+constexpr std::array<InputType, 16> kInputTypes = {
     InputType{"entity", "string", false, "An entity's SourceEntityId (UUID); a new random UUID v4 for a new one."},
     InputType{"optional_entity", "string", true, "An entity's SourceEntityId (UUID), or null for none."},
     InputType{"component", "string", false, "A component's type id (UUID) or name, as game_describe lists."},
@@ -69,7 +70,8 @@ constexpr std::array<InputType, 15> kInputTypes = {
     InputType{"style", "string", false, "A style class's name."},
     InputType{"graph_node", "string", false, "A material graph node's id, 16 hexadecimal digits."},
     InputType{"identity", "string", false, "An identity (UUID) for the new instance; a new random UUID v4."},
-    InputType{"resource", "string", false, "A resource id, 32 hexadecimal digits, as game_assets gives."}};
+    InputType{"resource", "string", false, "A resource id, 32 hexadecimal digits, as game_assets gives."},
+    InputType{"number", "number", false, "A number."}};
 
 const InputType* inputTypeOf(std::string_view name) {
     // An iterator, not a pointer, on every standard library (MSVC's).

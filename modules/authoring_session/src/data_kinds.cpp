@@ -9,8 +9,10 @@
 #include "rawframe/document/json.h"
 #include "rawframe/input/actions.h"
 #include "rawframe/localization/table.h"
+#include "rawframe/terrain/terrain.h"
 #include "rawframe/world_kest/game.h"
 
+#include <cmath>
 #include <string>
 
 namespace rawframe::authoring_session {
@@ -98,6 +100,63 @@ result::Status readsBlockout(std::string_view text) {
         RAWFRAME_TRY(blockout::meshOf(kRead));
         return {};
     });
+}
+
+result::Status readsTerrain(std::string_view text) {
+    return readsAs("terrain", [text]() -> result::Status {
+        RAWFRAME_TRY_ASSIGN(const terrain::Terrain kRead, terrain::parseTerrain(text));
+        RAWFRAME_TRY(terrain::meshOf(kRead));
+        return {};
+    });
+}
+
+result::Result<std::vector<std::string>> rewritesTerrain(std::span<const std::string> lines,
+                                                         const authoring::Operation& operation) {
+    const auto* brush = std::get_if<authoring::BrushTerrain>(&operation);
+    const auto kRefused = [](std::string_view why) {
+        return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                           authoring::kAuthoringDomain,
+                                                           authoring::code(authoring::AuthoringError::ValidationFailed),
+                                                           why)};
+    };
+    if (brush == nullptr) {
+        return kRefused("a terrain's operations are lines.set, lines.insert, and terrain.brush");
+    }
+    std::string text;
+    for (const std::string& kLine : lines) {
+        text += kLine + "\n";
+    }
+    auto read = terrain::parseTerrain(text);
+    if (!read.has_value()) {
+        return kRefused("the terrain does not read: " + std::string{read.error().description()});
+    }
+    if (!(brush->radius > 0) || !std::isfinite(brush->x) || !std::isfinite(brush->z) || !std::isfinite(brush->amount) ||
+        brush->radius > 1e4) {
+        return kRefused("a brush reaches a radius above nought, at a place of finite meters");
+    }
+    const terrain::Brush kBrush{.x = brush->x, .z = brush->z, .radius = brush->radius};
+    if (brush->tool == "raise" || brush->tool == "lower") {
+        static_cast<void>(terrain::raise(*read, kBrush, brush->tool == "raise" ? brush->amount : -brush->amount));
+    } else if (brush->tool == "smooth") {
+        static_cast<void>(terrain::smooth(*read, kBrush, brush->amount));
+    } else if (brush->tool == "paint") {
+        if (brush->amount < 0 || brush->amount != std::floor(brush->amount) ||
+            brush->amount >= static_cast<double>(read->layers.size())) {
+            return kRefused("a paint's amount is the place of a layer the terrain names");
+        }
+        static_cast<void>(terrain::paint(*read, kBrush, static_cast<std::uint8_t>(brush->amount)));
+    } else {
+        return kRefused("a brush's tool is raise, lower, smooth, or paint");
+    }
+    const std::string kWritten = terrain::writeTerrain(*read);
+    std::vector<std::string> made;
+    std::size_t at = 0;
+    while (at < kWritten.size()) {
+        const std::size_t kEnd = kWritten.find('\n', at);
+        made.push_back(kWritten.substr(at, kEnd - at));
+        at = kEnd + 1;
+    }
+    return made;
 }
 
 result::Status readsGameDescription(std::string_view text) {

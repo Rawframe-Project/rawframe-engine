@@ -10,6 +10,7 @@
 // its query, undo and redo step its history, and history lists it (D638).
 // A played game follows the files (D634).
 
+#include "rawframe/authoring/authored_lines.h"
 #include "rawframe/authoring/json_document.h"
 #include "rawframe/authoring/session.h"
 #include "rawframe/base/bits128.h"
@@ -31,12 +32,14 @@ public:
     Documents(std::filesystem::path root, std::string_view extension, std::string_view called)
         : root_(std::move(root)), extension_(extension), called_(called) {
     }
-    /// Data documents (D811), read by `reads`.
+    /// Data documents (D811), read by `reads`; line documents of a kind
+    /// whose own operations `rewrites` makes lines (D855).
     Documents(std::filesystem::path root,
               std::string_view extension,
               std::string_view called,
-              authoring::DocumentReader reads)
-        : root_(std::move(root)), extension_(extension), called_(called), reads_(reads) {
+              authoring::DocumentReader reads,
+              authoring::LineRewriter rewrites = nullptr)
+        : root_(std::move(root)), extension_(extension), called_(called), reads_(reads), rewrites_(rewrites) {
     }
     // Moved, never copied: an open document is its own. Said outright, so
     // a vector of these grows by moving them where a library would copy
@@ -78,6 +81,7 @@ private:
     std::string extension_;
     std::string called_;
     authoring::DocumentReader reads_ = nullptr;
+    authoring::LineRewriter rewrites_ = nullptr;
     std::map<std::string, Open> opened_;
 };
 

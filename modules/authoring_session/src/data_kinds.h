@@ -5,11 +5,14 @@
 // would read it.
 
 #include "rawframe/authoring/json_document.h"
+#include "rawframe/authoring/operations.h"
 #include "rawframe/result/result.h"
 
 #include <array>
 #include <span>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace rawframe::authoring_session {
 
@@ -32,5 +35,12 @@ struct DataKind {
 /// the format's limits, as the cook makes it (D849): the reader of a
 /// blockout's line document.
 [[nodiscard]] result::Status readsBlockout(std::string_view text);
+
+/// Whether `text` reads as a terrain whose mesh is made (D855), and the
+/// lines a brush's stroke leaves of one: the terrain module's brush, its
+/// document written again.
+[[nodiscard]] result::Status readsTerrain(std::string_view text);
+[[nodiscard]] result::Result<std::vector<std::string>> rewritesTerrain(std::span<const std::string> lines,
+                                                                       const authoring::Operation& operation);
 
 } // namespace rawframe::authoring_session

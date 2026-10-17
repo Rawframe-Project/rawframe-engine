@@ -72,7 +72,8 @@ public:
           cooking_(std::move(cook)), sheets_(root_, ".styles", "style sheet"), uis_(root_, ".ui", "UI document"),
           materials_(root_, ".rfmaterial", "material instance"),
           games_(root_, ".game", "game description", &readsGameDescription),
-          blockouts_(root_, ".blockout", "blockout", &readsBlockout) {
+          blockouts_(root_, ".blockout", "blockout", &readsBlockout),
+          terrains_(root_, ".terrain", "terrain", &readsTerrain, &rewritesTerrain) {
         for (const DataKind& kKind : dataKinds()) {
             data_.emplace_back(root_, kKind.extension, kKind.called, kKind.reads);
         }
@@ -876,12 +877,19 @@ private:
     std::vector<Documents<authoring::AuthoredData>> data_;
     /// The game's descriptions, its settings, as line documents (D817).
     Documents<authoring::AuthoredLines> games_;
-    /// Its blockouts, line documents too (D849).
+    /// Its blockouts (D849) and terrains (D855), line documents too, a
+    /// terrain's brush strokes made lines by its kind.
     Documents<authoring::AuthoredLines> blockouts_;
+    Documents<authoring::AuthoredLines> terrains_;
 
     /// The line documents `name` is one of, if any.
     Documents<authoring::AuthoredLines>* linesOf(const std::string& name) {
-        return games_.names(name) ? &games_ : blockouts_.names(name) ? &blockouts_ : nullptr;
+        for (auto* each : {&games_, &blockouts_, &terrains_}) {
+            if (each->names(name)) {
+                return each;
+            }
+        }
+        return nullptr;
     }
 
     /// The data documents `name` is one of, if any.
