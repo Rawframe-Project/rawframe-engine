@@ -449,6 +449,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("link", kLinks[network_.link].name),
                   diagnostics::field("networkReads", network_.reads),
                   diagnostics::field("mostConnections", network_.mostConnections),
+                  diagnostics::field("connectionLines", network_.mostConnectionLines),
                   diagnostics::field("deviceWidth", device_.has_value() ? std::uint64_t{(*device_)[0]} : 0),
                   diagnostics::field("live", live_.on),
                   diagnostics::field("liveListed", live_.listed),

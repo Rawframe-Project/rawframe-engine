@@ -1038,7 +1038,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # and shown while the panel is, once the server counts the client
         # (a sanitized client over the lossy link took longer than a fixed
         # wait, and the client's own log said it was in before the server
-        # counted it, D823).
+        # counted it, D823), and a line for each connection (D840).
         add_test(NAME studio_shows_network
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
@@ -1053,7 +1053,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"studio_played\"[^\n]*\"link\":\"Lossy link\",\"networkReads\":([2-9]|[1-9][0-9]+),\"mostConnections\":[1-9],.*\"latencyMs\":150,\"jitterMs\":30,\"lossPpm\":50000,")
+                             "\"code\":\"studio_played\"[^\n]*\"link\":\"Lossy link\",\"networkReads\":([2-9]|[1-9][0-9]+),\"mostConnections\":[1-9],\"connectionLines\":[1-9],.*\"latencyMs\":150,\"jitterMs\":30,\"lossPpm\":50000,")
         # The Profiler (D838): Plaza played from Studio and its Profiler
         # shown, which reads the server's last ticks once a second and says
         # how long they and each of the World's systems took.

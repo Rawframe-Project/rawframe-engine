@@ -2,7 +2,7 @@
 
 // Studio's Network panel (D807): the link the next play's clients run
 // over, and the played game's server's traffic, read once a second and
-// shown as rates.
+// shown as rates, the whole and each connection's (D840).
 
 #include "rawframe/ui/tree.h"
 
@@ -35,6 +35,8 @@ struct TrafficRead {
     std::int64_t stateBytes = 0;
     std::int64_t stateDatagrams = 0;
     std::int64_t inputWindows = 0;
+    /// Each connection's state bytes, by its number.
+    std::vector<std::pair<std::int64_t, std::int64_t>> connectionBytes;
 };
 
 struct NetworkShown {
@@ -51,6 +53,8 @@ struct NetworkShown {
     /// saw (the last may come as the game stops).
     std::int64_t connections = 0;
     std::int64_t mostConnections = 0;
+    /// The most connections a read showed a line of.
+    std::size_t mostConnectionLines = 0;
 };
 
 } // namespace rawframe::studio

@@ -6,6 +6,8 @@ namespace rawframe::studio {
 
 namespace {
 
+constexpr std::size_t kConnectionsShown = 16;
+
 std::string linkWords(const LinkChoice& link) {
     if (link.latencyMs == 0 && link.jitterMs == 0 && link.lossPpm == 0) {
         return "link: as this machine's, no conditions";
@@ -77,10 +79,10 @@ void ShellParticipant::readNetwork(double seconds) {
         const Value* kRead = kAnswer->find(name);
         return kRead != nullptr ? kRead->integer().value_or(0) : 0;
     };
-    const TrafficRead kNow{.at = seconds,
-                           .stateBytes = kCount("stateBytes"),
-                           .stateDatagrams = kCount("stateDatagrams"),
-                           .inputWindows = kCount("inputWindows")};
+    TrafficRead now{.at = seconds,
+                    .stateBytes = kCount("stateBytes"),
+                    .stateDatagrams = kCount("stateDatagrams"),
+                    .inputWindows = kCount("inputWindows")};
     const std::int64_t kWere = network_.connections;
     network_.connections = kCount("connections");
     network_.mostConnections = std::max(network_.mostConnections, network_.connections);
@@ -96,21 +98,73 @@ void ShellParticipant::readNetwork(double seconds) {
     std::vector<std::string> lines;
     lines.push_back("server at tick " + std::to_string(kCount("tick")) + ", " + std::to_string(network_.connections) +
                     (network_.connections == 1 ? " connection" : " connections"));
-    if (network_.last.has_value() && kNow.at > network_.last->at) {
-        const double kSpan = kNow.at - network_.last->at;
+    if (network_.last.has_value() && now.at > network_.last->at) {
+        const double kSpan = now.at - network_.last->at;
         char rates[160];
         std::snprintf(rates,
                       sizeof rates,
                       "state out: %.1f KiB/s in %.0f datagrams/s; input in: %.0f windows/s",
-                      static_cast<double>(kNow.stateBytes - network_.last->stateBytes) / 1024.0 / kSpan,
-                      static_cast<double>(kNow.stateDatagrams - network_.last->stateDatagrams) / kSpan,
-                      static_cast<double>(kNow.inputWindows - network_.last->inputWindows) / kSpan);
+                      static_cast<double>(now.stateBytes - network_.last->stateBytes) / 1024.0 / kSpan,
+                      static_cast<double>(now.stateDatagrams - network_.last->stateDatagrams) / kSpan,
+                      static_cast<double>(now.inputWindows - network_.last->inputWindows) / kSpan);
         lines.emplace_back(rates);
     }
     lines.push_back("inputs stale " + std::to_string(kCount("inputsStale")) + ", refused " +
                     std::to_string(kCount("inputsRefused")) + "; messages sent " +
                     std::to_string(kCount("messagesSent")));
-    network_.last = kNow;
+    lines.push_back("records sent " + std::to_string(kCount("recordsSent")) + ", held back as the client had them " +
+                    std::to_string(kCount("recordsHeld")) + ", deferred by the budget " +
+                    std::to_string(kCount("recordsDeferred")) + "; entities out of interest " +
+                    std::to_string(kCount("interestLeft")));
+    // Each connection alone (D840): what its client is told of, its state
+    // rate since the last read, and what waits on it.
+    const Value* kEach = kAnswer->find("perConnection");
+    std::size_t connectionLines = 0;
+    for (const Value& kConnection :
+         kEach != nullptr && kEach->kind() == Value::Kind::Array ? kEach->items() : std::span<const Value>{}) {
+        if (connectionLines == kConnectionsShown) {
+            lines.push_back("and " + std::to_string(kEach->items().size() - connectionLines) + " more connections");
+            break;
+        }
+        const auto kOf = [&](std::string_view name) {
+            const Value* kRead = kConnection.find(name);
+            return kRead != nullptr ? kRead->integer().value_or(0) : 0;
+        };
+        const std::int64_t kNumber = kOf("connection");
+        const Value* kPlayer = kConnection.find("player");
+        std::string line = "connection " + std::to_string(kNumber) + " (player " +
+                           (kPlayer != nullptr && kPlayer->text() != nullptr ? *kPlayer->text() : "?") +
+                           "): " + std::to_string(kOf("mapped")) + " entities";
+        const std::pair<std::int64_t, std::int64_t>* kWas = nullptr;
+        using Bytes = std::span<const std::pair<std::int64_t, std::int64_t>>;
+        for (const auto& kRead : network_.last.has_value() ? Bytes{network_.last->connectionBytes} : Bytes{}) {
+            kWas = kRead.first == kNumber ? &kRead : kWas;
+        }
+        if (kWas != nullptr && now.at > network_.last->at) {
+            char rate[48];
+            std::snprintf(rate,
+                          sizeof rate,
+                          ", %.1f KiB/s",
+                          static_cast<double>(kOf("stateBytes") - kWas->second) / 1024.0 /
+                              (now.at - network_.last->at));
+            line += rate;
+        }
+        line += ", " + std::to_string(kOf("recordsDeferred")) + " deferred, " + std::to_string(kOf("unacknowledged")) +
+                " unacknowledged";
+        if (const Value* kLag = kConnection.find("lagTicks"); kLag != nullptr && kLag->real().has_value()) {
+            char lag[40];
+            std::snprintf(lag, sizeof lag, ", lags %.1f ticks", *kLag->real());
+            line += lag;
+        }
+        if (kOf("divergences") > 0) {
+            line += ", " + std::to_string(kOf("divergences")) + " divergences";
+        }
+        lines.push_back(std::move(line));
+        now.connectionBytes.emplace_back(kNumber, kOf("stateBytes"));
+        ++connectionLines;
+    }
+    network_.mostConnectionLines = std::max(network_.mostConnectionLines, connectionLines);
+    network_.last = std::move(now);
     ++network_.reads;
     showNetwork(lines);
     say("network: " + lines.front());
