@@ -64,18 +64,21 @@ template <typename T> [[nodiscard]] bool same(const T& left, const T& right) noe
 }
 
 /// Whether a body can be made of these: sizes positive, the rest finite and
-/// in range.
+/// in range. Tiles have no sizes of their own, no mass, and no inside: a
+/// tiles body is static and not a sensor (D859).
 [[nodiscard]] bool makeable(const Body2D& body, const Pose2D& pose, const Velocity2D& velocity) noexcept {
+    const bool kTiles = body.shape == static_cast<std::uint8_t>(Shape::Tiles);
     const bool kShape = body.shape == static_cast<std::uint8_t>(Shape::Circle) ||
                         body.shape == static_cast<std::uint8_t>(Shape::Box) ||
                         body.shape == static_cast<std::uint8_t>(Shape::Capsule);
     const bool kHeight = body.shape == static_cast<std::uint8_t>(Shape::Circle) ||
                          (body.shape == static_cast<std::uint8_t>(Shape::Box) && body.height > 0) ||
                          (body.shape == static_cast<std::uint8_t>(Shape::Capsule) && body.height >= 0);
-    return body.motion <= static_cast<std::uint8_t>(physics::Motion::Dynamic) && kShape && body.width > 0 && kHeight &&
-           finite(body.width) && finite(body.height) && body.density >= 0 && finite(body.density) &&
-           body.friction >= 0 && finite(body.friction) && body.restitution >= 0 && body.restitution <= 1 &&
-           body.linearDamping >= 0 && finite(body.linearDamping) && body.angularDamping >= 0 &&
+    const bool kSized = kTiles ? body.motion == static_cast<std::uint8_t>(physics::Motion::Static) && !body.sensor
+                               : kShape && body.width > 0 && kHeight && finite(body.width) && finite(body.height);
+    return body.motion <= static_cast<std::uint8_t>(physics::Motion::Dynamic) && kSized && body.density >= 0 &&
+           finite(body.density) && body.friction >= 0 && finite(body.friction) && body.restitution >= 0 &&
+           body.restitution <= 1 && body.linearDamping >= 0 && finite(body.linearDamping) && body.angularDamping >= 0 &&
            finite(body.angularDamping) && std::isfinite(pose.x) && std::isfinite(pose.y) && finite(pose.c) &&
            finite(pose.s) && finite(velocity.x) && finite(velocity.y) && finite(velocity.angular);
 }
@@ -91,6 +94,10 @@ struct Mapped {
     m2ShapeId shape{};
     /// The sensor twin of a body whose class triggers with another.
     m2ShapeId trigger{};
+    /// A tiles body's shapes past its first, and the tilemap it was made
+    /// of (D859).
+    std::vector<m2ShapeId> pieces;
+    std::uint64_t tilemap = 0;
     /// Its pose after each of the last steps, by tick modulo the history's
     /// length, and the first tick of its unbroken trail.
     std::vector<Pose2D> history;
@@ -109,7 +116,13 @@ struct Row {
     Pose2D* pose = nullptr;
     Velocity2D* velocity = nullptr;
     Character2D* character = nullptr;
+    const Tiles2D* tiles = nullptr;
 };
+
+/// The tilemap a row's Tiles2D names, nought for none.
+[[nodiscard]] std::uint64_t tilemapOf(const Row& row) noexcept {
+    return row.tiles != nullptr ? row.tiles->tilemap : 0;
+}
 
 [[nodiscard]] bool sameBody(m2BodyId left, m2BodyId right) noexcept {
     return left.index1 == right.index1 && left.generation == right.generation && left.world == right.world;
@@ -139,6 +152,9 @@ struct Physics2D::State {
     std::optional<schema::ComponentRuntimeId> target;
     std::optional<schema::ComponentRuntimeId> contact;
     std::optional<schema::ComponentRuntimeId> character;
+    std::optional<schema::ComponentRuntimeId> tilesShape;
+    /// Each settings tilemap's solid runs, by its identity.
+    std::map<std::uint64_t, std::vector<tilemap::SolidRun>> tilemaps;
     std::optional<world::Query<world::Write<Joint2D>>> jointQuery;
     std::optional<Attachments> attachments;
     std::map<world::EntityHandle, MappedJoint> joints;
@@ -172,10 +188,18 @@ struct Physics2D::State {
         into.body = {};
         into.shape = {};
         into.trigger = {};
+        into.pieces.clear();
+        into.tilemap = tilemapOf(row);
         into.since.reset();
         into.character = row.character != nullptr;
         const auto kClass = filters.classIndex(body.collisionClass);
-        into.refused = !makeable(body, *row.pose, *row.velocity) || !kClass.has_value();
+        const std::vector<tilemap::SolidRun>* kRuns = nullptr;
+        if (body.shape == static_cast<std::uint8_t>(Shape::Tiles)) {
+            const auto kFound = tilemaps.find(into.tilemap);
+            kRuns = kFound != tilemaps.end() && !kFound->second.empty() ? &kFound->second : nullptr;
+        }
+        into.refused = !makeable(body, *row.pose, *row.velocity) || !kClass.has_value() ||
+                       (body.shape == static_cast<std::uint8_t>(Shape::Tiles) && kRuns == nullptr);
         if (into.refused) {
             ++statistics.bodiesRefused;
             return false;
@@ -221,6 +245,9 @@ struct Physics2D::State {
             const m2Capsule kCapsule{.point1 = {0, -body.height}, .point2 = {0, body.height}, .radius = body.width};
             return m2CreateCapsuleShape(kBody, &definitionOf, &kCapsule);
         };
+        if (kRuns != nullptr) {
+            return makeTiles(row.entity, *kRuns, kBody, shape, into);
+        }
         const m2ShapeId kMade = kShape(shape);
         m2ShapeId twin{};
         if (kMade.index1 != 0 && !body.sensor && filter.triggerMask != 0) {
@@ -243,6 +270,42 @@ struct Physics2D::State {
         owners[kMade.index1] = {kMade.generation, row.entity};
         if (twin.index1 != 0) {
             owners[twin.index1] = {twin.generation, row.entity};
+        }
+        ++statistics.bodiesMade;
+        return true;
+    }
+
+    /// A tiles body's shapes, a box for each run, from the map's top-left
+    /// at the body's origin. Tiles never trigger: they have no twin.
+    [[nodiscard]] bool makeTiles(world::EntityHandle entity,
+                                 const std::vector<tilemap::SolidRun>& runs,
+                                 m2BodyId body,
+                                 const m2ShapeDef& shape,
+                                 Mapped& into) {
+        std::vector<m2ShapeId> made;
+        made.reserve(runs.size());
+        for (const tilemap::SolidRun& kRun : runs) {
+            const auto kLeft = static_cast<float>(kRun.left);
+            const auto kRight = static_cast<float>(kRun.left + kRun.width);
+            const auto kTop = static_cast<float>(kRun.top);
+            const auto kBottom = static_cast<float>(kRun.top - kRun.height);
+            const std::array<m2Vec2, 4> kCorners = {
+                m2Vec2{kLeft, kBottom}, m2Vec2{kRight, kBottom}, m2Vec2{kRight, kTop}, m2Vec2{kLeft, kTop}};
+            const m2Polygon kBox = m2MakePolygon(kCorners.data(), static_cast<std::int32_t>(kCorners.size()), 0);
+            const m2ShapeId kMade = kBox.count == 0 ? m2ShapeId{} : m2CreatePolygonShape(body, &shape, &kBox);
+            if (kMade.index1 == 0) {
+                m2DestroyBody(body);
+                into.refused = true;
+                ++statistics.bodiesRefused;
+                return false;
+            }
+            made.push_back(kMade);
+        }
+        into.body = body;
+        into.shape = made.front();
+        into.pieces.assign(made.begin() + 1, made.end());
+        for (const m2ShapeId kMade : made) {
+            owners[kMade.index1] = {kMade.generation, entity};
         }
         ++statistics.bodiesMade;
         return true;
@@ -457,6 +520,9 @@ struct Physics2D::State {
         if (!entry.refused) {
             owners.erase(entry.shape.index1);
             owners.erase(entry.trigger.index1);
+            for (const m2ShapeId kPiece : entry.pieces) {
+                owners.erase(kPiece.index1);
+            }
             m2DestroyBody(entry.body);
             ++statistics.bodiesRemoved;
         }
@@ -547,6 +613,7 @@ struct Physics2D::State {
                         });
         for (Row& row : rows) {
             row.character = static_cast<Character2D*>(world.getErased(row.entity, *character));
+            row.tiles = static_cast<const Tiles2D*>(world.getErased(row.entity, *tilesShape));
         }
         std::sort(rows.begin(), rows.end(), [](const Row& left, const Row& right) {
             return left.entity < right.entity;
@@ -571,7 +638,8 @@ struct Physics2D::State {
         for (const Row& row : rows) {
             const auto [kEntry, kNew] = mapped.try_emplace(row.entity);
             Mapped& entry = kEntry->second;
-            if (kNew || !same(entry.made, *row.body) || entry.character != (row.character != nullptr)) {
+            if (kNew || !same(entry.made, *row.body) || entry.character != (row.character != nullptr) ||
+                entry.tilemap != tilemapOf(row)) {
                 if (!kNew) {
                     remove(entry);
                 }
@@ -722,6 +790,16 @@ result::Result<std::unique_ptr<Physics2D>> Physics2D::create(const Physics2DSett
     auto state = std::make_unique<State>();
     state->settings = settings;
     RAWFRAME_TRY_ASSIGN(state->filters, physics::CollisionFilters::make(settings.collision));
+    for (const BodyTilemap& each : settings.tilemaps) {
+        // Nought is a Tiles2D's name for none.
+        if (each.id == 0 || each.map == nullptr || state->tilemaps.contains(each.id)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          Physics2DError::InvalidSettings,
+                          "physics settings: every tilemap present, each identity once and not nought");
+        }
+        state->tilemaps.emplace(each.id, tilemap::solidRuns(*each.map));
+    }
+    state->settings.tilemaps.clear();
     m2WorldDef definition = m2DefaultWorldDef();
     definition.gravity = m2Vec2{settings.gravityX, settings.gravityY};
     definition.bodyCapacity = static_cast<std::int32_t>(settings.bodyCapacity);
@@ -758,11 +836,13 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
     RAWFRAME_TRY_ASSIGN(state.target, registry.find(Target2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.contact, registry.find(Contact2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.character, registry.find(Character2D::kComponentTypeId));
+    RAWFRAME_TRY_ASSIGN(state.tilesShape, registry.find(Tiles2D::kComponentTypeId));
     RAWFRAME_TRY_ASSIGN(state.jointQuery, (world::Query<world::Write<Joint2D>>::resolve(registry)));
     RAWFRAME_TRY_ASSIGN(state.attachments, Attachments::resolve(registry));
     state.reads = state.bodies->reads();
     const std::vector<schema::ComponentRuntimeId> kAttachReads = state.attachments->reads();
     state.reads.insert(state.reads.end(), kAttachReads.begin(), kAttachReads.end());
+    state.reads.push_back(*state.tilesShape);
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
     state.writes.push_back(*state.target);
@@ -917,21 +997,28 @@ RayHit2D Physics2D::castRayAt(double originX,
         // The ray in the body's frame then is the ray in its frame now.
         const m2Pos2 kOrigin = toWorld(kNow, toLocal(then, m2Pos2{originX, originY}));
         const m2Vec2 kDirection = turnToWorld(kNow, turnToLocal(then, kToward));
-        const m2RayCastResult kResult = m2Shape_CastRay(entry.shape, kOrigin, kDirection);
-        if (!kResult.hit || (closest.hit && kResult.fraction >= closest.fraction)) {
+        // A tiles body's nearest piece.
+        m2RayCastResult nearest = m2Shape_CastRay(entry.shape, kOrigin, kDirection);
+        for (const m2ShapeId kPiece : entry.pieces) {
+            const m2RayCastResult kPieceResult = m2Shape_CastRay(kPiece, kOrigin, kDirection);
+            if (kPieceResult.hit && (!nearest.hit || kPieceResult.fraction < nearest.fraction)) {
+                nearest = kPieceResult;
+            }
+        }
+        if (!nearest.hit || (closest.hit && nearest.fraction >= closest.fraction)) {
             continue;
         }
-        const m2Pos2 kPoint = toWorld(then, toLocal(kNow, kResult.point));
-        const m2Vec2 kNormal = turnToWorld(then, turnToLocal(kNow, kResult.normal));
+        const m2Pos2 kPoint = toWorld(then, toLocal(kNow, nearest.point));
+        const m2Vec2 kNormal = turnToWorld(then, turnToLocal(kNow, nearest.normal));
         closest = RayHit2D{.hit = true,
-                           .inside = kResult.normal.x == 0 && kResult.normal.y == 0,
+                           .inside = nearest.normal.x == 0 && nearest.normal.y == 0,
                            .discontinuous = kRewound && !kTrail,
                            .entity = entity,
                            .x = kPoint.x,
                            .y = kPoint.y,
                            .normalX = kNormal.x,
                            .normalY = kNormal.y,
-                           .fraction = kResult.fraction};
+                           .fraction = nearest.fraction};
     }
     return closest;
 }

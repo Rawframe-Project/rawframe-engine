@@ -37,6 +37,10 @@ enum class Shape : std::uint8_t {
     /// Upright: `width` is the radius and `height` half the distance
     /// between the two centers.
     Capsule = 2,
+    /// Static only: the solid tiles of the tilemap its entity's Tiles2D
+    /// names, one box for each row's run of them, the map's top-left on
+    /// the body's pose (D859). `width` and `height` are unused.
+    Tiles = 3,
 };
 
 /// How the body is made. Changing any of it makes the body again, from the
@@ -258,8 +262,19 @@ struct Attach2D {
     float s = 0;
 };
 
-/// Body2D, Pose2D, Velocity2D, Impulse2D, Contact2D, Character2D, Joint2D,
-/// and Attach2D, in that order.
+/// Which of the physics settings' tilemaps a body of Shape::Tiles is made
+/// of, by the identity the game's `tilemap` line gives it (D859). Changing
+/// it makes the body again.
+struct Tiles2D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("a16b2ceb-e06a-4958-9bf1-c07952aec05e");
+    static constexpr std::string_view kComponentName = "rawframe.physics2d.tiles";
+
+    std::uint64_t tilemap = 0;
+};
+
+/// Body2D, Pose2D, Velocity2D, Impulse2D, Target2D, Contact2D, Character2D,
+/// Joint2D, Attach2D, and Tiles2D, in that order.
 /// An entity field appears as its two parts, `<name>.slot` and
 /// `<name>.generation`.
 [[nodiscard]] std::span<const schema::ComponentLayout> componentLayouts() noexcept;

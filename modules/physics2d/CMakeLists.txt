@@ -4,7 +4,7 @@
 # can include it.
 rawframe_module(NAME physics2d
     SOURCES src/attachments.cpp src/characters.cpp src/components.cpp src/joints.cpp src/participant.cpp src/physics.cpp
-    DEPS physics world_runtime world composition schema execution diagnostics result base
+    DEPS tilemap physics world_runtime world composition schema execution diagnostics result base
 )
 target_link_libraries(rawframe_physics2d PRIVATE maul2d::maul2d)
 

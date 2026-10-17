@@ -59,6 +59,7 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
         .add<physics2d::Character2D>()
         .add<physics2d::Joint2D>()
         .add<physics2d::Attach2D>()
+        .add<physics2d::Tiles2D>()
         .add<Aim>()
         .add<Perception>();
     return *builder.freeze();

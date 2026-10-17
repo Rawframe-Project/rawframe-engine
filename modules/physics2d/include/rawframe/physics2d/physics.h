@@ -33,6 +33,7 @@
 #include "rawframe/physics/rewind.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/result/result.h"
+#include "rawframe/tilemap/tilemap.h"
 #include "rawframe/world/schedule.h"
 #include "rawframe/world_runtime/simulation.h"
 
@@ -44,6 +45,13 @@
 #include <vector>
 
 namespace rawframe::physics2d {
+
+/// A tilemap bodies may be made of: the identity a Tiles2D names it by, and
+/// its tiles (D859).
+struct BodyTilemap {
+    std::uint64_t id = 0;
+    std::shared_ptr<const tilemap::Tilemap> map;
+};
 
 struct Physics2DSettings {
     /// Meters a second squared.
@@ -58,6 +66,8 @@ struct Physics2DSettings {
     /// Ticks of every body's pose kept for casting back in time
     /// (SPEC-0041's compensation window); nought keeps none.
     std::uint32_t historyTicks = 64;
+    /// Every tilemap a body may be made of, each identity once.
+    std::vector<BodyTilemap> tilemaps;
     physics::CollisionDocument collision;
 };
 
@@ -140,15 +150,16 @@ public:
 
 class Physics2D final : public world_runtime::SystemContributor, public Physics2DQueries {
 public:
-    /// Refuses settings out of range (`invalid_settings`), a collision
-    /// document that is not well formed (rawframe.physics's `invalid_document`),
-    /// a processor that cannot run the build's kernels (`unsupported`), and
-    /// a process with no room for another physics world (`capacity`).
+    /// Refuses settings out of range or tilemaps named twice, nought, or
+    /// null (`invalid_settings`), a collision document that is not well
+    /// formed (rawframe.physics's `invalid_document`), a processor that
+    /// cannot run the build's kernels (`unsupported`), and a process with no
+    /// room for another physics world (`capacity`).
     [[nodiscard]] static result::Result<std::unique_ptr<Physics2D>> create(const Physics2DSettings& settings);
     ~Physics2D() override;
 
-    /// Contributes kStepSystem. The registry must hold the eight physics
-    /// components at the engine's sizes.
+    /// Contributes kStepSystem. The registry must hold the physics
+    /// components (componentLayouts()) at the engine's sizes.
     [[nodiscard]] result::Status declareSystems(const schema::SchemaRegistry& registry,
                                                 std::vector<world::SystemDeclaration>& systems) noexcept override;
 

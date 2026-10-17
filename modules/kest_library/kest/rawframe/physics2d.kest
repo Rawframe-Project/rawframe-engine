@@ -18,11 +18,14 @@ const KINEMATIC: u8 = 1
 const DYNAMIC: u8 = 2
 
 // Body2D.shape: a circle of radius `width`, a box of half sides `width` and
-// `height`, or an upright capsule of radius `width` whose two centers are
-// `height` above and below the origin.
+// `height`, an upright capsule of radius `width` whose two centers are
+// `height` above and below the origin, or the solid tiles of the tilemap
+// the entity's Tiles2D names, for a static body only, the map's top-left at
+// the origin.
 const CIRCLE: u8 = 0
 const BOX: u8 = 1
 const CAPSULE: u8 = 2
+const TILES: u8 = 3
 
 // How the body is made; changing it makes the body again where it is.
 struct Body2D {
@@ -183,6 +186,12 @@ struct Attach2D {
     y: f32
     c: f32
     s: f32
+}
+
+// Which of the game's tilemaps a body of shape TILES is, by the identity its
+// `tilemap` line gives it; changing it makes the body again.
+struct Tiles2D {
+    tilemap: u64
 }
 
 // Welds `b` to `a` where they are: every axis locked.

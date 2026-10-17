@@ -3,6 +3,7 @@
 #include "rawframe/physics2d/errors.h"
 #include "rawframe/physics2d/physics.h"
 #include "rawframe/test/test.h"
+#include "rawframe/tilemap/tilemap.h"
 #include "rawframe/world/schedule.h"
 #include "rawframe/world/world.h"
 
@@ -29,7 +30,8 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
         .add<Contact2D>()
         .add<Character2D>()
         .add<Joint2D>()
-        .add<Attach2D>();
+        .add<Attach2D>()
+        .add<Tiles2D>();
     return *builder.freeze();
 }
 
@@ -80,6 +82,14 @@ struct Scene {
         this->run(1);
     }
 
+    /// A tiles body naming tilemap `tilemap`, with its map's top-left at
+    /// the origin.
+    world::EntityHandle tiles(std::uint64_t tilemap, const Body2D& made) {
+        const world::EntityHandle kEntity = body(made, {});
+        RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<Tiles2D>(), Tiles2D{.tilemap = tilemap}).has_value());
+        return kEntity;
+    }
+
     Character2D& character(world::EntityHandle entity) {
         return *world.get(entity, *schema->key<Character2D>());
     }
@@ -121,7 +131,70 @@ constexpr Body2D kBall{.motion = static_cast<std::uint8_t>(physics::Motion::Dyna
                        .friction = 0.3F,
                        .restitution = 0.5F};
 
+constexpr Body2D kTiles{.motion = static_cast<std::uint8_t>(physics::Motion::Static),
+                        .shape = static_cast<std::uint8_t>(Shape::Tiles),
+                        .friction = 0.6F};
+
+/// A level six meters wide: a floor of solid tile 0 three meters down, gapped
+/// at its fourth meter, and above its second meter a tile 1, not solid.
+std::shared_ptr<const tilemap::Tilemap> level() {
+    auto map = tilemap::parseTilemap("tilemap 1\ntileset 00000000000000b2 2 1\ncell 1\nsolid 0\ngrid 6 3\ntiles\n"
+                                     ". . . . . .\n. 1 . . . .\n0 0 0 . 0 0\n");
+    RAWFRAME_EXPECT(map.has_value());
+    return std::make_shared<const tilemap::Tilemap>(map.value_or(tilemap::Tilemap{}));
+}
+
 } // namespace
+
+RAWFRAME_TEST(ACrateRestsOnATilemapsSolidTiles) {
+    // A tiles body is its solid runs: the floor's two, so a crate falls
+    // through the tile that is not solid and rests on the floor (D859).
+    Scene scene{{.tilemaps = {BodyTilemap{.id = 7, .map = level()}}}};
+    const world::EntityHandle kLevel = scene.tiles(7, kTiles);
+    const world::EntityHandle kCrateEntity = scene.body(kCrate, {.x = 1.5, .y = 2});
+    scene.run(240);
+    const Pose2D& kRest = scene.pose(kCrateEntity);
+    RAWFRAME_EXPECT(std::abs(kRest.y + 1.5) < 0.02 && std::abs(kRest.x - 1.5) < 0.01);
+    RAWFRAME_EXPECT(scene.physics->statistics().bodiesMade == 2 && scene.physics->statistics().bodiesRefused == 0);
+    // Rays meet the second run as the first, now and back in time, and
+    // fall through the gap.
+    const RayHit2D kRight = scene.physics->castRay(5, 5, 0, -10, kEveryClass);
+    RAWFRAME_EXPECT(kRight.hit && kRight.entity == kLevel && std::abs(kRight.y + 2) < 0.001 && kRight.normalY > 0.99F);
+    const RayHit2D kBack = scene.physics->castRayAt(5, 5, 0, -10, {.base = 100, .fraction = 0}, kEveryClass);
+    RAWFRAME_EXPECT(kBack.hit && kBack.entity == kLevel && std::abs(kBack.y + 2) < 0.001);
+    RAWFRAME_EXPECT(!scene.physics->castRay(3.5, 5, 0, -10, kEveryClass).hit);
+    // Taken away with its entity, every piece with it.
+    RAWFRAME_EXPECT(scene.world.destroy(kLevel).has_value());
+    scene.run(1);
+    RAWFRAME_EXPECT(!scene.physics->castRay(5, 5, 0, -10, kEveryClass).hit);
+}
+
+RAWFRAME_TEST(ATilesBodyIsStaticSolidAndOfAKnownTilemap) {
+    Scene scene{{.tilemaps = {BodyTilemap{.id = 7, .map = level()}}}};
+    Body2D moving = kTiles;
+    moving.motion = static_cast<std::uint8_t>(physics::Motion::Dynamic);
+    Body2D sensing = kTiles;
+    sensing.sensor = true;
+    scene.tiles(7, moving);
+    scene.tiles(7, sensing);
+    const world::EntityHandle kUnknown = scene.tiles(9, kTiles);
+    scene.body(kTiles, {});
+    scene.run(1);
+    RAWFRAME_EXPECT(scene.physics->statistics().bodiesRefused == 4 && scene.physics->statistics().bodiesMade == 0);
+    // Naming a tilemap the settings hold makes it.
+    scene.world.get(kUnknown, *scene.schema->key<Tiles2D>())->tilemap = 7;
+    scene.run(1);
+    RAWFRAME_EXPECT(scene.physics->statistics().bodiesMade == 1);
+    RAWFRAME_EXPECT(scene.physics->castRay(0.5, 5, 0, -10, kEveryClass).entity == kUnknown);
+    // Every tilemap present, each once and none nought.
+    for (const Physics2DSettings& kSettings : {Physics2DSettings{.tilemaps = {BodyTilemap{.id = 0, .map = level()}}},
+                                               Physics2DSettings{.tilemaps = {BodyTilemap{.id = 7}}},
+                                               Physics2DSettings{.tilemaps = {BodyTilemap{.id = 7, .map = level()},
+                                                                              BodyTilemap{.id = 7, .map = level()}}}}) {
+        const auto kMade = Physics2D::create(kSettings);
+        RAWFRAME_EXPECT(!kMade.has_value() && kMade.error().code() == code(Physics2DError::InvalidSettings));
+    }
+}
 
 RAWFRAME_TEST(AKinematicBodyIsCarriedToItsTargetPushingWhatItMeets) {
     Scene scene{{.gravityY = 0}};

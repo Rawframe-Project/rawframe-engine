@@ -159,7 +159,11 @@ constexpr std::array<ComponentField, 5> kTargetFields = {{
     {"set", offsetof(Target2D, set), FieldType::Bool},
 }};
 
-const std::array<ComponentLayout, 9> kLayouts = {
+constexpr std::array<ComponentField, 1> kTilesFields = {{
+    {"tilemap", offsetof(Tiles2D, tilemap), FieldType::U64},
+}};
+
+const std::array<ComponentLayout, 10> kLayouts = {
     layoutOf<Body2D>("Body2D", kBodyFields),
     layoutOf<Pose2D>("Pose2D", kPoseFields),
     layoutOf<Velocity2D>("Velocity2D", kVelocityFields),
@@ -169,6 +173,7 @@ const std::array<ComponentLayout, 9> kLayouts = {
     layoutOf<Character2D>("Character2D", kCharacterFields),
     layoutOf<Joint2D>("Joint2D", kJointFields),
     layoutOf<Attach2D>("Attach2D", kAttachFields),
+    layoutOf<Tiles2D>("Tiles2D", kTilesFields),
 };
 
 } // namespace
