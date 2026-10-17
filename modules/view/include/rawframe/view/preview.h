@@ -7,7 +7,8 @@
 // `rawframe.view.preview_camera`; its tooling endpoint sets it, and the
 // scene renderer reads it each frame. A press in the window while it looks
 // is kept as the ray it makes, which the tooling endpoint tells the author
-// (D456), so what they clicked can be found.
+// (D456), so what they clicked can be found. The scene renderer tells it
+// what each frame it drew holds (D842).
 
 #include "rawframe/composition/participant.h"
 #include "rawframe/view/players.h"
@@ -18,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -60,6 +62,28 @@ enum class Overlay : std::uint8_t {
 
 /// The overlay named `name` ("colliders", "lights"), none for another.
 [[nodiscard]] std::optional<Overlay> overlayNamed(std::string_view name) noexcept;
+
+/// One figure of the frame a preview last drew (D842): what the scene
+/// renderer counted, by a name it owns ("draws", "lights_culled").
+struct FrameFigure {
+    std::string_view name;
+    std::int64_t value = 0;
+};
+
+/// One step of the frame a preview last drew (D842): a pass by the name
+/// the scene renderer owns ("opaque", "shadow_cascade"), and what it drew
+/// there: a mesh by its identity, a material by its place among the
+/// frame's, and how many instances, in the order they were drawn.
+struct FrameStep {
+    std::string_view pass;
+    std::uint64_t mesh = 0;
+    std::uint32_t material = 0;
+    std::uint32_t instances = 0;
+};
+
+/// The most steps a frame's description keeps: a capture of a crowded
+/// frame says how many it left out.
+inline constexpr std::size_t kMostFrameSteps = 4096;
 
 /// A part of a mark: none, an axis (X, Y, Z), or the ring (D468).
 enum class MarkPart : std::uint8_t {
@@ -227,6 +251,26 @@ public:
         return lastRelease_;
     }
 
+    /// The scene renderer's description of the frame it last drew from
+    /// this preview (D842): its figures and its steps, at most
+    /// `kMostFrameSteps`, each in its order; and how many frames it has
+    /// described, none before the first.
+    void described(std::span<const FrameFigure> figures, std::span<const FrameStep> steps) {
+        figures_.assign(figures.begin(), figures.end());
+        steps_.assign(steps.begin(),
+                      steps.begin() + static_cast<std::ptrdiff_t>(std::min(steps.size(), kMostFrameSteps)));
+        ++described_;
+    }
+    [[nodiscard]] std::span<const FrameFigure> figures() const noexcept {
+        return figures_;
+    }
+    [[nodiscard]] std::span<const FrameStep> steps() const noexcept {
+        return steps_;
+    }
+    [[nodiscard]] std::uint64_t descriptions() const noexcept {
+        return described_;
+    }
+
 private:
     std::optional<Perspective> view_;
     std::optional<Ray> lastClick_;
@@ -247,6 +291,9 @@ private:
     std::uint8_t overlays_ = 0;
     std::vector<Perspective> others_;
     std::size_t views_ = 1;
+    std::vector<FrameFigure> figures_;
+    std::vector<FrameStep> steps_;
+    std::uint64_t described_ = 0;
 };
 
 inline constexpr composition::Capability<PreviewCamera> kPreviewCamera{"rawframe.view.preview_camera"};

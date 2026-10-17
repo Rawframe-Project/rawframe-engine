@@ -1,5 +1,6 @@
 #include "camera.h"
 #include "cameras.h"
+#include "frame_figures.h"
 #include "loading.h"
 #include "overlays.h"
 #include "pictures.h"
@@ -262,6 +263,11 @@ public:
             const SceneFrame& kFrame = scene_->queue(camera_);
             pictures_.askAll(kFrame);
             queued_ = &kFrame;
+            // What it drew, for the editor whose preview this is (D842).
+            if (preview_ != nullptr) {
+                describeFrame(kFrame, figures_, steps_);
+                preview_->described(figures_, steps_);
+            }
             if (!regionFrames_.empty() && regionFrames_[0].width != 0) {
                 regionFrames_[0].frame = &kFrame;
             }
@@ -885,6 +891,9 @@ private:
     /// The local players' views, told each frame (D367).
     view::PlayerViews* views_ = nullptr;
     view::PreviewCamera* preview_ = nullptr;
+    /// The last frame's description for the preview, kept to reuse (D842).
+    std::vector<view::FrameFigure> figures_;
+    std::vector<view::FrameStep> steps_;
     const world_animation::PresentedPoses* poses_ = nullptr;
 
     /// The animation `world` was presented with, if any.
