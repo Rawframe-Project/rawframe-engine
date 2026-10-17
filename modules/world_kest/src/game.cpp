@@ -221,6 +221,17 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a texture's identity and file are used once");
             }
             game.textures.push_back(GameTexture{.id = *kId, .path = std::string{kWords[2]}});
+        } else if (kKeyword == "tilemap") {
+            const auto kId = kWords.size() == 3 ? base::parseHex64(kWords[1]) : std::nullopt;
+            if (!kId || *kId == 0) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a tilemap line is `tilemap <16 hex digits> <file>`");
+            }
+            if (std::ranges::contains(game.tilemaps, *kId, &GameTilemap::id) ||
+                std::ranges::contains(game.tilemaps, kWords[2], &GameTilemap::path)) {
+                return badLine(number, WorldKestError::BadGameLine, "a tilemap's identity and file are used once");
+            }
+            game.tilemaps.push_back(GameTilemap{.id = *kId, .path = std::string{kWords[2]}});
         } else if (kKeyword == "rendertexture") {
             const bool kShaped = kWords.size() == 4 || kWords.size() == 5;
             const auto kId = kShaped ? base::parseHex64(kWords[1]) : std::nullopt;

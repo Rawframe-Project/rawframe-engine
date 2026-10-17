@@ -406,6 +406,15 @@ struct GameTexture {
     std::string path;
 };
 
+/// A level's tiles a `rawframe.canvas.Tilemap` draws (D858), by the
+/// identity the component names it by. Its source beside the description is
+/// a tilemap document (D857) the cook keeps as a resource
+/// (`rawframe.tilemap`).
+struct GameTilemap {
+    std::uint64_t id = 0;
+    std::string path;
+};
+
 /// A font UI text is shown in (D386), by the identity a `rawframe.ui.Node`'s
 /// `font` names it by. Its source beside the description is a TrueType or
 /// OpenType font the cook rebuilds through its sanitizer (`rawframe.font`).
@@ -612,6 +621,8 @@ struct GameDescription {
     std::vector<GameMesh> meshes;
     /// From `texture <16 hex digits> <file>` lines.
     std::vector<GameTexture> textures;
+    /// From `tilemap <16 hex digits> <file>` lines (D858).
+    std::vector<GameTilemap> tilemaps;
     /// From `rendertexture <16 hex digits> <width> <height> [every_frame |
     /// on_demand]` lines (D361).
     std::vector<GameRenderTexture> renderTextures;

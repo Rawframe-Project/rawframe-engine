@@ -12,6 +12,7 @@
 #include "rawframe/cook/terrain.h"
 #include "rawframe/cook/text.h"
 #include "rawframe/cook/texture.h"
+#include "rawframe/cook/tilemap.h"
 
 #include <algorithm>
 #include <utility>
@@ -33,7 +34,8 @@ std::vector<Importer> engineImporters(std::optional<ShaderTools> tools) {
             sceneImporter(),
             terrainImporter(),
             textImporter(),
-            textureImporter()};
+            textureImporter(),
+            tilemapImporter()};
 }
 
 const Importer* importerNamed(std::span<const Importer> importers, std::string_view identity) noexcept {

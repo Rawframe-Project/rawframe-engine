@@ -147,6 +147,19 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
         }
         game.textures.push_back(world_kest::CookedGameTexture{.path = texture.path, .texture = kSidecar.id.value});
     }
+    // Each tilemap: the resource its sidecar names, cooked by
+    // rawframe.tilemap (D858).
+    for (const world_kest::GameTilemap& tilemap : kDescription.tilemaps) {
+        auto sidecarBytes = reads.file(tilemap.path + std::string{content::kSidecarSuffix});
+        if (!sidecarBytes.has_value()) {
+            return refuse("a tilemap the description names has a sidecar", tilemap.path);
+        }
+        RAWFRAME_TRY_ASSIGN(const content::Sidecar kSidecar, content::readSidecar(textOf(*sidecarBytes)));
+        if (kSidecar.importer != "rawframe.tilemap") {
+            return refuse("a tilemap the description names is cooked by rawframe.tilemap", tilemap.path);
+        }
+        game.tilemaps.push_back(world_kest::CookedGameTilemap{.path = tilemap.path, .tilemap = kSidecar.id.value});
+    }
 
     // Each material: the resource its sidecar names, cooked by
     // rawframe.material, or by rawframe.postprocess or

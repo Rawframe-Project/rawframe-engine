@@ -80,6 +80,28 @@ RAWFRAME_TEST(ACookedGameRoundTripsInOneForm) {
     RAWFRAME_EXPECT(kAgain.has_value() && *kAgain == *kWritten);
 }
 
+RAWFRAME_TEST(ACookedGamesTilemapsAreWrittenOnlyWhereItHasAny) {
+    // A game without one keeps the bytes it had (D858).
+    const auto kWithout = writeCookedGame(sample());
+    RAWFRAME_EXPECT(kWithout.has_value() && kWithout->find("tilemaps") == std::string::npos);
+    CookedGame tiled = sample();
+    tiled.tilemaps = {
+        {.path = "level.tilemap", .tilemap = base::parseBits128Hex("9bc264ed9bfe68492b86641942cc74e9").value}};
+    const auto kWritten = writeCookedGame(tiled);
+    RAWFRAME_EXPECT(kWritten.has_value());
+    if (!kWritten.has_value()) {
+        return;
+    }
+    const auto kRead = readCookedGame(*kWritten);
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->tilemap("level.tilemap") != nullptr &&
+                    kRead->tilemap("level.tilemap")->tilemap == tiled.tilemaps[0].tilemap &&
+                    kRead->tilemap("tiles.png") == nullptr);
+    if (kRead.has_value()) {
+        const auto kAgain = writeCookedGame(*kRead);
+        RAWFRAME_EXPECT(kAgain.has_value() && *kAgain == *kWritten);
+    }
+}
+
 RAWFRAME_TEST(ACookedGameIsRefusedInAnyOtherForm) {
     CookedGame twice = sample();
     twice.files.push_back(twice.files[0]);

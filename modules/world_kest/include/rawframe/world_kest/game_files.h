@@ -54,6 +54,14 @@ struct GameTextureResource {
     base::Bits128 texture{};
 };
 
+/// A tilemap a `tilemap` line names, by the identity the line gives it and
+/// the resource it is (D858).
+struct GameTilemapResource {
+    std::uint64_t id = 0;
+    std::string path;
+    base::Bits128 tilemap{};
+};
+
 /// A font a `font` line names, by the identity the line gives it and the
 /// resource it is (D386).
 struct GameFontResource {
@@ -202,6 +210,10 @@ public:
     [[nodiscard]] const std::vector<GameTextureResource>& textures() const noexcept {
         return textures_;
     }
+    /// Its tilemaps (D858).
+    [[nodiscard]] const std::vector<GameTilemapResource>& tilemaps() const noexcept {
+        return tilemaps_;
+    }
     /// Every font the description names, by its resource, in the order of
     /// its lines: in development the identity its sidecar gives, which must
     /// name `rawframe.font`, and from content the one the record names. Only
@@ -326,6 +338,7 @@ private:
     std::vector<physics3d::BodyMesh> meshes_;
     std::vector<GameText> texts_;
     std::vector<GameTextureResource> textures_;
+    std::vector<GameTilemapResource> tilemaps_;
     std::vector<GameFontResource> fonts_;
     std::vector<content::BuildReference> modBuilds_;
     std::vector<SetAsideClaim> setAside_;

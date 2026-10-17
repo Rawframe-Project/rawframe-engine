@@ -644,6 +644,18 @@ result::Result<GameFiles> GameFiles::fromReader(std::string_view description,
         }
         game.texts_.push_back(GameText{.path = text, .document = (*kSidecarRead)->id.value});
     }
+    // Each tilemap, by the resource its sidecar names (D858).
+    for (const GameTilemap& tilemap : game.description_.tilemaps) {
+        const auto kSidecarText = reader.read(tilemap.path + std::string{content::kSidecarSuffix});
+        const auto kSidecarRead =
+            kSidecarText.has_value() ? std::optional{content::readSidecar(*kSidecarText)} : std::nullopt;
+        if (!kSidecarRead.has_value() || !kSidecarRead->has_value() ||
+            (*kSidecarRead)->importer != "rawframe.tilemap") {
+            return unreadable("a tilemap the game names has a sidecar naming rawframe.tilemap", tilemap.path);
+        }
+        game.tilemaps_.push_back(
+            GameTilemapResource{.id = tilemap.id, .path = tilemap.path, .tilemap = (*kSidecarRead)->id.value});
+    }
     // Each texture, by the resource its sidecar names.
     for (const GameTexture& texture : game.description_.textures) {
         const auto kSidecarText = reader.read(texture.path + std::string{content::kSidecarSuffix});
@@ -819,6 +831,14 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
             return invalid("the cooked description does not name the resource of a text document it names", path);
         }
         game.texts_.push_back(GameText{.path = path, .document = kText->document});
+    }
+    for (const GameTilemap& tilemap : game.description_.tilemaps) {
+        const CookedGameTilemap* const kTilemap = kCooked.tilemap(tilemap.path);
+        if (kTilemap == nullptr) {
+            return invalid("the cooked description does not name the resource of a tilemap it names", tilemap.path);
+        }
+        game.tilemaps_.push_back(
+            GameTilemapResource{.id = tilemap.id, .path = tilemap.path, .tilemap = kTilemap->tilemap});
     }
     for (const GameTexture& texture : game.description_.textures) {
         const CookedGameTexture* const kTexture = kCooked.texture(texture.path);

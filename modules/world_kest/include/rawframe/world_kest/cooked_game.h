@@ -93,6 +93,12 @@ struct CookedGameTexture {
     base::Bits128 texture{};
 };
 
+/// A tilemap the description names (D858), by the resource it is.
+struct CookedGameTilemap {
+    std::string path;
+    base::Bits128 tilemap{};
+};
+
 /// A font the description names (D386), by the resource it is.
 struct CookedGameFont {
     std::string path;
@@ -110,6 +116,9 @@ struct CookedGame {
     std::vector<CookedGameTexture> textures;
     std::vector<CookedGameMaterial> materials;
     std::vector<CookedGameFont> fonts;
+    /// Written only where there are any, so a game without one keeps the
+    /// bytes it had.
+    std::vector<CookedGameTilemap> tilemaps;
 
     /// The document the description names `path`, or none.
     [[nodiscard]] const CookedGameFile* file(std::string_view path) const noexcept;
@@ -127,6 +136,8 @@ struct CookedGame {
     [[nodiscard]] const CookedGameTexture* texture(std::string_view path) const noexcept;
     /// The font it names `path`, or none.
     [[nodiscard]] const CookedGameFont* font(std::string_view path) const noexcept;
+    /// The tilemap it names `path`, or none.
+    [[nodiscard]] const CookedGameTilemap* tilemap(std::string_view path) const noexcept;
     /// The animator graph it names `path`, or none.
     [[nodiscard]] const CookedGameAnimator* animator(std::string_view path) const noexcept;
 };

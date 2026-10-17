@@ -40,7 +40,11 @@ template <typename Named> bool ordered(const std::vector<Named>& named) {
 bool wellFormed(const CookedGame& game) {
     return ordered(game.animators) && ordered(game.files) && ordered(game.fonts) && ordered(game.meshes) &&
            ordered(game.programs) && ordered(game.scenes) && ordered(game.texts) && ordered(game.textures) &&
-           ordered(game.materials) &&
+           ordered(game.materials) && ordered(game.tilemaps) &&
+           std::ranges::all_of(game.tilemaps,
+                               [](const CookedGameTilemap& tilemap) {
+                                   return tilemap.tilemap != base::Bits128{};
+                               }) &&
            std::ranges::all_of(game.materials,
                                [](const CookedGameMaterial& material) {
                                    return material.material != base::Bits128{};
@@ -120,6 +124,11 @@ const CookedGameMaterial* CookedGame::material(std::string_view path) const noex
     return kFound == materials.end() ? nullptr : &*kFound;
 }
 
+const CookedGameTilemap* CookedGame::tilemap(std::string_view path) const noexcept {
+    const auto kFound = std::ranges::find(tilemaps, path, &CookedGameTilemap::path);
+    return kFound == tilemaps.end() ? nullptr : &*kFound;
+}
+
 const CookedGameTexture* CookedGame::texture(std::string_view path) const noexcept {
     const auto kFound = std::ranges::find(textures, path, &CookedGameTexture::path);
     return kFound == textures.end() ? nullptr : &*kFound;
@@ -151,6 +160,7 @@ result::Result<std::string> writeCookedGame(const CookedGame& game) {
     std::ranges::sort(sorted.textures, {}, &CookedGameTexture::path);
     std::ranges::sort(sorted.materials, {}, &CookedGameMaterial::path);
     std::ranges::sort(sorted.fonts, {}, &CookedGameFont::path);
+    std::ranges::sort(sorted.tilemaps, {}, &CookedGameTilemap::path);
     if (!wellFormed(sorted)) {
         return std::unexpected<result::Error>{
             invalid("a cooked game names each path once, each program's sources and entry, and not too many")};
@@ -232,6 +242,16 @@ result::Result<std::string> writeCookedGame(const CookedGame& game) {
     record.add("text", Value::string(std::move(sorted.text)));
     record.add("texts", std::move(texts));
     record.add("textures", std::move(textures));
+    if (!sorted.tilemaps.empty()) {
+        Value tilemaps = Value::array();
+        for (CookedGameTilemap& tilemap : sorted.tilemaps) {
+            Value each = Value::object();
+            each.add("path", Value::string(std::move(tilemap.path)));
+            each.add("tilemap", Value::string(hexOf(tilemap.tilemap)));
+            tilemaps.push(std::move(each));
+        }
+        record.add("tilemaps", std::move(tilemaps));
+    }
     auto written = document::writeCanonicalRecord(record);
     if (!written.has_value()) {
         return std::unexpected<result::Error>{invalid("a cooked game's text is not what a record can hold")};
@@ -255,7 +275,9 @@ result::Result<CookedGame> readCookedGame(std::string_view bytes) {
     const Value* textures = parsed->find("textures");
     const Value* materials = parsed->find("materials");
     const Value* fonts = parsed->find("fonts");
-    const std::string* text = textOf(*parsed, 12, "text");
+    // Tilemaps where a game has any (D858).
+    const Value* tilemaps = parsed->find("tilemaps");
+    const std::string* text = textOf(*parsed, tilemaps != nullptr ? 13 : 12, "text");
     if (kind == nullptr || kind->text() == nullptr || *kind->text() != "game.description" || version == nullptr ||
         version->integer() != 8 || files == nullptr || files->kind() != Value::Kind::Array || programs == nullptr ||
         programs->kind() != Value::Kind::Array || scenes == nullptr || scenes->kind() != Value::Kind::Array ||
@@ -263,7 +285,7 @@ result::Result<CookedGame> readCookedGame(std::string_view bytes) {
         animators->kind() != Value::Kind::Array || texts == nullptr || texts->kind() != Value::Kind::Array ||
         textures == nullptr || textures->kind() != Value::Kind::Array || materials == nullptr ||
         materials->kind() != Value::Kind::Array || fonts == nullptr || fonts->kind() != Value::Kind::Array ||
-        text == nullptr) {
+        text == nullptr || (tilemaps != nullptr && tilemaps->kind() != Value::Kind::Array)) {
         return std::unexpected<result::Error>{invalid("a cooked game is game.description, format 8, and its parts")};
     }
     CookedGame game{.text = *text};
@@ -339,6 +361,14 @@ result::Result<CookedGame> readCookedGame(std::string_view bytes) {
             return std::unexpected<result::Error>{invalid("a cooked game's font is a path and a font")};
         }
         game.fonts.push_back(CookedGameFont{.path = *path, .font = *kFont});
+    }
+    for (const Value& each : tilemaps != nullptr ? tilemaps->items() : std::span<const Value>{}) {
+        const std::string* path = textOf(each, 2, "path");
+        const std::optional<base::Bits128> kTilemap = identityOf(textOf(each, 2, "tilemap"));
+        if (path == nullptr || !kTilemap.has_value()) {
+            return std::unexpected<result::Error>{invalid("a cooked game's tilemap is a path and a tilemap")};
+        }
+        game.tilemaps.push_back(CookedGameTilemap{.path = *path, .tilemap = *kTilemap});
     }
     if (!wellFormed(game)) {
         return std::unexpected<result::Error>{invalid("a cooked game names each path once, in order, fully")};
