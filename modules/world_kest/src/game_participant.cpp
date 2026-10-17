@@ -39,6 +39,7 @@
 #include "rawframe/world_runtime/picking.h"
 #include "rawframe/world_runtime/save.h"
 #include "scene_follower.h"
+#include "splines.h"
 #include "ui_doors.h"
 
 #include <algorithm>
@@ -285,6 +286,9 @@ public:
         if (game_.physics.has_value()) {
             RAWFRAME_TRY(addPhysicsDoors(doors, game_.physics->dimensions, &doorContext_));
         }
+        // Splines its programs follow, measured from their points (D868).
+        RAWFRAME_TRY(planSplines());
+        RAWFRAME_TRY(addSplineDoors(doors, splines_.get()));
         // The server bakes the navmesh its programs ask the way across
         // (D400).
         if (game_.navigation.has_value()) {
@@ -340,6 +344,9 @@ public:
         }
         if (navmesh_ != nullptr) {
             RAWFRAME_TRY(simulation_->addSystems(*navmesh_));
+        }
+        if (splines_ != nullptr) {
+            RAWFRAME_TRY(simulation_->addSystems(*splines_));
         }
         debugging_.attach(systems_->machine());
         // Time a breakpoint holds a tick is not owed (D492).
@@ -413,6 +420,12 @@ public:
     void stop() noexcept override {
         if (navmesh_ != nullptr) {
             navmesh_->report(emitter_);
+        }
+        if (splines_ != nullptr) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kSplineSummary,
+                         "the splines measured",
+                         {diagnostics::field("measured", splines_->measured())});
         }
         if (timing_ == nullptr) {
             return;
@@ -803,6 +816,42 @@ private:
         return GameScenes{game_, layouts_}.spawnValues(spawn);
     }
 
+    /// Splines (D868): the game's components of the spline types, laid out
+    /// as the engine reads them, measured by the pose of its physics.
+    result::Status planSplines() {
+        GameSplineComponents found{.dimensions =
+                                       game_.physics.has_value() ? game_.physics->dimensions : std::uint8_t{3}};
+        for (const GameComponent& component : game_.components) {
+            if (ofEngineType(component, "rawframe.spline.Point")) {
+                found.points.push_back(component.id);
+            } else if (ofEngineType(component, "rawframe.spline.Spline")) {
+                found.splines.push_back(component.id);
+            }
+        }
+        if (found.points.empty()) {
+            return {};
+        }
+        const bool kPoints = laidOutAs(*program_,
+                                       "rawframe.spline.Point",
+                                       sizeof(SplinePoint),
+                                       {{"spline.slot", offsetof(SplinePoint, spline)},
+                                        {"spline.generation", offsetof(SplinePoint, spline) + sizeof(std::uint32_t)},
+                                        {"index", offsetof(SplinePoint, index)}});
+        const bool kSplines =
+            found.splines.empty() || laidOutAs(*program_, "rawframe.spline.Spline", sizeof(bool), {{"closed", 0}});
+        if (!game_.physics.has_value() || !kPoints || !kSplines) {
+            return std::unexpected<result::Error>{
+                result::fail(result::ErrorClass::InvalidArgument,
+                             kWorldKestDomain,
+                             code(WorldKestError::BadGameLine),
+                             "a spline's points stand where their physics poses put them, laid out as "
+                             "rawframe.spline's: the game has a physics line and imports the module")
+                    .error()};
+        }
+        splines_ = std::make_unique<GameSplines>(std::move(found));
+        return {};
+    }
+
     /// Physics: the program's physics types must be laid out exactly as the
     /// engine's components are, field by field. A process that plays the
     /// game elsewhere runs no physics.
@@ -871,6 +920,7 @@ private:
     std::optional<physics3d::Physics3DSettings> physics3d_;
     PhysicsDoorContext doorContext_;
     std::unique_ptr<GameNavmesh> navmesh_;
+    std::unique_ptr<GameSplines> splines_;
     std::optional<world_animation::AnimationSettings> animation_;
     AnimationDoorContext animationDoors_;
     GamePersistence persistence_;

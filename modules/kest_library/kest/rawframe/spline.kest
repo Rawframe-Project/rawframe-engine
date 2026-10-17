@@ -1,0 +1,45 @@
+module rawframe.spline
+
+// Splines (SPEC-0051's spline row, D868): smooth paths a scene holds as
+// entities, which a game's followers move along. A game declares
+// components of these types; a spline is an entity, its points are
+// entities that name it, each standing where its pose puts it (the game's
+// physics pose; in two dimensions its z is nought). Meters; y is up.
+
+import rawframe.world
+
+// On a spline's entity: whether its last point joins its first.
+struct Spline {
+    closed: bool
+}
+
+// On each of its points: the spline's entity, and the point's place among
+// its points, the path passing through them in that order.
+struct Point {
+    spline: world.Entity
+    index: u32
+}
+
+// Where a spline is `meters` along it, held to its ends (a closed one's
+// wrapping around), the way it heads there as a unit vector, and its whole
+// length; not found for an entity that is no spline with two points (three
+// when closed), and where a game's process measures none (a client's
+// prediction).
+struct Along {
+    x: f64
+    y: f64
+    z: f64
+    headingX: f32
+    headingY: f32
+    headingZ: f32
+    length: f64
+    found: bool
+}
+
+extern fn Splines.along(spline: world.Entity, meters: f64) -> Along
+
+// The paths are measured before the simulation phase, so a system there or
+// after sees this tick's points.
+fn along(spline: world.Entity, meters: f64) -> Along {
+    return Splines.along(spline, meters)
+}

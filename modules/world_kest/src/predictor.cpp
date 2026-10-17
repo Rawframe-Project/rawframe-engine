@@ -14,6 +14,7 @@
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/kest_systems.h"
 #include "rawframe/world_kest/sound_doors.h"
+#include "splines.h"
 #include "ui_doors.h"
 
 #include <cstddef>
@@ -129,6 +130,9 @@ public:
         if (game.navigation.has_value()) {
             RAWFRAME_TRY(addNavigationDoors(doors, nullptr));
         }
+        // Nor does it measure splines: a predicted follower finds none
+        // (D868).
+        RAWFRAME_TRY(addSplineDoors(doors, nullptr));
         RAWFRAME_TRY_ASSIGN(systems_,
                             KestSystems::create(KestSystemsSettings{.program = settings.program,
                                                                     .doors = std::move(doors),
