@@ -25,6 +25,8 @@ inline constexpr diagnostics::EventIdentity kCurveShown{"studio", "studio_curve"
 inline constexpr diagnostics::EventIdentity kStylePreviewShown{"studio", "studio_style_preview"};
 /// A UI document laid out as its game would show it (D832).
 inline constexpr diagnostics::EventIdentity kUiPreviewShown{"studio", "studio_ui_preview"};
+/// The played game's server's profile read (D838).
+inline constexpr diagnostics::EventIdentity kProfileRead{"studio", "studio_profile"};
 /// The environment panel's components and their entities (D834).
 inline constexpr diagnostics::EventIdentity kEnvironmentShown{"studio", "studio_environment"};
 
@@ -65,6 +67,12 @@ struct EditorsHeld {
     std::vector<ui::Node> environmentRows;
     std::vector<std::pair<ui::Node, std::size_t>> environmentParts;
     std::vector<std::pair<ui::Node, std::string>> environmentAdds;
+    /// The Profiler: its pane, its rows, when it next reads, and how many
+    /// reads it has shown (D838).
+    ui::Node profilerColumn{};
+    std::vector<ui::Node> profilerRows;
+    double profilerNextRead = 0;
+    std::uint64_t profilerReads = 0;
 };
 
 } // namespace rawframe::studio

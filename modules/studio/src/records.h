@@ -97,6 +97,8 @@ struct Asset {
 [[nodiscard]] Value stepRecord(std::int64_t id, std::string_view scene, std::uint32_t ticks);
 /// `authoring.traffic` of the previewed `scene`'s server (D807).
 [[nodiscard]] Value trafficRecord(std::int64_t id, std::string_view scene);
+/// `authoring.profile` of the previewed `scene`'s server (D838).
+[[nodiscard]] Value profileRecord(std::int64_t id, std::string_view scene);
 /// `authoring.asset_references` of the source at `asset` (D803).
 [[nodiscard]] Value assetReferencesRecord(std::int64_t id, std::string_view asset);
 [[nodiscard]] Value setImportSettingsRecord(std::int64_t id, std::string_view asset, Value settings);

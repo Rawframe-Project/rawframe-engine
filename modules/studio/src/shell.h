@@ -135,8 +135,7 @@ private:
     /// The viewport, under the view's fields, showing that picture.
     void showViewport();
 
-    /// What landed on the viewport handed to the game played there, and
-    /// the viewport's area told the window host while it plays (D790).
+    /// The viewport's input and area handed to the game played there (D790).
     void forwardInput();
 
     /// The left dock's layout, `width` wide (D788).
@@ -170,9 +169,7 @@ private:
     void tellSplit();
     /// Tells the preview what it draws over its scene (D798).
     void tellOverlays();
-    /// The asset browser (D799): the sources asked again, its kind and
-    /// folder controls and the rows of sources that are no document, and
-    /// a press on one of them.
+    /// The asset browser (D799): sources asked again, its controls, its rows.
     void listSources();
     result::Status showBrowser();
     result::Status showSources();
@@ -185,8 +182,7 @@ private:
     void takeDrops();
     /// The chosen source's references in the center, read only (D803).
     void showReferences();
-    /// `source`'s thumbnail at the browser's size, from the last cook, made
-    /// once (D801); none for a source that has none.
+    /// `source`'s thumbnail from the last cook, made once; or none (D801).
     std::shared_ptr<const texture::Texture> thumbnailOf(const ListedSource& source);
     void setImportSetting(const FieldRow& row, const std::string& text);
 
@@ -196,8 +192,7 @@ private:
     /// A column's layout, sharing its row's width or `width` pixels wide.
     [[nodiscard]] static ui::Layout columnLayout(float width);
 
-    /// The bottom dock's layout: `height` pixels, or for nought its share
-    /// of the body.
+    /// The bottom dock's layout: `height` pixels, or nought for its share.
     [[nodiscard]] static ui::Layout dockLayout(float height);
 
     /// The docks' edges a pointer drags (D779).
@@ -213,8 +208,7 @@ private:
     /// While a splitter is held, its dock follows the pointer.
     void followSplitter();
 
-    /// A splitter let go: the sizes kept in the preferences' file, if
-    /// Studio has one.
+    /// A splitter let go: the sizes kept in the preferences' file, if any.
     void releaseSplitter();
 
     /// A dock's pane, which scrolls, named `name` and headed by its tab.
@@ -239,7 +233,8 @@ private:
         History,
         Console,
         Network,
-        Environment
+        Environment,
+        Profiler
     };
 
     /// The bottom dock showing `pane`.
@@ -248,8 +243,7 @@ private:
     /// A line added to the Console, the oldest let go past its bound.
     void addConsoleLine(ConsoleLine line);
 
-    /// The played game's logs read as they grow, twice a second while it
-    /// plays (D778).
+    /// The played game's logs read as they grow, twice a second (D778).
     void readLogs(double seconds);
 
     /// The Console's pane, made once: its filters over its list.
@@ -669,6 +663,11 @@ private:
     result::Status makeEnvironment();
     void showEnvironment();
     bool pressEnvironment(ui::Node node);
+    /// The Profiler: the played game's server's last ticks, once a second
+    /// while it shows (D838).
+    result::Status makeProfiler();
+    void readProfiler(double seconds);
+    void showProfiler(const std::optional<Value>& profile);
     bool pressNetwork(ui::Node node);
     void readNetwork(double seconds);
     void showNetwork(const std::vector<std::string>& lines);
@@ -775,6 +774,7 @@ private:
     /// The Network panel (D807).
     ui::Node networkColumn_{};
     ui::Node environmentTab_{};
+    ui::Node profilerTab_{};
     NetworkShown network_;
     LiveShown live_;
     ui::Node consoleList_{};
