@@ -35,12 +35,14 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/players_saved.sh $<TARGET_FILE:rawframe_host_arena>
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(arena_players_saved PROPERTIES PASS_REGULAR_EXPRESSION "players kept across runs")
-    # A server with room for two players tells a third it is full.
+    # A server with room for two players tells a third it is full. The two
+    # it admitted may hear it stop as the run ends, when a loaded machine
+    # delivers the notice before they count (gate-45, gate-46).
     add_test(NAME arena_full
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/arena_full.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(arena_full PROPERTIES
-                         PASS_REGULAR_EXPRESSION "\"bots\":3,\"admitted\":2,\"unavailable\":0,\"serverStopping\":0,\"full\":1,")
+                         PASS_REGULAR_EXPRESSION "\"bots\":3,\"admitted\":2,\"unavailable\":0,\"serverStopping\":[0-2],\"full\":1,")
     # A game's own admission rule, in Kest, admits bots with the right
     # ticket and tells the others their ticket is invalid.
     add_test(NAME arena_gate_pass
