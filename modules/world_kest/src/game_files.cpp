@@ -621,8 +621,9 @@ result::Result<GameFiles> GameFiles::fromReader(std::string_view description,
         const auto kSidecarRead =
             kSidecarText.has_value() ? std::optional{content::readSidecar(*kSidecarText)} : std::nullopt;
         if (!kSidecarRead.has_value() || !kSidecarRead->has_value() || !makesMeshes((*kSidecarRead)->importer)) {
-            return unreadable("a mesh the game names has a sidecar naming rawframe.mesh or rawframe.blockout",
-                              declared.path);
+            return unreadable(
+                "a mesh the game names has a sidecar naming rawframe.mesh, rawframe.blockout, or rawframe.terrain",
+                declared.path);
         }
         meshes.push_back((*kSidecarRead)->id.value);
         auto& mapped = subassets.emplace_back(declared.path, std::vector<std::pair<std::string, base::Bits128>>{});

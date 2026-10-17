@@ -105,7 +105,9 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
         }
         RAWFRAME_TRY_ASSIGN(const content::Sidecar kSidecar, content::readSidecar(textOf(*sidecarBytes)));
         if (!world_kest::makesMeshes(kSidecar.importer)) {
-            return refuse("a mesh the description names is cooked by rawframe.mesh or rawframe.blockout", mesh.path);
+            return refuse(
+                "a mesh the description names is cooked by rawframe.mesh, rawframe.blockout, or rawframe.terrain",
+                mesh.path);
         }
         game.meshes.push_back(world_kest::CookedGameMesh{.path = mesh.path, .mesh = kSidecar.id.value});
         // Its material and texture subassets (D314), under its path.

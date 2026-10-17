@@ -393,9 +393,9 @@ struct GameMesh {
 };
 
 /// Whether `importer` makes the mesh resource a game's `mesh` line names:
-/// a glTF's or a blockout's (D848).
+/// a glTF's, a blockout's (D848), or a terrain's (D854).
 [[nodiscard]] constexpr bool makesMeshes(std::string_view importer) noexcept {
-    return importer == "rawframe.mesh" || importer == "rawframe.blockout";
+    return importer == "rawframe.mesh" || importer == "rawframe.blockout" || importer == "rawframe.terrain";
 }
 
 /// A picture a `rawframe.canvas.Sprite` shows (D254), by the identity the
