@@ -24,11 +24,18 @@ physics::CollisionDocument collisionDocumentOf(const GameDescription& game) {
     return document;
 }
 
-physics2d::Physics2DSettings physics2dSettingsOf(const GameDescription& game) {
-    return physics2d::Physics2DSettings{.gravityX = game.physics->gravityX,
-                                        .gravityY = game.physics->gravityY,
-                                        .substeps = game.physics->substeps,
-                                        .collision = collisionDocumentOf(game)};
+physics2d::Physics2DSettings physics2dSettingsOf(const GameDescription& game,
+                                                 const std::vector<GameTilemapResource>& tilemaps) {
+    physics2d::Physics2DSettings settings{.gravityX = game.physics->gravityX,
+                                          .gravityY = game.physics->gravityY,
+                                          .substeps = game.physics->substeps,
+                                          .collision = collisionDocumentOf(game)};
+    for (const GameTilemapResource& each : tilemaps) {
+        if (each.map != nullptr) {
+            settings.tilemaps.push_back(physics2d::BodyTilemap{.id = each.id, .map = each.map});
+        }
+    }
+    return settings;
 }
 
 physics3d::Physics3DSettings physics3dSettingsOf(const GameDescription& game,
@@ -92,7 +99,7 @@ replicatedAmong(const GameDescription& game, std::span<const std::string> names,
 result::Result<PredictionPlan> predictionOf(const GameDescription& game,
                                             const world_replication::ReplicationTable& table,
                                             std::span<const kest::TypeLayout> layouts,
-                                            const std::vector<physics3d::BodyMesh>& meshes) {
+                                            const GameFiles& files) {
     PredictionPlan plan;
     if (game.predicted.empty()) {
         return plan;
@@ -155,9 +162,9 @@ result::Result<PredictionPlan> predictionOf(const GameDescription& game,
     // bodies; everything that moves besides it is the server's.
     if (game.physics.has_value()) {
         if (game.physics->dimensions == 3) {
-            plan.physics3d = physics3dSettingsOf(game, meshes);
+            plan.physics3d = physics3dSettingsOf(game, files.meshes());
         } else {
-            plan.physics2d = physics2dSettingsOf(game);
+            plan.physics2d = physics2dSettingsOf(game, files.tilemaps());
         }
         const PhysicsFacts kFacts = physicsFacts(game.physics->dimensions);
         const GameScenes kScenes{game, layouts};

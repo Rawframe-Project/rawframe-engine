@@ -968,6 +968,17 @@ std::string spawnValue(const GameDescription& game, std::string_view component, 
             return std::to_string(kMesh->id);
         }
     }
+    // A tilemap by its file, for a tiles body and for a canvas's tiles
+    // (D859).
+    if (value.field == "tilemap") {
+        const auto kComponent = std::ranges::find(game.components, component, &GameComponent::name);
+        const auto kTilemap = std::ranges::find(game.tilemaps, value.value, &GameTilemap::path);
+        if (kTilemap != game.tilemaps.end() &&
+            (component == physics2d::Tiles2D::kComponentName ||
+             (kComponent != game.components.end() && ofEngineType(*kComponent, "rawframe.canvas.Tilemap")))) {
+            return std::to_string(kTilemap->id);
+        }
+    }
     if (value.field == "texture") {
         const auto kComponent = std::ranges::find(game.components, component, &GameComponent::name);
         const auto kTexture = std::ranges::find(game.textures, value.value, &GameTexture::path);

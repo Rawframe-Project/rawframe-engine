@@ -252,6 +252,10 @@ void GameFiles::seal() {
         field(digest, description_.meshes[at].path);
         digest.update(meshDigests_[at]);
     }
+    for (std::size_t at = 0; at < tilemapDigests_.size(); ++at) {
+        field(digest, tilemaps_[at].path);
+        digest.update(tilemapDigests_[at]);
+    }
     for (const GameText& text : texts_) {
         field(digest, text.path);
         field(digest, hexOf(text.document));
@@ -473,6 +477,33 @@ result::Status GameFiles::readMeshes(game_content::GameContent* content, const s
     return {};
 }
 
+result::Status GameFiles::readTilemaps(game_content::GameContent* content) {
+    if (tilemaps_.empty()) {
+        return {};
+    }
+    if (content == nullptr) {
+        return unreadable("a game's tilemaps are read cooked, from the Runtime's content", tilemaps_.front().path);
+    }
+    const content::ResourceTypeId kTilemapType{tilemap::kTilemapType};
+    const std::array<content::AdmittedRepresentation, 1> kAdmitted = {content::AdmittedRepresentation{
+        .type = kTilemapType, .representation = *content::RepresentationId::parse(tilemap::kTilemapRepresentation)}};
+    RAWFRAME_TRY(content->admit(kAdmitted));
+    for (GameTilemapResource& each : tilemaps_) {
+        auto bytes = readResource(content->store(),
+                                  content::ResourceRef{.id = content::ResourceId{each.tilemap}, .type = kTilemapType});
+        if (!bytes.has_value()) {
+            return std::unexpected<result::Error>{std::move(bytes).error().withContext("name", each.path)};
+        }
+        auto parsed = tilemap::parseTilemap(*bytes);
+        if (!parsed.has_value()) {
+            return std::unexpected<result::Error>{std::move(parsed).error().withContext("name", each.path)};
+        }
+        each.map = std::make_shared<const tilemap::Tilemap>(std::move(*parsed));
+        tilemapDigests_.push_back(base::sha256(std::as_bytes(std::span{bytes->data(), bytes->size()})));
+    }
+    return {};
+}
+
 result::Status GameFiles::readAnimations(
     const std::function<result::Result<std::string>(base::Bits128, animation::DocumentKind)>& read) {
     std::vector<std::pair<base::Bits128, std::string>> found;
@@ -655,6 +686,9 @@ result::Result<GameFiles> GameFiles::fromReader(std::string_view description,
         }
         game.tilemaps_.push_back(
             GameTilemapResource{.id = tilemap.id, .path = tilemap.path, .tilemap = (*kSidecarRead)->id.value});
+    }
+    if (reading == MeshReading::Cooked) {
+        RAWFRAME_TRY(game.readTilemaps(content));
     }
     // Each texture, by the resource its sidecar names.
     for (const GameTexture& texture : game.description_.textures) {
@@ -840,6 +874,7 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
         game.tilemaps_.push_back(
             GameTilemapResource{.id = tilemap.id, .path = tilemap.path, .tilemap = kTilemap->tilemap});
     }
+    RAWFRAME_TRY(game.readTilemaps(&content));
     for (const GameTexture& texture : game.description_.textures) {
         const CookedGameTexture* const kTexture = kCooked.texture(texture.path);
         if (kTexture == nullptr) {

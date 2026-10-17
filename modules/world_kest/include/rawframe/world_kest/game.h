@@ -725,9 +725,11 @@ struct GameDescription {
 /// A spawn line's value with the game's names made identities: a collision
 /// class's name as a body's `collisionClass`, a mesh's file as a
 /// `rawframe.physics3d.mesh`'s `mesh`, an animator's graph file as a
-/// `rawframe.animation.animator`'s `graph`, and a texture's file as the
-/// `texture` of a component of `rawframe.canvas.Sprite`'s type. Anything
-/// else as written.
+/// `rawframe.animation.animator`'s `graph`, a texture's file as the
+/// `texture` of a component of `rawframe.canvas.Sprite`'s type, and a
+/// tilemap's file as a `rawframe.physics2d.tiles`'s `tilemap` or that of a
+/// component of `rawframe.canvas.Tilemap`'s type (D859). Anything else as
+/// written.
 [[nodiscard]] std::string
 spawnValue(const GameDescription& game, std::string_view component, const GameFieldValue& value);
 

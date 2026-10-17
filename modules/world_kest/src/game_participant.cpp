@@ -785,7 +785,7 @@ private:
         if (game_.predicted.empty()) {
             return {};
         }
-        RAWFRAME_TRY_ASSIGN(PredictionPlan plan, predictionOf(game_, table_, layouts_, files_->meshes()));
+        RAWFRAME_TRY_ASSIGN(PredictionPlan plan, predictionOf(game_, table_, layouts_, *files_));
         predicted_ = std::move(plan.predicted);
         nearby_ = std::move(plan.nearby);
         predictedPhysics_ = std::move(plan.physics2d);
@@ -813,7 +813,7 @@ private:
         if (!planOnly_ && game_.physics->dimensions == 3) {
             physics3d_ = physics3dSettingsOf(game_, files_->meshes());
         } else if (!planOnly_) {
-            physics2d_ = physics2dSettingsOf(game_);
+            physics2d_ = physics2dSettingsOf(game_, files_->tilemaps());
         }
         return {};
     }

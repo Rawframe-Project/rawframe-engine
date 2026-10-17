@@ -31,8 +31,8 @@ struct EngineHint {
 
 constexpr std::array<std::pair<std::int64_t, std::string_view>, 3> kMotions{
     {{0, "static"}, {1, "kinematic"}, {2, "dynamic"}}};
-constexpr std::array<std::pair<std::int64_t, std::string_view>, 3> kShapes2d{
-    {{0, "circle"}, {1, "box"}, {2, "capsule"}}};
+constexpr std::array<std::pair<std::int64_t, std::string_view>, 4> kShapes2d{
+    {{0, "circle"}, {1, "box"}, {2, "capsule"}, {3, "tiles"}}};
 constexpr std::array<std::pair<std::int64_t, std::string_view>, 5> kShapes3d{
     {{0, "sphere"}, {1, "box"}, {2, "capsule"}, {3, "cylinder"}, {4, "mesh"}}};
 

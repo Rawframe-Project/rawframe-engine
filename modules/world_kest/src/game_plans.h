@@ -13,6 +13,7 @@
 #include "rawframe/physics3d/physics.h"
 #include "rawframe/result/result.h"
 #include "rawframe/world_kest/game.h"
+#include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_replication/plan.h"
 #include "rawframe/world_replication/server.h"
 
@@ -27,8 +28,10 @@ namespace rawframe::world_kest {
 /// The game's collision document, by identity.
 [[nodiscard]] physics::CollisionDocument collisionDocumentOf(const GameDescription& game);
 
-/// The 2D physics the game describes: its world and its collision document.
-[[nodiscard]] physics2d::Physics2DSettings physics2dSettingsOf(const GameDescription& game);
+/// The 2D physics the game describes: its world and its collision document,
+/// over those of its tilemaps that were read (D859).
+[[nodiscard]] physics2d::Physics2DSettings physics2dSettingsOf(const GameDescription& game,
+                                                               const std::vector<GameTilemapResource>& tilemaps);
 
 /// The same in three dimensions, over the game's meshes.
 [[nodiscard]] physics3d::Physics3DSettings physics3dSettingsOf(const GameDescription& game,
@@ -65,6 +68,6 @@ struct PredictionPlan {
 [[nodiscard]] result::Result<PredictionPlan> predictionOf(const GameDescription& game,
                                                           const world_replication::ReplicationTable& table,
                                                           std::span<const kest::TypeLayout> layouts,
-                                                          const std::vector<physics3d::BodyMesh>& meshes);
+                                                          const GameFiles& files);
 
 } // namespace rawframe::world_kest

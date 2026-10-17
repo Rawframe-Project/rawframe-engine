@@ -206,9 +206,9 @@ RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     }
     RAWFRAME_EXPECT(game->physics->dimensions == 2 && game->physics->gravityX == 0.5F &&
                     game->physics->gravityY == -9.8F && game->physics->substeps == 8);
-    // The engine's nine components, under their engine names, and its
-    // persistent identity and layer.
-    RAWFRAME_EXPECT(game->components.size() == 11 && game->components[0].name == "rawframe.physics2d.body" &&
+    // The engine's ten components (Tiles2D the tenth, D859), under their
+    // engine names, and its persistent identity and layer.
+    RAWFRAME_EXPECT(game->components.size() == 12 && game->components[0].name == "rawframe.physics2d.body" &&
                     game->components[1].kestType == "Pose2D");
     const auto kDefaults = parseGame("program p.kest\nphysics2d\n");
     RAWFRAME_EXPECT(kDefaults.has_value() && kDefaults->physics->gravityY == -10.0F &&

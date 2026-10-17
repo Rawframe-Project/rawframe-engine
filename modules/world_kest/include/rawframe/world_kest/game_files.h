@@ -21,6 +21,7 @@
 #include "rawframe/kest/program.h"
 #include "rawframe/physics3d/physics.h"
 #include "rawframe/result/result.h"
+#include "rawframe/tilemap/tilemap.h"
 #include "rawframe/world/layer.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/mod.h"
@@ -55,11 +56,13 @@ struct GameTextureResource {
 };
 
 /// A tilemap a `tilemap` line names, by the identity the line gives it and
-/// the resource it is (D858).
+/// the resource it is (D858), and its tiles, read cooked where the game
+/// reads its meshes and null where it does not (D859).
 struct GameTilemapResource {
     std::uint64_t id = 0;
     std::string path;
     base::Bits128 tilemap{};
+    std::shared_ptr<const tilemap::Tilemap> map;
 };
 
 /// A font a `font` line names, by the identity the line gives it and the
@@ -210,7 +213,11 @@ public:
     [[nodiscard]] const std::vector<GameTextureResource>& textures() const noexcept {
         return textures_;
     }
-    /// Its tilemaps (D858).
+    /// Every tilemap the description names, in the order of its lines: in
+    /// development the identity its sidecar gives, which must name
+    /// `rawframe.tilemap`, and from content the one the record names; each
+    /// read and checked where meshes are, so the server's bodies and the
+    /// client's tiles are one map (D858, D859).
     [[nodiscard]] const std::vector<GameTilemapResource>& tilemaps() const noexcept {
         return tilemaps_;
     }
@@ -314,6 +321,8 @@ private:
     /// Reads and decodes the description's meshes, the resources
     /// `resources` names in the order of its lines, from `content`.
     result::Status readMeshes(game_content::GameContent* content, const std::vector<base::Bits128>& resources);
+    /// Reads and parses each of `tilemaps_` from `content`.
+    result::Status readTilemaps(game_content::GameContent* content);
     /// Reads every clip and mask the animators' graphs name, every skeleton
     /// those clips name, and each animator's subset mask, each once, with
     /// `read`, which is asked for a document of a kind by its identity.
@@ -346,6 +355,8 @@ private:
     std::vector<GameModProgram> modPrograms_;
     /// The digest of each mesh's cooked bytes, in the same order.
     std::vector<base::Sha256Digest> meshDigests_;
+    /// The digest of each tilemap's cooked bytes, where they were read.
+    std::vector<base::Sha256Digest> tilemapDigests_;
     /// Each animator's graph, in the order of its lines.
     std::vector<Named> graphs_;
     /// Every clip, mask, and skeleton below them, by identity, in identity
