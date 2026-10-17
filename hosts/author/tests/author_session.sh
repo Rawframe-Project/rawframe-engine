@@ -192,11 +192,17 @@ rm -f "$work/root/level.scene.editor"
     echo '{"kind":"authoring.preview","id":2,"scene":"level.scene","preview":{"endpoint":"127.0.0.1:9","pinFile":"'"$work"'/none","tokenFile":"'"$work"'/none"}}'
     echo '{"kind":"authoring.preview","id":3,"scene":"level.scene","preview":null}'
     echo '{"kind":"authoring.view_mode","id":4,"scene":"level.scene","mode":"unlit"}'
+    echo '{"kind":"authoring.drawn_frame","id":5,"scene":"level.scene","steps":true}'
+    echo '{"kind":"authoring.drawn_frame","id":6,"scene":"level.scene","capture":"frame.txt"}'
 } | "$author" session "$game" "$work/root" >"$work/replies" || true
 reply 2 | grep -q '"code":"capability_denied".*"said":"the pin and token files must read"'
 reply 3 | grep -q '"answer":{"kind":"authoring.preview","reopened":false,"previewing":false}'
 # A view mode with no preview to take it is not shown (D794).
 reply 4 | grep -q '"answer":{"kind":"authoring.view_mode","mode":"unlit","shown":false}'
+# A drawn frame needs a preview to have drawn it, and a capture is a
+# .rfframe file (D842).
+reply 5 | grep -q '"code":"validation_failed".*a drawn frame needs the scene previewed'
+reply 6 | grep -q 'its capture a path ending .rfframe'
 # Nor is one off this machine, or a file that is not a small regular one.
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'

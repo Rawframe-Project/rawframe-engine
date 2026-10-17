@@ -71,6 +71,9 @@ public:
     /// `overlays` (D798): what the preview of `record.scene` draws over it,
     /// by name, if it is previewed; whether it draws them.
     [[nodiscard]] document::Value overlaid(const authoring::SessionRecord& record);
+    /// `drawn_frame` (D842): what the frame the preview of `record.scene`
+    /// last drew holds, as its client says, its steps when asked.
+    [[nodiscard]] result::Result<document::Value> drawnOf(const authoring::SessionRecord& record);
     /// `split` (D797): the preview of `record.scene` shown in one, two,
     /// or four views, told with its look from now on; whether it splits.
     [[nodiscard]] document::Value split(const authoring::SessionRecord& record, const authoring::AuthoredScene& scene);

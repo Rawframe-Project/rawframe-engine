@@ -30,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 37> kVerbs = {
+constexpr std::array<VerbName, 38> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -61,6 +61,7 @@ constexpr std::array<VerbName, 37> kVerbs = {
     VerbName{.kind = "authoring.step", .verb = SessionVerb::Step},
     VerbName{.kind = "authoring.traffic", .verb = SessionVerb::Traffic},
     VerbName{.kind = "authoring.profile", .verb = SessionVerb::Profile},
+    VerbName{.kind = "authoring.drawn_frame", .verb = SessionVerb::DrawnFrame},
     VerbName{.kind = "authoring.live_entities", .verb = SessionVerb::LiveEntities},
     VerbName{.kind = "authoring.live_entity", .verb = SessionVerb::LiveEntity},
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
@@ -103,6 +104,7 @@ Members membersOf(SessionVerb verb) {
         return Members{.required = 1, .optional = 0};
     case SessionVerb::Traffic:
     case SessionVerb::Profile:
+    case SessionVerb::DrawnFrame:
         return Members{.required = 1, .optional = 0};
     case SessionVerb::LiveEntities:
         return Members{.required = 1, .optional = 0};
@@ -240,6 +242,12 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         for (const char* kName : {"after", "component", "limit"}) {
             leftOutable += parsed->find(kName) != nullptr ? 1 : 0;
         }
+    } else if (record.verb == SessionVerb::DrawnFrame) {
+        for (const char* kName : {"steps", "capture"}) {
+            leftOutable += parsed->find(kName) != nullptr ? 1 : 0;
+        }
+    } else if (record.verb == SessionVerb::Profile) {
+        leftOutable = parsed->find("capture") != nullptr ? 1 : 0;
     }
     const std::size_t kGiven = parsed->names().size() - 1 - (parsed->find("id") != nullptr ? 1 : 0) -
                                (expects != nullptr ? 1 : 0) - (dry != nullptr ? 1 : 0) - leftOutable;
@@ -358,6 +366,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Step:
     case SessionVerb::Traffic:
     case SessionVerb::Profile:
+    case SessionVerb::DrawnFrame:
     case SessionVerb::LiveEntities:
     case SessionVerb::LiveEntity:
         break;
@@ -396,6 +405,25 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         if (!readView(parsed->find("view"), record.view)) {
             return malformed("view holds an eye and a target of three numbers each and a fieldOfView");
         }
+    } else if (record.verb == SessionVerb::Profile) {
+        // A profile kept as a capture too (D844), its place the session's
+        // to judge.
+        const Value* kCapture = parsed->find("capture");
+        if (kCapture != nullptr && (textOf(kCapture) == nullptr || !kCapture->text()->ends_with(".rfprofile"))) {
+            return malformed("a profile's capture is a path ending .rfprofile");
+        }
+        record.capture = kCapture != nullptr ? *kCapture->text() : std::string{};
+    } else if (record.verb == SessionVerb::DrawnFrame) {
+        // The capture's place is the session's to judge; the record only
+        // its form.
+        const Value* kSteps = parsed->find("steps");
+        const Value* kCapture = parsed->find("capture");
+        if ((kSteps != nullptr && !kSteps->truth().has_value()) ||
+            (kCapture != nullptr && (textOf(kCapture) == nullptr || !kCapture->text()->ends_with(".rfframe")))) {
+            return malformed("a drawn frame's steps is true or false, and its capture a path ending .rfframe");
+        }
+        record.steps = kSteps != nullptr && *kSteps->truth();
+        record.capture = kCapture != nullptr ? *kCapture->text() : std::string{};
     } else if (record.verb == SessionVerb::Overlays) {
         // Only bounded: the names are the renderer's.
         const Value* kOverlays = parsed->find("overlays");

@@ -141,6 +141,9 @@ enum class SessionVerb : std::uint8_t {
     /// What the played game's World's last ticks took, each tick and each
     /// system, read on its server (D838).
     Profile,
+    /// What the frame the scene's preview last drew holds, its steps when
+    /// asked, and kept as a capture file when one is named (D842).
+    DrawnFrame,
     /// The played game's living entities, a page, and one of them, read on
     /// its server (D808).
     LiveEntities,
@@ -235,6 +238,11 @@ struct SessionRecord {
     /// (D806).
     std::optional<bool> paused;
     std::uint32_t ticks = 1;
+    /// A drawn frame's: whether its steps are given, and the capture file
+    /// it is kept in, a path under the game's directory, empty for none
+    /// (D842); a profile's capture file too (D844).
+    bool steps = false;
+    std::string capture;
     /// Live entities' and live entity's: what is handed on to the server,
     /// `after`, `component`, `limit`, and `entity`, as given (D808).
     document::Value query;

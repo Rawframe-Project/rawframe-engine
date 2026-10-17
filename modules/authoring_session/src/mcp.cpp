@@ -558,11 +558,34 @@ void McpBridge::State::addSessionTools() {
     {
         Value properties = Value::object();
         properties.add("scene", property("string", false, "The scene previewed while the game plays."));
+        properties.add("capture",
+                       property("string",
+                                false,
+                                "A .rfprofile path under the game's directory to keep the profile in, as a capture "
+                                "Studio opens read-only (D844)."));
         tools.push_back(toolOf("game_profile",
                                "What the played game's server's last ticks took, in microseconds: each tick, and "
-                               "each system's total and longest over them.",
+                               "each system's total and longest over them; kept as a capture file when one is "
+                               "named.",
                                schemaOf(std::move(properties), {"scene"}),
-                               annotationsOf(true, false)));
+                               annotationsOf(false, false)));
+    }
+    // What the preview's last frame held, and a capture of it (D842).
+    {
+        Value properties = Value::object();
+        properties.add("scene", property("string", false, "The scene previewed."));
+        properties.add("steps", property("boolean", false, "Whether to give the frame's draw steps, pass by pass."));
+        properties.add("capture",
+                       property("string",
+                                false,
+                                "A .rfframe path under the game's directory to keep the frame in, as a capture "
+                                "Studio opens read-only."));
+        tools.push_back(toolOf("preview_frame",
+                               "What the frame the scene's preview last drew held: its figures (draws, culled, "
+                               "lights, shadows, decals, particles, which effects ran) and, when asked, its steps; "
+                               "kept as a capture file when one is named.",
+                               schemaOf(std::move(properties), {"scene"}),
+                               annotationsOf(false, false)));
     }
     // What a source uses and what uses it, by the last cook (D803).
     {
@@ -749,6 +772,12 @@ McpBridge::State::callSession(const Value& id, std::string_view name, const Valu
     } else if (name == "game_profile") {
         made = record("authoring.profile", recordId);
         copy("scene", "scene");
+        copy("capture", "capture");
+    } else if (name == "preview_frame") {
+        made = record("authoring.drawn_frame", recordId);
+        copy("scene", "scene");
+        copy("steps", "steps");
+        copy("capture", "capture");
     } else if (name == "game_step") {
         made = record("authoring.step", recordId);
         copy("scene", "scene");

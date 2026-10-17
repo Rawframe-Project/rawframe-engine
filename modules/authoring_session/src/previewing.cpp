@@ -568,6 +568,35 @@ Value Preview::split(const authoring::SessionRecord& record, const authoring::Au
     return made;
 }
 
+result::Result<Value> Preview::drawnOf(const authoring::SessionRecord& record) {
+    if (preview_ == nullptr || record.scene != scene_) {
+        return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
+                                       result::ErrorClass::FailedPrecondition,
+                                       "a drawn frame needs the scene previewed")
+                                   .withContext("scene", record.scene)};
+    }
+    Value asked = Value::object();
+    asked.add("kind", Value::string("tooling.drawn_frame"));
+    asked.add("id", Value::integer(0));
+    asked.add("steps", Value::boolean(record.steps || !record.capture.empty()));
+    const auto kReply = preview_->ask(rawframe::document::writeCompact(asked));
+    const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
+    const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    if (kAnswer == nullptr || kAnswer->kind() != Value::Kind::Object) {
+        return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
+                                       result::ErrorClass::Unavailable,
+                                       "the preview has drawn no frame it describes")};
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.drawn_frame"));
+    for (std::size_t each = 0; each < kAnswer->names().size(); ++each) {
+        if (kAnswer->names()[each] != "kind") {
+            made.add(kAnswer->names()[each], kAnswer->items()[each]);
+        }
+    }
+    return made;
+}
+
 Value Preview::overlaid(const authoring::SessionRecord& record) {
     bool shown = false;
     Value names = Value::array();

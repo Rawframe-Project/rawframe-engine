@@ -233,8 +233,14 @@ private:
             return preview_.ran(record);
         case authoring::SessionVerb::Traffic:
             return preview_.trafficOf(record);
-        case authoring::SessionVerb::Profile:
-            return preview_.profileOf(record);
+        case authoring::SessionVerb::Profile: {
+            RAWFRAME_TRY_ASSIGN(Value made, preview_.profileOf(record));
+            return captured(std::move(made), record.capture, ".rfprofile");
+        }
+        case authoring::SessionVerb::DrawnFrame: {
+            RAWFRAME_TRY_ASSIGN(Value made, preview_.drawnOf(record));
+            return captured(std::move(made), record.capture, ".rfframe");
+        }
         case authoring::SessionVerb::LiveEntities:
         case authoring::SessionVerb::LiveEntity:
             return preview_.live(record);
@@ -352,6 +358,39 @@ private:
             authoring::AuthoredScene::open(sidecarIdentity(kPath).value_or(rawframe::base::Bits128{}), *kText));
         open.onDisk = kDigest;
         return &open;
+    }
+
+    /// An answer kept in the capture file `capture` names, a file of
+    /// `extension` under the root, when it names one: the answer itself,
+    /// so a capture opens as it was read (a frame's D842, a profile's
+    /// D844).
+    result::Result<Value> captured(Value made, const std::string& capture, std::string_view extension) {
+        if (capture.empty()) {
+            return made;
+        }
+        const std::filesystem::path kPath = std::filesystem::weakly_canonical(root_ / capture);
+        const auto [kRootEnd, kPathAt] = std::ranges::mismatch(root_, kPath);
+        if (kRootEnd != root_.end() || kPath.extension() != extension) {
+            return std::unexpected{
+                failure(authoring::AuthoringError::ValidationFailed,
+                        result::ErrorClass::InvalidArgument,
+                        "a capture is a " + std::string{extension} + " file under the session's root")
+                    .withContext("capture", capture)};
+        }
+        std::error_code madeDirectory;
+        std::filesystem::create_directories(kPath.parent_path(), madeDirectory);
+        const std::filesystem::path kStaged = kPath.string() + ".authoring";
+        std::ofstream{kStaged, std::ios::binary | std::ios::trunc} << rawframe::document::write(made);
+        std::error_code renamed;
+        std::filesystem::rename(kStaged, kPath, renamed);
+        if (madeDirectory || renamed) {
+            return std::unexpected{failure(authoring::AuthoringError::Internal,
+                                           result::ErrorClass::Unavailable,
+                                           "the capture could not be written")
+                                       .withContext("capture", capture)};
+        }
+        made.add("capture", Value::string(capture));
+        return made;
     }
 
     /// Writes an open scene whose document changed, by rename.
