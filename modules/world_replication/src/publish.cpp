@@ -542,6 +542,8 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
                 ++flushed;
                 ++statistics.stateDatagrams;
                 statistics.stateBytes += writer.written().size();
+                ++peer.stateDatagrams;
+                peer.stateBytes += writer.written().size();
                 peer.sent.push_back(
                     SentState{.sequence = peer.stateSequence, .tick = tick.value, .records = std::move(inDatagram)});
                 if (peer.sent.size() > kSentWindow) {
@@ -682,6 +684,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         }
         if (spent + used + kRecord + kStateHeaderRoom > settings.stateBytesPerPublish) {
             ++statistics.recordsDeferred;
+            ++peer.recordsDeferred;
             continue;
         }
         if (!encodeStateRecordHead(recordWriter, {.entity = candidate.mapping->id, .component = value.component})
@@ -708,8 +711,10 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         used = recordWriter.written().size();
         ++count;
         ++statistics.recordsSent;
+        ++peer.recordsSent;
     }
     statistics.recordsDeferred += static_cast<std::uint64_t>(waiting - candidates.begin());
+    peer.recordsDeferred += static_cast<std::uint64_t>(waiting - candidates.begin());
     kFlush();
     // Nothing changed, yet the client still needs to hear which of its
     // input the server consumed: without it an idle player's predictions

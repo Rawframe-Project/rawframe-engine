@@ -197,6 +197,30 @@ struct ServerReplicationStatistics {
     std::uint64_t commandsLimited = 0;
 };
 
+/// One connection's replication so far (D840), for a tool's profile: the
+/// server's totals, counted for it alone, and what it holds now.
+struct ConnectionTraffic {
+    network::ConnectionId connection;
+    /// Its player's entity.
+    world::EntityHandle player;
+    /// Entities its client is told of now.
+    std::size_t mapped = 0;
+    std::uint64_t stateDatagrams = 0;
+    std::uint64_t stateBytes = 0;
+    std::uint64_t recordsSent = 0;
+    std::uint64_t recordsDeferred = 0;
+    std::uint64_t inputWindows = 0;
+    std::uint64_t inputBytes = 0;
+    /// Of the state datagrams it keeps for acknowledgement, those not yet
+    /// acknowledged.
+    std::size_t unacknowledged = 0;
+    /// Ticks its claimed moments lag their arrival, smoothed; none before
+    /// the first claim.
+    std::optional<double> lagTicks;
+    /// Its checksum records that did not match.
+    std::uint64_t divergences = 0;
+};
+
 class ReplicationServer final : public world_runtime::SystemContributor, public InterestHistory {
 public:
     /// `sessions` is a server's and must outlive this.
@@ -256,6 +280,8 @@ public:
     /// Divergences found since last asked, the oldest first, at most 64; a
     /// detection, never a response (SPEC-0041).
     [[nodiscard]] std::vector<Divergence> takeDivergences();
+    /// Each admitted connection's replication so far, in connection order.
+    [[nodiscard]] std::vector<ConnectionTraffic> connectionTraffic() const;
     /// How many of a connection's checksum records did not match.
     [[nodiscard]] std::uint64_t divergences(network::ConnectionId connection) const noexcept;
 

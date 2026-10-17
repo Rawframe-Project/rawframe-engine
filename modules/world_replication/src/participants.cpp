@@ -55,6 +55,9 @@ public:
     std::size_t connections() const noexcept override {
         return server_ != nullptr ? server_->connections() : 0;
     }
+    std::vector<ConnectionTraffic> perConnection() const override {
+        return server_ != nullptr ? server_->connectionTraffic() : std::vector<ConnectionTraffic>{};
+    }
 
     composition::CapabilityObject provide(std::string_view capability) noexcept override {
         if (capability == kReplicationTraffic.name) {

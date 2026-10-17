@@ -50,6 +50,15 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
     const std::uint64_t kSentSince = scenario.server->statistics().recordsSent - kSentBefore;
     RAWFRAME_EXPECT(kSentSince >= 10 && kSentSince <= 20);
     RAWFRAME_EXPECT(scenario.server->statistics().valuesLookedAt - kLookedBefore <= 40);
+    // Its one connection, counted alone, is the whole (D840): its player,
+    // the four entities it is told of, and every record and window.
+    const auto kEach = scenario.server->connectionTraffic();
+    const auto kTotals = scenario.server->statistics();
+    RAWFRAME_EXPECT(kEach.size() == 1 && kEach[0].mapped == 4 && !kEach[0].player.isNull());
+    RAWFRAME_EXPECT(!kEach.empty() && kEach[0].recordsSent == kTotals.recordsSent &&
+                    kEach[0].stateBytes == kTotals.stateBytes && kEach[0].stateDatagrams == kTotals.stateDatagrams &&
+                    kEach[0].inputWindows == kTotals.inputWindows && kEach[0].inputBytes == kTotals.inputBytes &&
+                    kEach[0].divergences == 0);
 
     // A prop destroyed on the server is retired on the client.
     RAWFRAME_EXPECT(scenario.serverWorld.destroy(props[1]).has_value());

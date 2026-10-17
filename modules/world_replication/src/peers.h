@@ -297,6 +297,14 @@ struct Peer {
     bool gone = false;
     /// Told the server is stopping (D585).
     bool toldStopping = false;
+    /// What its connection was sent and sent, as the server's totals count
+    /// them, for a tool's profile (D840).
+    std::uint64_t stateDatagrams = 0;
+    std::uint64_t stateBytes = 0;
+    std::uint64_t recordsSent = 0;
+    std::uint64_t recordsDeferred = 0;
+    std::uint64_t inputWindows = 0;
+    std::uint64_t inputBytes = 0;
 };
 
 /// An entity by the ID of the mapping a connection has acknowledged for it:

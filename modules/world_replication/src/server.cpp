@@ -165,6 +165,8 @@ void ReplicationServer::State::onInput(Peer& peer, const network::SessionEvent& 
     }
     ++statistics.inputWindows;
     statistics.inputBytes += event.payload.size();
+    ++peer.inputWindows;
+    peer.inputBytes += event.payload.size();
     peer.newestHeard = std::max(peer.newestHeard, kWindow->newestInputTick);
     // What the lead was since the window before counts if this one came
     // within a command's age of it; a longer silence was a stall, and
@@ -791,6 +793,27 @@ world::EntityHandle ReplicationServer::player(network::ConnectionId connection) 
 
 std::vector<Divergence> ReplicationServer::takeDivergences() {
     return std::exchange(state_->divergences, {});
+}
+
+std::vector<ConnectionTraffic> ReplicationServer::connectionTraffic() const {
+    std::vector<ConnectionTraffic> made;
+    made.reserve(state_->peers.size());
+    for (const auto& [kId, kPeer] : state_->peers) {
+        made.push_back(ConnectionTraffic{
+            .connection = kPeer.connection,
+            .player = kPeer.player,
+            .mapped = kPeer.mapped.size(),
+            .stateDatagrams = kPeer.stateDatagrams,
+            .stateBytes = kPeer.stateBytes,
+            .recordsSent = kPeer.recordsSent,
+            .recordsDeferred = kPeer.recordsDeferred,
+            .inputWindows = kPeer.inputWindows,
+            .inputBytes = kPeer.inputBytes,
+            .unacknowledged = static_cast<std::size_t>(std::ranges::count(kPeer.sent, false, &SentState::acknowledged)),
+            .lagTicks = kPeer.lag,
+            .divergences = kPeer.checksums.divergences});
+    }
+    return made;
 }
 
 std::uint64_t ReplicationServer::divergences(network::ConnectionId connection) const noexcept {
