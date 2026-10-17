@@ -66,7 +66,9 @@ struct FieldRow {
         /// A solid's line to put in a blockout, `field` its place (D850).
         NewSolid,
         /// The terrain brush's tool, radius, or amount, `field` which (D856).
-        BrushSetting
+        BrushSetting,
+        /// The tile a tilemap's block pressed paints (D861).
+        TileSetting
     };
     ui::Node value{};
     Role role = Role::Field;

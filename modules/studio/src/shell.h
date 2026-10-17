@@ -529,6 +529,12 @@ private:
     void showTerrainLayer(std::size_t at);
     void setBrush(const FieldRow& row, const std::string& text);
     bool pressMap(ui::Node node);
+    /// A tilemap's tiles as rows, the tile painted, and its grid (D861).
+    void showTilemap();
+    void showTilePaint();
+    void showTileRow(std::size_t at);
+    void setTilePaint(const std::string& text);
+    bool pressTiles(ui::Node node);
     void setSolid(const FieldRow& row, const std::string& text);
     /// A frame's capture (D843): its figures and its steps in the entity
     /// column, the one chosen in the Inspector, nothing to edit.

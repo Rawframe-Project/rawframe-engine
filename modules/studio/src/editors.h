@@ -22,6 +22,7 @@ inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canva
 inline constexpr diagnostics::EventIdentity kBlockoutShown{"studio", "studio_blockout"};
 inline constexpr diagnostics::EventIdentity kPlanShown{"studio", "studio_plan"};
 inline constexpr diagnostics::EventIdentity kTerrainShown{"studio", "studio_terrain"};
+inline constexpr diagnostics::EventIdentity kTilemapShown{"studio", "studio_tilemap"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
 inline constexpr diagnostics::EventIdentity kCurveShown{"studio", "studio_curve"};
 /// A style sheet's classes as each variant looks (D837).
@@ -51,6 +52,7 @@ enum class Listed : std::uint8_t {
     Capture,
     Blockout,
     Terrain,
+    Tilemap,
 };
 
 struct EditorsHeld {
@@ -69,6 +71,13 @@ struct EditorsHeld {
     double brushRadius = 2;
     double brushAmount = 1;
     std::size_t strokes = 0;
+    /// The chosen tilemap's grid, each block and the cells a paint there
+    /// covers (column, row, width, height), its rows' tiles (-1 none), and
+    /// the tile painted (D861).
+    std::vector<std::pair<ui::Node, std::array<std::uint32_t, 4>>> tileBlocks;
+    std::vector<int> tileRows;
+    int tilePaint = 0;
+    std::size_t tilesPainted = 0;
     /// What each entity row of a data document holds, as last read (D812).
     std::vector<document::Value> data;
     /// The game's description's lines as last read, and each settings row's

@@ -1157,6 +1157,24 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "field.terrain written: yes\n.*heights\n0 0 0 0 0\n.*layers\n1000\n.*\"code\":\"studio_terrain\"[^\n]*\"samples\":25,\"layers\":2,\"blocks\":16,\"strokes\":2}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"field.terrain\",[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
+        # A tilemap painted in Studio (D861): a room beside a copy of Runners,
+        # its sheet's tiles as rows and its grid drawn; tile 1 chosen and a
+        # cell painted with it through the session's tilemap.paint (D860),
+        # then none set as the tile and a floor cell cleared, and written.
+        add_test(NAME studio_tilemap
+                 COMMAND ${CMAKE_COMMAND} -E env
+                         "STUDIO_EXTRA_FILES=${CMAKE_CURRENT_SOURCE_DIR}/tests/tilemaps/room.tilemap=room.tilemap"
+                         STUDIO_SHOW_WRITTEN=1
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/runners/runners.game room.tilemap wheel=457,650,4 @room.tilemap until=studio_tilemap
+                         "@tile 1 (tile)" "@cell 2 1" "until=studio_said,status=\"painted tile 1 at 2 1"
+                         "@tile#2:none" "@cell 0 2" "until=studio_said,status=\"cleared at 0 2"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_tilemap PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "room.tilemap written: yes\n.*tiles\n\\. \\. \\. \\.\n\\. \\. 1 \\.\n\\. 0 0 0\n.*\"code\":\"studio_tilemap\"[^\n]*\"cells\":12,\"sheet\":2,\"blocks\":12,\"painted\":2}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"room.tilemap\",[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
         # Paused and stepped (D806): Plaza played from Studio, its World
         # paused on its server, stepped three ticks one by one, each a tick
         # on, and let run again.
