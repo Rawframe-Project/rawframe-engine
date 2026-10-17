@@ -128,6 +128,12 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_terrain)
     set_tests_properties(author_terrain PROPERTIES
                          PASS_REGULAR_EXPRESSION "shaped a terrain in a session and cooked it as a mesh")
+    # A scatter edited line by line and undone (D865).
+    add_test(NAME author_scatter
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_scatter.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_scatter)
+    set_tests_properties(author_scatter PROPERTIES
+                         PASS_REGULAR_EXPRESSION "edited a scatter in a session and undid it")
     # A tilemap painted and cooked (D858, D860).
     add_test(NAME author_tilemap
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_tilemap.sh $<TARGET_FILE:rawframe_host_author>

@@ -9,6 +9,7 @@
 #include "rawframe/document/json.h"
 #include "rawframe/input/actions.h"
 #include "rawframe/localization/table.h"
+#include "rawframe/scatter/scatter.h"
 #include "rawframe/terrain/terrain.h"
 #include "rawframe/tilemap/tilemap.h"
 #include "rawframe/world_kest/game.h"
@@ -164,6 +165,13 @@ result::Result<std::vector<std::string>> rewritesTerrain(std::span<const std::st
         return refusedLines("a brush's tool is raise, lower, smooth, or paint");
     }
     return linesOf(terrain::writeTerrain(*read));
+}
+
+result::Status readsScatter(std::string_view text) {
+    return readsAs("scatter", [text]() -> result::Status {
+        RAWFRAME_TRY(scatter::parseScatter(text));
+        return {};
+    });
 }
 
 result::Status readsTilemap(std::string_view text) {

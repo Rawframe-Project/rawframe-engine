@@ -43,6 +43,10 @@ struct DataKind {
 [[nodiscard]] result::Result<std::vector<std::string>> rewritesTerrain(std::span<const std::string> lines,
                                                                        const authoring::Operation& operation);
 
+/// Whether `text` reads as a scatter (D865): the reader of a scatter's
+/// line document.
+[[nodiscard]] result::Status readsScatter(std::string_view text);
+
 /// Whether `text` reads as a tilemap (D860), and the lines tiles painted
 /// leave of one: the tilemap module's paint, its document written again.
 [[nodiscard]] result::Status readsTilemap(std::string_view text);
