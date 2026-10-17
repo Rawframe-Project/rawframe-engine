@@ -239,7 +239,8 @@ RAWFRAME_TEST(SpawnLinesBecomeAScene) {
 
 RAWFRAME_TEST(AGameResolvesItsScenesInstances) {
     // Movers whose start scene instances a two-mover prefab twice, found by
-    // its sidecar: one copy as authored, one moved and slowed.
+    // its sidecar: one copy as authored, one moved and slowed and streamed
+    // as a district (D870).
     const std::filesystem::path kDirectory = test::scratchDirectory("instances");
     std::filesystem::create_directories(kDirectory / "prefabs");
     writeText(kDirectory / "movers.kest", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.kest"));
@@ -289,12 +290,18 @@ RAWFRAME_TEST(AGameResolvesItsScenesInstances) {
                        {.entity = kId(21),
                         .component = "movers.velocity",
                         .kind = scene::Override::Kind::Set,
-                        .fields = {{.name = "dx", .value = kNumber("0")}}}}});
+                        .fields = {{.name = "dx", .value = kNumber("0")}}}},
+         .streaming = scene::Streaming::Atomic});
     writeText(kDirectory / "start.scene", *scene::writeScene(start));
 
     std::vector<composition::Problem> problems;
+    const std::array<composition::RegistrarEntry, 4> kRegistered = {
+        kWatched[0],
+        kWatched[1],
+        kWatched[2],
+        composition::RegistrarEntry{"test.replication", &registerReplicationWatcher, world_runtime::kScopes}};
     auto plan = composition::compose(
-        composition::CompositionRequest{.registrars = kWatched,
+        composition::CompositionRequest{.registrars = kRegistered,
                                         .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
         problems);
     const auto kConfiguration = composition::Configuration::parse(
@@ -316,9 +323,20 @@ RAWFRAME_TEST(AGameResolvesItsScenesInstances) {
         const std::vector<std::pair<float, float>> kExpected = {
             {1.0F, 0.0F}, {1.0F, 50.0F}, {2.0F, 0.0F}, {2.0F, 0.0F}};
         RAWFRAME_EXPECT(found == kExpected);
+        // The second copy a district of its two movers, the first none.
+        const world_replication::StreamedUnits* const kDistricts =
+            replicationPlan != nullptr ? replicationPlan->streamedUnits() : nullptr;
+        RAWFRAME_EXPECT(kDistricts != nullptr && kDistricts->units().size() == 1 &&
+                        !kDistricts->units()[0].persistent && kDistricts->units()[0].entities.size() == 2);
+        if (kDistricts != nullptr && kDistricts->units().size() == 1) {
+            for (const world::EntityHandle kMember : kDistricts->units()[0].entities) {
+                RAWFRAME_EXPECT(simulation->world()->alive(kMember));
+            }
+        }
         composition.stop();
     }
     simulation = nullptr;
+    replicationPlan = nullptr;
 
     // Without the prefab's sidecar the instance names nothing, and the game
     // does not load.

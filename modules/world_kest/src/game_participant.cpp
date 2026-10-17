@@ -47,8 +47,10 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 #include <memory>
 #include <optional>
+#include <span>
 
 #if RAWFRAME_FILE_SYSTEM
 #include <filesystem>
@@ -407,6 +409,18 @@ public:
                 ++spawned;
             }
         }
+        // Its scenes' districts, streamed as units to clients (D870).
+        districts_.held.clear();
+        for (const SceneRange& range : sceneRanges_) {
+            for (const SceneUnit& unit : range.units) {
+                world_replication::StreamedUnit& district =
+                    districts_.held.emplace_back(world_replication::StreamedUnit{.persistent = unit.persistent});
+                for (const std::size_t kSpawn : unit.spawns) {
+                    std::ranges::copy(made[range.first + kSpawn], std::back_inserter(district.entities));
+                }
+            }
+        }
+        ++districts_.changed;
         // A game's own scenes are followed where its sources are watched
         // (D410).
         scenes_ = SceneFollower::spawned(*files_, sceneRanges_, made, authored);
@@ -623,6 +637,9 @@ public:
     }
     const std::optional<world_replication::InterestSettings>& interest() const noexcept override {
         return interest_;
+    }
+    const world_replication::StreamedUnits* streamedUnits() const noexcept override {
+        return &districts_;
     }
     std::size_t maximumMapped() const noexcept override {
         return game_.mapped;
@@ -967,6 +984,20 @@ private:
     std::vector<SpawnValues> level_;
     std::vector<SceneReference> references_;
     std::vector<SceneRange> sceneRanges_;
+    /// The districts its scenes spawned, as the replication server reads
+    /// them (D870).
+    struct Districts final : world_replication::StreamedUnits {
+        std::vector<world_replication::StreamedUnit> held;
+        std::uint64_t changed = 0;
+
+        std::span<const world_replication::StreamedUnit> units() const noexcept override {
+            return held;
+        }
+        std::uint64_t version() const noexcept override {
+            return changed;
+        }
+    };
+    Districts districts_;
     SceneFollower scenes_;
     std::vector<KestPrefab> prefabs_;
     /// Each Kest component's entity fields, which its declaration views.

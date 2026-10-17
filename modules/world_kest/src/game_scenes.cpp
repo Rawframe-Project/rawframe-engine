@@ -136,11 +136,13 @@ GameScenes::sceneSpawns(const GameFiles& files, std::string_view sceneText, cons
     };
     // Its instances resolved: what spawns is the scene's entities and
     // every entity its instances bring.
-    auto read = scene::readScene(sceneText).and_then([&files](const scene::Scene& authored) {
-        return scene::resolveInstances(authored, [&files](base::Bits128 source) {
-            return files.sceneById(source).and_then([](std::string_view text) {
-                return scene::readScene(text);
-            });
+    auto authored = scene::readScene(sceneText);
+    if (!authored.has_value()) {
+        return std::unexpected<result::Error>{std::move(authored).error().withContext("scene", path)};
+    }
+    auto read = scene::resolveInstances(*authored, [&files](base::Bits128 source) {
+        return files.sceneById(source).and_then([](std::string_view text) {
+            return scene::readScene(text);
         });
     });
     if (!read.has_value()) {
@@ -196,6 +198,20 @@ GameScenes::sceneSpawns(const GameFiles& files, std::string_view sceneText, cons
         made.spawns.push_back(std::move(spawn));
         made.ids.push_back(entity.id);
     }
+    // Each instance streamed as a district: the entities it brings, by the
+    // ids it gives them, that are still there once resolved (D870).
+    for (const scene::SceneInstance& instance : authored->instances) {
+        if (instance.streaming == scene::Streaming::Each) {
+            continue;
+        }
+        SceneUnit unit{.persistent = instance.streaming == scene::Streaming::Persistent, .spawns = {}};
+        for (const scene::IdentityMapping& mapping : instance.entities) {
+            if (const std::size_t kPlace = kPlaceOf(mapping.instance); kPlace < made.spawns.size()) {
+                unit.spawns.push_back(kPlace);
+            }
+        }
+        made.units.push_back(std::move(unit));
+    }
     return made;
 }
 
@@ -215,7 +231,7 @@ result::Status GameScenes::addScenes(const GameFiles& files,
         RAWFRAME_TRY(namePersistent(files, path, scene));
         const std::size_t kFirst = spawns.size();
         if (ranges != nullptr) {
-            ranges->push_back(SceneRange{.path = path, .first = kFirst, .ids = scene.ids});
+            ranges->push_back(SceneRange{.path = path, .first = kFirst, .ids = scene.ids, .units = scene.units});
         }
         for (SceneReference& reference : scene.references) {
             reference.spawn += kFirst;

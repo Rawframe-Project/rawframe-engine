@@ -36,6 +36,13 @@ struct SceneReference {
     std::size_t target = 0;
 };
 
+/// A district of the scene streamed as one (D870): whether it is
+/// persistent, and its entities by their places among the spawns.
+struct SceneUnit {
+    bool persistent = false;
+    std::vector<std::size_t> spawns;
+};
+
 /// A scene's entities as spawns of one each, and the references among them
 /// by their places in that list.
 struct SceneSpawns {
@@ -43,6 +50,9 @@ struct SceneSpawns {
     std::vector<SceneReference> references;
     /// Each spawn's entity id in the resolved scene.
     std::vector<base::Bits128> ids;
+    /// Its instances streamed as districts, each with the entities it
+    /// brings that the scene keeps.
+    std::vector<SceneUnit> units;
 };
 
 /// Where one of the game's scenes lies among the spawns `addScenes`
@@ -52,6 +62,8 @@ struct SceneRange {
     std::string path;
     std::size_t first = 0;
     std::vector<base::Bits128> ids;
+    /// Its districts, their spawns counted from `first` (D870).
+    std::vector<SceneUnit> units;
 };
 
 /// Reads scenes for one game: `layouts` in the order of `game.components`.

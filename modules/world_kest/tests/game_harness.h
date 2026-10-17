@@ -15,6 +15,7 @@
 #include "rawframe/test/test.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world_kest/registrar.h"
+#include "rawframe/world_replication/plan.h"
 #include "rawframe/world_runtime/registrar.h"
 #include "rawframe/world_runtime/simulation.h"
 
@@ -79,6 +80,29 @@ inline void registerPlanWatcher(composition::ParticipantRegistrar& registrar) no
         .factory = &makePlanWatcher,
         .scope = composition::LifetimeScope::World,
         .requiredCapabilities = kPlanNeeds,
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
+    });
+}
+
+/// The loaded game's replication plan, found as the simulation is, for a
+/// test that reads what a server would be handed.
+inline const world_replication::ReplicationPlan* replicationPlan = nullptr;
+
+inline result::Result<composition::ParticipantOwner>
+makeReplicationWatcher(composition::ParticipantContext& context) noexcept {
+    RAWFRAME_TRY_ASSIGN(replicationPlan, context.capability(world_replication::kReplicationPlan));
+    struct Watcher final : composition::Participant {};
+    return composition::ParticipantOwner{new Watcher{}};
+}
+
+inline constexpr std::string_view kReplicationNeeds[] = {world_replication::kReplicationPlan.name};
+
+inline void registerReplicationWatcher(composition::ParticipantRegistrar& registrar) noexcept {
+    registrar.submit(composition::ParticipantDeclaration{
+        .identity = "test.replication_watcher",
+        .factory = &makeReplicationWatcher,
+        .scope = composition::LifetimeScope::World,
+        .requiredCapabilities = kReplicationNeeds,
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
     });
 }
