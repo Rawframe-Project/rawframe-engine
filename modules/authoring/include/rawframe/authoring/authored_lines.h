@@ -27,13 +27,21 @@
 
 namespace rawframe::authoring {
 
+/// The lines a line document's kind makes of an operation of its own, as a
+/// terrain's brush stroke (D855); refused as it refuses.
+using LineRewriter = result::Result<std::vector<std::string>> (*)(std::span<const std::string> lines,
+                                                                  const Operation& operation);
+
 class AuthoredLines {
 public:
     /// The document `text`, of resource identity `document`, at generation
     /// nought and clean; refused (`ValidationFailed`) where `reads` does
-    /// not read it.
-    [[nodiscard]] static result::Result<std::unique_ptr<AuthoredLines>>
-    open(base::Bits128 document, std::string_view text, DocumentReader reads, const HistoryLimits& limits = {});
+    /// not read it. Its kind's own operations go to `rewrites`, where given.
+    [[nodiscard]] static result::Result<std::unique_ptr<AuthoredLines>> open(base::Bits128 document,
+                                                                             std::string_view text,
+                                                                             DocumentReader reads,
+                                                                             const HistoryLimits& limits = {},
+                                                                             LineRewriter rewrites = nullptr);
 
     AuthoredLines(AuthoredLines&&) = delete;
     AuthoredLines& operator=(AuthoredLines&&) = delete;
@@ -112,14 +120,16 @@ private:
     AuthoredLines(base::Bits128 identity,
                   std::vector<std::string> lines,
                   DocumentReader reads,
-                  const HistoryLimits& limits)
-        : identity_(identity), lines_(std::move(lines)), reads_(reads), history_(limits) {
+                  const HistoryLimits& limits,
+                  LineRewriter rewrites)
+        : identity_(identity), lines_(std::move(lines)), reads_(reads), rewrites_(rewrites), history_(limits) {
     }
     [[nodiscard]] result::Result<Committed> step(std::uint64_t generation, bool undo);
 
     base::Bits128 identity_{};
     std::vector<std::string> lines_;
     DocumentReader reads_ = nullptr;
+    LineRewriter rewrites_ = nullptr;
     History<Entry> history_;
     std::uint64_t generation_ = 0;
 };

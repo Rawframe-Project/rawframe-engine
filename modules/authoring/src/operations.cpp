@@ -42,6 +42,11 @@ constexpr std::array<InputDeclaration, 2> kAddInstanceInputs = {
 constexpr std::array<InputDeclaration, 2> kSetLineInputs = {
     {{"line", InputType::Place}, {"text", InputType::OptionalText}}};
 constexpr std::array<InputDeclaration, 2> kInsertLineInputs = {{{"line", InputType::Place}, {"text", InputType::Text}}};
+constexpr std::array<InputDeclaration, 5> kBrushInputs = {{{"tool", InputType::Text},
+                                                           {"x", InputType::Number},
+                                                           {"z", InputType::Number},
+                                                           {"radius", InputType::Number},
+                                                           {"amount", InputType::Number}}};
 
 constexpr std::array<InputDeclaration, 2> kDataInputs = {
     {{"path", InputType::Text}, {"value", InputType::DocumentValue}}};
@@ -75,7 +80,7 @@ constexpr std::array<InputDeclaration, 2> kSwitchInputs = {
 constexpr std::array<InputDeclaration, 2> kRenameClassInputs = {
     {{"style", InputType::Style}, {"name", InputType::Text}}};
 
-constexpr std::array<OperationDeclaration, 43> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 44> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -109,6 +114,7 @@ constexpr std::array<OperationDeclaration, 43> kDeclarations = {{
     {.name = "data.set", .targets = "data value", .inputs = kDataInputs},
     {.name = "lines.set", .targets = "line", .inputs = kSetLineInputs},
     {.name = "lines.insert", .targets = "line", .inputs = kInsertLineInputs},
+    {.name = "terrain.brush", .targets = "terrain", .inputs = kBrushInputs},
     {.name = "scene.list_entities", .history = HistoryClass::ReadOnly, .targets = "rawframe.scene", .inputs = {}},
     {.name = "scene.read_entity",
      .history = HistoryClass::ReadOnly,

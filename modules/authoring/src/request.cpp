@@ -26,7 +26,7 @@ constexpr std::array<std::string_view, 10> kCodeNames = {"validation_failed",
                                                          "delta_invalid",
                                                          "delta_mismatch"};
 
-constexpr std::array<std::string_view, 15> kInputTypeNames = {"entity",
+constexpr std::array<std::string_view, 16> kInputTypeNames = {"entity",
                                                               "component",
                                                               "field",
                                                               "text",
@@ -40,7 +40,8 @@ constexpr std::array<std::string_view, 15> kInputTypeNames = {"entity",
                                                               "style",
                                                               "document_value",
                                                               "optional_text",
-                                                              "graph_node"};
+                                                              "graph_node",
+                                                              "number"};
 constexpr std::array<std::string_view, 4> kHistoryNames = {
     "undoable", "non_dirtying", "bulk_non_undoable", "read_only"};
 
@@ -210,6 +211,22 @@ result::Result<Operation> operationOf(const Value& value) {
             return kBad();
         }
         return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
+    }
+    if (kIndex == 33) {
+        // A brush's stroke on a terrain (D855), its numbers any JSON number.
+        const std::string* tool = textOf(value.find("tool"));
+        const auto kNumber = [&value](std::string_view name) {
+            const Value* kGiven = value.find(name);
+            return kGiven != nullptr ? kGiven->real() : std::nullopt;
+        };
+        const auto kX = kNumber("x");
+        const auto kZ = kNumber("z");
+        const auto kRadius = kNumber("radius");
+        const auto kAmount = kNumber("amount");
+        if (tool == nullptr || !kX.has_value() || !kZ.has_value() || !kRadius.has_value() || !kAmount.has_value()) {
+            return kBad();
+        }
+        return Operation{BrushTerrain{.tool = *tool, .x = *kX, .z = *kZ, .radius = *kRadius, .amount = *kAmount}};
     }
     if (kIndex == 31 || kIndex == 32) {
         // A line document's line by its place (D817), set, taken away, or

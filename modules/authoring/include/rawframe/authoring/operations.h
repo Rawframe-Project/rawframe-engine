@@ -351,6 +351,19 @@ struct InsertLine {
     std::string text;
 };
 
+/// A brush's stroke on a terrain (D855): `tool` raise, lower, smooth, or
+/// paint, its middle at `x` `z` in meters, reaching `radius`; `amount` the
+/// meters a raise or a lower moves the middle, a smooth's strength from
+/// nought to one, or the layer a paint puts. The terrain's kind makes it
+/// the lines it changes.
+struct BrushTerrain {
+    std::string tool;
+    double x = 0;
+    double z = 0;
+    double radius = 1;
+    double amount = 0;
+};
+
 using Operation = std::variant<CreateEntity,
                                DestroyEntity,
                                RenameEntity,
@@ -383,7 +396,8 @@ using Operation = std::variant<CreateEntity,
                                SetMaterialSwitch,
                                SetDataValue,
                                SetLine,
-                               InsertLine>;
+                               InsertLine,
+                               BrushTerrain>;
 
 /// Whether `operation` changes a scene, rather than a style sheet (D636), a
 /// UI document (D641), or a material instance (D721), which follow the
@@ -466,6 +480,8 @@ enum class InputType : std::uint8_t {
     OptionalText,
     /// A graph node's identity, as 16 hex digits (D728).
     GraphNode,
+    /// A number (D855).
+    Number,
 };
 
 struct InputDeclaration {

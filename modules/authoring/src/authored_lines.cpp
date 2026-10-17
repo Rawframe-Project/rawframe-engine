@@ -46,10 +46,13 @@ std::size_t bytesOf(const std::vector<std::string>& lines) noexcept {
 
 } // namespace
 
-result::Result<std::unique_ptr<AuthoredLines>>
-AuthoredLines::open(base::Bits128 document, std::string_view text, DocumentReader reads, const HistoryLimits& limits) {
+result::Result<std::unique_ptr<AuthoredLines>> AuthoredLines::open(base::Bits128 document,
+                                                                   std::string_view text,
+                                                                   DocumentReader reads,
+                                                                   const HistoryLimits& limits,
+                                                                   LineRewriter rewrites) {
     RAWFRAME_TRY(reads(text));
-    return std::unique_ptr<AuthoredLines>{new AuthoredLines(document, linesOf(text), reads, limits)};
+    return std::unique_ptr<AuthoredLines>{new AuthoredLines(document, linesOf(text), reads, limits, rewrites)};
 }
 
 std::string AuthoredLines::text() const {
@@ -69,6 +72,9 @@ result::Result<Committed> AuthoredLines::change(std::uint64_t generation, std::s
     }
     std::vector<std::string> lines = lines_;
     std::size_t deltas = 0;
+    // Its operations that changed something: one a line, or a brush's
+    // stroke of many lines (D855).
+    std::size_t changes = 0;
     std::string summary;
     for (std::size_t at = 0; at < operations.size(); ++at) {
         const auto kIndexed = [at](std::unexpected<result::Error> refused) {
@@ -76,6 +82,24 @@ result::Result<Committed> AuthoredLines::change(std::uint64_t generation, std::s
         };
         const auto* set = std::get_if<SetLine>(&operations[at]);
         const auto* put = std::get_if<InsertLine>(&operations[at]);
+        if (set == nullptr && put == nullptr && rewrites_ != nullptr) {
+            // Its kind's own, made the lines it leaves (D855); each line
+            // that differs a delta.
+            auto after = rewrites_(lines, operations[at]);
+            if (!after.has_value()) {
+                return kIndexed(std::unexpected<result::Error>{std::move(after).error()});
+            }
+            std::size_t changed = std::max(after->size(), lines.size()) - std::min(after->size(), lines.size());
+            for (std::size_t each = 0; each < std::min(after->size(), lines.size()); ++each) {
+                changed += (*after)[each] != lines[each] ? 1 : 0;
+            }
+            if (changed != 0 && changes++ == 0) {
+                summary = std::string{declarationOf(operations[at]).name};
+            }
+            deltas += changed;
+            lines = std::move(*after);
+            continue;
+        }
         if (set == nullptr && put == nullptr) {
             return kIndexed(refuse(result::ErrorClass::InvalidArgument,
                                    AuthoringError::ValidationFailed,
@@ -102,7 +126,7 @@ result::Result<Committed> AuthoredLines::change(std::uint64_t generation, std::s
         } else {
             lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(kLine));
         }
-        if (deltas == 0) {
+        if (changes++ == 0) {
             summary = std::string{put != nullptr      ? "insert"
                                   : kText.has_value() ? "set"
                                                       : "remove"} +
@@ -113,8 +137,8 @@ result::Result<Committed> AuthoredLines::change(std::uint64_t generation, std::s
     if (deltas == 0) {
         return Committed{.generation = generation_, .deltas = 0};
     }
-    if (deltas > 1) {
-        summary += " and " + std::to_string(deltas - 1) + " more";
+    if (changes > 1) {
+        summary += " and " + std::to_string(changes - 1) + " more";
     }
     RAWFRAME_TRY(reads_(written(lines)));
     const std::size_t kBytes = bytesOf(lines_) + bytesOf(lines);
