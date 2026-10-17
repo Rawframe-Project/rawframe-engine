@@ -87,8 +87,9 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     if (pressPreferences(node)) {
         return;
     }
-    // The left dock's tabs and the Layers' rows (D788).
-    if (pressLayers(node) || pressBrowser(node)) {
+    // The left dock's tabs and the Layers' rows (D788), and a terrain's map
+    // (D856).
+    if (pressLayers(node) || pressBrowser(node) || pressMap(node)) {
         return;
     }
     // A document's tab is pressed as its row in Assets is (D776).
@@ -532,6 +533,10 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
     }
     if (row.role == FieldRow::Role::SolidWord || row.role == FieldRow::Role::NewSolid) {
         setSolid(row, text);
+        return;
+    }
+    if (row.role == FieldRow::Role::BrushSetting) {
+        setBrush(row, text);
         return;
     }
     if (row.role == FieldRow::Role::GraphParam || row.role == FieldRow::Role::GraphInput) {

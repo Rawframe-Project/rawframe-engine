@@ -21,6 +21,7 @@ namespace rawframe::studio {
 inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canvas"};
 inline constexpr diagnostics::EventIdentity kBlockoutShown{"studio", "studio_blockout"};
 inline constexpr diagnostics::EventIdentity kPlanShown{"studio", "studio_plan"};
+inline constexpr diagnostics::EventIdentity kTerrainShown{"studio", "studio_terrain"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
 inline constexpr diagnostics::EventIdentity kCurveShown{"studio", "studio_curve"};
 /// A style sheet's classes as each variant looks (D837).
@@ -49,6 +50,7 @@ enum class Listed : std::uint8_t {
     Settings,
     Capture,
     Blockout,
+    Terrain,
 };
 
 struct EditorsHeld {
@@ -60,6 +62,13 @@ struct EditorsHeld {
     std::vector<std::string> blockoutLines;
     float planScale = 1;
     bool planPressed = false;
+    /// The chosen terrain's map, each block and the place in meters a
+    /// stroke there brushes, and the brush (D856).
+    std::vector<std::pair<ui::Node, std::array<double, 2>>> mapBlocks;
+    std::string brushTool = "raise";
+    double brushRadius = 2;
+    double brushAmount = 1;
+    std::size_t strokes = 0;
     /// What each entity row of a data document holds, as last read (D812).
     std::vector<document::Value> data;
     /// The game's description's lines as last read, and each settings row's

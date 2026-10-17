@@ -523,6 +523,12 @@ private:
     void showPlan();
     void showBlockoutSolid(std::size_t at);
     void dropSolid(std::size_t at, std::array<float, 2> moved);
+    /// A terrain's layers as rows, its brush, and its map (D856).
+    void showTerrain();
+    void showBrush();
+    void showTerrainLayer(std::size_t at);
+    void setBrush(const FieldRow& row, const std::string& text);
+    bool pressMap(ui::Node node);
     void setSolid(const FieldRow& row, const std::string& text);
     /// A frame's capture (D843): its figures and its steps in the entity
     /// column, the one chosen in the Inspector, nothing to edit.

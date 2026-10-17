@@ -1138,6 +1138,25 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "yard.blockout written: yes\nblockout 1\nbox floor at 0 0 0 size 8 0.5 8\nbox wall at 1 0 3 size 4 3 0.2\n.*\"code\":\"studio_blockout\"[^\n]*\"lines\":3,\"solids\":2}.*\"code\":\"studio_plan\"[^\n]*\"solids\":2,\"cuts\":0,\"centimetersWide\":800,\"centimetersDeep\":800}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"yard.blockout\",[^\n]*\"entity\":\"floor\",[^\n]*\"applied\":3,\"refused\":1,.*\"exit\":\"clean_stop\"")
+        # A terrain brushed in Studio (D856): a flat field beside a copy of
+        # Runners, its layers as rows and its ground drawn from above; the
+        # brush's radius and amount set, a block pressed raising the ground
+        # there through the session's terrain.brush (D855) and written; the
+        # rock chosen and a block painted with it.
+        add_test(NAME studio_terrain
+                 COMMAND ${CMAKE_COMMAND} -E env
+                         "STUDIO_EXTRA_FILES=${CMAKE_CURRENT_SOURCE_DIR}/tests/terrains/field.terrain=field.terrain"
+                         STUDIO_SHOW_WRITTEN=1
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/runners/runners.game field.terrain wheel=457,650,4 @field.terrain until=studio_terrain
+                         "@radius#2:1.5" "@amount#2:1" "@map 2 2" "until=studio_said,status=\"raised at 2.5 2.5"
+                         "@rock (layer)" "@radius#2:0.6" "@map 0 0" "until=studio_said,status=\"painted at 0.5 0.5"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_terrain PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "field.terrain written: yes\n.*heights\n0 0 0 0 0\n.*layers\n1000\n.*\"code\":\"studio_terrain\"[^\n]*\"samples\":25,\"layers\":2,\"blocks\":16,\"strokes\":2}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"field.terrain\",[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
         # Paused and stepped (D806): Plaza played from Studio, its World
         # paused on its server, stepped three ticks one by one, each a tick
         # on, and let run again.

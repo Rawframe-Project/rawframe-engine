@@ -64,7 +64,9 @@ struct FieldRow {
         /// the word, or `line` for the whole line (D850).
         SolidWord,
         /// A solid's line to put in a blockout, `field` its place (D850).
-        NewSolid
+        NewSolid,
+        /// The terrain brush's tool, radius, or amount, `field` which (D856).
+        BrushSetting
     };
     ui::Node value{};
     Role role = Role::Field;

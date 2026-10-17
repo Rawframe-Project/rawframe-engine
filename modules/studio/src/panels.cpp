@@ -482,6 +482,10 @@ void ShellParticipant::showScene(std::size_t at) {
         showBlockout();
         return;
     }
+    if (chosen(Listed::Terrain)) {
+        showTerrain();
+        return;
+    }
     // Over the scene's entities, the search that chooses them (D473), then
     // the scene an instance placed in it is of: at the Hierarchy's top,
     // where a long scene does not scroll them away (D776).
@@ -631,6 +635,10 @@ void ShellParticipant::showEntity(std::size_t at) {
     }
     if (chosen(Listed::Blockout)) {
         showBlockoutSolid(at);
+        return;
+    }
+    if (chosen(Listed::Terrain)) {
+        showTerrainLayer(at);
         return;
     }
     endEdit();
