@@ -10,6 +10,7 @@
 #include "rawframe/input/actions.h"
 #include "rawframe/localization/table.h"
 #include "rawframe/terrain/terrain.h"
+#include "rawframe/tilemap/tilemap.h"
 #include "rawframe/world_kest/game.h"
 
 #include <cmath>
@@ -88,6 +89,26 @@ constexpr std::array<DataKind, 5> kKinds = {{{".actions", "action map", &readsAc
                                              {".translations", "translation table", &readsTranslations},
                                              {".rfanim", "animation document", &readsAnimation}}};
 
+/// A line document kind's refusal of an operation it cannot make lines of.
+std::unexpected<result::Error> refusedLines(std::string_view why) {
+    return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                       authoring::kAuthoringDomain,
+                                                       authoring::code(authoring::AuthoringError::ValidationFailed),
+                                                       why)};
+}
+
+/// A document written again, as its lines.
+std::vector<std::string> linesOf(std::string_view written) {
+    std::vector<std::string> made;
+    std::size_t at = 0;
+    while (at < written.size()) {
+        const std::size_t kEnd = written.find('\n', at);
+        made.emplace_back(written.substr(at, kEnd - at));
+        at = kEnd + 1;
+    }
+    return made;
+}
+
 } // namespace
 
 std::span<const DataKind> dataKinds() noexcept {
@@ -113,14 +134,8 @@ result::Status readsTerrain(std::string_view text) {
 result::Result<std::vector<std::string>> rewritesTerrain(std::span<const std::string> lines,
                                                          const authoring::Operation& operation) {
     const auto* brush = std::get_if<authoring::BrushTerrain>(&operation);
-    const auto kRefused = [](std::string_view why) {
-        return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
-                                                           authoring::kAuthoringDomain,
-                                                           authoring::code(authoring::AuthoringError::ValidationFailed),
-                                                           why)};
-    };
     if (brush == nullptr) {
-        return kRefused("a terrain's operations are lines.set, lines.insert, and terrain.brush");
+        return refusedLines("a terrain's operations are lines.set, lines.insert, and terrain.brush");
     }
     std::string text;
     for (const std::string& kLine : lines) {
@@ -128,11 +143,11 @@ result::Result<std::vector<std::string>> rewritesTerrain(std::span<const std::st
     }
     auto read = terrain::parseTerrain(text);
     if (!read.has_value()) {
-        return kRefused("the terrain does not read: " + std::string{read.error().description()});
+        return refusedLines("the terrain does not read: " + std::string{read.error().description()});
     }
     if (!(brush->radius > 0) || !std::isfinite(brush->x) || !std::isfinite(brush->z) || !std::isfinite(brush->amount) ||
         brush->radius > 1e4) {
-        return kRefused("a brush reaches a radius above nought, at a place of finite meters");
+        return refusedLines("a brush reaches a radius above nought, at a place of finite meters");
     }
     const terrain::Brush kBrush{.x = brush->x, .z = brush->z, .radius = brush->radius};
     if (brush->tool == "raise" || brush->tool == "lower") {
@@ -142,21 +157,53 @@ result::Result<std::vector<std::string>> rewritesTerrain(std::span<const std::st
     } else if (brush->tool == "paint") {
         if (brush->amount < 0 || brush->amount != std::floor(brush->amount) ||
             brush->amount >= static_cast<double>(read->layers.size())) {
-            return kRefused("a paint's amount is the place of a layer the terrain names");
+            return refusedLines("a paint's amount is the place of a layer the terrain names");
         }
         static_cast<void>(terrain::paint(*read, kBrush, static_cast<std::uint8_t>(brush->amount)));
     } else {
-        return kRefused("a brush's tool is raise, lower, smooth, or paint");
+        return refusedLines("a brush's tool is raise, lower, smooth, or paint");
     }
-    const std::string kWritten = terrain::writeTerrain(*read);
-    std::vector<std::string> made;
-    std::size_t at = 0;
-    while (at < kWritten.size()) {
-        const std::size_t kEnd = kWritten.find('\n', at);
-        made.push_back(kWritten.substr(at, kEnd - at));
-        at = kEnd + 1;
+    return linesOf(terrain::writeTerrain(*read));
+}
+
+result::Status readsTilemap(std::string_view text) {
+    return readsAs("tilemap", [text]() -> result::Status {
+        RAWFRAME_TRY(tilemap::parseTilemap(text));
+        return {};
+    });
+}
+
+result::Result<std::vector<std::string>> rewritesTilemap(std::span<const std::string> lines,
+                                                         const authoring::Operation& operation) {
+    const auto* paint = std::get_if<authoring::PaintTiles>(&operation);
+    if (paint == nullptr) {
+        return refusedLines("a tilemap's operations are lines.set, lines.insert, and tilemap.paint");
     }
-    return made;
+    std::string text;
+    for (const std::string& kLine : lines) {
+        text += kLine + "\n";
+    }
+    auto read = tilemap::parseTilemap(text);
+    if (!read.has_value()) {
+        return refusedLines("the tilemap does not read: " + std::string{read.error().description()});
+    }
+    const auto kWhole = [](double value, double most) {
+        return value >= 0 && value <= most && value == std::floor(value);
+    };
+    const double kTiles = static_cast<double>(read->sheetColumns) * read->sheetRows;
+    if (!kWhole(paint->column, read->columns - 1.0) || !kWhole(paint->row, read->rows - 1.0) ||
+        !kWhole(paint->width, read->columns - paint->column) || !kWhole(paint->height, read->rows - paint->row) ||
+        paint->width < 1 || paint->height < 1 || !(paint->tile == -1 || kWhole(paint->tile, kTiles - 1))) {
+        return refusedLines("tiles painted are a rectangle of whole cells within the grid, of a tile of its "
+                            "sheet or -1 for none");
+    }
+    static_cast<void>(tilemap::paint(*read,
+                                     static_cast<std::uint32_t>(paint->column),
+                                     static_cast<std::uint32_t>(paint->row),
+                                     static_cast<std::uint32_t>(paint->width),
+                                     static_cast<std::uint32_t>(paint->height),
+                                     paint->tile == -1 ? tilemap::kEmpty : static_cast<std::uint16_t>(paint->tile)));
+    return linesOf(tilemap::writeTilemap(*read));
 }
 
 result::Status readsGameDescription(std::string_view text) {

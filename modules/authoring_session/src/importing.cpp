@@ -36,7 +36,7 @@ struct Taken {
     std::string_view importer;
 };
 
-constexpr std::array<Taken, 17> kTaken = {Taken{".png", "texture", "rawframe.texture"},
+constexpr std::array<Taken, 18> kTaken = {Taken{".png", "texture", "rawframe.texture"},
                                           Taken{".jpg", "texture", "rawframe.texture"},
                                           Taken{".jpeg", "texture", "rawframe.texture"},
                                           Taken{".bmp", "texture", "rawframe.texture"},
@@ -46,6 +46,7 @@ constexpr std::array<Taken, 17> kTaken = {Taken{".png", "texture", "rawframe.tex
                                           Taken{".glb", "mesh", "rawframe.mesh"},
                                           Taken{".blockout", "mesh", "rawframe.blockout"},
                                           Taken{".terrain", "mesh", "rawframe.terrain"},
+                                          Taken{".tilemap", "tilemap", "rawframe.tilemap"},
                                           Taken{".wav", "sound", "rawframe.audio"},
                                           Taken{".ogg", "sound", "rawframe.audio"},
                                           Taken{".opus", "sound", "rawframe.audio"},
@@ -176,8 +177,8 @@ result::Result<Imported> importAsset(const std::filesystem::path& game,
             failure(authoring::AuthoringError::ValidationFailed,
                     result::ErrorClass::InvalidArgument,
                     "an import goes to a path under the game's directory, named as its kind is: "
-                    "png, jpg, bmp, tga, or hdr for a texture, gltf or glb for a mesh, wav, ogg, opus, flac, or "
-                    "mp3 for a sound, ttf or otf for a font")
+                    "png, jpg, bmp, tga, or hdr for a texture, gltf, glb, blockout, or terrain for a mesh, "
+                    "tilemap for a tilemap, wav, ogg, opus, flac, or mp3 for a sound, ttf or otf for a font")
                 .withContext("as", std::string{as})};
     }
     std::string sourceKind;

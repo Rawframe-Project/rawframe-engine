@@ -73,7 +73,8 @@ public:
           materials_(root_, ".rfmaterial", "material instance"),
           games_(root_, ".game", "game description", &readsGameDescription),
           blockouts_(root_, ".blockout", "blockout", &readsBlockout),
-          terrains_(root_, ".terrain", "terrain", &readsTerrain, &rewritesTerrain) {
+          terrains_(root_, ".terrain", "terrain", &readsTerrain, &rewritesTerrain),
+          tilemaps_(root_, ".tilemap", "tilemap", &readsTilemap, &rewritesTilemap) {
         for (const DataKind& kKind : dataKinds()) {
             data_.emplace_back(root_, kKind.extension, kKind.called, kKind.reads);
         }
@@ -877,14 +878,16 @@ private:
     std::vector<Documents<authoring::AuthoredData>> data_;
     /// The game's descriptions, its settings, as line documents (D817).
     Documents<authoring::AuthoredLines> games_;
-    /// Its blockouts (D849) and terrains (D855), line documents too, a
-    /// terrain's brush strokes made lines by its kind.
+    /// Its blockouts (D849), terrains (D855), and tilemaps (D860), line
+    /// documents too, a terrain's brush strokes and a tilemap's painted
+    /// tiles made lines by their kinds.
     Documents<authoring::AuthoredLines> blockouts_;
     Documents<authoring::AuthoredLines> terrains_;
+    Documents<authoring::AuthoredLines> tilemaps_;
 
     /// The line documents `name` is one of, if any.
     Documents<authoring::AuthoredLines>* linesOf(const std::string& name) {
-        for (auto* each : {&games_, &blockouts_, &terrains_}) {
+        for (auto* each : {&games_, &blockouts_, &terrains_, &tilemaps_}) {
             if (each->names(name)) {
                 return each;
             }

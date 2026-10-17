@@ -128,6 +128,12 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_terrain)
     set_tests_properties(author_terrain PROPERTIES
                          PASS_REGULAR_EXPRESSION "shaped a terrain in a session and cooked it as a mesh")
+    # A tilemap painted and cooked (D858, D860).
+    add_test(NAME author_tilemap
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_tilemap.sh $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_tilemap)
+    set_tests_properties(author_tilemap PROPERTIES
+                         PASS_REGULAR_EXPRESSION "painted a tilemap in a session and cooked it")
     set_tests_properties(author_cooks PROPERTIES
                          PASS_REGULAR_EXPRESSION "cooked the plaza through a session, [1-9][0-9]* sources")
     # An agent's tools over the Model Context Protocol (D773): the plaza

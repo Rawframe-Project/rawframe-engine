@@ -215,6 +215,9 @@ document::Value assetsOf(const world_kest::GameDescription& game) {
     for (const auto& each : game.meshes) {
         kAdd("mesh", each.id, each.path);
     }
+    for (const auto& each : game.tilemaps) {
+        kAdd("tilemap", each.id, each.path);
+    }
     for (const auto& each : game.materials) {
         kAdd("material", each.id, each.path);
     }

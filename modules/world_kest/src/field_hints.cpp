@@ -36,10 +36,12 @@ constexpr std::array<std::pair<std::int64_t, std::string_view>, 4> kShapes2d{
 constexpr std::array<std::pair<std::int64_t, std::string_view>, 5> kShapes3d{
     {{0, "sphere"}, {1, "box"}, {2, "capsule"}, {3, "cylinder"}, {4, "mesh"}}};
 
-const std::array<EngineHint, 61> kEngineHints{{
+const std::array<EngineHint, 63> kEngineHints{{
     {.type = "rawframe.canvas.Sprite", .field = "color", .color = true},
     {.type = "rawframe.canvas.Sprite", .field = "texture", .asset = "texture"},
     {.type = "rawframe.canvas.Sprite", .field = "material", .asset = "material"},
+    {.type = "rawframe.canvas.Tilemap", .field = "tilemap", .asset = "tilemap"},
+    {.type = "rawframe.physics2d.Tiles2D", .field = "tilemap", .asset = "tilemap"},
     {.type = "rawframe.model.Model", .field = "mesh", .asset = "mesh"},
     {.type = "rawframe.model.Model", .field = "material", .asset = "material"},
     {.type = "rawframe.sound.Emitter", .field = "sound", .asset = "sound"},
@@ -143,10 +145,10 @@ std::optional<std::string_view> readFieldLine(std::span<const std::string_view> 
             united = true;
         } else if (kWhat == "asset" && !kinded && at < words.size()) {
             // The kinds of asset a game's lines declare (assetsOf).
-            constexpr std::array<std::string_view, 7> kKinds{
-                "texture", "mesh", "material", "sound", "font", "prefab", "label"};
+            constexpr std::array<std::string_view, 8> kKinds{
+                "texture", "mesh", "tilemap", "material", "sound", "font", "prefab", "label"};
             if (std::ranges::find(kKinds, words[at]) == kKinds.end()) {
-                return "a field's asset is a texture, mesh, material, sound, font, prefab, or label";
+                return "a field's asset is a texture, mesh, tilemap, material, sound, font, prefab, or label";
             }
             hint.asset = std::string{words[at++]};
             kinded = true;
