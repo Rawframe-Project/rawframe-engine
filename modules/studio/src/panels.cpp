@@ -166,13 +166,16 @@ result::Status ShellParticipant::build() {
     // The docks at the sizes the author left them (D779), each with a
     // splitter on its inner edge in place of the gap it had.
     // The left dock holds the Hierarchy, or the Layers in its place, each
-    // heading naming the other (D788).
+    // heading naming the other (D788), and the Layers the World (D870).
     RAWFRAME_TRY_ASSIGN(leftDock_, box(kUpper, leftLayout(preferences_.hierarchyWidth), kBackground));
     RAWFRAME_TRY_ASSIGN(entitiesColumn_,
                         tabbedColumn(leftDock_, "Hierarchy", "Layers", layersTab_, "Live", &live_.button));
-    RAWFRAME_TRY_ASSIGN(layersColumn_, tabbedColumn(leftDock_, "Layers", "Hierarchy", hierarchyTab_));
+    RAWFRAME_TRY_ASSIGN(layersColumn_,
+                        tabbedColumn(leftDock_, "Layers", "Hierarchy", hierarchyTab_, "World", &worldTab_));
     RAWFRAME_TRY(tree_->detach(layersColumn_));
-    layersShown_ = false;
+    RAWFRAME_TRY_ASSIGN(worldColumn_, tabbedColumn(leftDock_, "World", "Hierarchy", worldBackTab_));
+    RAWFRAME_TRY(tree_->detach(worldColumn_));
+    leftShown_ = Left::Hierarchy;
     RAWFRAME_TRY(splitter(kUpper, Edge::Hierarchy));
     // The entities' operations above their rows, in two rows: what makes
     // and copies, then what restores and orders.
@@ -575,8 +578,11 @@ void ShellParticipant::showScene(std::size_t at) {
     }
     // The Layers count what the scene has now, and the environment says
     // what holds its light.
-    if (layersShown_) {
+    if (leftShown_ == Left::Layers) {
         showLayers();
+    }
+    if (leftShown_ == Left::World) {
+        showWorld();
     }
     if (dockShown_ == Dock::Environment) {
         showEnvironment();

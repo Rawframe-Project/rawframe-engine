@@ -149,8 +149,20 @@ private:
                                           std::string_view extra = {},
                                           ui::Node* extraButton = nullptr);
 
-    /// The Hierarchy, or with `layers` the Layers, in the left dock.
-    void showLeft(bool layers);
+    /// What the left dock shows: the Hierarchy, the Layers (D788), or the
+    /// World, the scene's districts (D870).
+    enum class Left : std::uint8_t {
+        Hierarchy,
+        Layers,
+        World,
+    };
+    void showLeft(Left shown);
+
+    /// The World: each instance of the scene, how it reaches clients as a
+    /// district, pressed to stream it the next way (D870).
+    void showWorld();
+    /// A press on the World's rows; whether it was.
+    bool pressWorld(ui::Node node);
 
     /// The Layers: each layer, how many are on it, its choosing and lock (D788).
     void showLayers();
@@ -967,7 +979,19 @@ private:
     ui::Node layersColumn_{};
     ui::Node layersTab_{};
     ui::Node hierarchyTab_{};
-    bool layersShown_ = false;
+    Left leftShown_ = Left::Hierarchy;
+    /// The World's column, its heading's press back to the Hierarchy, the
+    /// Layers' press for it, its rows, and each district's press with the
+    /// entity its instance is named by and how it is streamed (D870).
+    ui::Node worldColumn_{};
+    ui::Node worldTab_{};
+    ui::Node worldBackTab_{};
+    std::vector<ui::Node> worldRows_;
+    struct DistrictPress {
+        std::string entity;
+        std::string streaming;
+    };
+    std::vector<std::pair<ui::Node, DistrictPress>> districtPresses_;
     struct LayerPress {
         enum class Does : std::uint8_t {
             Choose,

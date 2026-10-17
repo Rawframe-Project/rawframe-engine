@@ -25,6 +25,8 @@ inline constexpr diagnostics::EventIdentity kTerrainShown{"studio", "studio_terr
 inline constexpr diagnostics::EventIdentity kTilemapShown{"studio", "studio_tilemap"};
 inline constexpr diagnostics::EventIdentity kScatterShown{"studio", "studio_scatter"};
 inline constexpr diagnostics::EventIdentity kSequenceShown{"studio", "studio_sequence"};
+/// A scene's instances listed as districts (D870).
+inline constexpr diagnostics::EventIdentity kWorldShown{"studio", "studio_world"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
 inline constexpr diagnostics::EventIdentity kCurveShown{"studio", "studio_curve"};
 /// A style sheet's classes as each variant looks (D837).

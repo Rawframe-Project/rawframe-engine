@@ -47,14 +47,20 @@ result::Result<ui::Node> ShellParticipant::tabbedColumn(ui::Node parent,
     return kColumn;
 }
 
-void ShellParticipant::showLeft(bool layers) {
-    if (layers != layersShown_) {
-        static_cast<void>(tree_->detach(layers ? entitiesColumn_ : layersColumn_));
-        static_cast<void>(tree_->attach(leftDock_, layers ? layersColumn_ : entitiesColumn_));
-        layersShown_ = layers;
+void ShellParticipant::showLeft(Left shown) {
+    const auto kColumn = [this](Left which) {
+        return which == Left::Layers ? layersColumn_ : which == Left::World ? worldColumn_ : entitiesColumn_;
+    };
+    if (shown != leftShown_) {
+        static_cast<void>(tree_->detach(kColumn(leftShown_)));
+        static_cast<void>(tree_->attach(leftDock_, kColumn(shown)));
+        leftShown_ = shown;
     }
-    if (layers) {
+    if (shown == Left::Layers) {
         showLayers();
+    }
+    if (shown == Left::World) {
+        showWorld();
     }
 }
 
@@ -134,9 +140,12 @@ void ShellParticipant::showLayers() {
 }
 
 bool ShellParticipant::pressLayers(ui::Node node) {
-    if (node == layersTab_ || node == hierarchyTab_) {
+    if (node == layersTab_ || node == hierarchyTab_ || node == worldTab_ || node == worldBackTab_) {
         endEdit();
-        showLeft(node == layersTab_);
+        showLeft(node == layersTab_ ? Left::Layers : node == worldTab_ ? Left::World : Left::Hierarchy);
+        return true;
+    }
+    if (pressWorld(node)) {
         return true;
     }
     const auto kPress = std::ranges::find(layerPresses_, node, &std::pair<ui::Node, LayerPress>::first);
