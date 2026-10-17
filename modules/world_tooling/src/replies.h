@@ -4,6 +4,7 @@
 // shared by the server and the preview's verbs.
 
 #include "rawframe/document/json.h"
+#include "rawframe/world/entity.h"
 #include "rawframe/world_tooling/errors.h"
 #include "rawframe/world_tooling/preview.h"
 
@@ -19,6 +20,9 @@ namespace rawframe::world_tooling {
 
 /// An error reply line: its code's name and why.
 [[nodiscard]] std::string errorLine(const document::Value& id, ToolingError error, std::string_view why);
+
+/// An entity as a record names it: `slot:generation`, both decimal.
+[[nodiscard]] std::string entityName(world::EntityHandle entity);
 
 /// A point of three finite numbers within a million metres, as `tooling.look`
 /// and `tooling.pick` give one; none otherwise.

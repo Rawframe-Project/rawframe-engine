@@ -41,6 +41,10 @@ std::string replyLine(const Value& id, std::string_view member, Value value) {
     return document::writeCompact(made) + "\n";
 }
 
+std::string entityName(world::EntityHandle entity) {
+    return std::to_string(entity.slot) + ":" + std::to_string(entity.generation);
+}
+
 std::string errorLine(const Value& id, ToolingError error, std::string_view why) {
     Value record = Value::object();
     record.add("code", Value::string(std::string{codeName(error)}));

@@ -39,10 +39,6 @@ bool sameSecret(std::string_view given, std::string_view expected) noexcept {
     return difference == 0;
 }
 
-std::string entityName(world::EntityHandle entity) {
-    return std::to_string(entity.slot) + ":" + std::to_string(entity.generation);
-}
-
 /// `slot:generation`, both decimal.
 std::optional<world::EntityHandle> entityNamed(std::string_view text) {
     const std::size_t kColon = text.find(':');

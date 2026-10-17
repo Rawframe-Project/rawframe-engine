@@ -542,12 +542,14 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"scene", "entity"}),
                                annotationsOf(true, false)));
     }
-    // The played game's server's traffic (D807).
+    // The played game's server's traffic (D807), each connection's too
+    // (D840).
     {
         Value properties = Value::object();
         properties.add("scene", property("string", false, "The scene previewed while the game plays."));
         tools.push_back(toolOf("game_traffic",
-                               "The played game's server's replication totals so far and its connections now; ask "
+                               "The played game's server's replication totals so far and its connections now, each "
+                               "counted alone: entities it is told of, bytes, records sent and deferred, lag; ask "
                                "twice to measure rates.",
                                schemaOf(std::move(properties), {"scene"}),
                                annotationsOf(true, false)));
