@@ -82,4 +82,4 @@ if "$author" describe "$work/kind/hinted.game" >"$work/refused"; then
     echo "an asset of no kind read"
     exit 1
 fi
-grep -q 'texture, mesh, tilemap, material' "$work/refused" && echo "refused: an asset of no kind there is"
+grep -q 'texture, mesh, tilemap, sequence, material' "$work/refused" && echo "refused: an asset of no kind there is"

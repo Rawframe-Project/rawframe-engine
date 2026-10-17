@@ -173,6 +173,19 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
         }
         game.scatters.push_back(world_kest::CookedGameScatter{.path = scatter, .placed = kSidecar.id.value});
     }
+    // Each sequence: the resource its sidecar names, cooked by
+    // rawframe.sequence (D869).
+    for (const world_kest::GameSequence& sequence : kDescription.sequences) {
+        auto sidecarBytes = reads.file(sequence.path + std::string{content::kSidecarSuffix});
+        if (!sidecarBytes.has_value()) {
+            return refuse("a sequence the description names has a sidecar", sequence.path);
+        }
+        RAWFRAME_TRY_ASSIGN(const content::Sidecar kSidecar, content::readSidecar(textOf(*sidecarBytes)));
+        if (kSidecar.importer != "rawframe.sequence") {
+            return refuse("a sequence the description names is cooked by rawframe.sequence", sequence.path);
+        }
+        game.sequences.push_back(world_kest::CookedGameSequence{.path = sequence.path, .sequence = kSidecar.id.value});
+    }
 
     // Each material: the resource its sidecar names, cooked by
     // rawframe.material, or by rawframe.postprocess or

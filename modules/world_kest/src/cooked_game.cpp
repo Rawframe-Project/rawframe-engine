@@ -40,7 +40,7 @@ template <typename Named> bool ordered(const std::vector<Named>& named) {
 bool wellFormed(const CookedGame& game) {
     return ordered(game.animators) && ordered(game.files) && ordered(game.fonts) && ordered(game.meshes) &&
            ordered(game.programs) && ordered(game.scenes) && ordered(game.texts) && ordered(game.textures) &&
-           ordered(game.materials) && ordered(game.tilemaps) && ordered(game.scatters) &&
+           ordered(game.materials) && ordered(game.tilemaps) && ordered(game.scatters) && ordered(game.sequences) &&
            std::ranges::all_of(game.tilemaps,
                                [](const CookedGameTilemap& tilemap) {
                                    return tilemap.tilemap != base::Bits128{};
@@ -48,6 +48,10 @@ bool wellFormed(const CookedGame& game) {
            std::ranges::all_of(game.scatters,
                                [](const CookedGameScatter& scatter) {
                                    return scatter.placed != base::Bits128{};
+                               }) &&
+           std::ranges::all_of(game.sequences,
+                               [](const CookedGameSequence& sequence) {
+                                   return sequence.sequence != base::Bits128{};
                                }) &&
            std::ranges::all_of(game.materials,
                                [](const CookedGameMaterial& material) {
@@ -138,6 +142,11 @@ const CookedGameScatter* CookedGame::scatter(std::string_view path) const noexce
     return kFound == scatters.end() ? nullptr : &*kFound;
 }
 
+const CookedGameSequence* CookedGame::sequence(std::string_view path) const noexcept {
+    const auto kFound = std::ranges::find(sequences, path, &CookedGameSequence::path);
+    return kFound == sequences.end() ? nullptr : &*kFound;
+}
+
 const CookedGameTexture* CookedGame::texture(std::string_view path) const noexcept {
     const auto kFound = std::ranges::find(textures, path, &CookedGameTexture::path);
     return kFound == textures.end() ? nullptr : &*kFound;
@@ -171,6 +180,7 @@ result::Result<std::string> writeCookedGame(const CookedGame& game) {
     std::ranges::sort(sorted.fonts, {}, &CookedGameFont::path);
     std::ranges::sort(sorted.tilemaps, {}, &CookedGameTilemap::path);
     std::ranges::sort(sorted.scatters, {}, &CookedGameScatter::path);
+    std::ranges::sort(sorted.sequences, {}, &CookedGameSequence::path);
     if (!wellFormed(sorted)) {
         return std::unexpected<result::Error>{
             invalid("a cooked game names each path once, each program's sources and entry, and not too many")};
@@ -259,6 +269,16 @@ result::Result<std::string> writeCookedGame(const CookedGame& game) {
         record.add("scatters", std::move(scatters));
     }
     record.add("scenes", std::move(scenes));
+    if (!sorted.sequences.empty()) {
+        Value sequences = Value::array();
+        for (CookedGameSequence& sequence : sorted.sequences) {
+            Value each = Value::object();
+            each.add("path", Value::string(std::move(sequence.path)));
+            each.add("sequence", Value::string(hexOf(sequence.sequence)));
+            sequences.push(std::move(each));
+        }
+        record.add("sequences", std::move(sequences));
+    }
     record.add("text", Value::string(std::move(sorted.text)));
     record.add("texts", std::move(texts));
     record.add("textures", std::move(textures));
@@ -298,6 +318,8 @@ result::Result<CookedGame> readCookedGame(std::string_view bytes) {
     // Tilemaps (D858) and scatters (D864) where a game has any.
     const Value* tilemaps = parsed->find("tilemaps");
     const Value* scatters = parsed->find("scatters");
+    // Sequences (D869) the same.
+    const Value* sequences = parsed->find("sequences");
     const std::string* text =
         textOf(*parsed, 12 + (tilemaps != nullptr ? 1 : 0) + (scatters != nullptr ? 1 : 0), "text");
     if (kind == nullptr || kind->text() == nullptr || *kind->text() != "game.description" || version == nullptr ||
@@ -400,6 +422,14 @@ result::Result<CookedGame> readCookedGame(std::string_view bytes) {
             return std::unexpected<result::Error>{invalid("a cooked game's scatter is a path and its placements")};
         }
         game.scatters.push_back(CookedGameScatter{.path = *path, .placed = *kPlaced});
+    }
+    for (const Value& each : sequences != nullptr ? sequences->items() : std::span<const Value>{}) {
+        const std::string* path = textOf(each, 2, "path");
+        const std::optional<base::Bits128> kSequence = identityOf(textOf(each, 2, "sequence"));
+        if (path == nullptr || !kSequence.has_value()) {
+            return std::unexpected<result::Error>{invalid("a cooked game's sequence is a path and a sequence")};
+        }
+        game.sequences.push_back(CookedGameSequence{.path = *path, .sequence = *kSequence});
     }
     if (!wellFormed(game)) {
         return std::unexpected<result::Error>{invalid("a cooked game names each path once, in order, fully")};

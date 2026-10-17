@@ -39,6 +39,7 @@
 #include "rawframe/world_runtime/picking.h"
 #include "rawframe/world_runtime/save.h"
 #include "scene_follower.h"
+#include "sequences.h"
 #include "splines.h"
 #include "ui_doors.h"
 
@@ -289,6 +290,9 @@ public:
         // Splines its programs follow, measured from their points (D868).
         RAWFRAME_TRY(planSplines());
         RAWFRAME_TRY(addSplineDoors(doors, splines_.get()));
+        // Sequences it plays, and the events they fire (D869).
+        RAWFRAME_TRY(planSequences());
+        RAWFRAME_TRY(addSequenceDoors(doors, sequences_.get()));
         // The server bakes the navmesh its programs ask the way across
         // (D400).
         if (game_.navigation.has_value()) {
@@ -347,6 +351,9 @@ public:
         }
         if (splines_ != nullptr) {
             RAWFRAME_TRY(simulation_->addSystems(*splines_));
+        }
+        if (sequences_ != nullptr) {
+            RAWFRAME_TRY(simulation_->addSystems(*sequences_));
         }
         debugging_.attach(systems_->machine());
         // Time a breakpoint holds a tick is not owed (D492).
@@ -426,6 +433,13 @@ public:
                          kSplineSummary,
                          "the splines measured",
                          {diagnostics::field("measured", splines_->measured())});
+        }
+        if (sequences_ != nullptr) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kSequenceSummary,
+                         "the sequences played",
+                         {diagnostics::field("fired", sequences_->fired()),
+                          diagnostics::field("unknown", sequences_->unknown())});
         }
         if (timing_ == nullptr) {
             return;
@@ -852,6 +866,50 @@ private:
         return {};
     }
 
+    /// Sequences (D869): the game's components of the sequence types, laid
+    /// out as the engine reads them, and its sequences as read.
+    result::Status planSequences() {
+        GameSequenceSettings found;
+        for (const GameComponent& component : game_.components) {
+            if (ofEngineType(component, "rawframe.sequence.Player")) {
+                found.players.push_back(component.id);
+            } else if (ofEngineType(component, "rawframe.sequence.Cast")) {
+                found.casts.push_back(component.id);
+            }
+        }
+        if (found.players.empty()) {
+            return {};
+        }
+        const bool kPlayers = laidOutAs(*program_,
+                                        "rawframe.sequence.Player",
+                                        sizeof(SequencePlayer),
+                                        {{"sequence", offsetof(SequencePlayer, sequence)},
+                                         {"time", offsetof(SequencePlayer, time)},
+                                         {"playing", offsetof(SequencePlayer, playing)},
+                                         {"events", offsetof(SequencePlayer, events)}});
+        const bool kCasts = found.casts.empty() ||
+                            laidOutAs(*program_,
+                                      "rawframe.sequence.Cast",
+                                      sizeof(SequenceCast),
+                                      {{"player.slot", offsetof(SequenceCast, player)},
+                                       {"player.generation", offsetof(SequenceCast, player) + sizeof(std::uint32_t)},
+                                       {"track", offsetof(SequenceCast, track)}});
+        if (!kPlayers || !kCasts) {
+            return std::unexpected<result::Error>{
+                result::fail(result::ErrorClass::InvalidArgument,
+                             kWorldKestDomain,
+                             code(WorldKestError::BadGameLine),
+                             "a sequence's players and casts are laid out as rawframe.sequence's: the game imports "
+                             "the module")
+                    .error()};
+        }
+        for (const GameSequenceResource& each : files_->sequences()) {
+            found.sequences.emplace(each.id, each.timeline);
+        }
+        sequences_ = std::make_unique<GameSequences>(std::move(found));
+        return {};
+    }
+
     /// Physics: the program's physics types must be laid out exactly as the
     /// engine's components are, field by field. A process that plays the
     /// game elsewhere runs no physics.
@@ -921,6 +979,7 @@ private:
     PhysicsDoorContext doorContext_;
     std::unique_ptr<GameNavmesh> navmesh_;
     std::unique_ptr<GameSplines> splines_;
+    std::unique_ptr<GameSequences> sequences_;
     std::optional<world_animation::AnimationSettings> animation_;
     AnimationDoorContext animationDoors_;
     GamePersistence persistence_;

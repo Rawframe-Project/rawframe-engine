@@ -232,6 +232,17 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                 return badLine(number, WorldKestError::BadGameLine, "a tilemap's identity and file are used once");
             }
             game.tilemaps.push_back(GameTilemap{.id = *kId, .path = std::string{kWords[2]}});
+        } else if (kKeyword == "sequence") {
+            const auto kId = kWords.size() == 3 ? base::parseHex64(kWords[1]) : std::nullopt;
+            if (!kId || *kId == 0) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a sequence line is `sequence <16 hex digits> <file>`");
+            }
+            if (std::ranges::contains(game.sequences, *kId, &GameSequence::id) ||
+                std::ranges::contains(game.sequences, kWords[2], &GameSequence::path)) {
+                return badLine(number, WorldKestError::BadGameLine, "a sequence's identity and file are used once");
+            }
+            game.sequences.push_back(GameSequence{.id = *kId, .path = std::string{kWords[2]}});
         } else if (kKeyword == "rendertexture") {
             const bool kShaped = kWords.size() == 4 || kWords.size() == 5;
             const auto kId = kShaped ? base::parseHex64(kWords[1]) : std::nullopt;
@@ -1010,6 +1021,15 @@ std::string spawnValue(const GameDescription& game, std::string_view component, 
             (component == physics2d::Tiles2D::kComponentName ||
              (kComponent != game.components.end() && ofEngineType(*kComponent, "rawframe.canvas.Tilemap")))) {
             return std::to_string(kTilemap->id);
+        }
+    }
+    // A sequence by its file, for a player of it (D869).
+    if (value.field == "sequence") {
+        const auto kComponent = std::ranges::find(game.components, component, &GameComponent::name);
+        const auto kSequence = std::ranges::find(game.sequences, value.value, &GameSequence::path);
+        if (kSequence != game.sequences.end() && kComponent != game.components.end() &&
+            ofEngineType(*kComponent, "rawframe.sequence.Player")) {
+            return std::to_string(kSequence->id);
         }
     }
     if (value.field == "texture") {

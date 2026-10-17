@@ -22,6 +22,7 @@
 #include "rawframe/physics3d/physics.h"
 #include "rawframe/result/result.h"
 #include "rawframe/scatter/scatter.h"
+#include "rawframe/sequence/sequence.h"
 #include "rawframe/tilemap/tilemap.h"
 #include "rawframe/world/layer.h"
 #include "rawframe/world_kest/game.h"
@@ -64,6 +65,16 @@ struct GameTilemapResource {
     std::string path;
     base::Bits128 tilemap{};
     std::shared_ptr<const tilemap::Tilemap> map;
+};
+
+/// A sequence a `sequence` line names, by the identity the line gives it
+/// and the resource it is, and its keys (D869): read from its source in
+/// development and cooked from content, the same text either way.
+struct GameSequenceResource {
+    std::uint64_t id = 0;
+    std::string path;
+    base::Bits128 sequence{};
+    std::shared_ptr<const sequence::Sequence> timeline;
 };
 
 /// A scatter a `scatter` line names (D864) and its copies' placements:
@@ -230,6 +241,11 @@ public:
     [[nodiscard]] const std::vector<GameTilemapResource>& tilemaps() const noexcept {
         return tilemaps_;
     }
+    /// Every sequence the description names, read, in the order of its
+    /// lines (D869).
+    [[nodiscard]] const std::vector<GameSequenceResource>& sequences() const noexcept {
+        return sequences_;
+    }
     /// Every scatter the description names, placed, in the order of its
     /// lines (D864).
     [[nodiscard]] const std::vector<GameScatterResource>& scatters() const noexcept {
@@ -363,6 +379,7 @@ private:
     std::vector<GameTextureResource> textures_;
     std::vector<GameTilemapResource> tilemaps_;
     std::vector<GameScatterResource> scatters_;
+    std::vector<GameSequenceResource> sequences_;
     std::vector<GameFontResource> fonts_;
     std::vector<content::BuildReference> modBuilds_;
     std::vector<SetAsideClaim> setAside_;

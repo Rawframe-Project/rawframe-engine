@@ -4,7 +4,8 @@
 // World's animation, all of them in a client's World and only the
 // simulation's on a dedicated server. A program reads their bones and
 // events through rawframe.animation's doors, which answer nothing past the
-// bones and events there are.
+// bones and events there are. A sequence starts an animator on the entity
+// it casts and fires its events for the program (D869).
 
 #include "game_harness.h"
 #include "rawframe/animation/clip.h"
@@ -22,6 +23,7 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -105,6 +107,14 @@ struct Gait {
     std::uint32_t strays = 0;
 };
 
+/// rawframe.sequence.Player as the program lays it out.
+struct SequencePlayerSeen {
+    std::uint64_t sequence = 0;
+    double time = 0;
+    bool playing = false;
+    std::uint32_t events = 0;
+};
+
 /// One entity's animation after a run: the events its Animator said were
 /// fired, summed over the steps, and its gait.
 struct Played {
@@ -113,8 +123,12 @@ struct Played {
 };
 
 /// Each entity, in entity order, played for `ticks` ticks at 60 Hz in a
-/// composition for `role`; none when the game does not start.
-std::optional<std::vector<Played>> play(const std::filesystem::path& game, composition::TargetRole role, int ticks) {
+/// composition for `role`, `last` shown the World after the last; none
+/// when the game does not start.
+std::optional<std::vector<Played>> play(const std::filesystem::path& game,
+                                        composition::TargetRole role,
+                                        int ticks,
+                                        const std::function<void(world::World&)>& last = {}) {
     std::vector<composition::Problem> problems;
     auto plan = composition::compose(
         composition::CompositionRequest{
@@ -165,6 +179,9 @@ std::optional<std::vector<Played>> play(const std::filesystem::path& game, compo
         played.resize(now.size());
         for (std::size_t at = 0; at < now.size(); ++at) {
             played[at] = Played{.events = played[at].events + now[at].second.events, .gait = now[at].second.gait};
+        }
+        if (tick + 1 == ticks && last) {
+            last(world);
         }
     }
     composition.stop();
@@ -307,5 +324,91 @@ RAWFRAME_TEST(AGamesClipsAnimateItsComponentsFields) {
         kWithField(kField, kChannel);
         RAWFRAME_EXPECT(!play(kGame, composition::TargetRole::Client, 1).has_value());
     }
+    std::filesystem::remove_all(kGame);
+}
+
+RAWFRAME_TEST(AGamesSequenceStartsItsAnimatorsAndFiresItsEvents) {
+    // A sequence two seconds long: an opening event at a quarter second
+    // and at one, and at a half its track's pendulum starts swinging. The
+    // program casts the pendulum, still, on its first tick, and counts the
+    // events it reads.
+    const std::filesystem::path kGame = writeGame("sequenced", "speed: f32");
+    std::string program = readText(kGame / "swing.kest");
+    program.replace(program.find("import rawframe.world\n"), 22, "import rawframe.sequence\nimport rawframe.world\n");
+    writeText(kGame / "swing.kest",
+              program +
+                  "\n"
+                  "struct Stage {\n    cast: bool\n    opened: u32\n}\n"
+                  "extern fn Gait.insert(entity: world.Entity, value: Gait)\n"
+                  "extern fn Animator.insert(entity: world.Entity, value: animation.Animator)\n"
+                  "extern fn Cast.insert(entity: world.Entity, value: sequence.Cast)\n"
+                  "fn stage(count: i32, stages: [Stage], players: [sequence.Player], entities: [world.Entity]) {\n"
+                  "    let i = 0\n"
+                  "    while i < count {\n"
+                  "        if !stages[i].cast {\n"
+                  "            let pendulum = world.create()\n"
+                  "            Gait.insert(pendulum, Gait(f32(1.0), f64(0.0), u32(0), u32(0)))\n"
+                  "            Animator.insert(pendulum, animation.Animator(u64(0), animation.SIMULATION, "
+                  "u32(0), u64(0)))\n"
+                  "            Cast.insert(pendulum, sequence.Cast(entities[i], u32(0)))\n"
+                  "            stages[i].cast = true\n"
+                  "        }\n"
+                  "        let at = u32(0)\n"
+                  "        while at < players[i].events {\n"
+                  "            if sequence.event(entities[i], at).event == u64(1) {\n"
+                  "                stages[i].opened = stages[i].opened + u32(1)\n"
+                  "            }\n"
+                  "            at = at + u32(1)\n"
+                  "        }\n"
+                  "        i = i + 1\n"
+                  "    }\n"
+                  "}\n");
+    writeText(kGame / "opening.sequence",
+              "sequence 1\nduration 2\ntrack pendulum\nevent 0.25 0000000000000001 opened\n"
+              "play 0.5 pendulum 5a0000000000a001\nevent 1 0000000000000001 opened\n");
+    writeText(kGame / "opening.sequence.rfmeta",
+              "{\n  \"schema\": 1,\n  \"resourceId\": \"000000000000000000000000000000a5\",\n  \"importer\": "
+              "\"rawframe.sequence\"\n}\n");
+    writeText(kGame / "swing.game",
+              readText(kGame / "swing.game") +
+                  "component 1c0ffee0-0000-4000-8000-00000000a002 swing.stage Stage\n"
+                  "component 1c0ffee0-0000-4000-8000-00000000a003 swing.player rawframe.sequence.Player\n"
+                  "component 1c0ffee0-0000-4000-8000-00000000a004 swing.cast Cast\n"
+                  "sequence 5e0000000000a001 opening.sequence\n"
+                  "system swing.stage simulation stage write swing.stage read swing.player entities\n"
+                  "spawn 1 swing.stage swing.player sequence=opening.sequence playing=true\n");
+    // Two seconds and a sixth: both events read, the sequence at its end,
+    // and the pendulum swinging since the half, so it ticked at one and at
+    // two seconds.
+    struct Staged {
+        bool cast = false;
+        std::uint32_t opened = 0;
+    };
+    Staged staged;
+    std::optional<SequencePlayerSeen> seen;
+    const auto kPlayed = play(kGame, composition::TargetRole::DedicatedServer, 130, [&](world::World& world) {
+        const auto kStage =
+            world.registry().find(schema::ComponentTypeId::fromText("1c0ffee0-0000-4000-8000-00000000a002"));
+        const auto kPlayer =
+            world.registry().find(schema::ComponentTypeId::fromText("1c0ffee0-0000-4000-8000-00000000a003"));
+        const std::array<world::ColumnTerm, 2> kTerms = {world::ColumnTerm{*kStage, world::Access::Read},
+                                                         world::ColumnTerm{*kPlayer, world::Access::Read}};
+        world::ColumnQuery::resolve(kTerms, world.registry())
+            ->forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+                std::memcpy(&staged, chunk.columns[0], sizeof staged);
+                SequencePlayerSeen player;
+                std::memcpy(&player, chunk.columns[1], sizeof player);
+                seen = player;
+            });
+    });
+    RAWFRAME_EXPECT(kPlayed.has_value() && kPlayed->size() == 4);
+    RAWFRAME_EXPECT(staged.cast && staged.opened == 2);
+    RAWFRAME_EXPECT(seen.has_value() && seen->sequence == 0x5e0000000000a001ULL && !seen->playing && seen->time == 2);
+    if (kPlayed.has_value() && kPlayed->size() == 4) {
+        RAWFRAME_EXPECT((*kPlayed)[3].events == 2 && (*kPlayed)[3].gait.ticks == 2);
+    }
+    // A sequence without its sidecar, and the game does not start.
+    std::filesystem::remove(kGame / "opening.sequence.rfmeta");
+    RAWFRAME_EXPECT(!play(kGame, composition::TargetRole::DedicatedServer, 1).has_value());
     std::filesystem::remove_all(kGame);
 }

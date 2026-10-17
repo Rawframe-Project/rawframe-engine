@@ -256,6 +256,10 @@ void GameFiles::seal() {
         field(digest, scattered.path);
         field(digest, scatter::writePlaced(scattered.placed));
     }
+    for (const GameSequenceResource& each : sequences_) {
+        field(digest, each.path);
+        field(digest, sequence::writeSequence(*each.timeline));
+    }
     for (std::size_t at = 0; at < tilemapDigests_.size(); ++at) {
         field(digest, tilemaps_[at].path);
         digest.update(tilemapDigests_[at]);
@@ -694,6 +698,27 @@ result::Result<GameFiles> GameFiles::fromReader(std::string_view description,
     if (reading == MeshReading::Cooked) {
         RAWFRAME_TRY(game.readTilemaps(content));
     }
+    // Each sequence, by the resource its sidecar names, read from its
+    // source (D869).
+    for (const GameSequence& each : game.description_.sequences) {
+        const auto kSidecarText = reader.read(each.path + std::string{content::kSidecarSuffix});
+        const auto kSidecarRead =
+            kSidecarText.has_value() ? std::optional{content::readSidecar(*kSidecarText)} : std::nullopt;
+        if (!kSidecarRead.has_value() || !kSidecarRead->has_value() ||
+            (*kSidecarRead)->importer != "rawframe.sequence") {
+            return unreadable("a sequence the game names has a sidecar naming rawframe.sequence", each.path);
+        }
+        RAWFRAME_TRY_ASSIGN(const std::string kText, reader.read(each.path));
+        auto read = sequence::parseSequence(kText);
+        if (!read.has_value()) {
+            return std::unexpected<result::Error>{std::move(read).error().withContext("name", each.path)};
+        }
+        game.sequences_.push_back(
+            GameSequenceResource{.id = each.id,
+                                 .path = each.path,
+                                 .sequence = (*kSidecarRead)->id.value,
+                                 .timeline = std::make_shared<const sequence::Sequence>(std::move(*read))});
+    }
     // Each scatter placed from its text and the terrain it names, beside
     // it, as the cook places it (D864).
     for (const std::string& path : game.description_.scatters) {
@@ -904,6 +929,35 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
             GameTilemapResource{.id = tilemap.id, .path = tilemap.path, .tilemap = kTilemap->tilemap});
     }
     RAWFRAME_TRY(game.readTilemaps(&content));
+    // Each sequence as cooked (D869).
+    if (!game.description_.sequences.empty()) {
+        const content::ResourceTypeId kSequenceType{sequence::kSequenceType};
+        const std::array<content::AdmittedRepresentation, 1> kSequenceAdmitted = {content::AdmittedRepresentation{
+            .type = kSequenceType,
+            .representation = *content::RepresentationId::parse(sequence::kSequenceRepresentation)}};
+        RAWFRAME_TRY(content.admit(kSequenceAdmitted));
+    }
+    for (const GameSequence& each : game.description_.sequences) {
+        const CookedGameSequence* const kSequence = kCooked.sequence(each.path);
+        if (kSequence == nullptr) {
+            return invalid("the cooked description does not name the resource of a sequence it names", each.path);
+        }
+        auto bytes = readResource(content.store(),
+                                  content::ResourceRef{.id = content::ResourceId{kSequence->sequence},
+                                                       .type = content::ResourceTypeId{sequence::kSequenceType}});
+        if (!bytes.has_value()) {
+            return std::unexpected<result::Error>{std::move(bytes).error().withContext("name", each.path)};
+        }
+        auto read = sequence::parseSequence(*bytes);
+        if (!read.has_value()) {
+            return std::unexpected<result::Error>{std::move(read).error().withContext("name", each.path)};
+        }
+        game.sequences_.push_back(
+            GameSequenceResource{.id = each.id,
+                                 .path = each.path,
+                                 .sequence = kSequence->sequence,
+                                 .timeline = std::make_shared<const sequence::Sequence>(std::move(*read))});
+    }
     // Each scatter's placements as cooked (D864).
     if (!game.description_.scatters.empty()) {
         const content::ResourceTypeId kPlacedType{scatter::kPlacedType};

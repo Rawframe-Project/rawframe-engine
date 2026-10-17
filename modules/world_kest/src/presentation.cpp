@@ -18,6 +18,7 @@
 #include "rawframe/world_kest/starts.h"
 #include "rawframe/world_kest/ui_queries.h"
 #include "rawframe/world_replication/client_worlds.h"
+#include "sequences.h"
 #include "splines.h"
 #include "ui_doors.h"
 
@@ -142,6 +143,7 @@ struct ClientPresentation::State {
                 RAWFRAME_TRY(addNavigationDoors(doors, nullptr));
             }
             RAWFRAME_TRY(addSplineDoors(doors, nullptr));
+            RAWFRAME_TRY(addSequenceDoors(doors, nullptr));
             RAWFRAME_TRY_ASSIGN(systems,
                                 KestSystems::create(KestSystemsSettings{.program = settings.program,
                                                                         .doors = std::move(doors),

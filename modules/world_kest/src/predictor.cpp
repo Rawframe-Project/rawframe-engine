@@ -14,6 +14,7 @@
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/kest_systems.h"
 #include "rawframe/world_kest/sound_doors.h"
+#include "sequences.h"
 #include "splines.h"
 #include "ui_doors.h"
 
@@ -133,6 +134,8 @@ public:
         // Nor does it measure splines: a predicted follower finds none
         // (D868).
         RAWFRAME_TRY(addSplineDoors(doors, nullptr));
+        // Nor sequences: a predicted reader finds no event (D869).
+        RAWFRAME_TRY(addSequenceDoors(doors, nullptr));
         RAWFRAME_TRY_ASSIGN(systems_,
                             KestSystems::create(KestSystemsSettings{.program = settings.program,
                                                                     .doors = std::move(doors),

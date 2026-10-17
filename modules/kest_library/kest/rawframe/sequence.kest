@@ -1,0 +1,50 @@
+module rawframe.sequence
+
+// Sequences (SPEC-0051's sequence row, D869): timelines a game plays, each
+// a document its `sequence` line names, of tracks and keys. A game declares
+// components of these types. A play key starts one of the game's animators
+// on each entity cast in the key's track, and an event key fires one of the
+// sequence's events; how those entities move between keys is their
+// animators' clips. Sequences play on the server before the simulation
+// phase, so `rawframe.animation.step` plays what a key started that tick
+// and a system in the simulation phase sees the events it fired.
+
+import rawframe.world
+
+// A sequence playing: the game's sequence by the identity its `sequence`
+// line gives it, how far it has played in seconds, and whether it plays on.
+// Each step moves `time` on by the tick while `playing`, firing every key it
+// reaches; at the end of a sequence that does not loop it stops `playing`.
+// Every step writes `events`: how many event keys it fired, which `event`
+// reads one by one. Setting `time` plays on from there; keys before it do
+// not fire.
+struct Player {
+    sequence: u64
+    time: f64
+    playing: bool
+    events: u32
+}
+
+// On an entity a player's sequence moves: the player's entity, and the
+// track, by its place among the sequence's tracks from nought, whose play
+// keys start their animators on it (as its Animator's `graph`).
+struct Cast {
+    player: world.Entity
+    track: u32
+}
+
+// An event key the player fired in the last step: the event's identity.
+// Not `found` past the last, nor where a game's process plays no sequences
+// (a client).
+struct SequenceEvent {
+    found: bool
+    event: u64
+}
+
+extern fn Sequences.event(player: world.Entity, index: u32) -> SequenceEvent
+
+// The event key at `index`, in the order they fired, of the player's last
+// step; its Player's `events` says how many there are.
+fn event(player: world.Entity, index: u32) -> SequenceEvent {
+    return Sequences.event(player, index)
+}

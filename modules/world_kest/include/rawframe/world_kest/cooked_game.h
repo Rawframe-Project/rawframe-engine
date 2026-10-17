@@ -106,6 +106,12 @@ struct CookedGameScatter {
     base::Bits128 placed{};
 };
 
+/// A sequence the description names (D869), by the resource it is.
+struct CookedGameSequence {
+    std::string path;
+    base::Bits128 sequence{};
+};
+
 /// A font the description names (D386), by the resource it is.
 struct CookedGameFont {
     std::string path;
@@ -128,6 +134,8 @@ struct CookedGame {
     std::vector<CookedGameTilemap> tilemaps;
     /// The same of scatters (D864).
     std::vector<CookedGameScatter> scatters;
+    /// The same of sequences (D869).
+    std::vector<CookedGameSequence> sequences;
 
     /// The document the description names `path`, or none.
     [[nodiscard]] const CookedGameFile* file(std::string_view path) const noexcept;
@@ -149,6 +157,8 @@ struct CookedGame {
     [[nodiscard]] const CookedGameTilemap* tilemap(std::string_view path) const noexcept;
     /// The scatter it names `path`, or none.
     [[nodiscard]] const CookedGameScatter* scatter(std::string_view path) const noexcept;
+    /// The sequence it names `path`, or none.
+    [[nodiscard]] const CookedGameSequence* sequence(std::string_view path) const noexcept;
     /// The animator graph it names `path`, or none.
     [[nodiscard]] const CookedGameAnimator* animator(std::string_view path) const noexcept;
 };

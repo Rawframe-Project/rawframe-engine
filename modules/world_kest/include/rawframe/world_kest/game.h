@@ -415,6 +415,14 @@ struct GameTilemap {
     std::string path;
 };
 
+/// A timeline a `rawframe.sequence.Player` plays (D869), by the identity
+/// the player names it by. Its source beside the description is a sequence
+/// document the cook keeps as a resource (`rawframe.sequence`).
+struct GameSequence {
+    std::uint64_t id = 0;
+    std::string path;
+};
+
 /// A font UI text is shown in (D386), by the identity a `rawframe.ui.Node`'s
 /// `font` names it by. Its source beside the description is a TrueType or
 /// OpenType font the cook rebuilds through its sanitizer (`rawframe.font`).
@@ -627,6 +635,8 @@ struct GameDescription {
     std::vector<GameTexture> textures;
     /// From `tilemap <16 hex digits> <file>` lines (D858).
     std::vector<GameTilemap> tilemaps;
+    /// From `sequence <16 hex digits> <file>` lines (D869).
+    std::vector<GameSequence> sequences;
     /// From `rendertexture <16 hex digits> <width> <height> [every_frame |
     /// on_demand]` lines (D361).
     std::vector<GameRenderTexture> renderTextures;
@@ -737,8 +747,9 @@ struct GameDescription {
 /// `rawframe.animation.animator`'s `graph`, a texture's file as the
 /// `texture` of a component of `rawframe.canvas.Sprite`'s type, and a
 /// tilemap's file as a `rawframe.physics2d.tiles`'s `tilemap` or that of a
-/// component of `rawframe.canvas.Tilemap`'s type (D859). Anything else as
-/// written.
+/// component of `rawframe.canvas.Tilemap`'s type (D859), and a sequence's
+/// file as the `sequence` of a component of `rawframe.sequence.Player`'s
+/// type (D869). Anything else as written.
 [[nodiscard]] std::string
 spawnValue(const GameDescription& game, std::string_view component, const GameFieldValue& value);
 
