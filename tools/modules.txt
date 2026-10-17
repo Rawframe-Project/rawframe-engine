@@ -26,7 +26,7 @@ texture_import: texture result base
 font_import: result base
 blockout: mesh result base
 mesh_import: mesh material animation_import animation graph document result base
-cook: process localization animation material graph mesh_import mesh texture_import texture font_import ui scene world_kest input kest_library kest audio_import audio content document execution result base
+cook: blockout process localization animation material graph mesh_import mesh texture_import texture font_import ui scene world_kest input kest_library kest audio_import audio content document execution result base
 build: signature content document result base
 release: content document result base
 install: release content signature document result base
@@ -44,7 +44,7 @@ kest: execution result base
 kest_library: kest document result base
 scene: schema document result base
 authoring: material graph ui scene schema document result base
-authoring_session: authoring cook animation audio input localization texture material graph ui process world_tooling view network_quic network world_kest kest content scene schema document execution result base
+authoring_session: authoring blockout cook animation audio input localization texture material graph ui process world_tooling view network_quic network world_kest kest content scene schema document execution result base
 studio: authoring_session animation world_tooling render material font_import process view ui texture document composition execution diagnostics result base
 network: composition execution diagnostics result base
 network_loopback: network composition execution diagnostics result base

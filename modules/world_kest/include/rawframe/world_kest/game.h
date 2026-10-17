@@ -387,9 +387,16 @@ struct GamePrefab {
 struct GameMesh {
     std::uint64_t id = 0;
     /// Its source beside the description, which the cook makes a mesh
-    /// resource (`rawframe.mesh`); a process reads the resource.
+    /// resource (`rawframe.mesh`, or `rawframe.blockout` from a blockout,
+    /// D848); a process reads the resource.
     std::string path;
 };
+
+/// Whether `importer` makes the mesh resource a game's `mesh` line names:
+/// a glTF's or a blockout's (D848).
+[[nodiscard]] constexpr bool makesMeshes(std::string_view importer) noexcept {
+    return importer == "rawframe.mesh" || importer == "rawframe.blockout";
+}
 
 /// A picture a `rawframe.canvas.Sprite` shows (D254), by the identity the
 /// sprite names it by. Its source beside the description is an image the

@@ -2,6 +2,7 @@
 
 #include "rawframe/cook/animation.h"
 #include "rawframe/cook/audio.h"
+#include "rawframe/cook/blockout.h"
 #include "rawframe/cook/font.h"
 #include "rawframe/cook/game.h"
 #include "rawframe/cook/kest.h"
@@ -19,6 +20,7 @@ namespace rawframe::cook {
 std::vector<Importer> engineImporters(std::optional<ShaderTools> tools) {
     return {animationImporter(),
             audioImporter(),
+            blockoutImporter(),
             canvasImporter(),
             fontImporter(),
             gameImporter(),
