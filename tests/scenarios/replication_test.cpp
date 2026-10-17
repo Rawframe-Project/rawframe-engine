@@ -6,6 +6,8 @@
 #include "replication_scenario.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <span>
 #include <vector>
 
 using namespace rawframe;
@@ -628,6 +630,72 @@ RAWFRAME_TEST(InterestSendsWhatIsNearThePlayerAndAlwaysThePlayer) {
     // The player itself was never out of its own interest.
     const Position* mirror = scenario.clientWorld.get(scenario.client->owned(), kPosition);
     RAWFRAME_EXPECT(mirror != nullptr && mirror->x == 0);
+}
+
+namespace {
+
+/// Districts a test sets as it makes their entities.
+struct Districts final : world_replication::StreamedUnits {
+    std::vector<world_replication::StreamedUnit> held;
+    std::uint64_t changed = 0;
+
+    std::span<const world_replication::StreamedUnit> units() const noexcept override {
+        return held;
+    }
+    std::uint64_t version() const noexcept override {
+        return changed;
+    }
+};
+
+} // namespace
+
+RAWFRAME_TEST(ADistrictIsSentWholeWhileItsPlayerIsNearAnyOfIt) {
+    // A district of three props, one far from the others, sent all together
+    // or not at all; a persistent one sent always, however far; and props of
+    // no district sent one by one (D870).
+    Districts districts;
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)},
+                      {.interest = world_replication::InterestSettings{.position = Position::kComponentTypeId,
+                                                                       .axes = {{offsetof(Position, x), WireKind::F32},
+                                                                                {offsetof(Position, y), WireKind::F32}},
+                                                                       .radius = 10,
+                                                                       .leaveRadius = 12},
+                       .units = &districts}};
+    const auto kPosition = *scenario.schema->key<Position>();
+    const auto kProp = [&](float x) {
+        const world::EntityHandle kMade = *scenario.serverWorld.create();
+        RAWFRAME_EXPECT(scenario.serverWorld.insert(kMade, kPosition, Position{x, 0}).has_value());
+        return kMade;
+    };
+    districts.held = {{.persistent = false, .entities = {kProp(30), kProp(32), kProp(60)}},
+                      {.persistent = true, .entities = {kProp(1000)}}};
+    ++districts.changed;
+    kProp(5);
+    kProp(45);
+    const auto kPlaceAt = [&](float x) {
+        const world::EntityHandle kPlayer = scenario.server->player(network::ConnectionId{1});
+        if (!kPlayer.isNull()) {
+            *scenario.serverWorld.get(kPlayer, kPosition) = Position{x, 0};
+        }
+        for (int step = 0; step < 20; ++step) {
+            scenario.step(Steer{});
+        }
+    };
+    kPlaceAt(0);
+    kPlaceAt(0);
+    RAWFRAME_EXPECT((scenario.othersAt() == std::vector<float>{5, 1000}));
+    // Near one of the district's props: all three, the far one too.
+    kPlaceAt(30);
+    RAWFRAME_EXPECT((scenario.othersAt() == std::vector<float>{30, 32, 60, 1000}));
+    // Held while one is within the leaving radius, beside a loose prop.
+    kPlaceAt(41);
+    RAWFRAME_EXPECT((scenario.othersAt() == std::vector<float>{30, 32, 45, 60, 1000}));
+    // Away from them all: the district goes whole; the persistent one stays.
+    kPlaceAt(75);
+    RAWFRAME_EXPECT((scenario.othersAt() == std::vector<float>{1000}));
+    // Near its far prop: all three again.
+    kPlaceAt(58);
+    RAWFRAME_EXPECT((scenario.othersAt() == std::vector<float>{30, 32, 60, 1000}));
 }
 
 RAWFRAME_TEST(WhatIsAcknowledgedIsForgottenAsPlayGoesOn) {

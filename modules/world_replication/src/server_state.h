@@ -161,6 +161,8 @@ struct ReplicationServer::State {
     /// Indices into `entities` of those without a position: in every
     /// connection's interest.
     std::vector<std::size_t> unplaced;
+    /// The district each entity is of, by slot, or kNowhere (D870).
+    std::vector<std::size_t> unitAt;
     /// One connection's entities that may enter, by bucket, and those that
     /// do.
     std::vector<std::size_t> reachable;
@@ -224,6 +226,14 @@ struct ReplicationServer::State {
     /// may enter, in no order: what its player's cell and those around it
     /// hold, and every entity without a position.
     void reach(const std::array<double, 3>& viewer);
+
+    /// Which districts are in a connection's interest whose player is at
+    /// `viewer`: a persistent one always, another while its player is near
+    /// any of its entities (D870).
+    void unitsFor(Peer& peer, const std::array<double, 3>* viewer);
+
+    /// The district `entity` is of, or kNowhere.
+    [[nodiscard]] std::size_t unitOf(world::EntityHandle entity) const noexcept;
 
     /// Where a connection's player is, if it has a position.
     [[nodiscard]] const std::array<double, 3>* locationOf(world::EntityHandle entity) const noexcept;

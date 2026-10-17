@@ -49,6 +49,29 @@ struct InterestSettings {
     double leaveRadius = 0;
 };
 
+/// A district of a large world streamed as one (ADR-0048, D870): under
+/// spatial interest its entities enter a connection's interest together,
+/// while the connection's player is within the entering radius of any of
+/// them, and stay while one is within the leaving radius; a persistent one
+/// is in every connection's interest always.
+struct StreamedUnit {
+    bool persistent = false;
+    std::vector<world::EntityHandle> entities;
+};
+
+/// A game's districts as its scenes spawned them, read at every publish;
+/// `version` moves on whenever they change.
+class StreamedUnits {
+public:
+    StreamedUnits() = default;
+    StreamedUnits(const StreamedUnits&) = delete;
+    StreamedUnits& operator=(const StreamedUnits&) = delete;
+    virtual ~StreamedUnits() = default;
+
+    [[nodiscard]] virtual std::span<const StreamedUnit> units() const noexcept = 0;
+    [[nodiscard]] virtual std::uint64_t version() const noexcept = 0;
+};
+
 struct ServerReplicationSettings {
     ReplicationTable table;
     /// Components a player entity starts with, zeroed.
@@ -65,6 +88,9 @@ struct ServerReplicationSettings {
     double perceptionSkew = 6;
     /// Every entity is in every connection's interest without one.
     std::optional<InterestSettings> interest;
+    /// The game's districts, where it has any; read only under interest,
+    /// and outliving the server.
+    const StreamedUnits* units = nullptr;
     /// Entities one connection may have mapped at once.
     std::size_t maximumMapped = kMappedByDefault;
     /// Input ticks a command may run ahead of the newest consumed one.

@@ -160,6 +160,8 @@ struct Options {
     std::size_t stateBytesPerPublish = 1092;
     bool predicting = false;
     std::optional<world_replication::InterestSettings> interest;
+    /// Districts streamed as units, outliving the scenario (D870).
+    const world_replication::StreamedUnits* units = nullptr;
     bool interpolating = false;
     /// How much time one step is.
     MonotonicDuration stepLength = MonotonicDuration::fromMilliseconds(16);
@@ -214,6 +216,7 @@ struct Scenario {
              .playerComponents = {Position::kComponentTypeId, Steer::kComponentTypeId},
              .input = steerCodec(),
              .interest = std::move(options.interest),
+             .units = options.units,
              .statePeriod = options.statePeriod,
              .stateBytesPerPublish = options.stateBytesPerPublish,
              .commandSizes = options.commandSizes,

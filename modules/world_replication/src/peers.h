@@ -265,6 +265,10 @@ struct Peer {
     /// Whether the bound on mappings left an entity undeclared at its last
     /// turn: its next looks at every entity again (D745).
     bool bounded = false;
+    /// Which of the game's districts are in its interest, by their place,
+    /// as of the districts' version (D870).
+    std::vector<bool> unitsIn;
+    std::uint64_t unitsVersion = 0;
     std::map<std::uint32_t, world::EntityHandle> byNetEntity;
     /// The next input tick to consume, and commands waiting for theirs.
     std::uint64_t nextInputTick = 0;

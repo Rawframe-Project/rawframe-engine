@@ -132,6 +132,18 @@ void ReplicationServer::State::publish(world::World& world, world::TickIndex tic
     if (settings.interest) {
         cellEntities();
     }
+    unitAt.clear();
+    if (settings.interest && settings.units != nullptr) {
+        unitAt.assign(slots, kNowhere);
+        const std::span<const StreamedUnit> kUnits = settings.units->units();
+        for (std::size_t unit = 0; unit < kUnits.size(); ++unit) {
+            for (const world::EntityHandle kMember : kUnits[unit].entities) {
+                if (isPresent(kMember)) {
+                    unitAt[kMember.slot] = unit;
+                }
+            }
+        }
+    }
     heldMark.assign(entities.size(), 0);
     markNow = 0;
     for (auto& [id, peer] : peers) {
@@ -321,7 +333,13 @@ bool ReplicationServer::State::relevant(const Peer& peer,
                                         const std::array<double, 3>* viewer,
                                         const PresentEntity& entity,
                                         bool mapped) const noexcept {
-    if (!settings.interest || entity.entity == peer.player || !entity.located) {
+    if (!settings.interest || entity.entity == peer.player) {
+        return true;
+    }
+    if (const std::size_t kUnit = unitOf(entity.entity); kUnit != kNowhere) {
+        return peer.unitsIn[kUnit];
+    }
+    if (!entity.located) {
         return true;
     }
     if (viewer == nullptr) {
@@ -335,6 +353,38 @@ bool ReplicationServer::State::relevant(const Peer& peer,
     const double kLimit = mapped ? settings.interest->leaveRadius : settings.interest->radius;
     // A position that is not a number is never within reach.
     return distance <= kLimit * kLimit;
+}
+
+void ReplicationServer::State::unitsFor(Peer& peer, const std::array<double, 3>* viewer) {
+    const std::span<const StreamedUnit> kUnits = settings.units->units();
+    if (peer.unitsVersion != settings.units->version() || peer.unitsIn.size() != kUnits.size()) {
+        peer.unitsIn.assign(kUnits.size(), false);
+        peer.unitsVersion = settings.units->version();
+    }
+    for (std::size_t unit = 0; unit < kUnits.size(); ++unit) {
+        if (kUnits[unit].persistent || viewer == nullptr) {
+            peer.unitsIn[unit] = kUnits[unit].persistent;
+            continue;
+        }
+        // Near any of its entities, held to the leaving radius once in.
+        const double kLimit = peer.unitsIn[unit] ? settings.interest->leaveRadius : settings.interest->radius;
+        peer.unitsIn[unit] = std::ranges::any_of(kUnits[unit].entities, [&](world::EntityHandle member) {
+            const std::size_t kIndex = presentIndex(member);
+            if (kIndex == kNowhere || !entities[kIndex].located) {
+                return false;
+            }
+            double distance = 0;
+            for (std::size_t axis = 0; axis < 3; ++axis) {
+                const double kDelta = entities[kIndex].at[axis] - (*viewer)[axis];
+                distance += kDelta * kDelta;
+            }
+            return distance <= kLimit * kLimit;
+        });
+    }
+}
+
+std::size_t ReplicationServer::State::unitOf(world::EntityHandle entity) const noexcept {
+    return entity.slot < unitAt.size() ? unitAt[entity.slot] : kNowhere;
 }
 
 bool ReplicationServer::State::isPresent(world::EntityHandle entity) const noexcept {
@@ -395,6 +445,9 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         return;
     }
     const std::array<double, 3>* const kViewer = locationOf(peer.player);
+    if (!unitAt.empty()) {
+        unitsFor(peer, kViewer);
+    }
     // Without interest, what a connection holds changes only as entities
     // come and go (D745): it retires those gone and declares those that
     // appeared since its last turn, unless those are no longer kept or the
@@ -492,7 +545,20 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
             kConsider(kIndex);
         }
     }
+    // Every entity of a district in interest, wherever it stands (D870).
+    if (!unitAt.empty()) {
+        const std::span<const StreamedUnit> kUnits = settings.units->units();
+        for (std::size_t unit = 0; unit < kUnits.size(); ++unit) {
+            for (const world::EntityHandle kMember :
+                 peer.unitsIn[unit] ? std::span{kUnits[unit].entities} : std::span<const world::EntityHandle>{}) {
+                if (const std::size_t kIndex = presentIndex(kMember); kIndex != kNowhere) {
+                    kConsider(kIndex);
+                }
+            }
+        }
+    }
     std::ranges::sort(entering);
+    entering.erase(std::ranges::unique(entering).begin(), entering.end());
     peer.bounded = false;
     for (const std::size_t kIndex : entering) {
         if (peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0) {

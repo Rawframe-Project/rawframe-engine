@@ -85,6 +85,11 @@ public:
     /// Who is sent what: none for a game whose every entity every
     /// connection sees.
     [[nodiscard]] virtual const std::optional<InterestSettings>& interest() const noexcept = 0;
+    /// The game's districts streamed as units (D870), alive while the plan
+    /// is; none for a game without them.
+    [[nodiscard]] virtual const StreamedUnits* streamedUnits() const noexcept {
+        return nullptr;
+    }
     /// Entities one connection may have mapped at once, on both sides: a
     /// game every client sees whole may need more than most (D742).
     [[nodiscard]] virtual std::size_t maximumMapped() const noexcept {
