@@ -32,6 +32,7 @@ constexpr auto kSpriteId = schema::ComponentTypeId::fromText("5b1d8f0e-2a44-4c1f
 constexpr auto kHatId = schema::ComponentTypeId::fromText("6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90");
 constexpr auto kSparksId = schema::ComponentTypeId::fromText("8b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90");
 constexpr auto kStreakId = schema::ComponentTypeId::fromText("9b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90");
+constexpr auto kMapId = schema::ComponentTypeId::fromText("cb1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90");
 constexpr std::uint64_t kRunner = 0xb1;
 constexpr std::uint64_t kTiles = 0xb2;
 constexpr std::uint64_t kGlow = 0xc1;
@@ -54,6 +55,11 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
                                             .name = "test.streak",
                                             .size = sizeof(particles::Trail),
                                             .alignment = alignof(particles::Trail),
+                                            .plainData = true});
+    builder.add(schema::ComponentDescriptor{.id = kMapId,
+                                            .name = "test.map",
+                                            .size = sizeof(TilemapPlaced),
+                                            .alignment = alignof(TilemapPlaced),
                                             .plainData = true});
     builder.add<physics2d::Pose2D>();
     builder.add(schema::ComponentDescriptor{.id = world::Layer::kComponentTypeId,
@@ -327,6 +333,82 @@ RAWFRAME_TEST(AGamesCanvasLoadsAgainstItsProgram) {
     RAWFRAME_EXPECT(
         kSparkling.has_value() && kSparkling->emitters == (std::vector<schema::ComponentTypeId>{kSparksId}) &&
         kSparkling->trails == (std::vector<schema::ComponentTypeId>{kStreakId}) && kSparkling->beams.size() == 1);
+    // A tilemap component (D858).
+    const auto kTiled = kLoad("fn draw(sprites: [canvas.Sprite], maps: [canvas.Tilemap]) {\n}\n",
+                              "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n"
+                              "component cb1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.level rawframe.canvas.Tilemap\n");
+    RAWFRAME_EXPECT(kTiled.has_value() && kTiled->tilemaps == (std::vector<schema::ComponentTypeId>{kMapId}));
+}
+
+RAWFRAME_TEST(ATilemapsTilesAreCellsOfItsSheet) {
+    // A sheet four tiles across and two down; two-meter tiles; the map's
+    // top-left on the pose (D858).
+    const std::shared_ptr<const schema::SchemaRegistry> kSchema = registry();
+    world::World world{kSchema};
+    const auto kMap =
+        tilemap::parseTilemap("tilemap 1\ntileset 00000000000000b2 4 2\ncell 2\ngrid 3 2\ntiles\n. 5 .\n0 . 1\n");
+    RAWFRAME_EXPECT(kMap.has_value());
+    auto canvas = Canvas::create(*kSchema,
+                                 {.sprites = {kSpriteId},
+                                  .textures = {kTiles},
+                                  .tilemapComponents = {kMapId},
+                                  .tilemaps = {{0xd1, kMap.value_or(tilemap::Tilemap{})}}});
+    RAWFRAME_EXPECT(canvas.has_value());
+    if (!canvas.has_value()) {
+        return;
+    }
+    for (const auto& [kTilemap, kX] : {std::pair{std::uint64_t{0xd1}, 10.0}, std::pair{std::uint64_t{0xd9}, 0.0}}) {
+        const world::EntityHandle kEntity = *world.create();
+        TilemapPlaced placed{.tilemap = kTilemap, .layer = 3};
+        RAWFRAME_EXPECT(world.insertErased(kEntity, *kSchema->find(kMapId), &placed).has_value());
+        RAWFRAME_EXPECT(
+            world.insert(kEntity, *kSchema->key<physics2d::Pose2D>(), physics2d::Pose2D{.x = kX, .y = 20}).has_value());
+    }
+    (*canvas)->extract(world);
+    // Three tiles; a map the game does not declare draws none.
+    const std::span<const SpriteInstance> kTilesDrawn = (*canvas)->extracted();
+    RAWFRAME_EXPECT(kTilesDrawn.size() == 3);
+    if (kTilesDrawn.size() != 3) {
+        return;
+    }
+    // Tile 5, the second row's second cell, in the top row's middle.
+    const SpriteInstance& kFive = kTilesDrawn[0];
+    RAWFRAME_EXPECT(kFive.x == 13 && kFive.y == 19 && kFive.sprite.frame == 5 && kFive.sprite.columns == 4 &&
+                    kFive.sprite.u1 == 0.25F && kFive.sprite.v1 == 0.5F && kFive.sprite.width == 2 &&
+                    kFive.sprite.layer == 3 && kFive.sprite.texture == kTiles);
+    // Tile 0 at the bottom row's left, tile 1 at its right.
+    RAWFRAME_EXPECT(kTilesDrawn[1].x == 11 && kTilesDrawn[1].y == 17 && kTilesDrawn[1].sprite.frame == 0);
+    RAWFRAME_EXPECT(kTilesDrawn[2].x == 15 && kTilesDrawn[2].y == 17 && kTilesDrawn[2].sprite.frame == 1);
+}
+
+RAWFRAME_TEST(TilemapsStopAtTheSpriteLimit) {
+    // Two placings of a three-tile map under a limit of four sprites: the
+    // tiles past it are counted, not made (D858).
+    const std::shared_ptr<const schema::SchemaRegistry> kSchema = registry();
+    world::World world{kSchema};
+    const auto kMap =
+        tilemap::parseTilemap("tilemap 1\ntileset 00000000000000b2 4 2\ncell 1\ngrid 3 1\ntiles\n0 1 2\n");
+    RAWFRAME_EXPECT(kMap.has_value());
+    auto canvas = Canvas::create(*kSchema,
+                                 {.sprites = {kSpriteId},
+                                  .textures = {kTiles},
+                                  .tilemapComponents = {kMapId},
+                                  .tilemaps = {{0xd1, kMap.value_or(tilemap::Tilemap{})}},
+                                  .limits = {.maximumSprites = 4}});
+    RAWFRAME_EXPECT(canvas.has_value());
+    if (!canvas.has_value()) {
+        return;
+    }
+    for (int placing = 0; placing < 2; ++placing) {
+        const world::EntityHandle kEntity = *world.create();
+        TilemapPlaced placed{.tilemap = 0xd1};
+        RAWFRAME_EXPECT(world.insertErased(kEntity, *kSchema->find(kMapId), &placed).has_value());
+        RAWFRAME_EXPECT(world.insert(kEntity, *kSchema->key<physics2d::Pose2D>(), physics2d::Pose2D{}).has_value());
+    }
+    (*canvas)->extract(world);
+    RAWFRAME_EXPECT((*canvas)->extracted().size() == 4);
+    const CanvasFrame& kFrame = (*canvas)->queue({.height = 10});
+    RAWFRAME_EXPECT(kFrame.drawn == 4 && kFrame.overLimit == 2);
 }
 
 RAWFRAME_TEST(SpritesDrawByTheirMaterials) {

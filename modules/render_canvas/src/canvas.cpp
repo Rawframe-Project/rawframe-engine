@@ -64,6 +64,12 @@ struct Canvas::State {
     std::vector<world::ColumnQuery> emitterQueries;
     std::vector<world::ColumnQuery> trailQueries;
     std::vector<world::ColumnQuery> beamQueries;
+    /// The tilemap components' queries and the maps by identity (D858).
+    std::vector<world::ColumnQuery> tilemapQueries;
+    std::map<std::uint64_t, tilemap::Tilemap> maps;
+    /// The tiles one extraction left out past the sprite limit, counted
+    /// into the next frame's over the limit (D858).
+    std::size_t tilesOverLimit = 0;
     std::vector<EmitterInstance> emitters;
     std::vector<TrailInstance> trails;
     std::vector<BeamInstance> beams;
@@ -124,7 +130,7 @@ struct Canvas::State {
         frame.malformed = 0;
         frame.unknownTextures = 0;
         frame.unknownMaterials = 0;
-        frame.overLimit = 0;
+        frame.overLimit = tilesOverLimit;
         frame.materials = materials;
         order.clear();
         for (const SpriteInstance& instance : extracted) {
@@ -248,6 +254,21 @@ result::Result<std::unique_ptr<Canvas>> Canvas::create(const schema::SchemaRegis
             kQueries->push_back(std::move(query));
         }
     }
+    for (const schema::ComponentTypeId kId : settings.tilemapComponents) {
+        RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kComponent, registry.find(kId));
+        if (registry.descriptor(kComponent).size != sizeof(TilemapPlaced)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          RenderCanvasError::BadComponents,
+                          "a tilemap component is not rawframe.canvas's size");
+        }
+        const std::array<world::ColumnTerm, 1> kTerms = {world::ColumnTerm{kComponent, world::Access::Read}};
+        RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, world::ColumnQuery::resolve(kTerms, registry));
+        state->tilemapQueries.push_back(std::move(query));
+    }
+    for (auto& [kId, map] : settings.tilemaps) {
+        state->maps.emplace(kId, std::move(map));
+    }
+    settings.tilemaps.clear();
     std::ranges::sort(settings.textures);
     // Material nought is none: white, over what is behind.
     state->materials.emplace_back(material::CanvasMaterial{.shading = material::Shading::Unlit});
@@ -271,6 +292,7 @@ result::Result<std::unique_ptr<Canvas>> Canvas::create(const schema::SchemaRegis
 void Canvas::extract(world::World& world) {
     State& state = *state_;
     state.extracted.clear();
+    state.tilesOverLimit = 0;
     for (std::size_t component = 0; component < state.sprites.size(); ++component) {
         state.sprites[component].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
             for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
@@ -296,6 +318,70 @@ void Canvas::extract(world::World& world) {
                     }
                 }
                 state.extracted.push_back(instance);
+            }
+        });
+    }
+    // A tilemap's tiles, each a sprite of its sheet's cell, from its
+    // top-left on the pose, unturned, after the sprites' components in
+    // order (D858). A map is up to thousands of sprites, so the tiles of
+    // every map together stop at the frame's sprite limit: past it, the
+    // rest are counted as over it without being made.
+    std::size_t tiles = 0;
+    for (std::size_t component = 0; component < state.tilemapQueries.size(); ++component) {
+        state.tilemapQueries[component].forEachChunk(world, [&](const world::ColumnChunk& chunk) {
+            for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
+                const world::EntityHandle kEntity = chunk.entities[row];
+                if (!state.hiddenLayers.empty() && state.layer.has_value()) {
+                    if (const auto* layer = static_cast<const world::Layer*>(world.getErased(kEntity, *state.layer));
+                        layer != nullptr && std::ranges::contains(state.hiddenLayers, layer->layer)) {
+                        ++state.spritesHidden;
+                        continue;
+                    }
+                }
+                TilemapPlaced placed;
+                std::memcpy(&placed, chunk.columns[0] + (row * sizeof(TilemapPlaced)), sizeof(TilemapPlaced));
+                const auto kMap = state.maps.find(placed.tilemap);
+                if (kMap == state.maps.end()) {
+                    continue;
+                }
+                const tilemap::Tilemap& kTiles = kMap->second;
+                double x = 0;
+                double y = 0;
+                if (state.pose) {
+                    if (const auto* pose =
+                            static_cast<const physics2d::Pose2D*>(world.getErased(kEntity, *state.pose))) {
+                        x = pose->x;
+                        y = pose->y;
+                    }
+                }
+                const auto kCell = static_cast<float>(kTiles.cell);
+                for (std::uint32_t down = 0; down < kTiles.rows; ++down) {
+                    for (std::uint32_t across = 0; across < kTiles.columns; ++across) {
+                        const std::uint16_t kTile = kTiles.at(across, down);
+                        if (kTile == tilemap::kEmpty) {
+                            continue;
+                        }
+                        if (tiles == state.settings.limits.maximumSprites) {
+                            ++state.tilesOverLimit;
+                            continue;
+                        }
+                        ++tiles;
+                        state.extracted.push_back(
+                            SpriteInstance{.entity = kEntity,
+                                           .component = static_cast<std::uint32_t>(state.sprites.size() + component),
+                                           .sprite = Sprite{.texture = kTiles.texture,
+                                                            .u1 = 1.0F / static_cast<float>(kTiles.sheetColumns),
+                                                            .v1 = 1.0F / static_cast<float>(kTiles.sheetRows),
+                                                            .width = kCell,
+                                                            .height = kCell,
+                                                            .color = placed.color,
+                                                            .layer = placed.layer,
+                                                            .frame = kTile,
+                                                            .columns = kTiles.sheetColumns},
+                                           .x = x + ((across + 0.5) * kTiles.cell),
+                                           .y = y - ((down + 0.5) * kTiles.cell)});
+                    }
+                }
             }
         });
     }
@@ -383,6 +469,8 @@ result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, con
             loaded.trails.push_back(component.id);
         } else if (world_kest::ofEngineType(component, particles::kBeamType)) {
             loaded.beams.push_back(component.id);
+        } else if (world_kest::ofEngineType(component, "rawframe.canvas.Tilemap")) {
+            loaded.tilemaps.push_back(component.id);
         } else if (world_kest::ofEngineType(component, "rawframe.canvas.Camera")) {
             if (loaded.camera.has_value()) {
                 return refuse(result::ErrorClass::InvalidArgument,
@@ -416,6 +504,16 @@ result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, con
         return refuse(result::ErrorClass::InvalidArgument,
                       RenderCanvasError::BadComponents,
                       "the program lays out rawframe.canvas's Sprite otherwise than this engine reads it");
+    }
+    if (!loaded.tilemaps.empty() && !world_kest::laidOutAs(program,
+                                                           "rawframe.canvas.Tilemap",
+                                                           sizeof(TilemapPlaced),
+                                                           {{"tilemap", offsetof(TilemapPlaced, tilemap)},
+                                                            {"color", offsetof(TilemapPlaced, color)},
+                                                            {"layer", offsetof(TilemapPlaced, layer)}})) {
+        return refuse(result::ErrorClass::InvalidArgument,
+                      RenderCanvasError::BadComponents,
+                      "the program lays out rawframe.canvas's Tilemap otherwise than this engine reads it");
     }
     if (loaded.camera.has_value() && !world_kest::laidOutAs(program,
                                                             "rawframe.canvas.Camera",

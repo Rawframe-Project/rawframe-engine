@@ -34,6 +34,7 @@ constexpr diagnostics::EventIdentity kTextureReloaded{"canvas", "texture_reloade
 constexpr diagnostics::EventIdentity kTextureNotReloaded{"canvas", "texture_reload_failed"};
 constexpr diagnostics::EventIdentity kTexturesRead{"canvas", "textures_read"};
 constexpr diagnostics::EventIdentity kUnreadMaterial{"canvas", "material_unavailable"};
+constexpr diagnostics::EventIdentity kUnreadTilemap{"canvas", "tilemap_unavailable"};
 constexpr std::string_view kProvided[] = {kCanvasFrames.name};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
@@ -75,6 +76,23 @@ result::Result<material::CanvasMaterial> readCanvasMaterial(content::ContentStor
                                                            .code = code(RenderCanvasError::MaterialUnreadable),
                                                            .description = "a canvas material's read was cancelled"}));
     return material::decodeCanvas(kRead.bytes());
+}
+
+/// A tilemap's cooked text, read and waited for, and read as a tilemap
+/// (D858).
+result::Result<tilemap::Tilemap> readTilemap(content::ContentStore& store, base::Bits128 id) {
+    RAWFRAME_TRY_ASSIGN(execution::AsyncHandle<content::VerifiedContent> read,
+                        store.read(content::ResourceRef{.id = content::ResourceId{id},
+                                                        .type = content::ResourceTypeId{tilemap::kTilemapType}}));
+    RAWFRAME_TRY_ASSIGN(
+        const content::VerifiedContent kRead,
+        execution::toResult(read.wait(),
+                            execution::CancellationMapping{.errorClass = result::ErrorClass::Unavailable,
+                                                           .domain = kRenderCanvasDomain,
+                                                           .code = code(RenderCanvasError::MaterialUnreadable),
+                                                           .description = "a tilemap's read was cancelled"}));
+    const std::span<const std::byte> kBytes = kRead.bytes();
+    return tilemap::parseTilemap({reinterpret_cast<const char*>(kBytes.data()), kBytes.size()});
 }
 
 /// Draws one client's mirrored World each frame through a camera following
@@ -172,7 +190,27 @@ public:
                                    .textures = std::move(game->textures),
                                    .emitters = std::move(game->emitters),
                                    .trails = std::move(game->trails),
-                                   .beams = std::move(game->beams)};
+                                   .beams = std::move(game->beams),
+                                   .tilemapComponents = std::move(game->tilemaps)};
+        // The game's tilemaps from its cooked content (D858); one that
+        // cannot be read draws no tiles, said so when the canvas starts.
+        if (context.has(game_content::kGameContent.name) && !files->tilemaps().empty()) {
+            RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
+            if (content->held()) {
+                const std::array<content::AdmittedRepresentation, 1> kAdmitted = {content::AdmittedRepresentation{
+                    .type = content::ResourceTypeId{tilemap::kTilemapType},
+                    .representation = *content::RepresentationId::parse(tilemap::kTilemapRepresentation)}};
+                RAWFRAME_TRY(content->admit(kAdmitted));
+                for (const world_kest::GameTilemapResource& each : files->tilemaps()) {
+                    auto read = readTilemap(content->store(), each.tilemap);
+                    if (read.has_value()) {
+                        settings_.tilemaps.emplace_back(each.id, std::move(*read));
+                    } else {
+                        unreadTilemaps_.emplace_back(each.path, std::string{read.error().description()});
+                    }
+                }
+            }
+        }
         // The game's canvas materials from its cooked content (D356): one
         // of another domain is another renderer's; one that cannot be read,
         // or with no cooked content to read it from, is drawn as none, and
@@ -235,6 +273,12 @@ public:
                          kUnread,
                          "the game's textures could not be asked for: every draw waits for its texture",
                          {diagnostics::field("reason", *unread_)});
+        }
+        for (const auto& [kPath, kReason] : unreadTilemaps_) {
+            emitter_.log(diagnostics::Severity::Warning,
+                         kUnreadTilemap,
+                         "a tilemap could not be read: its tiles are not drawn",
+                         {diagnostics::field("tilemap", kPath), diagnostics::field("reason", kReason)});
         }
         for (const auto& [kPath, kReason] : unreadMaterials_) {
             emitter_.log(diagnostics::Severity::Warning,
@@ -590,6 +634,7 @@ private:
     /// The particles' frames, summed (D360).
     rawframe::particles::Tally particles_;
     std::vector<std::pair<std::string, std::string>> unreadMaterials_;
+    std::vector<std::pair<std::string, std::string>> unreadTilemaps_;
     std::uint64_t overLimit_ = 0;
     std::size_t mostDraws_ = 0;
     std::size_t mostVertices_ = 0;

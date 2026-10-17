@@ -41,6 +41,16 @@ struct Sprite {
     material: u64
 }
 
+// A level's tiles (D858): the game's tilemap by the identity its `tilemap`
+// line gives it, its top-left corner on the pose, unturned, each tile a
+// cell of its tileset's sheet `cell` meters on a side; `color` multiplies
+// them and they draw at `layer`, as a sprite's do.
+struct Tilemap {
+    tilemap: u64
+    color: u32
+    layer: i32
+}
+
 // A client's view of the World (ADR-0052's camera, D261), on the client's
 // own player: a presentation component (`presentation <camera> on
 // player`) its present systems place. The view is centered `offsetX`,

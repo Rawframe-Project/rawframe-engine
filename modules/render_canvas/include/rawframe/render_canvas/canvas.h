@@ -14,6 +14,7 @@
 #include "rawframe/particles/particles.h"
 #include "rawframe/result/result.h"
 #include "rawframe/schema/registry.h"
+#include "rawframe/tilemap/tilemap.h"
 #include "rawframe/view/view.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_kest/game_files.h"
@@ -49,6 +50,14 @@ struct Sprite {
     std::uint32_t columns = 0;
     /// A game's canvas material, nought for none (D356).
     std::uint64_t material = 0;
+};
+
+/// `rawframe.canvas.Tilemap` as C++ reads it (D858): a game's tilemap by
+/// identity, drawn from its top-left on the pose.
+struct TilemapPlaced {
+    std::uint64_t tilemap = 0;
+    std::uint32_t color = 0xFFFFFFFF;
+    std::int32_t layer = 0;
 };
 
 /// `rawframe.canvas.Camera` as C++ reads it (D261): a client's view,
@@ -173,6 +182,10 @@ struct CanvasSettings {
     std::vector<schema::ComponentTypeId> emitters;
     std::vector<schema::ComponentTypeId> trails;
     std::vector<schema::ComponentTypeId> beams;
+    /// The game's components of `rawframe.canvas.Tilemap`'s type, and its
+    /// tilemaps by the identities its `tilemap` lines give them (D858).
+    std::vector<schema::ComponentTypeId> tilemapComponents;
+    std::vector<std::pair<std::uint64_t, tilemap::Tilemap>> tilemaps;
     CanvasLimits limits;
 };
 
@@ -221,6 +234,7 @@ struct GameCanvas {
     std::vector<schema::ComponentTypeId> emitters;
     std::vector<schema::ComponentTypeId> trails;
     std::vector<schema::ComponentTypeId> beams;
+    std::vector<schema::ComponentTypeId> tilemaps;
 };
 
 /// Finds the game's components of `rawframe.canvas.Sprite`'s type, its one
