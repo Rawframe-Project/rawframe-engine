@@ -168,7 +168,8 @@ result::Status ShellParticipant::showBrowser() {
     if (!folders.empty()) {
         RAWFRAME_TRY(kControls(folders, browser_.folder, "All folders", false, browser_.folderRows));
     }
-    // And the thumbnails' size (D801), each a texture's from the last cook.
+    // And the thumbnails' size (D801), each a texture's or a mesh's (D899)
+    // from the last cook.
     browser_.sizeRows.clear();
     RAWFRAME_TRY_ASSIGN(const ui::Node kSizes,
                         box(scenesColumn_, ui::Layout{.height = ui::pixels(28), .gap = 4, .shrink = 0}, 0));
@@ -371,7 +372,7 @@ void ShellParticipant::setImportSetting(const FieldRow& row, const std::string& 
 }
 
 std::shared_ptr<const texture::Texture> ShellParticipant::thumbnailOf(const ListedSource& source) {
-    if (browser_.thumbnail == 0 || source.importer != "rawframe.texture") {
+    if (browser_.thumbnail == 0 || (source.importer != "rawframe.texture" && source.importer != "rawframe.mesh")) {
         return nullptr;
     }
     const std::uint64_t kKey = thumbnailKey(source.path);

@@ -1000,6 +1000,8 @@ private:
     /// The cook tool, where the game's content and the cook's cache go,
     /// and the running cook's id, if any (D502).
     std::filesystem::path cookTool_;
+    /// The tool that draws a mesh's thumbnail (D899).
+    std::filesystem::path thumbnailTool_;
     /// `rawframe-export`, whose directory holds the tools it runs (D872).
     std::filesystem::path exportTool_;
     std::filesystem::path cookAt_;

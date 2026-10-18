@@ -81,6 +81,9 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     // The cook tool: named, or beside Studio, where an export puts it; the
     // content goes where the game plays (D502).
     cookTool_ = std::string{configuration.path("studio.cook").value_or(process::besideSelf("rawframe-cook").string())};
+    // And the tool that draws a mesh's thumbnail (D899), the same way.
+    thumbnailTool_ = std::string{
+        configuration.path("studio.thumbnail").value_or(process::besideSelf("rawframe-thumbnail").string())};
     exportTool_ =
         std::string{configuration.path("studio.export").value_or(process::besideSelf("rawframe-export").string())};
     // The templates a new game is made from, and where new games go:
@@ -151,7 +154,7 @@ void ShellParticipant::settle(const std::filesystem::path& description, const st
         play_->content = cookAt_ / "content";
     }
     if (held_.joinEndpoint.empty()) {
-        session_ = std::make_unique<authoring_session::Session>(description, root, cookTool_);
+        session_ = std::make_unique<authoring_session::Session>(description, root, cookTool_, thumbnailTool_);
     }
     description_ = description;
     sceneRoot_ = root;
