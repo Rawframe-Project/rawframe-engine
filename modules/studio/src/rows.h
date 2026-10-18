@@ -70,7 +70,10 @@ struct FieldRow {
         /// The tile a tilemap's block pressed paints (D861).
         TileSetting,
         /// The message a commit of the game's changes is made with (D871).
-        CommitMessage
+        CommitMessage,
+        /// The Export dialog's output, title, or address, `field` which
+        /// (D872).
+        ExportSetting
     };
     ui::Node value{};
     Role role = Role::Field;

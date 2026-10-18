@@ -144,8 +144,9 @@ void ShellParticipant::makeGame(const std::string& name) {
 
 void ShellParticipant::rebuild() {
     endEdit();
-    // The dialog went with the tree it was in.
+    // The dialogs went with the tree they were in.
     dialog_.reset();
+    held_.exportDialog.reset();
     // The window's access goes with the tree it read (D575).
     if (seat_ != nullptr) {
         seat_->leave();

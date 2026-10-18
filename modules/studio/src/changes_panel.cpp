@@ -25,6 +25,23 @@ std::string firstLine(std::string_view text) {
 
 } // namespace
 
+std::optional<std::filesystem::path> ShellParticipant::ownDirectory() {
+    // A directory of Studio's own, made afresh and closed to other users,
+    // never a name in the shared temporary directory another may have made
+    // first; the tools Studio runs write their output there.
+    if (held_.own.empty()) {
+        std::error_code error;
+        const std::filesystem::path kDirectory =
+            std::filesystem::temp_directory_path(error) / ("rawframe-studio-" + mintedHexIdentity());
+        if (error || !std::filesystem::create_directory(kDirectory, error) || error) {
+            return std::nullopt;
+        }
+        std::filesystem::permissions(kDirectory, std::filesystem::perms::owner_all, error);
+        held_.own = kDirectory;
+    }
+    return held_.own;
+}
+
 result::Status ShellParticipant::makeChanges() {
     RAWFRAME_TRY_ASSIGN(held_.changesColumn, pane("Changes"));
     return {};
@@ -65,21 +82,13 @@ void ShellParticipant::startGit() {
     std::vector<std::string> words = {
         "-c", "core.fsmonitor=false", "-c", "diff.external=", "-C", description_.parent_path().string()};
     words.insert(words.end(), arguments.begin(), arguments.end());
-    // Its output in a directory of Studio's own, made afresh for it and
-    // closed to other users, never a name in the shared temporary directory
-    // another may have made first.
-    if (held_.gitOutput.empty()) {
-        std::error_code error;
-        const std::filesystem::path kDirectory =
-            std::filesystem::temp_directory_path(error) / ("rawframe-studio-" + mintedHexIdentity());
-        if (error || !std::filesystem::create_directory(kDirectory, error) || error) {
-            held_.gitWaiting.clear();
-            say("Studio has no directory of its own for git's output");
-            return;
-        }
-        std::filesystem::permissions(kDirectory, std::filesystem::perms::owner_all, error);
-        held_.gitOutput = kDirectory / "git.out";
+    const std::optional<std::filesystem::path> kOwn = ownDirectory();
+    if (!kOwn.has_value()) {
+        held_.gitWaiting.clear();
+        say("Studio has no directory of its own for git's output");
+        return;
     }
+    held_.gitOutput = *kOwn / "git.out";
     auto started = process::Child::start({.program = *kProgram, .arguments = words, .output = held_.gitOutput});
     if (!started.has_value()) {
         held_.gitWaiting.clear();

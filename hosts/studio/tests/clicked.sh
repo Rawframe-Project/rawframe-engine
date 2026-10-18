@@ -52,6 +52,14 @@ if [ -n "${STUDIO_GIT:-}" ] && [ "$2" != none ]; then
     git -C "$work/game" add -A
     git -C "$work/game" commit -q -m "the game as it was"
 fi
+# And tools beside one another, as an export puts them: `name=path` pairs
+# in STUDIO_TOOLS, each linked under the test's `tools/` (D872).
+if [ -n "${STUDIO_TOOLS:-}" ]; then
+    mkdir -p "$work/tools"
+    for pair in $STUDIO_TOOLS; do
+        ln -s "${pair#*=}" "$work/tools/${pair%%=*}"
+    done
+fi
 cat >"$work/studio.conf" <<CONF
 host.maximum_iterations = 7200
 host.iteration_rate = 120

@@ -26,7 +26,7 @@ std::string lowered(std::string_view text) {
 
 /// The menus in the menu bar's order, none named as a command is, so a
 /// screen reader's "Play" is the button (D777).
-constexpr std::string_view kMenus[] = {"Edit", "Entity", "Game", "View", "Window"};
+constexpr std::string_view kMenus[] = {"File", "Edit", "Entity", "Game", "View", "Window"};
 
 /// The palette's own command, which has no button: it gives the palette's
 /// field the keyboard.
@@ -34,6 +34,9 @@ constexpr std::string_view kPalette = "Command palette";
 
 /// Studio's preferences, a dialog of its own with no button.
 constexpr std::string_view kPreferences = "Preferences";
+
+/// The game exported, a dialog of its own with no button (D872).
+constexpr std::string_view kExport = "Export";
 
 /// The view turned on what is chosen (D792), with no button: the key,
 /// the menu, or the palette.
@@ -116,12 +119,13 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     kOffer("Profiler", "Window", {}, profilerTab_);
     kOffer("Frame", "Window", {}, held_.frameTab);
     kOffer("Changes", "Window", {}, held_.changesTab);
+    // The menus whose commands come below, with no button, always shown.
     for (const std::string_view kMenu : kMenus) {
         if (std::ranges::none_of(commands_,
                                  [&](const Command& command) {
                                      return command.menu == kMenu;
                                  }) &&
-            kMenu != "Window" && kMenu != "View") {
+            kMenu != "File" && kMenu != "Window" && kMenu != "View") {
             continue;
         }
         RAWFRAME_TRY_ASSIGN(const ui::Node kButton, box(bar, ui::Layout{.shrink = 0, .padding = {8, 3, 8, 3}}, 0));
@@ -130,6 +134,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     }
     commands_.push_back(Command{.name = std::string{kPalette}, .menu = "Window", .keys = kKeys(kPalette, {"Ctrl+K"})});
     commands_.push_back(Command{.name = std::string{kPreferences}, .menu = "Window", .keys = kKeys(kPreferences, {})});
+    commands_.push_back(Command{.name = std::string{kExport}, .menu = "File", .keys = kKeys(kExport, {})});
     commands_.push_back(Command{.name = std::string{kFrame}, .menu = "View", .keys = kKeys(kFrame, {"F"})});
     commands_.push_back(Command{.name = std::string{kFlat}, .menu = "View", .keys = kKeys(kFlat, {})});
     commands_.push_back(Command{.name = std::string{kTilted}, .menu = "View", .keys = kKeys(kTilted, {})});
@@ -249,8 +254,14 @@ bool ShellParticipant::runCommand(std::string_view name) {
         return true;
     }
     if (kCommand->name == kPreferences) {
+        closeExport();
         openPreferences();
         say(dialog_.has_value() ? "preferences" : "preferences closed");
+        return true;
+    }
+    if (kCommand->name == kExport) {
+        openExport();
+        say(held_.exportDialog.has_value() ? "export" : "export closed");
         return true;
     }
     if (!tree_->contains(kCommand->button)) {

@@ -707,6 +707,21 @@ private:
     void showChanges();
     bool pressChanges(ui::Node node);
     void commitChanges(const std::string& message);
+    /// Studio's own directory, made the first time a tool needs it.
+    std::optional<std::filesystem::path> ownDirectory();
+    /// The Export dialog (D872), from the File menu: a target (desktop,
+    /// web, Android, iOS), the output directory, the title, and for a
+    /// phone the address it reaches the server by; the export run as
+    /// `rawframe-export` and heard when it ends. Opened again closes it.
+    void openExport();
+    void closeExport();
+    bool pressExport(ui::Node node);
+    void setExport(const std::string& field, const std::string& text);
+    void startExport();
+    void pollExport();
+    /// The directory the chosen target exports to, the default beside the
+    /// game's.
+    [[nodiscard]] std::filesystem::path exportOutput() const;
     bool pressNetwork(ui::Node node);
     void readNetwork(double seconds);
     void showNetwork(const std::vector<std::string>& lines);
@@ -949,6 +964,8 @@ private:
     /// The cook tool, where the game's content and the cook's cache go,
     /// and the running cook's id, if any (D502).
     std::filesystem::path cookTool_;
+    /// `rawframe-export`, whose directory holds the tools it runs (D872).
+    std::filesystem::path exportTool_;
     std::filesystem::path cookAt_;
     ui::Node cookNode_{};
     std::optional<std::int64_t> cooking_;

@@ -65,6 +65,8 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     // The cook tool: named, or beside Studio, where an export puts it; the
     // content goes where the game plays (D502).
     cookTool_ = std::string{configuration.path("studio.cook").value_or(process::besideSelf("rawframe-cook").string())};
+    exportTool_ =
+        std::string{configuration.path("studio.export").value_or(process::besideSelf("rawframe-export").string())};
     // The templates a new game is made from, and where new games go:
     // named, or beside Studio, where its package puts them (D781).
     templates_ =
@@ -309,6 +311,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     readProfiler(kSeconds);
     readFrame(kSeconds);
     pollGit();
+    pollExport();
     if (playing_.has_value()) {
         inViewport_.othersStarted = playing_->others();
     }
@@ -359,11 +362,13 @@ void ShellParticipant::stop() noexcept {
     // sizes kept: a loaded Studio could end before the frame that read
     // the release (D830).
     releaseSplitter();
-    // Git ended, and the directory its output went to taken away (D871).
+    // Git and an export ended, and the directory their output went to
+    // taken away (D871, D872).
     held_.git.reset();
-    if (!held_.gitOutput.empty()) {
+    held_.exporting.reset();
+    if (!held_.own.empty()) {
         std::error_code error;
-        std::filesystem::remove_all(held_.gitOutput.parent_path(), error);
+        std::filesystem::remove_all(held_.own, error);
     }
     if (typing_ != nullptr) {
         typing_->focus(std::nullopt);

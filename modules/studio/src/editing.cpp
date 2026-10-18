@@ -83,8 +83,8 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         pressStart(node);
         return;
     }
-    // The Preferences dialog's own (D782).
-    if (pressPreferences(node)) {
+    // The Preferences and Export dialogs' own (D782, D872).
+    if (pressPreferences(node) || pressExport(node)) {
         return;
     }
     // The left dock's tabs and the Layers' rows (D788), a terrain's map
@@ -471,6 +471,8 @@ void ShellParticipant::take(const view::Typing& typing) {
             setEditor(kTyped);
         } else if (kEdited.role == FieldRow::Role::CommitMessage) {
             commitChanges(kTyped);
+        } else if (kEdited.role == FieldRow::Role::ExportSetting) {
+            setExport(kEdited.field, kTyped);
         } else if (kEdited.role == FieldRow::Role::OpenGame) {
             chooseGame(std::filesystem::path{kTyped});
         } else if (kEdited.role == FieldRow::Role::Find) {
@@ -484,7 +486,7 @@ void ShellParticipant::take(const view::Typing& typing) {
         endEdit();
         if (kRole == FieldRow::Role::NewGame || kRole == FieldRow::Role::OpenGame ||
             kRole == FieldRow::Role::Shortcut || kRole == FieldRow::Role::Editor ||
-            kRole == FieldRow::Role::CommitMessage) {
+            kRole == FieldRow::Role::CommitMessage || kRole == FieldRow::Role::ExportSetting) {
             return;
         }
         if (kRole == FieldRow::Role::View) {

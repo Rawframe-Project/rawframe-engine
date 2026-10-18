@@ -33,6 +33,8 @@ inline constexpr diagnostics::EventIdentity kWorldShown{"studio", "studio_world"
 /// Version control's changes read, and a commit made (D871).
 inline constexpr diagnostics::EventIdentity kChangesShown{"studio", "studio_changes"};
 inline constexpr diagnostics::EventIdentity kCommitted{"studio", "studio_committed"};
+/// A game exported, or its export failed (D872).
+inline constexpr diagnostics::EventIdentity kExported{"studio", "studio_exported"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
 inline constexpr diagnostics::EventIdentity kCurveShown{"studio", "studio_curve"};
 /// A style sheet's classes as each variant looks (D837).
@@ -164,6 +166,27 @@ struct EditorsHeld {
     std::string diff;
     std::string diffOf;
     std::uint64_t commits = 0;
+    /// Studio's own directory, made afresh for the output of the tools it
+    /// runs, taken away as it stops (D871, D872).
+    std::filesystem::path own;
+    /// The Export dialog (D872): its node, its close and export presses,
+    /// each target's press by its word, and its fields; what the author
+    /// chose, an output, title, or address empty for its default; the
+    /// export running, the output it writes to, what it said last, and the
+    /// exports made.
+    std::optional<ui::Node> exportDialog;
+    ui::Node exportClose{};
+    ui::Node exportPress{};
+    std::vector<std::pair<ui::Node, std::string>> exportTargets;
+    std::vector<std::pair<ui::Node, std::string>> exportFields;
+    std::string exportTarget = "desktop";
+    std::string exportOutput;
+    std::string exportTitle;
+    std::string exportAddress;
+    std::optional<process::Child> exporting;
+    std::filesystem::path exportingTo;
+    std::string exportSaid;
+    std::uint64_t exports = 0;
 };
 
 } // namespace rawframe::studio

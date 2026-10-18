@@ -61,7 +61,7 @@ void ShellParticipant::forwardInput() {
     // menu's lower rows lie over the viewport).
     const bool kPlaysHere = playing_.has_value() && play_.has_value() && play_->viewport.has_value() &&
                             inViewport_.picture != nullptr && tree_->contains(viewport_) && !scene_.empty() &&
-                            !popup_.has_value() && !dialog_.has_value();
+                            !popup_.has_value() && !dialog_.has_value() && !held_.exportDialog.has_value();
     if (!kPlaysHere) {
         inViewport_.forwarding->forwardOver(std::nullopt);
         static_cast<void>(inViewport_.forwarding->take());
