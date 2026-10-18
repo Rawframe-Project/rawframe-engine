@@ -42,9 +42,11 @@ struct Run {
     bool showing = false;
     std::vector<ExtensionCommand> commands;
     std::vector<ExtensionSection> sections;
+    std::vector<ExtensionCommand> modes;
     std::vector<SectionRow> rows;
     const scene::Scene* scene = nullptr;
     std::span<const base::Bits128> chosen;
+    std::optional<std::array<double, 3>> point;
     const authoring::ComponentCatalog* catalog = nullptr;
     std::vector<base::Bits128> made;
     Value operations = Value::array();
@@ -164,6 +166,24 @@ void sectionDoor(kest::DoorCall& call, void* context) noexcept {
         return;
     }
     run.sections.push_back(ExtensionSection{.component = std::string{kComponent}, .function = std::string{kFunction}});
+}
+
+void modeDoor(kest::DoorCall& call, void* context) noexcept {
+    auto& run = *static_cast<Run*>(context);
+    const std::string_view kName = call.text(0);
+    const std::string_view kFunction = call.text(1);
+    if (!run.extending || kName.empty() || kName.size() > 64 || kFunction.empty() || kFunction.size() > 64 ||
+        run.modes.size() >= kMostCommands) {
+        call.fail("in extend(), a mode has a name and a function of 1 to 64 characters, at most 32 of them");
+        return;
+    }
+    run.modes.push_back(ExtensionCommand{.name = std::string{kName}, .function = std::string{kFunction}});
+}
+
+void pointDoor(kest::DoorCall& call, void* context) noexcept {
+    const auto& run = *static_cast<Run*>(context);
+    const auto kAxis = static_cast<std::uint64_t>(call.integer(0));
+    call.answerReal(run.point.has_value() && kAxis < 3 ? (*run.point)[kAxis] : 0);
 }
 
 void rowDoor(kest::DoorCall& call, void* context) noexcept {
@@ -288,6 +308,8 @@ result::Result<kest::DoorTable> doorsOver(Run& run) {
     const std::array kDoors = {
         kest::Door{.name = "Studio.command", .function = &commandDoor, .takes = kTwoTexts},
         kest::Door{.name = "Studio.section", .function = &sectionDoor, .takes = kTwoTexts},
+        kest::Door{.name = "Studio.mode", .function = &modeDoor, .takes = kTwoTexts},
+        kest::Door{.name = "Edit.point", .function = &pointDoor, .takes = kU32, .gives = kF64},
         kest::Door{.name = "Show.row", .function = &rowDoor, .takes = kTextAndF64},
         kest::Door{.name = "Edit.chosen", .function = &chosenDoor, .gives = kU32},
         kest::Door{.name = "Edit.number", .function = &numberDoor, .takes = kIndexAndTwoTexts, .gives = kF64},
@@ -409,6 +431,7 @@ std::vector<GameExtension> readExtensions(const std::filesystem::path& gameDirec
         if (kExtended.has_value()) {
             extension.commands = std::move(run.commands);
             extension.sections = std::move(run.sections);
+            extension.modes = std::move(run.modes);
         } else {
             extension.refused = std::string{kExtended.error().description()};
         }
@@ -422,21 +445,29 @@ result::Result<authoring::Request> runExtension(const std::filesystem::path& gam
                                                 std::string_view command,
                                                 const scene::Scene& scene,
                                                 std::span<const base::Bits128> chosen,
+                                                std::optional<std::array<double, 3>> point,
                                                 const authoring::ComponentCatalog& catalog) {
     const std::vector<kest::SourceFile> kFiles = sourcesOf(gameDirectory);
-    // Its commands as it names them now, then the one asked for run on a
-    // machine of its own, so nothing one run kept reaches another.
+    // Its commands and modes as it names them now, then the one asked for
+    // run on a machine of its own, so nothing one run kept reaches another.
     RAWFRAME_TRY_ASSIGN(const Run kNamed, named(kFiles, path));
     const auto kCommand = std::ranges::find(kNamed.commands, command, &ExtensionCommand::name);
-    if (kCommand == kNamed.commands.end()) {
+    const auto kMode = std::ranges::find(kNamed.modes, command, &ExtensionCommand::name);
+    if (kCommand == kNamed.commands.end() && kMode == kNamed.modes.end()) {
         return std::unexpected{refused(authoring::AuthoringError::TargetNotFound,
                                        result::ErrorClass::NotFound,
-                                       "the extension offers no command of that name")};
+                                       "the extension offers no command or mode of that name")};
     }
-    Run run{.scene = &scene, .chosen = chosen, .catalog = &catalog};
+    // A mode runs where the author clicked (D877).
+    if (kCommand == kNamed.commands.end() && !point.has_value()) {
+        return std::unexpected{refused(authoring::AuthoringError::ValidationFailed,
+                                       result::ErrorClass::InvalidArgument,
+                                       "a mode runs at a point")};
+    }
+    Run run{.scene = &scene, .chosen = chosen, .point = point, .catalog = &catalog};
     RAWFRAME_TRY_ASSIGN(const kest::DoorTable kDoors, doorsOver(run));
     RAWFRAME_TRY_ASSIGN(std::unique_ptr<kest::Machine> machine, started(kFiles, path, kDoors, nullptr));
-    RAWFRAME_TRY(called(*machine, kCommand->function));
+    RAWFRAME_TRY(called(*machine, kCommand != kNamed.commands.end() ? kCommand->function : kMode->function));
     if (run.operations.items().empty()) {
         return std::unexpected{refused(authoring::AuthoringError::ValidationFailed,
                                        result::ErrorClass::InvalidArgument,

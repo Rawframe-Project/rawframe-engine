@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# A Studio extension run headless (D874, D875): a Kest program under a copy of
+# A Studio extension run headless (D874, D875, D877): a Kest program under a copy of
 # Ledges' `extensions/` listed with its commands and what its doors are of;
 # one command raising the chosen points, read and staged through its
 # doors, applied as one step and undone; another making a marker entity
 # with a component and a field; and an extension asking for a door it is
 # not offered, listed as refused, with nothing it can run; and its
-# Inspector section's rows for a point, a section that stages refused.
+# Inspector section's rows for a point, a section that stages refused; and
+# its mode run at a point, refused without one.
 #
 # usage: author_extension.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -34,6 +35,15 @@ fn extend() {
     studio.command("Mark above", "mark")
     studio.section("rawframe.physics2d.pose", "height")
     studio.section("ledges.point", "meddle")
+    studio.mode("Drop marker", "drop")
+}
+
+// A marker where the author clicked.
+fn drop() {
+    let made = studio.make("dropped")
+    studio.add(made, "rawframe.physics2d.pose")
+    studio.set_made(made, "rawframe.physics2d.pose", "x", studio.point(u32(0)))
+    studio.set_made(made, "rawframe.physics2d.pose", "y", studio.point(u32(1)))
 }
 
 // The pose's height, and how far over the lift's floor it stands.
@@ -92,8 +102,9 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.extension","id":4,"scene":"lift.scene","extension":"extensions/lift.kest","command":"Mark above","entities":["'$point0'"]}'
     echo '{"kind":"authoring.extension_section","id":5,"scene":"lift.scene","extension":"extensions/lift.kest","component":"rawframe.physics2d.pose","entity":"'$point0'"}'
     echo '{"kind":"authoring.extension_section","id":6,"scene":"lift.scene","extension":"extensions/lift.kest","component":"ledges.point","entity":"'$point0'"}'
+    echo '{"kind":"authoring.extension","id":7,"scene":"lift.scene","extension":"extensions/lift.kest","command":"Drop marker","entities":[],"point":[3,20,0]}'
 } | "$author" session "$game" >"$work/replies" || true
-reply 2 | grep -q '{"path":"extensions/lift.kest","commands":\["Raise chosen","Mark above"\],"sections":\["rawframe.physics2d.pose","ledges.point"\],"capabilities":\["Studio","Show","Edit"\]}'
+reply 2 | grep -q '{"path":"extensions/lift.kest","commands":\["Raise chosen","Mark above"\],"sections":\["rawframe.physics2d.pose","ledges.point"\],"modes":\["Drop marker"\],"capabilities":\["Studio","Show","Edit"\]}'
 reply 2 | grep -q '"path":"extensions/reach.kest","commands":\[\],.*"refused":"the extension does not start'
 reply 3 | grep -q '"written":true,.*"undoable":1,'
 reply 4 | grep -q '"written":true,.*"undoable":2,'
@@ -102,6 +113,9 @@ grep -A10 '"name": "lift point 1"' "$work/ledges/lift.scene" | grep -q '"y": 15'
 grep -A6 '"name": "marker"' "$work/ledges/lift.scene" | grep -q '"y": 17'
 reply 5 | grep -q '"rows":\[{"label":"height","value":15},{"label":"over the floor","value":1}\]'
 reply 6 | grep -q 'only a command stages changes'
+reply 7 | grep -q '"written":true,'
+grep -A6 '"name": "dropped"' "$work/ledges/lift.scene" | grep -q '"x": 3'
+grep -A6 '"name": "dropped"' "$work/ledges/lift.scene" | grep -q '"y": 20'
 
 # Undone back to the scene's very bytes; a command the extension does not
 # offer, and one of an extension that does not start, refused.
@@ -114,6 +128,7 @@ rm -f "$work/replies"
     echo '{"kind":"authoring.extension","id":4,"scene":"lift.scene","extension":"extensions/lift.kest","command":"Fly","entities":[]}'
     echo '{"kind":"authoring.extension","id":5,"scene":"lift.scene","extension":"extensions/reach.kest","command":"Any","entities":[]}'
     echo '{"kind":"authoring.extension","id":6,"scene":"lift.scene","extension":"../ledges.kest","command":"Any","entities":[]}'
+    echo '{"kind":"authoring.extension","id":7,"scene":"lift.scene","extension":"extensions/lift.kest","command":"Drop marker","entities":[]}'
 } | "$author" session "$game" >"$work/replies" || true
 reply 2 | grep -q '"written":true,'
 reply 3 | grep -q '"undoable":0,'
@@ -121,4 +136,5 @@ cmp "$work/original.scene" "$work/ledges/lift.scene"
 reply 4 | grep -q '"code":"target_not_found"'
 reply 5 | grep -q 'does not start: the program asks for a door this table does not hold'
 reply 6 | grep -q '"code":"target_not_found"'
+reply 7 | grep -q 'a mode runs at a point'
 echo "ran an extension's commands in a session, its doors its only reach"

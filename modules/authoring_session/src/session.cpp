@@ -553,6 +553,11 @@ private:
                 sections.push(Value::string(kSection.component));
             }
             each.add("sections", std::move(sections));
+            Value modes = Value::array();
+            for (const ExtensionCommand& kMode : kExtension.modes) {
+                modes.push(Value::string(kMode.name));
+            }
+            each.add("modes", std::move(modes));
             Value capabilities = Value::array();
             for (const std::string& kCapability : kExtension.capabilities) {
                 capabilities.push(Value::string(kCapability));
@@ -583,6 +588,7 @@ private:
                                          record.command,
                                          open->document->scene(),
                                          record.entities,
+                                         record.mark,
                                          *catalog_));
         return applied(applying);
     }

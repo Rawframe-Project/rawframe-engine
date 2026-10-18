@@ -172,6 +172,9 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
     const std::int64_t kClicks = kCount != nullptr ? kCount->integer().value_or(0) : 0;
     Value scene;
     Value source;
+    // Where the ray met what it picked, where an extension's mode runs
+    // (D877).
+    Value hit;
     if (kClicks > clicks_ && kAnswer->find("origin") != nullptr && kAnswer->find("toward") != nullptr) {
         pressed_ = grabbed(kClicks, *kAnswer, previewed);
     }
@@ -194,6 +197,12 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
             scene = *kHit->find("scene");
             source = *kHit->find("source");
             const auto kPoint = pointOf(kHit->find("point"));
+            if (kPoint.has_value()) {
+                hit = Value::array();
+                for (const double kAxis : *kPoint) {
+                    hit.push(Value::real(kAxis));
+                }
+            }
             const auto kToward = pointOf(kAnswer->find("toward"));
             const Value* kModifiers = kAnswer->find("modifiers");
             if (kPoint.has_value() && kToward.has_value() && scene.text() != nullptr && source.text() != nullptr) {
@@ -210,6 +219,7 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
     made.add("clicks", Value::integer(kClicks));
     made.add("scene", std::move(scene));
     made.add("source", std::move(source));
+    made.add("point", std::move(hit));
     // The mark's part the pointer has lit, if any (D468, D504).
     made.add("lit", partName(lit_).empty() ? Value{} : Value::string(std::string{partName(lit_)}));
     // The press that met an authored entity, let go elsewhere: how far

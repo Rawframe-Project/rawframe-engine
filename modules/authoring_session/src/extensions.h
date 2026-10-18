@@ -16,8 +16,10 @@
 #include "rawframe/result/result.h"
 #include "rawframe/scene/scene.h"
 
+#include <array>
 #include <cstddef>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -58,6 +60,9 @@ struct GameExtension {
     std::string path;
     std::vector<ExtensionCommand> commands;
     std::vector<ExtensionSection> sections;
+    /// Its viewport modes, each a name and a function as a command is
+    /// (D877).
+    std::vector<ExtensionCommand> modes;
     std::vector<std::string> capabilities;
     std::string refused;
 };
@@ -66,16 +71,18 @@ struct GameExtension {
 /// the order of their names, each with the others there to import.
 [[nodiscard]] std::vector<GameExtension> readExtensions(const std::filesystem::path& gameDirectory);
 
-/// The atomic request the command `command` of the extension at `path`
-/// stages, run on `chosen` (entities of `scene`), its components named as
-/// `catalog` names them. Refuses (`TargetNotFound`) an extension or
-/// command there is not, and (`ValidationFailed`) a run the machine
-/// refused, with its report, or one that staged nothing.
+/// The atomic request the command or mode `command` of the extension at
+/// `path` stages, run on `chosen` (entities of `scene`) at `point`, its
+/// components named as `catalog` names them. Refuses (`TargetNotFound`)
+/// an extension or command there is not, and (`ValidationFailed`) a mode
+/// given no point, a run the machine refused, with its report, or one
+/// that staged nothing.
 [[nodiscard]] result::Result<authoring::Request> runExtension(const std::filesystem::path& gameDirectory,
                                                               std::string_view path,
                                                               std::string_view command,
                                                               const scene::Scene& scene,
                                                               std::span<const base::Bits128> chosen,
+                                                              std::optional<std::array<double, 3>> point,
                                                               const authoring::ComponentCatalog& catalog);
 
 /// The rows the extension at `path` shows in its section of `component`

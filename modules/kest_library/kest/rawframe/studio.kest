@@ -9,17 +9,19 @@ module rawframe.studio
 // own edits are, and which `authoring.extension` runs without Studio.
 //
 // The session first calls the extension's `extend()`, in which it names
-// each command with `command` and each Inspector section with `section`;
-// then a command's or a section's function, by the name given, with
-// nothing, each time it is run. A game's programs are offered none of
+// each command with `command`, each Inspector section with `section`, and
+// each viewport mode with `mode`; then a command's, a section's, or a
+// mode's function, by the name given, with nothing, each time it is run. A game's programs are offered none of
 // these doors.
 
 // The doors, each called through the function below it.
 extern fn Studio.command(name: text, run: text)
 extern fn Studio.section(component: text, run: text)
+extern fn Studio.mode(name: text, run: text)
 extern fn Show.row(label: text, value: f64)
 
 extern fn Edit.chosen() -> u32
+extern fn Edit.point(axis: u32) -> f64
 extern fn Edit.number(index: u32, component: text, field: text) -> f64
 extern fn Edit.set_number(index: u32, component: text, field: text, value: f64)
 extern fn Edit.make(name: text) -> u32
@@ -38,6 +40,20 @@ fn command(name: text, run: text) {
 // nothing. Only in `extend()`.
 fn section(component: text, run: text) {
     Studio.section(component, run)
+}
+
+// Offers a viewport mode, by its name and the function that runs it: run
+// where the author clicks in the viewport, at the point clicked, with the
+// entity clicked as the one chosen; it stages changes as a command does.
+// Only in `extend()`.
+fn mode(name: text, run: text) {
+    Studio.mode(name, run)
+}
+
+// The point a mode runs at, along `axis` (0 for x, 1 for y, 2 for z);
+// nought where the run has no point.
+fn point(axis: u32) -> f64 {
+    return Edit.point(axis)
 }
 
 // A row of the section being filled: a label and a number.

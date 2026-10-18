@@ -608,9 +608,16 @@ void McpBridge::State::addSessionTools() {
         properties.add("extension", property("string", false, "The extension's path, as extensions_list gives it."));
         properties.add("command", property("string", false, "The command's name, as extensions_list gives it."));
         properties.add("entities", std::move(entities));
+        Value axis = Value::object();
+        axis.add("type", text("number"));
+        Value point = Value::object();
+        point.add("type", text("array"));
+        point.add("items", std::move(axis));
+        point.add("description", text("Where a mode runs: a point of the scene, three numbers."));
+        properties.add("point", std::move(point));
         tools.push_back(toolOf("extension_run",
-                               "Runs an extension's command on a scene's entities: what it stages is applied as "
-                               "one change, one undo step, as document_apply's are.",
+                               "Runs an extension's command, or its mode at a point, on a scene's entities: what it "
+                               "stages is applied as one change, one undo step, as document_apply's are.",
                                schemaOf(std::move(properties), {"scene", "extension", "command"}),
                                annotationsOf(false, false)));
     }
@@ -816,6 +823,7 @@ McpBridge::State::callSession(const Value& id, std::string_view name, const Valu
         copy("extension", "extension");
         copy("command", "command");
         made.add("entities", arguments.find("entities") != nullptr ? *arguments.find("entities") : Value::array());
+        copy("point", "point");
     } else if (name == "extension_section") {
         made = record("authoring.extension_section", recordId);
         copy("scene", "scene");

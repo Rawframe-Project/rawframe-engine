@@ -167,6 +167,22 @@ bool readView(const Value* view, SceneView& into) {
     return true;
 }
 
+/// A point of three finite numbers, or none for anything else.
+std::optional<std::array<double, 3>> pointIn(const Value* point) {
+    if (point == nullptr || point->kind() != Value::Kind::Array || point->items().size() != 3) {
+        return std::nullopt;
+    }
+    std::array<double, 3> at{};
+    for (std::size_t each = 0; each < 3; ++each) {
+        const std::optional<double> kNumber = point->items()[each].real();
+        if (!kNumber.has_value() || !std::isfinite(*kNumber)) {
+            return std::nullopt;
+        }
+        at[each] = *kNumber;
+    }
+    return at;
+}
+
 /// Whether `path` is absolute in POSIX's form (`/a`) or Windows' (`C:/a`,
 /// `C:\a`). Never a network share (`\\server\share`, `//server/share`):
 /// Windows answers one by authenticating to the server, which would hand
@@ -255,6 +271,8 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         }
     } else if (record.verb == SessionVerb::Profile) {
         leftOutable = parsed->find("capture") != nullptr ? 1 : 0;
+    } else if (record.verb == SessionVerb::Extension) {
+        leftOutable = parsed->find("point") != nullptr ? 1 : 0;
     }
     const std::size_t kGiven = parsed->names().size() - 1 - (parsed->find("id") != nullptr ? 1 : 0) -
                                (expects != nullptr ? 1 : 0) - (dry != nullptr ? 1 : 0) - leftOutable;
@@ -423,6 +441,13 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             }
             record.extension = *kExtension;
             record.command = *kCommand;
+            // A mode's command runs at a point of the scene (D877).
+            if (const Value* kPoint = parsed->find("point"); kPoint != nullptr) {
+                record.mark = pointIn(kPoint);
+                if (!record.mark.has_value()) {
+                    return malformed("an extension's point is three finite numbers");
+                }
+            }
         }
         const Value* kEntities = parsed->find("entities");
         if (kEntities == nullptr || kEntities->kind() != Value::Kind::Array) {
@@ -558,17 +583,10 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         if (kAt != nullptr && kAt->isNull()) {
             return record;
         }
-        std::array<double, 3> at{};
-        bool sound = kAt != nullptr && kAt->kind() == Value::Kind::Array && kAt->items().size() == 3;
-        for (std::size_t each = 0; sound && each < 3; ++each) {
-            const std::optional<double> kNumber = kAt->items()[each].real();
-            sound = kNumber.has_value() && std::isfinite(*kNumber);
-            at[each] = sound ? *kNumber : 0;
-        }
-        if (!sound) {
+        record.mark = pointIn(kAt);
+        if (!record.mark.has_value()) {
             return malformed("mark's at is a point of three finite numbers, or null");
         }
-        record.mark = at;
     } else if (record.verb == SessionVerb::Preview) {
         const Value* kPreview = parsed->find("preview");
         if (kPreview != nullptr && kPreview->isNull()) {

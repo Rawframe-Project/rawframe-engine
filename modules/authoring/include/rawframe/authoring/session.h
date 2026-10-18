@@ -207,7 +207,8 @@ struct SessionRecord {
     SceneView view;
     /// Preview's; none to let the preview go (D433).
     std::optional<PreviewTarget> preview;
-    /// Mark's: the point, or none (D464).
+    /// Mark's: the point, or none (D464); an extension's mode's point,
+    /// where it runs (D877).
     std::optional<std::array<double, 3>> mark;
     /// `preview_input`'s events, as the record gave them, which the
     /// session reads as tooling input before it hands them on.
