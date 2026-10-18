@@ -11,9 +11,13 @@ on:
 permissions:
   contents: read
 
+# A run in progress finishes: pushes come more often than a full check takes
+# since the push tier gates them (D898), and cancelling would leave main never
+# checked whole. The newest push waiting runs next; older ones waiting are
+# dropped, as GitHub keeps one waiting run per group.
 concurrency:
   group: check-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   check:
