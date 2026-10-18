@@ -1,6 +1,7 @@
 #include "rawframe/authoring_session/link.h"
 
 #include "line_client.h"
+#include "rawframe/authoring/errors.h"
 #include "rawframe/authoring/session.h"
 #include "rawframe/authoring_session/host.h"
 #include "rawframe/document/json.h"
@@ -13,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace rawframe::authoring_session {
@@ -154,6 +156,65 @@ std::vector<std::string> HostLink::heard(std::int64_t withinMilliseconds) {
 
 bool HostLink::closed() const noexcept {
     return client_->closed();
+}
+
+JoinedSession::JoinedSession(std::unique_ptr<HostLink> link, std::string welcome)
+    : link_(std::move(link)), welcome_(std::move(welcome)) {
+}
+
+std::unique_ptr<JoinedSession>
+JoinedSession::open(std::string_view endpoint, const char* pinFile, const char* tokenFile, std::string& said) {
+    std::unique_ptr<HostLink> link = HostLink::open(endpoint, pinFile, tokenFile, said);
+    if (link == nullptr) {
+        return nullptr;
+    }
+    return std::unique_ptr<JoinedSession>{new JoinedSession{std::move(link), said}};
+}
+
+std::string JoinedSession::answer(std::string_view line, bool& ended) {
+    const auto kParsed = document::parse(line);
+    const document::Value* kKind = kParsed.has_value() ? kParsed->find("kind") : nullptr;
+    const std::string kNamed =
+        kKind != nullptr && kKind->kind() == document::Value::Kind::String ? *kKind->text() : std::string{};
+    const document::Value* kAsked = kParsed.has_value() ? kParsed->find("id") : nullptr;
+    const document::Value kId = kAsked != nullptr ? *kAsked : document::Value{};
+    if (kNamed == "authoring.hello") {
+        // The link said hello as it joined: the welcome is the answer,
+        // under the asker's id.
+        const auto kWelcome = document::parse(welcome_);
+        document::Value welcomed = document::Value::object();
+        for (const std::string& kName : kWelcome->names()) {
+            welcomed.add(kName, kName == "id" ? kId : *kWelcome->find(kName));
+        }
+        return document::writeCompact(welcomed) + "\n";
+    }
+    if (kNamed == "authoring.cook") {
+        return authoring::writeRefusal(kId,
+                                       result::fail(result::ErrorClass::FailedPrecondition,
+                                                    authoring::kAuthoringDomain,
+                                                    authoring::code(authoring::AuthoringError::UnsupportedOperation),
+                                                    "a joined client does not cook through the host yet")
+                                           .error());
+    }
+    ended = kNamed == "authoring.end";
+    const auto kReply = link_->ask(line);
+    if (!kReply.has_value()) {
+        return authoring::writeRefusal(kId,
+                                       result::fail(result::ErrorClass::Unavailable,
+                                                    authoring::kAuthoringDomain,
+                                                    authoring::code(authoring::AuthoringError::Internal),
+                                                    "the host closed or did not answer")
+                                           .error());
+    }
+    return *kReply + "\n";
+}
+
+std::vector<std::string> JoinedSession::poll() {
+    std::vector<std::string> said;
+    for (std::string& each : link_->heard(0)) {
+        said.push_back(std::move(each) + "\n");
+    }
+    return said;
 }
 
 std::optional<std::string> loopbackEndpoint(std::string_view endpoint) {

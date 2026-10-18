@@ -18,13 +18,14 @@
 
 namespace rawframe::authoring_session {
 
-class Session;
+class Answering;
 
 class McpBridge {
 public:
     /// Greets `session` and reads its discovery; the session must not have
-    /// been greeted, and outlives the bridge.
-    explicit McpBridge(Session& session);
+    /// been greeted, and outlives the bridge. It is one held here, or a
+    /// shared session's host joined (D883).
+    explicit McpBridge(Answering& session);
     McpBridge(const McpBridge&) = delete;
     McpBridge& operator=(const McpBridge&) = delete;
     ~McpBridge();

@@ -5,6 +5,7 @@
 // preview (D433); and a collaborator's of a shared session's host
 // (host.h), what `rawframe-author join` speaks through (D881).
 
+#include "rawframe/authoring_session/session.h"
 #include "rawframe/network/provider.h"
 #include "rawframe/network_quic/quic.h"
 
@@ -79,6 +80,28 @@ private:
     std::unique_ptr<network_quic::QuicNetwork> network_;
     std::unique_ptr<network::Provider> provider_;
     std::unique_ptr<LineClient> client_;
+};
+
+/// A shared session's host joined, answering records as a session held
+/// here does (D883), so a client of one speaks to the other unchanged: its
+/// hello answered with the host's welcome, what the host says unasked
+/// given by `poll`, and `end` ending the connection. A record the host
+/// answers only when it ends (`cook`) is refused, since the link waits for
+/// each reply.
+class JoinedSession final : public Answering {
+public:
+    /// Joins as `HostLink::open` does; `said` is the welcome, or why not.
+    static std::unique_ptr<JoinedSession>
+    open(std::string_view endpoint, const char* pinFile, const char* tokenFile, std::string& said);
+
+    [[nodiscard]] std::string answer(std::string_view line, bool& ended) override;
+    [[nodiscard]] std::vector<std::string> poll() override;
+
+private:
+    JoinedSession(std::unique_ptr<HostLink> link, std::string welcome);
+
+    std::unique_ptr<HostLink> link_;
+    std::string welcome_;
 };
 
 /// Whether a reply line is an answer rather than an error.

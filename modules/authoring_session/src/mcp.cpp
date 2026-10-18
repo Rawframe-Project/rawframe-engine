@@ -273,10 +273,10 @@ Value refusedResult(std::string_view why) {
 } // namespace
 
 struct McpBridge::State {
-    explicit State(Session& held) : session(held) {
+    explicit State(Answering& held) : session(held) {
     }
 
-    Session& session;
+    Answering& session;
     std::int64_t nextRecord = 1;
     bool ended = false;
     std::vector<Value> tools;
@@ -906,7 +906,7 @@ std::optional<Value> McpBridge::State::call(const Value& id, const Value* params
     return callSession(id, *name, kArguments, params->find("_meta"));
 }
 
-McpBridge::McpBridge(Session& session) : state_(std::make_unique<State>(session)) {
+McpBridge::McpBridge(Answering& session) : state_(std::make_unique<State>(session)) {
     std::int64_t id = 0;
     Value hello = state_->record("authoring.hello", id);
     hello.add("surfaceGeneration", Value::integer(authoring::kSurfaceGeneration));
