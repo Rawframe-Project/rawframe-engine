@@ -7,7 +7,7 @@ endif()
 
 rawframe_host(NAME thumbnail_tool OUTPUT rawframe-thumbnail
     SOURCES src/main.cpp
-    DEPS render_scene_gpu render_scene render mesh texture schema result base
+    DEPS render_scene_gpu render_scene render material content mesh texture schema result base
 )
 
 if(RAWFRAME_BUILD_TESTS)

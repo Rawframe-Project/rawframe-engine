@@ -2,14 +2,20 @@
 
 #include "rawframe/authoring/errors.h"
 #include "rawframe/authoring_session/game.h"
+#include "rawframe/base/bits128.h"
+#include "rawframe/base/files.h"
 #include "rawframe/content/manifest.h"
 #include "rawframe/content/sidecar.h"
+#include "rawframe/material/material.h"
 #include "rawframe/mesh/mesh.h"
 #include "rawframe/process/child.h"
 #include "rawframe/texture/texture.h"
+#include "rawframe/world_kest/game_files.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -29,31 +35,75 @@ std::filesystem::path objectOf(const std::filesystem::path& cooked, const conten
     return cooked / "objects" / kDigest.substr(kDigest.find(':') + 1);
 }
 
-/// The most meshes one run of the tool draws: a cook of more has the rest
-/// go without, so one asking cannot hold the machine for a run without end.
+/// The most meshes and materials one run of the tool draws: a cook of more
+/// has the rest go without, so one asking cannot hold the machine for a run
+/// without end.
 constexpr std::size_t kMostDrawn = 1024;
 /// How long a run may draw: lavapipe makes the scene's pipelines on the
 /// CPU, slowly on a loaded machine (D476); past it, the run is stopped.
 constexpr auto kDrawing = std::chrono::minutes{5};
 
-/// Every mesh of the cook into `cooked`, up to `kMostDrawn`, set drawing
-/// into its `thumbnails` directory by one run of the tool, whose device and
-/// pipelines are made once for them all, what it says kept there in
+std::string hexOf(const base::Bits128& id) {
+    std::array<char, base::kBits128HexDigits> digits{};
+    base::formatBits128Hex(id, digits);
+    return {digits.begin(), digits.end()};
+}
+
+/// The tool's plan for the cook into `cooked` (D900): every mesh and every
+/// surface material, up to `kMostDrawn`, then every material again as a
+/// base an instance may read, and every texture the game's description
+/// names by the identity its materials sample it by.
+std::string planOf(const std::filesystem::path& game,
+                   const std::filesystem::path& cooked,
+                   const std::vector<content::ManifestEntry>& entries) {
+    std::string plan;
+    std::size_t asked = 0;
+    for (const content::ManifestEntry& kEntry : entries) {
+        const std::string kObject = objectOf(cooked, kEntry).string();
+        if (kEntry.type == content::ResourceTypeId{mesh::kMeshType} && asked++ < kMostDrawn) {
+            plan += "mesh\t" + kObject + "\n";
+        } else if (kEntry.type == content::ResourceTypeId{material::kMaterialType} && asked++ < kMostDrawn) {
+            plan += "material\t" + kObject + "\t" + hexOf(kEntry.id.value) + "\t" +
+                    std::string{kEntry.representation.text()} + "\n";
+        }
+    }
+    for (const content::ManifestEntry& kEntry : entries) {
+        if (kEntry.type == content::ResourceTypeId{material::kMaterialType}) {
+            plan += "base\t" + hexOf(kEntry.id.value) + "\t" + objectOf(cooked, kEntry).string() + "\t" +
+                    std::string{kEntry.representation.text()} + "\n";
+        }
+    }
+    const auto kFiles = world_kest::GameFiles::fromDirectory(game, nullptr, world_kest::MeshReading::Named);
+    if (kFiles.has_value()) {
+        for (const world_kest::GameTextureResource& kTexture : kFiles->textures()) {
+            const auto kEntry =
+                std::ranges::find(entries, content::ResourceId{kTexture.texture}, &content::ManifestEntry::id);
+            if (kEntry != entries.end()) {
+                plan += "texture\t" + std::to_string(kTexture.id) + "\t" + objectOf(cooked, *kEntry).string() + "\n";
+            }
+        }
+    }
+    return plan;
+}
+
+/// The cook into `cooked` set drawing into its `thumbnails` directory by one
+/// run of the tool, whose device and pipelines are made once for every mesh
+/// and material, its plan kept there as `plan` and what it says as
 /// `thumbnails.log`; nothing when the tool does not start.
-std::optional<process::Child> drawMeshes(const std::filesystem::path& tool,
-                                         const std::filesystem::path& cooked,
-                                         const std::vector<content::ManifestEntry>& entries) {
+std::optional<process::Child> drawCook(const std::filesystem::path& tool,
+                                       const std::filesystem::path& game,
+                                       const std::filesystem::path& cooked,
+                                       const std::vector<content::ManifestEntry>& entries) {
     const std::filesystem::path kInto = cooked / "thumbnails";
     std::error_code error;
     std::filesystem::create_directories(kInto, error);
-    std::vector<std::string> arguments{kInto.string()};
-    for (const content::ManifestEntry& kEntry : entries) {
-        if (kEntry.type == content::ResourceTypeId{mesh::kMeshType} && arguments.size() <= kMostDrawn) {
-            arguments.push_back(objectOf(cooked, kEntry).string());
-        }
+    const std::string kPlan = planOf(game, cooked, entries);
+    if (!base::replaceFile(kInto / "plan", std::as_bytes(std::span{kPlan.data(), kPlan.size()}))) {
+        return std::nullopt;
     }
-    auto drawing =
-        process::Child::start({.program = tool, .arguments = std::move(arguments), .output = kInto / "thumbnails.log"});
+    auto drawing = process::Child::start({.program = tool,
+                                          .arguments = {kInto.string(), (kInto / "plan").string()},
+                                          .output = kInto / "thumbnails.log"});
     if (!drawing.has_value()) {
         return std::nullopt;
     }
@@ -74,16 +124,17 @@ result::Result<Value> thumbnailOf(const std::filesystem::path& game,
                        result::ErrorClass::NotFound,
                        "no source with a sidecar is at that path under the game's directory");
     }
-    const bool kMesh = kSource->importer == "rawframe.mesh";
-    if (kSource->importer != "rawframe.texture" && !kMesh) {
+    // A mesh's and a material's are drawn (D899, D900).
+    const bool kDrawn = kSource->importer == "rawframe.mesh" || kSource->importer == "rawframe.material";
+    if (kSource->importer != "rawframe.texture" && !kDrawn) {
         return refused(authoring::AuthoringError::UnsupportedOperation,
                        result::ErrorClass::Unsupported,
-                       "only a texture and a mesh have thumbnails");
+                       "only a texture, a mesh, and a material have thumbnails");
     }
-    if (kMesh && meshes.tool.empty()) {
+    if (kDrawn && meshes.tool.empty()) {
         return refused(authoring::AuthoringError::UnsupportedOperation,
                        result::ErrorClass::Unsupported,
-                       "no thumbnail tool draws this session's meshes");
+                       "no thumbnail tool draws this session's meshes and materials");
     }
     if (!cooked.has_value()) {
         return refused(authoring::AuthoringError::TargetNotFound,
@@ -112,8 +163,14 @@ result::Result<Value> thumbnailOf(const std::filesystem::path& game,
                        result::ErrorClass::NotFound,
                        "the last cook holds no such source; cook again");
     }
+    if (kDrawn && kEntry->type != content::ResourceTypeId{mesh::kMeshType} &&
+        kEntry->type != content::ResourceTypeId{material::kMaterialType}) {
+        return refused(authoring::AuthoringError::UnsupportedOperation,
+                       result::ErrorClass::Unsupported,
+                       "only a surface material has a thumbnail: a post process or a canvas material has none");
+    }
     std::filesystem::path object = objectOf(*cooked, *kEntry);
-    if (kMesh) {
+    if (kDrawn) {
         object = *cooked / "thumbnails" / (object.filename().string() + ".texture");
         std::error_code error;
         // A run that ended, or ran past its time, is let go; one still
@@ -124,24 +181,24 @@ result::Result<Value> thumbnailOf(const std::filesystem::path& game,
             meshes.drawing.reset();
         }
         if (!meshes.drawing.has_value() && meshes.drawn != *cooked && !std::filesystem::exists(object, error)) {
-            meshes.drawing = drawMeshes(meshes.tool, *cooked, *kEntries);
+            meshes.drawing = drawCook(meshes.tool, game, *cooked, *kEntries);
             meshes.began = std::chrono::steady_clock::now();
             meshes.drawn = *cooked;
         }
         if (meshes.drawing.has_value() && !std::filesystem::exists(object, error)) {
             return refused(authoring::AuthoringError::UnsupportedOperation,
                            result::ErrorClass::Unavailable,
-                           "the cook's meshes are being drawn; ask again");
+                           "the cook's meshes and materials are being drawn; ask again");
         }
     }
     const auto kBytes = readFile(object);
     if (!kBytes.has_value()) {
-        return kMesh ? refused(authoring::AuthoringError::UnsupportedOperation,
-                               result::ErrorClass::Unsupported,
-                               "the thumbnail tool could not draw this mesh here")
-                     : refused(authoring::AuthoringError::TargetNotFound,
-                               result::ErrorClass::NotFound,
-                               "the cooked texture does not read");
+        return kDrawn ? refused(authoring::AuthoringError::UnsupportedOperation,
+                                result::ErrorClass::Unsupported,
+                                "the thumbnail tool could not draw it here")
+                      : refused(authoring::AuthoringError::TargetNotFound,
+                                result::ErrorClass::NotFound,
+                                "the cooked texture does not read");
     }
     RAWFRAME_TRY_ASSIGN(const texture::Texture kTexture,
                         texture::decode(std::as_bytes(std::span{kBytes->data(), kBytes->size()})));
