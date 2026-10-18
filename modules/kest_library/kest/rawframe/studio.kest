@@ -9,15 +9,17 @@ module rawframe.studio
 // own edits are, and which `authoring.extension` runs without Studio.
 //
 // The session first calls the extension's `extend()`, in which it names
-// each command with `command`, each Inspector section with `section`, and
-// each viewport mode with `mode`; then a command's, a section's, or a
-// mode's function, by the name given, with nothing, each time it is run. A game's programs are offered none of
+// each command with `command`, each Inspector section with `section`,
+// each viewport mode with `mode`, and each panel with `panel`; then the
+// function of one of them, by the name given, with nothing, each time it
+// is run. A game's programs are offered none of
 // these doors.
 
 // The doors, each called through the function below it.
 extern fn Studio.command(name: text, run: text)
 extern fn Studio.section(component: text, run: text)
 extern fn Studio.mode(name: text, run: text)
+extern fn Studio.panel(name: text, run: text)
 extern fn Show.row(label: text, value: f64)
 
 extern fn Edit.chosen() -> u32
@@ -50,13 +52,21 @@ fn mode(name: text, run: text) {
     Studio.mode(name, run)
 }
 
+// Offers a panel, by its name and the function that fills it: run with
+// the entities chosen in Studio, it reads them and shows rows as a section
+// does, and stages nothing. Studio shows every extension's panels in its
+// one Extension panels tab. Only in `extend()`.
+fn panel(name: text, run: text) {
+    Studio.panel(name, run)
+}
+
 // The point a mode runs at, along `axis` (0 for x, 1 for y, 2 for z);
 // nought where the run has no point.
 fn point(axis: u32) -> f64 {
     return Edit.point(axis)
 }
 
-// A row of the section being filled: a label and a number.
+// A row of the section or panel being filled: a label and a number.
 fn row(label: text, value: f64) {
     Show.row(label, value)
 }

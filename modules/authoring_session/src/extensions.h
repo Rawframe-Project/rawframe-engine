@@ -63,6 +63,8 @@ struct GameExtension {
     /// Its viewport modes, each a name and a function as a command is
     /// (D877).
     std::vector<ExtensionCommand> modes;
+    /// Its panels, each a name and a function (D878).
+    std::vector<ExtensionCommand> panels;
     std::vector<std::string> capabilities;
     std::string refused;
 };
@@ -95,5 +97,15 @@ struct GameExtension {
                                                                  const scene::Scene& scene,
                                                                  base::Bits128 entity,
                                                                  const authoring::ComponentCatalog& catalog);
+
+/// The rows the extension at `path` shows in its panel `panel` for
+/// `chosen` (entities of `scene`), staging nothing (D878). Refuses as
+/// `runSection` does, and (`TargetNotFound`) a panel it does not offer.
+[[nodiscard]] result::Result<std::vector<SectionRow>> runPanel(const std::filesystem::path& gameDirectory,
+                                                               std::string_view path,
+                                                               std::string_view panel,
+                                                               const scene::Scene& scene,
+                                                               std::span<const base::Bits128> chosen,
+                                                               const authoring::ComponentCatalog& catalog);
 
 } // namespace rawframe::authoring_session

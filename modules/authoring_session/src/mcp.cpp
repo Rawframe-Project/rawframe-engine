@@ -633,6 +633,23 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"scene", "extension", "component", "entity"}),
                                annotationsOf(true, false)));
     }
+    {
+        Value entity = Value::object();
+        entity.add("type", text("string"));
+        Value entities = Value::object();
+        entities.add("type", text("array"));
+        entities.add("items", std::move(entity));
+        entities.add("description", text("The entities the panel reads, by their SourceEntityIds."));
+        Value properties = Value::object();
+        properties.add("scene", property("string", false, "The scene's path under the game's directory."));
+        properties.add("extension", property("string", false, "The extension's path, as extensions_list gives it."));
+        properties.add("panel", property("string", false, "The panel's name, as extensions_list gives it."));
+        properties.add("entities", std::move(entities));
+        tools.push_back(toolOf("extension_panel",
+                               "The rows an extension's panel shows for a scene's entities; changes nothing.",
+                               schemaOf(std::move(properties), {"scene", "extension", "panel"}),
+                               annotationsOf(true, false)));
+    }
     // What a source uses and what uses it, by the last cook (D803).
     {
         Value properties = Value::object();
@@ -824,6 +841,12 @@ McpBridge::State::callSession(const Value& id, std::string_view name, const Valu
         copy("command", "command");
         made.add("entities", arguments.find("entities") != nullptr ? *arguments.find("entities") : Value::array());
         copy("point", "point");
+    } else if (name == "extension_panel") {
+        made = record("authoring.extension_panel", recordId);
+        copy("scene", "scene");
+        copy("extension", "extension");
+        copy("panel", "panel");
+        made.add("entities", arguments.find("entities") != nullptr ? *arguments.find("entities") : Value::array());
     } else if (name == "extension_section") {
         made = record("authoring.extension_section", recordId);
         copy("scene", "scene");

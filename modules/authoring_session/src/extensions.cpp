@@ -43,6 +43,7 @@ struct Run {
     std::vector<ExtensionCommand> commands;
     std::vector<ExtensionSection> sections;
     std::vector<ExtensionCommand> modes;
+    std::vector<ExtensionCommand> panels;
     std::vector<SectionRow> rows;
     const scene::Scene* scene = nullptr;
     std::span<const base::Bits128> chosen;
@@ -180,6 +181,18 @@ void modeDoor(kest::DoorCall& call, void* context) noexcept {
     run.modes.push_back(ExtensionCommand{.name = std::string{kName}, .function = std::string{kFunction}});
 }
 
+void panelDoor(kest::DoorCall& call, void* context) noexcept {
+    auto& run = *static_cast<Run*>(context);
+    const std::string_view kName = call.text(0);
+    const std::string_view kFunction = call.text(1);
+    if (!run.extending || kName.empty() || kName.size() > 64 || kFunction.empty() || kFunction.size() > 64 ||
+        run.panels.size() >= kMostCommands) {
+        call.fail("in extend(), a panel has a name and a function of 1 to 64 characters, at most 32 of them");
+        return;
+    }
+    run.panels.push_back(ExtensionCommand{.name = std::string{kName}, .function = std::string{kFunction}});
+}
+
 void pointDoor(kest::DoorCall& call, void* context) noexcept {
     const auto& run = *static_cast<Run*>(context);
     const auto kAxis = static_cast<std::uint64_t>(call.integer(0));
@@ -309,6 +322,7 @@ result::Result<kest::DoorTable> doorsOver(Run& run) {
         kest::Door{.name = "Studio.command", .function = &commandDoor, .takes = kTwoTexts},
         kest::Door{.name = "Studio.section", .function = &sectionDoor, .takes = kTwoTexts},
         kest::Door{.name = "Studio.mode", .function = &modeDoor, .takes = kTwoTexts},
+        kest::Door{.name = "Studio.panel", .function = &panelDoor, .takes = kTwoTexts},
         kest::Door{.name = "Edit.point", .function = &pointDoor, .takes = kU32, .gives = kF64},
         kest::Door{.name = "Show.row", .function = &rowDoor, .takes = kTextAndF64},
         kest::Door{.name = "Edit.chosen", .function = &chosenDoor, .gives = kU32},
@@ -415,6 +429,21 @@ result::Result<Run> named(const std::vector<kest::SourceFile>& files, std::strin
     return naming;
 }
 
+/// The rows `function` of the extension at `path` shows, run on its own
+/// machine with `chosen` and staging nothing: a section's or a panel's.
+result::Result<std::vector<SectionRow>> shown(const std::vector<kest::SourceFile>& files,
+                                              std::string_view path,
+                                              const std::string& function,
+                                              const scene::Scene& scene,
+                                              std::span<const base::Bits128> chosen,
+                                              const authoring::ComponentCatalog& catalog) {
+    Run run{.showing = true, .scene = &scene, .chosen = chosen, .catalog = &catalog};
+    RAWFRAME_TRY_ASSIGN(const kest::DoorTable kDoors, doorsOver(run));
+    RAWFRAME_TRY_ASSIGN(std::unique_ptr<kest::Machine> machine, started(files, path, kDoors, nullptr));
+    RAWFRAME_TRY(called(*machine, function));
+    return std::move(run.rows);
+}
+
 } // namespace
 
 std::vector<GameExtension> readExtensions(const std::filesystem::path& gameDirectory) {
@@ -432,6 +461,7 @@ std::vector<GameExtension> readExtensions(const std::filesystem::path& gameDirec
             extension.commands = std::move(run.commands);
             extension.sections = std::move(run.sections);
             extension.modes = std::move(run.modes);
+            extension.panels = std::move(run.panels);
         } else {
             extension.refused = std::string{kExtended.error().description()};
         }
@@ -496,11 +526,24 @@ result::Result<std::vector<SectionRow>> runSection(const std::filesystem::path& 
                                        "the extension offers no section of that component")};
     }
     const std::array<base::Bits128, 1> kChosen = {entity};
-    Run run{.showing = true, .scene = &scene, .chosen = kChosen, .catalog = &catalog};
-    RAWFRAME_TRY_ASSIGN(const kest::DoorTable kDoors, doorsOver(run));
-    RAWFRAME_TRY_ASSIGN(std::unique_ptr<kest::Machine> machine, started(kFiles, path, kDoors, nullptr));
-    RAWFRAME_TRY(called(*machine, kSection->function));
-    return std::move(run.rows);
+    return shown(kFiles, path, kSection->function, scene, kChosen, catalog);
+}
+
+result::Result<std::vector<SectionRow>> runPanel(const std::filesystem::path& gameDirectory,
+                                                 std::string_view path,
+                                                 std::string_view panel,
+                                                 const scene::Scene& scene,
+                                                 std::span<const base::Bits128> chosen,
+                                                 const authoring::ComponentCatalog& catalog) {
+    const std::vector<kest::SourceFile> kFiles = sourcesOf(gameDirectory);
+    RAWFRAME_TRY_ASSIGN(const Run kNamed, named(kFiles, path));
+    const auto kPanel = std::ranges::find(kNamed.panels, panel, &ExtensionCommand::name);
+    if (kPanel == kNamed.panels.end()) {
+        return std::unexpected{refused(authoring::AuthoringError::TargetNotFound,
+                                       result::ErrorClass::NotFound,
+                                       "the extension offers no panel of that name")};
+    }
+    return shown(kFiles, path, kPanel->function, scene, chosen, catalog);
 }
 
 } // namespace rawframe::authoring_session

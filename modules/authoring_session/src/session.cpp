@@ -180,7 +180,8 @@ private:
         case authoring::SessionVerb::Extension:
             return extensionRun(record);
         case authoring::SessionVerb::ExtensionSection:
-            return extensionSection(record);
+        case authoring::SessionVerb::ExtensionPanel:
+            return extensionRows(record);
         case authoring::SessionVerb::ApplyTogether:
             return appliedTogether(record);
         case authoring::SessionVerb::Cook: {
@@ -558,6 +559,11 @@ private:
                 modes.push(Value::string(kMode.name));
             }
             each.add("modes", std::move(modes));
+            Value panels = Value::array();
+            for (const ExtensionCommand& kPanel : kExtension.panels) {
+                panels.push(Value::string(kPanel.name));
+            }
+            each.add("panels", std::move(panels));
             Value capabilities = Value::array();
             for (const std::string& kCapability : kExtension.capabilities) {
                 capabilities.push(Value::string(kCapability));
@@ -593,18 +599,26 @@ private:
         return applied(applying);
     }
 
-    /// An extension's Inspector section filled for one entity: its rows,
-    /// the scene left as it was (D875).
-    result::Result<Value> extensionSection(const authoring::SessionRecord& record) {
+    /// An extension's Inspector section filled for one entity (D875), or
+    /// its panel for the entities chosen (D878): its rows, the scene left
+    /// as it was.
+    result::Result<Value> extensionRows(const authoring::SessionRecord& record) {
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
         RAWFRAME_TRY_ASSIGN(const std::vector<SectionRow> kRows,
-                            runSection(game_.parent_path(),
-                                       record.extension,
-                                       record.component,
-                                       open->document->scene(),
-                                       record.entities.front(),
-                                       *catalog_));
+                            record.verb == authoring::SessionVerb::ExtensionSection
+                                ? runSection(game_.parent_path(),
+                                             record.extension,
+                                             record.component,
+                                             open->document->scene(),
+                                             record.entities.front(),
+                                             *catalog_)
+                                : runPanel(game_.parent_path(),
+                                           record.extension,
+                                           record.command,
+                                           open->document->scene(),
+                                           record.entities,
+                                           *catalog_));
         Value rows = Value::array();
         for (const SectionRow& kRow : kRows) {
             Value each = Value::object();

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# A Studio extension run headless (D874, D875, D877): a Kest program under a copy of
+# A Studio extension run headless (D874, D875, D877, D878): a Kest program under a copy of
 # Ledges' `extensions/` listed with its commands and what its doors are of;
 # one command raising the chosen points, read and staged through its
 # doors, applied as one step and undone; another making a marker entity
 # with a component and a field; and an extension asking for a door it is
 # not offered, listed as refused, with nothing it can run; and its
 # Inspector section's rows for a point, a section that stages refused; and
-# its mode run at a point, refused without one.
+# its mode run at a point, refused without one; and its panel's rows for
+# the points chosen.
 #
 # usage: author_extension.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -36,6 +37,16 @@ fn extend() {
     studio.section("rawframe.physics2d.pose", "height")
     studio.section("ledges.point", "meddle")
     studio.mode("Drop marker", "drop")
+    studio.panel("Heights", "heights")
+}
+
+// Each chosen entity's height, in a panel.
+fn heights() {
+    let i = u32(0)
+    while i < studio.chosen() {
+        studio.row("height", studio.number(i, "rawframe.physics2d.pose", "y"))
+        i = i + u32(1)
+    }
 }
 
 // A marker where the author clicked.
@@ -103,8 +114,15 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.extension_section","id":5,"scene":"lift.scene","extension":"extensions/lift.kest","component":"rawframe.physics2d.pose","entity":"'$point0'"}'
     echo '{"kind":"authoring.extension_section","id":6,"scene":"lift.scene","extension":"extensions/lift.kest","component":"ledges.point","entity":"'$point0'"}'
     echo '{"kind":"authoring.extension","id":7,"scene":"lift.scene","extension":"extensions/lift.kest","command":"Drop marker","entities":[],"point":[3,20,0]}'
+    echo '{"kind":"authoring.extension_panel","id":8,"scene":"lift.scene","extension":"extensions/lift.kest","panel":"Heights","entities":["'$point0'","'$point1'"]}'
 } | "$author" session "$game" >"$work/replies" || true
-reply 2 | grep -q '{"path":"extensions/lift.kest","commands":\["Raise chosen","Mark above"\],"sections":\["rawframe.physics2d.pose","ledges.point"\],"modes":\["Drop marker"\],"capabilities":\["Studio","Show","Edit"\]}'
+reply 2 | grep -q '{"path":"extensions/lift.kest","commands":\["Raise chosen","Mark above"\],"sections":\["rawframe.physics2d.pose","ledges.point"\],"modes":\["Drop marker"\],"panels":\["Heights"\],"capabilities":\['
+# Its capabilities, in whatever order its code first reaches their doors.
+capabilities=$(reply 2 | grep -o '"path":"extensions/lift.kest"[^}]*' | grep -o '"capabilities":\[[^]]*\]')
+for capability in Studio Edit Show; do
+    grep -q "\"$capability\"" <<<"$capabilities"
+done
+[[ $(grep -o '"[A-Za-z]*"' <<<"$capabilities" | wc -l) == 4 ]]
 reply 2 | grep -q '"path":"extensions/reach.kest","commands":\[\],.*"refused":"the extension does not start'
 reply 3 | grep -q '"written":true,.*"undoable":1,'
 reply 4 | grep -q '"written":true,.*"undoable":2,'
@@ -116,6 +134,7 @@ reply 6 | grep -q 'only a command stages changes'
 reply 7 | grep -q '"written":true,'
 grep -A6 '"name": "dropped"' "$work/ledges/lift.scene" | grep -q '"x": 3'
 grep -A6 '"name": "dropped"' "$work/ledges/lift.scene" | grep -q '"y": 20'
+reply 8 | grep -q '"rows":\[{"label":"height","value":15},{"label":"height","value":15}\]'
 
 # Undone back to the scene's very bytes; a command the extension does not
 # offer, and one of an extension that does not start, refused.

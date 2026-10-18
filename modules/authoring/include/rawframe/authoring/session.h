@@ -160,8 +160,10 @@ enum class SessionVerb : std::uint8_t {
     /// of their commands run on a scene, what it staged one step (D874).
     Extensions,
     Extension,
-    /// An extension's Inspector section filled for one entity (D875).
+    /// An extension's Inspector section filled for one entity (D875), and
+    /// its panel for the entities chosen (D878).
     ExtensionSection,
+    ExtensionPanel,
     End,
 };
 
@@ -236,7 +238,8 @@ struct SessionRecord {
     std::string source;
     std::string as;
     /// Extension's: the extension, by its path under the game's directory,
-    /// and its command, by name; the entities chosen are `entities`.
+    /// and its command or mode, or its panel's, by name; the entities
+    /// chosen are `entities`.
     std::string extension;
     std::string command;
     /// Extension section's: the component its section is of, by the name
