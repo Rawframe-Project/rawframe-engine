@@ -479,6 +479,24 @@ std::optional<std::string> pickedIn(std::string_view reply, std::string_view sce
     return *source->text();
 }
 
+std::optional<std::array<double, 3>> pickedPointIn(std::string_view reply) {
+    const auto kParsed = document::parse(reply);
+    const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* point = answer != nullptr ? answer->find("point") : nullptr;
+    if (point == nullptr || point->kind() != Value::Kind::Array || point->items().size() != 3) {
+        return std::nullopt;
+    }
+    std::array<double, 3> at{};
+    for (std::size_t axis = 0; axis < 3; ++axis) {
+        const std::optional<double> kNumber = point->items()[axis].real();
+        if (!kNumber.has_value()) {
+            return std::nullopt;
+        }
+        at[axis] = *kNumber;
+    }
+    return at;
+}
+
 Search searchOf(std::string_view text) {
     Search made;
     std::size_t at = 0;
@@ -1062,7 +1080,8 @@ std::vector<ListedExtension> extensionsOf(std::string_view reply) {
             continue;
         }
         // A list of sections from a session that offers none is empty.
-        if (each.find("sections") != nullptr && !kTexts(each.find("sections"), extension.sections)) {
+        if ((each.find("sections") != nullptr && !kTexts(each.find("sections"), extension.sections)) ||
+            (each.find("modes") != nullptr && !kTexts(each.find("modes"), extension.modes))) {
             continue;
         }
         extension.path = *path->text();
@@ -1111,7 +1130,8 @@ Value extensionRecord(std::int64_t id,
                       std::string_view scene,
                       std::string_view extension,
                       std::string_view command,
-                      std::span<const std::string> entities) {
+                      std::span<const std::string> entities,
+                      std::optional<std::array<double, 3>> point) {
     Value record = Value::object();
     record.add("kind", Value::string("authoring.extension"));
     record.add("id", Value::integer(id));
@@ -1123,6 +1143,13 @@ Value extensionRecord(std::int64_t id,
         chosen.push(Value::string(kEntity));
     }
     record.add("entities", std::move(chosen));
+    if (point.has_value()) {
+        Value at = Value::array();
+        for (const double kAxis : *point) {
+            at.push(Value::real(kAxis));
+        }
+        record.add("point", std::move(at));
+    }
     return record;
 }
 

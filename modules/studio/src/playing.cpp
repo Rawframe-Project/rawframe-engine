@@ -230,7 +230,12 @@ void ShellParticipant::pollPicks(double seconds) {
     }
     const std::optional<std::string> kSource = pickedIn(kReply, scene_);
     const std::optional<Moved> kMoved = movedIn(kReply, scene_);
-    if (kSource.has_value()) {
+    // With an extension's mode on, a click that met the scene runs it
+    // there, on what it met, instead of choosing that (D877).
+    const std::optional<std::array<double, 3>> kPoint = pickedPointIn(kReply);
+    if (held_.extensionMode.has_value() && kPoint.has_value()) {
+        runExtensionMode(*kPoint, kSource);
+    } else if (kSource.has_value()) {
         if (const std::optional<std::string> kLayer = lockedOf(*kSource); kLayer.has_value()) {
             // Not picked in the viewport, nor moved there (D788).
             ++lockRefused_;

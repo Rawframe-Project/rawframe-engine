@@ -20,6 +20,12 @@ work="$(mktemp -d)"
 source "$here/bus.sh"
 trap '[ -n "$bus" ] && kill "$bus" 2>/dev/null; rm -rf "$work"' EXIT
 cp -R "$(dirname "$4")" "$work/game"
+# And files of its own beside the game's: `from=to` pairs in
+# STUDIO_EXTRA_FILES, `to` under the copy, as an extension (D877).
+for pair in ${STUDIO_EXTRA_FILES:-}; do
+    mkdir -p "$work/game/$(dirname "${pair#*=}")"
+    cp "${pair%%=*}" "$work/game/${pair#*=}"
+done
 # The played client's window beside Studio's, clear of where Studio is
 # clicked: with no window manager, a later window lies over an earlier.
 if [ -n "${STUDIO_COOK:-}" ]; then

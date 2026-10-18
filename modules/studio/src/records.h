@@ -169,6 +169,9 @@ struct Heard {
 /// `authoring.hide_layers` (D791): the layers the preview leaves out.
 [[nodiscard]] Value hideLayersRecord(std::int64_t id, std::string_view scene, const std::vector<std::uint32_t>& layers);
 [[nodiscard]] std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene);
+/// Where the ray of a pick met what it picked, if it met something
+/// (D877).
+[[nodiscard]] std::optional<std::array<double, 3>> pickedPointIn(std::string_view reply);
 
 /// The part of the preview's mark a pick's answer says the pointer has
 /// lit (D468): x, y, z, or ring; empty for none.
@@ -455,8 +458,10 @@ struct ChangedFile {
 struct ListedExtension {
     std::string path;
     std::vector<std::string> commands;
-    /// The components its Inspector sections are of (D875).
+    /// The components its Inspector sections are of (D875), and its
+    /// viewport modes (D877).
     std::vector<std::string> sections;
+    std::vector<std::string> modes;
     std::vector<std::string> capabilities;
     std::string refused;
 
@@ -484,6 +489,7 @@ struct ListedExtension {
                                     std::string_view scene,
                                     std::string_view extension,
                                     std::string_view command,
-                                    std::span<const std::string> entities);
+                                    std::span<const std::string> entities,
+                                    std::optional<std::array<double, 3>> point = std::nullopt);
 
 } // namespace rawframe::studio

@@ -186,6 +186,9 @@ struct EditorsHeld {
     std::string exportTitle;
     std::string exportAddress;
     std::optional<process::Child> exporting;
+    /// The extension's viewport mode on, by its extension's path and its
+    /// name, none for none (D877).
+    std::optional<std::pair<std::string, std::string>> extensionMode;
     std::filesystem::path exportingTo;
     std::string exportSaid;
     std::uint64_t exports = 0;

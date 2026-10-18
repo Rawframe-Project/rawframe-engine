@@ -1434,6 +1434,27 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "clicked at 980,520.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"picked\":1,[^\n]*\"marked\":[1-9][0-9]*,.*\"code\":\"scene_summary\"[^\n]*\"marksShown\":[1-9]")
+        # An extension's viewport mode (D877): switched on from the
+        # Extensions menu, then the click that picks the gate post in
+        # studio_picks_plaza runs it where the ray met the post, a marker
+        # made there, one step.
+        add_test(NAME studio_extension_mode_plaza
+                 COMMAND ${CMAKE_COMMAND} -E env
+                         "STUDIO_EXTRA_FILES=${CMAKE_CURRENT_SOURCE_DIR}/tests/extensions/drop.kest=extensions/drop.kest"
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
+                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" wait=3 @Extensions "@Drop marker mode"
+                         "until=studio_said,status=\"Drop marker mode: click" 980,520
+                         "until=studio_said,status=\"Drop marker done" @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_extension_mode_plaza PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "clicked at 980,520.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"picked\":0,")
         # A drag in the played game moving what it pressed (D457): the
         # gate's post, aimed at, pressed in the middle of the played client's
         # window and let go a hundred pixels to its right, is chosen, and its
@@ -1594,7 +1615,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # one day's checks at a load of 50 to 80, D789).
         set_tests_properties(studio_plays_plaza studio_picks_plaza studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza studio_snaps_plaza studio_looks_plaza
                              studio_rings_plaza studio_raises_plaza studio_turns_plaza studio_previews_plaza studio_cooks_plaza
-                             studio_plays_in_viewport
+                             studio_plays_in_viewport studio_extension_mode_plaza
                              PROPERTIES PROCESSORS 3)
     endif()
     # Every test here draws a window: labeled so the check can leave them

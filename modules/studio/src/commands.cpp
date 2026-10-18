@@ -36,6 +36,11 @@ constexpr std::string_view kPalette = placed("Command palette", SurfaceKind::Com
 /// Studio's preferences, a dialog of its own with no button.
 constexpr std::string_view kPreferences = placed("Preferences", SurfaceKind::Dialog, "Window menu");
 
+/// How many viewport modes the extensions may add: SPEC-0051's eight, less
+/// Studio's own in the surface table (D877).
+constexpr std::size_t kModesLeft =
+    8 - static_cast<std::size_t>(std::ranges::count(kSurfaces, SurfaceKind::ViewportMode, &Surface::kind));
+
 /// The game exported, a dialog of its own with no button (D872).
 constexpr std::string_view kExport = placed("Export", SurfaceKind::Dialog, "File menu");
 
@@ -128,7 +133,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
                                  }) &&
             kMenu != "File" && kMenu != "Window" && kMenu != "View" &&
             (kMenu != "Extensions" || std::ranges::all_of(extensions_, [](const ListedExtension& extension) {
-                 return extension.commands.empty();
+                 return extension.commands.empty() && extension.modes.empty();
              }))) {
             continue;
         }
@@ -170,12 +175,25 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     }
     // Each command the game's extensions offer, in their menu, by its own
     // name, after all of Studio's: one named as a command Studio has, or
-    // as another extension's, is not offered (D874).
+    // as another extension's, is not offered (D874). Then each mode, as
+    // its name and "mode", while SPEC-0051's eight modes have room after
+    // Studio's own (D877).
+    std::size_t modesLeft = kModesLeft;
     for (const ListedExtension& kExtension : extensions_) {
+        const auto kOffered = [&](const std::string& name) {
+            return std::ranges::none_of(commands_, [&](const Command& command) {
+                return command.name == name;
+            });
+        };
         for (const std::string& kName : kExtension.commands) {
-            if (std::ranges::none_of(commands_, [&](const Command& command) {
-                    return command.name == kName;
-                })) {
+            if (kOffered(kName)) {
+                commands_.push_back(Command{.name = kName, .menu = "Extensions", .keys = kKeys(kName, {})});
+            }
+        }
+        for (const std::string& kMode : kExtension.modes) {
+            const std::string kName = kMode + " mode";
+            if (modesLeft > 0 && kOffered(kName)) {
+                --modesLeft;
                 commands_.push_back(Command{.name = kName, .menu = "Extensions", .keys = kKeys(kName, {})});
             }
         }
@@ -281,7 +299,11 @@ bool ShellParticipant::runCommand(std::string_view name) {
         return true;
     }
     if (kCommand->menu == "Extensions") {
-        runExtensionCommand(kCommand->name);
+        if (kCommand->name.ends_with(" mode")) {
+            switchExtensionMode(kCommand->name.substr(0, kCommand->name.size() - 5));
+        } else {
+            runExtensionCommand(kCommand->name);
+        }
         return true;
     }
     if (!tree_->contains(kCommand->button)) {

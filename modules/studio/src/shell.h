@@ -710,6 +710,10 @@ private:
     /// An extension's command run on the chosen entities through the
     /// session, as `authoring.extension` runs it headless (D874).
     void runExtensionCommand(const std::string& command);
+    /// An extension's viewport mode switched on, or off again (D877), and
+    /// run where a pick in the viewport met the scene.
+    void switchExtensionMode(const std::string& mode);
+    void runExtensionMode(const std::array<double, 3>& point, const std::optional<std::string>& picked);
     /// The Inspector's sections the game's extensions offer for the
     /// entity shown, of the components `read` lists it with (D875).
     void showSections(const std::optional<Value>& read);

@@ -33,6 +33,43 @@ void ShellParticipant::runExtensionCommand(const std::string& command) {
     refresh(entity_.empty() ? std::nullopt : std::optional<std::string>{entity_});
 }
 
+void ShellParticipant::switchExtensionMode(const std::string& mode) {
+    if (held_.extensionMode.has_value() && held_.extensionMode->second == mode) {
+        held_.extensionMode.reset();
+        say(mode + " mode off");
+        return;
+    }
+    const auto kOffering = std::ranges::find_if(extensions_, [&](const ListedExtension& extension) {
+        return std::ranges::contains(extension.modes, mode);
+    });
+    if (kOffering == extensions_.end()) {
+        return;
+    }
+    held_.extensionMode = std::pair{kOffering->path, mode};
+    say(mode + " mode: click in the played scene");
+}
+
+void ShellParticipant::runExtensionMode(const std::array<double, 3>& point, const std::optional<std::string>& picked) {
+    // The mode as `authoring.extension` runs it headless with a point:
+    // what it staged one step of the scene's history (D877).
+    const auto& [kPath, kMode] = *held_.extensionMode;
+    std::vector<std::string> chosen;
+    if (picked.has_value()) {
+        chosen.push_back(*picked);
+    }
+    const Outcome kOutcome = outcomeOf(ask(extensionRecord(next(), scene_, kPath, kMode, chosen, point)));
+    told(kOutcome);
+    if (kOutcome.done) {
+        ++applied_;
+        say(kMode + " done");
+        recookPlayed();
+    } else {
+        ++refused_;
+        say(kMode + ": " + kOutcome.message);
+    }
+    refresh(entity_.empty() ? std::nullopt : std::optional<std::string>{entity_});
+}
+
 void ShellParticipant::showSections(const std::optional<Value>& read) {
     const Value* kComponents = read.has_value() ? read->find("components") : nullptr;
     if (kComponents == nullptr || kComponents->kind() != Value::Kind::Array) {

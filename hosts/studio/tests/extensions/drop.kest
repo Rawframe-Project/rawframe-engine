@@ -1,0 +1,18 @@
+module drop
+
+// A Studio extension's viewport mode for the tests (D877): a marker
+// dropped where the author clicks in the played scene.
+
+import rawframe.studio
+
+fn extend() {
+    studio.mode("Drop marker", "drop")
+}
+
+fn drop() {
+    let made = studio.make("dropped")
+    studio.add(made, "rawframe.physics3d.pose")
+    studio.set_made(made, "rawframe.physics3d.pose", "x", studio.point(u32(0)))
+    studio.set_made(made, "rawframe.physics3d.pose", "y", studio.point(u32(1)))
+    studio.set_made(made, "rawframe.physics3d.pose", "z", studio.point(u32(2)))
+}
