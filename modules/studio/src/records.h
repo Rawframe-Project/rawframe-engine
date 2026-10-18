@@ -455,6 +455,8 @@ struct ChangedFile {
 struct ListedExtension {
     std::string path;
     std::vector<std::string> commands;
+    /// The components its Inspector sections are of (D875).
+    std::vector<std::string> sections;
     std::vector<std::string> capabilities;
     std::string refused;
 
@@ -468,6 +470,16 @@ struct ListedExtension {
 
 /// `authoring.extension`: the command `command` of the extension at
 /// `extension` run on `entities` of `scene`.
+/// `authoring.extension_section`: the rows the extension at `extension`
+/// shows in its section of `component` for `entity` of `scene` (D875),
+/// and the rows its answer holds, each a label and a value.
+[[nodiscard]] Value extensionSectionRecord(std::int64_t id,
+                                           std::string_view scene,
+                                           std::string_view extension,
+                                           std::string_view component,
+                                           std::string_view entity);
+[[nodiscard]] std::vector<std::pair<std::string, double>> sectionRowsOf(std::string_view reply);
+
 [[nodiscard]] Value extensionRecord(std::int64_t id,
                                     std::string_view scene,
                                     std::string_view extension,

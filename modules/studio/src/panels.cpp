@@ -796,6 +796,7 @@ void ShellParticipant::showEntity(std::size_t at) {
                                        .type = kType});
         }
     }
+    showSections(kRead);
     if (catalog_.offers("scene.add_component")) {
         auto line = fieldRow("add", "");
         if (line.has_value()) {

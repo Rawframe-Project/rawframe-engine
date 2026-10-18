@@ -710,6 +710,9 @@ private:
     /// An extension's command run on the chosen entities through the
     /// session, as `authoring.extension` runs it headless (D874).
     void runExtensionCommand(const std::string& command);
+    /// The Inspector's sections the game's extensions offer for the
+    /// entity shown, of the components `read` lists it with (D875).
+    void showSections(const std::optional<Value>& read);
     /// Studio's own directory, made the first time a tool needs it.
     std::optional<std::filesystem::path> ownDirectory();
     /// The Export dialog (D872), from the File menu: a target (desktop,

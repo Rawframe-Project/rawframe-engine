@@ -1261,9 +1261,10 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"studio_exported\"[^\n]*\"target\":\"desktop\",[^\n]*\"code\":0,\"receipt\":true,\"exports\":1}.*\"status\":\"a phone's export needs.*\"exit\":\"clean_stop\"")
-        # A Studio extension's command (D874): a Kest program put under a
-        # copy of Runners' extensions/, its command in the Extensions menu,
-        # run on the west wall, which it raises a meter as one step.
+        # A Studio extension's command and section (D874, D875): a Kest
+        # program put under a copy of Runners' extensions/, its command in
+        # the Extensions menu, run on the west wall, which it raises a meter
+        # as one step, and its section of the pose in the Inspector.
         add_test(NAME studio_extends
                  COMMAND ${CMAKE_COMMAND} -E env
                          "STUDIO_EXTRA_FILES=${CMAKE_CURRENT_SOURCE_DIR}/tests/extensions/raise.kest=extensions/raise.kest"
@@ -1277,7 +1278,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set_tests_properties(studio_extends PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "level.scene written: yes\n.*\"x\": -40,\n *\"y\": 11\n.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
+                             "level.scene written: yes\n.*\"x\": -40,\n *\"y\": 11\n.*\"code\":\"studio_section_shown\"[^\n]*\"component\":\"rawframe.physics2d.pose\",\"rows\":1}.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
         # Paused and stepped (D806): Plaza played from Studio, its World
         # paused on its server, stepped three ticks one by one, each a tick
         # on, and let run again.

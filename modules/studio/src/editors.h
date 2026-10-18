@@ -33,6 +33,8 @@ inline constexpr diagnostics::EventIdentity kWorldShown{"studio", "studio_world"
 /// Version control's changes read, and a commit made (D871).
 inline constexpr diagnostics::EventIdentity kChangesShown{"studio", "studio_changes"};
 inline constexpr diagnostics::EventIdentity kCommitted{"studio", "studio_committed"};
+/// An extension's Inspector section shown (D875).
+inline constexpr diagnostics::EventIdentity kSectionShown{"studio", "studio_section_shown"};
 /// A game exported, or its export failed (D872).
 inline constexpr diagnostics::EventIdentity kExported{"studio", "studio_exported"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};

@@ -1,12 +1,19 @@
 module raise
 
-// A Studio extension for the tests (D874): the chosen entities a meter
-// higher, one step of the scene's history.
+// A Studio extension for the tests (D874, D875): the chosen entities a
+// meter higher, one step of the scene's history, and a pose's height in
+// the Inspector.
 
 import rawframe.studio
 
 fn extend() {
     studio.command("Raise chosen", "raise")
+    studio.section("rawframe.physics2d.pose", "height")
+}
+
+// The pose's height in the Inspector.
+fn height() {
+    studio.row("height", studio.number(u32(0), "rawframe.physics2d.pose", "y"))
 }
 
 fn raise() {

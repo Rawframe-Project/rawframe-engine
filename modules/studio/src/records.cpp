@@ -1061,9 +1061,48 @@ std::vector<ListedExtension> extensionsOf(std::string_view reply) {
             (refused != nullptr && refused->kind() != Value::Kind::String)) {
             continue;
         }
+        // A list of sections from a session that offers none is empty.
+        if (each.find("sections") != nullptr && !kTexts(each.find("sections"), extension.sections)) {
+            continue;
+        }
         extension.path = *path->text();
         extension.refused = refused != nullptr ? *refused->text() : std::string{};
         made.push_back(std::move(extension));
+    }
+    return made;
+}
+
+Value extensionSectionRecord(std::int64_t id,
+                             std::string_view scene,
+                             std::string_view extension,
+                             std::string_view component,
+                             std::string_view entity) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.extension_section"));
+    record.add("id", Value::integer(id));
+    record.add("scene", Value::string(std::string{scene}));
+    record.add("extension", Value::string(std::string{extension}));
+    record.add("component", Value::string(std::string{component}));
+    record.add("entity", Value::string(std::string{entity}));
+    return record;
+}
+
+std::vector<std::pair<std::string, double>> sectionRowsOf(std::string_view reply) {
+    std::vector<std::pair<std::string, double>> made;
+    const auto kParsed = document::parse(reply);
+    const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* rows = answer != nullptr ? answer->find("rows") : nullptr;
+    if (rows == nullptr || rows->kind() != Value::Kind::Array) {
+        return made;
+    }
+    for (const Value& each : rows->items()) {
+        const Value* label = each.find("label");
+        const Value* value = each.find("value");
+        if (label == nullptr || label->kind() != Value::Kind::String || value == nullptr ||
+            !value->real().has_value()) {
+            continue;
+        }
+        made.emplace_back(*label->text(), *value->real());
     }
     return made;
 }
