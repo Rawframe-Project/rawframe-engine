@@ -77,6 +77,10 @@ RAWFRAME_TEST(AnythingElseIsRefused) {
         "\"kind\":\"kest.sources\"}",
         "{\"files\":[{\"mode\":1,\"path\":\"a.kest\",\"text\":\"\"}],\"formatVersion\":1,\"kind\":\"kest.sources\"}",
         "{\"files\":[{\"path\":\"../a.kest\",\"text\":\"\"}],\"formatVersion\":1,\"kind\":\"kest.sources\"}",
+        // A number where a file's text is, which the nightly fuzz run found
+        // (2026-10-18): read as its digits, it wrote back quoted.
+        "{\"files\":[{\"path\":\"a.kest\",\"text\":2}],\"formatVersion\":1,\"kind\":\"kest.sources\"}",
+        "{\"files\":[{\"path\":2,\"text\":\"\"}],\"formatVersion\":1,\"kind\":\"kest.sources\"}",
         // Cut short.
         kGood.substr(0, kGood.size() - 1),
     };

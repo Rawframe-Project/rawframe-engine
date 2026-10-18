@@ -62,16 +62,20 @@ result::Result<std::vector<kest::SourceFile>> readGameSources(std::string_view b
     const Value* kind = parsed->find("kind");
     const Value* version = parsed->find("formatVersion");
     const Value* listed = parsed->find("files");
-    if (parsed->names().size() != 3 || kind == nullptr || kind->text() == nullptr || *kind->text() != "kest.sources" ||
-        version == nullptr || version->integer() != 1 || listed == nullptr || listed->kind() != Value::Kind::Array) {
+    // A number's text reads as a string's (Value::text), so each string is
+    // asked its kind: a number as a file's text would write back quoted.
+    const auto kString = [](const Value* value) {
+        return value != nullptr && value->kind() == Value::Kind::String;
+    };
+    if (parsed->names().size() != 3 || !kString(kind) || *kind->text() != "kest.sources" || version == nullptr ||
+        version->integer() != 1 || listed == nullptr || listed->kind() != Value::Kind::Array) {
         return std::unexpected<result::Error>{invalid("a game's sources are kest.sources, format 1, and files")};
     }
     std::vector<kest::SourceFile> files;
     for (const Value& each : listed->items()) {
         const Value* path = each.find("path");
         const Value* text = each.find("text");
-        if (each.kind() != Value::Kind::Object || each.names().size() != 2 || path == nullptr ||
-            path->text() == nullptr || text == nullptr || text->text() == nullptr) {
+        if (each.kind() != Value::Kind::Object || each.names().size() != 2 || !kString(path) || !kString(text)) {
             return std::unexpected<result::Error>{invalid("a game's file is a path and a text")};
         }
         files.push_back(kest::SourceFile{.path = *path->text(), .text = *text->text()});
