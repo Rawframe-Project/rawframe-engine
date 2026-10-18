@@ -33,14 +33,20 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     done
     # The crate asked until it is drawn, which the session answers as being
     # drawn meanwhile, never waiting for it; three minutes only bound a
-    # loaded machine's software rasterizer.
-    for each in $(seq 100 1900); do
-        echo '{"kind":"authoring.thumbnail","id":'"$each"',"asset":"crate.gltf","size":64}'
-        echo '{"kind":"authoring.describe","id":"between'"$each"'"}'
-        grep -q '"answer":{"kind":"authoring.thumbnail","asset":"crate.gltf"\|"class":"unsupported"' "$work/replies" && break
-        sleep 0.1
+    # loaded machine's software rasterizer. Then the figure and the mound
+    # (at 32 pixels) until each is drawn too, the run drawing its meshes one
+    # after another, before the session's end stops the run.
+    for asset in crate figure mound; do
+        size=64
+        [ "$asset" = mound ] && size=32
+        for each in $(seq 100 1900); do
+            echo '{"kind":"authoring.thumbnail","id":"'"$asset$each"'","asset":"'"$asset"'.gltf","size":'"$size"'}'
+            echo '{"kind":"authoring.describe","id":"between'"$asset$each"'"}'
+            grep -q '"answer":{"kind":"authoring.thumbnail","asset":"'"$asset"'.gltf"\|"class":"unsupported"' \
+                "$work/replies" && break
+            sleep 0.1
+        done
     done
-    echo '{"kind":"authoring.thumbnail","id":4,"asset":"mound.gltf","size":32}'
     echo '{"kind":"authoring.thumbnail","id":5,"asset":"gate.scene","size":64}'
     echo '{"kind":"authoring.end","id":6}'
 } | "$author" session "$game" --cook "$cook" --thumbnail "$thumbnail" >"$work/replies" || true
@@ -51,10 +57,10 @@ if grep -q "skip: no device" "$work/content/thumbnails/thumbnails.log" 2>/dev/nu
 fi
 # The first asking answered as being drawn, and a describe between the
 # askings answered while the tool drew.
-reply 100 | grep -q '"class":"unavailable"'
-grep -q '"id":"between100","answer"' "$work/replies"
+grep '"id":"crate100",' "$work/replies" | grep -q '"class":"unavailable"'
+grep -q '"id":"betweencrate100","answer"' "$work/replies"
 grep -q '"answer":{"kind":"authoring.thumbnail","asset":"crate.gltf","object":"[^"]*/content/thumbnails/[0-9a-f]\{64\}.texture","level":2,"width":64,"height":64}' "$work/replies"
-reply 4 | grep -q '"answer":{"kind":"authoring.thumbnail","asset":"mound.gltf","object":"[^"]*/content/thumbnails/[0-9a-f]\{64\}.texture","level":3,"width":32,"height":32}'
+grep -q '"answer":{"kind":"authoring.thumbnail","asset":"mound.gltf","object":"[^"]*/content/thumbnails/[0-9a-f]\{64\}.texture","level":3,"width":32,"height":32}' "$work/replies"
 reply 5 | grep -q '"code":"unsupported_operation"'
 # One run drew them all, the plaza's three meshes, each covering some of
 # its picture and not all of it.
