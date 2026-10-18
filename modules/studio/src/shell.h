@@ -750,6 +750,9 @@ private:
     void setExport(const std::string& field, const std::string& text);
     void startExport();
     void pollExport();
+    /// The browser shown again while the session draws meshes' thumbnails,
+    /// twice a second, so they appear as they are drawn (D899).
+    void pollThumbnails(double seconds);
     /// The directory the chosen target exports to, the default beside the
     /// game's.
     [[nodiscard]] std::filesystem::path exportOutput() const;

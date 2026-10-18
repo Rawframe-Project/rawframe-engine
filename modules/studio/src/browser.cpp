@@ -383,6 +383,12 @@ std::shared_ptr<const texture::Texture> ShellParticipant::thumbnailOf(const List
     // before a cook, which is said as the row's state.
     const auto kParsed = document::parse(ask(thumbnailRecord(next(), source.path, browser_.thumbnail)));
     const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    // A mesh's is being drawn beside the session: asked again shortly.
+    const Value* kError = kParsed.has_value() ? kParsed->find("error") : nullptr;
+    const Value* kClass = kError != nullptr ? kError->find("class") : nullptr;
+    if (kClass != nullptr && kClass->text() != nullptr && *kClass->text() == "unavailable") {
+        browser_.drawing = true;
+    }
     const Value* kObject = kAnswer != nullptr ? kAnswer->find("object") : nullptr;
     const Value* kLevel = kAnswer != nullptr ? kAnswer->find("level") : nullptr;
     if (kObject == nullptr || kObject->text() == nullptr || kLevel == nullptr || !kLevel->integer().has_value()) {
@@ -488,6 +494,15 @@ void ShellParticipant::showReferences() {
     kSection("used by", kAnswer->find("usedBy"));
     ++browser_.referencesShown;
     say(browser_.chosen + ": " + std::to_string(browser_.referenceRows.size()) + " references");
+}
+
+void ShellParticipant::pollThumbnails(double seconds) {
+    if (!browser_.drawing || seconds - browser_.drawingAsked < 0.5) {
+        return;
+    }
+    browser_.drawing = false;
+    browser_.drawingAsked = seconds;
+    static_cast<void>(showScenes());
 }
 
 } // namespace rawframe::studio

@@ -355,6 +355,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     readFrame(kSeconds);
     pollGit();
     pollExport();
+    pollThumbnails(kSeconds);
     if (playing_.has_value()) {
         inViewport_.othersStarted = playing_->others();
     }

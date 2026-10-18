@@ -72,6 +72,10 @@ struct AssetBrowser {
     std::vector<std::pair<ui::Node, std::uint32_t>> sizeRows;
     std::map<std::uint64_t, std::shared_ptr<const texture::Texture>> pictures;
     std::uint64_t thumbnailsMade = 0;
+    /// Whether the session said meshes' thumbnails are being drawn, and
+    /// when the browser last asked again (D899).
+    bool drawing = false;
+    double drawingAsked = 0;
     /// Files dropped on the window, and those imported (D802).
     /// The Inspector's References, the center's rows of what the chosen
     /// source uses and what uses it, and how many times they were shown
