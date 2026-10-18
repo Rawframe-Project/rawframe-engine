@@ -182,9 +182,11 @@ RAWFRAME_TEST(AMarkNamesAPointOrNone) {
 RAWFRAME_TEST(AHistoryIsReadEntryByEntry) {
     const std::vector<HistoryEntry> kRead = historyOf(
         R"({"kind":"authoring.reply","id":3,"answer":{"kind":"authoring.history","reopened":false,"entries":[)"
-        R"({"summary":"rename to floor","deltas":1,"applied":true},{"summary":"move entity","deltas":1,"applied":false}]}})");
+        R"({"summary":"rename to floor","deltas":1,"applied":true,"kind":"change"},)"
+        R"({"summary":"move entity","deltas":1,"applied":false,"author":"ada","kind":"undo"}]}})");
     RAWFRAME_EXPECT(kRead.size() == 2 && kRead[0].summary == "rename to floor" && kRead[0].applied &&
-                    kRead[1].summary == "move entity" && !kRead[1].applied);
+                    kRead[0].author.empty() && kRead[0].kind == "change" && kRead[1].summary == "move entity" &&
+                    !kRead[1].applied && kRead[1].author == "ada" && kRead[1].kind == "undo");
     RAWFRAME_EXPECT(historyOf(R"({"kind":"authoring.reply","id":3,"error":{"message":"no"}})").empty());
     RAWFRAME_EXPECT(document::writeCompact(historyRecord(4, "level.scene")) ==
                     R"({"kind":"authoring.history","id":4,"scene":"level.scene"})");

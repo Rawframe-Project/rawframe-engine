@@ -250,9 +250,13 @@ std::vector<HistoryEntry> historyOf(std::string_view reply) {
     for (const Value& each : entries->items()) {
         const Value* summary = each.find("summary");
         const Value* applied = each.find("applied");
-        made.push_back(
-            HistoryEntry{.summary = summary != nullptr && summary->text() != nullptr ? *summary->text() : "?",
-                         .applied = applied != nullptr && applied->truth().value_or(false)});
+        const Value* author = each.find("author");
+        const Value* kind = each.find("kind");
+        made.push_back(HistoryEntry{
+            .summary = summary != nullptr && summary->text() != nullptr ? *summary->text() : "?",
+            .applied = applied != nullptr && applied->truth().value_or(false),
+            .author = author != nullptr && author->kind() == Value::Kind::String ? *author->text() : std::string{},
+            .kind = kind != nullptr && kind->kind() == Value::Kind::String ? *kind->text() : std::string{}});
     }
     return made;
 }

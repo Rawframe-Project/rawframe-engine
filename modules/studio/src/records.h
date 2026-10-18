@@ -67,6 +67,10 @@ struct Answered {
 struct HistoryEntry {
     std::string summary;
     bool applied = false;
+    /// Who made it, where its record named an author, and whether it takes
+    /// another entry back, `undo` or `redo`, or is a `change` (D879).
+    std::string author;
+    std::string kind;
 };
 
 /// `authoring.history` for `scene`, and the entries its answer lists,

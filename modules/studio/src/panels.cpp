@@ -914,8 +914,14 @@ void ShellParticipant::showHistoryList() {
         return;
     }
     for (const HistoryEntry& entry : historyOf(ask(historyRecord(next(), scene_)))) {
-        auto added =
-            row(historyColumn_, entry.summary, entry.applied ? kText : kQuiet, entry.applied ? kRow : kField, true);
+        // An entry that takes another back says so, and one another author
+        // made says whose it is (ADR-0085).
+        std::string text =
+            entry.kind == "undo" || entry.kind == "redo" ? entry.kind + ": " + entry.summary : entry.summary;
+        if (!entry.author.empty()) {
+            text += " by " + entry.author;
+        }
+        auto added = row(historyColumn_, text, entry.applied ? kText : kQuiet, entry.applied ? kRow : kField, true);
         if (!added.has_value()) {
             return;
         }
