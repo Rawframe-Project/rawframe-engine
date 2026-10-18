@@ -1,8 +1,8 @@
 # The authoring tool (ADR-0032, SPEC-0040): the operation surface from a
 # command line. Tooling only; no client or server closure contains it.
 rawframe_host(NAME author OUTPUT rawframe-author
-    SOURCES src/main.cpp src/connect.cpp
-    DEPS authoring_session authoring process world_kest kest content scene schema document execution result base
+    SOURCES src/main.cpp src/connect.cpp src/hosting.cpp
+    DEPS authoring_session authoring host process world_kest kest content scene schema document execution result base
 )
 
 if(RAWFRAME_BUILD_TESTS)
@@ -80,6 +80,12 @@ if(RAWFRAME_BUILD_TESTS)
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_claims)
     set_tests_properties(author_claims PROPERTIES
                          PASS_REGULAR_EXPRESSION "authors present and their claims kept in one session")
+    # The session shared over QUIC with tokens and grants (ADR-0085, D881).
+    add_test(NAME author_hosted
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_hosted.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_hosted)
+    set_tests_properties(author_hosted PROPERTIES
+                         PASS_REGULAR_EXPRESSION "three collaborators shared one hosted session")
     add_test(NAME author_styles
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_styles.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_styles)

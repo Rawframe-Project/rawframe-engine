@@ -66,10 +66,19 @@
 // connect.h): records a line on standard input, the replies on standard
 // output, the hello said for it with the token from its file.
 //
+// `host` shares the session with collaborators over QUIC (ADR-0085, D881,
+// authoring_session/host.h): at `--endpoint`, each admitted by a token
+// `--tokens` names with its grants, under a certificate made for the run
+// whose fingerprint goes to `--fingerprint-file`, a collaborator's cook
+// going into `--cooks`; it runs until asked to stop. `join` is a
+// collaborator of one, as `connect` is of an endpoint, what the host says
+// unasked written as it is heard.
+//
 // Exit status 0 when everything succeeded, 1 otherwise, and 2 for a usage
 // error.
 
 #include "connect.h"
+#include "hosting.h"
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/operations.h"
 #include "rawframe/authoring/queries.h"
@@ -554,6 +563,47 @@ int main(int argc, char** argv) {
     if (kVerb == "connect" && argc == 5) {
         return rawframe::author::connect(argv[2], argv[3], argv[4]);
     }
+    if (kVerb == "join" && argc == 5) {
+        return rawframe::author::join(argv[2], argv[3], argv[4]);
+    }
+    if (kVerb == "host") {
+        // `host <game> [<scene root>]` and its named settings, in any order.
+        std::vector<std::string_view> places;
+        rawframe::authoring_session::HostSettings settings;
+        std::filesystem::path cook = rawframe::process::besideSelf("rawframe-cook");
+        bool sound = true;
+        for (int at = 2; at < argc && sound; ++at) {
+            const std::string_view kWord = argv[at];
+            if (!kWord.starts_with("--")) {
+                places.push_back(kWord);
+                continue;
+            }
+            sound = at + 1 < argc;
+            if (!sound) {
+                break;
+            }
+            const char* kValue = argv[++at];
+            if (kWord == "--endpoint") {
+                settings.endpoint = kValue;
+            } else if (kWord == "--tokens") {
+                settings.tokens = kValue;
+            } else if (kWord == "--fingerprint-file") {
+                settings.fingerprintFile = kValue;
+            } else if (kWord == "--cooks") {
+                settings.cooks = std::filesystem::path{kValue};
+            } else if (kWord == "--cook") {
+                cook = kValue;
+            } else {
+                sound = false;
+            }
+        }
+        if (sound && (places.size() == 1 || places.size() == 2) && !settings.endpoint.empty() &&
+            !settings.tokens.empty() && !settings.fingerprintFile.empty()) {
+            const std::filesystem::path kGame{places[0]};
+            return rawframe::author::hostGame(
+                kGame, places.size() == 2 ? std::filesystem::path{places[1]} : kGame.parent_path(), cook, settings);
+        }
+    }
     // `session <game> [<scene root>] [--cook <program>]`
     const bool kCookNamed = argc >= 5 && std::string_view{argv[argc - 2]} == "--cook";
     const int kSessionArguments = kCookNamed ? argc - 2 : argc;
@@ -582,7 +632,10 @@ int main(int argc, char** argv) {
                "       rawframe-author migrate <game description> <scene>... [--dry-run]\n"
                "       rawframe-author session <game description> [<scene root>] [--cook <rawframe-cook>]\n"
                "       rawframe-author mcp <game description> [<scene root>] [--cook <rawframe-cook>]\n"
-               "       rawframe-author connect <endpoint> <pin file> <token file>\n",
+               "       rawframe-author connect <endpoint> <pin file> <token file>\n"
+               "       rawframe-author host <game description> [<scene root>] --endpoint <host:port> --tokens <file>\n"
+               "           --fingerprint-file <file> [--cooks <directory>] [--cook <rawframe-cook>]\n"
+               "       rawframe-author join <endpoint> <pin file> <token file>\n",
                stderr);
     return 2;
 }
