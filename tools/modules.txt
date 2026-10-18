@@ -100,3 +100,4 @@ author: authoring_session authoring host process world_kest kest content scene s
 debug: authoring_session document result base
 animation_tool: animation_import animation content result base
 bake: scene_bake host game_content input_kest world_audio world_localization network_loopback render render_canvas render_canvas_gpu world_ui render_scene render_scene_gpu physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
+thumbnail_tool: render_scene_gpu render_scene render mesh texture schema result base

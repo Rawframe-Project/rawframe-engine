@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Packages Studio for an author with no build of their own (D768): Studio,
-# the cook tool, the dedicated server, the client, and the authoring tool
-# from one build tree, beside the sources of the games named and a
+# the cook tool, the dedicated server, the client, the authoring tool, and
+# the thumbnail tool from one build tree, beside the sources of the games named and a
 # configuration for each, so Studio opens the game, cooks it, and plays it
 # from its header. A Windows
 # tree's programs take the DLLs they import from the tree, and the C++
@@ -23,6 +23,10 @@ mkdir -p "$into/games"
 cp "$tree/hosts/studio/rawframe-studio$exe" "$tree/hosts/cook/rawframe-cook$exe" \
     "$tree/hosts/dedicated_server/rawframe-server$exe" "$tree/hosts/client/rawframe-client$exe" \
     "$tree/hosts/author/rawframe-author$exe" "$into/"
+# And the tool that draws a mesh's thumbnail, where the tree has the
+# scene's renderer (D899).
+thumbnail="$tree/hosts/thumbnail/rawframe-thumbnail$exe"
+[ -e "$thumbnail" ] && cp "$thumbnail" "$into/"
 # The templates a new game is made from (D780).
 cp -R templates "$into/templates"
 for game in "$@"; do
