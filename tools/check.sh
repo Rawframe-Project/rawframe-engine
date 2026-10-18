@@ -182,10 +182,21 @@ build_and_test() {
 web_steps() {
     # Two trees at once: the browser's page modules drive the web client
     # against the native dedicated server over WebTransport (D173).
+    # A page that fails is played once more, and fails the check only if it
+    # fails again, as a tree's failed tests are run again (D895, D897): a
+    # page plays for seconds against a server on the same machine.
     step "web page"
-    if ! tools/node_page.sh hosts/web_client/tests/browser_page.mjs \
-        out/clang-development/hosts/dedicated_server/rawframe-server \
-        out/wasm-development/hosts/web_client/rawframe-web-client.wasm "$PWD" >out/web-page.log 2>&1; then
+    page_status=1
+    for attempt in 1 2; do
+        if tools/node_page.sh hosts/web_client/tests/browser_page.mjs \
+            out/clang-development/hosts/dedicated_server/rawframe-server \
+            out/wasm-development/hosts/web_client/rawframe-web-client.wasm "$PWD" >out/web-page.log 2>&1; then
+            page_status=0
+            break
+        fi
+        [ "$attempt" = 1 ] && echo "   web page: played again: $(grep '^page:' out/web-page.log | tail -1)"
+    done
+    if [ "$page_status" -ne 0 ]; then
         tail -30 out/web-page.log; fail "web page"
     else
         grep '^page:' out/web-page.log
@@ -218,22 +229,29 @@ web_plays() {
     # material (D703), then Quarry, seven thousand blocks (D742), then the
     # Lighting Test, its lamps' light read from the canvas (D750), each
     # exported for the web and played from its site (D397).
+    # A game whose play fails is played once more, as the page is above.
     for game in runners plaza tycoon gale quarry lighting; do
         step "web play $game"
-        play_status=0
-        RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
-            PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
-            tools/node_page.sh hosts/web_client/tests/browser_play.mjs \
-            out/clang-development/hosts/export/rawframe-export \
-            out/clang-development/hosts/cook/rawframe-cook out/clang-development/hosts/build/rawframe-build \
-            out/clang-development/hosts/dedicated_server/rawframe-server \
-            out/clang-development/hosts/bots/rawframe-bots \
-            out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
-            out/wasm-development/third_party/maul-window/maul-window.mjs \
-            out/wasm-development/third_party/maul-rhi/maul-rhi.mjs \
-            out/wasm-development/third_party/maul-ui/maul-ui.mjs "$PWD" \
-            "$game" >"out/web-play-$game.log" 2>&1 ||
-            play_status=$?
+        for attempt in 1 2; do
+            play_status=0
+            RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
+                PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
+                tools/node_page.sh hosts/web_client/tests/browser_play.mjs \
+                out/clang-development/hosts/export/rawframe-export \
+                out/clang-development/hosts/cook/rawframe-cook out/clang-development/hosts/build/rawframe-build \
+                out/clang-development/hosts/dedicated_server/rawframe-server \
+                out/clang-development/hosts/bots/rawframe-bots \
+                out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
+                out/wasm-development/third_party/maul-window/maul-window.mjs \
+                out/wasm-development/third_party/maul-rhi/maul-rhi.mjs \
+                out/wasm-development/third_party/maul-ui/maul-ui.mjs "$PWD" \
+                "$game" >"out/web-play-$game.log" 2>&1 ||
+                play_status=$?
+            if [ "$play_status" -eq 0 ] || [ "$play_status" -eq 77 ] || [ "$attempt" = 2 ]; then
+                break
+            fi
+            echo "   web play $game: played again: $(grep '^page: unmet' "out/web-play-$game.log" | tail -1)"
+        done
         if [ "$play_status" -eq 77 ]; then
             echo "web play skipped: no Puppeteer or no browser for it"
         elif [ "$play_status" -ne 0 ]; then
