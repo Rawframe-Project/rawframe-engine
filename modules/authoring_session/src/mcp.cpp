@@ -614,6 +614,18 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"scene", "extension", "command"}),
                                annotationsOf(false, false)));
     }
+    {
+        Value properties = Value::object();
+        properties.add("scene", property("string", false, "The scene's path under the game's directory."));
+        properties.add("extension", property("string", false, "The extension's path, as extensions_list gives it."));
+        properties.add("component",
+                       property("string", false, "The component the section is of, as extensions_list gives it."));
+        properties.add("entity", property("string", false, "The entity's SourceEntityId."));
+        tools.push_back(toolOf("extension_section",
+                               "The rows an extension's Inspector section shows for an entity; changes nothing.",
+                               schemaOf(std::move(properties), {"scene", "extension", "component", "entity"}),
+                               annotationsOf(true, false)));
+    }
     // What a source uses and what uses it, by the last cook (D803).
     {
         Value properties = Value::object();
@@ -804,6 +816,12 @@ McpBridge::State::callSession(const Value& id, std::string_view name, const Valu
         copy("extension", "extension");
         copy("command", "command");
         made.add("entities", arguments.find("entities") != nullptr ? *arguments.find("entities") : Value::array());
+    } else if (name == "extension_section") {
+        made = record("authoring.extension_section", recordId);
+        copy("scene", "scene");
+        copy("extension", "extension");
+        copy("component", "component");
+        copy("entity", "entity");
     } else if (name == "game_profile") {
         made = record("authoring.profile", recordId);
         copy("scene", "scene");

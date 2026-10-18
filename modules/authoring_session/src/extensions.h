@@ -30,10 +30,25 @@ namespace rawframe::authoring_session {
 inline constexpr std::size_t kMostExtensions = 32;
 inline constexpr std::size_t kMostCommands = 32;
 inline constexpr std::size_t kMostStaged = 4096;
+/// The most rows one section shows.
+inline constexpr std::size_t kMostRows = 64;
 
 struct ExtensionCommand {
     std::string name;
     std::string function;
+};
+
+/// An Inspector section an extension offers (D875): the component it is
+/// shown on, by the name the scene records it by, and its function.
+struct ExtensionSection {
+    std::string component;
+    std::string function;
+};
+
+/// A row a section shows.
+struct SectionRow {
+    std::string label;
+    double value = 0;
 };
 
 /// One extension: its path under the game's directory, the commands it
@@ -42,6 +57,7 @@ struct ExtensionCommand {
 struct GameExtension {
     std::string path;
     std::vector<ExtensionCommand> commands;
+    std::vector<ExtensionSection> sections;
     std::vector<std::string> capabilities;
     std::string refused;
 };
@@ -61,5 +77,16 @@ struct GameExtension {
                                                               const scene::Scene& scene,
                                                               std::span<const base::Bits128> chosen,
                                                               const authoring::ComponentCatalog& catalog);
+
+/// The rows the extension at `path` shows in its section of `component`
+/// for `entity` of `scene`: the section's function run with the entity as
+/// the one chosen, staging nothing. Refuses as `runExtension` does, and
+/// (`TargetNotFound`) a section the extension does not offer.
+[[nodiscard]] result::Result<std::vector<SectionRow>> runSection(const std::filesystem::path& gameDirectory,
+                                                                 std::string_view path,
+                                                                 std::string_view component,
+                                                                 const scene::Scene& scene,
+                                                                 base::Bits128 entity,
+                                                                 const authoring::ComponentCatalog& catalog);
 
 } // namespace rawframe::authoring_session

@@ -179,6 +179,8 @@ private:
             return extensionsListed();
         case authoring::SessionVerb::Extension:
             return extensionRun(record);
+        case authoring::SessionVerb::ExtensionSection:
+            return extensionSection(record);
         case authoring::SessionVerb::ApplyTogether:
             return appliedTogether(record);
         case authoring::SessionVerb::Cook: {
@@ -546,6 +548,11 @@ private:
                 commands.push(Value::string(kCommand.name));
             }
             each.add("commands", std::move(commands));
+            Value sections = Value::array();
+            for (const ExtensionSection& kSection : kExtension.sections) {
+                sections.push(Value::string(kSection.component));
+            }
+            each.add("sections", std::move(sections));
             Value capabilities = Value::array();
             for (const std::string& kCapability : kExtension.capabilities) {
                 capabilities.push(Value::string(kCapability));
@@ -578,6 +585,31 @@ private:
                                          record.entities,
                                          *catalog_));
         return applied(applying);
+    }
+
+    /// An extension's Inspector section filled for one entity: its rows,
+    /// the scene left as it was (D875).
+    result::Result<Value> extensionSection(const authoring::SessionRecord& record) {
+        bool reopened = false;
+        RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
+        RAWFRAME_TRY_ASSIGN(const std::vector<SectionRow> kRows,
+                            runSection(game_.parent_path(),
+                                       record.extension,
+                                       record.component,
+                                       open->document->scene(),
+                                       record.entities.front(),
+                                       *catalog_));
+        Value rows = Value::array();
+        for (const SectionRow& kRow : kRows) {
+            Value each = Value::object();
+            each.add("label", Value::string(kRow.label));
+            each.add("value", Value::real(kRow.value));
+            rows.push(std::move(each));
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.extension_rows"));
+        made.add("rows", std::move(rows));
+        return made;
     }
 
     result::Result<Value> applied(const authoring::SessionRecord& record) {

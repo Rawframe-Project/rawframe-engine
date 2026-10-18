@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# A Studio extension run headless (D874): a Kest program under a copy of
+# A Studio extension run headless (D874, D875): a Kest program under a copy of
 # Ledges' `extensions/` listed with its commands and what its doors are of;
 # one command raising the chosen points, read and staged through its
 # doors, applied as one step and undone; another making a marker entity
 # with a component and a field; and an extension asking for a door it is
-# not offered, listed as refused, with nothing it can run.
+# not offered, listed as refused, with nothing it can run; and its
+# Inspector section's rows for a point, a section that stages refused.
 #
 # usage: author_extension.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -31,6 +32,20 @@ import rawframe.studio
 fn extend() {
     studio.command("Raise chosen", "raise")
     studio.command("Mark above", "mark")
+    studio.section("rawframe.physics2d.pose", "height")
+    studio.section("ledges.point", "meddle")
+}
+
+// The pose's height, and how far over the lift's floor it stands.
+fn height() {
+    let y = studio.number(u32(0), "rawframe.physics2d.pose", "y")
+    studio.row("height", y)
+    studio.row("over the floor", y - 14.0)
+}
+
+// A section that would change the scene: refused.
+fn meddle() {
+    studio.set_number(u32(0), "rawframe.physics2d.pose", "y", 0.0)
 }
 
 // Each chosen entity a meter higher.
@@ -75,14 +90,18 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.extensions","id":2}'
     echo '{"kind":"authoring.extension","id":3,"scene":"lift.scene","extension":"extensions/lift.kest","command":"Raise chosen","entities":["'$point0'","'$point1'"]}'
     echo '{"kind":"authoring.extension","id":4,"scene":"lift.scene","extension":"extensions/lift.kest","command":"Mark above","entities":["'$point0'"]}'
+    echo '{"kind":"authoring.extension_section","id":5,"scene":"lift.scene","extension":"extensions/lift.kest","component":"rawframe.physics2d.pose","entity":"'$point0'"}'
+    echo '{"kind":"authoring.extension_section","id":6,"scene":"lift.scene","extension":"extensions/lift.kest","component":"ledges.point","entity":"'$point0'"}'
 } | "$author" session "$game" >"$work/replies" || true
-reply 2 | grep -q '{"path":"extensions/lift.kest","commands":\["Raise chosen","Mark above"\],"capabilities":\["Studio","Edit"\]}'
+reply 2 | grep -q '{"path":"extensions/lift.kest","commands":\["Raise chosen","Mark above"\],"sections":\["rawframe.physics2d.pose","ledges.point"\],"capabilities":\["Studio","Show","Edit"\]}'
 reply 2 | grep -q '"path":"extensions/reach.kest","commands":\[\],.*"refused":"the extension does not start'
 reply 3 | grep -q '"written":true,.*"undoable":1,'
 reply 4 | grep -q '"written":true,.*"undoable":2,'
 grep -A9 '"name": "lift point 0"' "$work/ledges/lift.scene" | grep -q '"y": 15'
 grep -A10 '"name": "lift point 1"' "$work/ledges/lift.scene" | grep -q '"y": 15'
 grep -A6 '"name": "marker"' "$work/ledges/lift.scene" | grep -q '"y": 17'
+reply 5 | grep -q '"rows":\[{"label":"height","value":15},{"label":"over the floor","value":1}\]'
+reply 6 | grep -q 'only a command stages changes'
 
 # Undone back to the scene's very bytes; a command the extension does not
 # offer, and one of an extension that does not start, refused.

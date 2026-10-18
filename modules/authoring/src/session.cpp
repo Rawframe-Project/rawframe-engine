@@ -30,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 40> kVerbs = {
+constexpr std::array<VerbName, 41> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -70,6 +70,7 @@ constexpr std::array<VerbName, 40> kVerbs = {
     VerbName{.kind = "authoring.import", .verb = SessionVerb::Import},
     VerbName{.kind = "authoring.extensions", .verb = SessionVerb::Extensions},
     VerbName{.kind = "authoring.extension", .verb = SessionVerb::Extension},
+    VerbName{.kind = "authoring.extension_section", .verb = SessionVerb::ExtensionSection},
     VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
 
 /// The members a verb's record may hold beside `kind` and `id`, and those
@@ -89,6 +90,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::End:
         return Members{.required = 0, .optional = 0};
     case SessionVerb::Extension:
+    case SessionVerb::ExtensionSection:
         return Members{.required = 4, .optional = 0};
     case SessionVerb::Apply:
     case SessionVerb::Read:
@@ -376,6 +378,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::LiveEntities:
     case SessionVerb::LiveEntity:
     case SessionVerb::Extension:
+    case SessionVerb::ExtensionSection:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -394,6 +397,19 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             return malformed("read holds a query document");
         }
         RAWFRAME_TRY_ASSIGN(record.queries, readQueries(document::writeCompact(*kQueries)));
+    } else if (record.verb == SessionVerb::ExtensionSection) {
+        // A section is of a component and filled for one entity (D875).
+        const std::string* kExtension = textOf(parsed->find("extension"));
+        const std::string* kComponent = textOf(parsed->find("component"));
+        const std::string* kEntity = textOf(parsed->find("entity"));
+        const base::Bits128Parse kId = kEntity != nullptr ? schema::parseStableIdText(*kEntity) : base::Bits128Parse{};
+        if (kExtension == nullptr || kExtension->empty() || kExtension->size() > 1024 || kComponent == nullptr ||
+            kComponent->empty() || kComponent->size() > 256 || !kId.parsed) {
+            return malformed("extension_section names the extension, the component, and the entity");
+        }
+        record.extension = *kExtension;
+        record.component = *kComponent;
+        record.entities.push_back(kId.value);
     } else if (record.verb == SessionVerb::Select || record.verb == SessionVerb::Extension) {
         // An extension's command is run on the entities chosen, as select
         // names them (D874), its extension and command by their names; the
