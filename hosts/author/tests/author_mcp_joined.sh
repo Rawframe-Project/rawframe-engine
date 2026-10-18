@@ -4,18 +4,19 @@
 # `rawframe-author mcp --join` under the token named "claude", and Ben
 # joined headless. The agent's tools are the session's; its rename of the
 # ground is kept under its own name, which Ben hears; its undo takes back
-# only its own change; a cook through the host is refused; and the level
-# holds what the agent left.
+# only its own change; it cooks through the host into its own directory
+# there (D885); and the level holds what the agent left.
 #
-# usage: author_mcp_joined.sh <rawframe-author> <repository> <work directory>
+# usage: author_mcp_joined.sh <rawframe-author> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
 
 author=$1
-repository=$2
+cook=$2
+repository=$3
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }
-work="$(native "$3")"
+work="$(native "$4")"
 rm -rf "$work"
 mkdir -p "$work"
 trap 'echo "failed at line $LINENO"; for each in "$work"/*.out; do [ -f "$each" ] && { echo "== $each"; tail -20 "$each"; }; done' ERR
@@ -24,9 +25,9 @@ port=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
 for each in claude ben; do
     python3 -c 'import secrets; print(secrets.token_hex(24))' >"$work/$each.token"
 done
-printf '%s claude read edit\n%s ben read edit\n' "$(cat "$work/claude.token")" "$(cat "$work/ben.token")" >"$work/tokens"
+printf '%s claude read edit cook\n%s ben read edit\n' "$(cat "$work/claude.token")" "$(cat "$work/ben.token")" >"$work/tokens"
 "$author" host "$work/hosted/runners.game" --endpoint "127.0.0.1:$port" --tokens "$work/tokens" \
-    --fingerprint-file "$work/pin" >"$work/host.log" 2>&1 &
+    --fingerprint-file "$work/pin" --cooks "$work/cooks" --cook "$cook" >"$work/host.log" 2>&1 &
 hosting=$!
 trap 'kill "$hosting" 2>/dev/null || true' EXIT
 for _ in $(seq 100); do
@@ -70,7 +71,8 @@ benning=$!
     call 3 scene_rename_entity '{"document":"level.scene","entity":"'$ground'","name":"claudes ground"}'
     heard ben.out '"id":2,"answer"'
     call 4 document_undo '{"document":"level.scene"}'
-    call 5 game_cook '{"output":"/tmp/elsewhere"}'
+    printf '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"game_cook","arguments":{"output":"content"},"_meta":{"progressToken":"cooking"}}}\n'
+    heard agent.out '"id":5,"result"'
 } | "$author" mcp --join "127.0.0.1:$port" "$work/pin" "$work/claude.token" >"$work/agent.out" 2>&1 &
 agenting=$!
 wait "$agenting" || true
@@ -78,8 +80,9 @@ wait "$benning" || true
 grep -q '"id":2,"result":{"tools":\[.*"name":"scene_rename_entity"' "$work/agent.out"
 grep -q '"id":3,"result":{"content":\[' "$work/agent.out"
 grep -q '"id":4,"result":{"content":\[' "$work/agent.out"
-grep '"id":5,"result"' "$work/agent.out" | grep -q 'does not cook through the host yet'
-grep '"id":5,"result"' "$work/agent.out" | grep -q '"isError":true'
+grep -q '"method":"notifications/progress","params":{"progressToken":"cooking"' "$work/agent.out"
+grep '"id":5,"result"' "$work/agent.out" | grep -q 'authoring.cooked'
+[ -s "$work/cooks/claude/content/cook.receipt" ]
 grep -q '{"kind":"authoring.changed","author":"claude","document":"level.scene"' "$work/ben.out"
 # The agent's undo took back its own rename past Ben's later one.
 grep -q '"bens wall"' "$work/hosted/level.scene"

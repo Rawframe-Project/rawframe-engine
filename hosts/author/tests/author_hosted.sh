@@ -8,17 +8,21 @@
 # token the host never issued is refused; Ben's token taken out of the
 # tokens file disconnects him at once; and the level holds Ada's change.
 #
-# usage: author_hosted.sh <rawframe-author> <repository> <work directory>
+# Ada, granted cooking, cooks the level by a plain name into the host's
+# cooking directory, in her own, and is refused one naming a path (D885).
+#
+# usage: author_hosted.sh <rawframe-author> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
 
 author=$1
-repository=$2
+cook=$2
+repository=$3
 # Paths as the programs under test read them: Git's bash on Windows names
 # D:/a as /d/a, which only its own tools understand (D237).
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }
-work="$(native "$3")"
+work="$(native "$4")"
 rm -rf "$work"
 mkdir -p "$work/root" "$work/cooks"
 trap 'echo "failed at line $LINENO"; for each in "$work"/*.out "$work"/host.log; do [ -f "$each" ] && { echo "== $each"; tail -20 "$each"; }; done' ERR
@@ -28,7 +32,7 @@ port=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
 for each in ada ben cara stranger; do
     python3 -c 'import secrets; print(secrets.token_hex(24))' >"$work/$each.token"
 done
-printf '# collaborators\n%s ada read edit claim\n%s ben read edit\n%s cara read\n' \
+printf '# collaborators\n%s ada read edit claim cook\n%s ben read edit\n%s cara read\n' \
     "$(cat "$work/ada.token")" "$(cat "$work/ben.token")" "$(cat "$work/cara.token")" >"$work/tokens"
 ground=c5400cf8-4b07-4d16-84c2-951852c66b40
 rename() {
@@ -36,7 +40,7 @@ rename() {
 }
 
 "$author" host "$game" "$work/root" --endpoint "127.0.0.1:$port" --tokens "$work/tokens" \
-    --fingerprint-file "$work/pin" --cooks "$work/cooks" >"$work/host.log" 2>&1 &
+    --fingerprint-file "$work/pin" --cooks "$work/cooks" --cook "$cook" >"$work/host.log" 2>&1 &
 hosting=$!
 trap 'kill "$hosting" 2>/dev/null || true' EXIT
 for _ in $(seq 100); do
@@ -79,6 +83,8 @@ benning=$!
     heard ada.out '"id":1,"answer"'
     echo '{"kind":"authoring.claim","id":2,"scene":"level.scene","entity":"'$ground'"}'
     heard ben.out 'the host closed'
+    echo '{"kind":"authoring.cook","id":4,"output":"../escaped","cache":null}'
+    echo '{"kind":"authoring.cook","id":5,"output":"content","cache":"cache"}'
     echo '{"kind":"authoring.end","id":3}'
 } | join ada >"$work/ada.out" 2>&1 &
 adaing=$!
@@ -122,6 +128,11 @@ wait "$adaing" || true
 grep -q '"kind":"authoring.revoked","author":"ben"' "$work/ben.out"
 grep -q 'the host closed' "$work/ben.out"
 grep -q '"id":3,"answer":{"kind":"authoring.ended"}' "$work/ada.out"
+grep -q '"id":4,"error":{"code":"capability_denied",.*plain names' "$work/ada.out"
+grep -q '{"kind":"authoring.progress","id":5,' "$work/ada.out"
+grep -q '"id":5,"answer":{"kind":"authoring.cooked"' "$work/ada.out"
+[ -s "$work/cooks/ada/content/cook.receipt" ]
+[ ! -e "$work/escaped" ]
 grep -q '"adas ground"' "$work/root/level.scene"
 if grep -q '"bens ground"\|"caras ground"' "$work/root/level.scene"; then
     echo "a refused change reached the level"
