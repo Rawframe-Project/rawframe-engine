@@ -4,6 +4,7 @@
 #include "rawframe/render_scene_gpu/captures.h"
 #include "rawframe/render_scene_gpu/registrar.h"
 #include "rawframe/render_scene_gpu/renderer.h"
+#include "rawframe/view/preview.h"
 
 #include <algorithm>
 #include <cmath>
@@ -21,7 +22,8 @@ namespace {
 constexpr diagnostics::EventIdentity kDrawingSummary{"scene", "scene_drawing_summary"};
 constexpr diagnostics::EventIdentity kFailed{"scene", "scene_drawing_failed"};
 constexpr diagnostics::EventIdentity kEyesDrawingSummary{"scene", "scene_eyes_drawing_summary"};
-constexpr std::string_view kMaybe[] = {render::kFrames.name, render_scene::kSceneFrames.name};
+constexpr std::string_view kMaybe[] = {
+    render::kFrames.name, render_scene::kSceneFrames.name, view::kPreviewCamera.name};
 constexpr std::string_view kProvided[] = {kSceneCaptures.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 /// The scene's place in a frame: first (SPEC-0024); and its post
@@ -41,6 +43,10 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(frames_, context.capability(render::kFrames));
         RAWFRAME_TRY_ASSIGN(scene_, context.capability(render_scene::kSceneFrames));
+        // An editor's preview, whose frames' passes are timed (D894).
+        if (context.has(view::kPreviewCamera.name)) {
+            RAWFRAME_TRY_ASSIGN(preview_, context.capability(view::kPreviewCamera));
+        }
         meshes_ = [scene = scene_](std::uint64_t id) {
             return scene->mesh(id);
         };
@@ -124,6 +130,26 @@ public:
         if (const render::FramePace kPace = frames_->pace(); kPace.done != paced_) {
             paced_ = kPace.done;
             scene_->paced(kPace.atLeast, kPace.atMost, kPace.budget);
+        }
+        // Once an editor asked what the preview's frames hold, their passes
+        // are timed, and it is told the last times, each name's together
+        // (D894).
+        if (preview_ != nullptr) {
+            const bool kAsked = preview_->timesAsked();
+            frames_->timePasses(kAsked);
+            const std::span<const render::PassTime> kTimes = frames_->passTimes();
+            if (kAsked && !kTimes.empty()) {
+                std::vector<view::PassTiming> timed;
+                for (const render::PassTime& kEach : kTimes) {
+                    const auto kSame = std::ranges::find(timed, kEach.pass, &view::PassTiming::pass);
+                    if (kSame != timed.end()) {
+                        kSame->nanoseconds += kEach.nanoseconds;
+                    } else {
+                        timed.push_back(view::PassTiming{.pass = kEach.pass, .nanoseconds = kEach.nanoseconds});
+                    }
+                }
+                preview_->passesTimed(std::move(timed));
+            }
         }
         const auto kPlanned = frames_->planned();
         if (!kPlanned.has_value()) {
@@ -365,6 +391,7 @@ public:
 
 private:
     render::Frames* frames_ = nullptr;
+    view::PreviewCamera* preview_ = nullptr;
     render_scene::SceneFrames* scene_ = nullptr;
     MeshSource meshes_;
     TextureSource textures_;

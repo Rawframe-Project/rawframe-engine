@@ -4,6 +4,7 @@
 #include "rawframe/render/errors.h"
 
 #include <cmath>
+#include <maul-rhi/device.h>
 #include <maul-rhi/encoder.h>
 #include <maul-rhi/frame.h>
 #include <maul-rhi/resources.h>
@@ -31,6 +32,15 @@ constexpr std::uint32_t kMaximumSide = 8192;
 } // namespace
 
 struct Framer::State {
+    State() = default;
+    State(const State&) = delete;
+    State& operator=(const State&) = delete;
+    ~State() {
+        if (timestamps.has_value()) {
+            static_cast<void>(mrhiDestroyQuerySet(native, *timestamps));
+        }
+    }
+
     Device* device = nullptr;
     mrhiDevice* native = nullptr;
     FramerStatistics statistics;
@@ -42,6 +52,14 @@ struct Framer::State {
     std::optional<mrhiRequestId> readback;
     std::size_t readbackBytes = 0;
     std::optional<std::vector<std::byte>> pixels;
+    /// The passes' timestamps, made the first time a frame is timed, the
+    /// nanoseconds a tick of them takes, the last frame's readback of
+    /// them and the passes it timed, and the last times read (D894).
+    std::optional<mrhiQuerySetId> timestamps;
+    double period = 1;
+    std::optional<mrhiRequestId> timesRead;
+    std::vector<std::string> timesNamed;
+    std::vector<PassTime> passTimes;
 
     /// Takes the last frame's answer, and its pixels once they are ready.
     void takeDone() {
@@ -62,6 +80,25 @@ struct Framer::State {
                     pixels = std::move(bytes);
                 }
                 readback.reset();
+            }
+        }
+        if (frameDone && timesRead.has_value()) {
+            if (const auto kAnswer = device->answer(requestKey(timesRead->index1, timesRead->generation));
+                kAnswer.has_value() && kAnswer->has_value()) {
+                std::vector<std::uint64_t> ticks(2 * timesNamed.size());
+                std::size_t taken = 0;
+                if (mrhiTakeReadback(native, *timesRead, ticks.data(), ticks.size() * 8, &taken) == mrhi_success &&
+                    taken == ticks.size() * 8) {
+                    passTimes.clear();
+                    for (std::size_t at = 0; at < timesNamed.size(); ++at) {
+                        const std::uint64_t kTicks =
+                            ticks[2 * at + 1] >= ticks[2 * at] ? ticks[2 * at + 1] - ticks[2 * at] : 0;
+                        passTimes.push_back(
+                            PassTime{.pass = timesNamed[at],
+                                     .nanoseconds = static_cast<std::uint64_t>(static_cast<double>(kTicks) * period)});
+                    }
+                }
+                timesRead.reset();
             }
         }
     }
@@ -112,6 +149,22 @@ struct Framer::State {
                    .height = target.height,
                    .picture = requestKey(picture.index1, picture.generation)};
         open.covers.assign(target.images.size(), std::nullopt);
+        // Timed where asked and the device writes timestamps (D894).
+        if (target.timed && device->adapter().has_value() && device->adapter()->timestamps) {
+            if (!timestamps.has_value()) {
+                mrhiQuerySetDef def = mrhiDefaultQuerySetDef();
+                def.type = mrhi_queryTimestamp;
+                def.count = static_cast<std::uint32_t>(2 * kMostTimedPasses);
+                mrhiQuerySetId made{};
+                if (mrhiCreateQuerySet(native, &def, &made) == mrhi_success &&
+                    mrhiGetDeviceTimestampPeriod(native, &period) == mrhi_success) {
+                    timestamps = made;
+                }
+            }
+            if (timestamps.has_value()) {
+                open.timestamps = requestKey(timestamps->index1, timestamps->generation);
+            }
+        }
         // The panel (D597): a texture of its image's size, covering it
         // whole.
         std::optional<mrhiResourceId> panel;
@@ -218,6 +271,32 @@ struct Framer::State {
                 placing.push_back(**placed);
             }
         }
+        // The timed passes' times resolved into a buffer, then read back.
+        std::optional<mrhiResourceId> times;
+        std::optional<mrhiPassId> resolving;
+        std::optional<mrhiPassId> timesReading;
+        if (!open.timed.empty()) {
+            mrhiBufferDef def = mrhiDefaultBufferDef();
+            def.size = ((open.timed.size() * 16 + 255) / 256) * 256;
+            mrhiResourceId declared{};
+            if (const mrhiResult kDeclared = mrhiDeclareBuffer(native, &def, &declared); kDeclared != mrhi_success) {
+                return drop(recorders, failed("the passes' times could not be declared", kDeclared).error());
+            }
+            times = declared;
+            for (const auto& [kAccess, kInto] :
+                 {std::pair{mrhi_accessQueryResolve, &resolving}, std::pair{mrhi_accessCopySource, &timesReading}}) {
+                const mrhiAccess kUse{.resource = declared, .kind = static_cast<mrhiAccessKind>(kAccess), .range = {}};
+                mrhiPassDef pass = mrhiDefaultPassDef();
+                pass.accesses = &kUse;
+                pass.accessCount = 1;
+                pass.neverCull = true;
+                mrhiPassId made{};
+                if (const mrhiResult kAdded = mrhiAddPass(native, &pass, &made); kAdded != mrhi_success) {
+                    return drop(recorders, failed("the passes' times could not be read", kAdded).error());
+                }
+                *kInto = made;
+            }
+        }
         const mrhiAccess kRead{
             .resource = picture,
             .kind = mrhi_accessCopySource,
@@ -260,6 +339,21 @@ struct Framer::State {
             if (auto recorded = display->record(kPass); !recorded.has_value()) {
                 return drop(recorders, std::move(recorded).error());
             }
+        }
+        timesRead.reset();
+        if (times.has_value()) {
+            const auto kCount = static_cast<std::uint32_t>(2 * open.timed.size());
+            mrhiRequestId request{};
+            if (mrhiBeginPass(native, *resolving) != mrhi_success ||
+                mrhiResolveQueries(native, *resolving, *timestamps, 0, kCount, *times, 0) != mrhi_success ||
+                mrhiEndPass(native, *resolving) != mrhi_success ||
+                mrhiBeginPass(native, *timesReading) != mrhi_success ||
+                mrhiReadBuffer(native, *timesReading, *times, 0, std::uint64_t{kCount} * 8, &request) != mrhi_success ||
+                mrhiEndPass(native, *timesReading) != mrhi_success) {
+                return drop(recorders, failed("the passes' times could not be read back", mrhi_errorState).error());
+            }
+            timesRead = request;
+            timesNamed = open.timed;
         }
         readback.reset();
         pixels.reset();
@@ -340,6 +434,18 @@ result::Status Framer::finish(std::uint64_t nanoseconds) {
 std::optional<std::vector<std::byte>> Framer::pixels() {
     state_->takeDone();
     return std::exchange(state_->pixels, std::nullopt);
+}
+
+std::span<const PassTime> Framer::passTimes() const noexcept {
+    return state_->passTimes;
+}
+
+std::optional<std::uint32_t> Frame::time(std::string_view pass) {
+    if (timestamps == 0 || timed.size() >= kMostTimedPasses) {
+        return std::nullopt;
+    }
+    timed.emplace_back(pass);
+    return static_cast<std::uint32_t>(2 * (timed.size() - 1));
 }
 
 const FramerStatistics& Framer::statistics() const noexcept {

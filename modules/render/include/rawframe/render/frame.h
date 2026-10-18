@@ -20,10 +20,15 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace rawframe::render {
+
+/// The most passes one frame times on the GPU (D894).
+inline constexpr std::size_t kMostTimedPasses = 64;
 
 /// The open frame as a recorder sees it (SPEC-0024's `record`).
 struct Frame {
@@ -70,6 +75,21 @@ struct Frame {
         return !std::exchange(panelDrawn, true);
     }
     bool panelDrawn = false;
+    /// The frame's timestamps (D894): a query set named as `requestKey`
+    /// names ids, 0 where the frame does not time its passes; and the
+    /// passes timed, by name, in their order. `time`, asked as a graphics
+    /// pass is declared, gives the query its start is written to, its end
+    /// the next; none where the frame does not time, or has timed its
+    /// most.
+    std::uint64_t timestamps = 0;
+    std::vector<std::string> timed;
+    [[nodiscard]] std::optional<std::uint32_t> time(std::string_view pass);
+};
+
+/// A pass of a frame as the GPU timed it, from its start to its end (D894).
+struct PassTime {
+    std::string pass;
+    std::uint64_t nanoseconds = 0;
 };
 
 /// An 8-bit sRGB channel in linear light, what a pass clearing an sRGB
@@ -111,6 +131,9 @@ struct FrameTarget {
     /// Of `images`, the one the UI is shown in apart, at its own size
     /// (`Frame::panel`): a headset's panel (D597).
     std::optional<std::size_t> panel;
+    /// Whether its passes are timed on the GPU, where the device writes
+    /// timestamps (D894): an editor's preview asks.
+    bool timed = false;
 };
 
 struct FramerStatistics {
@@ -152,6 +175,10 @@ public:
     /// The last frame's pixels, RGBA8 sRGB, rows top first, once it is done;
     /// each frame's are given once.
     [[nodiscard]] std::optional<std::vector<std::byte>> pixels();
+    /// The passes of the last frame timed, as the GPU timed them, once it
+    /// is done; those of the frame before until then, and none before the
+    /// first (D894).
+    [[nodiscard]] std::span<const PassTime> passTimes() const noexcept;
 
     [[nodiscard]] const FramerStatistics& statistics() const noexcept;
 
@@ -214,6 +241,11 @@ public:
     virtual void unchanged(FrameRecorder& recorder) noexcept = 0;
     /// How the last frame done kept up with the device.
     [[nodiscard]] virtual FramePace pace() const noexcept = 0;
+    /// Times the passes of every frame from the next on, or no longer
+    /// (D894): an editor's preview asks while it looks.
+    virtual void timePasses(bool timed) noexcept = 0;
+    /// The passes of the last frame timed, as the GPU timed them (D894).
+    [[nodiscard]] virtual std::span<const PassTime> passTimes() const noexcept = 0;
 };
 
 inline constexpr composition::Capability<Frames> kFrames{"rawframe.render.frames"};

@@ -108,6 +108,9 @@ result::Status ModelPasses::addPrepass(const std::vector<mrhiAccess>& reads) {
         def.colorTargetCount = 1;
     }
     def.depthTarget = depthTarget();
+    if (timer_ != nullptr) {
+        timer_->time(def, "depth");
+    }
     if (const mrhiResult kAdded = mrhiAddPass(native_, &def, &prepass_); kAdded != mrhi_success) {
         return failed("the depth pass could not be added", kAdded);
     }
@@ -143,6 +146,9 @@ result::Status ModelPasses::addLitPass(const std::vector<mrhiAccess>& reads) {
     def.depthTarget.depthLoad = mrhi_loadKeep;
     def.depthTarget.readOnly = true;
     if (!transmits_) {
+        if (timer_ != nullptr) {
+            timer_->time(def, "lit");
+        }
         if (const mrhiResult kAdded = mrhiAddPass(native_, &def, &lit_); kAdded != mrhi_success) {
             return failed("the models' pass could not be added", kAdded);
         }
@@ -153,6 +159,9 @@ result::Status ModelPasses::addLitPass(const std::vector<mrhiAccess>& reads) {
     // translucent models over it, reading the copy.
     for (mrhiColorTarget& kept : std::span{def.colorTargets, def.colorTargetCount}) {
         kept.store = mrhi_storeKeep;
+    }
+    if (timer_ != nullptr) {
+        timer_->time(def, "lit");
     }
     if (const mrhiResult kAdded = mrhiAddPass(native_, &def, &lit_); kAdded != mrhi_success) {
         return failed("the models' pass could not be added", kAdded);
@@ -199,6 +208,9 @@ result::Status ModelPasses::addLitPass(const std::vector<mrhiAccess>& reads) {
     glass.accessCount = static_cast<std::uint32_t>(glassReads.size());
     for (mrhiColorTarget& loaded : std::span{glass.colorTargets, glass.colorTargetCount}) {
         loaded.load = mrhi_loadKeep;
+    }
+    if (timer_ != nullptr) {
+        timer_->time(glass, "glass");
     }
     if (const mrhiResult kAdded = mrhiAddPass(native_, &glass, &glass_); kAdded != mrhi_success) {
         return failed("the translucent models' pass could not be added", kAdded);

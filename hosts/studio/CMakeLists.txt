@@ -1121,7 +1121,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              "\"code\":\"studio_profile\"[^\n]*\"ticks\":1[0-9][0-9],\"systems\":[1-9][0-9]*,\"gameSystems\":5,.*\"code\":\"studio_capture_kept\"[^\n]*\"capture\":\"captures/profile-1.rfprofile\".*\"exit\":\"clean_stop\"")
         # The Frame tab (D842): Plaza played from Studio, its preview's last
         # frame read once a second while the tab shows, then kept as a
-        # capture with its draw steps (D843).
+        # capture with its draw steps (D843), its passes timed by the GPU
+        # (D894).
         add_test(NAME studio_frame_capture
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
@@ -1135,7 +1136,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"code\":\"studio_frame\"[^\n]*\"draws\":[1-9][0-9]*,\"figures\":40,\"steps\":[1-9][0-9]*,\"captures\":1,.*\"exit\":\"clean_stop\"")
+                             "\"code\":\"studio_frame\"[^\n]*\"draws\":[1-9][0-9]*,\"figures\":40,\"steps\":[1-9][0-9]*,\"captures\":1,[^\n]*\"passesTimed\":[1-9][0-9]*}.*\"exit\":\"clean_stop\"")
         # Captures opened read only (D843, D844): a frame's and a profile's,
         # each put beside a copy of Runners and opened as Studio starts,
         # shown as its rows, a step's lines in the Inspector.

@@ -190,6 +190,15 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         made.add("kind", Value::string("tooling.drawn_frame"));
         made.add("frames", Value::integer(static_cast<std::int64_t>(kDrawn->frames)));
         made.add("figures", std::move(figures));
+        // Each pass the GPU timed, in microseconds (D894).
+        Value passes = Value::array();
+        for (const auto& [kPass, kNanoseconds] : kDrawn->passes) {
+            Value pass = Value::object();
+            pass.add("pass", Value::string(kPass));
+            pass.add("gpuMicroseconds", Value::real(static_cast<double>(kNanoseconds) / 1000));
+            passes.push(std::move(pass));
+        }
+        made.add("passes", std::move(passes));
         if (kWithSteps) {
             Value steps = Value::array();
             for (const DrawnStep& kStep : kDrawn->steps) {

@@ -4,6 +4,7 @@
 #include "pipelines.h"
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/result/result.h"
+#include "timing.h"
 
 #include <array>
 #include <maul-rhi/frame.h>
@@ -55,7 +56,13 @@ public:
     /// Its passes recorded.
     result::Status record(const Pipelines& pipelines, mrhiResourceId depth);
 
+    /// What times its passes on the GPU (D894).
+    void timeBy(const PassTimer& timer) noexcept {
+        timer_ = &timer;
+    }
+
 private:
+    const PassTimer* timer_ = nullptr;
     mrhiDevice* native_ = nullptr;
     bool enabled_ = false;
     OcclusionBlock block_;

@@ -85,6 +85,9 @@ result::Status ReflectionPass::addPasses(mrhiResourceId depth, mrhiResourceId su
     def.colorTargetCount = 1;
     def.accesses = kReads.data();
     def.accessCount = static_cast<std::uint32_t>(kReads.size());
+    if (timer_ != nullptr) {
+        timer_->time(def, "reflection");
+    }
     if (const mrhiResult kAdded = mrhiAddPass(native_, &def, &pass_); kAdded != mrhi_success) {
         return failed("the reflections' pass could not be added", kAdded);
     }

@@ -83,6 +83,9 @@ result::Status BloomPass::addPasses(mrhiResourceId scene) {
         def.accesses = &kRead;
         def.accessCount = 1;
         mrhiPassId made{};
+        if (timer_ != nullptr) {
+            timer_->time(def, "bloom");
+        }
         if (const mrhiResult kAdded = mrhiAddPass(native_, &def, &made); kAdded != mrhi_success) {
             return failed("the bloom's passes could not be added", kAdded);
         }

@@ -7,6 +7,7 @@
 #include "rawframe/result/result.h"
 #include "runs.h"
 #include "skinning.h"
+#include "timing.h"
 
 #include <array>
 #include <cstdint>
@@ -75,7 +76,13 @@ public:
     [[nodiscard]] mrhiResourceId squares() const noexcept;
     [[nodiscard]] std::uint64_t squareBytes() const noexcept;
 
+    /// What times its passes on the GPU (D894).
+    void timeBy(const PassTimer& timer) noexcept {
+        timer_ = &timer;
+    }
+
 private:
+    const PassTimer* timer_ = nullptr;
     mrhiDevice* native_ = nullptr;
     /// The sun's map, its cascades' views and their blocks, a square's
     /// side, and its pass.

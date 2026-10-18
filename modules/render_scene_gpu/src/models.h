@@ -6,6 +6,7 @@
 #include "rawframe/result/result.h"
 #include "runs.h"
 #include "skinning.h"
+#include "timing.h"
 
 #include <array>
 #include <cstddef>
@@ -75,6 +76,11 @@ public:
     [[nodiscard]] std::uint32_t samples() const noexcept;
     [[nodiscard]] bool surfaced() const noexcept;
 
+    /// What times its passes on the GPU (D894).
+    void timeBy(const PassTimer& timer) noexcept {
+        timer_ = &timer;
+    }
+
 private:
     /// What runs a material's program may draw are drawn as: their shade,
     /// and, lit, whether under decals.
@@ -96,6 +102,7 @@ private:
                             std::optional<Shaded> shaded = std::nullopt);
     [[nodiscard]] mrhiDepthTarget depthTarget() const noexcept;
 
+    const PassTimer* timer_ = nullptr;
     mrhiDevice* native_ = nullptr;
     std::uint32_t samples_ = 1;
     bool surfaced_ = false;

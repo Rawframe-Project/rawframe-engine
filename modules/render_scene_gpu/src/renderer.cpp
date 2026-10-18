@@ -96,6 +96,8 @@ struct SceneRenderer::State {
     std::optional<DepthOfFieldPass> focus;
     /// Its bloom, when a view asks (D328).
     std::optional<BloomPass> bloom;
+    /// What times the scene's passes (D894).
+    PassTimer timer;
     /// Its picture, graded and tonemapped, and antialiased by FXAA when a
     /// view asks (D294 to D296).
     std::optional<PicturePass> picture;
@@ -263,6 +265,14 @@ struct SceneRenderer::State {
     }
 
     result::Status declare(render::Frame& open) {
+        // The frame's passes timed while it is declared, none after (D894).
+        timer.declaring(&open);
+        auto declaredNow = declareTimed(open);
+        timer.declaring(nullptr);
+        return declaredNow;
+    }
+
+    result::Status declareTimed(render::Frame& open) {
         declared.reset();
         if (frame == nullptr) {
             return {};
@@ -915,14 +925,18 @@ SceneRenderer::made(render::Device& device, RendererLimits limits, const SceneRe
     state->temporal.emplace(device.native());
     state->capturing.emplace(device);
     state->occlusion.emplace(device.native());
+    state->occlusion->timeBy(state->timer);
     state->reflecting.emplace(device.native());
+    state->reflecting->timeBy(state->timer);
     state->contact.emplace(device.native());
     state->sampleCounts = 0xFF;
     for (const mrhiFormat kFormat : {kSceneFormat, kMotionFormat, kDepthFormat, kSurfaceFormat}) {
         state->sampleCounts &= device.sampleCounts(static_cast<std::uint32_t>(kFormat));
     }
     state->shadows.emplace(device.native());
+    state->shadows->timeBy(state->timer);
     state->models.emplace(device.native());
+    state->models->timeBy(state->timer);
     state->decalAtlas.emplace(device.native());
     RAWFRAME_TRY(state->decalAtlas->make());
     state->probeAtlas.emplace(device.native());
@@ -930,7 +944,9 @@ SceneRenderer::made(render::Device& device, RendererLimits limits, const SceneRe
     state->motionBlur.emplace(device.native());
     state->focus.emplace(device.native());
     state->bloom.emplace(device.native());
+    state->bloom->timeBy(state->timer);
     state->picture.emplace(device.native());
+    state->picture->timeBy(state->timer);
     state->post.emplace(device.native());
     if (sharing != nullptr) {
         RAWFRAME_TRY_ASSIGN(

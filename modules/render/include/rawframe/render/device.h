@@ -84,6 +84,9 @@ struct AdapterDescription {
     /// Whether it takes BC-compressed textures (BC7 is the desktop form a
     /// cooked texture may have, D253); asked for whenever it does.
     bool blockCompression = false;
+    /// Whether it writes the GPU's time at a pass's start and end, which a
+    /// frame that times its passes reads (D894); asked for whenever it does.
+    bool timestamps = false;
 };
 
 /// The bytes one frame may upload, and those its readbacks may hold, on

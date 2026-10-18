@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -79,6 +80,14 @@ struct FrameStep {
     std::uint64_t mesh = 0;
     std::uint32_t material = 0;
     std::uint32_t instances = 0;
+};
+
+/// A pass of the frame a preview last drew, by the scene renderer's name
+/// for it, and the nanoseconds the GPU took from its start to its end, all
+/// of that name together (D894).
+struct PassTiming {
+    std::string pass;
+    std::uint64_t nanoseconds = 0;
 };
 
 /// The most steps a frame's description keeps: a capture of a crowded
@@ -284,6 +293,23 @@ public:
     [[nodiscard]] std::uint64_t descriptions() const noexcept {
         return described_;
     }
+    /// Whether an editor has asked what the preview's frames hold, from
+    /// which on their passes are timed on the GPU (D894); asking is a
+    /// reader's, so a reader of the frames that changes nothing else may.
+    void askTimes() const noexcept {
+        timesAsked_ = true;
+    }
+    [[nodiscard]] bool timesAsked() const noexcept {
+        return timesAsked_;
+    }
+    /// The passes of the last frame the GPU timed, in their order (D894);
+    /// none where the device times none.
+    void passesTimed(std::vector<PassTiming> passes) {
+        timings_ = std::move(passes);
+    }
+    [[nodiscard]] std::span<const PassTiming> passTimings() const noexcept {
+        return timings_;
+    }
 
 private:
     std::optional<Perspective> view_;
@@ -294,6 +320,8 @@ private:
     std::uint64_t marks_ = 0;
     MarkPart lit_ = MarkPart::None;
     std::vector<std::vector<std::array<double, 3>>> paths_;
+    std::vector<PassTiming> timings_;
+    mutable bool timesAsked_ = false;
     std::uint64_t pathsShown_ = 0;
     std::optional<Ray> pointing_;
     double wheel_ = 0;

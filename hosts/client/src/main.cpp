@@ -204,12 +204,17 @@ public:
     }
     /// What the frame the scene last drew from the preview holds (D842).
     std::optional<world_tooling::DrawnFrame> drawn(bool steps) const override {
+        // Asked, the frames' passes are timed from now on (D894).
+        camera.askTimes();
         if (camera.descriptions() == 0) {
             return std::nullopt;
         }
         world_tooling::DrawnFrame made{.frames = camera.descriptions()};
         for (const view::FrameFigure& kFigure : camera.figures()) {
             made.figures.emplace_back(std::string{kFigure.name}, kFigure.value);
+        }
+        for (const view::PassTiming& kPass : camera.passTimings()) {
+            made.passes.emplace_back(kPass.pass, kPass.nanoseconds);
         }
         for (const view::FrameStep& kStep : steps ? camera.steps() : std::span<const view::FrameStep>{}) {
             made.steps.push_back(world_tooling::DrawnStep{.pass = std::string{kStep.pass},

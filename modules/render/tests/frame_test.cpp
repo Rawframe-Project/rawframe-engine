@@ -78,6 +78,13 @@ public:
             mrhiClearColor{.red = color_[0], .green = color_[1], .blue = color_[2], .alpha = color_[3]};
         def.colorTargetCount = 1;
         def.neverCull = true;
+        // Timed by its name, where the frame times its passes (D894).
+        if (const std::optional<std::uint32_t> kAt = frame.time(name_); kAt.has_value()) {
+            def.timestampQuerySet = mrhiQuerySetId{.index1 = static_cast<std::uint32_t>(frame.timestamps >> 32U),
+                                                   .generation = static_cast<std::uint32_t>(frame.timestamps)};
+            def.timestampBegin = *kAt;
+            def.timestampEnd = *kAt + 1;
+        }
         if (mrhiAddPass(frame.device->native(), &def, &pass_) != mrhi_success) {
             return std::unexpected<result::Error>{result::fail(result::ErrorClass::Unavailable,
                                                                render::kRenderDomain,
@@ -166,4 +173,36 @@ RAWFRAME_TEST(FramesAreMadeOfTheirRecordersInOrder) {
     green.refuse = false;
     RAWFRAME_EXPECT(kMade(kBoth).value_or(false));
     RAWFRAME_EXPECT((*framer)->statistics().frames == 3);
+}
+
+RAWFRAME_TEST(AFrameTimesItsPassesWhereAsked) {
+    // D894: a frame not asked times nothing; asked, on a device that writes
+    // timestamps, each pass a recorder names is timed by the GPU once the
+    // frame is done, in its order.
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(framer.has_value());
+    if (!framer.has_value()) {
+        return;
+    }
+    std::vector<std::string> log;
+    Filling red{{1, 0, 0, 1}, log, "red"};
+    Filling green{{0, 1, 0, 1}, log, "green"};
+    const std::array<render::FrameRecorder*, 2> kBoth = {&red, &green};
+    const auto kMade = [&](bool timed) {
+        RAWFRAME_EXPECT((*framer)->make(kBoth, {.width = kSide, .height = kSide, .timed = timed}).value_or(false));
+        RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value() && (*framer)->done().value_or(false));
+    };
+    kMade(false);
+    RAWFRAME_EXPECT((*framer)->passTimes().empty());
+    kMade(true);
+    if (!kDevice->adapter().has_value() || !kDevice->adapter()->timestamps) {
+        RAWFRAME_EXPECT((*framer)->passTimes().empty());
+        return;
+    }
+    const std::span<const render::PassTime> kTimes = (*framer)->passTimes();
+    RAWFRAME_EXPECT(kTimes.size() == 2 && kTimes[0].pass == "red" && kTimes[1].pass == "green");
 }

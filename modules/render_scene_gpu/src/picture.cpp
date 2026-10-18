@@ -129,6 +129,9 @@ result::Result<mrhiResourceId> PicturePass::addGrade(mrhiResourceId shown, mrhiR
     mrhiPassDef def = drawingInto(graded_, false, reads);
     def.colorTargets[0].load = mrhi_loadDiscard;
     def.neverCull = false;
+    if (timer_ != nullptr) {
+        timer_->time(def, "grade");
+    }
     if (const mrhiResult kAdded = mrhiAddPass(native_, &def, &gradePass_); kAdded != mrhi_success) {
         return failed("the grade's pass could not be added", kAdded);
     }
@@ -144,8 +147,11 @@ result::Status PicturePass::addTonemap(mrhiResourceId light, mrhiResourceId spre
     if (spread_.index1 != 0) {
         reads.push_back(wholeOf(spread_, mrhi_accessSampled));
     }
-    const mrhiPassDef kDef = drawingInto(into, clears, reads);
-    if (const mrhiResult kAdded = mrhiAddPass(native_, &kDef, &tonemapPass_); kAdded != mrhi_success) {
+    mrhiPassDef tonemapDef = drawingInto(into, clears, reads);
+    if (timer_ != nullptr) {
+        timer_->time(tonemapDef, "tonemap");
+    }
+    if (const mrhiResult kAdded = mrhiAddPass(native_, &tonemapDef, &tonemapPass_); kAdded != mrhi_success) {
         return failed("the picture's pass could not be added", kAdded);
     }
     return {};
@@ -154,8 +160,11 @@ result::Status PicturePass::addTonemap(mrhiResourceId light, mrhiResourceId spre
 result::Status PicturePass::addFxaa(mrhiResourceId display, mrhiResourceId into, bool clears) {
     display_ = display;
     const std::vector<mrhiAccess> kReads = {wholeOf(display_, mrhi_accessSampled)};
-    const mrhiPassDef kDef = drawingInto(into, clears, kReads);
-    if (const mrhiResult kAdded = mrhiAddPass(native_, &kDef, &fxaaPass_); kAdded != mrhi_success) {
+    mrhiPassDef fxaaDef = drawingInto(into, clears, kReads);
+    if (timer_ != nullptr) {
+        timer_->time(fxaaDef, "antialias");
+    }
+    if (const mrhiResult kAdded = mrhiAddPass(native_, &fxaaDef, &fxaaPass_); kAdded != mrhi_success) {
         return failed("the FXAA pass could not be added", kAdded);
     }
     return {};

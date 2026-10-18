@@ -190,7 +190,8 @@ public:
         target_ = FrameTarget{.width = width_,
                               .height = height_,
                               .readBack = readEvery_ != 0 && (submitted_ + 1) % readEvery_ == 0,
-                              .surface = std::nullopt};
+                              .surface = std::nullopt,
+                              .timed = timed_};
         if (windows_ != nullptr) {
             // Shown on the window, drawn at its size; a window that shows
             // nothing this frame is not drawn for, unless a headset is.
@@ -401,6 +402,14 @@ private:
         return pace_;
     }
 
+    void timePasses(bool timed) noexcept override {
+        timed_ = timed;
+    }
+
+    std::span<const PassTime> passTimes() const noexcept override {
+        return framer_ != nullptr ? framer_->passTimes() : std::span<const PassTime>{};
+    }
+
     /// The headset's frame begun for this iteration's plan, ended: `drawn`
     /// when the picture was made into its images.
     void endHeadset(bool drawn) noexcept {
@@ -527,6 +536,8 @@ private:
     std::optional<std::pair<std::uint32_t, std::uint32_t>> planned_;
     std::optional<std::pair<std::uint32_t, std::uint32_t>> plannedPanel_;
     FrameTarget target_;
+    /// Whether its frames' passes are timed (D894).
+    bool timed_ = false;
     bool made_ = false;
     bool failed_ = false;
     std::uint32_t width_ = 1280;

@@ -128,6 +128,31 @@ void ShellParticipant::readFrame(double seconds, std::string_view capture) {
         }
     }
     kLine("samples " + kOf("samples") + "; effects " + (effects.empty() ? std::string{"none"} : effects), kQuiet);
+    // The GPU's time for each pass it timed, where the device times them
+    // (D894).
+    std::size_t timed = 0;
+    if (const Value* kPasses = kAnswer->find("passes"); kPasses != nullptr && kPasses->kind() == Value::Kind::Array) {
+        std::string line;
+        double total = 0;
+        for (const Value& kPass : kPasses->items()) {
+            const Value* kName = kPass.find("pass");
+            const Value* kMicroseconds = kPass.find("gpuMicroseconds");
+            if (kName == nullptr || kName->kind() != Value::Kind::String || kMicroseconds == nullptr) {
+                continue;
+            }
+            const double kSpent = kMicroseconds->real().value_or(0);
+            char said[64];
+            std::snprintf(said, sizeof said, " %.2f ms", kSpent / 1000);
+            line += (line.empty() ? "" : ", ") + *kName->text() + said;
+            total += kSpent;
+            ++timed;
+        }
+        if (timed > 0) {
+            char sum[64];
+            std::snprintf(sum, sizeof sum, "GPU %.2f ms: ", total / 1000);
+            kLine(sum + line, kText);
+        }
+    }
     // A capture's steps, the first few, as the file keeps them all.
     std::size_t steps = 0;
     if (const Value* kSteps = kAnswer->find("steps"); kAsked && kSteps != nullptr) {
@@ -156,7 +181,8 @@ void ShellParticipant::readFrame(double seconds, std::string_view capture) {
                   diagnostics::field("figures", kFigures->items().size()),
                   diagnostics::field("steps", steps),
                   diagnostics::field("captures", held_.frameCaptures),
-                  diagnostics::field("reads", held_.frameReads)});
+                  diagnostics::field("reads", held_.frameReads),
+                  diagnostics::field("passesTimed", timed)});
 }
 
 } // namespace rawframe::studio

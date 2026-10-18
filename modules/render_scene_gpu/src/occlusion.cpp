@@ -100,6 +100,9 @@ result::Status OcclusionPass::addPasses(mrhiResourceId depth, mrhiResourceId sur
         def.colorTargetCount = 1;
         def.accesses = reads.data();
         def.accessCount = static_cast<std::uint32_t>(reads.size());
+        if (timer_ != nullptr) {
+            timer_->time(def, "occlusion");
+        }
         if (const mrhiResult kAdded = mrhiAddPass(native_, &def, kMade); kAdded != mrhi_success) {
             return failed("the ambient occlusion's passes could not be added", kAdded);
         }

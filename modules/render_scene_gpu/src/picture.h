@@ -4,6 +4,7 @@
 #include "pipelines.h"
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/result/result.h"
+#include "timing.h"
 
 #include <cstdint>
 #include <maul-rhi/frame.h>
@@ -71,7 +72,13 @@ public:
     result::Status recordTonemap(const Pipelines& pipelines);
     result::Status recordFxaa(const Pipelines& pipelines);
 
+    /// What times its passes on the GPU (D894).
+    void timeBy(const PassTimer& timer) noexcept {
+        timer_ = &timer;
+    }
+
 private:
+    const PassTimer* timer_ = nullptr;
     mrhiDevice* native_ = nullptr;
     /// The tonemapper's grade, and, graded first, the grade's.
     PictureBlock block_;

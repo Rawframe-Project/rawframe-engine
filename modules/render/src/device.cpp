@@ -435,10 +435,12 @@ struct Device::State {
         }
         adapter = AdapterDescription{.name = std::string{info.name, info.nameLength},
                                      .software = info.kind == mrhi_adapterSoftware,
-                                     .blockCompression = features.textureCompressionBc};
+                                     .blockCompression = features.textureCompressionBc,
+                                     .timestamps = features.timestampQuery};
         mrhiDeviceDef def = mrhiDefaultDeviceDef();
         def.adapter = chosen;
         def.features.textureCompressionBc = features.textureCompressionBc;
+        def.features.timestampQuery = features.timestampQuery;
         def.deviceLimits.frameUploadBytes = kFrameUploadBytes;
         def.deviceLimits.readbackBytes = kReadbackBytes;
         constexpr std::string_view kLabel = "rawframe.render";

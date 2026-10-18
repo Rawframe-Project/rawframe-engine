@@ -69,12 +69,14 @@ struct DrawnStep {
 };
 
 /// What the frame a preview last drew holds (D842): how many frames its
-/// renderer has described, its figures by the renderer's names, and its
-/// steps in the order they were drawn.
+/// renderer has described, its figures by the renderer's names, its steps
+/// in the order they were drawn, and the GPU's time for each of its passes
+/// timed, in nanoseconds, where the device times them (D894).
 struct DrawnFrame {
     std::uint64_t frames = 0;
     std::vector<std::pair<std::string, std::int64_t>> figures;
     std::vector<DrawnStep> steps;
+    std::vector<std::pair<std::string, std::uint64_t>> passes;
 };
 
 class Previewer {

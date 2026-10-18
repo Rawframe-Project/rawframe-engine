@@ -226,6 +226,9 @@ result::Status ShadowPasses::addPasses(const std::vector<mrhiAccess>& reads) {
                                          .stencilStore = mrhi_storeDiscard,
                                          .clearStencil = 0,
                                          .readOnly = false};
+    if (timer_ != nullptr) {
+        timer_->time(sunDef, "sun shadows");
+    }
     if (const mrhiResult kAdded = mrhiAddPass(native_, &sunDef, &sunPass_); kAdded != mrhi_success) {
         return failed("the shadow pass could not be added", kAdded);
     }
@@ -237,6 +240,9 @@ result::Status ShadowPasses::addPasses(const std::vector<mrhiAccess>& reads) {
     lightDef.accesses = slotReads.data();
     lightDef.accessCount = static_cast<std::uint32_t>(slotReads.size());
     lightDef.depthTarget.resource = lightMap_;
+    if (timer_ != nullptr) {
+        timer_->time(lightDef, "light shadows");
+    }
     if (const mrhiResult kAdded = mrhiAddPass(native_, &lightDef, &lightPass_); kAdded != mrhi_success) {
         return failed("the lights' shadow pass could not be added", kAdded);
     }

@@ -75,7 +75,7 @@ world_ui: ui document view game_textures assets game_content content texture gra
 particles_gpu: render particles result base
 render_canvas: tilemap view particles game_textures game_content assets content material texture physics2d world_replication world_kest kest world composition schema execution diagnostics result base
 render_scene: view particles game_textures texture material graph game_content content physics3d mesh world_replication world_animation animation world_kest kest world composition schema execution diagnostics result base
-render_scene_gpu: render render_scene particles_gpu particles material texture mesh composition diagnostics result base
+render_scene_gpu: render render_scene view particles_gpu particles material texture mesh composition diagnostics result base
 render_canvas_gpu: render render_canvas ui particles_gpu particles material texture composition diagnostics result base
 scene_bake: render_scene_gpu render_scene texture_import texture world_kest graph composition diagnostics result base
 game_textures: world_kest assets content texture execution result base
