@@ -71,6 +71,12 @@ if (fingerprint === undefined) {
     server.kill();
     end(1);
 }
+// And the server running its world, as the bots' tests wait for it: the
+// client plays three seconds, which a server still loading its game on a
+// loaded machine took whole without admitting it (gate-77).
+for (let tries = 0; tries < 5000 && !serverLog.includes('"state":"active"'); tries += 1) {
+    await sleep(10);
+}
 
 const transport = new PageTransport({ certificateHashes: [fingerprint], WebTransport });
 const client = await WebClient.load(await readFile(wasmPath), {
