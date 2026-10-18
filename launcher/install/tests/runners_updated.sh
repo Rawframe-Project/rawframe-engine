@@ -54,6 +54,10 @@ play() {
 host.maximum_iterations = 240
 host.iteration_rate = 120
 world.tick_rate = 60
+# What is played only shows the Composition opened; a machine loaded by
+# other work makes a debug tree's World fall behind for longer than its
+# overload limit, which is no update's fault (D893).
+world.overload_ms = 0
 kest.game_resource = $game
 content.library = $player
 network.loopback.latency_ms = 10
