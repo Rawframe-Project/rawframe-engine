@@ -44,7 +44,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
 } | "$author" session "$game" "$work/root" >"$work/replies" || true
 reply 2 | grep -q '"written":true,.*"undoable":1,"redoable":0'
 reply 3 | grep -q '"written":true,.*"undoable":2,"redoable":0'
-reply 4 | grep -q '"entries":\[{"summary":"terrain.brush","deltas":[1-9][0-9]*,"applied":true},{"summary":"terrain.brush","deltas":[1-9][0-9]*,"applied":true}\]'
+reply 4 | grep -q '"entries":\[{"summary":"terrain.brush","deltas":[1-9][0-9]*,"applied":true,"kind":"change"},{"summary":"terrain.brush","deltas":[1-9][0-9]*,"applied":true,"kind":"change"}\]'
 # The middle sample a meter up, its row's neighbors between, the edges
 # flat; the four cells around the middle painted rock.
 grep -qx '0 0.012 0.309 0.012 0' "$work/root/field.terrain"

@@ -45,7 +45,7 @@ reply 2 | grep -q '"answer":{"lines":\["# Quarry (D735), the small block game'
 reply 2 | grep -q '"program quarry.kest"'
 reply 3 | grep -q '"written":true,.*"undoable":1,"redoable":0'
 reply 4 | grep -q '"program quarry.kest","aspect 16 9"'
-reply 5 | grep -q '"entries":\[{"summary":"insert line '$((program + 1))'","deltas":1,"applied":true}\]'
+reply 5 | grep -q '"entries":\[{"summary":"insert line '$((program + 1))'","deltas":1,"applied":true,"kind":"change"}\]'
 # Undone, the description is its very bytes again.
 reply 6 | grep -q '"undoable":0,"redoable":1'
 cmp "$work/root/quarry.game" "$work/original.game"

@@ -12,8 +12,10 @@
 #include "replies.h"
 
 #include <algorithm>
+#include <charconv>
 #include <cstdint>
 #include <span>
+#include <system_error>
 #include <type_traits>
 #include <utility>
 
@@ -70,6 +72,35 @@ void addTo(Value& answer, const authoring::AuthoredMaterial& material, const std
 
 } // namespace
 
+void addAuthorship(Value& entry, const authoring::Authorship& authorship, std::span<const std::string> authors) {
+    if (authorship.author != 0 && authorship.author < authors.size()) {
+        entry.add("author", Value::string(authors[authorship.author]));
+    }
+    const char* kind = "change";
+    if (authorship.kind == authoring::EntryKind::Undo) {
+        kind = "undo";
+    } else if (authorship.kind == authoring::EntryKind::Redo) {
+        kind = "redo";
+    }
+    entry.add("kind", Value::string(kind));
+}
+
+result::Result<authoring::Committed> namingAuthor(result::Result<authoring::Committed> step,
+                                                  std::span<const std::string> authors) {
+    if (step.has_value()) {
+        return step;
+    }
+    for (const result::ContextField& kField : step.error().context()) {
+        std::size_t number = 0;
+        const auto [kEnd, kFailed] =
+            std::from_chars(kField.value.data(), kField.value.data() + kField.value.size(), number);
+        if (kField.key == "authorNumber" && kFailed == std::errc{} && number != 0 && number < authors.size()) {
+            return std::unexpected{std::move(step).error().withContext("author", authors[number])};
+        }
+    }
+    return step;
+}
+
 template <class Authored>
 result::Result<typename Documents<Authored>::Open*> Documents<Authored>::open(const std::string& name, bool& reopened) {
     reopened = false;
@@ -86,10 +117,12 @@ result::Result<typename Documents<Authored>::Open*> Documents<Authored>::open(co
     const std::string kDigest = digestOf(*kText);
     Open& open = opened_[kPath.string()];
     if (open.document != nullptr && open.onDisk == kDigest) {
+        open.document->setAuthor(author_);
         return &open;
     }
     reopened = open.document != nullptr;
     RAWFRAME_TRY_ASSIGN(open.document, made(sidecarIdentity(kPath).value_or(rawframe::base::Bits128{}), *kText));
+    open.document->setAuthor(author_);
     open.onDisk = kDigest;
     return &open;
 }
@@ -169,7 +202,10 @@ result::Result<Value> Documents<Authored>::applied(const authoring::SessionRecor
 }
 
 template <class Authored>
-result::Result<Value> Documents<Authored>::stepped(const authoring::SessionRecord& record, bool undo, bool& failed) {
+result::Result<Value> Documents<Authored>::stepped(const authoring::SessionRecord& record,
+                                                   bool undo,
+                                                   bool& failed,
+                                                   std::span<const std::string> authors) {
     bool reopened = false;
     RAWFRAME_TRY_ASSIGN(Open * open, this->open(record.scene, reopened));
     Authored& authored = *open->document;
@@ -180,7 +216,8 @@ result::Result<Value> Documents<Authored>::stepped(const authoring::SessionRecor
                                        "the step was asked against another generation of the " + called_)
                                    .withContext("document", kBefore)};
     }
-    const auto kStep = undo ? authored.undo(authored.generation()) : authored.redo(authored.generation());
+    const auto kStep =
+        namingAuthor(undo ? authored.undo(authored.generation()) : authored.redo(authored.generation()), authors);
     failed = !kStep.has_value();
     Value results = Value::array();
     results.push(slotValue(kStep));
@@ -213,7 +250,9 @@ result::Result<Value> Documents<Authored>::answered(const authoring::SessionReco
     return made;
 }
 
-template <class Authored> result::Result<Value> Documents<Authored>::history(const authoring::SessionRecord& record) {
+template <class Authored>
+result::Result<Value> Documents<Authored>::history(const authoring::SessionRecord& record,
+                                                   std::span<const std::string> authors) {
     bool reopened = false;
     RAWFRAME_TRY_ASSIGN(Open * open, this->open(record.scene, reopened));
     const Authored& authored = *open->document;
@@ -230,6 +269,7 @@ template <class Authored> result::Result<Value> Documents<Authored>::history(con
         entry.add("summary", Value::string(authored.summaryAt(at)));
         entry.add("deltas", Value::integer(static_cast<std::int64_t>(deltas)));
         entry.add("applied", Value::boolean(at < authored.undoable()));
+        addAuthorship(entry, authored.authorshipAt(at), authors);
         entries.push(std::move(entry));
     }
     Value made = Value::object();

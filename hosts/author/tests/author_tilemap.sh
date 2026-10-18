@@ -41,7 +41,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
 } | "$author" session "$game" "$work/root" >"$work/replies" || true
 reply 2 | grep -q '"written":true,.*"undoable":1,"redoable":0'
 reply 3 | grep -q '"written":true,.*"undoable":2,"redoable":0'
-reply 4 | grep -q '"entries":\[{"summary":"tilemap.paint","deltas":[1-9][0-9]*,"applied":true},{"summary":"tilemap.paint","deltas":[1-9][0-9]*,"applied":true}\]'
+reply 4 | grep -q '"entries":\[{"summary":"tilemap.paint","deltas":[1-9][0-9]*,"applied":true,"kind":"change"},{"summary":"tilemap.paint","deltas":[1-9][0-9]*,"applied":true,"kind":"change"}\]'
 # The bottom row ground but for its middle; the rows above as they were.
 grep -qx '0 0 . 0 0' "$work/root/level.tilemap"
 [ "$(grep -cx '\. \. \. \. \.' "$work/root/level.tilemap")" = 2 ]

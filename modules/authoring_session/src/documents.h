@@ -17,13 +17,28 @@
 #include "rawframe/document/json.h"
 #include "rawframe/result/result.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 
 namespace rawframe::authoring_session {
+
+/// Adds to a history entry's summary who made it and what it is (D879):
+/// `author`, the name its record gave, where it gave one, of `authors` by
+/// the entry's author, and `kind`, `change`, `undo`, or `redo`.
+void addAuthorship(document::Value& entry,
+                   const authoring::Authorship& authorship,
+                   std::span<const std::string> authors);
+
+/// A step refused for another author's later change, that author named as
+/// their records name them (`author`) beside the number the document knows
+/// them by (D879).
+[[nodiscard]] result::Result<authoring::Committed> namingAuthor(result::Result<authoring::Committed> step,
+                                                                std::span<const std::string> authors);
 
 template <class Authored> class Documents {
 public:
@@ -59,10 +74,17 @@ public:
     /// operation in it failed, as the session's own are.
     [[nodiscard]] result::Result<document::Value> applied(const authoring::SessionRecord& record, bool& failed);
     [[nodiscard]] result::Result<document::Value>
-    stepped(const authoring::SessionRecord& record, bool undo, bool& failed);
+    stepped(const authoring::SessionRecord& record, bool undo, bool& failed, std::span<const std::string> authors);
     [[nodiscard]] result::Result<document::Value> answered(const authoring::SessionRecord& record, bool& failed);
-    /// The document's history, each entry summed up, as a scene's is.
-    [[nodiscard]] result::Result<document::Value> history(const authoring::SessionRecord& record);
+    /// The document's history, each entry summed up, as a scene's is, its
+    /// authors named as `authors` names them.
+    [[nodiscard]] result::Result<document::Value> history(const authoring::SessionRecord& record,
+                                                          std::span<const std::string> authors);
+    /// Who makes the changes and steps of the records that follow, by the
+    /// session's number for them (ADR-0085, D879).
+    void setAuthor(std::uint32_t author) noexcept {
+        author_ = author;
+    }
 
 private:
     struct Open {
@@ -83,6 +105,7 @@ private:
     authoring::DocumentReader reads_ = nullptr;
     authoring::LineRewriter rewrites_ = nullptr;
     std::map<std::string, Open> opened_;
+    std::uint32_t author_ = 0;
 };
 
 } // namespace rawframe::authoring_session

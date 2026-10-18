@@ -277,7 +277,7 @@ rename='{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operatio
     echo '{"kind":"authoring.history","id":6,"scene":"level.scene"}'
 } | "$author" session "$game" "$work/history" >"$work/replies" || true
 reply 2 | grep -q '"answer":{"kind":"authoring.history","reopened":false,"entries":\[\]}'
-reply 6 | grep -q '"entries":\[{"summary":"rename to floor","deltas":1,"applied":true},{"summary":"create entity crate[^"]*","deltas":[0-9]*,"applied":false}\]'
+reply 6 | grep -q '"entries":\[{"summary":"rename to floor","deltas":1,"applied":true,"kind":"change"},{"summary":"create entity crate[^"]*","deltas":[0-9]*,"applied":false,"kind":"change"}\]'
 # The assets runners declares (D455), each by kind, identity, and name.
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'

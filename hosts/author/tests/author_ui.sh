@@ -56,7 +56,7 @@ reply 4 | grep -q '"fill":"#c01818c0"'
 if reply 4 | grep -q 'tycoon.banner'; then
     exit 1
 fi
-reply 5 | grep -q '"entries":\[{"summary":"set fill of tycoon.purse and 2 more","deltas":3,"applied":true}\]'
+reply 5 | grep -q '"entries":\[{"summary":"set fill of tycoon.purse and 2 more","deltas":3,"applied":true,"kind":"change"}\]'
 reply 6 | grep -q '"undoable":0,"redoable":1'
 cmp "$work/root/tycoon.ui" "$work/original.ui"
 

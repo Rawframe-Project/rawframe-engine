@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <map>
@@ -55,6 +56,9 @@ namespace rawframe::authoring_session {
 namespace {
 
 using document::Value;
+
+/// The most authors a session's records name besides its own (D879).
+constexpr std::size_t kMostAuthors = 1024;
 
 /// A scene a session holds open: the document with its history, and the
 /// digest of the bytes on disk as the session last read or wrote them.
@@ -163,6 +167,7 @@ private:
                                            result::ErrorClass::FailedPrecondition,
                                            "a session begins with hello")};
         }
+        RAWFRAME_TRY(authorFrom(record));
         switch (record.verb) {
         case authoring::SessionVerb::Hello:
             break;
@@ -364,12 +369,14 @@ private:
         const std::string kDigest = digestOf(*kText);
         OpenScene& open = scenes_[kPath.string()];
         if (open.document != nullptr && open.onDisk == kDigest) {
+            open.document->setAuthor(author_);
             return &open;
         }
         reopened = open.document != nullptr;
         RAWFRAME_TRY_ASSIGN(
             open.document,
             authoring::AuthoredScene::open(sidecarIdentity(kPath).value_or(rawframe::base::Bits128{}), *kText));
+        open.document->setAuthor(author_);
         open.onDisk = kDigest;
         return &open;
     }
@@ -441,19 +448,19 @@ private:
     /// undone (redoable). A read: nothing staged, nothing written.
     result::Result<Value> historyOf(const authoring::SessionRecord& record) {
         if (auto* lines = linesOf(record.scene)) {
-            return lines->history(record);
+            return lines->history(record, authors_);
         }
         if (auto* data = dataOf(record.scene)) {
-            return data->history(record);
+            return data->history(record, authors_);
         }
         if (sheets_.names(record.scene)) {
-            return sheets_.history(record);
+            return sheets_.history(record, authors_);
         }
         if (uis_.names(record.scene)) {
-            return uis_.history(record);
+            return uis_.history(record, authors_);
         }
         if (materials_.names(record.scene)) {
-            return materials_.history(record);
+            return materials_.history(record, authors_);
         }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -465,6 +472,7 @@ private:
             entry.add("summary", Value::string(authoring::summaryOf(journal)));
             entry.add("deltas", Value::integer(static_cast<std::int64_t>(journal.size())));
             entry.add("applied", Value::boolean(at < scene.undoable()));
+            addAuthorship(entry, scene.authorshipAt(at), authors_);
             entries.push(std::move(entry));
         }
         Value made = Value::object();
@@ -901,20 +909,20 @@ private:
 
     result::Result<Value> stepped(const authoring::SessionRecord& record, bool undo) {
         if (auto* lines = linesOf(record.scene)) {
-            return lines->stepped(record, undo, failed_);
+            return lines->stepped(record, undo, failed_, authors_);
         }
         if (auto* data = dataOf(record.scene)) {
-            return data->stepped(record, undo, failed_);
+            return data->stepped(record, undo, failed_, authors_);
         }
         if (materials_.names(record.scene)) {
-            return materials_.stepped(record, undo, failed_);
+            return materials_.stepped(record, undo, failed_, authors_);
         }
         if (sheets_.names(record.scene) || uis_.names(record.scene)) {
             // A step that would leave a node naming a class the sheet no
             // longer has is stepped back and refused (D642).
             const auto kStep = [this](const authoring::SessionRecord& asked, bool back) {
-                return sheets_.names(asked.scene) ? sheets_.stepped(asked, back, failed_)
-                                                  : uis_.stepped(asked, back, failed_);
+                return sheets_.names(asked.scene) ? sheets_.stepped(asked, back, failed_, authors_)
+                                                  : uis_.stepped(asked, back, failed_, authors_);
             };
             const std::set<std::uint64_t> kBefore = unresolvedStyles(gameDocuments_);
             auto stepped = kStep(record, undo);
@@ -945,7 +953,8 @@ private:
                                            "the step was asked against another generation of the scene")
                                        .withContext("document", kBefore)};
         }
-        const auto kStep = undo ? document.undo(document.generation()) : document.redo(document.generation());
+        const auto kStep =
+            namingAuthor(undo ? document.undo(document.generation()) : document.redo(document.generation()), authors_);
         Value results = Value::array();
         failed_ = !kStep.has_value();
         results.push(slotValue(kStep));
@@ -991,6 +1000,35 @@ private:
     Documents<authoring::AuthoredLines> tilemaps_;
     Documents<authoring::AuthoredLines> scatters_;
     Documents<authoring::AuthoredLines> sequences_;
+    /// The authors records have named, each by its place, the first the
+    /// session's own (ADR-0085, D879), and the one the current record names.
+    std::vector<std::string> authors_{std::string{}};
+    std::uint32_t author_ = 0;
+
+    /// Makes the author the record names, or the session's own where it
+    /// names none, the one its changes and steps are of, in every document.
+    result::Status authorFrom(const authoring::SessionRecord& record) {
+        const auto kKnown = std::ranges::find(authors_, record.author);
+        if (kKnown == authors_.end() && authors_.size() > kMostAuthors) {
+            return std::unexpected{failure(authoring::AuthoringError::LimitExceeded,
+                                           result::ErrorClass::ResourceExhausted,
+                                           "a session's records name at most 1024 authors")};
+        }
+        if (kKnown == authors_.end()) {
+            authors_.push_back(record.author);
+        }
+        author_ = static_cast<std::uint32_t>(std::ranges::find(authors_, record.author) - authors_.begin());
+        for (auto* each : {&games_, &blockouts_, &terrains_, &tilemaps_, &scatters_, &sequences_}) {
+            each->setAuthor(author_);
+        }
+        for (auto& each : data_) {
+            each.setAuthor(author_);
+        }
+        sheets_.setAuthor(author_);
+        uis_.setAuthor(author_);
+        materials_.setAuthor(author_);
+        return {};
+    }
 
     /// The line documents `name` is one of, if any.
     Documents<authoring::AuthoredLines>* linesOf(const std::string& name) {

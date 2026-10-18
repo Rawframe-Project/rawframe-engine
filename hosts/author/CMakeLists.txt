@@ -68,6 +68,12 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_session.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_session)
     set_tests_properties(author_session PROPERTIES PASS_REGULAR_EXPRESSION "authored runners in a session")
+    # Two authors, each undoing only their own changes (ADR-0085, D879).
+    add_test(NAME author_authors
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_authors.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_authors)
+    set_tests_properties(author_authors PROPERTIES
+                         PASS_REGULAR_EXPRESSION "two authors each undid their own changes in one session")
     add_test(NAME author_styles
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_styles.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_styles)

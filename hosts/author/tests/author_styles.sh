@@ -77,6 +77,6 @@ removed='{"operation":"styles.remove_class","style":"'$button'"}'
 } | "$author" session "$game" "$work/root" >"$work/replies"
 reply 2 | grep -q '"results":\[{"deltas":2}\]'
 reply 3 | grep -q '"written":true'
-reply 4 | grep -q '"entries":\[{"summary":"create class tip and 1 more","deltas":2,"applied":true},{"summary":"delete class button","deltas":1,"applied":true}\]'
+reply 4 | grep -q '"entries":\[{"summary":"create class tip and 1 more","deltas":2,"applied":true,"kind":"change"},{"summary":"delete class button","deltas":1,"applied":true,"kind":"change"}\]'
 cmp "$work/root/tycoon.styles" "$work/redone.styles"
 echo "authored stalls' styles in a session"

@@ -63,7 +63,7 @@ cp "$work/root/shore.rfmaterial" "$work/redone.rfmaterial"
 reply 5 | grep -q '"code":"validation_failed".*"message":"the material instance does not read: '
 reply 6 | grep -q '"code":"validation_failed".*"message":"an override names an input or a switch as a Kest name is"'
 reply 7 | grep -q '"code":"validation_failed".*"message":"the operation does not change a material instance"'
-reply 8 | grep -q '"entries":\[{"summary":"set tint","deltas":1,"applied":true}\]'
+reply 8 | grep -q '"entries":\[{"summary":"set tint","deltas":1,"applied":true,"kind":"change"}\]'
 # A graph is no instance to author here.
 reply 9 | grep -q '"code":"validation_failed"'
 cmp "$work/root/shore.rfmaterial" "$work/redone.rfmaterial"
@@ -82,7 +82,7 @@ rough='{"operation":"materials.set_node_input","node":"60c0000000000005","input"
 reply 2 | grep -q '"answer":{"graph":{"formatVersion":1,"kind":"surface","interface":{"inputs":{"stone"'
 reply 3 | grep -q '"written":true,.*"results":\[{"deltas":1}\]'
 reply 4 | grep -q '"code":"validation_failed".*"message":"the operation does not change a material graph"'
-reply 5 | grep -q '"entries":\[{"summary":"set 60c00000.specular_roughness","deltas":1,"applied":true}\]'
+reply 5 | grep -q '"entries":\[{"summary":"set 60c00000.specular_roughness","deltas":1,"applied":true,"kind":"change"}\]'
 reply 6 | grep -q '"undoable":0,"redoable":1'
 cmp "$work/root/rock.rfmaterial" "$work/rock.original"
 echo "authored gale's shore in a session"
