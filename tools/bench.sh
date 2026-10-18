@@ -12,10 +12,11 @@
 #                           4 ms, or on a p95 past twice this machine's
 #                           recorded one (the median of its last three rows)
 #                           and half a millisecond. A game past them is
-#                           measured once more and fails only if it is past
-#                           them again: the owner's machine is shared, and
-#                           a tick slowed by another's build is told from a
-#                           slower engine only by measuring again (D504).
+#                           measured up to twice more and fails only if it
+#                           is past them each time: the owner's machine is
+#                           shared, and a tick slowed by another's build is
+#                           told from a slower engine only by measuring
+#                           again (D504, D896).
 #
 # Needs out/clang-shipping built; the full check builds it first. Last, the
 # crowd is served over QUIC to bots in processes of their own, and the
@@ -83,8 +84,8 @@ if [ "$mode" = check ]; then
     wait
 fi
 for game in "${games[@]}"; do
-    for attempt in 1 2; do
-        if [ "$mode" != check ] || [ "$attempt" = 2 ]; then
+    for attempt in 1 2 3; do
+        if [ "$mode" != check ] || [ "$attempt" != 1 ]; then
             "$build/hosts/arena/rawframe-arena" --config "$work/$game.conf" >"$work/$game.log" 2>&1 || true
         fi
         summary="$(grep '"code":"tick_summary"' "$work/$game.log" | tail -1 || true)"
@@ -121,7 +122,7 @@ if mine and p95 > 2 * statistics.median(mine) + 0.5:
             if [ -z "$verdict" ]; then
                 break
             fi
-            if [ "$attempt" = 1 ]; then
+            if [ "$attempt" != 3 ]; then
                 quieter "$game" "$verdict"
                 continue
             fi
@@ -135,14 +136,19 @@ if mine and p95 > 2 * statistics.median(mine) + 0.5:
 done
 
 # Runs a measurement, which sets `verdict`, and says it. In check mode one
-# past its bounds is measured once more, once the machine is quieter, and
-# fails only if past them again, as each game's is above (D504, D509).
+# past its bounds is measured up to twice more, each once the machine is
+# quieter, and fails only if past them each time, as each game's is above
+# (D504, D509, D896): the checkpoint's hold is one capture's, which one
+# preemption puts past its 5 ms.
 held() {
     "$2"
-    if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]]; then
+    for _ in 1 2; do
+        if [ "$mode" != check ] || [[ "$verdict" != FAIL* ]]; then
+            break
+        fi
         quieter "$1" "$verdict"
         "$2"
-    fi
+    done
     printf 'bench %s: %s\n' "$1" "$verdict"
     if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]]; then
         failures=$((failures + 1))
