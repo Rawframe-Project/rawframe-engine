@@ -9,11 +9,12 @@ tree's own changes, can reach, one per line, or nothing when it reaches
 none. A test is reached when its directory is a changed module's or host's,
 or a module's or host's that depends on a changed module by the module
 graph (tools/modules.txt), however indirectly. The cross-module scenarios
-run whenever any module is reached. A change the graph cannot place (the
-build's own files, a vendored library, a game, a template, a test harness)
-reaches every test; one that no test reads (the check's own scripts,
-documents) reaches none, the full check after the push running everything
-(D898).
+run whenever any module is reached. A module or host whose line in the graph
+changed counts as changed, as does a directory the build's own file only
+adds. A change the graph cannot place (the build's own files otherwise, a
+vendored library, a game, a template, a test harness) reaches every test;
+one that no test reads (the check's own scripts, documents) reaches none,
+the full check after the push running everything (D898).
 """
 
 import pathlib
@@ -33,10 +34,26 @@ def run(*arguments):
     return subprocess.run(arguments, cwd=ROOT, capture_output=True, text=True, check=False).stdout
 
 
+def merge_base():
+    return run("git", "merge-base", "HEAD", "origin/main").strip() or "HEAD"
+
+
+def added_directories(base, directories):
+    """Whether the build's own file changed only in the directories it adds,
+    which are then changed themselves."""
+    lines = [line for line in run("git", "diff", "-U0", base or merge_base(), "--", "CMakeLists.txt").splitlines()
+             if line[:1] in "+-" and not line.startswith(("+++", "---"))]
+    named = [re.match(r"^[+-]\s*add_subdirectory\(([\w/]+)\)\s*$", line) for line in lines]
+    if not lines or not all(named):
+        return False
+    directories.update(match.group(1) for match in named)
+    return True
+
+
 def changed(base):
     """The paths changed since `base`, committed or not."""
     if not base:
-        base = run("git", "merge-base", "HEAD", "origin/main").strip() or "HEAD"
+        base = merge_base()
     paths = set(run("git", "diff", "--name-only", base).split())
     for line in run("git", "status", "--porcelain", "--untracked-files=all").splitlines():
         paths.add(line[3:].split(" -> ")[-1])
@@ -87,9 +104,14 @@ def main():
         elif parts[0] in ("hosts", "launcher") and len(parts) > 1:
             directories.add("/".join(parts[:2]))
         elif path == "tools/modules.txt":
-            # A dependency added or taken away reaches what it was added to;
-            # the graph is read whole, so every module.
-            everything = True
+            # A module or host whose line changed (a dependency added or
+            # taken away, or the line new) is changed itself.
+            for line in run("git", "diff", "-U0", base or merge_base(), "--", path).splitlines():
+                named = re.match(r"^[+-](\w+):", line)
+                if named:
+                    reached.add(named.group(1))
+        elif path == "CMakeLists.txt" and added_directories(base, directories):
+            pass
         else:
             everything = True
     if everything:
