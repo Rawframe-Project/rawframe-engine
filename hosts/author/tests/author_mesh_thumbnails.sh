@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # A mesh's thumbnail (D899): the plaza cooked through a session, then its
-# crate's thumbnail asked, which draws every mesh of the cook by one run of
-# the thumbnail tool; the mound's then answered from what that run drew,
-# without another. Each answer names the drawn picture beside the cook and
+# crate's thumbnail asked, which sets every mesh of the cook drawing by one
+# run of the thumbnail tool beside the session, answered as being drawn
+# until it is while other records are answered; the mound's then answered
+# from what that run drew, without another. Each answer names the drawn picture beside the cook and
 # the level that fits; each mesh covers some of its picture and not all of
 # it. Says "skip: no device" where the tool found no adapter, unless
 # RAWFRAME_REQUIRE_GPU is set, as the check sets it where lavapipe is.
@@ -30,7 +31,15 @@ reply() { grep "\"id\":$1," "$work/replies"; }
         grep -q '"id":2,"answer"\|"id":2,"error"' "$work/replies" 2>/dev/null && break
         sleep 0.1
     done
-    echo '{"kind":"authoring.thumbnail","id":3,"asset":"crate.gltf","size":64}'
+    # The crate asked until it is drawn, which the session answers as being
+    # drawn meanwhile, never waiting for it; three minutes only bound a
+    # loaded machine's software rasterizer.
+    for each in $(seq 100 1900); do
+        echo '{"kind":"authoring.thumbnail","id":'"$each"',"asset":"crate.gltf","size":64}'
+        echo '{"kind":"authoring.describe","id":"between'"$each"'"}'
+        grep -q '"answer":{"kind":"authoring.thumbnail","asset":"crate.gltf"\|"class":"unsupported"' "$work/replies" && break
+        sleep 0.1
+    done
     echo '{"kind":"authoring.thumbnail","id":4,"asset":"mound.gltf","size":32}'
     echo '{"kind":"authoring.thumbnail","id":5,"asset":"gate.scene","size":64}'
     echo '{"kind":"authoring.end","id":6}'
@@ -40,7 +49,11 @@ if grep -q "skip: no device" "$work/content/thumbnails/thumbnails.log" 2>/dev/nu
     echo "skip: no device"
     exit 0
 fi
-reply 3 | grep -q '"answer":{"kind":"authoring.thumbnail","asset":"crate.gltf","object":"[^"]*/content/thumbnails/[0-9a-f]\{64\}.texture","level":2,"width":64,"height":64}'
+# The first asking answered as being drawn, and a describe between the
+# askings answered while the tool drew.
+reply 100 | grep -q '"class":"unavailable"'
+grep -q '"id":"between100","answer"' "$work/replies"
+grep -q '"answer":{"kind":"authoring.thumbnail","asset":"crate.gltf","object":"[^"]*/content/thumbnails/[0-9a-f]\{64\}.texture","level":2,"width":64,"height":64}' "$work/replies"
 reply 4 | grep -q '"answer":{"kind":"authoring.thumbnail","asset":"mound.gltf","object":"[^"]*/content/thumbnails/[0-9a-f]\{64\}.texture","level":3,"width":32,"height":32}'
 reply 5 | grep -q '"code":"unsupported_operation"'
 # One run drew them all, the plaza's three meshes, each covering some of

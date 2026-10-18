@@ -11,7 +11,6 @@
 #include <algorithm>
 #include <chrono>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace rawframe::authoring_session {
@@ -30,33 +29,35 @@ std::filesystem::path objectOf(const std::filesystem::path& cooked, const conten
     return cooked / "objects" / kDigest.substr(kDigest.find(':') + 1);
 }
 
-/// Every mesh of the cook into `cooked` drawn into its `thumbnails`
-/// directory by one run of the tool, whose device and pipelines are made
-/// once for them all, what it said kept there in `thumbnails.log`. Five minutes only bounds a tool that never ends:
-/// lavapipe makes the scene's pipelines on the CPU, slowly on a loaded
-/// machine (D476).
-void drawMeshes(const std::filesystem::path& tool,
-                const std::filesystem::path& cooked,
-                const std::vector<content::ManifestEntry>& entries) {
+/// The most meshes one run of the tool draws: a cook of more has the rest
+/// go without, so one asking cannot hold the machine for a run without end.
+constexpr std::size_t kMostDrawn = 1024;
+/// How long a run may draw: lavapipe makes the scene's pipelines on the
+/// CPU, slowly on a loaded machine (D476); past it, the run is stopped.
+constexpr auto kDrawing = std::chrono::minutes{5};
+
+/// Every mesh of the cook into `cooked`, up to `kMostDrawn`, set drawing
+/// into its `thumbnails` directory by one run of the tool, whose device and
+/// pipelines are made once for them all, what it says kept there in
+/// `thumbnails.log`; nothing when the tool does not start.
+std::optional<process::Child> drawMeshes(const std::filesystem::path& tool,
+                                         const std::filesystem::path& cooked,
+                                         const std::vector<content::ManifestEntry>& entries) {
     const std::filesystem::path kInto = cooked / "thumbnails";
     std::error_code error;
     std::filesystem::create_directories(kInto, error);
     std::vector<std::string> arguments{kInto.string()};
     for (const content::ManifestEntry& kEntry : entries) {
-        if (kEntry.type == content::ResourceTypeId{mesh::kMeshType}) {
+        if (kEntry.type == content::ResourceTypeId{mesh::kMeshType} && arguments.size() <= kMostDrawn) {
             arguments.push_back(objectOf(cooked, kEntry).string());
         }
     }
     auto drawing =
         process::Child::start({.program = tool, .arguments = std::move(arguments), .output = kInto / "thumbnails.log"});
     if (!drawing.has_value()) {
-        return;
+        return std::nullopt;
     }
-    const auto kUntil = std::chrono::steady_clock::now() + std::chrono::minutes{5};
-    while (!drawing->exited().has_value() && std::chrono::steady_clock::now() < kUntil) {
-        std::this_thread::sleep_for(std::chrono::milliseconds{20});
-    }
-    drawing->kill();
+    return std::move(*drawing);
 }
 
 } // namespace
@@ -115,15 +116,28 @@ result::Result<Value> thumbnailOf(const std::filesystem::path& game,
     if (kMesh) {
         object = *cooked / "thumbnails" / (object.filename().string() + ".texture");
         std::error_code error;
-        if (meshes.drawn != *cooked && !std::filesystem::exists(object, error)) {
-            drawMeshes(meshes.tool, *cooked, *kEntries);
+        // A run that ended, or ran past its time, is let go; one still
+        // drawing is waited for by asking again, never on this thread,
+        // which answers every other record and every other author.
+        if (meshes.drawing.has_value() &&
+            (meshes.drawing->exited().has_value() || std::chrono::steady_clock::now() - meshes.began > kDrawing)) {
+            meshes.drawing.reset();
+        }
+        if (!meshes.drawing.has_value() && meshes.drawn != *cooked && !std::filesystem::exists(object, error)) {
+            meshes.drawing = drawMeshes(meshes.tool, *cooked, *kEntries);
+            meshes.began = std::chrono::steady_clock::now();
             meshes.drawn = *cooked;
+        }
+        if (meshes.drawing.has_value() && !std::filesystem::exists(object, error)) {
+            return refused(authoring::AuthoringError::UnsupportedOperation,
+                           result::ErrorClass::Unavailable,
+                           "the cook's meshes are being drawn; ask again");
         }
     }
     const auto kBytes = readFile(object);
     if (!kBytes.has_value()) {
         return kMesh ? refused(authoring::AuthoringError::UnsupportedOperation,
-                               result::ErrorClass::Unavailable,
+                               result::ErrorClass::Unsupported,
                                "the thumbnail tool could not draw this mesh here")
                      : refused(authoring::AuthoringError::TargetNotFound,
                                result::ErrorClass::NotFound,

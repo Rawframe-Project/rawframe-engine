@@ -710,9 +710,10 @@ void McpBridge::State::addSessionTools() {
         properties.add("asset", property("string", false, "The texture's or mesh's path under the game's directory."));
         properties.add("size", property("integer", false, "The most pixels on the longer side, 16 to 256."));
         tools.push_back(toolOf("asset_thumbnail",
-                               "The texture file that pictures a texture or a mesh from the session's last cook (a "
-                               "mesh's drawn at its first asking), and which of its levels is the first no larger "
-                               "than the size asked; cook first.",
+                               "The texture file that pictures a texture or a mesh from the session's last cook, and "
+                               "which of its levels is the first no larger than the size asked; cook first. A "
+                               "mesh's is drawn beside the session at its first asking: while it is, the call fails "
+                               "with class unavailable, to be made again.",
                                schemaOf(std::move(properties), {"asset", "size"}),
                                annotationsOf(true, false)));
     }
