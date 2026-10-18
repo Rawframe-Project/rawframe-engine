@@ -4,9 +4,11 @@
 // client opens (D408, D881): the client side shared by a link to a
 // running Runtime's tooling endpoint and one to a shared session's host.
 
+#include "rawframe/document/json.h"
 #include "rawframe/network/provider.h"
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,6 +33,14 @@ public:
     /// endpoint said unasked meanwhile, is kept for `heard`.
     [[nodiscard]] std::optional<std::string> ask(std::string_view record);
 
+    /// Sends one record answered later, its reply and what is said of it
+    /// meanwhile (a cook's progress) kept for `heard` under the record's own
+    /// id (D885). Whether it was sent.
+    [[nodiscard]] bool send(std::string_view record);
+    /// The number a record sent with `send` went out under, by the id it
+    /// was given; none for one not waiting for its reply.
+    [[nodiscard]] std::optional<std::int64_t> sentAs(const document::Value& id) const;
+
     /// What the endpoint said unasked, waiting up to `withinMilliseconds`
     /// for the first where none was kept.
     [[nodiscard]] std::vector<std::string> heard(std::int64_t withinMilliseconds);
@@ -45,6 +55,10 @@ public:
 
 private:
     void pump();
+    /// `record` numbered `id` in place of its own, as a line.
+    static std::string numbered(const document::Value& record, std::int64_t id);
+    /// `line` with `id` its id in place of the number it came under.
+    static std::string renumbered(const document::Value& line, const document::Value& id);
     /// The whole lines received, each taken: a reply returned where it is
     /// the one numbered `id`, every other line that is no reply kept.
     std::optional<std::string> take(std::optional<std::int64_t> id);
@@ -55,6 +69,9 @@ private:
     std::vector<network::Event> events_;
     std::string received_;
     std::vector<std::string> unasked_;
+    /// Records sent with `send` whose reply has not come, by the number
+    /// each went out under: the id each was given.
+    std::map<std::int64_t, document::Value> waiting_;
     bool ready_ = false;
     bool closed_ = false;
     /// The questions asked, each one's number.

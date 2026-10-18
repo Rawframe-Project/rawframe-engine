@@ -16,7 +16,9 @@
 // saying one's own presence), `edit` (what changes the documents or their
 // editor state), `cook` (cook, cancel, import), `play` (the preview and the
 // played game), and `claim` (claim, release). A record its token does not
-// grant is refused. A record is the token holder's: its author is the
+// grant is refused. A collaborator's cook names its output and cache by
+// plain names, which the host puts under its cooking directory, in the
+// collaborator's own (D885). A record is the token holder's: its author is the
 // token's name, set by the host, and one naming another is refused, so no
 // collaborator acts as another. `end` ends the collaborator's connection,
 // never the session, and a connection's end lets go of its presence and
@@ -73,8 +75,9 @@ struct Collaborator {
 inline constexpr std::size_t kMostCollaborators = 256;
 
 /// A tokens file: a line each, `<token> <name> <grant>...`, a token of 32
-/// to 256 printable bytes, a name of 1 to 64 with no space, and one or
-/// more of the grants above; blank lines and lines starting `#` pass.
+/// to 256 printable bytes, a plain name (1 to 64 letters, digits, `.`,
+/// `_`, and `-`, not starting with `.`, D885), and one or more of the
+/// grants above; blank lines and lines starting `#` pass.
 /// Refuses (`ValidationFailed`, naming the line) anything else, a token or
 /// a name given twice, and more than `kMostCollaborators`.
 [[nodiscard]] result::Result<std::vector<Collaborator>> readCollaborators(std::string_view text);

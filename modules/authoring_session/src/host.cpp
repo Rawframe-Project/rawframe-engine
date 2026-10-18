@@ -200,14 +200,14 @@ result::Result<std::vector<Collaborator>> readTokensFile(const std::filesystem::
     return readCollaborators(text);
 }
 
-/// Whether `path` is an absolute path inside `directory`.
-bool inside(const std::filesystem::path& directory, const std::string& path) {
-    const std::filesystem::path kPath = std::filesystem::path{path}.lexically_normal();
-    if (!kPath.is_absolute()) {
-        return false;
-    }
-    const auto [kDirectoryEnd, kPathAt] = std::ranges::mismatch(directory, kPath);
-    return kDirectoryEnd == directory.end() && kPathAt != kPath.end();
+/// Whether `text` is a plain name, a collaborator's or a cook's output's:
+/// 1 to 64 letters, digits, `.`, `_`, and `-`, not starting with `.`, so
+/// it names one entry of a directory and nothing beside or above it.
+bool plainName(std::string_view text) {
+    return !text.empty() && text.size() <= 64 && text.front() != '.' && std::ranges::all_of(text, [](char kEach) {
+        return (kEach >= 'a' && kEach <= 'z') || (kEach >= 'A' && kEach <= 'Z') || (kEach >= '0' && kEach <= '9') ||
+               kEach == '.' || kEach == '_' || kEach == '-';
+    });
 }
 
 } // namespace
@@ -240,8 +240,8 @@ result::Result<std::vector<Collaborator>> readCollaborators(std::string_view tex
             });
         };
         if (words.size() < 3 || words[0].size() < 32 || words[0].size() > 256 || !kPrintable(words[0]) ||
-            words[1].size() > 64 || !kPrintable(words[1])) {
-            return invalid("a token line is a token of 32 to 256 bytes, a name, and its grants", number);
+            !plainName(words[1])) {
+            return invalid("a token line is a token of 32 to 256 bytes, a plain name, and its grants", number);
         }
         Collaborator made{.token = std::string{words[0]}, .name = std::string{words[1]}, .grants = {}};
         for (const std::string_view kGrant : std::span{words}.subspan(2)) {
@@ -437,15 +437,24 @@ struct AuthoringHost::State {
                  refusalLine(kAnswerId, authoring::AuthoringError::CapabilityDenied, "a record is its sender's own"));
             return;
         }
-        if (kNamed == "authoring.cook" && !cookedInside(*parsed)) {
-            send(connection,
-                 client,
-                 refusalLine(kAnswerId,
-                             authoring::AuthoringError::CapabilityDenied,
-                             "a collaborator cooks only into the host's cooking directory"));
-            return;
-        }
         std::string asked{text};
+        if (kNamed == "authoring.cook") {
+            // A collaborator names its cook's output and cache by plain
+            // names, which the host puts under its cooking directory, in
+            // the collaborator's own: no record names a path on the host's
+            // machine (D885).
+            const std::optional<std::string> kCook = cookedUnder(*parsed, kWho.name);
+            if (!kCook.has_value()) {
+                send(connection,
+                     client,
+                     refusalLine(kAnswerId,
+                                 authoring::AuthoringError::CapabilityDenied,
+                                 cooks.has_value() ? "a collaborator's cook names its output and cache by plain names"
+                                                   : "the host offers no cooking"));
+                return;
+            }
+            asked = *kCook;
+        }
         if (kNeeds->authored && kAuthor == nullptr) {
             Value owned = Value::object();
             for (const std::string& kName : parsed->names()) {
@@ -468,17 +477,30 @@ struct AuthoringHost::State {
         }
     }
 
-    /// Whether a cook's output, and its cache where it names one, are in
-    /// the host's cooking directory.
-    [[nodiscard]] bool cookedInside(const Value& record) const {
+    /// A collaborator's cook record as the session reads it: its output
+    /// and cache, plain names, as paths under the host's cooking directory,
+    /// in the author's own; none for one that names anything else.
+    [[nodiscard]] std::optional<std::string> cookedUnder(const Value& record, const std::string& author) const {
         const Value* kOutput = record.find("output");
         const Value* kCache = record.find("cache");
-        if (!cooks.has_value() || kOutput == nullptr || kOutput->kind() != Value::Kind::String) {
-            return false;
+        const bool kCacheNamed = kCache != nullptr && kCache->kind() == Value::Kind::String;
+        if (!cooks.has_value() || kOutput == nullptr || kOutput->kind() != Value::Kind::String ||
+            !plainName(*kOutput->text()) || kCache == nullptr || (!kCache->isNull() && !kCacheNamed) ||
+            (kCacheNamed && !plainName(*kCache->text()))) {
+            return std::nullopt;
         }
-        return inside(*cooks, *kOutput->text()) &&
-               (kCache == nullptr || kCache->isNull() ||
-                (kCache->kind() == Value::Kind::String && inside(*cooks, *kCache->text())));
+        const std::filesystem::path kOwn = *cooks / author;
+        Value made = Value::object();
+        for (const std::string& kName : record.names()) {
+            if (kName == "output") {
+                made.add(kName, Value::string((kOwn / *kOutput->text()).generic_string()));
+            } else if (kName == "cache" && kCacheNamed) {
+                made.add(kName, Value::string((kOwn / *kCache->text()).generic_string()));
+            } else {
+                made.add(kName, *record.find(kName));
+            }
+        }
+        return document::writeCompact(made);
     }
 
     /// The others told of each document a record changed, by the digest it

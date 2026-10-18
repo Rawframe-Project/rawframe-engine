@@ -6,6 +6,7 @@
 // (host.h), what `rawframe-author join` speaks through (D881).
 
 #include "rawframe/authoring_session/session.h"
+#include "rawframe/document/json.h"
 #include "rawframe/network/provider.h"
 #include "rawframe/network_quic/quic.h"
 
@@ -67,9 +68,15 @@ public:
     /// closed or kept silent. What the host says unasked meanwhile is kept
     /// for `heard`.
     std::optional<std::string> ask(std::string_view record);
-    /// What the host said unasked (`authoring.changed`, presence, and a
-    /// revocation's refusal), waiting up to `withinMilliseconds` for the
-    /// first where none was kept.
+    /// Sends one record the host answers when it ends (`cook`, D885),
+    /// its progress and reply then heard under its own id; whether it was
+    /// sent. `cancel`'s operation is that id too.
+    [[nodiscard]] bool send(std::string_view record);
+    /// The number a record sent with `send` went out under, by its own id.
+    [[nodiscard]] std::optional<std::int64_t> sentAs(const document::Value& id) const;
+    /// What the host said unasked (`authoring.changed`, presence, a
+    /// revocation, and what a record sent is answered with), waiting up to
+    /// `withinMilliseconds` for the first where none was kept.
     std::vector<std::string> heard(std::int64_t withinMilliseconds);
     /// Whether the host closed the connection.
     [[nodiscard]] bool closed() const noexcept;
@@ -86,8 +93,8 @@ private:
 /// here does (D883), so a client of one speaks to the other unchanged: its
 /// hello answered with the host's welcome, what the host says unasked
 /// given by `poll`, and `end` ending the connection. A record the host
-/// answers only when it ends (`cook`) is refused, since the link waits for
-/// each reply.
+/// answers when it ends (`cook`) is answered as a session answers it,
+/// later, through `poll` (D885).
 class JoinedSession final : public Answering {
 public:
     /// Joins as `HostLink::open` does; `said` is the welcome, or why not.
@@ -96,6 +103,8 @@ public:
 
     [[nodiscard]] std::string answer(std::string_view line, bool& ended) override;
     [[nodiscard]] std::vector<std::string> poll() override;
+    /// Whether the host closed the connection.
+    [[nodiscard]] bool closed() const noexcept;
 
 private:
     JoinedSession(std::unique_ptr<HostLink> link, std::string welcome);

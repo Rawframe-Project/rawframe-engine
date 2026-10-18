@@ -150,6 +150,14 @@ std::optional<std::string> HostLink::ask(std::string_view record) {
     return client_->ask(record);
 }
 
+bool HostLink::send(std::string_view record) {
+    return client_->send(record);
+}
+
+std::optional<std::int64_t> HostLink::sentAs(const document::Value& id) const {
+    return client_->sentAs(id);
+}
+
 std::vector<std::string> HostLink::heard(std::int64_t withinMilliseconds) {
     return client_->heard(withinMilliseconds);
 }
@@ -189,15 +197,32 @@ std::string JoinedSession::answer(std::string_view line, bool& ended) {
         return document::writeCompact(welcomed) + "\n";
     }
     if (kNamed == "authoring.cook") {
+        // Answered when it ends, as a session's is: its progress and reply
+        // come through `poll` (D885).
+        if (link_->send(line)) {
+            return {};
+        }
         return authoring::writeRefusal(kId,
-                                       result::fail(result::ErrorClass::FailedPrecondition,
+                                       result::fail(result::ErrorClass::Unavailable,
                                                     authoring::kAuthoringDomain,
-                                                    authoring::code(authoring::AuthoringError::UnsupportedOperation),
-                                                    "a joined client does not cook through the host yet")
+                                                    authoring::code(authoring::AuthoringError::Internal),
+                                                    "the host closed")
                                            .error());
     }
+    std::string asked{line};
+    if (const document::Value* kOperation = kParsed.has_value() ? kParsed->find("operation") : nullptr;
+        kNamed == "authoring.cancel" && kOperation != nullptr) {
+        // The host knows the operation by the number it went out under.
+        if (const std::optional<std::int64_t> kNumber = link_->sentAs(*kOperation); kNumber.has_value()) {
+            document::Value cancel = document::Value::object();
+            for (const std::string& kName : kParsed->names()) {
+                cancel.add(kName, kName == "operation" ? document::Value::integer(*kNumber) : *kParsed->find(kName));
+            }
+            asked = document::writeCompact(cancel);
+        }
+    }
     ended = kNamed == "authoring.end";
-    const auto kReply = link_->ask(line);
+    const auto kReply = link_->ask(asked);
     if (!kReply.has_value()) {
         return authoring::writeRefusal(kId,
                                        result::fail(result::ErrorClass::Unavailable,
@@ -207,6 +232,10 @@ std::string JoinedSession::answer(std::string_view line, bool& ended) {
                                            .error());
     }
     return *kReply + "\n";
+}
+
+bool JoinedSession::closed() const noexcept {
+    return link_->closed();
 }
 
 std::vector<std::string> JoinedSession::poll() {
