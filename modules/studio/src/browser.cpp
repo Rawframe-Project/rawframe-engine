@@ -372,7 +372,8 @@ void ShellParticipant::setImportSetting(const FieldRow& row, const std::string& 
 }
 
 std::shared_ptr<const texture::Texture> ShellParticipant::thumbnailOf(const ListedSource& source) {
-    if (browser_.thumbnail == 0 || (source.importer != "rawframe.texture" && source.importer != "rawframe.mesh")) {
+    if (browser_.thumbnail == 0 || (source.importer != "rawframe.texture" && source.importer != "rawframe.mesh" &&
+                                    source.importer != "rawframe.material")) {
         return nullptr;
     }
     const std::uint64_t kKey = thumbnailKey(source.path);
