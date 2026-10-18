@@ -86,6 +86,12 @@ if(RAWFRAME_BUILD_TESTS)
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_hosted)
     set_tests_properties(author_hosted PROPERTIES
                          PASS_REGULAR_EXPRESSION "three collaborators shared one hosted session")
+    # An agent a collaborator of the shared session through MCP (D883).
+    add_test(NAME author_mcp_joined
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_mcp_joined.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_mcp_joined)
+    set_tests_properties(author_mcp_joined PROPERTIES
+                         PASS_REGULAR_EXPRESSION "an agent shared a hosted session under its own name")
     add_test(NAME author_styles
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_styles.sh $<TARGET_FILE:rawframe_host_author>
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_styles)

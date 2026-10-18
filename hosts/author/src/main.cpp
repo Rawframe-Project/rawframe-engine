@@ -60,7 +60,9 @@
 // Protocol on standard input and output (D773, authoring_session/mcp.h):
 // each operation the session describes is a tool, as are its own verbs,
 // every call one of the session's records. An agent is given it as
-// `claude mcp add rawframe -- rawframe-author mcp <game description>`.
+// `claude mcp add rawframe -- rawframe-author mcp <game description>`. With
+// `--join`, the agent is a collaborator of a shared session's host instead
+// (D883), under its own token's name and grants.
 //
 // `connect` is a client of a running Runtime's tooling endpoint (D408,
 // connect.h): records a line on standard input, the replies on standard
@@ -85,6 +87,7 @@
 #include "rawframe/authoring/request.h"
 #include "rawframe/authoring/session.h"
 #include "rawframe/authoring_session/game.h"
+#include "rawframe/authoring_session/link.h"
 #include "rawframe/authoring_session/mcp.h"
 #include "rawframe/authoring_session/new_game.h"
 #include "rawframe/authoring_session/session.h"
@@ -539,6 +542,33 @@ mcp(const std::filesystem::path& game, const std::filesystem::path& root, const 
         });
 }
 
+/// `mcp --join`: an agent a collaborator of a shared session's host
+/// (ADR-0085 section 7, D883), under its own token's name and grants, its
+/// tools the same over the host as over a session of its own.
+[[noreturn]] void mcpJoined(const char* endpoint, const char* pinFile, const char* tokenFile) {
+    std::string said;
+    std::unique_ptr<rawframe::authoring_session::JoinedSession> joined =
+        rawframe::authoring_session::JoinedSession::open(endpoint, pinFile, tokenFile, said);
+    if (joined == nullptr) {
+        std::fprintf(stderr, "rawframe-author mcp: %s\n", said.c_str());
+        std::_Exit(1);
+    }
+    rawframe::authoring_session::McpBridge bridge{*joined};
+    serve(
+        [&bridge](const std::string& line, bool&) {
+            return bridge.answer(line);
+        },
+        [&bridge] {
+            return bridge.poll();
+        },
+        [&bridge] {
+            return bridge.end();
+        },
+        [] {
+            return true;
+        });
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -562,6 +592,9 @@ int main(int argc, char** argv) {
     }
     if (kVerb == "connect" && argc == 5) {
         return rawframe::author::connect(argv[2], argv[3], argv[4]);
+    }
+    if (kVerb == "mcp" && argc == 6 && std::string_view{argv[2]} == "--join") {
+        mcpJoined(argv[3], argv[4], argv[5]);
     }
     if (kVerb == "join" && argc == 5) {
         return rawframe::author::join(argv[2], argv[3], argv[4]);
@@ -632,6 +665,7 @@ int main(int argc, char** argv) {
                "       rawframe-author migrate <game description> <scene>... [--dry-run]\n"
                "       rawframe-author session <game description> [<scene root>] [--cook <rawframe-cook>]\n"
                "       rawframe-author mcp <game description> [<scene root>] [--cook <rawframe-cook>]\n"
+               "       rawframe-author mcp --join <endpoint> <pin file> <token file>\n"
                "       rawframe-author connect <endpoint> <pin file> <token file>\n"
                "       rawframe-author host <game description> [<scene root>] --endpoint <host:port> --tokens <file>\n"
                "           --fingerprint-file <file> [--cooks <directory>] [--cook <rawframe-cook>]\n"
