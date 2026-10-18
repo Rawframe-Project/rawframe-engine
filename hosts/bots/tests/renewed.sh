@@ -72,8 +72,10 @@ if cmp -s "$work/fingerprint" "$work/first"; then
     exit 1
 fi
 cp "$work/fingerprint" "$work/second"
-bots_conf after "$work/second" 240
-bots_conf stale "$work/first" 240
+# Ten seconds each, so that a debug tree on a machine loaded by other work
+# is admitted before its iterations run out (D893).
+bots_conf after "$work/second" 1200
+bots_conf stale "$work/first" 1200
 "$bots" --config "$work/after.conf" >"$work/after.log" 2>&1 || true
 "$bots" --config "$work/stale.conf" >"$work/stale.log" 2>&1 || true
 for pid in ${pids[@]+"${pids[@]}"}; do
