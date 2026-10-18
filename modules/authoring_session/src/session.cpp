@@ -42,6 +42,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -220,7 +221,7 @@ private:
         case authoring::SessionVerb::Thumbnail:
             return thumbnailOf(game_, record.asset, cooking_.lastCooked(), record.size);
         case authoring::SessionVerb::AssetReferences:
-            return assetReferencesOf(game_, record.asset, cooking_.lastCooked());
+            return assetReferencesOf(game_, record.asset, cooking_.lastCooked(), scenesNaming(record.asset));
         case authoring::SessionVerb::Cancel: {
             Value made = Value::object();
             made.add("kind", Value::string("authoring.cancelling"));
@@ -1039,6 +1040,63 @@ private:
     std::uint32_t author_ = 0;
     /// Who is present and what each has claimed (D880).
     Presences presences_;
+
+    /// The scenes beside the game whose entities hold the asset at `asset`,
+    /// by the identity the game's line gives it, in a field hinted to hold
+    /// an asset (D786), their own or an instance's override (D892): what a
+    /// cook's reads leave out, since the game's description resolves the
+    /// identity. Each a path under the game's directory.
+    std::vector<std::string> scenesNaming(std::string_view asset) const {
+        std::set<std::uint64_t> ids;
+        for (const Value& kEach : assets_.items()) {
+            const Value* kName = kEach.find("name");
+            const Value* kId = kEach.find("id");
+            if (kName != nullptr && kName->text() != nullptr && *kName->text() == asset && kId != nullptr &&
+                kId->text() != nullptr) {
+                ids.insert(std::strtoull(kId->text()->c_str(), nullptr, 16));
+            }
+        }
+        std::vector<std::string> naming;
+        if (ids.empty() || !catalog_.has_value()) {
+            return naming;
+        }
+        const auto kHolds = [&](std::string_view component, std::span<const rawframe::scene::SceneField> fields) {
+            const authoring::ComponentSchema* kSchema = catalog_->findNamed(component);
+            return kSchema != nullptr && std::ranges::any_of(fields, [&](const rawframe::scene::SceneField& field) {
+                       const auto kField =
+                           std::ranges::find(kSchema->fields, field.name, &authoring::FieldSchema::name);
+                       return kField != kSchema->fields.end() && !kField->asset.empty() &&
+                              field.value.kind == rawframe::scene::FieldValue::Kind::Number &&
+                              ids.contains(std::strtoull(field.value.number.c_str(), nullptr, 10));
+                   });
+        };
+        for (const auto& [kIdentity, kPath] : beside_) {
+            const auto kText = readFile(kPath);
+            if (!kText.has_value()) {
+                continue;
+            }
+            const auto kScene = rawframe::scene::readScene(*kText);
+            if (!kScene.has_value()) {
+                continue;
+            }
+            bool named = false;
+            for (const rawframe::scene::SceneEntity& kEntity : kScene->entities) {
+                for (const rawframe::scene::SceneComponent& kComponent : kEntity.components) {
+                    named = named || kHolds(kComponent.name, kComponent.fields);
+                }
+            }
+            for (const rawframe::scene::SceneInstance& kInstance : kScene->instances) {
+                for (const rawframe::scene::Override& kOverride : kInstance.overrides) {
+                    named = named || (kOverride.kind != rawframe::scene::Override::Kind::Remove &&
+                                      kHolds(kOverride.component, kOverride.fields));
+                }
+            }
+            if (named) {
+                naming.push_back(kPath.lexically_relative(game_.parent_path()).generic_string());
+            }
+        }
+        return naming;
+    }
 
     /// Refuses a change to a document another author holds whole (D880).
     result::Status unclaimed(const std::string& author, const std::string& name) const {

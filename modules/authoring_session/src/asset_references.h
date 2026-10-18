@@ -11,6 +11,8 @@
 
 #include <filesystem>
 #include <optional>
+#include <span>
+#include <string>
 #include <string_view>
 
 namespace rawframe::authoring_session {
@@ -18,11 +20,13 @@ namespace rawframe::authoring_session {
 /// `authoring.asset_references`'s answer for the source at `asset` under `game`'s
 /// directory, from the cook into `cooked`: `uses`, the files it read (a
 /// glTF's pictures need no sidecar of their own), and `usedBy`, the sources
-/// that read it, each a path under the game's directory, in path order.
-/// Refused for a path that is no source and for a game this session has
-/// not cooked (`target_not_found`).
+/// that read it and the scenes `naming` says hold it in a field (D892),
+/// each a path under the game's directory, in path order. Refused for a
+/// path that is no source and for a game this session has not cooked
+/// (`target_not_found`).
 [[nodiscard]] result::Result<document::Value> assetReferencesOf(const std::filesystem::path& game,
                                                                 std::string_view asset,
-                                                                const std::optional<std::filesystem::path>& cooked);
+                                                                const std::optional<std::filesystem::path>& cooked,
+                                                                std::span<const std::string> naming);
 
 } // namespace rawframe::authoring_session

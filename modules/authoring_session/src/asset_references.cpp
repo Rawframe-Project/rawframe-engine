@@ -48,7 +48,8 @@ Value listOf(const std::set<std::string>& paths) {
 
 result::Result<Value> assetReferencesOf(const std::filesystem::path& game,
                                         std::string_view asset,
-                                        const std::optional<std::filesystem::path>& cooked) {
+                                        const std::optional<std::filesystem::path>& cooked,
+                                        std::span<const std::string> naming) {
     std::set<std::string, std::less<>> sources;
     for (const SourceListed& kSource : sourcesBeside(game)) {
         sources.insert(kSource.path);
@@ -93,6 +94,7 @@ result::Result<Value> assetReferencesOf(const std::filesystem::path& game,
             }
         }
     }
+    usedBy.insert(naming.begin(), naming.end());
     Value made = Value::object();
     made.add("kind", Value::string("authoring.asset_references"));
     made.add("asset", Value::string(std::string{asset}));

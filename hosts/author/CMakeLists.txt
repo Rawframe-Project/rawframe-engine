@@ -133,6 +133,13 @@ if(RAWFRAME_BUILD_TESTS)
     add_test(NAME author_cooks
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_cooks.sh $<TARGET_FILE:rawframe_host_author>
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_cooks)
+    # A source's references with the scenes that name it in a field (D892).
+    add_test(NAME author_field_references
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_field_references.sh
+                     $<TARGET_FILE:rawframe_host_author> $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}
+                     ${CMAKE_CURRENT_BINARY_DIR}/author_field_references)
+    set_tests_properties(author_field_references PROPERTIES
+                         PASS_REGULAR_EXPRESSION "a source's references named its scenes' fields")
     # A source's import settings read and set through a session (D800), the
     # importer refusing what it does not take, and the copy cooked.
     add_test(NAME author_settings
