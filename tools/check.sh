@@ -2,6 +2,11 @@
 # The one definition of "it passes".
 #
 #   tools/check.sh fast   repository rules, format, one incremental build, tests
+#   tools/check.sh push   repository rules, format, gcc's debug tree and the
+#                         address sanitizer's built, each running the tests
+#                         the change can reach (tools/affected.py), before a
+#                         push; the runner's full check after it runs the
+#                         rest (D898)
 #   tools/check.sh        the above plus GCC and Clang in every configuration,
 #                         the address and thread sanitizers, the web build
 #                         (wasm32 without threads, tests under Node), the web
@@ -118,24 +123,24 @@ build_and_test() {
     local leave=()
     if [ "$preset" = gcc-shipping ] || [ "$preset" = clang-shipping ]; then
         leave=(-LE 'window|headset')
-        [ "$tier" = full ] && leave=(-LE 'window|headset|alone')
+        [ "$tier" != fast ] && leave=(-LE 'window|headset|alone')
     elif [ "$preset" = clang-development ] && [ "$tier" = full ]; then
         leave=(-LE window)
-    elif [ "$preset" = clang-thread ] && [ "$tier" = full ]; then
+    elif [ "$preset" = clang-thread ] && [ "$tier" != fast ]; then
         # Studio's window tests play under the address sanitizer, not here
         # too: they were most of this tree's time, the full check's longest
         # (D527).
         leave=(-LE 'alone|studio|headset')
-    elif [ "$preset" = gcc-debug ] && [ "$tier" = full ]; then
+    elif [ "$preset" = gcc-debug ] && [ "$tier" != fast ]; then
         # Studio's window tests play under the address sanitizer alone:
         # here as well they were half this tree's test time (D602).
         leave=(-LE 'alone|headset|studio')
-    elif [ "$preset" = clang-sanitize ] && [ "$tier" = full ]; then
+    elif [ "$preset" = clang-sanitize ] && [ "$tier" != fast ]; then
         # Studio's played tests that differ only in a gesture are left to
         # the fast check: nine instrumented games drawing were a third of
         # this tree's time, the full check's longest (D645).
         leave=(-LE 'alone|headset|gesture')
-    elif [ "$tier" = full ]; then
+    elif [ "$tier" != fast ]; then
         leave=(-LE 'alone|headset')
     fi
     # The trees that play the window tests run twice the jobs (D507): those
@@ -143,7 +148,7 @@ build_and_test() {
     # took 169 s at twelve jobs where it took 319 s at six, the same 1,150 s
     # of tests.
     local run=$jobs
-    if [ "$tier" = full ] && [[ "${leave[1]:-}" != window* ]] && [[ "$preset" != wasm-* ]]; then
+    if [ "$tier" != fast ] && [[ "${leave[1]:-}" != window* ]] && [[ "$preset" != wasm-* ]]; then
         run=$((jobs * 2))
     fi
     # A test that sets no limit of its own has none under ctest: twenty
@@ -156,7 +161,19 @@ build_and_test() {
     # frames, a peer, or a deadline misses them in a tree that is sound,
     # and passes alone. A sanitizer's report is never run again: a race or
     # a bad access that shows once is a finding (D895).
-    if ! ctest --test-dir "out/$preset" "${leave[@]}" --output-on-failure --timeout 1200 -j "$run" \
+    # Before a push, only the tests the change can reach (D898).
+    local picked=()
+    if [ "$tier" = push ]; then
+        local reached
+        mapfile -t reached < <(python3 tools/affected.py "out/$preset")
+        if [ "${#reached[@]}" -eq 0 ]; then
+            printf '   %s: built in %ss, no test reached\n' "$preset" "$((built - began))"
+            return
+        fi
+        picked=(-R "^($(IFS='|'; echo "${reached[*]}"))\$")
+        printf '   %s: %s tests reached\n' "$preset" "${#reached[@]}"
+    fi
+    if ! ctest --test-dir "out/$preset" "${leave[@]}" "${picked[@]}" --output-on-failure --timeout 1200 -j "$run" \
         >"out/$preset.test.log" 2>&1 &&
         ! { ! grep -qE 'WARNING: ThreadSanitizer|ERROR: (Address|Leak)Sanitizer|runtime error:' "out/$preset.test.log" &&
             [ "$(grep -cE 'Test +#[0-9]+: .*\*\*\*' "out/$preset.test.log")" -le 10 ] &&
@@ -267,6 +284,24 @@ web_plays() {
 
 if [ "$tier" = "fast" ]; then
     build_and_test clang-development
+elif [ "$tier" = "push" ]; then
+    # The two trees that find the most: gcc's warnings and debug checks, and
+    # the address and undefined-behavior sanitizers. The optimized trees,
+    # the thread sanitizer's, the web's, and the budgets are the runner's
+    # full check after the push, whose failure is fixed before other work
+    # (D224): run here too they doubled every push's hour (D898).
+    jobs=$(( ($(nproc) + 3) / 4 ))
+    presets=(gcc-debug clang-sanitize)
+    pids=()
+    for preset in "${presets[@]}"; do
+        ( build_and_test "$preset" ) >"out/$preset.check.log" 2>&1 &
+        pids+=($!)
+    done
+    for i in "${!presets[@]}"; do
+        wait "${pids[$i]}" 2>/dev/null || true
+        cat "out/${presets[$i]}.check.log"
+        grep -q '^FAILED' "out/${presets[$i]}.check.log" && failures=$((failures + 1))
+    done
 else
     # Independent build trees, so they build in parallel.
     jobs=$(( ($(nproc) + 3) / 4 ))
