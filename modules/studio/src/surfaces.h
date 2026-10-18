@@ -96,6 +96,7 @@ inline constexpr auto kSurfaces = std::to_array<Surface>({
     // Services and external tools.
     {"Reloading", SurfaceKind::Service, "Status bar", "the atomic reload", ""},
     {"MCP bridge", SurfaceKind::Service, "Title bar", "rawframe-author mcp", ""},
+    {"Extensions", SurfaceKind::Service, "Preferences", "authoring.extensions and authoring.extension", ""},
     {"Accessibility", SurfaceKind::Service, "Everywhere", "none needed", ""},
     {"Code editor", SurfaceKind::ExternalTool, "Open in", "the Kest language server; files", ""},
     {"Script debugger", SurfaceKind::ExternalTool, "VS Code", "rawframe-debug", ""},

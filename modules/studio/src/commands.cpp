@@ -27,7 +27,7 @@ std::string lowered(std::string_view text) {
 
 /// The menus in the menu bar's order, none named as a command is, so a
 /// screen reader's "Play" is the button (D777).
-constexpr std::string_view kMenus[] = {"File", "Edit", "Entity", "Game", "View", "Window"};
+constexpr std::string_view kMenus[] = {"File", "Edit", "Entity", "Game", "Extensions", "View", "Window"};
 
 /// The palette's own command, which has no button: it gives the palette's
 /// field the keyboard.
@@ -126,7 +126,10 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
                                  [&](const Command& command) {
                                      return command.menu == kMenu;
                                  }) &&
-            kMenu != "File" && kMenu != "Window" && kMenu != "View") {
+            kMenu != "File" && kMenu != "Window" && kMenu != "View" &&
+            (kMenu != "Extensions" || std::ranges::all_of(extensions_, [](const ListedExtension& extension) {
+                 return extension.commands.empty();
+             }))) {
             continue;
         }
         RAWFRAME_TRY_ASSIGN(const ui::Node kButton, box(bar, ui::Layout{.shrink = 0, .padding = {8, 3, 8, 3}}, 0));
@@ -164,6 +167,18 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
         const std::string kSet = std::string{kKeep} + slot;
         commands_.push_back(Command{.name = kGo, .keys = kKeys(kGo, {std::string{"Ctrl+"} + slot})});
         commands_.push_back(Command{.name = kSet, .keys = kKeys(kSet, {std::string{"Ctrl+Shift+"} + slot})});
+    }
+    // Each command the game's extensions offer, in their menu, by its own
+    // name, after all of Studio's: one named as a command Studio has, or
+    // as another extension's, is not offered (D874).
+    for (const ListedExtension& kExtension : extensions_) {
+        for (const std::string& kName : kExtension.commands) {
+            if (std::ranges::none_of(commands_, [&](const Command& command) {
+                    return command.name == kName;
+                })) {
+                commands_.push_back(Command{.name = kName, .menu = "Extensions", .keys = kKeys(kName, {})});
+            }
+        }
     }
     // The palette's field, as a field named "commands" is read (D575).
     RAWFRAME_TRY_ASSIGN(const ui::Node kSearch, tree_->addEditable(++keys_));
@@ -263,6 +278,10 @@ bool ShellParticipant::runCommand(std::string_view name) {
     if (kCommand->name == kExport) {
         openExport();
         say(held_.exportDialog.has_value() ? "export" : "export closed");
+        return true;
+    }
+    if (kCommand->menu == "Extensions") {
+        runExtensionCommand(kCommand->name);
         return true;
     }
     if (!tree_->contains(kCommand->button)) {

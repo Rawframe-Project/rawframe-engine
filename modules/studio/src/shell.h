@@ -707,6 +707,9 @@ private:
     void showChanges();
     bool pressChanges(ui::Node node);
     void commitChanges(const std::string& message);
+    /// An extension's command run on the chosen entities through the
+    /// session, as `authoring.extension` runs it headless (D874).
+    void runExtensionCommand(const std::string& command);
     /// Studio's own directory, made the first time a tool needs it.
     std::optional<std::filesystem::path> ownDirectory();
     /// The Export dialog (D872), from the File menu: a target (desktop,
@@ -866,6 +869,8 @@ private:
     std::optional<Value> nodeTypes_;
     /// The assets the game declares, read as it opens (D455).
     std::vector<Asset> assets_;
+    /// The game's Studio extensions as the session lists them (D874).
+    std::vector<ListedExtension> extensions_;
     /// Each scene's identity, from its sidecar, as 32 hex digits.
     std::vector<std::string> sceneSources_;
     /// The chosen scene's own field rows under its entities.

@@ -1,0 +1,19 @@
+module raise
+
+// A Studio extension for the tests (D874): the chosen entities a meter
+// higher, one step of the scene's history.
+
+import rawframe.studio
+
+fn extend() {
+    studio.command("Raise chosen", "raise")
+}
+
+fn raise() {
+    let i = u32(0)
+    while i < studio.chosen() {
+        let y = studio.number(i, "rawframe.physics2d.pose", "y")
+        studio.set_number(i, "rawframe.physics2d.pose", "y", y + 1.0)
+        i = i + u32(1)
+    }
+}

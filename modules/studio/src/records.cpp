@@ -1023,4 +1023,68 @@ std::vector<ChangedFile> changedFiles(std::string_view porcelain, std::string_vi
     return made;
 }
 
+Value extensionsRecord(std::int64_t id) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.extensions"));
+    record.add("id", Value::integer(id));
+    return record;
+}
+
+std::vector<ListedExtension> extensionsOf(std::string_view reply) {
+    std::vector<ListedExtension> made;
+    const auto kParsed = document::parse(reply);
+    const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* extensions = answer != nullptr ? answer->find("extensions") : nullptr;
+    if (extensions == nullptr || extensions->kind() != Value::Kind::Array) {
+        return made;
+    }
+    const auto kTexts = [](const Value* list, std::vector<std::string>& into) {
+        if (list == nullptr || list->kind() != Value::Kind::Array) {
+            return false;
+        }
+        for (const Value& kEach : list->items()) {
+            // A number holds its text too: only a string is a name.
+            if (kEach.kind() != Value::Kind::String) {
+                return false;
+            }
+            into.push_back(*kEach.text());
+        }
+        return true;
+    };
+    for (const Value& each : extensions->items()) {
+        const Value* path = each.find("path");
+        const Value* refused = each.find("refused");
+        ListedExtension extension;
+        if (path == nullptr || path->kind() != Value::Kind::String ||
+            !kTexts(each.find("commands"), extension.commands) ||
+            !kTexts(each.find("capabilities"), extension.capabilities) ||
+            (refused != nullptr && refused->kind() != Value::Kind::String)) {
+            continue;
+        }
+        extension.path = *path->text();
+        extension.refused = refused != nullptr ? *refused->text() : std::string{};
+        made.push_back(std::move(extension));
+    }
+    return made;
+}
+
+Value extensionRecord(std::int64_t id,
+                      std::string_view scene,
+                      std::string_view extension,
+                      std::string_view command,
+                      std::span<const std::string> entities) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.extension"));
+    record.add("id", Value::integer(id));
+    record.add("scene", Value::string(std::string{scene}));
+    record.add("extension", Value::string(std::string{extension}));
+    record.add("command", Value::string(std::string{command}));
+    Value chosen = Value::array();
+    for (const std::string& kEntity : entities) {
+        chosen.push(Value::string(kEntity));
+    }
+    record.add("entities", std::move(chosen));
+    return record;
+}
+
 } // namespace rawframe::studio

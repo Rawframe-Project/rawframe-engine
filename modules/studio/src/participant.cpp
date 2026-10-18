@@ -172,6 +172,8 @@ bool ShellParticipant::openGame() {
     const std::string kAssets = ask(assetsRecord(next()));
     assets_ = assetsOf(kAssets);
     browser_.sources = sourcesOf(kAssets);
+    // The game's extensions, their commands Studio's own (D874).
+    extensions_ = extensionsOf(ask(extensionsRecord(next())));
     std::vector<std::pair<std::string, std::string>> scenes;
     for (const auto& [kIdentity, kPath] : authoring_session::scenesBeside(description_)) {
         std::error_code error;

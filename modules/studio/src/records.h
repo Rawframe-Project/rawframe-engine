@@ -449,4 +449,29 @@ struct ChangedFile {
 /// its new name. Lines of another form, and files elsewhere, are left out.
 [[nodiscard]] std::vector<ChangedFile> changedFiles(std::string_view porcelain, std::string_view prefix);
 
+/// One of the game's Studio extensions as the session lists them (D874):
+/// its path, its commands' names, the capabilities its doors are of, and
+/// why it offers nothing, where it does not.
+struct ListedExtension {
+    std::string path;
+    std::vector<std::string> commands;
+    std::vector<std::string> capabilities;
+    std::string refused;
+
+    friend bool operator==(const ListedExtension&, const ListedExtension&) = default;
+};
+
+/// `authoring.extensions`, and the extensions its answer lists; none for a
+/// refusal, an entry out of shape left out.
+[[nodiscard]] Value extensionsRecord(std::int64_t id);
+[[nodiscard]] std::vector<ListedExtension> extensionsOf(std::string_view reply);
+
+/// `authoring.extension`: the command `command` of the extension at
+/// `extension` run on `entities` of `scene`.
+[[nodiscard]] Value extensionRecord(std::int64_t id,
+                                    std::string_view scene,
+                                    std::string_view extension,
+                                    std::string_view command,
+                                    std::span<const std::string> entities);
+
 } // namespace rawframe::studio

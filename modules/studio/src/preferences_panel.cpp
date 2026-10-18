@@ -66,6 +66,28 @@ void ShellParticipant::openPreferences() {
             }
         }
     }
+    // The game's extensions (SPEC-0051's Preferences: Extensions, D874):
+    // each by its path, what its doors are of, and its commands, or why it
+    // offers none.
+    static_cast<void>(row(*dialog, "Extensions", kQuiet, kHeaderFill));
+    if (extensions_.empty()) {
+        static_cast<void>(
+            row(*dialog, "none: an extension is a Kest program under the game's extensions/", kQuiet, kHeaderFill));
+    }
+    for (const ListedExtension& kExtension : extensions_) {
+        std::string doors;
+        for (const std::string& kCapability : kExtension.capabilities) {
+            doors += (doors.empty() ? "" : ", ") + kCapability;
+        }
+        static_cast<void>(
+            row(*dialog, kExtension.path + "  doors: " + (doors.empty() ? "none" : doors), kText, kHeaderFill));
+        if (!kExtension.refused.empty()) {
+            static_cast<void>(row(*dialog, kExtension.refused, kWarning, kHeaderFill));
+        }
+        for (const std::string& kCommand : kExtension.commands) {
+            static_cast<void>(row(*dialog, "  " + kCommand, kQuiet, kHeaderFill));
+        }
+    }
 }
 
 void ShellParticipant::closePreferences() {

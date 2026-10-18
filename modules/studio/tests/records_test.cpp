@@ -478,3 +478,20 @@ RAWFRAME_TEST(VersionControlsChangesAreTheGamesFiles) {
     RAWFRAME_EXPECT(changedFiles(kPorcelain, "").size() == 4);
     RAWFRAME_EXPECT(changedFiles("", "games/").empty());
 }
+
+RAWFRAME_TEST(ExtensionsAreReadAsTheSessionListsThem) {
+    // D874: each extension's commands and capabilities, one refused with
+    // why, and an entry out of shape left out.
+    const std::string_view kReply =
+        R"({"kind":"authoring.reply","id":3,"answer":{"kind":"authoring.extensions","extensions":[)"
+        R"({"path":"extensions/lift.kest","commands":["Raise chosen","Mark above"],"capabilities":["Studio","Edit"]},)"
+        R"({"path":"extensions/reach.kest","commands":[],"capabilities":["Random"],"refused":"it does not start"},)"
+        R"({"path":"extensions/odd.kest","commands":[1],"capabilities":[]}]}})";
+    RAWFRAME_EXPECT((extensionsOf(kReply) == std::vector<ListedExtension>{{.path = "extensions/lift.kest",
+                                                                           .commands = {"Raise chosen", "Mark above"},
+                                                                           .capabilities = {"Studio", "Edit"}},
+                                                                          {.path = "extensions/reach.kest",
+                                                                           .capabilities = {"Random"},
+                                                                           .refused = "it does not start"}}));
+    RAWFRAME_EXPECT(extensionsOf(R"({"kind":"authoring.reply","id":3,"error":{"code":"x"}})").empty());
+}
