@@ -274,6 +274,42 @@ RAWFRAME_TEST(TheViewIsKeptBesideTheDocumentAndPutBackByUndo) {
     RAWFRAME_EXPECT(scene->redo(scene->generation()).has_value() && scene->view() == kLow);
 }
 
+RAWFRAME_TEST(EachAuthorHasTheirOwnSelectionAndView) {
+    // ADR-0085 section 5, D887: authors 1 and 2 choose and look apart; an
+    // author new to the scene has neither, and an entity another destroyed
+    // has left an author's selection when they come back.
+    std::unique_ptr<AuthoredScene> scene = opened();
+    const base::Bits128 kLamp{2, 2};
+    auto made = scene->begin(scene->generation());
+    RAWFRAME_EXPECT(made.has_value() &&
+                    made->stage(Delta{.kind = DeltaKind::CreateNode,
+                                      .entity = kLamp,
+                                      .after = {.node = NodeRecord{.place = 1, .name = "lamp", .components = {}}}})
+                        .has_value() &&
+                    made->commit().has_value());
+    const SceneView kHigh{.eye = {0, 20, 0.5}, .target = {0, 0, 0}, .fieldOfView = 50};
+    const SceneView kLow{.eye = {3, 1, 3}, .target = {0, 1, 0}, .fieldOfView = 70};
+    const base::Bits128 kBoth[] = {kSpawn, kLamp};
+    scene->setAuthor(1);
+    RAWFRAME_EXPECT(scene->selection().empty() && !scene->view().has_value());
+    RAWFRAME_EXPECT(scene->select(kBoth).has_value() && scene->setView(kHigh).has_value());
+    scene->setAuthor(2);
+    RAWFRAME_EXPECT(scene->selection().empty() && !scene->view().has_value());
+    const base::Bits128 kSpawns[] = {kSpawn};
+    RAWFRAME_EXPECT(scene->select(kSpawns).has_value() && scene->setView(kLow).has_value());
+    auto gone = scene->begin(scene->generation());
+    RAWFRAME_EXPECT(gone.has_value() &&
+                    gone->stage(Delta{.kind = DeltaKind::DestroyNode,
+                                      .entity = kLamp,
+                                      .before = {.node = NodeRecord{.place = 1, .name = "lamp", .components = {}}}})
+                        .has_value() &&
+                    gone->commit().has_value());
+    scene->setAuthor(1);
+    RAWFRAME_EXPECT(scene->selection() == std::vector<base::Bits128>{kSpawn} && scene->view() == kHigh);
+    scene->setAuthor(2);
+    RAWFRAME_EXPECT(scene->selection() == std::vector<base::Bits128>{kSpawn} && scene->view() == kLow);
+}
+
 RAWFRAME_TEST(ASelectionPastItsLimitIsRefused) {
     std::unique_ptr<AuthoredScene> scene = opened({.maximumSelection = 0});
     const base::Bits128 kSpawns[] = {kSpawn};

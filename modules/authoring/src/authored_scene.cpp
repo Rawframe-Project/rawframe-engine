@@ -372,6 +372,22 @@ result::Status AuthoredScene::select(std::span<const base::Bits128> entities) {
     return {};
 }
 
+void AuthoredScene::setAuthor(std::uint32_t author) {
+    if (author == author_) {
+        return;
+    }
+    others_.push_back(Looking{.author = author_, .selection = std::move(selection_), .view = view_});
+    selection_.clear();
+    view_.reset();
+    const auto kTheirs = std::ranges::find(others_, author, &Looking::author);
+    if (kTheirs != others_.end()) {
+        selection_ = heldOf(scene_, kTheirs->selection);
+        view_ = kTheirs->view;
+        others_.erase(kTheirs);
+    }
+    author_ = author;
+}
+
 result::Status AuthoredScene::setView(const SceneView& view) {
     RAWFRAME_TRY(checkView(view));
     view_ = view;

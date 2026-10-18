@@ -23,7 +23,9 @@
 // selection from before its transaction and after it, as a non-dirtying
 // payload (ADR-0065, SPEC-0040's `non_dirtying`), and undo and redo put
 // them back, less any entity the scene no longer holds. Its view, the
-// camera an author looks at it through (D432), is kept the same way.
+// camera an author looks at it through (D432), is kept the same way. Where
+// several authors share it, each has a selection and a view of their own
+// (ADR-0085 section 5, D887).
 //
 // Opening a transaction while one is open joins it: only the outermost
 // token commits, and any token's cancel, or any failure, discards the
@@ -183,10 +185,10 @@ public:
         return history_.canRedo();
     }
     /// Who makes what commits, undoes, or redoes next (ADR-0085, D879):
-    /// nought, the session's own, until told.
-    void setAuthor(std::uint32_t author) noexcept {
-        author_ = author;
-    }
+    /// nought, the session's own, until told; the selection and view are
+    /// then theirs, as they left them, less any entity the scene no longer
+    /// holds, none for an author new to the scene (D887).
+    void setAuthor(std::uint32_t author);
     /// Takes back the author's latest change, or puts back what they took
     /// back last (see history.h). Refuses (`TargetStale`) another
     /// generation, (`Conflict`) while a transaction is open or where a
@@ -268,6 +270,14 @@ private:
     std::optional<Open> open_;
     std::vector<base::Bits128> selection_;
     std::optional<SceneView> view_;
+    /// The other authors' selections and views, while another's are the
+    /// scene's own.
+    struct Looking {
+        std::uint32_t author = 0;
+        std::vector<base::Bits128> selection;
+        std::optional<SceneView> view;
+    };
+    std::vector<Looking> others_;
     /// Each transaction's number, so a token outliving one is inert.
     std::uint64_t serials_ = 0;
     std::uint32_t author_ = 0;
