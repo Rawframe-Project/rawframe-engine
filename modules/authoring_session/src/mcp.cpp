@@ -476,6 +476,49 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"document", "operations"}),
                                annotationsOf(false, true)));
     }
+    // Several scenes changed as one, and what is chosen in one (D889).
+    {
+        Value operation = Value::object();
+        operation.add("type", text("object"));
+        operation.add("description", text("One operation, as document_apply takes them."));
+        Value listed = Value::object();
+        listed.add("type", text("array"));
+        listed.add("items", std::move(operation));
+        Value partProperties = Value::object();
+        partProperties.add("document", documentProperty());
+        partProperties.add("operations", std::move(listed));
+        partProperties.add(
+            "expects",
+            property("string", false, "The scene's generation last seen (sha256:...); refused if it moved."));
+        Value part = schemaOf(std::move(partProperties), {"document", "operations"});
+        Value parts = Value::object();
+        parts.add("type", text("array"));
+        parts.add("items", std::move(part));
+        parts.add("description", text("Each scene's operations, a scene at most once."));
+        Value properties = Value::object();
+        properties.add("documents", std::move(parts));
+        tools.push_back(toolOf("document_apply_together",
+                               "Operations on several scenes kept all or none, each scene's one undo step in its "
+                               "own history.",
+                               schemaOf(std::move(properties), {"documents"}),
+                               annotationsOf(false, true)));
+    }
+    {
+        Value entity = Value::object();
+        entity.add("type", text("string"));
+        Value entities = Value::object();
+        entities.add("type", text("array"));
+        entities.add("items", std::move(entity));
+        entities.add("description", text("The entities chosen, by their ids, in place of what was; none to clear."));
+        Value properties = Value::object();
+        properties.add("document", documentProperty());
+        properties.add("entities", std::move(entities));
+        tools.push_back(toolOf("scene_select",
+                               "Chooses entities in a scene, the caller's own choice: no change to the document, "
+                               "but what undo and redo put back, and what the view frames.",
+                               schemaOf(std::move(properties), {"document", "entities"}),
+                               annotationsOf(false, false)));
+    }
     {
         Value properties = Value::object();
         properties.add("output", property("string", false, "An absolute directory outside the game's to cook into."));
@@ -806,6 +849,39 @@ McpBridge::State::callSession(const Value& id, std::string_view name, const Valu
         }
         request.add("operations", std::move(listed));
         made.add("request", std::move(request));
+    } else if (name == "document_apply_together") {
+        made = record("authoring.apply_together", recordId);
+        Value parts = Value::array();
+        if (const Value* given = arguments.find("documents"); given != nullptr) {
+            for (const Value& kPart : given->items()) {
+                Value request = Value::object();
+                request.add("formatVersion", Value::integer(1));
+                request.add("kind", text("authoring.request"));
+                request.add("batch", text("atomic"));
+                if (const Value* expects = kPart.find("expects"); expects != nullptr) {
+                    request.add("expects", *expects);
+                }
+                Value listed = Value::array();
+                if (const Value* kListed = kPart.find("operations"); kListed != nullptr) {
+                    for (const Value& kOperation : kListed->items()) {
+                        listed.push(kOperation.kind() == Value::Kind::Object ? operationOf(kOperation, nullptr)
+                                                                             : kOperation);
+                    }
+                }
+                request.add("operations", std::move(listed));
+                Value each = Value::object();
+                if (const Value* document = kPart.find("document"); document != nullptr) {
+                    each.add("scene", *document);
+                }
+                each.add("request", std::move(request));
+                parts.push(std::move(each));
+            }
+        }
+        made.add("documents", std::move(parts));
+    } else if (name == "scene_select") {
+        made = record("authoring.select", recordId);
+        copy("document", "scene");
+        copy("entities", "entities");
     } else if (name == "game_cook") {
         made = record("authoring.cook", recordId);
         copy("output", "output");

@@ -4,10 +4,11 @@
 # discovery, an entity made, given a body named as the catalog names it,
 # and a field set, each written to the scene; a value of the wrong kind and
 # an input the operation lacks refused as failed calls; a batch kept as one
-# undo step and taken back; a tool and a method that do not exist refused
-# as protocol errors; then the game cooked as a long-running call telling
-# its progress, and a second cook cancelled by the agent answering
-# cancelled.
+# undo step and taken back; an entity chosen; two scenes changed as one,
+# and neither where one part fails (D889); a tool and a method that do not
+# exist refused as protocol errors; then the game cooked as a long-running
+# call telling its progress, and a second cook cancelled by the agent
+# answering cancelled.
 #
 # usage: author_mcp.sh <rawframe-author> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -26,6 +27,9 @@ mkdir -p "$work"
 cp -R "$repository/games/plaza" "$work/plaza"
 game="$work/plaza/plaza.game"
 crate=5f0e4c2a-1b3d-4e5f-8a9b-0c1d2e3f4a5b
+lamp=6a1f5d3b-2c4e-4f6a-9b0c-1d2e3f4a5b6c
+post=7b2a6e4c-3d5f-4a7b-8c1d-2e3f4a5b6c7d
+stone=8c3b7f5d-4e6a-4b8c-9d2e-3f4a5b6c7d8e
 
 # The reply to the call of id $1.
 reply() { grep "\"id\":$1," "$work/replies"; }
@@ -44,6 +48,11 @@ call() {
     call 7 scene_rename_entity '{"document":"gate.scene","entity":"'$crate'","name":"box","colour":"red"}'
     call 8 document_apply '{"document":"gate.scene","operations":[{"operation":"scene.rename_entity","entity":"'$crate'","name":"box"},{"operation":"scene.set_field","entity":"'$crate'","component":"rawframe.physics3d.body","field":"height","value":{"real":1}}]}'
     call 9 document_undo '{"document":"gate.scene"}'
+    call 14 scene_select '{"document":"gate.scene","entities":["'$crate'"]}'
+    call 15 document_create_scene '{"document":"yard.scene"}'
+    made() { echo '{"operation":"scene.create_entity","entity":"'$1'","name":"'$2'"}'; }
+    call 16 document_apply_together '{"documents":[{"document":"gate.scene","operations":['"$(made $lamp lamp)"']},{"document":"yard.scene","operations":['"$(made $post post)"']}]}'
+    call 17 document_apply_together '{"documents":[{"document":"yard.scene","operations":['"$(made $stone stone)"']},{"document":"gate.scene","operations":[{"operation":"scene.rename_entity","entity":"'$stone'","name":"none"}]}]}'
     call 10 nothing '{}'
     echo '{"jsonrpc":"2.0","id":11,"method":"resources/list"}'
     printf '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"game_cook","arguments":{"output":"%s"},"_meta":{"progressToken":"cooking"}}}\n' "$work/content"
@@ -73,6 +82,15 @@ for id in 3 4 5 8 9; do
     reply $id | grep -q '"isError":false'
 done
 reply 6 | grep -q '"isError":true'
+# What is chosen, and two scenes changed as one, or neither (D889).
+reply 14 | grep -q "$crate"
+for id in 14 15 16; do
+    reply $id | grep -q '"isError":false'
+done
+reply 17 | grep -q '"isError":true'
+grep -q '"name": "lamp"' "$work/plaza/gate.scene"
+grep -q '"name": "post"' "$work/plaza/yard.scene"
+! grep -q '"name": "stone"' "$work/plaza/yard.scene"
 reply 7 | grep -q 'has no input colour'
 reply 8 | grep -q '\\"undoable\\":4'
 reply 9 | grep -q '\\"undoable\\":3,\\"redoable\\":1'
