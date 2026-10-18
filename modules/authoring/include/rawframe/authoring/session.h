@@ -48,6 +48,17 @@
 // stop; that operation still answers, cancelled. `import` copies a file
 // from outside (an absolute `source`) into the game's directory at `as`,
 // gives it a sidecar, and declares it in the game's description (D503).
+// Several authors share a session (ADR-0085): a change, undo, or redo may
+// name its `author`, and an author undoes only their own (D879); each says
+// what they have chosen and where they look, and may claim a document or
+// an entity in it, so that another's change to it is refused (D880):
+//
+//   {"kind":"authoring.present","id":13,"author":"ada","scene":"level.scene","entities":[...],"view":null}
+//   {"kind":"authoring.claim","id":14,"author":"ada","scene":"level.scene","entity":"..."}
+//   {"kind":"authoring.release","id":15,"author":"ada","scene":"level.scene","entity":null}
+//   {"kind":"authoring.presence","id":16}
+//   {"kind":"authoring.leave","id":17,"author":"ada"}
+//
 // Every reply is
 //
 //   {"kind":"authoring.reply","id":...,"answer":{...}}
@@ -164,6 +175,15 @@ enum class SessionVerb : std::uint8_t {
     /// its panel for the entities chosen (D878).
     ExtensionSection,
     ExtensionPanel,
+    /// An author's presence: the document they have open, what they have
+    /// chosen in it, and where they look; everyone's, with their claims; a
+    /// claim on a document or an entity in it, and one let go; and an
+    /// author leaving, their presence and claims gone (ADR-0085, D880).
+    Present,
+    Presence,
+    Claim,
+    Release,
+    Leave,
     End,
 };
 
@@ -193,7 +213,8 @@ struct SessionRecord {
     document::Value id;
     /// Who makes the change, undo, or redo it asks for (ADR-0085, D879):
     /// a collaborator's or agent's name, empty for the session's own.
-    /// Apply, apply_together, undo, redo, and extension may name one.
+    /// Apply, apply_together, undo, redo, and extension may name one;
+    /// present, claim, release, and leave must (D880).
     std::string author;
     /// The scene's path under the game's directory, for apply, read, undo,
     /// redo, and the verbs naming a scene.
@@ -207,10 +228,12 @@ struct SessionRecord {
     bool dryRun = false;
     /// Read's.
     std::vector<Query> queries;
-    /// Select's, as given.
+    /// Select's, as given; present's, chosen; a claim's entity, none for
+    /// the whole document.
     std::vector<base::Bits128> entities;
-    /// View's (D432).
+    /// View's (D432); present's, where the author looks, none for nowhere.
     SceneView view;
+    bool looking = false;
     /// Preview's; none to let the preview go (D433).
     std::optional<PreviewTarget> preview;
     /// Mark's: the point, or none (D464); an extension's mode's point,

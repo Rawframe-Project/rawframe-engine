@@ -217,6 +217,11 @@ public:
     [[nodiscard]] const Journal& journalAt(std::size_t entry) const noexcept {
         return history_.at(entry).journal;
     }
+    /// The entry the author's undo or redo would take back or put back, if
+    /// any (D880).
+    [[nodiscard]] std::optional<std::size_t> stepTarget(bool undo) const noexcept {
+        return history_.targetOf(author_, undo);
+    }
     /// Who made the history's entry at `entry`, and what it is (D879).
     [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
         return history_.authorshipAt(entry);

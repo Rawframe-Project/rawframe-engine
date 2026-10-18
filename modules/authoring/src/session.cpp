@@ -31,7 +31,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 42> kVerbs = {
+constexpr std::array<VerbName, 47> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -73,6 +73,11 @@ constexpr std::array<VerbName, 42> kVerbs = {
     VerbName{.kind = "authoring.extension", .verb = SessionVerb::Extension},
     VerbName{.kind = "authoring.extension_section", .verb = SessionVerb::ExtensionSection},
     VerbName{.kind = "authoring.extension_panel", .verb = SessionVerb::ExtensionPanel},
+    VerbName{.kind = "authoring.present", .verb = SessionVerb::Present},
+    VerbName{.kind = "authoring.presence", .verb = SessionVerb::Presence},
+    VerbName{.kind = "authoring.claim", .verb = SessionVerb::Claim},
+    VerbName{.kind = "authoring.release", .verb = SessionVerb::Release},
+    VerbName{.kind = "authoring.leave", .verb = SessionVerb::Leave},
     VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
 
 /// The members a verb's record may hold beside `kind` and `id`, and those
@@ -89,8 +94,15 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Describe:
     case SessionVerb::Assets:
     case SessionVerb::Extensions:
+    case SessionVerb::Presence:
+    case SessionVerb::Leave:
     case SessionVerb::End:
         return Members{.required = 0, .optional = 0};
+    case SessionVerb::Present:
+        return Members{.required = 3, .optional = 0};
+    case SessionVerb::Claim:
+    case SessionVerb::Release:
+        return Members{.required = 2, .optional = 0};
     case SessionVerb::Extension:
     case SessionVerb::ExtensionSection:
     case SessionVerb::ExtensionPanel:
@@ -277,11 +289,17 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     } else if (record.verb == SessionVerb::Extension) {
         leftOutable = parsed->find("point") != nullptr ? 1 : 0;
     }
-    // A change's author, where the verb makes one (D879).
+    // A change's author, where the verb makes one (D879), and the author
+    // whose presence or claim it is, where it is one (D880).
+    const bool kOwned = record.verb == SessionVerb::Present || record.verb == SessionVerb::Claim ||
+                        record.verb == SessionVerb::Release || record.verb == SessionVerb::Leave;
+    if (kOwned && parsed->find("author") == nullptr) {
+        return malformed("a presence or a claim names its author");
+    }
     if (const Value* kAuthor = parsed->find("author"); kAuthor != nullptr) {
         const bool kChanges = record.verb == SessionVerb::Apply || record.verb == SessionVerb::ApplyTogether ||
                               record.verb == SessionVerb::Undo || record.verb == SessionVerb::Redo ||
-                              record.verb == SessionVerb::Extension;
+                              record.verb == SessionVerb::Extension || kOwned;
         const std::string* kName = textOf(kAuthor);
         if (!kChanges || kName == nullptr || kName->empty() || kName->size() > 64 ||
             !std::ranges::all_of(*kName, [](char each) {
@@ -317,6 +335,8 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Describe:
     case SessionVerb::Assets:
     case SessionVerb::Extensions:
+    case SessionVerb::Presence:
+    case SessionVerb::Leave:
     case SessionVerb::End:
         return record;
     case SessionVerb::ApplyTogether:
@@ -416,6 +436,9 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Extension:
     case SessionVerb::ExtensionSection:
     case SessionVerb::ExtensionPanel:
+    case SessionVerb::Present:
+    case SessionVerb::Claim:
+    case SessionVerb::Release:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -482,6 +505,35 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             }
             record.entities.push_back(kId.value);
         }
+    } else if (record.verb == SessionVerb::Claim || record.verb == SessionVerb::Release) {
+        // An entity of the document, or null for the whole of it (D880).
+        const Value* kEntity = parsed->find("entity");
+        const std::string* kText = textOf(kEntity);
+        const base::Bits128Parse kId = kText != nullptr ? schema::parseStableIdText(*kText) : base::Bits128Parse{};
+        if (kEntity == nullptr || (!kEntity->isNull() && !kId.parsed)) {
+            return malformed("a claim names an entity by its SourceEntityId, or null for the whole document");
+        }
+        if (kId.parsed) {
+            record.entities.push_back(kId.value);
+        }
+    } else if (record.verb == SessionVerb::Present) {
+        // What the author has chosen in the document, and where they look,
+        // null for nowhere (D880).
+        const Value* kEntities = parsed->find("entities");
+        const Value* kView = parsed->find("view");
+        if (kEntities == nullptr || kEntities->kind() != Value::Kind::Array || kView == nullptr ||
+            (!kView->isNull() && !readView(kView, record.view))) {
+            return malformed("present holds the entities chosen and the view, or null for none");
+        }
+        for (const Value& each : kEntities->items()) {
+            const std::string* text = textOf(&each);
+            const base::Bits128Parse kId = text != nullptr ? schema::parseStableIdText(*text) : base::Bits128Parse{};
+            if (!kId.parsed) {
+                return malformed("present names each entity chosen by its SourceEntityId");
+            }
+            record.entities.push_back(kId.value);
+        }
+        record.looking = !kView->isNull();
     } else if (record.verb == SessionVerb::View) {
         // The scene's checks its ranges; the record only its form.
         if (!readView(parsed->find("view"), record.view)) {
