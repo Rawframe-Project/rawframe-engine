@@ -403,7 +403,9 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,[^\n]*\"ribbonsDrawn\":[1-9][0-9]*,.*\"code\":\"ui_drawing_summary\"[^\n]*\"glyphRuns\":[1-9][0-9]*,.*\"code\":\"bots_summary\"[^\n]*\"bots\":2,\"admitted\":2,")
         # Quarry's land drawn (D736): every block a box of its kind's color,
         # some seven thousand, seen from above the land's near edge, played
-        # from its sources, none left out.
+        # from its sources, none left out. A scale's test, labeled `heavy`:
+        # played in the optimized trees, not the debug and sanitized ones,
+        # where it took 935 s to past its 1,200 under load (D902).
         add_test(NAME client_quarry_drawn
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawn.sh $<TARGET_FILE:rawframe_host_dedicated_server>
@@ -411,6 +413,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          games/quarry/quarry.game ${CMAKE_CURRENT_SOURCE_DIR}/tests/quarry_server.conf
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(client_quarry_drawn PROPERTIES
+                             LABELS heavy
                              PROCESSORS 2
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
