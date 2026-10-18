@@ -28,7 +28,8 @@ if(RAWFRAME_BUILD_TESTS)
     add_test(NAME bots_same_session
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/play.sh
                      $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots> 1 2 480
-                     games/arena/arena.game /dev/null ${CMAKE_CURRENT_SOURCE_DIR}/tests/same_session.conf
+                     games/arena/arena.game ${CMAKE_CURRENT_SOURCE_DIR}/tests/same_session_server.conf
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/same_session.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(bots_same_session PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":1,\"admitted\":1,.*\"bots\":1,\"admitted\":0,\"unavailable\":1|\"bots\":1,\"admitted\":0,\"unavailable\":1,.*\"bots\":1,\"admitted\":1,")
