@@ -43,20 +43,23 @@ mkdir -p bench
 
 failures=0
 # Before a measurement past its bounds is taken again: the load average
-# said, then up to five minutes waited for the last minute's to fall below
-# half the processors, as the trees' tests leave the machine loaded for a
-# while after they end, and CI's run beside other work (D509). Below the
+# said, then a wait for the last minute's to fall below half the
+# processors, as the trees' tests leave the machine loaded for a while
+# after they end, and CI's run beside other work (D509). Below the
 # processors was not enough: at a load of 23 on 24 processors the plaza
 # was starved into 650 ticks where it plays 360, and measured twice its
-# own (D896).
+# own (D896). The waits of one run come to ten minutes at most, so a
+# machine loaded throughout keeps the check within its time.
+waited=0
 quieter() {
     printf 'bench %s: %s; measured again, the load average %s\n' "$1" "$2" \
         "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || echo unknown)"
     local processors
     processors="$(nproc 2>/dev/null || echo 2)"
-    for _ in $(seq 60); do
+    while [ "$waited" -lt 600 ]; do
         awk -v most="$((processors / 2))" '{ exit !($1 >= most) }' /proc/loadavg 2>/dev/null || break
         sleep 5
+        waited=$((waited + 5))
     done
 }
 games=(arena runners plaza crowd)
