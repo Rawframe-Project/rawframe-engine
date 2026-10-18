@@ -34,6 +34,19 @@ inline constexpr diagnostics::EventIdentity kSequenceShown{"studio", "studio_seq
 /// unasked (D882).
 inline constexpr diagnostics::EventIdentity kJoined{"studio", "studio_joined"};
 inline constexpr diagnostics::EventIdentity kHostHeard{"studio", "studio_host_heard"};
+/// The collaborators shown: in the title bar, and their choices and claims
+/// in the Hierarchy (D884).
+inline constexpr diagnostics::EventIdentity kPresenceShown{"studio", "studio_presence_shown"};
+
+/// Another author at the host, as presence says: the document they have
+/// open, what they have chosen in it, and what they hold, each a document
+/// and an entity in it or the whole of it.
+struct Collaborating {
+    std::string author;
+    std::string document;
+    std::vector<std::string> chosen;
+    std::vector<std::pair<std::string, std::string>> claims;
+};
 /// A scene's instances listed as districts (D870).
 inline constexpr diagnostics::EventIdentity kWorldShown{"studio", "studio_world"};
 /// Version control's changes read, and a commit made (D871).
@@ -216,6 +229,11 @@ struct EditorsHeld {
     std::string welcome;
     std::string joinedAs;
     std::string presented;
+    /// Everyone presence names, Studio's own author among them, the title
+    /// bar's place for the others, and their marks there (D884).
+    std::vector<Collaborating> collaborators;
+    ui::Node avatarsNode{};
+    std::vector<ui::Node> avatars;
     bool saidJoined = false;
     bool toldClosed = false;
 };

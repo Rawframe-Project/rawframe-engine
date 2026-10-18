@@ -95,6 +95,17 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"code\":\"studio_joined\"[^\n]*\"author\":\"ada\".*\"code\":\"studio_host_heard\"[^\n]*\"kind\":\"changed\",\"author\":\"ben\",\"document\":\"level.scene\".*\"code\":\"studio_summary\"[^\n]*\"entity\":\"c5400cf8-4b07-4d16-84c2-951852c66b40\",[^\n]*\"status\":\"ben changed level.scene\".*\"exit\":\"clean_stop\".*ben's rename kept.*the host's level holds it")
+    # The others at a host shown, their choices and claims in the
+    # Hierarchy, and a claim made from the Edit menu (D884).
+    add_test(NAME studio_presence
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/presence.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     $<TARGET_FILE:rawframe_host_author>
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_presence PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "found west wall  \\[ben\\] at.*found ground  \\[locked by ben\\] at.*\"code\":\"studio_presence_shown\"[^\n]*\"others\":1,\"marked\":3.*\"exit\":\"clean_stop\".*ben refused ada's east wall")
     add_test(NAME studio_chooses_many
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>

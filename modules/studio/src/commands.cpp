@@ -48,6 +48,10 @@ constexpr std::string_view kExport = placed("Export", SurfaceKind::Dialog, "File
 /// the menu, or the palette.
 constexpr std::string_view kFrame = "Frame chosen";
 
+/// The chosen entity claimed at a host joined, and let go (D884).
+constexpr std::string_view kClaim = "Claim chosen";
+constexpr std::string_view kRelease = "Release chosen";
+
 /// The view seen in 2D, straight down at a 2D game's plane, or out of it
 /// again (D793); no buttons either.
 constexpr std::string_view kFlat = "2D view";
@@ -146,6 +150,11 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     commands_.push_back(Command{.name = std::string{kPreferences}, .menu = "Window", .keys = kKeys(kPreferences, {})});
     commands_.push_back(Command{.name = std::string{kExport}, .menu = "File", .keys = kKeys(kExport, {})});
     commands_.push_back(Command{.name = std::string{kFrame}, .menu = "View", .keys = kKeys(kFrame, {"F"})});
+    // At a host joined, the chosen entity claimed and let go (D884).
+    if (held_.joined != nullptr) {
+        commands_.push_back(Command{.name = std::string{kClaim}, .menu = "Edit", .keys = kKeys(kClaim, {})});
+        commands_.push_back(Command{.name = std::string{kRelease}, .menu = "Edit", .keys = kKeys(kRelease, {})});
+    }
     commands_.push_back(Command{.name = std::string{kFlat}, .menu = "View", .keys = kKeys(kFlat, {})});
     commands_.push_back(Command{.name = std::string{kTilted}, .menu = "View", .keys = kKeys(kTilted, {})});
     for (const auto& [kName, kMode] : kModes) {
@@ -223,6 +232,10 @@ bool ShellParticipant::runCommand(std::string_view name) {
     }
     if (kCommand->name == kFrame) {
         frameChosen();
+        return true;
+    }
+    if (kCommand->name == kClaim || kCommand->name == kRelease) {
+        claimChosen(kCommand->name == kClaim);
         return true;
     }
     for (const auto& [kPrefix, kGoes] : {std::pair{kGoTo, true}, std::pair{kKeep, false}}) {

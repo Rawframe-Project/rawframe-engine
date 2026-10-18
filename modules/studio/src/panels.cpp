@@ -112,6 +112,13 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(const ui::Node kStart, box(kToolbar, ui::Layout{.alignItems = ui::Align::Center, .gap = 4}, 0));
     RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kStart, ui::Layout{.padding = {0, 2, 8, 2}}, 0));
     RAWFRAME_TRY(words(kTitle, title_, kText));
+    // The others at a host joined, each in their color (D884).
+    held_.avatars.clear();
+    held_.avatarsNode = ui::Node{};
+    if (held_.joined != nullptr) {
+        RAWFRAME_TRY_ASSIGN(held_.avatarsNode, box(kStart, ui::Layout{.alignItems = ui::Align::Center, .gap = 4}, 0));
+        showCollaborators();
+    }
     // The toolbar's commands at its end: Cook before Play, so Play, Undo,
     // and Redo keep their places (D502).
     RAWFRAME_TRY_ASSIGN(const ui::Node kEnd, box(kToolbar, ui::Layout{.alignItems = ui::Align::Center, .gap = 6}, 0));
@@ -585,6 +592,8 @@ void ShellParticipant::showScene(std::size_t at) {
         if (kRemoved) {
             label += "  (removed)";
         }
+        // Who else has it chosen, and who holds it, at a host joined (D884).
+        label += presenceMarks(*id->text());
         auto added = row(entitiesColumn_, label, brought != nullptr ? kQuiet : kText, kRow, true);
         if (!added.has_value()) {
             break;

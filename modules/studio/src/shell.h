@@ -318,6 +318,13 @@ private:
     /// What the joined host said unasked, acted on, and what Studio has
     /// open and chosen said to it as it changes.
     void hearHost();
+    /// The others at the host in the title bar, each in their color (D884).
+    void showCollaborators();
+    /// What a Hierarchy row of `entity` says of the others: who has it
+    /// chosen, and who holds it; empty where no one does.
+    [[nodiscard]] std::string presenceMarks(const std::string& entity) const;
+    /// The chosen entity claimed at the host, or let go (D884).
+    void claimChosen(bool claim);
     std::int64_t next() const noexcept;
 
     /// A read of `scene`: one query, `operation`, with `entity` if given.
