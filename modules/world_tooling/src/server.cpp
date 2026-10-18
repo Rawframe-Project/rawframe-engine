@@ -2,6 +2,7 @@
 
 #include "previewing.h"
 #include "profile.h"
+#include "rawframe/base/secret.h"
 #include "rawframe/document/json.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world_tooling/errors.h"
@@ -27,17 +28,6 @@ namespace rawframe::world_tooling {
 namespace {
 
 using document::Value;
-
-/// Whether two texts are equal, in a time that depends on their lengths
-/// only, so a token is not guessed a byte at a time.
-bool sameSecret(std::string_view given, std::string_view expected) noexcept {
-    unsigned difference = given.size() == expected.size() ? 0U : 1U;
-    for (std::size_t at = 0; at < given.size(); ++at) {
-        const char kExpected = expected.empty() ? '\0' : expected[at % expected.size()];
-        difference |= static_cast<unsigned char>(given[at]) ^ static_cast<unsigned char>(kExpected);
-    }
-    return difference == 0;
-}
 
 /// `slot:generation`, both decimal.
 std::optional<world::EntityHandle> entityNamed(std::string_view text) {
@@ -359,7 +349,7 @@ struct ToolingServer::State {
                        "this endpoint speaks tooling protocol version 1 only");
                 return;
             }
-            if (!sameSecret(*kToken->text(), settings.token)) {
+            if (!base::sameSecret(*kToken->text(), settings.token)) {
                 refuse(connection, client, id, ToolingError::Unauthenticated, "the token is not this endpoint's");
                 return;
             }
