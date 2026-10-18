@@ -5,6 +5,7 @@
 #include "rawframe/game_content/game_content.h"
 #include "rawframe/material/instance.h"
 #include "rawframe/render_scene/errors.h"
+#include "rawframe/render_scene/materials.h"
 
 #include <algorithm>
 #include <array>
@@ -32,11 +33,6 @@ MaterialBlob noMaterial() noexcept {
 
 namespace {
 
-/// A material's texture as the scene binds it.
-SceneTexture sceneTextureOf(const material::SampledTexture& texture) {
-    return {.id = texture.id, .filter = texture.filter, .address = texture.address};
-}
-
 /// A material's cooked bytes of `type`, read and waited for (D303).
 result::Result<content::VerifiedContent>
 readCooked(content::ContentStore& store, base::Bits128 id, base::Bits128 type) {
@@ -50,75 +46,22 @@ readCooked(content::ContentStore& store, base::Bits128 id, base::Bits128 type) {
                                                               .description = "a material's read was cancelled"});
 }
 
-/// A surface material as the scene draws it: its blob at `quality` (D303),
-/// or, cooked with its own program (D484), that program, its states in the
-/// blob and its textures at their slots (D485); or, an instance (D709), its
-/// base's, its parameters the instance's. An instance's base is no instance.
+/// A surface material as the scene draws it, read from `store` (D303):
+/// what `sceneMaterialOf` makes of its cooked bytes, an instance's base
+/// read from the same store.
 result::Result<SceneMaterial> readMaterial(content::ContentStore& store,
                                            std::uint64_t identity,
                                            base::Bits128 id,
                                            material::Quality quality,
-                                           Programs& programs,
-                                           bool instance = true) {
-    RAWFRAME_TRY_ASSIGN(const content::VerifiedContent kRead, readCooked(store, id, material::kMaterialType));
-    if (kRead.descriptor().representation.text() == material::kInstanceRepresentation) {
-        RAWFRAME_TRY_ASSIGN(const material::MaterialInstance kInstance, material::decodeInstance(kRead.bytes()));
-        if (!instance) {
-            return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
-                                                               kRenderSceneDomain,
-                                                               code(RenderSceneError::MaterialUnreadable),
-                                                               "a material instance's base is another instance")
-                                                      .error()};
-        }
-        RAWFRAME_TRY_ASSIGN(SceneMaterial made,
-                            readMaterial(store, identity, kInstance.base, quality, programs, false));
-        std::ranges::copy(kInstance.parameters, made.blob.begin() + material::kBlobFloats);
-        // The textures its texture inputs' overrides give, each at its
-        // base's slot, its sampler state the base's (D710).
-        const std::array<SceneTexture*, 4> kSlots = {
-            &made.textures.base, &made.textures.packed, &made.textures.emission, &made.textures.normal};
-        for (std::size_t slot = 0; slot < kSlots.size(); ++slot) {
-            if (kInstance.textures.at(slot) != 0) {
-                kSlots.at(slot)->id = kInstance.textures.at(slot);
-            }
-        }
-        return made;
-    }
-    if (kRead.descriptor().representation.text() == material::kProgramRepresentation) {
-        ReadProgram& read = programs[id];
-        if (read.program == nullptr || read.revision != kRead.descriptor().digest) {
-            RAWFRAME_TRY_ASSIGN(material::ProgramMaterial decoded, material::decodeProgram(kRead.bytes()));
-            read = ReadProgram{.revision = kRead.descriptor().digest,
-                               .program = std::make_shared<const material::ProgramMaterial>(std::move(decoded))};
-        }
-        const std::shared_ptr<const material::ProgramMaterial>& program = read.program;
-        const material::Material kStates{.shading = program->shading,
-                                         .blend = program->blend,
-                                         .alphaCutoff = program->alphaCutoff,
-                                         .doubleSided = program->doubleSided};
-        std::array<SceneTexture, 4> slots{};
-        for (std::size_t at = 0; at < program->textures.size(); ++at) {
-            slots.at(at) = sceneTextureOf(program->textures[at]);
-        }
-        return SceneMaterial{
-            .id = identity,
-            .blob = sceneBlobOf(material::blobOf(kStates), program->parameters),
-            // A transmitting model is drawn after the opaque, over a copy of
-            // what they made, as the translucent are (D720).
-            .translucent = program->blend == material::Blend::Translucent || program->transmits,
-            .textures = {.base = slots[0], .packed = slots[1], .emission = slots[2], .normal = slots[3]},
-            .program = program};
-    }
-    RAWFRAME_TRY_ASSIGN(const material::Qualities kQualities, material::decode(kRead.bytes()));
-    const material::Material& kMaterial = kQualities.at(static_cast<std::size_t>(quality));
-    return SceneMaterial{.id = identity,
-                         .blob = sceneBlobOf(material::blobOf(kMaterial)),
-                         .translucent = kMaterial.blend == material::Blend::Translucent,
-                         .textures = {.base = sceneTextureOf(kMaterial.textures.base),
-                                      .packed = sceneTextureOf(kMaterial.textures.packed),
-                                      .emission = sceneTextureOf(kMaterial.textures.emission),
-                                      .normal = sceneTextureOf(kMaterial.textures.normal)},
-                         .program = nullptr};
+                                           Programs& programs) {
+    const CookedMaterials kRead = [&store](base::Bits128 at) -> result::Result<CookedMaterial> {
+        RAWFRAME_TRY_ASSIGN(const content::VerifiedContent kCooked, readCooked(store, at, material::kMaterialType));
+        return CookedMaterial{.representation = std::string{kCooked.descriptor().representation.text()},
+                              .revision = kCooked.descriptor().digest,
+                              .bytes = {kCooked.bytes().begin(), kCooked.bytes().end()}};
+    };
+    RAWFRAME_TRY_ASSIGN(const CookedMaterial kCooked, kRead(id));
+    return sceneMaterialOf(identity, id, kCooked, quality, programs, kRead);
 }
 
 /// Whether a read found no resource of that identity, or (`other`) one of

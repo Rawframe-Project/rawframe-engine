@@ -7,6 +7,7 @@
 #include "rawframe/composition/participant.h"
 #include "rawframe/content/store.h"
 #include "rawframe/material/material.h"
+#include "rawframe/render_scene/materials.h"
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/result/result.h"
 #include "rawframe/world_kest/game_files.h"
@@ -42,17 +43,6 @@ struct SceneConfiguration {
 
 /// Reads every `scene.*` key, refusing one out of its bounds.
 [[nodiscard]] result::Result<SceneConfiguration> readConfiguration(const composition::Configuration& configuration);
-
-/// A program material read (D484), with the revision it was read from: one
-/// program however many instances draw with it (D709), so they share its
-/// pipelines, and one a reload finds unchanged kept, so it keeps them
-/// (D734).
-struct ReadProgram {
-    content::ContentDigest revision;
-    std::shared_ptr<const material::ProgramMaterial> program;
-};
-/// The program materials read so far, by their resources' identities.
-using Programs = std::map<base::Bits128, ReadProgram>;
 
 /// The game's materials at `quality` read from `store`, surfaces into
 /// `materials` and post processes into `postProcesses`; one that cannot be
