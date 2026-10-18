@@ -28,6 +28,14 @@ void ShellParticipant::dropEntity() {
         std::hypot((*kPointer)[0] - pressedAt_[0], (*kPointer)[1] - pressedAt_[1]) < kDragAfter) {
         return;
     }
+    // A clip's items have no parents: a mark dragged along its timeline
+    // moves its key, event, or marker in time (D890).
+    if (held_.timelineScale > 0) {
+        if (std::exchange(held_.planPressed, false)) {
+            dropKey(*kHeld, (*kPointer)[0] - pressedAt_[0]);
+        }
+        return;
+    }
     // A blockout's solids have no parents: a footprint dragged in its plan
     // moves its solid (D852), and a row dragged does nothing.
     if (chosen(Listed::Blockout)) {

@@ -101,6 +101,10 @@ struct EditorsHeld {
     std::vector<std::string> blockoutLines;
     float planScale = 1;
     bool planPressed = false;
+    /// The pixels a second takes on the clip's timeline shown, nought where
+    /// none is: a mark pressed there is a press on the plan too, and a drag
+    /// moves its key, event, or marker in time (D890).
+    float timelineScale = 0;
     /// The chosen terrain's map, each block and the place in meters a
     /// stroke there brushes, and the brush (D856).
     std::vector<std::pair<ui::Node, std::array<double, 2>>> mapBlocks;

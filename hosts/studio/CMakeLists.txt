@@ -657,6 +657,20 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "typed 0.25 at [0-9]+,[0-9]+.*found hips translation at 0.25 at.*amble/walk.rfanim written: yes.*\"code\":\"studio_curve\"[^\n]*\"track\":0,\"values\":3,\"samples\":160}.*\"code\":\"studio_timeline\"[^\n]*\"tracks\":6,\"keys\":11,\"events\":2,\"markers\":0,\"named\":7,\"marks\":13}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"amble/walk.rfanim\",[^\n]*\"entity\":\"tracks.0..keys.1.\",[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
+    # A key dragged along the timeline (D890): the hips' second translation
+    # key carried 120 pixels back, a quarter second at 480 pixels a second,
+    # kept as the field would set it, then found where it went.
+    add_test(NAME studio_drags_key
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/tycoon/tycoon.game amble/walk.rfanim @Animations wheel=457,650,4 @amble/walk.rfanim
+                     "drag=@hips translation at 0.5,-120,0" "until=studio_said,status=\"tracks[0].keys[1] moved to 0.25"
+                     "@hips translation at 0.25" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_drags_key PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "found hips translation at 0.25 at.*amble/walk.rfanim written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"amble/walk.rfanim\",[^\n]*\"entity\":\"tracks.0..keys.1.\",[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
     # A node the surface reads is not deleted: the session refuses what
     # leaves a graph that does not read (D728), and Studio says so.
     add_test(NAME studio_graph_keeps

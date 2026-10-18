@@ -68,12 +68,13 @@ bool ShellParticipant::beforePress() {
 
 void ShellParticipant::pressOn(ui::Node node, bool moving) {
     // A graph's node on the canvas stands for its row (D819), as does a
-    // blockout's footprint, which a drag then moves (D852).
+    // blockout's footprint, which a drag then moves (D852), and a mark on a
+    // clip's timeline, moved in time by a drag (D890).
     held_.planPressed = false;
     if (const std::optional<std::size_t> kStands = canvasEntityOf(node);
         kStands.has_value() && *kStands < entityRows_.size()) {
         node = entityRows_[*kStands];
-        held_.planPressed = chosen(Listed::Blockout);
+        held_.planPressed = chosen(Listed::Blockout) || held_.timelineScale > 0;
     }
     // An output pressed waits for the input to connect (D733).
     const std::optional<std::pair<std::string, std::string>> kConnecting = std::exchange(connecting_, std::nullopt);

@@ -127,6 +127,7 @@ void ShellParticipant::showTimeline(const Value& clip) {
     const float kPerSecondShown =
         std::min(kPerSecond, (kMostWide - kLabelWidth - 2 * kMargin) / static_cast<float>(kLength));
     const float kWide = kLabelWidth + static_cast<float>(kLength) * kPerSecondShown + 2 * kMargin;
+    held_.timelineScale = kPerSecondShown;
     // The track chosen, by its row's path (`tracks[2]` or one of its
     // keys), whose curve is drawn under the lanes.
     std::optional<std::size_t> curved;
@@ -270,6 +271,30 @@ void ShellParticipant::showTimeline(const Value& clip) {
                   diagnostics::field("markers", markers),
                   diagnostics::field("named", boneNames.size()),
                   diagnostics::field("marks", held_.canvasBoxes.size())});
+}
+
+void ShellParticipant::dropKey(std::size_t at, float moved) {
+    // As far in time as it was carried along the timeline, on a hundredth
+    // of a second, never before the clip begins; the clip's reader refuses
+    // a key past its neighbors or its end, as it refuses one typed there.
+    if (at >= entities_.size() || at >= held_.data.size() || held_.timelineScale <= 0) {
+        return;
+    }
+    const Value* kTime = held_.data[at].kind() == Value::Kind::Object ? held_.data[at].find("time") : nullptr;
+    if (kTime == nullptr || !kTime->real().has_value()) {
+        return;
+    }
+    const double kTo =
+        std::max(0.0, std::round((*kTime->real() + static_cast<double>(moved / held_.timelineScale)) * 100) / 100);
+    if (kTo == *kTime->real()) {
+        return;
+    }
+    const std::string kPath = entities_[at];
+    Value operation = Value::object();
+    operation.add("operation", Value::string("data.set"));
+    operation.add("path", Value::string(kPath + ".time"));
+    operation.add("value", Value::real(kTo));
+    commit(std::move(operation), kPath + " moved to " + timeText(kTo), kPath);
 }
 
 } // namespace rawframe::studio

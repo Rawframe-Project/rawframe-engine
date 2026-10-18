@@ -486,6 +486,7 @@ void ShellParticipant::showScene(std::size_t at) {
     entity_.clear();
     components_ = 0;
     findField_.reset();
+    held_.timelineScale = 0;
     // The played game's World in place of the document's (D808).
     if (live_.on) {
         showLive();

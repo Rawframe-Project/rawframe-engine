@@ -552,6 +552,7 @@ private:
     void showPlan();
     void showBlockoutSolid(std::size_t at);
     void dropSolid(std::size_t at, std::array<float, 2> moved);
+    void dropKey(std::size_t at, float moved);
     /// A terrain's layers as rows, its brush, and its map (D856).
     void showTerrain();
     void showBrush();
