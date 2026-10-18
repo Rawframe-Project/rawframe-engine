@@ -49,11 +49,15 @@ void ShellParticipant::hearHost() {
         present.add("kind", Value::string("authoring.present"));
         present.add("id", Value::integer(next()));
         present.add("scene", Value::string(scene_));
-        Value chosen = Value::array();
-        for (const std::string& kPicked : selected_) {
-            chosen.push(Value::string(kPicked));
+        // A scene's entities or a UI document's nodes (D886); another
+        // document's rows are not presence.
+        Value picked = Value::array();
+        if (chosen(Listed::Scene) || chosen(Listed::Ui)) {
+            for (const std::string& kPicked : selected_) {
+                picked.push(Value::string(kPicked));
+            }
         }
-        present.add("entities", std::move(chosen));
+        present.add(chosen(Listed::Ui) ? "nodes" : "entities", std::move(picked));
         present.add("view", Value{});
         static_cast<void>(ask(present));
     }
@@ -106,12 +110,15 @@ void ShellParticipant::hearHost() {
                 }
                 if (const Value* kClaims = kEach.find("claims"); kClaims != nullptr) {
                     for (const Value& kClaim : kClaims->items()) {
+                        // An entity's id or a UI node's component, the
+                        // whole document where neither is named (D886).
                         const Value* kDocument = kClaim.find("document");
-                        const Value* kEntity = kClaim.find("entity");
+                        const Value* kPart =
+                            kClaim.find("node") != nullptr ? kClaim.find("node") : kClaim.find("entity");
                         if (kDocument != nullptr && kDocument->kind() == Value::Kind::String) {
                             made.claims.emplace_back(*kDocument->text(),
-                                                     kEntity != nullptr && kEntity->kind() == Value::Kind::String
-                                                         ? *kEntity->text()
+                                                     kPart != nullptr && kPart->kind() == Value::Kind::String
+                                                         ? *kPart->text()
                                                          : std::string{});
                         }
                     }
@@ -194,15 +201,15 @@ std::string ShellParticipant::presenceMarks(const std::string& entity) const {
 }
 
 void ShellParticipant::claimChosen(bool claim) {
-    if (held_.joined == nullptr || scene_.empty() || entity_.empty()) {
-        say(claim ? "claim an entity chosen in a scene, joined to a host" : "nothing claimed to let go");
+    if (held_.joined == nullptr || !(chosen(Listed::Scene) || chosen(Listed::Ui)) || entity_.empty()) {
+        say(claim ? "claim an entity or a UI node chosen, joined to a host" : "nothing claimed to let go");
         return;
     }
     Value record = Value::object();
     record.add("kind", Value::string(claim ? "authoring.claim" : "authoring.release"));
     record.add("id", Value::integer(next()));
     record.add("scene", Value::string(scene_));
-    record.add("entity", Value::string(entity_));
+    record.add(chosen(Listed::Ui) ? "node" : "entity", Value::string(entity_));
     const std::string kReply = ask(record);
     const std::string kName =
         std::ranges::find(entities_, entity_) != entities_.end()

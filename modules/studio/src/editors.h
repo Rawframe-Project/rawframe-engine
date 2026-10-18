@@ -40,7 +40,7 @@ inline constexpr diagnostics::EventIdentity kPresenceShown{"studio", "studio_pre
 
 /// Another author at the host, as presence says: the document they have
 /// open, what they have chosen in it, and what they hold, each a document
-/// and an entity in it or the whole of it.
+/// and an entity or UI node in it, or the whole of it.
 struct Collaborating {
     std::string author;
     std::string document;

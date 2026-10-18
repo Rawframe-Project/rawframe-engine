@@ -106,6 +106,16 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "found west wall  \\[ben\\] at.*found ground  \\[locked by ben\\] at.*\"code\":\"studio_presence_shown\"[^\n]*\"others\":1,\"marked\":3.*\"exit\":\"clean_stop\".*ben refused ada's east wall")
+    # The same for a UI document's nodes (D886).
+    add_test(NAME studio_node_claims
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/node_claims.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     $<TARGET_FILE:rawframe_host_author>
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_node_claims PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "found   tycoon.purse  \\[ben\\] at.*found tycoon.sign  \\[locked by ben\\] at.*\"code\":\"studio_presence_shown\"[^\n]*\"others\":1,\"marked\":3.*\"exit\":\"clean_stop\".*ben refused ada's board")
     add_test(NAME studio_chooses_many
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>

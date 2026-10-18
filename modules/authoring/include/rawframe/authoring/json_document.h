@@ -152,6 +152,11 @@ public:
     [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
         return history_.authorshipAt(entry);
     }
+    /// The entry the author's undo or redo would take back or put back, if
+    /// any (D886).
+    [[nodiscard]] std::optional<std::size_t> stepTarget(bool undo) const noexcept {
+        return history_.targetOf(author_, undo);
+    }
 
 private:
     struct Entry {

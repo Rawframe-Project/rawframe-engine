@@ -80,6 +80,11 @@ public:
     /// authors named as `authors` names them.
     [[nodiscard]] result::Result<document::Value> history(const authoring::SessionRecord& record,
                                                           std::span<const std::string> authors);
+    /// The document `name` names, open, and a copy of it as it stands
+    /// whose changes are the current author's, to learn what a change or
+    /// a step would touch (D886).
+    [[nodiscard]] result::Result<const Authored*> held(const std::string& name);
+    [[nodiscard]] result::Result<std::unique_ptr<Authored>> copied(const std::string& name);
     /// Who makes the changes and steps of the records that follow, by the
     /// session's number for them (ADR-0085, D879).
     void setAuthor(std::uint32_t author) noexcept {

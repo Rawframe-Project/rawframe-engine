@@ -212,7 +212,12 @@ void ShellParticipant::showUi() {
             if (component == nullptr || component->text() == nullptr) {
                 continue;
             }
-            auto added = row(entitiesColumn_, std::string(2 * depth, ' ') + *component->text(), kText, kRow, true);
+            // Who else has it chosen, or holds it, when joined (D886).
+            auto added = row(entitiesColumn_,
+                             std::string(2 * depth, ' ') + *component->text() + presenceMarks(*component->text()),
+                             kText,
+                             kRow,
+                             true);
             if (!added.has_value()) {
                 return;
             }

@@ -662,7 +662,11 @@ private:
             // A node names a class the sheet has (D642).
             RAWFRAME_TRY(referencesKept(
                 gameDocuments_, std::filesystem::weakly_canonical(root_ / record.scene), record.request));
-            return sheets_.names(record.scene) ? sheets_.applied(record, failed_) : uis_.applied(record, failed_);
+            if (sheets_.names(record.scene)) {
+                return sheets_.applied(record, failed_);
+            }
+            RAWFRAME_TRY(nodesUnclaimed(record.author, record.scene, record.request));
+            return uis_.applied(record, failed_);
         }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -936,6 +940,14 @@ private:
                 return sheets_.names(asked.scene) ? sheets_.stepped(asked, back, failed_, authors_)
                                                   : uis_.stepped(asked, back, failed_, authors_);
             };
+            // A step changes what its entry changed, so another's claim on
+            // one of those nodes refuses it as it refuses a change (D886).
+            if (uis_.names(record.scene)) {
+                RAWFRAME_TRY_ASSIGN(const authoring::AuthoredUi* kUi, uis_.held(record.scene));
+                if (const auto kTarget = kUi->stepTarget(undo); kTarget.has_value()) {
+                    RAWFRAME_TRY(touchedUnclaimed(record.author, record.scene, nodesOf(kUi->journalAt(*kTarget))));
+                }
+            }
             const std::set<std::uint64_t> kBefore = unresolvedStyles(gameDocuments_);
             auto stepped = kStep(record, undo);
             if (!stepped.has_value() || failed_) {
@@ -1046,7 +1058,7 @@ private:
                                      const authoring::AuthoredScene& document,
                                      const authoring::Request& request) {
         const auto kKey = documentKey(root_, name);
-        if (!kKey.has_value() || !presences_.othersHoldEntities(author, *kKey)) {
+        if (!kKey.has_value() || !presences_.othersHoldParts(author, *kKey)) {
             return {};
         }
         RAWFRAME_TRY_ASSIGN(std::unique_ptr<authoring::AuthoredScene> copy,
@@ -1066,6 +1078,31 @@ private:
         std::vector<std::string> touched;
         for (std::size_t at = 0; at < copy->undoable(); ++at) {
             for (std::string& each : entitiesOf(copy->journalAt(at))) {
+                touched.push_back(std::move(each));
+            }
+        }
+        return presences_.untouched(author, *kKey, touched);
+    }
+
+    /// Refuses a request touching a node another author holds in the UI
+    /// document, what it touches found as a scene's entities are (D886).
+    result::Status
+    nodesUnclaimed(const std::string& author, const std::string& name, const authoring::Request& request) {
+        const auto kKey = documentKey(root_, name);
+        if (!kKey.has_value() || !presences_.othersHoldParts(author, *kKey)) {
+            return {};
+        }
+        RAWFRAME_TRY_ASSIGN(std::unique_ptr<authoring::AuthoredUi> copy, uis_.copied(name));
+        if (request.batch == authoring::Batch::Atomic) {
+            static_cast<void>(copy->change(copy->generation(), request.operations));
+        } else {
+            for (std::size_t at = 0; at < request.operations.size(); ++at) {
+                static_cast<void>(copy->change(copy->generation(), std::span{request.operations}.subspan(at, 1)));
+            }
+        }
+        std::vector<std::string> touched;
+        for (std::size_t at = 0; at < copy->undoable(); ++at) {
+            for (std::string& each : nodesOf(copy->journalAt(at))) {
                 touched.push_back(std::move(each));
             }
         }

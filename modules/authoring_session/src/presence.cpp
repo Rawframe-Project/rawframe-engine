@@ -21,8 +21,38 @@ result::Error failure(authoring::AuthoringError error, result::ErrorClass kind, 
 Value claimValue(const Claim& claim) {
     Value made = Value::object();
     made.add("document", Value::string(claim.document));
-    made.add("entity", claim.entity.has_value() ? Value::string(*claim.entity) : Value{});
+    if (claim.node.has_value()) {
+        made.add("node", Value::string(*claim.node));
+    } else {
+        made.add("entity", claim.entity.has_value() ? Value::string(*claim.entity) : Value{});
+    }
     return made;
+}
+
+bool whole(const Claim& claim) {
+    return !claim.entity.has_value() && !claim.node.has_value();
+}
+
+bool samePart(const Claim& one, const Claim& other) {
+    return one.entity == other.entity && one.node == other.node;
+}
+
+// Every node's component in `value`, a node or a part of one, kept once.
+void nodesIn(const Value& value, std::vector<std::string>& touched) {
+    if (value.kind() == Value::Kind::Object) {
+        if (const Value* kComponent = value.find("component"); kComponent != nullptr &&
+                                                               kComponent->kind() == Value::Kind::String &&
+                                                               !std::ranges::contains(touched, *kComponent->text())) {
+            touched.push_back(*kComponent->text());
+        }
+        for (const std::string& kName : value.names()) {
+            nodesIn(*value.find(kName), touched);
+        }
+    } else if (value.kind() == Value::Kind::Array) {
+        for (const Value& kItem : value.items()) {
+            nodesIn(kItem, touched);
+        }
+    }
 }
 
 result::Error claimedBy(std::string_view holder, std::string_view document) {
@@ -67,6 +97,23 @@ std::vector<std::string> entitiesOf(const authoring::Journal& journal) {
     return touched;
 }
 
+std::vector<std::string> nodesOf(std::span<const authoring::JsonDelta> journal) {
+    std::vector<std::string> touched;
+    for (const authoring::JsonDelta& kDelta : journal) {
+        for (const authoring::JsonStep& kStep : kDelta.path) {
+            if (kStep.key == "component" && !std::ranges::contains(touched, kStep.id)) {
+                touched.push_back(kStep.id);
+            }
+        }
+        for (const auto* kHeld : {&kDelta.before, &kDelta.after}) {
+            if (kHeld->has_value()) {
+                nodesIn(**kHeld, touched);
+            }
+        }
+    }
+    return touched;
+}
+
 result::Result<Value> Presences::answer(const authoring::SessionRecord& record, const std::filesystem::path& root) {
     if (record.verb == authoring::SessionVerb::Presence) {
         return value();
@@ -83,8 +130,14 @@ result::Result<Value> Presences::answer(const authoring::SessionRecord& record, 
     if (!record.entities.empty()) {
         entity = idText(record.entities.front());
     }
+    if (!record.nodes.empty() && std::filesystem::path{key}.extension() != ".ui") {
+        return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
+                                       result::ErrorClass::InvalidArgument,
+                                       "nodes are chosen and claimed in a UI document")
+                                   .withContext("scene", key)};
+    }
     if (record.verb == authoring::SessionVerb::Present) {
-        Presence presence{.author = record.author, .document = key, .chosen = {}, .view = std::nullopt};
+        Presence presence{.author = record.author, .document = key, .chosen = record.nodes, .view = std::nullopt};
         for (const base::Bits128 kChosen : record.entities) {
             presence.chosen.push_back(idText(kChosen));
         }
@@ -93,18 +146,23 @@ result::Result<Value> Presences::answer(const authoring::SessionRecord& record, 
         }
         RAWFRAME_TRY(present(std::move(presence)));
         made.add("kind", Value::string("authoring.presented"));
-    } else if (record.verb == authoring::SessionVerb::Claim) {
-        RAWFRAME_TRY(claim(Claim{.author = record.author, .document = key, .entity = entity}));
-        made.add("kind", Value::string("authoring.claimed"));
     } else {
-        RAWFRAME_TRY(release(Claim{.author = record.author, .document = key, .entity = entity}));
-        made.add("kind", Value::string("authoring.released"));
+        const Claim kAsked{.author = record.author,
+                           .document = key,
+                           .entity = entity,
+                           .node = record.nodes.empty() ? std::nullopt : std::optional{record.nodes.front()}};
+        const bool kClaims = record.verb == authoring::SessionVerb::Claim;
+        RAWFRAME_TRY(kClaims ? claim(kAsked) : release(kAsked));
+        made.add("kind", Value::string(kClaims ? "authoring.claimed" : "authoring.released"));
+        made.add("author", Value::string(record.author));
+        const Value kClaimed = claimValue(kAsked);
+        for (const std::string& kName : kClaimed.names()) {
+            made.add(kName, *kClaimed.find(kName));
+        }
+        return made;
     }
     made.add("author", Value::string(record.author));
     made.add("document", Value::string(key));
-    if (record.verb != authoring::SessionVerb::Present) {
-        made.add("entity", entity.has_value() ? Value::string(*entity) : Value{});
-    }
     return made;
 }
 
@@ -112,7 +170,7 @@ result::Status Presences::present(Presence presence) {
     if (presence.chosen.size() > kMostChosen) {
         return std::unexpected{failure(authoring::AuthoringError::LimitExceeded,
                                        result::ErrorClass::ResourceExhausted,
-                                       "a presence names at most 1024 entities chosen")};
+                                       "a presence names at most 1024 entities or nodes chosen")};
     }
     const auto kHeld = std::ranges::find(present_, presence.author, &Presence::author);
     if (kHeld != present_.end()) {
@@ -133,13 +191,12 @@ result::Status Presences::claim(Claim claim) {
         if (kHeld.document != claim.document) {
             continue;
         }
-        if (kHeld.author == claim.author && kHeld.entity == claim.entity) {
+        if (kHeld.author == claim.author && samePart(kHeld, claim)) {
             return {};
         }
         // Another's claim stands in the way where it holds the document
-        // whole, this one would, or both name the entity.
-        if (kHeld.author != claim.author &&
-            (!kHeld.entity.has_value() || !claim.entity.has_value() || kHeld.entity == claim.entity)) {
+        // whole, this one would, or both name the part.
+        if (kHeld.author != claim.author && (whole(kHeld) || whole(claim) || samePart(kHeld, claim))) {
             return std::unexpected{failure(authoring::AuthoringError::Conflict,
                                            result::ErrorClass::Conflict,
                                            "another author has claimed it")
@@ -157,7 +214,7 @@ result::Status Presences::claim(Claim claim) {
 
 result::Status Presences::release(const Claim& claim) {
     const auto kHeld = std::ranges::find_if(claims_, [&claim](const Claim& each) {
-        return each.author == claim.author && each.document == claim.document && each.entity == claim.entity;
+        return each.author == claim.author && each.document == claim.document && samePart(each, claim);
     });
     if (kHeld == claims_.end()) {
         return std::unexpected{failure(
@@ -178,7 +235,7 @@ void Presences::leave(std::string_view author) {
 
 result::Status Presences::unclaimed(std::string_view author, std::string_view document) const {
     for (const Claim& kHeld : claims_) {
-        if (kHeld.author != author && kHeld.document == document && !kHeld.entity.has_value()) {
+        if (kHeld.author != author && kHeld.document == document && whole(kHeld)) {
             return std::unexpected{claimedBy(kHeld.author, document)};
         }
     }
@@ -186,19 +243,20 @@ result::Status Presences::unclaimed(std::string_view author, std::string_view do
 }
 
 result::Status
-Presences::untouched(std::string_view author, std::string_view document, std::span<const std::string> entities) const {
+Presences::untouched(std::string_view author, std::string_view document, std::span<const std::string> parts) const {
     for (const Claim& kHeld : claims_) {
-        if (kHeld.author != author && kHeld.document == document && kHeld.entity.has_value() &&
-            std::ranges::contains(entities, *kHeld.entity)) {
+        const std::optional<std::string>& kPart = kHeld.node.has_value() ? kHeld.node : kHeld.entity;
+        if (kHeld.author != author && kHeld.document == document && kPart.has_value() &&
+            std::ranges::contains(parts, *kPart)) {
             return std::unexpected{claimedBy(kHeld.author, document)};
         }
     }
     return {};
 }
 
-bool Presences::othersHoldEntities(std::string_view author, std::string_view document) const {
+bool Presences::othersHoldParts(std::string_view author, std::string_view document) const {
     return std::ranges::any_of(claims_, [&](const Claim& each) {
-        return each.author != author && each.document == document && each.entity.has_value();
+        return each.author != author && each.document == document && !whole(each);
     });
 }
 

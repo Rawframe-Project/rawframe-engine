@@ -51,13 +51,15 @@
 // Several authors share a session (ADR-0085): a change, undo, or redo may
 // name its `author`, and an author undoes only their own (D879); each says
 // what they have chosen and where they look, and may claim a document or
-// an entity in it, so that another's change to it is refused (D880):
+// an entity in it, so that another's change to it is refused (D880), or a
+// node of a UI document, by its component, and what the node holds (D886):
 //
 //   {"kind":"authoring.present","id":13,"author":"ada","scene":"level.scene","entities":[...],"view":null}
 //   {"kind":"authoring.claim","id":14,"author":"ada","scene":"level.scene","entity":"..."}
 //   {"kind":"authoring.release","id":15,"author":"ada","scene":"level.scene","entity":null}
-//   {"kind":"authoring.presence","id":16}
-//   {"kind":"authoring.leave","id":17,"author":"ada"}
+//   {"kind":"authoring.claim","id":16,"author":"ada","scene":"hud.ui","node":"game.hud"}
+//   {"kind":"authoring.presence","id":17}
+//   {"kind":"authoring.leave","id":18,"author":"ada"}
 //
 // Every reply is
 //
@@ -231,6 +233,9 @@ struct SessionRecord {
     /// Select's, as given; present's, chosen; a claim's entity, none for
     /// the whole document.
     std::vector<base::Bits128> entities;
+    /// Present's nodes chosen, in a UI document, by their components; a
+    /// claim's node, its one (D886).
+    std::vector<std::string> nodes;
     /// View's (D432); present's, where the author looks, none for nowhere.
     SceneView view;
     bool looking = false;

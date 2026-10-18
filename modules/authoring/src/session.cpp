@@ -26,6 +26,12 @@ const std::string* textOf(const Value* value) {
     return value != nullptr && value->kind() == Value::Kind::String ? value->text() : nullptr;
 }
 
+// A UI node's component, as a claim or a presence names it (D886).
+const std::string* componentOf(const Value* value) {
+    const std::string* text = textOf(value);
+    return text != nullptr && !text->empty() && text->size() <= 256 ? text : nullptr;
+}
+
 struct VerbName {
     std::string_view kind;
     SessionVerb verb;
@@ -506,26 +512,45 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             record.entities.push_back(kId.value);
         }
     } else if (record.verb == SessionVerb::Claim || record.verb == SessionVerb::Release) {
-        // An entity of the document, or null for the whole of it (D880).
-        const Value* kEntity = parsed->find("entity");
-        const std::string* kText = textOf(kEntity);
-        const base::Bits128Parse kId = kText != nullptr ? schema::parseStableIdText(*kText) : base::Bits128Parse{};
-        if (kEntity == nullptr || (!kEntity->isNull() && !kId.parsed)) {
-            return malformed("a claim names an entity by its SourceEntityId, or null for the whole document");
-        }
-        if (kId.parsed) {
-            record.entities.push_back(kId.value);
+        // An entity of the document, or null for the whole of it (D880);
+        // or, in a UI document, a node by its component (D886).
+        if (const Value* kNode = parsed->find("node"); kNode != nullptr) {
+            const std::string* kComponent = componentOf(kNode);
+            if (kComponent == nullptr) {
+                return malformed("a claim names a node by its component, of 1 to 256 bytes");
+            }
+            record.nodes.push_back(*kComponent);
+        } else {
+            const Value* kEntity = parsed->find("entity");
+            const std::string* kText = textOf(kEntity);
+            const base::Bits128Parse kId = kText != nullptr ? schema::parseStableIdText(*kText) : base::Bits128Parse{};
+            if (kEntity == nullptr || (!kEntity->isNull() && !kId.parsed)) {
+                return malformed("a claim names an entity by its SourceEntityId, or null for the whole document");
+            }
+            if (kId.parsed) {
+                record.entities.push_back(kId.value);
+            }
         }
     } else if (record.verb == SessionVerb::Present) {
-        // What the author has chosen in the document, and where they look,
-        // null for nowhere (D880).
-        const Value* kEntities = parsed->find("entities");
+        // What the author has chosen in the document, entities or, in a
+        // UI document, nodes (D886), and where they look, null for nowhere
+        // (D880).
+        const Value* kNodes = parsed->find("nodes");
+        const Value* kChosen = kNodes != nullptr ? kNodes : parsed->find("entities");
         const Value* kView = parsed->find("view");
-        if (kEntities == nullptr || kEntities->kind() != Value::Kind::Array || kView == nullptr ||
+        if (kChosen == nullptr || kChosen->kind() != Value::Kind::Array || kView == nullptr ||
             (!kView->isNull() && !readView(kView, record.view))) {
-            return malformed("present holds the entities chosen and the view, or null for none");
+            return malformed("present holds the entities or nodes chosen and the view, or null for none");
         }
-        for (const Value& each : kEntities->items()) {
+        for (const Value& each : kChosen->items()) {
+            if (kNodes != nullptr) {
+                const std::string* kComponent = componentOf(&each);
+                if (kComponent == nullptr) {
+                    return malformed("present names each node chosen by its component, of 1 to 256 bytes");
+                }
+                record.nodes.push_back(*kComponent);
+                continue;
+            }
             const std::string* text = textOf(&each);
             const base::Bits128Parse kId = text != nullptr ? schema::parseStableIdText(*text) : base::Bits128Parse{};
             if (!kId.parsed) {

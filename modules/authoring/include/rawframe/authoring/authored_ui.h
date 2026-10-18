@@ -100,6 +100,11 @@ public:
     [[nodiscard]] const std::vector<JsonDelta>& journalAt(std::size_t entry) const noexcept {
         return document_.journalAt(entry);
     }
+    /// The entry the author's undo or redo would take back or put back, if
+    /// any (D886).
+    [[nodiscard]] std::optional<std::size_t> stepTarget(bool undo) const noexcept {
+        return document_.stepTarget(undo);
+    }
     /// What the history's entry at `entry` does, in a line: its first
     /// delta, as `set fill of game.hud`, and how many more there are.
     [[nodiscard]] std::string summaryAt(std::size_t entry) const;

@@ -155,6 +155,20 @@ template <class Authored> result::Result<bool> Documents<Authored>::save(const s
     return true;
 }
 
+template <class Authored> result::Result<const Authored*> Documents<Authored>::held(const std::string& name) {
+    bool reopened = false;
+    RAWFRAME_TRY_ASSIGN(const Open* open, this->open(name, reopened));
+    return open->document.get();
+}
+
+template <class Authored>
+result::Result<std::unique_ptr<Authored>> Documents<Authored>::copied(const std::string& name) {
+    RAWFRAME_TRY_ASSIGN(const Authored* kHeld, held(name));
+    RAWFRAME_TRY_ASSIGN(std::unique_ptr<Authored> copy, made(kHeld->identity(), kHeld->text()));
+    copy->setAuthor(author_);
+    return copy;
+}
+
 template <class Authored>
 result::Result<Value> Documents<Authored>::applied(const authoring::SessionRecord& record, bool& failed) {
     bool reopened = false;

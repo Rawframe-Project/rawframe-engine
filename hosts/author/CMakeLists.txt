@@ -80,6 +80,12 @@ if(RAWFRAME_BUILD_TESTS)
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_claims)
     set_tests_properties(author_claims PROPERTIES
                          PASS_REGULAR_EXPRESSION "authors present and their claims kept in one session")
+    # Claims on a UI document's nodes (ADR-0085, D886).
+    add_test(NAME author_node_claims
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_node_claims.sh
+                     $<TARGET_FILE:rawframe_host_author> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_node_claims)
+    set_tests_properties(author_node_claims PROPERTIES
+                         PASS_REGULAR_EXPRESSION "UI nodes claimed and kept from others in one session")
     # The session shared over QUIC with tokens and grants (ADR-0085, D881).
     add_test(NAME author_hosted
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_hosted.sh $<TARGET_FILE:rawframe_host_author>
