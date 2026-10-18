@@ -26,7 +26,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Read by no test: the full check, run by the runner after every push,
 # covers them.
 UNREAD = re.compile(r"^(tools/(check\.sh|bench\.sh|web_budget\.sh|soak\.sh|affected\.py|package_studio\.sh)"
-                    r"|\.github/|bench/|README\.md|CHANGELOG\.md|.*\.md$)")
+                    r"|tools/hooks/|\.github/|bench/|README\.md|CHANGELOG\.md|.*\.md$)")
 
 
 def run(*arguments):

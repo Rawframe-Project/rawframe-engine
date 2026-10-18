@@ -3,10 +3,11 @@
 #
 #   tools/check.sh fast   repository rules, format, one incremental build, tests
 #   tools/check.sh push   repository rules, format, gcc's debug tree and the
-#                         address sanitizer's built, each running the tests
-#                         the change can reach (tools/affected.py), before a
-#                         push; the runner's full check after it runs the
-#                         rest (D898)
+#                         address sanitizer's, then clang's development tree
+#                         alone, each running the tests the change can reach
+#                         (tools/affected.py): the pre-push hook's gate; the
+#                         runner's full check after the push runs the rest
+#                         (D898)
 #   tools/check.sh        the above plus GCC and Clang in every configuration,
 #                         the address and thread sanitizers, the web build
 #                         (wasm32 without threads, tests under Node), the web
@@ -121,7 +122,11 @@ build_and_test() {
     # them here put them beside every other tree's tests, against D829's
     # word (D888).
     local leave=()
-    if [ "$preset" = gcc-shipping ] || [ "$preset" = clang-shipping ]; then
+    if [ "$preset" = clang-development ] && [ "$tier" = push ]; then
+        # Before a push it plays what the fast check plays, alone: every
+        # label, the reached tests only (D898).
+        leave=()
+    elif [ "$preset" = gcc-shipping ] || [ "$preset" = clang-shipping ]; then
         leave=(-LE 'window|headset')
         [ "$tier" != fast ] && leave=(-LE 'window|headset|alone')
     elif [ "$preset" = clang-development ] && [ "$tier" = full ]; then
@@ -148,7 +153,8 @@ build_and_test() {
     # took 169 s at twelve jobs where it took 319 s at six, the same 1,150 s
     # of tests.
     local run=$jobs
-    if [ "$tier" != fast ] && [[ "${leave[1]:-}" != window* ]] && [[ "$preset" != wasm-* ]]; then
+    if [ "$tier" != fast ] && [[ "${leave[1]:-}" != window* ]] && [[ "$preset" != wasm-* ]] &&
+        ! { [ "$tier" = push ] && [ "$preset" = clang-development ]; }; then
         run=$((jobs * 2))
     fi
     # A test that sets no limit of its own has none under ctest: twenty
@@ -302,6 +308,11 @@ elif [ "$tier" = "push" ]; then
         cat "out/${presets[$i]}.check.log"
         grep -q '^FAILED' "out/${presets[$i]}.check.log" && failures=$((failures + 1))
     done
+    # Then clang's development tree alone, as the fast check plays it: the
+    # tests labeled `alone` need a quiet machine, and no other tier plays
+    # them (D521, D898).
+    jobs=$(nproc)
+    build_and_test clang-development
 else
     # Independent build trees, so they build in parallel.
     jobs=$(( ($(nproc) + 3) / 4 ))
