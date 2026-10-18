@@ -100,13 +100,21 @@ void ShellParticipant::cookOrStop() {
         say("stopping the cook");
         return;
     }
-    // Into the game's play directory, its owner's alone (D462).
-    if (const result::Status kMade = privateDirectory(cookAt_); !kMade.has_value()) {
-        say(std::string{kMade.error().description()});
-        return;
-    }
     const std::int64_t kId = next();
-    const std::string kRefused = ask(cookRecord(kId, cookAt_ / "content", cookAt_ / "cook-cache"));
+    std::string refused;
+    if (held_.joined != nullptr) {
+        // At a host joined, into the host's cooking directory, by plain
+        // names it keeps in this author's own (D885).
+        refused = ask(cookRecord(kId, "content", "cook-cache"));
+    } else {
+        // Into the game's play directory, its owner's alone (D462).
+        if (const result::Status kMade = privateDirectory(cookAt_); !kMade.has_value()) {
+            say(std::string{kMade.error().description()});
+            return;
+        }
+        refused = ask(cookRecord(kId, cookAt_ / "content", cookAt_ / "cook-cache"));
+    }
+    const std::string& kRefused = refused;
     // A cook started answers when it ends; one refused, at once.
     if (!kRefused.empty()) {
         say(answeredOf(kRefused).message);
@@ -122,37 +130,41 @@ void ShellParticipant::hearCook() {
         return;
     }
     for (const std::string& kLine : session_->poll()) {
-        const Heard kHeard = heardOf(kLine);
-        if (!cooking_.has_value() || kHeard.id != *cooking_ || kHeard.kind == Heard::Kind::None) {
-            continue;
-        }
-        switch (kHeard.kind) {
-        case Heard::Kind::None:
-            break;
-        case Heard::Kind::Progress:
-            say("cooking " + std::to_string(kHeard.step) + "/" + std::to_string(kHeard.steps) + " " + kHeard.text);
-            continue;
-        case Heard::Kind::Cooked:
-            say("cooked " + std::to_string(kHeard.cooked + kHeard.reused) + " sources, " +
-                std::to_string(kHeard.reused) + " reused");
-            break;
-        case Heard::Kind::Failed:
-            say(kHeard.text);
-            break;
-        case Heard::Kind::Cancelled:
-            say("cook stopped");
-            break;
-        }
-        cooking_.reset();
-        static_cast<void>(pressWords(cookNode_, "Cook", kText, 14));
-        // Each source as the cook left it (D799), its thumbnail from this
-        // cook (D801).
-        listSources();
-        browser_.pictures.clear();
-        static_cast<void>(showScenes());
-        if (std::exchange(recook_, false)) {
-            cookOrStop();
-        }
+        hearCookLine(kLine);
+    }
+}
+
+void ShellParticipant::hearCookLine(const std::string& line) {
+    const Heard kHeard = heardOf(line);
+    if (!cooking_.has_value() || kHeard.id != *cooking_ || kHeard.kind == Heard::Kind::None) {
+        return;
+    }
+    switch (kHeard.kind) {
+    case Heard::Kind::None:
+        break;
+    case Heard::Kind::Progress:
+        say("cooking " + std::to_string(kHeard.step) + "/" + std::to_string(kHeard.steps) + " " + kHeard.text);
+        return;
+    case Heard::Kind::Cooked:
+        say("cooked " + std::to_string(kHeard.cooked + kHeard.reused) + " sources, " + std::to_string(kHeard.reused) +
+            " reused");
+        break;
+    case Heard::Kind::Failed:
+        say(kHeard.text);
+        break;
+    case Heard::Kind::Cancelled:
+        say("cook stopped");
+        break;
+    }
+    cooking_.reset();
+    static_cast<void>(pressWords(cookNode_, "Cook", kText, 14));
+    // Each source as the cook left it (D799), its thumbnail from this cook
+    // (D801).
+    listSources();
+    browser_.pictures.clear();
+    static_cast<void>(showScenes());
+    if (std::exchange(recook_, false)) {
+        cookOrStop();
     }
 }
 

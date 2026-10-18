@@ -89,12 +89,12 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_joins
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/joined.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_author> $<TARGET_FILE:rawframe_host_cook_tool>
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_joins PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"studio_joined\"[^\n]*\"author\":\"ada\".*\"code\":\"studio_host_heard\"[^\n]*\"kind\":\"changed\",\"author\":\"ben\",\"document\":\"level.scene\".*\"code\":\"studio_summary\"[^\n]*\"entity\":\"c5400cf8-4b07-4d16-84c2-951852c66b40\",[^\n]*\"status\":\"ben changed level.scene\".*\"exit\":\"clean_stop\".*ben's rename kept.*the host's level holds it")
+                         "found bens ground at.*\"code\":\"studio_joined\"[^\n]*\"author\":\"ada\".*\"code\":\"studio_host_heard\"[^\n]*\"kind\":\"changed\",\"author\":\"ben\",\"document\":\"level.scene\".*\"code\":\"studio_summary\"[^\n]*\"status\":\"cooked [0-9]+ sources.*\"exit\":\"clean_stop\".*ben's rename kept.*the host's level holds it.*cooked on the host")
     # The others at a host shown, their choices and claims in the
     # Hierarchy, and a claim made from the Edit menu (D884).
     add_test(NAME studio_presence

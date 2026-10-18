@@ -772,6 +772,9 @@ private:
 
     /// What the session says of a running cook, shown as it says it.
     void hearCook();
+    /// One line the session or a host joined said unasked, acted on where
+    /// it is the running cook's (D885).
+    void hearCookLine(const std::string& line);
 
     /// A material changed while a game plays from Studio's cook: cooked
     /// again, or once the running cook ends, so the game, following its

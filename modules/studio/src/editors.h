@@ -225,7 +225,7 @@ struct EditorsHeld {
     std::string joinEndpoint;
     std::string joinPin;
     std::string joinToken;
-    std::unique_ptr<authoring_session::HostLink> joined;
+    std::unique_ptr<authoring_session::JoinedSession> joined;
     std::string welcome;
     std::string joinedAs;
     std::string presented;

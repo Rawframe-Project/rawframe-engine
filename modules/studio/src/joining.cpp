@@ -11,12 +11,12 @@
 namespace rawframe::studio {
 
 std::string ShellParticipant::answerLine(const std::string& line) {
-    if (held_.joined != nullptr) {
-        // A host that closed answers nothing; Studio shows what it last
-        // read and says so once (hearHost).
-        return held_.joined->ask(line).value_or(std::string{});
-    }
+    // A host joined answers as a session held here does (D883); one that
+    // closed refuses, and Studio says so once (hearHost).
     bool ended = false;
+    if (held_.joined != nullptr) {
+        return held_.joined->answer(line, ended);
+    }
     return session_ != nullptr ? session_->answer(line, ended) : std::string{};
 }
 
@@ -57,7 +57,9 @@ void ShellParticipant::hearHost() {
         present.add("view", Value{});
         static_cast<void>(ask(present));
     }
-    for (const std::string& kLine : held_.joined->heard(0)) {
+    for (const std::string& kLine : held_.joined->poll()) {
+        // A cook's progress and reply, as a session's own (D885).
+        hearCookLine(kLine);
         const auto kParsed = document::parse(kLine);
         const Value* kKind = kParsed.has_value() ? kParsed->find("kind") : nullptr;
         if (kKind == nullptr || kKind->kind() != Value::Kind::String) {

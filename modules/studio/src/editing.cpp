@@ -151,7 +151,9 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         return;
     }
     // The row is the node pressed or the one its words are on.
-    if (!cookTool_.empty() && node == cookNode_) {
+    // At a host joined the cook runs on the host's machine, with its tool
+    // (D885).
+    if ((!cookTool_.empty() || held_.joined != nullptr) && node == cookNode_) {
         endEdit();
         cookOrStop();
     } else if (play_.has_value() && node == playNode_) {

@@ -4,23 +4,26 @@
 # token the host's owner gave her, and Ben joining headless. Studio says
 # what it has open, which Ben waits to hear; Ben renames the ground; Studio
 # hears his change and shows the level as the host now holds it, the row
-# Ben named pressed in its Hierarchy. Prints what clicked.sh prints.
+# Ben named found in its Hierarchy by that name; then Cook cooks the game
+# on the host, into Ada's own directory there (D885). Prints what
+# clicked.sh prints.
 #
-#   joined.sh <rawframe-studio> <rawframe-author>
+#   joined.sh <rawframe-studio> <rawframe-author> <rawframe-cook>
 set -uo pipefail
 
 here="$(dirname "$0")"
 studio=$1
 author=$2
+cook=$3
 work="$(mktemp -d)"
 cp -R games/runners "$work/hosted"
 port=$(python3 "$here/../../../tools/free_port.py")
 for each in ada ben; do
     python3 -c 'import secrets; print(secrets.token_hex(24))' >"$work/$each.token"
 done
-printf '%s ada read edit\n%s ben read edit\n' "$(cat "$work/ada.token")" "$(cat "$work/ben.token")" >"$work/tokens"
+printf '%s ada read edit cook\n%s ben read edit\n' "$(cat "$work/ada.token")" "$(cat "$work/ben.token")" >"$work/tokens"
 "$author" host "$work/hosted/runners.game" --endpoint "127.0.0.1:$port" --tokens "$work/tokens" \
-    --fingerprint-file "$work/pin" >"$work/host.log" 2>&1 &
+    --fingerprint-file "$work/pin" --cooks "$work/cooks" --cook "$cook" >"$work/host.log" 2>&1 &
 hosting=$!
 trap 'kill "$hosting" 2>/dev/null; rm -rf "$work"' EXIT
 for _ in $(seq 100); do
@@ -42,8 +45,9 @@ STUDIO_SETTINGS="studio.join.endpoint = 127.0.0.1:$port
 studio.join.pin_file = $work/pin
 studio.join.token_file = $work/ada.token" \
     bash "$here/clicked.sh" "$studio" games/runners/runners.game level.scene @level.scene \
-    "until=studio_host_heard,author=\"ben\"" "@bens ground" "until=studio_selection,chosen=1"
+    "until=studio_host_heard,author=\"ben\"" wait=1 "@bens ground" @Cook "until=studio_said,status=\"cooked"
 status=$?
 grep -q '"id":1,"answer":{"kind":"authoring.outcome"' "$work/ben.out" && echo "ben's rename kept"
 grep -q '"bens ground"' "$work/hosted/level.scene" && echo "the host's level holds it"
+[ -s "$work/cooks/ada/content/cook.receipt" ] && echo "cooked on the host"
 exit "$status"

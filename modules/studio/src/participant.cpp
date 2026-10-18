@@ -180,7 +180,7 @@ bool ShellParticipant::openGame() {
     } else if (!held_.joinEndpoint.empty()) {
         // The host's welcome is the session's: the link says hello with
         // the token (D882).
-        held_.joined = authoring_session::HostLink::open(
+        held_.joined = authoring_session::JoinedSession::open(
             held_.joinEndpoint, held_.joinPin.c_str(), held_.joinToken.c_str(), welcome);
         if (held_.joined == nullptr) {
             say("the host could not be joined: " + (welcome.starts_with('{') ? answeredOf(welcome).message : welcome));
