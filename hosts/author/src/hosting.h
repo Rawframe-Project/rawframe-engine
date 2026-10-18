@@ -16,6 +16,7 @@ namespace rawframe::author {
 int hostGame(const std::filesystem::path& game,
              const std::filesystem::path& root,
              const std::filesystem::path& cook,
+             const std::filesystem::path& thumbnail,
              const authoring_session::HostSettings& settings);
 
 /// `rawframe-author join`: a link to a host, its welcome written, then

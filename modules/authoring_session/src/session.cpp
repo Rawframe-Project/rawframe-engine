@@ -74,9 +74,13 @@ struct OpenScene {
 /// written to its file as it commits.
 class Held {
 public:
-    Held(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook)
+    Held(std::filesystem::path game,
+         std::filesystem::path root,
+         std::filesystem::path cook,
+         std::filesystem::path thumbnail)
         : game_(std::move(game)), root_(std::filesystem::weakly_canonical(root)), cook_(cook),
-          cooking_(std::move(cook)), sheets_(root_, ".styles", "style sheet"), uis_(root_, ".ui", "UI document"),
+          cooking_(std::move(cook)), meshPictures_{.tool = std::move(thumbnail)},
+          sheets_(root_, ".styles", "style sheet"), uis_(root_, ".ui", "UI document"),
           materials_(root_, ".rfmaterial", "material instance"),
           games_(root_, ".game", "game description", &readsGameDescription),
           blockouts_(root_, ".blockout", "blockout", &readsBlockout),
@@ -219,7 +223,7 @@ private:
         case authoring::SessionVerb::SetImportSettings:
             return setImportSettings(game_, record.asset, record.settings, importers_);
         case authoring::SessionVerb::Thumbnail:
-            return thumbnailOf(game_, record.asset, cooking_.lastCooked(), record.size);
+            return thumbnailOf(game_, record.asset, cooking_.lastCooked(), record.size, meshPictures_);
         case authoring::SessionVerb::AssetReferences:
             return assetReferencesOf(game_, record.asset, cooking_.lastCooked(), scenesNaming(record.asset));
         case authoring::SessionVerb::Cancel: {
@@ -1014,6 +1018,8 @@ private:
     /// runs (D502).
     std::filesystem::path cook_;
     Cooking cooking_;
+    /// The thumbnail tool, and the cook whose meshes it last drew (D899).
+    MeshPictures meshPictures_;
     /// The engine's importers, which describe and check a source's settings
     /// (D800); materials need no toolchain for that.
     std::vector<cook::Importer> importers_ = cook::engineImporters();
@@ -1219,14 +1225,20 @@ private:
 } // namespace
 
 struct Session::State {
-    State(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook)
-        : held(std::move(game), std::move(root), std::move(cook)) {
+    State(std::filesystem::path game,
+          std::filesystem::path root,
+          std::filesystem::path cook,
+          std::filesystem::path thumbnail)
+        : held(std::move(game), std::move(root), std::move(cook), std::move(thumbnail)) {
     }
     Held held;
 };
 
-Session::Session(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook)
-    : state_(std::make_unique<State>(std::move(game), std::move(root), std::move(cook))) {
+Session::Session(std::filesystem::path game,
+                 std::filesystem::path root,
+                 std::filesystem::path cook,
+                 std::filesystem::path thumbnail)
+    : state_(std::make_unique<State>(std::move(game), std::move(root), std::move(cook), std::move(thumbnail))) {
 }
 
 Session::~Session() = default;

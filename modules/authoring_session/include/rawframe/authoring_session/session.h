@@ -40,8 +40,12 @@ class Session final : public Answering {
 public:
     /// The game described at `game`, its scenes under `root`; read at
     /// `hello`. `cook` is the cook tool `authoring.cook` runs (D502); none
-    /// refuses it.
-    Session(std::filesystem::path game, std::filesystem::path root, std::filesystem::path cook = {});
+    /// refuses it. `thumbnail` is the tool that draws a mesh's thumbnail
+    /// (D899); none refuses a mesh's.
+    Session(std::filesystem::path game,
+            std::filesystem::path root,
+            std::filesystem::path cook = {},
+            std::filesystem::path thumbnail = {});
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
     /// Gives a preview's player its camera back.

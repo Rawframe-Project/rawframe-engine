@@ -54,7 +54,9 @@
 // goes to no other machine. `cook` cooks the game's directory with the cook
 // tool `--cook` names, or the rawframe-cook beside this program, as a
 // long-running operation (D502): records are read and answered while it
-// runs, its progress and its reply said as they come.
+// runs, its progress and its reply said as they come. A mesh's thumbnail
+// is drawn by the tool `--thumbnail` names, or the rawframe-thumbnail
+// beside this program (D899).
 //
 // `mcp` holds the same session for an AI agent over the Model Context
 // Protocol on standard input and output (D773, authoring_session/mcp.h):
@@ -498,9 +500,11 @@ template <typename Answer, typename Poll, typename Close, typename Clean>
 /// `session`: records from standard input answered on standard output
 /// until `end` or the input ends, and what the session says unasked as it
 /// says it; 0 when every record succeeded.
-[[noreturn]] void
-session(const std::filesystem::path& game, const std::filesystem::path& root, const std::filesystem::path& cook) {
-    rawframe::authoring_session::Session held{game, root, cook};
+[[noreturn]] void session(const std::filesystem::path& game,
+                          const std::filesystem::path& root,
+                          const std::filesystem::path& cook,
+                          const std::filesystem::path& thumbnail) {
+    rawframe::authoring_session::Session held{game, root, cook, thumbnail};
     serve(
         [&held](const std::string& line, bool& ended) {
             return held.answer(line, ended);
@@ -523,9 +527,11 @@ session(const std::filesystem::path& game, const std::filesystem::path& root, co
 /// Protocol's standard input and output transport (D773, mcp.h), until the
 /// input ends, as MCP ends a session; always 0, a failed call being the
 /// agent's to read, not the process's.
-[[noreturn]] void
-mcp(const std::filesystem::path& game, const std::filesystem::path& root, const std::filesystem::path& cook) {
-    rawframe::authoring_session::Session held{game, root, cook};
+[[noreturn]] void mcp(const std::filesystem::path& game,
+                      const std::filesystem::path& root,
+                      const std::filesystem::path& cook,
+                      const std::filesystem::path& thumbnail) {
+    rawframe::authoring_session::Session held{game, root, cook, thumbnail};
     rawframe::authoring_session::McpBridge bridge{held};
     serve(
         [&bridge](const std::string& line, bool&) {
@@ -604,6 +610,7 @@ int main(int argc, char** argv) {
         std::vector<std::string_view> places;
         rawframe::authoring_session::HostSettings settings;
         std::filesystem::path cook = rawframe::process::besideSelf("rawframe-cook");
+        std::filesystem::path thumbnail = rawframe::process::besideSelf("rawframe-thumbnail");
         bool sound = true;
         for (int at = 2; at < argc && sound; ++at) {
             const std::string_view kWord = argv[at];
@@ -626,6 +633,8 @@ int main(int argc, char** argv) {
                 settings.cooks = std::filesystem::path{kValue};
             } else if (kWord == "--cook") {
                 cook = kValue;
+            } else if (kWord == "--thumbnail") {
+                thumbnail = kValue;
             } else {
                 sound = false;
             }
@@ -633,23 +642,33 @@ int main(int argc, char** argv) {
         if (sound && (places.size() == 1 || places.size() == 2) && !settings.endpoint.empty() &&
             !settings.tokens.empty() && !settings.fingerprintFile.empty()) {
             const std::filesystem::path kGame{places[0]};
-            return rawframe::author::hostGame(
-                kGame, places.size() == 2 ? std::filesystem::path{places[1]} : kGame.parent_path(), cook, settings);
+            return rawframe::author::hostGame(kGame,
+                                              places.size() == 2 ? std::filesystem::path{places[1]}
+                                                                 : kGame.parent_path(),
+                                              cook,
+                                              thumbnail,
+                                              settings);
         }
     }
-    // `session <game> [<scene root>] [--cook <program>]`
-    const bool kCookNamed = argc >= 5 && std::string_view{argv[argc - 2]} == "--cook";
-    const int kSessionArguments = kCookNamed ? argc - 2 : argc;
-    if ((kVerb == "session" || kVerb == "mcp") && (kSessionArguments == 3 || kSessionArguments == 4)) {
-        const std::filesystem::path kGame = argv[2];
-        const std::filesystem::path kRoot =
-            kSessionArguments == 4 ? std::filesystem::path{argv[3]} : kGame.parent_path();
-        const std::filesystem::path kCook =
-            kCookNamed ? std::filesystem::path{argv[argc - 1]} : rawframe::process::besideSelf("rawframe-cook");
-        if (kVerb == "mcp") {
-            mcp(kGame, kRoot, kCook);
+    // `session <game> [<scene root>] [--cook <program>] [--thumbnail <program>]`,
+    // the tools named last in either order.
+    if (kVerb == "session" || kVerb == "mcp") {
+        std::filesystem::path cook = rawframe::process::besideSelf("rawframe-cook");
+        std::filesystem::path thumbnail = rawframe::process::besideSelf("rawframe-thumbnail");
+        int places = argc;
+        while (places >= 5 && (std::string_view{argv[places - 2]} == "--cook" ||
+                               std::string_view{argv[places - 2]} == "--thumbnail")) {
+            (std::string_view{argv[places - 2]} == "--cook" ? cook : thumbnail) = argv[places - 1];
+            places -= 2;
         }
-        session(kGame, kRoot, kCook);
+        if (places == 3 || places == 4) {
+            const std::filesystem::path kGame = argv[2];
+            const std::filesystem::path kRoot = places == 4 ? std::filesystem::path{argv[3]} : kGame.parent_path();
+            if (kVerb == "mcp") {
+                mcp(kGame, kRoot, cook, thumbnail);
+            }
+            session(kGame, kRoot, cook, thumbnail);
+        }
     }
     if (kVerb == "migrate" && argc >= 4) {
         const bool kDry = std::string_view{argv[argc - 1]} == "--dry-run";
@@ -664,11 +683,14 @@ int main(int argc, char** argv) {
                "       rawframe-author read <game description> <scene> <queries>\n"
                "       rawframe-author migrate <game description> <scene>... [--dry-run]\n"
                "       rawframe-author session <game description> [<scene root>] [--cook <rawframe-cook>]\n"
+               "           [--thumbnail <rawframe-thumbnail>]\n"
                "       rawframe-author mcp <game description> [<scene root>] [--cook <rawframe-cook>]\n"
+               "           [--thumbnail <rawframe-thumbnail>]\n"
                "       rawframe-author mcp --join <endpoint> <pin file> <token file>\n"
                "       rawframe-author connect <endpoint> <pin file> <token file>\n"
                "       rawframe-author host <game description> [<scene root>] --endpoint <host:port> --tokens <file>\n"
                "           --fingerprint-file <file> [--cooks <directory>] [--cook <rawframe-cook>]\n"
+               "           [--thumbnail <rawframe-thumbnail>]\n"
                "       rawframe-author join <endpoint> <pin file> <token file>\n",
                stderr);
     return 2;

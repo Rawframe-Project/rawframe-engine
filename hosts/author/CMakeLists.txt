@@ -191,6 +191,18 @@ if(RAWFRAME_BUILD_TESTS)
                          PASS_REGULAR_EXPRESSION "painted a tilemap in a session and cooked it")
     set_tests_properties(author_cooks PROPERTIES
                          PASS_REGULAR_EXPRESSION "cooked the plaza through a session, [1-9][0-9]* sources")
+    # A mesh's thumbnail drawn by the thumbnail tool (D899), where the tree
+    # has the scene's renderer.
+    if(TARGET rawframe_host_thumbnail_tool)
+        add_test(NAME author_mesh_thumbnails
+                 COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_mesh_thumbnails.sh
+                         $<TARGET_FILE:rawframe_host_author> $<TARGET_FILE:rawframe_host_cook_tool>
+                         $<TARGET_FILE:rawframe_host_thumbnail_tool> ${PROJECT_SOURCE_DIR}
+                         ${CMAKE_CURRENT_BINARY_DIR}/author_mesh_thumbnails)
+        set_tests_properties(author_mesh_thumbnails PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION "drew the plaza's meshes as thumbnails through a session")
+    endif()
     # An agent's tools over the Model Context Protocol (D773): the plaza
     # changed through the session's operations as tools, failures told as
     # failed calls, a batch undone, and the game cooked with its progress

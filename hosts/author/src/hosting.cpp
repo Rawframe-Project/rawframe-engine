@@ -34,9 +34,10 @@ void say(const std::string& line) {
 int hostGame(const std::filesystem::path& game,
              const std::filesystem::path& root,
              const std::filesystem::path& cook,
+             const std::filesystem::path& thumbnail,
              const authoring_session::HostSettings& settings) {
     rawframe::host::installStopBridge();
-    authoring_session::Session session{game, root, cook};
+    authoring_session::Session session{game, root, cook, thumbnail};
     const auto kHosted = authoring_session::hostSession(session, settings, [] {
         return rawframe::host::stopRequested().load(std::memory_order_acquire);
     });

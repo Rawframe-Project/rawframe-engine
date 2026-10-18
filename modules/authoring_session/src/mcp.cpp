@@ -703,14 +703,16 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"asset"}),
                                annotationsOf(true, false)));
     }
-    // A texture's thumbnail from the session's last cook (D801).
+    // A texture's or a mesh's thumbnail from the session's last cook (D801,
+    // D899).
     {
         Value properties = Value::object();
-        properties.add("asset", property("string", false, "The texture's path under the game's directory."));
+        properties.add("asset", property("string", false, "The texture's or mesh's path under the game's directory."));
         properties.add("size", property("integer", false, "The most pixels on the longer side, 16 to 256."));
         tools.push_back(toolOf("asset_thumbnail",
-                               "Where the session's last cook holds a texture, and which of its levels is the "
-                               "first no larger than the size asked; cook first.",
+                               "The texture file that pictures a texture or a mesh from the session's last cook (a "
+                               "mesh's drawn at its first asking), and which of its levels is the first no larger "
+                               "than the size asked; cook first.",
                                schemaOf(std::move(properties), {"asset", "size"}),
                                annotationsOf(true, false)));
     }
