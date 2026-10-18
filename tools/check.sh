@@ -112,9 +112,13 @@ build_and_test() {
     # full check plays it in clang-development alone, as the fast check
     # does, and the XR module's own test and the client's headset window
     # test cover its code under the sanitizers (D602).
+    # The optimized trees leave `alone` tests to the fast check too: playing
+    # them here put them beside every other tree's tests, against D829's
+    # word (D888).
     local leave=()
     if [ "$preset" = gcc-shipping ] || [ "$preset" = clang-shipping ]; then
         leave=(-LE 'window|headset')
+        [ "$tier" = full ] && leave=(-LE 'window|headset|alone')
     elif [ "$preset" = clang-development ] && [ "$tier" = full ]; then
         leave=(-LE window)
     elif [ "$preset" = clang-thread ] && [ "$tier" = full ]; then
