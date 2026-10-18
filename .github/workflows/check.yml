@@ -33,4 +33,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           clean: false
-      - run: tools/check.sh full
+      # At a lower priority than the push tier on the same machine, which
+      # gates the next push while this run checks the last one (D898).
+      - run: nice -n 10 tools/check.sh full
