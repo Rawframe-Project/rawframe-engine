@@ -47,6 +47,15 @@ reply() { grep "\"id\":$1," "$work/replies"; }
             sleep 0.1
         done
     done
+    # And the run's every mesh and material drawn before the session's end
+    # stops it.
+    drawn="$work/content/thumbnails"
+    for _ in $(seq 1800); do
+        grep -q "skip: no device" "$drawn/thumbnails.log" 2>/dev/null && break
+        [ -s "$drawn/plan" ] && [ "$(grep -c '^thumbnail ' "$drawn/thumbnails.log" 2>/dev/null)" -ge \
+            "$(grep -cE '^(mesh|material)' "$drawn/plan")" ] && break
+        sleep 0.1
+    done
     echo '{"kind":"authoring.thumbnail","id":5,"asset":"gate.scene","size":64}'
     echo '{"kind":"authoring.end","id":6}'
 } | "$author" session "$game" --cook "$cook" --thumbnail "$thumbnail" >"$work/replies" || true
