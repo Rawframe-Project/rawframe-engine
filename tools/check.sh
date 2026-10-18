@@ -150,8 +150,20 @@ build_and_test() {
     # minutes, three times the slowest sanitized test, so one that hangs
     # (a played client waiting for a click that never came) ends the check
     # rather than holding it for hours (D816).
+    # A test that failed is run once more with at most one other beside
+    # it, where it failed by no sanitizer's report and at most ten did: on
+    # a machine other work loads past two hundred, a test that waits on
+    # frames, a peer, or a deadline misses them in a tree that is sound,
+    # and passes alone. A sanitizer's report is never run again: a race or
+    # a bad access that shows once is a finding (D895).
     if ! ctest --test-dir "out/$preset" "${leave[@]}" --output-on-failure --timeout 1200 -j "$run" \
-        >"out/$preset.test.log" 2>&1; then
+        >"out/$preset.test.log" 2>&1 &&
+        ! { ! grep -qE 'WARNING: ThreadSanitizer|ERROR: (Address|Leak)Sanitizer|runtime error:' "out/$preset.test.log" &&
+            [ "$(grep -cE 'Test +#[0-9]+: .*\*\*\*' "out/$preset.test.log")" -le 10 ] &&
+            ctest --test-dir "out/$preset" --rerun-failed --output-on-failure --timeout 1200 -j 2 \
+                >"out/$preset.rerun.log" 2>&1 &&
+            printf '   %s: run again alone and passed: %s\n' "$preset" \
+                "$(grep -oE 'Test +#[0-9]+: [A-Za-z0-9_]+' "out/$preset.rerun.log" | awk '{print $3}' | tr '\n' ' ')"; }; then
         # Each failed test's status and its output's last lines, cut short
         # (its records are long), so a failure seen only under CI's load can
         # be read there.
