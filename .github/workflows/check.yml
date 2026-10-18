@@ -27,8 +27,10 @@ jobs:
     # every tree includes rebuilds all eight, 20 minutes on this machine
     # (D493), and was cancelled at the 20 it had; other work on the shared
     # machine at a load near 200 took the check to 29.5 minutes, and two
-    # runs were cancelled at 30 (D876).
-    timeout-minutes: 45
+    # runs were cancelled at 30 (D876); at a load of 300 to 400, run at a
+    # lower priority than the push tier (D898), two were cancelled at 45, the
+    # full check taking 51 minutes on the machine alone (D904).
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
         with:
