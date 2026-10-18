@@ -53,6 +53,8 @@ struct StreamId {
 /// game's lanes.
 inline constexpr std::string_view kGameApplication = "rawframe-game-v1";
 inline constexpr std::string_view kToolingApplication = "rawframe-tooling-v1";
+/// A shared authoring session's (ADR-0085, D881).
+inline constexpr std::string_view kAuthoringApplication = "rawframe-authoring-v1";
 
 /// Every bound a provider enforces. All are required: zero is refused, and
 /// nothing grows without one (SPEC-0010 finite profile values).

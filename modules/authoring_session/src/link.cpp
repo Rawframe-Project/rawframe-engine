@@ -1,178 +1,26 @@
 #include "rawframe/authoring_session/link.h"
 
+#include "line_client.h"
+#include "rawframe/authoring/session.h"
+#include "rawframe/authoring_session/host.h"
 #include "rawframe/document/json.h"
 #include "rawframe/network_quic/quic.h"
 #include "rawframe/world_tooling/server.h"
 
 #include <array>
 #include <charconv>
-#include <chrono>
 #include <cstdint>
-#include <cstdio>
-#include <filesystem>
-#include <fstream>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <vector>
 
 namespace rawframe::authoring_session {
-
-namespace {
-
-/// How long a reply may take before the client gives up on the endpoint.
-constexpr auto kReplyWithin = std::chrono::seconds(10);
-
-/// A pin or token file's bytes at most, as the endpoint's token file.
-constexpr std::size_t kMaximumLineFile = 4096;
-
-/// The first line of a regular file of at most 4 KiB; none for anything
-/// else, so a device or a large file is never read.
-std::optional<std::string> firstLine(const char* path) {
-    std::error_code failed;
-    if (!std::filesystem::is_regular_file(path, failed) ||
-        std::filesystem::file_size(path, failed) > kMaximumLineFile || failed) {
-        return std::nullopt;
-    }
-    std::ifstream file{path, std::ios::binary};
-    if (!file) {
-        return std::nullopt;
-    }
-    std::string text(kMaximumLineFile, '\0');
-    file.read(text.data(), static_cast<std::streamsize>(text.size()));
-    text.resize(static_cast<std::size_t>(file.gcount()));
-    text.resize(std::min(text.find('\n'), text.size()));
-    if (!text.empty() && text.back() == '\r') {
-        text.pop_back();
-    }
-    return text;
-}
-
-} // namespace
 
 bool answered(std::string_view reply) {
     const auto kParsed = document::parse(reply);
     return kParsed.has_value() && kParsed->find("answer") != nullptr;
 }
-
-class ToolingLink::Client {
-public:
-    explicit Client(network::Provider& provider) : provider_(provider) {
-    }
-
-    /// Waits until the connection is ready to carry records.
-    bool connected(std::string_view endpoint) {
-        auto connection = provider_.connect(network::Endpoint{std::string{endpoint}});
-        if (!connection.has_value()) {
-            return false;
-        }
-        connection_ = *connection;
-        const auto kUntil = std::chrono::steady_clock::now() + kReplyWithin;
-        while (std::chrono::steady_clock::now() < kUntil && !closed_) {
-            pump();
-            if (ready_) {
-                auto stream = provider_.openStream(connection_, false);
-                if (!stream.has_value()) {
-                    return false;
-                }
-                stream_ = *stream;
-                return true;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        return false;
-    }
-
-    /// Sends one record and waits for its reply line; none when the
-    /// endpoint closed or kept silent.
-    std::optional<std::string> ask(std::string_view record) {
-        // Each question numbered afresh, and only the reply with its number
-        // taken: one that came after its asker stopped waiting is left
-        // behind, not read as the next question's answer (D467).
-        const auto kParsed = document::parse(record);
-        const bool kNumbered = kParsed.has_value() && kParsed->kind() == document::Value::Kind::Object;
-        const std::int64_t kId = ++asked_;
-        std::string line{record};
-        if (kNumbered) {
-            document::Value numbered = document::Value::object();
-            for (const std::string& kName : kParsed->names()) {
-                if (kName != "id") {
-                    numbered.add(kName, *kParsed->find(kName));
-                }
-            }
-            numbered.add("id", document::Value::integer(kId));
-            line = document::writeCompact(numbered);
-        }
-        line += '\n';
-        const std::span<const std::byte> kBytes{reinterpret_cast<const std::byte*>(line.data()), line.size()};
-        if (!provider_.send(connection_, stream_, kBytes).has_value()) {
-            return std::nullopt;
-        }
-        const auto kUntil = std::chrono::steady_clock::now() + kReplyWithin;
-        while (std::chrono::steady_clock::now() < kUntil) {
-            pump();
-            for (std::size_t end = received_.find('\n'); end != std::string::npos; end = received_.find('\n')) {
-                std::string reply = received_.substr(0, end);
-                received_.erase(0, end + 1);
-                const auto kReply = document::parse(reply);
-                const document::Value* kAnswers = kReply.has_value() ? kReply->find("id") : nullptr;
-                if (!kNumbered) {
-                    return reply;
-                }
-                if (kAnswers != nullptr && kAnswers->integer() == kId) {
-                    // Answered under the caller's own id, where its record
-                    // had one, in its place.
-                    const document::Value* kAsked = kParsed->find("id");
-                    document::Value answered = document::Value::object();
-                    for (const std::string& kName : kReply->names()) {
-                        if (kName != "id") {
-                            answered.add(kName, *kReply->find(kName));
-                        } else if (kAsked != nullptr) {
-                            answered.add(kName, *kAsked);
-                        }
-                    }
-                    return document::writeCompact(answered);
-                }
-            }
-            if (closed_) {
-                return std::nullopt;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        return std::nullopt;
-    }
-
-    void close() noexcept {
-        provider_.close(connection_);
-    }
-
-private:
-    void pump() {
-        events_.clear();
-        provider_.poll(events_, 64);
-        for (const network::Event& event : events_) {
-            if (event.kind == network::EventKind::Connected) {
-                ready_ = true;
-            } else if (event.kind == network::EventKind::StreamBytes) {
-                received_.append(reinterpret_cast<const char*>(event.bytes.data()), event.bytes.size());
-            } else if (event.kind == network::EventKind::Closed) {
-                closed_ = true;
-            }
-        }
-    }
-
-    network::Provider& provider_;
-    network::ConnectionId connection_;
-    network::StreamId stream_;
-    std::vector<network::Event> events_;
-    std::string received_;
-    bool ready_ = false;
-    bool closed_ = false;
-    /// The questions asked, each one's number.
-    std::int64_t asked_ = 0;
-};
 
 ToolingLink::ToolingLink() = default;
 
@@ -211,7 +59,7 @@ ToolingLink::open(std::string_view endpoint, const char* pinFile, const char* to
     std::unique_ptr<ToolingLink> link{new ToolingLink};
     link->network_ = std::move(*network);
     link->provider_ = std::move(*provider);
-    auto client = std::make_unique<Client>(*link->provider_);
+    auto client = std::make_unique<LineClient>(*link->provider_);
     if (!client->connected(endpoint)) {
         said = "the endpoint could not be reached, or did not trust the pin";
         return nullptr;
@@ -236,6 +84,76 @@ ToolingLink::open(std::string_view endpoint, const char* pinFile, const char* to
 
 std::optional<std::string> ToolingLink::ask(std::string_view record) {
     return client_->ask(record);
+}
+
+HostLink::HostLink() = default;
+
+HostLink::~HostLink() {
+    if (client_ != nullptr) {
+        (void)client_->ask(R"({"kind":"authoring.end","id":null})");
+        client_->close();
+    }
+}
+
+std::unique_ptr<HostLink>
+HostLink::open(std::string_view endpoint, const char* pinFile, const char* tokenFile, std::string& said) {
+    const auto kPin = firstLine(pinFile);
+    const auto kToken = firstLine(tokenFile);
+    if (!kPin.has_value() || !kToken.has_value()) {
+        said = "the pin and token files must read";
+        return nullptr;
+    }
+    auto pin = network_quic::parseFingerprint(*kPin);
+    if (!pin.has_value()) {
+        said = "the pin file holds no certificate fingerprint";
+        return nullptr;
+    }
+    auto network = network_quic::QuicNetwork::create(network_quic::QuicSettings{.pin = *pin});
+    if (!network.has_value()) {
+        said = "QUIC could not start";
+        return nullptr;
+    }
+    auto provider = (*network)->provider(authoringProfile(1));
+    if (!provider.has_value()) {
+        said = "no provider for the authoring protocol";
+        return nullptr;
+    }
+    std::unique_ptr<HostLink> link{new HostLink};
+    link->network_ = std::move(*network);
+    link->provider_ = std::move(*provider);
+    auto client = std::make_unique<LineClient>(*link->provider_);
+    if (!client->connected(endpoint)) {
+        said = "the host could not be reached, or did not trust the pin";
+        return nullptr;
+    }
+    document::Value hello = document::Value::object();
+    hello.add("kind", document::Value::string("authoring.hello"));
+    hello.add("id", document::Value::integer(0));
+    hello.add("surfaceGeneration", document::Value::integer(authoring::kSurfaceGeneration));
+    hello.add("token", document::Value::string(*kToken));
+    auto welcome = client->ask(document::writeCompact(hello));
+    if (!welcome.has_value()) {
+        said = "the host closed before welcoming";
+        return nullptr;
+    }
+    said = std::move(*welcome);
+    if (!answered(said)) {
+        return nullptr;
+    }
+    link->client_ = std::move(client);
+    return link;
+}
+
+std::optional<std::string> HostLink::ask(std::string_view record) {
+    return client_->ask(record);
+}
+
+std::vector<std::string> HostLink::heard(std::int64_t withinMilliseconds) {
+    return client_->heard(withinMilliseconds);
+}
+
+bool HostLink::closed() const noexcept {
+    return client_->closed();
 }
 
 std::optional<std::string> loopbackEndpoint(std::string_view endpoint) {
