@@ -47,8 +47,11 @@ Value selectionOf(const authoring::AuthoredScene& scene) {
 }
 
 Value viewOf(const authoring::AuthoredScene& scene) {
-    const std::optional<authoring::SceneView>& kView = scene.view();
-    if (!kView.has_value()) {
+    return viewValue(scene.view());
+}
+
+Value viewValue(const std::optional<authoring::SceneView>& view) {
+    if (!view.has_value()) {
         return Value{};
     }
     const auto kPoint = [](const std::array<double, 3>& at) {
@@ -59,9 +62,9 @@ Value viewOf(const authoring::AuthoredScene& scene) {
         return made;
     };
     Value made = Value::object();
-    made.add("eye", kPoint(kView->eye));
-    made.add("target", kPoint(kView->target));
-    made.add("fieldOfView", Value::real(kView->fieldOfView));
+    made.add("eye", kPoint(view->eye));
+    made.add("target", kPoint(view->target));
+    made.add("fieldOfView", Value::real(view->fieldOfView));
     return made;
 }
 

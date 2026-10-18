@@ -8,6 +8,7 @@
 #include "extensions.h"
 #include "handles.h"
 #include "importing.h"
+#include "presence.h"
 #include "previewing.h"
 #include "rawframe/authoring/authored_data.h"
 #include "rawframe/authoring/authored_lines.h"
@@ -180,6 +181,12 @@ private:
         }
         case authoring::SessionVerb::Apply:
             return applied(record);
+        case authoring::SessionVerb::Present:
+        case authoring::SessionVerb::Presence:
+        case authoring::SessionVerb::Claim:
+        case authoring::SessionVerb::Release:
+        case authoring::SessionVerb::Leave:
+            return presences_.answer(record, root_);
         case authoring::SessionVerb::Extensions:
             return extensionsListed();
         case authoring::SessionVerb::Extension:
@@ -641,6 +648,7 @@ private:
     }
 
     result::Result<Value> applied(const authoring::SessionRecord& record) {
+        RAWFRAME_TRY(unclaimed(record.author, record.scene));
         if (auto* lines = linesOf(record.scene)) {
             return lines->applied(record, failed_);
         }
@@ -660,6 +668,7 @@ private:
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
         authoring::AuthoredScene& document = *open->document;
         const authoring::Request& request = record.request;
+        RAWFRAME_TRY(entitiesUnclaimed(record.author, record.scene, document, request));
         const std::string kBefore = digestOf(document.text());
         if (request.expects.has_value() && *request.expects != kBefore) {
             return std::unexpected{failure(authoring::AuthoringError::TargetStale,
@@ -714,7 +723,9 @@ private:
         std::vector<authoring::DocumentPart> parts;
         for (const authoring::SessionPart& kPart : record.parts) {
             bool again = false;
+            RAWFRAME_TRY(unclaimed(record.author, kPart.scene));
             RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(kPart.scene, again));
+            RAWFRAME_TRY(entitiesUnclaimed(record.author, kPart.scene, *open->document, kPart.request));
             const std::string kBefore = digestOf(open->document->text());
             if (kPart.request.expects.has_value() && *kPart.request.expects != kBefore) {
                 return std::unexpected{failure(authoring::AuthoringError::TargetStale,
@@ -908,6 +919,7 @@ private:
     }
 
     result::Result<Value> stepped(const authoring::SessionRecord& record, bool undo) {
+        RAWFRAME_TRY(unclaimed(record.author, record.scene));
         if (auto* lines = linesOf(record.scene)) {
             return lines->stepped(record, undo, failed_, authors_);
         }
@@ -952,6 +964,11 @@ private:
                                            result::ErrorClass::FailedPrecondition,
                                            "the step was asked against another generation of the scene")
                                        .withContext("document", kBefore)};
+        }
+        // A step changes what its entry changed, so another's claim on one
+        // of those entities refuses it as it refuses a change (D880).
+        if (const auto kTarget = document.stepTarget(undo); kTarget.has_value()) {
+            RAWFRAME_TRY(touchedUnclaimed(record.author, record.scene, entitiesOf(document.journalAt(*kTarget))));
         }
         const auto kStep =
             namingAuthor(undo ? document.undo(document.generation()) : document.redo(document.generation()), authors_);
@@ -1004,6 +1021,56 @@ private:
     /// session's own (ADR-0085, D879), and the one the current record names.
     std::vector<std::string> authors_{std::string{}};
     std::uint32_t author_ = 0;
+    /// Who is present and what each has claimed (D880).
+    Presences presences_;
+
+    /// Refuses a change to a document another author holds whole (D880).
+    result::Status unclaimed(const std::string& author, const std::string& name) const {
+        const auto kKey = documentKey(root_, name);
+        return kKey.has_value() ? presences_.unclaimed(author, *kKey) : result::Status{};
+    }
+
+    /// Refuses a change touching an entity another author holds.
+    result::Status touchedUnclaimed(const std::string& author,
+                                    const std::string& name,
+                                    const std::vector<std::string>& touched) const {
+        const auto kKey = documentKey(root_, name);
+        return kKey.has_value() ? presences_.untouched(author, *kKey, touched) : result::Status{};
+    }
+
+    /// Refuses a request touching an entity another author holds in the
+    /// scene, what it touches found by running it on a copy, as a dry run
+    /// is, only where another holds one.
+    result::Status entitiesUnclaimed(const std::string& author,
+                                     const std::string& name,
+                                     const authoring::AuthoredScene& document,
+                                     const authoring::Request& request) {
+        const auto kKey = documentKey(root_, name);
+        if (!kKey.has_value() || !presences_.othersHoldEntities(author, *kKey)) {
+            return {};
+        }
+        RAWFRAME_TRY_ASSIGN(std::unique_ptr<authoring::AuthoredScene> copy,
+                            authoring::AuthoredScene::open(document.identity(), document.text()));
+        const rawframe::scene::SceneSource kSources = sources();
+        if (request.batch == authoring::Batch::Atomic) {
+            static_cast<void>(
+                authoring::executeAtomic(*copy, copy->generation(), request.operations, *catalog_, &kSources));
+        } else {
+            static_cast<void>(authoring::executeIndependent(*copy,
+                                                            copy->generation(),
+                                                            request.operations,
+                                                            *catalog_,
+                                                            authoring::OnFailure::ContinuePerItem,
+                                                            &kSources));
+        }
+        std::vector<std::string> touched;
+        for (std::size_t at = 0; at < copy->undoable(); ++at) {
+            for (std::string& each : entitiesOf(copy->journalAt(at))) {
+                touched.push_back(std::move(each));
+            }
+        }
+        return presences_.untouched(author, *kKey, touched);
+    }
 
     /// Makes the author the record names, or the session's own where it
     /// names none, the one its changes and steps are of, in every document.

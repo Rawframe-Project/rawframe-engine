@@ -7,6 +7,7 @@
 #include "rawframe/document/json.h"
 
 #include <cstddef>
+#include <optional>
 #include <string_view>
 
 namespace rawframe::authoring_session {
@@ -25,5 +26,7 @@ document::Value selectionOf(const authoring::AuthoredScene& scene);
 
 /// Where a scene is looked at from, null until told (D432).
 document::Value viewOf(const authoring::AuthoredScene& scene);
+/// A view as `viewOf` gives it, null for none.
+document::Value viewValue(const std::optional<authoring::SceneView>& view);
 
 } // namespace rawframe::authoring_session
