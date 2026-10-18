@@ -1081,7 +1081,8 @@ std::vector<ListedExtension> extensionsOf(std::string_view reply) {
         }
         // A list of sections from a session that offers none is empty.
         if ((each.find("sections") != nullptr && !kTexts(each.find("sections"), extension.sections)) ||
-            (each.find("modes") != nullptr && !kTexts(each.find("modes"), extension.modes))) {
+            (each.find("modes") != nullptr && !kTexts(each.find("modes"), extension.modes)) ||
+            (each.find("panels") != nullptr && !kTexts(each.find("panels"), extension.panels))) {
             continue;
         }
         extension.path = *path->text();
@@ -1103,6 +1104,25 @@ Value extensionSectionRecord(std::int64_t id,
     record.add("extension", Value::string(std::string{extension}));
     record.add("component", Value::string(std::string{component}));
     record.add("entity", Value::string(std::string{entity}));
+    return record;
+}
+
+Value extensionPanelRecord(std::int64_t id,
+                           std::string_view scene,
+                           std::string_view extension,
+                           std::string_view panel,
+                           std::span<const std::string> entities) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.extension_panel"));
+    record.add("id", Value::integer(id));
+    record.add("scene", Value::string(std::string{scene}));
+    record.add("extension", Value::string(std::string{extension}));
+    record.add("panel", Value::string(std::string{panel}));
+    Value chosen = Value::array();
+    for (const std::string& kEntity : entities) {
+        chosen.push(Value::string(kEntity));
+    }
+    record.add("entities", std::move(chosen));
     return record;
 }
 

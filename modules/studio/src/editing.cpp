@@ -174,15 +174,17 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (broken_.has_value()) {
         return;
     } else if (node == assetsTab_ || node == historyTab_ || node == consoleTab_ || node == networkTab_ ||
-               node == environmentTab_ || node == profilerTab_ || node == held_.frameTab || node == held_.changesTab) {
-        showDock(node == assetsTab_        ? Dock::Assets
-                 : node == historyTab_     ? Dock::History
-                 : node == consoleTab_     ? Dock::Console
-                 : node == networkTab_     ? Dock::Network
-                 : node == environmentTab_ ? Dock::Environment
-                 : node == profilerTab_    ? Dock::Profiler
-                 : node == held_.frameTab  ? Dock::Frame
-                                           : Dock::Changes);
+               node == environmentTab_ || node == profilerTab_ || node == held_.frameTab || node == held_.changesTab ||
+               node == held_.panelsTab) {
+        showDock(node == assetsTab_         ? Dock::Assets
+                 : node == historyTab_      ? Dock::History
+                 : node == consoleTab_      ? Dock::Console
+                 : node == networkTab_      ? Dock::Network
+                 : node == environmentTab_  ? Dock::Environment
+                 : node == profilerTab_     ? Dock::Profiler
+                 : node == held_.frameTab   ? Dock::Frame
+                 : node == held_.changesTab ? Dock::Changes
+                                            : Dock::Panels);
     } else if (pressNetwork(node) || pressEnvironment(node) || pressCapture(node) || pressChanges(node)) {
         return;
     } else if (const auto kFilter = std::ranges::find(consoleFilters_, node, &std::pair<ui::Node, int>::first);

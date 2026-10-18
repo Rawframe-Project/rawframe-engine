@@ -125,6 +125,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     kOffer("Profiler", "Window", {}, profilerTab_);
     kOffer("Frame", "Window", {}, held_.frameTab);
     kOffer("Changes", "Window", {}, held_.changesTab);
+    kOffer("Extension panels", "Window", {}, held_.panelsTab);
     // The menus whose commands come below, with no button, always shown.
     for (const std::string_view kMenu : kMenus) {
         if (std::ranges::none_of(commands_,

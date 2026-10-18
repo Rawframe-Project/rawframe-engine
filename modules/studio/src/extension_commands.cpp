@@ -113,6 +113,52 @@ void ShellParticipant::showSections(const std::optional<Value>& read) {
                           diagnostics::field("rows", kRows.size())});
         }
     }
+    // The panels follow what is chosen.
+    if (dockShown_ == Dock::Panels) {
+        showExtensionPanels();
+    }
+}
+
+result::Status ShellParticipant::makeExtensionPanels() {
+    RAWFRAME_TRY_ASSIGN(held_.panelsColumn, pane("Extension panels"));
+    return {};
+}
+
+void ShellParticipant::showExtensionPanels() {
+    clear(held_.panelsRows);
+    const auto kAdd = [this](const std::string& text, std::uint32_t color) {
+        if (auto made = row(held_.panelsColumn, text, color, kPanel); made.has_value()) {
+            held_.panelsRows.push_back(*made);
+        }
+    };
+    // Each panel filled through the session for the entities chosen, as
+    // `authoring.extension_panel` fills it headless.
+    std::size_t panels = 0;
+    std::size_t rows = 0;
+    for (const ListedExtension& kExtension : extensions_) {
+        for (const std::string& kName : kExtension.panels) {
+            const auto kRows =
+                scene_.empty()
+                    ? std::vector<std::pair<std::string, double>>{}
+                    : sectionRowsOf(ask(extensionPanelRecord(next(), scene_, kExtension.path, kName, selected_)));
+            kAdd(kName, kQuiet);
+            for (const auto& [kLabel, kValue] : kRows) {
+                std::array<char, 32> digits{};
+                const auto kWritten =
+                    std::to_chars(digits.data(), digits.data() + digits.size(), kValue, std::chars_format::general, 6);
+                kAdd(kLabel + "  " + std::string{digits.data(), kWritten.ptr}, kText);
+            }
+            ++panels;
+            rows += kRows.size();
+        }
+    }
+    if (panels == 0) {
+        kAdd("no panels: an extension offers them with studio.panel", kQuiet);
+    }
+    emitter_.log(diagnostics::Severity::Info,
+                 kPanelsShown,
+                 "the extensions' panels filled for the entities chosen",
+                 {diagnostics::field("panels", panels), diagnostics::field("rows", rows)});
 }
 
 } // namespace rawframe::studio

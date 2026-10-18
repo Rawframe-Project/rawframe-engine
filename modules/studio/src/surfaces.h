@@ -64,6 +64,7 @@ inline constexpr auto kSurfaces = std::to_array<Surface>({
     {"Profiler", SurfaceKind::Panel, "Bottom", "diagnostic span records; authoring.profile", ""},
     {"Frame", SurfaceKind::Panel, "Bottom", "authoring.preview's frame description; the capture file", ""},
     {"Changes", SurfaceKind::Panel, "Bottom", "git", ""},
+    {"Extension panels", SurfaceKind::Panel, "Bottom", "authoring.extension_panel", ""},
     // Document editors in the center's tabs.
     {"Scene", SurfaceKind::DocumentEditor, "Center", "the scene document", ""},
     {"Project settings", SurfaceKind::DocumentEditor, "Center", "the .game text", ""},

@@ -9,6 +9,16 @@ import rawframe.studio
 fn extend() {
     studio.command("Raise chosen", "raise")
     studio.section("rawframe.physics2d.pose", "height")
+    studio.panel("Heights", "heights")
+}
+
+// The chosen entities' heights in the Extension panels tab.
+fn heights() {
+    let i = u32(0)
+    while i < studio.chosen() {
+        studio.row("height", studio.number(i, "rawframe.physics2d.pose", "y"))
+        i = i + u32(1)
+    }
 }
 
 // The pose's height in the Inspector.

@@ -253,6 +253,7 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(profilerTab_, button(kDockTabs, kBottom("Profiler")));
     RAWFRAME_TRY_ASSIGN(held_.frameTab, button(kDockTabs, kBottom("Frame")));
     RAWFRAME_TRY_ASSIGN(held_.changesTab, button(kDockTabs, kBottom("Changes")));
+    RAWFRAME_TRY_ASSIGN(held_.panelsTab, button(kDockTabs, kBottom("Extension panels")));
     RAWFRAME_TRY_ASSIGN(scenesColumn_, pane("Assets"));
     RAWFRAME_TRY_ASSIGN(historyColumn_, pane("History"));
     RAWFRAME_TRY(makeConsole());
@@ -261,6 +262,7 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY(makeProfiler());
     RAWFRAME_TRY(makeFrame());
     RAWFRAME_TRY(makeChanges());
+    RAWFRAME_TRY(makeExtensionPanels());
     RAWFRAME_TRY(tree_->attach(bottomDock_, scenesColumn_));
     dockShown_ = Dock::Assets;
     showDock(Dock::Assets);
@@ -280,7 +282,8 @@ void ShellParticipant::showDock(Dock pane) {
                : dock == Dock::Environment ? held_.environmentColumn
                : dock == Dock::Profiler    ? held_.profilerColumn
                : dock == Dock::Frame       ? held_.frameColumn
-                                           : held_.changesColumn;
+               : dock == Dock::Changes     ? held_.changesColumn
+                                           : held_.panelsColumn;
     };
     if (pane != dockShown_) {
         static_cast<void>(tree_->detach(kPaneOf(dockShown_)));
@@ -302,12 +305,16 @@ void ShellParticipant::showDock(Dock pane) {
         tree_->setLook(held_.frameTab, ui::Look{.fill = pane == Dock::Frame ? kChosen : kRow, .radius = 4}));
     static_cast<void>(
         tree_->setLook(held_.changesTab, ui::Look{.fill = pane == Dock::Changes ? kChosen : kRow, .radius = 4}));
+    static_cast<void>(
+        tree_->setLook(held_.panelsTab, ui::Look{.fill = pane == Dock::Panels ? kChosen : kRow, .radius = 4}));
     if (pane == Dock::Console) {
         showConsole();
     } else if (pane == Dock::Environment) {
         showEnvironment();
     } else if (pane == Dock::Changes) {
         readChanges();
+    } else if (pane == Dock::Panels) {
+        showExtensionPanels();
     }
 }
 

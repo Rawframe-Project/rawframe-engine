@@ -35,6 +35,8 @@ inline constexpr diagnostics::EventIdentity kChangesShown{"studio", "studio_chan
 inline constexpr diagnostics::EventIdentity kCommitted{"studio", "studio_committed"};
 /// An extension's Inspector section shown (D875).
 inline constexpr diagnostics::EventIdentity kSectionShown{"studio", "studio_section_shown"};
+/// The extensions' panels shown (D878).
+inline constexpr diagnostics::EventIdentity kPanelsShown{"studio", "studio_panels_shown"};
 /// A game exported, or its export failed (D872).
 inline constexpr diagnostics::EventIdentity kExported{"studio", "studio_exported"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
@@ -189,6 +191,10 @@ struct EditorsHeld {
     /// The extension's viewport mode on, by its extension's path and its
     /// name, none for none (D877).
     std::optional<std::pair<std::string, std::string>> extensionMode;
+    /// The Extension panels tab, its pane, and its rows (D878).
+    ui::Node panelsTab{};
+    ui::Node panelsColumn{};
+    std::vector<ui::Node> panelsRows;
     std::filesystem::path exportingTo;
     std::string exportSaid;
     std::uint64_t exports = 0;

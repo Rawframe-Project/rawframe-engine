@@ -462,6 +462,8 @@ struct ListedExtension {
     /// viewport modes (D877).
     std::vector<std::string> sections;
     std::vector<std::string> modes;
+    /// Its panels, shown in the Extension panels tab (D878).
+    std::vector<std::string> panels;
     std::vector<std::string> capabilities;
     std::string refused;
 
@@ -484,6 +486,14 @@ struct ListedExtension {
                                            std::string_view component,
                                            std::string_view entity);
 [[nodiscard]] std::vector<std::pair<std::string, double>> sectionRowsOf(std::string_view reply);
+/// `authoring.extension_panel`: the rows the extension at `extension`
+/// shows in its panel `panel` for `entities` of `scene` (D878), read by
+/// `sectionRowsOf`.
+[[nodiscard]] Value extensionPanelRecord(std::int64_t id,
+                                         std::string_view scene,
+                                         std::string_view extension,
+                                         std::string_view panel,
+                                         std::span<const std::string> entities);
 
 [[nodiscard]] Value extensionRecord(std::int64_t id,
                                     std::string_view scene,

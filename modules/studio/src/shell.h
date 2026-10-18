@@ -247,7 +247,8 @@ private:
         Environment,
         Profiler,
         Frame,
-        Changes
+        Changes,
+        Panels
     };
     /// The bottom dock showing `pane`.
     void showDock(Dock pane);
@@ -717,6 +718,10 @@ private:
     /// The Inspector's sections the game's extensions offer for the
     /// entity shown, of the components `read` lists it with (D875).
     void showSections(const std::optional<Value>& read);
+    /// The Extension panels tab (D878): each extension's panels filled for
+    /// the entities chosen, headed by their names.
+    result::Status makeExtensionPanels();
+    void showExtensionPanels();
     /// Studio's own directory, made the first time a tool needs it.
     std::optional<std::filesystem::path> ownDirectory();
     /// The Export dialog (D872), from the File menu: a target (desktop,
