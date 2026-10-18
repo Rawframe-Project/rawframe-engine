@@ -1,6 +1,7 @@
 #include "hierarchy.h"
 #include "hints.h"
 #include "shell.h"
+#include "surfaces.h"
 
 #include <algorithm>
 
@@ -172,12 +173,17 @@ result::Status ShellParticipant::build() {
     // The left dock holds the Hierarchy, or the Layers in its place, each
     // heading naming the other (D788), and the Layers the World (D870).
     RAWFRAME_TRY_ASSIGN(leftDock_, box(kUpper, leftLayout(preferences_.hierarchyWidth), kBackground));
-    RAWFRAME_TRY_ASSIGN(entitiesColumn_,
-                        tabbedColumn(leftDock_, "Hierarchy", "Layers", layersTab_, "Live", &live_.button));
-    RAWFRAME_TRY_ASSIGN(layersColumn_,
-                        tabbedColumn(leftDock_, "Layers", "Hierarchy", hierarchyTab_, "World", &worldTab_));
+    RAWFRAME_TRY_ASSIGN(
+        entitiesColumn_,
+        tabbedColumn(
+            leftDock_, placed("Hierarchy", SurfaceKind::Panel, "Left"), "Layers", layersTab_, "Live", &live_.button));
+    RAWFRAME_TRY_ASSIGN(
+        layersColumn_,
+        tabbedColumn(
+            leftDock_, placed("Layers", SurfaceKind::Panel, "Left"), "Hierarchy", hierarchyTab_, "World", &worldTab_));
     RAWFRAME_TRY(tree_->detach(layersColumn_));
-    RAWFRAME_TRY_ASSIGN(worldColumn_, tabbedColumn(leftDock_, "World", "Hierarchy", worldBackTab_));
+    RAWFRAME_TRY_ASSIGN(
+        worldColumn_, tabbedColumn(leftDock_, placed("World", SurfaceKind::Panel, "Left"), "Hierarchy", worldBackTab_));
     RAWFRAME_TRY(tree_->detach(worldColumn_));
     leftShown_ = Left::Hierarchy;
     RAWFRAME_TRY(splitter(kUpper, Edge::Hierarchy));
@@ -233,16 +239,20 @@ result::Status ShellParticipant::build() {
     // heading.
     RAWFRAME_TRY(splitter(kMain, Edge::Dock));
     RAWFRAME_TRY_ASSIGN(bottomDock_, box(kMain, dockLayout(preferences_.dockHeight), kPanel));
+    // Each panel by the name the surface table places it under (D873).
+    constexpr auto kBottom = [](std::string_view name) consteval {
+        return placed(name, SurfaceKind::Panel, "Bottom");
+    };
     RAWFRAME_TRY_ASSIGN(const ui::Node kDockTabs,
                         box(bottomDock_, ui::Layout{.height = ui::pixels(26), .gap = 4, .shrink = 0}, 0));
-    RAWFRAME_TRY_ASSIGN(assetsTab_, button(kDockTabs, "Assets"));
-    RAWFRAME_TRY_ASSIGN(historyTab_, button(kDockTabs, "History"));
-    RAWFRAME_TRY_ASSIGN(consoleTab_, button(kDockTabs, "Console"));
-    RAWFRAME_TRY_ASSIGN(networkTab_, button(kDockTabs, "Network"));
-    RAWFRAME_TRY_ASSIGN(environmentTab_, button(kDockTabs, "Environment"));
-    RAWFRAME_TRY_ASSIGN(profilerTab_, button(kDockTabs, "Profiler"));
-    RAWFRAME_TRY_ASSIGN(held_.frameTab, button(kDockTabs, "Frame"));
-    RAWFRAME_TRY_ASSIGN(held_.changesTab, button(kDockTabs, "Changes"));
+    RAWFRAME_TRY_ASSIGN(assetsTab_, button(kDockTabs, kBottom("Assets")));
+    RAWFRAME_TRY_ASSIGN(historyTab_, button(kDockTabs, kBottom("History")));
+    RAWFRAME_TRY_ASSIGN(consoleTab_, button(kDockTabs, kBottom("Console")));
+    RAWFRAME_TRY_ASSIGN(networkTab_, button(kDockTabs, kBottom("Network")));
+    RAWFRAME_TRY_ASSIGN(environmentTab_, button(kDockTabs, kBottom("Environment")));
+    RAWFRAME_TRY_ASSIGN(profilerTab_, button(kDockTabs, kBottom("Profiler")));
+    RAWFRAME_TRY_ASSIGN(held_.frameTab, button(kDockTabs, kBottom("Frame")));
+    RAWFRAME_TRY_ASSIGN(held_.changesTab, button(kDockTabs, kBottom("Changes")));
     RAWFRAME_TRY_ASSIGN(scenesColumn_, pane("Assets"));
     RAWFRAME_TRY_ASSIGN(historyColumn_, pane("History"));
     RAWFRAME_TRY(makeConsole());
@@ -255,7 +265,8 @@ result::Status ShellParticipant::build() {
     dockShown_ = Dock::Assets;
     showDock(Dock::Assets);
     RAWFRAME_TRY(splitter(kBody, Edge::Inspector));
-    RAWFRAME_TRY_ASSIGN(componentsColumn_, column(kBody, "Inspector", preferences_.inspectorWidth));
+    RAWFRAME_TRY_ASSIGN(componentsColumn_,
+                        column(kBody, placed("Inspector", SurfaceKind::Panel, "Right"), preferences_.inspectorWidth));
     RAWFRAME_TRY(showMenus(kStart));
     return showScenes();
 }

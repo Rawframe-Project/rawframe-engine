@@ -29,6 +29,10 @@
 9. No runtime's closure reaches authoring tooling (ADR-0032 section 5,
    D435): the command layer, the session, and Studio are a tool's, never a
    game's, a client's, or a server's.
+10. Studio's surface table (SPEC-0051's conformance, D873) holds Part 1's
+   kinds and no other, keeps Part 1's budgets (fourteen panels, eight
+   viewport modes, ten toolbar commands), and gives every surface a
+   headless path, "none needed" where the contract says so.
 
 Exits non-zero on any failure and prints one line per finding.
 """
@@ -244,6 +248,35 @@ def check_gpu_language(files, findings):
             findings.append(f"{relative}: a GPU source not in Slang, the one first-party GPU language (ADR-0026)")
 
 
+SURFACES = Path("modules/studio/src/surfaces.h")
+SURFACE_KINDS = ["Frame", "Command", "Panel", "DocumentEditor", "ViewportMode", "Overlay", "Play", "Dialog", "Service",
+                 "ExternalTool"]
+SURFACE = re.compile(r'\{\s*"([^"]*)",\s*SurfaceKind::(\w+),\s*"([^"]*)",\s*"([^"]*)",\s*"([^"]*)"\s*\}')
+
+
+def check_surfaces(findings):
+    text = (ROOT / SURFACES).read_text(errors="replace")
+    kinds = re.search(r"enum class SurfaceKind[^{]*\{([^}]*)\}", text)
+    if kinds is None or [kind.strip() for kind in kinds.group(1).split(",") if kind.strip()] != SURFACE_KINDS:
+        findings.append(f"{SURFACES}: SurfaceKind is not SPEC-0051 Part 1's ten kinds")
+    surfaces = SURFACE.findall(text)
+    if not surfaces:
+        findings.append(f"{SURFACES}: no surfaces read")
+    names = [name for name, *_ in surfaces]
+    for name in sorted({name for name in names if names.count(name) > 1}):
+        findings.append(f"{SURFACES}: '{name}' is in the table twice")
+    for name, kind, place, headless, _ in surfaces:
+        if not headless.strip():
+            findings.append(f"{SURFACES}: '{name}' stands on no headless path (SPEC-0051's first principle)")
+        if not place.strip():
+            findings.append(f"{SURFACES}: '{name}' has no place")
+    for kind, place, most in (("Panel", None, 14), ("ViewportMode", None, 8), ("Command", "Toolbar", 10)):
+        count = sum(1 for _, each, where, _, _ in surfaces if each == kind and (place is None or where == place))
+        if count > most:
+            findings.append(f"{SURFACES}: {count} of kind {kind}{' in the ' + place if place else ''}, the budget "
+                            f"is {most} (SPEC-0051 Part 1)")
+
+
 def check_owner_rules(files, findings):
     for path in files:
         # Vendored code is upstream's own text (third_party/README.md).
@@ -283,6 +316,7 @@ def main():
     check_bounds_literals(files, findings)
     check_sizes(files, findings, notes)
     check_owner_rules(files, findings)
+    check_surfaces(findings)
     for note in notes:
         print(f"note: {note}")
     for finding in findings:

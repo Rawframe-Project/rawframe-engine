@@ -1,4 +1,5 @@
 #include "shell.h"
+#include "surfaces.h"
 
 #include <algorithm>
 #include <cctype>
@@ -30,13 +31,13 @@ constexpr std::string_view kMenus[] = {"File", "Edit", "Entity", "Game", "View",
 
 /// The palette's own command, which has no button: it gives the palette's
 /// field the keyboard.
-constexpr std::string_view kPalette = "Command palette";
+constexpr std::string_view kPalette = placed("Command palette", SurfaceKind::Command, "Menu bar");
 
 /// Studio's preferences, a dialog of its own with no button.
-constexpr std::string_view kPreferences = "Preferences";
+constexpr std::string_view kPreferences = placed("Preferences", SurfaceKind::Dialog, "Window menu");
 
 /// The game exported, a dialog of its own with no button (D872).
-constexpr std::string_view kExport = "Export";
+constexpr std::string_view kExport = placed("Export", SurfaceKind::Dialog, "File menu");
 
 /// The view turned on what is chosen (D792), with no button: the key,
 /// the menu, or the palette.
