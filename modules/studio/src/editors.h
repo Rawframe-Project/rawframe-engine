@@ -4,6 +4,7 @@
 // D827): the kinds of document listed with the scenes, and what the data,
 // settings, graph, clip, and UI editors last read and laid out.
 
+#include "rawframe/authoring_session/link.h"
 #include "rawframe/diagnostics/identity.h"
 #include "rawframe/document/json.h"
 #include "rawframe/process/child.h"
@@ -13,6 +14,7 @@
 #include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -28,6 +30,10 @@ inline constexpr diagnostics::EventIdentity kTerrainShown{"studio", "studio_terr
 inline constexpr diagnostics::EventIdentity kTilemapShown{"studio", "studio_tilemap"};
 inline constexpr diagnostics::EventIdentity kScatterShown{"studio", "studio_scatter"};
 inline constexpr diagnostics::EventIdentity kSequenceShown{"studio", "studio_sequence"};
+/// Studio joined to a shared session's host, and what it heard there
+/// unasked (D882).
+inline constexpr diagnostics::EventIdentity kJoined{"studio", "studio_joined"};
+inline constexpr diagnostics::EventIdentity kHostHeard{"studio", "studio_host_heard"};
 /// A scene's instances listed as districts (D870).
 inline constexpr diagnostics::EventIdentity kWorldShown{"studio", "studio_world"};
 /// Version control's changes read, and a commit made (D871).
@@ -198,6 +204,20 @@ struct EditorsHeld {
     std::filesystem::path exportingTo;
     std::string exportSaid;
     std::uint64_t exports = 0;
+    /// The host Studio joins in place of a session of its own, where
+    /// `studio.join` names one (D882): where, and the files of its pin and
+    /// token; the link once welcomed, whom it welcomed, what Studio last
+    /// said it has open and chosen there, and whether it said the host
+    /// closed.
+    std::string joinEndpoint;
+    std::string joinPin;
+    std::string joinToken;
+    std::unique_ptr<authoring_session::HostLink> joined;
+    std::string welcome;
+    std::string joinedAs;
+    std::string presented;
+    bool saidJoined = false;
+    bool toldClosed = false;
 };
 
 } // namespace rawframe::studio

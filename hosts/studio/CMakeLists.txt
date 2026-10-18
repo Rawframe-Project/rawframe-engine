@@ -84,6 +84,17 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # with Control held, their shared friction set together as one step;
     # then the rows from the east wall to the steep slope with Shift held,
     # deleted as one step.
+    # Studio joined to a shared session's host (ADR-0085, D882): Ben's
+    # rename, made headless, heard and shown.
+    add_test(NAME studio_joins
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/joined.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     $<TARGET_FILE:rawframe_host_author>
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_joins PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"code\":\"studio_joined\"[^\n]*\"author\":\"ada\".*\"code\":\"studio_host_heard\"[^\n]*\"kind\":\"changed\",\"author\":\"ben\",\"document\":\"level.scene\".*\"code\":\"studio_summary\"[^\n]*\"entity\":\"c5400cf8-4b07-4d16-84c2-951852c66b40\",[^\n]*\"status\":\"ben changed level.scene\".*\"exit\":\"clean_stop\".*ben's rename kept.*the host's level holds it")
     add_test(NAME studio_chooses_many
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>

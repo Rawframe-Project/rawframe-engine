@@ -8,12 +8,11 @@ namespace rawframe::studio {
 
 std::string ShellParticipant::ask(const Value& record) {
     // On the start screen there is no game to ask of (D781).
-    if (session_ == nullptr) {
+    if (!gameOpen()) {
         return {};
     }
-    bool ended = false;
     ++records_;
-    return session_->answer(document::writeCompact(record), ended);
+    return answerLine(document::writeCompact(record));
 }
 
 std::int64_t ShellParticipant::next() const noexcept {
@@ -79,7 +78,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     // An output pressed waits for the input to connect (D733).
     const std::optional<std::pair<std::string, std::string>> kConnecting = std::exchange(connecting_, std::nullopt);
     // The start screen's own presses (D781).
-    if (session_ == nullptr) {
+    if (!gameOpen()) {
         pressStart(node);
         return;
     }

@@ -310,6 +310,14 @@ private:
     void clear(std::vector<ui::Node>& rows);
     /// One record to the session, counted; its reply; the next record's id.
     std::string ask(const Value& record);
+    /// One record line answered by the session Studio holds, or the host it
+    /// joined (D882).
+    std::string answerLine(const std::string& line);
+    /// Whether a game is open, in a session of Studio's own or a host's.
+    [[nodiscard]] bool gameOpen() const noexcept;
+    /// What the joined host said unasked, acted on, and what Studio has
+    /// open and chosen said to it as it changes.
+    void hearHost();
     std::int64_t next() const noexcept;
 
     /// A read of `scene`: one query, `operation`, with `entity` if given.

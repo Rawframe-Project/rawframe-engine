@@ -115,18 +115,20 @@ result::Status ShellParticipant::build() {
     // The toolbar's commands at its end: Cook before Play, so Play, Undo,
     // and Redo keep their places (D502).
     RAWFRAME_TRY_ASSIGN(const ui::Node kEnd, box(kToolbar, ui::Layout{.alignItems = ui::Align::Center, .gap = 6}, 0));
-    // The start screen has no game to cook, play, or undo in (D781).
-    if (session_ == nullptr) {
+    // The start screen has no game to cook, play, or undo in (D781); a
+    // host joined cooks and plays on its own machine, not yet from here
+    // (D882).
+    if (!gameOpen()) {
         menus_.clear();
-    } else if (!cookTool_.empty()) {
+    } else if (!cookTool_.empty() && held_.joined == nullptr) {
         RAWFRAME_TRY_ASSIGN(cookNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
         RAWFRAME_TRY(pressWords(cookNode_, cooking_.has_value() ? "Stop" : "Cook", kText, 14));
     }
-    if (session_ != nullptr && play_.has_value()) {
+    if (session_ != nullptr && play_.has_value() && held_.joined == nullptr) {
         RAWFRAME_TRY_ASSIGN(playNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {12, 2, 10, 2}}, kRow));
         RAWFRAME_TRY(pressWords(playNode_, "Play", kText, 14));
     }
-    if (session_ != nullptr) {
+    if (gameOpen()) {
         RAWFRAME_TRY_ASSIGN(undoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
         RAWFRAME_TRY_ASSIGN(redoNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
         RAWFRAME_TRY(showHistory());
@@ -153,7 +155,7 @@ result::Status ShellParticipant::build() {
     popup_.reset();
     menuOpen_.reset();
     popupRows_.clear();
-    if (session_ == nullptr) {
+    if (!gameOpen()) {
         return showStart(kBody);
     }
     if (broken_.has_value()) {

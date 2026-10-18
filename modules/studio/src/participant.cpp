@@ -45,6 +45,22 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     if (kEndpoint.has_value()) {
         preview_ = Preview{std::string{*kEndpoint}, std::string{*kPin}, std::string{*kToken}};
     }
+    // A shared session's host joined in place of a session of Studio's own
+    // (D882); the game is the author's own copy, as each collaborator has.
+    const auto kJoin = configuration.text("studio.join.endpoint");
+    const auto kJoinPin = configuration.path("studio.join.pin_file");
+    const auto kJoinToken = configuration.path("studio.join.token_file");
+    if (kJoin.has_value() != kJoinPin.has_value() || kJoin.has_value() != kJoinToken.has_value()) {
+        return misconfigured("joining needs studio.join.endpoint, pin_file, and token_file together");
+    }
+    if (kJoin.has_value() && !kGame.has_value()) {
+        return misconfigured("a host joined is of the game studio.game names");
+    }
+    if (kJoin.has_value()) {
+        held_.joinEndpoint = std::string{*kJoin};
+        held_.joinPin = std::string{*kJoinPin};
+        held_.joinToken = std::string{*kJoinToken};
+    }
     // A game Studio plays itself to preview it (D445).
     const auto kPlayServer = configuration.path("studio.play.server");
     const auto kPlayClient = configuration.path("studio.play.client");
@@ -134,13 +150,16 @@ void ShellParticipant::settle(const std::filesystem::path& description, const st
     if (play_.has_value()) {
         play_->content = cookAt_ / "content";
     }
-    session_ = std::make_unique<authoring_session::Session>(description, root, cookTool_);
+    if (held_.joinEndpoint.empty()) {
+        session_ = std::make_unique<authoring_session::Session>(description, root, cookTool_);
+    }
     description_ = description;
     sceneRoot_ = root;
     // A game that does not read is shown so, its diagnostic opened in the
     // author's editor, and read again when asked.
     static_cast<void>(openGame());
-    title_ = "Rawframe Studio  " + description.filename().string();
+    title_ = "Rawframe Studio  " + description.filename().string() +
+             (held_.joinedAs.empty() ? std::string{} : "  joined as " + held_.joinedAs);
     // Kept by its whole path, once however it was named before.
     const auto kWhole = [](const std::filesystem::path& path) {
         std::error_code ignored;
@@ -155,18 +174,36 @@ void ShellParticipant::settle(const std::filesystem::path& description, const st
 }
 
 bool ShellParticipant::openGame() {
-    bool ended = false;
-    const std::string kWelcome = session_->answer(R"({"kind":"authoring.hello","id":1,"surfaceGeneration":1})", ended);
+    std::string welcome;
+    if (!held_.joinEndpoint.empty() && held_.joined != nullptr) {
+        welcome = held_.welcome;
+    } else if (!held_.joinEndpoint.empty()) {
+        // The host's welcome is the session's: the link says hello with
+        // the token (D882).
+        held_.joined = authoring_session::HostLink::open(
+            held_.joinEndpoint, held_.joinPin.c_str(), held_.joinToken.c_str(), welcome);
+        if (held_.joined == nullptr) {
+            say("the host could not be joined: " + (welcome.starts_with('{') ? answeredOf(welcome).message : welcome));
+            return false;
+        }
+        held_.welcome = welcome;
+        const auto kRead = document::parse(welcome);
+        const Value* kAnswer = kRead.has_value() ? kRead->find("answer") : nullptr;
+        const Value* kAuthor = kAnswer != nullptr ? kAnswer->find("author") : nullptr;
+        held_.joinedAs = kAuthor != nullptr && kAuthor->kind() == Value::Kind::String ? *kAuthor->text() : "";
+    } else {
+        welcome = answerLine(R"({"kind":"authoring.hello","id":1,"surfaceGeneration":1})");
+    }
     ++records_;
-    if (kWelcome.find("\"authoring.welcome\"") == std::string::npos) {
-        broken_ = answeredOf(kWelcome).message;
-        diagnostic_ = diagnosticOf(kWelcome);
+    if (welcome.find("\"authoring.welcome\"") == std::string::npos) {
+        broken_ = answeredOf(welcome).message;
+        diagnostic_ = diagnosticOf(welcome);
         return false;
     }
     broken_.reset();
     diagnostic_.reset();
     // What the session offers decides what Studio offers (ADR-0032).
-    catalog_ = catalogOf(session_->answer(R"({"kind":"authoring.describe","id":2})", ended));
+    catalog_ = catalogOf(answerLine(R"({"kind":"authoring.describe","id":2})"));
     ++records_;
     // The assets fields pick from, and the browser's sources (D799).
     const std::string kAssets = ask(assetsRecord(next()));
@@ -306,6 +343,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     // Scroll steps ease over the layouts that follow, by this clock.
     const double kSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began_).count() + 1;
     hearCook();
+    hearHost();
     attachPlayed(kSeconds);
     pollPicks(kSeconds);
     readLogs(kSeconds);
@@ -380,10 +418,12 @@ void ShellParticipant::stop() noexcept {
         playing_->stop();
     }
     // Ending lets a preview go, the player's camera given back (D433).
+    // A host joined is told the author leaves as its link goes.
     bool ended = false;
     if (session_ != nullptr) {
         static_cast<void>(session_->answer(R"({"kind":"authoring.end","id":0})", ended));
     }
+    held_.joined.reset();
     emitter_.log(diagnostics::Severity::Info,
                  kSummary,
                  "what Studio showed",
@@ -501,7 +541,7 @@ void ShellParticipant::stop() noexcept {
                  kStartScreen,
                  "what Studio's start screen did",
                  {diagnostics::field("made", made_),
-                  diagnostics::field("game", session_ != nullptr ? description_.filename().string() : std::string{}),
+                  diagnostics::field("game", gameOpen() ? description_.filename().string() : std::string{}),
                   diagnostics::field("recent", static_cast<std::uint64_t>(preferences_.recent.size()))});
 }
 
