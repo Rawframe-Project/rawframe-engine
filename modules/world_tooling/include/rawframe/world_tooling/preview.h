@@ -102,6 +102,12 @@ public:
     virtual bool mark(const std::optional<std::array<double, 3>>& /*at*/, std::uint8_t /*lit*/) {
         return false;
     }
+    /// Draws the paths a previewed scene's splines make, each its points in
+    /// order, in place of those it drew (D891); whether the Runtime draws
+    /// them.
+    virtual bool paths(const std::vector<std::vector<std::array<double, 3>>>& /*paths*/) {
+        return false;
+    }
     /// Takes what an author did in an editor's viewport showing the
     /// preview as its own window's (D790), in order; whether the Runtime
     /// takes such input.

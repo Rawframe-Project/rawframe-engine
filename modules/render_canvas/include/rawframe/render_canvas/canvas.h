@@ -116,6 +116,16 @@ struct CanvasVertex {
     std::uint32_t color = 0;
 };
 
+/// A line an editor's preview draws over the canvas (D891): from one point
+/// of its plane to another, in meters, and its color, 0xRRGGBBAA.
+struct CanvasLine {
+    std::array<double, 2> from{};
+    std::array<double, 2> to{};
+    std::uint32_t color = 0;
+};
+/// The most lines a canvas draws, as a scene draws at most this many.
+inline constexpr std::size_t kMostCanvasLines = 1024;
+
 /// Consecutive quads of one texture and one material, drawn by one
 /// command: the texture nought for white (a sprite with a material and no
 /// texture), the material its place among the frame's, nought for none.
@@ -149,6 +159,8 @@ struct CanvasFrame {
     std::size_t unknownTextures = 0;
     std::size_t unknownMaterials = 0;
     std::size_t overLimit = 0;
+    /// The lines drawn over every sprite (D891).
+    std::size_t lines = 0;
     /// The particle emitters, trails, and beams that reach the view, and
     /// what they spawn and leave out (D357), a material named by its place
     /// among the frame's materials and drawn over every sprite; and the
@@ -210,6 +222,12 @@ public:
     const CanvasFrame& queue(const CanvasCamera& camera);
 
     [[nodiscard]] std::span<const SpriteInstance> extracted() const noexcept;
+
+    /// The lines drawn over every sprite from the next queue on, in place
+    /// of those before, at most kMostCanvasLines (D891): an editor's
+    /// preview's paths. Each is a quad a two hundredth of the view's height
+    /// wide.
+    void showLines(std::vector<CanvasLine> lines);
 
     /// The layers whose sprites are left out from the next extract on, as
     /// an editor's preview hides them (D791, D793): a sprite whose entity's

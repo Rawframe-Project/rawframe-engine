@@ -365,7 +365,8 @@ public:
             diagnostics::field("texturesReloaded", reloaded_),
             diagnostics::field("textureBytes", kTextures.bytes),
             diagnostics::field("players", static_cast<std::uint64_t>(localPlayers_.size() + 1)),
-            diagnostics::field("playerFrames", playerFrames_)};
+            diagnostics::field("playerFrames", playerFrames_),
+            diagnostics::field("pathsShown", pathsDrawn_)};
         const auto kParticles = particles_.fields();
         fields.insert(fields.end(), kParticles.begin(), kParticles.end());
         emitter_.log(diagnostics::Severity::Info, kCanvasSummary, "what one client's canvas drew", fields);
@@ -429,6 +430,22 @@ private:
             canvas_ = std::move(*made);
         }
         canvas_->hideLayers(preview_ != nullptr ? preview_->hidden() : std::vector<std::uint32_t>{});
+        // The paths the previewed scene's splines make, cyan lines in the
+        // canvas's plane (D891).
+        if (preview_ != nullptr && preview_->pathsShown() != pathsSeen_) {
+            pathsSeen_ = preview_->pathsShown();
+            std::vector<CanvasLine> lines;
+            pathsDrawn_ = 0;
+            for (const std::vector<std::array<double, 3>>& kPath : preview_->paths()) {
+                for (std::size_t at = 1; at < kPath.size(); ++at) {
+                    lines.push_back(CanvasLine{.from = {kPath[at - 1][0], kPath[at - 1][1]},
+                                               .to = {kPath[at][0], kPath[at][1]},
+                                               .color = 0x33D9FFFFU});
+                }
+                pathsDrawn_ += kPath.size() > 1 ? 1 : 0;
+            }
+            canvas_->showLines(std::move(lines));
+        }
         canvas_->extract(*kView.world);
         extracted_ = true;
         if (!kView.owned.isNull() && kView.world->alive(kView.owned) &&
@@ -591,6 +608,9 @@ private:
     std::uint64_t animated_ = 0;
     std::uint64_t culled_ = 0;
     std::uint64_t previewed_ = 0;
+    /// The preview's paths last seen, and how many it drew (D891).
+    std::uint64_t pathsSeen_ = 0;
+    std::uint64_t pathsDrawn_ = 0;
     std::uint64_t hidden_ = 0;
     std::uint64_t malformed_ = 0;
     std::uint64_t unknownTextures_ = 0;

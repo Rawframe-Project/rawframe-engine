@@ -70,6 +70,7 @@ struct Canvas::State {
     /// The tiles one extraction left out past the sprite limit, counted
     /// into the next frame's over the limit (D858).
     std::size_t tilesOverLimit = 0;
+    std::vector<CanvasLine> lines;
     std::vector<EmitterInstance> emitters;
     std::vector<TrailInstance> trails;
     std::vector<BeamInstance> beams;
@@ -194,6 +195,45 @@ struct Canvas::State {
             frame.draws.back().indexCount += 6;
             ++frame.drawn;
             frame.animated += kSprite.frame != 0 ? 1 : 0;
+        }
+        // The lines over every sprite, white quads in their colors, as one
+        // draw where the draws leave room for it (D891).
+        frame.lines = 0;
+        if (kSees && !lines.empty() &&
+            (frame.draws.size() < settings.limits.maximumDraws ||
+             (frame.draws.back().texture == 0 && frame.draws.back().material == 0))) {
+            const float kTall = camera.height / 2;
+            const float kWide = kTall * camera.aspect;
+            const double kThick = static_cast<double>(camera.height) / 400;
+            for (const CanvasLine& kLine : lines) {
+                const double kAcross = kLine.to[0] - kLine.from[0];
+                const double kUp = kLine.to[1] - kLine.from[1];
+                const double kLong = std::hypot(kAcross, kUp);
+                if (!(kLong > 0) || !std::isfinite(kLong)) {
+                    continue;
+                }
+                const double kSideX = -kUp / kLong * kThick;
+                const double kSideY = kAcross / kLong * kThick;
+                const auto kEdge = [&](const std::array<double, 2>& at, double side) {
+                    return CanvasVertex{.x = static_cast<float>(at[0] + (kSideX * side) - camera.x) / kWide,
+                                        .y = static_cast<float>(at[1] + (kSideY * side) - camera.y) / kTall,
+                                        .color = kLine.color};
+                };
+                if (frame.draws.empty() || frame.draws.back().texture != 0 || frame.draws.back().material != 0) {
+                    frame.draws.push_back(CanvasDraw{
+                        .texture = 0, .material = 0, .firstIndex = static_cast<std::uint32_t>(frame.indices.size())});
+                }
+                const auto kFirst = static_cast<std::uint32_t>(frame.vertices.size());
+                for (const CanvasVertex& kEach :
+                     {kEdge(kLine.from, -1), kEdge(kLine.to, -1), kEdge(kLine.to, 1), kEdge(kLine.from, 1)}) {
+                    frame.vertices.push_back(kEach);
+                }
+                for (const std::uint32_t kCorner : {0U, 1U, 2U, 2U, 3U, 0U}) {
+                    frame.indices.push_back(kFirst + kCorner);
+                }
+                frame.draws.back().indexCount += 6;
+                ++frame.lines;
+            }
         }
         // The particles over every sprite, in the canvas's plane: what
         // reaches the view's rectangle is seen (D357).
@@ -455,6 +495,13 @@ const CanvasFrame& Canvas::queue(const CanvasCamera& camera) {
 
 std::span<const SpriteInstance> Canvas::extracted() const noexcept {
     return state_->extracted;
+}
+
+void Canvas::showLines(std::vector<CanvasLine> lines) {
+    if (lines.size() > kMostCanvasLines) {
+        lines.resize(kMostCanvasLines);
+    }
+    state_->lines = std::move(lines);
 }
 
 result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, const kest::Program& program) {

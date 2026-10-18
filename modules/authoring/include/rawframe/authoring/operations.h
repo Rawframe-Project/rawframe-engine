@@ -93,6 +93,10 @@ struct ComponentSchema {
     /// Of `rawframe.ui.Node`: a node of the game's UI document may be it
     /// (D672).
     bool uiNode = false;
+    /// Of `rawframe.spline.Spline` or `rawframe.spline.Point`: a spline's
+    /// path or a point on it, whose curve a preview draws (D891).
+    bool splinePath = false;
+    bool splinePoint = false;
     /// The Kest type the game declares it of, as its line names it, so a
     /// tool finds a game's sun or sky by the engine's type (D834).
     std::string type;

@@ -242,7 +242,12 @@ public:
         overlays_ = overlays;
         return true;
     }
+    bool paths(const std::vector<std::vector<std::array<double, 3>>>& paths) override {
+        paths_ = paths;
+        return true;
+    }
     std::optional<Look> kept;
+    std::vector<std::vector<std::array<double, 3>>> paths_;
     std::vector<Look> split_;
     std::vector<std::string> overlays_;
 };
@@ -317,6 +322,23 @@ RAWFRAME_TEST(LookingMovesThePreviewUnderTheViewGrant) {
     server->serve(nullptr, {}, {});
     RAWFRAME_EXPECT(provider.sent[1].find(R"("id":10,"error":{"code":"malformed")") != std::string::npos &&
                     preview.overlays_.size() == 2);
+    // A spline's path handed on (D891); a path of one point, or a point
+    // that is no number, refused, the paths kept.
+    provider.say(1,
+                 R"({"kind":"tooling.paths","id":11,"paths":[[[0,0,0],[1,2,0],[3,2,0]]]})"
+                 "\n"
+                 R"({"kind":"tooling.paths","id":12,"paths":[[[0,0,0]]]})"
+                 "\n"
+                 R"({"kind":"tooling.paths","id":13,"paths":[[[0,0,0],[1,"x",0]]]})"
+                 "\n");
+    server->serve(nullptr, {}, {});
+    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":11,"answer":{"kind":"tooling.pathed","drawn":true})") !=
+                        std::string::npos &&
+                    preview.paths_.size() == 1 && preview.paths_[0].size() == 3 &&
+                    preview.paths_[0][1] == (std::array<double, 3>{1, 2, 0}));
+    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":12,"error":{"code":"malformed")") != std::string::npos &&
+                    provider.sent[1].find(R"("id":13,"error":{"code":"malformed")") != std::string::npos &&
+                    preview.paths_.size() == 1);
     // Granted but with no preview here: not found.
     FedProvider other;
     auto bare = *ToolingServer::create(other, {.token = kToken, .grants = {.view = true}});

@@ -7,6 +7,7 @@
 // (ADR-0066).
 
 #include "rawframe/authoring/authored_scene.h"
+#include "rawframe/authoring/operations.h"
 #include "rawframe/document/json.h"
 
 #include <array>
@@ -48,6 +49,15 @@ movedView(const authoring::SceneView& view, double detents, double across, doubl
 /// nought depth): the scene's own entity's, an instance's entity's as its
 /// patch sets or adds it; none for one without, or not in the scene.
 [[nodiscard]] std::optional<std::array<double, 3>> standingOf(const scene::Scene& scene, base::Bits128 entity);
+
+/// The paths `scene`'s splines make (D891), as `catalog` says which of its
+/// components are a spline and a point on one: each spline's own points,
+/// ordered by their index, then their id, standing where their poses put
+/// them, walked as the game walks them; at most 64 paths and 4,096 points in all, a spline with fewer
+/// than two points none. Points an instance brings are its source's to
+/// draw.
+[[nodiscard]] std::vector<std::vector<std::array<double, 3>>> pathsOf(const scene::Scene& scene,
+                                                                      const authoring::ComponentCatalog& catalog);
 
 /// Whether `view` is a 2D one (D793): its eye straight over its target
 /// along +Z, looking down at the plane a 2D game draws in.

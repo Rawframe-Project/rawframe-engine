@@ -495,3 +495,26 @@ RAWFRAME_TEST(APreviewsEyePlacesTheView) {
                         kSeen.elapsed == 0.5F);
     }
 }
+
+RAWFRAME_TEST(ALineIsAThinQuadOverTheSprites) {
+    // D891: a preview's path, one line from (1000, -2) to (1004, -2), over
+    // a sprite, in a white draw of its own after the sprite's; a camera ten
+    // meters tall and twenty wide, so the line is a twentieth of a meter
+    // thick each way of its middle.
+    Rig rig;
+    rig.spawn(Sprite{.texture = kRunner, .width = 1, .height = 1}, physics2d::Pose2D{.x = 1000, .y = -2});
+    rig.canvas->showLines({CanvasLine{.from = {1000, -2}, .to = {1004, -2}, .color = 0x33D9FFFFU},
+                           CanvasLine{.from = {5, 5}, .to = {5, 5}, .color = 0xFFFFFFFFU}});
+    const CanvasFrame& kFrame = rig.frame({.x = 1000, .y = -2, .height = 10, .aspect = 2});
+    RAWFRAME_EXPECT(kFrame.drawn == 1 && kFrame.lines == 1 && kFrame.draws.size() == 2 &&
+                    kFrame.draws[1].texture == 0 && kFrame.draws[1].material == 0 && kFrame.draws[1].indexCount == 6 &&
+                    kFrame.vertices.size() == 8);
+    if (kFrame.vertices.size() == 8) {
+        RAWFRAME_EXPECT(at(kFrame.vertices[4], 0, -0.005F, 0, 0) && at(kFrame.vertices[5], 0.4F, -0.005F, 0, 0) &&
+                        at(kFrame.vertices[6], 0.4F, 0.005F, 0, 0) && at(kFrame.vertices[7], 0, 0.005F, 0, 0) &&
+                        kFrame.vertices[4].color == 0x33D9FFFFU);
+    }
+    // Lines taken away, none drawn.
+    rig.canvas->showLines({});
+    RAWFRAME_EXPECT(rig.frame({.x = 1000, .y = -2, .height = 10, .aspect = 2}).lines == 0);
+}

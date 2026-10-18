@@ -1,11 +1,15 @@
 #include "viewing.h"
 
+#include "rawframe/spline/spline.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
+#include <map>
 #include <numbers>
 #include <string_view>
+#include <tuple>
 
 namespace rawframe::authoring_session {
 
@@ -158,6 +162,60 @@ ViewMotion motionSince(const ViewMotion& now, const ViewMotion& read) noexcept {
                       .orbit = {now.orbit[0] - read.orbit[0], now.orbit[1] - read.orbit[1]},
                       .fly = now.fly - read.fly,
                       .look = {now.look[0] - read.look[0], now.look[1] - read.look[1]}};
+}
+
+std::vector<std::vector<std::array<double, 3>>> pathsOf(const scene::Scene& scene,
+                                                        const authoring::ComponentCatalog& catalog) {
+    constexpr std::size_t kMostPaths = 64;
+    constexpr std::size_t kMostPoints = 4096;
+    const auto kOf = [&catalog](std::string_view name, bool authoring::ComponentSchema::* role) {
+        const authoring::ComponentSchema* kSchema = catalog.findNamed(name);
+        return kSchema != nullptr && kSchema->*role;
+    };
+    const auto kField = [](const scene::SceneComponent& component, std::string_view name) {
+        const auto kFound = std::ranges::find(component.fields, name, &scene::SceneField::name);
+        return kFound != component.fields.end() ? &kFound->value : nullptr;
+    };
+    // Each spline's closing, and its points by (index, id).
+    std::map<base::Bits128, bool> closed;
+    std::map<base::Bits128, std::map<std::tuple<double, base::Bits128>, std::array<double, 3>>> points;
+    for (const scene::SceneEntity& kEntity : scene.entities) {
+        for (const scene::SceneComponent& kComponent : kEntity.components) {
+            if (kOf(kComponent.name, &authoring::ComponentSchema::splinePath)) {
+                const scene::FieldValue* kClosed = kField(kComponent, "closed");
+                closed[kEntity.id] = kClosed != nullptr && kClosed->kind == scene::FieldValue::Kind::True;
+            } else if (kOf(kComponent.name, &authoring::ComponentSchema::splinePoint)) {
+                const scene::FieldValue* kSpline = kField(kComponent, "spline");
+                const scene::FieldValue* kIndex = kField(kComponent, "index");
+                const std::optional<std::array<double, 3>> kAt = standingOf(scene, kEntity.id);
+                if (kSpline != nullptr && kSpline->kind == scene::FieldValue::Kind::Entity && kAt.has_value()) {
+                    const double kPlace = kIndex != nullptr && kIndex->kind == scene::FieldValue::Kind::Number
+                                              ? std::strtod(kIndex->number.c_str(), nullptr)
+                                              : 0;
+                    points[kSpline->entity][{kPlace, kEntity.id}] = *kAt;
+                }
+            }
+        }
+    }
+    std::vector<std::vector<std::array<double, 3>>> paths;
+    std::size_t total = 0;
+    for (const auto& [kSpline, kClosed] : closed) {
+        const auto kPoints = points.find(kSpline);
+        if (kPoints == points.end() || kPoints->second.size() < 2 || paths.size() == kMostPaths) {
+            continue;
+        }
+        spline::Spline made{.points = {}, .closed = kClosed};
+        for (const auto& [kKey, kAt] : kPoints->second) {
+            made.points.push_back(kAt);
+        }
+        std::vector<std::array<double, 3>> walked = spline::walk(made).points;
+        if (walked.size() < 2 || total + walked.size() > kMostPoints) {
+            continue;
+        }
+        total += walked.size();
+        paths.push_back(std::move(walked));
+    }
+    return paths;
 }
 
 bool flat(const authoring::SceneView& view) noexcept {

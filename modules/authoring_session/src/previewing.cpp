@@ -96,6 +96,7 @@ result::Status Preview::open(const authoring::SessionRecord& record) {
     scene_ = record.scene;
     previewed_ = std::nullopt;
     told_ = false;
+    pathsTold_.reset();
     clicks_ = 0;
     pressed_.reset();
     return {};
@@ -115,9 +116,35 @@ void Preview::letGo() {
 /// Hands the preview the scene's view where it previews that scene and
 /// the view changed since it was last told; whether the preview is
 /// live. A preview that does not answer is let go.
-bool Preview::forward(const std::string& name, const authoring::AuthoredScene& scene) {
+bool Preview::forward(const std::string& name,
+                      const authoring::AuthoredScene& scene,
+                      std::vector<std::vector<std::array<double, 3>>> paths) {
     if (preview_ == nullptr || name != scene_) {
         return false;
+    }
+    if (!pathsTold_.has_value() || *pathsTold_ != paths) {
+        Value listed = Value::array();
+        for (const std::vector<std::array<double, 3>>& kPath : paths) {
+            Value points = Value::array();
+            for (const std::array<double, 3>& kPoint : kPath) {
+                Value numbers = Value::array();
+                for (const double kEach : kPoint) {
+                    numbers.push(Value::real(kEach));
+                }
+                points.push(std::move(numbers));
+            }
+            listed.push(std::move(points));
+        }
+        Value asked = Value::object();
+        asked.add("kind", Value::string("tooling.paths"));
+        asked.add("id", Value::integer(0));
+        asked.add("paths", std::move(listed));
+        if (!preview_->ask(rawframe::document::writeCompact(asked)).has_value()) {
+            preview_.reset();
+            scene_.clear();
+            return false;
+        }
+        pathsTold_ = std::move(paths);
     }
     const std::optional<authoring::SceneView>& kView = scene.view();
     if (told_ && kView == previewed_) {
@@ -303,7 +330,7 @@ Value Preview::viewMovedBy(const Value& clicked, authoring::AuthoredScene* previ
     if (!previewed->setView(movedBy(kWas, kChange)).has_value()) {
         return Value{};
     }
-    forward(scene_, *previewed);
+    forward(scene_, *previewed, pathsTold_.value_or(std::vector<std::vector<std::array<double, 3>>>{}));
     return viewOf(*previewed);
 }
 
@@ -570,7 +597,8 @@ Value Preview::split(const authoring::SessionRecord& record, const authoring::Au
     views_ = record.views;
     told_ = false;
     splitShown_ = 0;
-    const bool kLive = forward(record.scene, scene);
+    const bool kLive =
+        forward(record.scene, scene, pathsTold_.value_or(std::vector<std::vector<std::array<double, 3>>>{}));
     Value made = Value::object();
     made.add("kind", Value::string("authoring.split"));
     made.add("views", Value::integer(static_cast<std::int64_t>(views_)));

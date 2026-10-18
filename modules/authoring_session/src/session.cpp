@@ -714,6 +714,9 @@ private:
             return ranDry(outcomeOf(document, false, reopened, std::move(results), skipped), copy->text());
         }
         RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.scene, *open));
+        // A spline's points moved, its path drawn again where it previews
+        // (D891).
+        (void)forward(record.scene, *open);
         return outcomeOf(*open->document, kWritten, reopened, std::move(results), skipped);
     }
 
@@ -750,6 +753,7 @@ private:
         Value documents = Value::array();
         for (std::size_t at = 0; at < opened.size(); ++at) {
             RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.parts[at].scene, *opened[at]));
+            (void)forward(record.parts[at].scene, *opened[at]);
             Value results = Value::array();
             results.push(kCommitted.has_value()
                              ? slotValue((*kCommitted)[at])
@@ -868,7 +872,7 @@ private:
 
     /// Hands the preview the scene's view, where it previews it.
     bool forward(const std::string& name, const OpenScene& open) {
-        return preview_.forward(name, *open.document);
+        return preview_.forward(name, *open.document, pathsOf(open.document->scene(), *catalog_));
     }
 
     /// `select`: the scene's selection, in place of what was (D417).

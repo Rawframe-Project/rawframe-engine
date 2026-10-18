@@ -22,6 +22,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace rawframe::authoring_session {
 
@@ -50,9 +51,12 @@ public:
     void letGo();
 
     /// Hands the preview `scene`'s view where it previews `name` and the
-    /// view changed since it was last told; whether the preview is live. A
-    /// preview that does not answer is let go.
-    bool forward(const std::string& name, const authoring::AuthoredScene& scene);
+    /// view changed since it was last told, and the paths its splines make
+    /// where they changed (D891); whether the preview is live. A preview
+    /// that does not answer is let go.
+    bool forward(const std::string& name,
+                 const authoring::AuthoredScene& scene,
+                 std::vector<std::vector<std::array<double, 3>>> paths);
 
     /// `pick` (D456): the preview's newest press, if it is new, asked of the
     /// server as a pick; what it moved when let go; the mark's part lit;
@@ -136,6 +140,8 @@ private:
     std::string scene_;
     std::optional<authoring::SceneView> previewed_;
     bool told_ = false;
+    /// The paths it was last told to draw (D891), none before.
+    std::optional<std::vector<std::vector<std::array<double, 3>>>> pathsTold_;
     /// How many views the preview shows, and how many beside its own the
     /// preview last took (D797).
     std::size_t views_ = 1;

@@ -128,6 +128,20 @@ public:
         return marks_;
     }
 
+    /// The paths the previewed scene's splines make, each its points in
+    /// order, drawn over the scene while it looks (D891); counted, so a
+    /// reader tells new ones.
+    void showPaths(std::vector<std::vector<std::array<double, 3>>> paths) {
+        paths_ = std::move(paths);
+        ++pathsShown_;
+    }
+    [[nodiscard]] const std::vector<std::vector<std::array<double, 3>>>& paths() const noexcept {
+        return paths_;
+    }
+    [[nodiscard]] std::uint64_t pathsShown() const noexcept {
+        return pathsShown_;
+    }
+
     /// The layers whose entities the preview leaves out (D791), as
     /// `rawframe.world.layer` numbers them; none hides nothing.
     void hide(std::vector<std::uint32_t> layers) {
@@ -279,6 +293,8 @@ private:
     std::optional<std::array<double, 3>> marked_;
     std::uint64_t marks_ = 0;
     MarkPart lit_ = MarkPart::None;
+    std::vector<std::vector<std::array<double, 3>>> paths_;
+    std::uint64_t pathsShown_ = 0;
     std::optional<Ray> pointing_;
     double wheel_ = 0;
     std::array<double, 2> orbit_{};

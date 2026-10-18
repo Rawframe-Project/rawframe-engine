@@ -83,6 +83,41 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         made.add("marked", Value::boolean(settings.previewer != nullptr && settings.previewer->mark(kPoint, lit)));
         return replyLine(id, "answer", std::move(made));
     }
+    if (kind == "tooling.paths") {
+        // The paths the previewed scene's splines make (D891): the view's.
+        // At most 64 paths of 2 to 4,096 points, 4,096 points in all: a
+        // scene draws at most 1,024 lines (render_scene's kMostSceneLines).
+        if (!settings.grants.view) {
+            return errorLine(id, ToolingError::NotGranted, "drawing paths needs the view grant");
+        }
+        const Value* kPaths = record.find("paths");
+        std::vector<std::vector<std::array<double, 3>>> paths;
+        std::size_t points = 0;
+        bool sound = kPaths != nullptr && kPaths->kind() == Value::Kind::Array && kPaths->items().size() <= 64;
+        for (std::size_t at = 0; sound && at < kPaths->items().size(); ++at) {
+            const Value& kPath = kPaths->items()[at];
+            sound = kPath.kind() == Value::Kind::Array && kPath.items().size() >= 2 && kPath.items().size() <= 4096 &&
+                    (points += kPath.items().size()) <= 4096;
+            std::vector<std::array<double, 3>> path;
+            for (std::size_t each = 0; sound && each < kPath.items().size(); ++each) {
+                const std::optional<std::array<double, 3>> kPoint = pointOf(&kPath.items()[each]);
+                sound = kPoint.has_value();
+                if (sound) {
+                    path.push_back(*kPoint);
+                }
+            }
+            paths.push_back(std::move(path));
+        }
+        if (!sound) {
+            return errorLine(id,
+                             ToolingError::Malformed,
+                             "paths are at most 64 of 2 to 4096 points, each three finite numbers, 4096 in all");
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("tooling.pathed"));
+        made.add("drawn", Value::boolean(settings.previewer != nullptr && settings.previewer->paths(paths)));
+        return replyLine(id, "answer", std::move(made));
+    }
     if (kind == "tooling.hide") {
         // The layers the preview leaves out (D791): the view's.
         if (!settings.grants.view) {

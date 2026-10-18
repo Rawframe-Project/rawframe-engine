@@ -82,12 +82,15 @@ result::Result<authoring::ComponentCatalog> catalogOf(const rawframe::world_kest
         if (!kLayout.has_value()) {
             continue;
         }
-        authoring::ComponentSchema schema{.id = component.id,
-                                          .name = component.name,
-                                          .mark = kLayout->mark,
-                                          .fields = {},
-                                          .uiNode = rawframe::world_kest::ofEngineType(component, "rawframe.ui.Node"),
-                                          .type = component.kestType};
+        authoring::ComponentSchema schema{
+            .id = component.id,
+            .name = component.name,
+            .mark = kLayout->mark,
+            .fields = {},
+            .uiNode = rawframe::world_kest::ofEngineType(component, "rawframe.ui.Node"),
+            .splinePath = rawframe::world_kest::ofEngineType(component, "rawframe.spline.Spline"),
+            .splinePoint = rawframe::world_kest::ofEngineType(component, "rawframe.spline.Point"),
+            .type = component.kestType};
         std::vector<std::string> references;
         for (const rawframe::world_kest::GameEntityField& field : game.entityFields) {
             if (field.component == component.name) {

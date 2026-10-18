@@ -116,6 +116,10 @@ public:
                                                                            : view::MarkPart::None);
         return true;
     }
+    bool paths(const std::vector<std::vector<std::array<double, 3>>>& paths) override {
+        camera.showPaths(paths);
+        return true;
+    }
     std::optional<world_tooling::Clicked> clicked() const override {
         const std::optional<view::Ray>& kRay = camera.lastClick();
         const std::optional<view::Ray>& kPointing = camera.pointing();
