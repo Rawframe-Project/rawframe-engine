@@ -589,6 +589,31 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"scene"}),
                                annotationsOf(false, false)));
     }
+    // The game's Studio extensions, and one of their commands run (D874).
+    tools.push_back(toolOf("extensions_list",
+                           "The game's Studio extensions (Kest programs under extensions/), each with its "
+                           "commands, the capabilities its doors are of, and why it offers nothing where it does "
+                           "not.",
+                           schemaOf(Value::object(), {}),
+                           annotationsOf(true, false)));
+    {
+        Value entity = Value::object();
+        entity.add("type", text("string"));
+        Value entities = Value::object();
+        entities.add("type", text("array"));
+        entities.add("items", std::move(entity));
+        entities.add("description", text("The entities the command runs on, by their SourceEntityIds."));
+        Value properties = Value::object();
+        properties.add("scene", property("string", false, "The scene's path under the game's directory."));
+        properties.add("extension", property("string", false, "The extension's path, as extensions_list gives it."));
+        properties.add("command", property("string", false, "The command's name, as extensions_list gives it."));
+        properties.add("entities", std::move(entities));
+        tools.push_back(toolOf("extension_run",
+                               "Runs an extension's command on a scene's entities: what it stages is applied as "
+                               "one change, one undo step, as document_apply's are.",
+                               schemaOf(std::move(properties), {"scene", "extension", "command"}),
+                               annotationsOf(false, false)));
+    }
     // What a source uses and what uses it, by the last cook (D803).
     {
         Value properties = Value::object();
@@ -771,6 +796,14 @@ McpBridge::State::callSession(const Value& id, std::string_view name, const Valu
     } else if (name == "game_traffic") {
         made = record("authoring.traffic", recordId);
         copy("scene", "scene");
+    } else if (name == "extensions_list") {
+        made = record("authoring.extensions", recordId);
+    } else if (name == "extension_run") {
+        made = record("authoring.extension", recordId);
+        copy("scene", "scene");
+        copy("extension", "extension");
+        copy("command", "command");
+        made.add("entities", arguments.find("entities") != nullptr ? *arguments.find("entities") : Value::array());
     } else if (name == "game_profile") {
         made = record("authoring.profile", recordId);
         copy("scene", "scene");

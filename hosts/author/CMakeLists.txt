@@ -140,6 +140,12 @@ if(RAWFRAME_BUILD_TESTS)
                      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_sequence)
     set_tests_properties(author_sequence PROPERTIES
                          PASS_REGULAR_EXPRESSION "edited a sequence in a session and undid it")
+    # A Studio extension's commands run headless (D874).
+    add_test(NAME author_extension
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_extension.sh $<TARGET_FILE:rawframe_host_author>
+                     ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_extension)
+    set_tests_properties(author_extension PROPERTIES
+                         PASS_REGULAR_EXPRESSION "ran an extension's commands in a session, its doors its only reach")
     # A tilemap painted and cooked (D858, D860).
     add_test(NAME author_tilemap
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_tilemap.sh $<TARGET_FILE:rawframe_host_author>

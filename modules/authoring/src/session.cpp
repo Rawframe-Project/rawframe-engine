@@ -30,7 +30,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 38> kVerbs = {
+constexpr std::array<VerbName, 40> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -68,6 +68,8 @@ constexpr std::array<VerbName, 38> kVerbs = {
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
     VerbName{.kind = "authoring.import", .verb = SessionVerb::Import},
+    VerbName{.kind = "authoring.extensions", .verb = SessionVerb::Extensions},
+    VerbName{.kind = "authoring.extension", .verb = SessionVerb::Extension},
     VerbName{.kind = "authoring.end", .verb = SessionVerb::End}};
 
 /// The members a verb's record may hold beside `kind` and `id`, and those
@@ -83,8 +85,11 @@ Members membersOf(SessionVerb verb) {
         return Members{.required = 1, .optional = 0};
     case SessionVerb::Describe:
     case SessionVerb::Assets:
+    case SessionVerb::Extensions:
     case SessionVerb::End:
         return Members{.required = 0, .optional = 0};
+    case SessionVerb::Extension:
+        return Members{.required = 4, .optional = 0};
     case SessionVerb::Apply:
     case SessionVerb::Read:
     case SessionVerb::Select:
@@ -273,6 +278,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     }
     case SessionVerb::Describe:
     case SessionVerb::Assets:
+    case SessionVerb::Extensions:
     case SessionVerb::End:
         return record;
     case SessionVerb::ApplyTogether:
@@ -369,6 +375,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::DrawnFrame:
     case SessionVerb::LiveEntities:
     case SessionVerb::LiveEntity:
+    case SessionVerb::Extension:
         break;
     }
     if (textOf(scene) == nullptr || scene->text()->empty()) {
@@ -387,7 +394,20 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             return malformed("read holds a query document");
         }
         RAWFRAME_TRY_ASSIGN(record.queries, readQueries(document::writeCompact(*kQueries)));
-    } else if (record.verb == SessionVerb::Select) {
+    } else if (record.verb == SessionVerb::Select || record.verb == SessionVerb::Extension) {
+        // An extension's command is run on the entities chosen, as select
+        // names them (D874), its extension and command by their names; the
+        // session finds them among the game's.
+        if (record.verb == SessionVerb::Extension) {
+            const std::string* kExtension = textOf(parsed->find("extension"));
+            const std::string* kCommand = textOf(parsed->find("command"));
+            if (kExtension == nullptr || kExtension->empty() || kExtension->size() > 1024 || kCommand == nullptr ||
+                kCommand->empty() || kCommand->size() > 256) {
+                return malformed("extension names the extension by its path and the command by its name");
+            }
+            record.extension = *kExtension;
+            record.command = *kCommand;
+        }
         const Value* kEntities = parsed->find("entities");
         if (kEntities == nullptr || kEntities->kind() != Value::Kind::Array) {
             return malformed("select holds the entities it chooses");

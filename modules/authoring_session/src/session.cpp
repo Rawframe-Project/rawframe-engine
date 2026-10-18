@@ -5,6 +5,7 @@
 #include "cooking.h"
 #include "data_kinds.h"
 #include "documents.h"
+#include "extensions.h"
 #include "handles.h"
 #include "importing.h"
 #include "previewing.h"
@@ -174,6 +175,10 @@ private:
         }
         case authoring::SessionVerb::Apply:
             return applied(record);
+        case authoring::SessionVerb::Extensions:
+            return extensionsListed();
+        case authoring::SessionVerb::Extension:
+            return extensionRun(record);
         case authoring::SessionVerb::ApplyTogether:
             return appliedTogether(record);
         case authoring::SessionVerb::Cook: {
@@ -527,6 +532,52 @@ private:
         made.add("resource", Value::string(std::string{digits.data(), digits.size()}));
         made.add("document", Value::string(digestOf(kText)));
         return made;
+    }
+
+    /// The game's extensions, each with its commands, what its doors are
+    /// of, and why it offers nothing where it does not (D874).
+    Value extensionsListed() const {
+        Value extensions = Value::array();
+        for (const GameExtension& kExtension : readExtensions(game_.parent_path())) {
+            Value each = Value::object();
+            each.add("path", Value::string(kExtension.path));
+            Value commands = Value::array();
+            for (const ExtensionCommand& kCommand : kExtension.commands) {
+                commands.push(Value::string(kCommand.name));
+            }
+            each.add("commands", std::move(commands));
+            Value capabilities = Value::array();
+            for (const std::string& kCapability : kExtension.capabilities) {
+                capabilities.push(Value::string(kCapability));
+            }
+            each.add("capabilities", std::move(capabilities));
+            if (!kExtension.refused.empty()) {
+                each.add("refused", Value::string(kExtension.refused));
+            }
+            extensions.push(std::move(each));
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("authoring.extensions"));
+        made.add("extensions", std::move(extensions));
+        return made;
+    }
+
+    /// An extension's command run on the scene's chosen entities: what it
+    /// staged applied as one atomic request, answered as apply answers
+    /// (D874).
+    result::Result<Value> extensionRun(const authoring::SessionRecord& record) {
+        bool reopened = false;
+        RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
+        authoring::SessionRecord applying = record;
+        applying.verb = authoring::SessionVerb::Apply;
+        RAWFRAME_TRY_ASSIGN(applying.request,
+                            runExtension(game_.parent_path(),
+                                         record.extension,
+                                         record.command,
+                                         open->document->scene(),
+                                         record.entities,
+                                         *catalog_));
+        return applied(applying);
     }
 
     result::Result<Value> applied(const authoring::SessionRecord& record) {

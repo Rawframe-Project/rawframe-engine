@@ -156,6 +156,10 @@ enum class SessionVerb : std::uint8_t {
     Cancel,
     /// A file from outside made one of the game's assets (D503).
     Import,
+    /// The game's Studio extensions and the commands each offers, and one
+    /// of their commands run on a scene, what it staged one step (D874).
+    Extensions,
+    Extension,
     End,
 };
 
@@ -228,6 +232,10 @@ struct SessionRecord {
     /// Import's: the file, and where under the game's directory it goes.
     std::string source;
     std::string as;
+    /// Extension's: the extension, by its path under the game's directory,
+    /// and its command, by name; the entities chosen are `entities`.
+    std::string extension;
+    std::string command;
     /// Import settings': the source's path under the game's directory, and
     /// the settings given it, an object (D800).
     std::string asset;
