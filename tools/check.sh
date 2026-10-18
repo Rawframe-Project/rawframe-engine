@@ -123,9 +123,10 @@ build_and_test() {
     # word (D888).
     local leave=()
     if [ "$preset" = clang-development ] && [ "$tier" = push ]; then
-        # Before a push it plays what the fast check plays, alone: every
-        # label, the reached tests only (D898).
-        leave=()
+        # Before a push it plays, alone, the reached tests that neither of
+        # the other two trees played: those labeled `alone`, `headset`, or
+        # `gesture` (D898).
+        leave=(-L 'alone|headset|gesture')
     elif [ "$preset" = gcc-shipping ] || [ "$preset" = clang-shipping ]; then
         leave=(-LE 'window|headset')
         [ "$tier" != fast ] && leave=(-LE 'window|headset|alone')
