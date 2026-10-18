@@ -21,8 +21,10 @@ jobs:
     runs-on: [self-hosted, linux, x64, rawframe]
     # A backstop against a hang, not the check's budget: a change to a header
     # every tree includes rebuilds all eight, 20 minutes on this machine
-    # (D493), and was cancelled at the 20 it had.
-    timeout-minutes: 30
+    # (D493), and was cancelled at the 20 it had; other work on the shared
+    # machine at a load near 200 took the check to 29.5 minutes, and two
+    # runs were cancelled at 30 (D876).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
