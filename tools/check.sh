@@ -125,8 +125,10 @@ build_and_test() {
     if [ "$preset" = clang-development ] && [ "$tier" = push ]; then
         # Before a push it plays, alone, the reached tests that neither of
         # the other two trees played: those labeled `alone`, `headset`,
-        # `gesture`, or `heavy` (D898, D902).
-        leave=(-L 'alone|headset|gesture|heavy')
+        # `gesture`, or `heavy` (D898, D902), and Studio's window tests,
+        # which the full check after the push plays under the address
+        # sanitizer: a Studio change's push took an hour there (D903).
+        leave=(-L 'alone|headset|gesture|heavy|studio')
     elif [ "$preset" = gcc-shipping ] || [ "$preset" = clang-shipping ]; then
         leave=(-LE 'window|headset')
         [ "$tier" != fast ] && leave=(-LE 'window|headset|alone')
@@ -146,6 +148,7 @@ build_and_test() {
         # the fast check: nine instrumented games drawing were a third of
         # this tree's time, the full check's longest (D645).
         leave=(-LE 'alone|headset|gesture|heavy')
+        [ "$tier" = push ] && leave=(-LE 'alone|headset|gesture|heavy|studio')
     elif [ "$tier" != fast ]; then
         leave=(-LE 'alone|headset')
     fi
