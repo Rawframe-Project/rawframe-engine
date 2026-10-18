@@ -336,3 +336,56 @@ RAWFRAME_TEST(DocumentsCommittedTogetherAreAllOrNothingWithTheirOwnHistories) {
     }
     RAWFRAME_EXPECT(xOf(*kLevel) == "1" && !kLevel->inTransaction() && kLevel->canRedo());
 }
+
+RAWFRAME_TEST(EachAuthorUndoesTheirOwnChangesOnly) {
+    // ADR-0085, D879: authors 1 and 2 change a scene in turn; each undo
+    // takes back its own author's latest change, even past another's, as
+    // an entry of its own, and never another's.
+    const auto kScene = opened();
+    const auto kSetY = [&](std::string_view from, std::string_view to) {
+        Delta made{.kind = DeltaKind::SetField, .entity = kSpawn, .component = "game.position", .field = "y"};
+        if (from != "0") {
+            made.before.field = number(from);
+        }
+        if (to != "0") {
+            made.after.field = number(to);
+        }
+        auto transaction = kScene->begin(kScene->generation());
+        RAWFRAME_EXPECT(transaction.has_value() && transaction->stage(made).has_value());
+        RAWFRAME_EXPECT(transaction->commit().has_value());
+    };
+    kScene->setAuthor(1);
+    commitMove(*kScene, "1", "2");
+    kScene->setAuthor(2);
+    kSetY("0", "5");
+    const std::string kBoth = kScene->text();
+    // Author 1's x taken back past author 2's y, which stays.
+    kScene->setAuthor(1);
+    RAWFRAME_EXPECT(kScene->undo(kScene->generation()).has_value() && xOf(*kScene) == "1");
+    RAWFRAME_EXPECT(kScene->text().find("\"y\": 5") != std::string::npos && kScene->undoable() == 3);
+    RAWFRAME_EXPECT(kScene->authorshipAt(2).author == 1 && kScene->authorshipAt(2).kind == EntryKind::Undo &&
+                    kScene->authorshipAt(0).takenBack);
+    // Author 1 has nothing more to undo, and puts x back.
+    RAWFRAME_EXPECT(refusedWith(kScene->undo(kScene->generation()), AuthoringError::TargetNotFound));
+    RAWFRAME_EXPECT(kScene->redo(kScene->generation()).has_value() && kScene->text() == kBoth);
+    RAWFRAME_EXPECT(kScene->authorshipAt(3).kind == EntryKind::Redo);
+    // Author 2's own undo steps back only its own y.
+    kScene->setAuthor(2);
+    RAWFRAME_EXPECT(kScene->undo(kScene->generation()).has_value() && xOf(*kScene) == "2" &&
+                    kScene->text().find("\"y\"") == std::string::npos);
+
+    // Where another author changed the very field since, the undo is
+    // refused, naming that change.
+    const auto kContested = opened();
+    kContested->setAuthor(1);
+    commitMove(*kContested, "1", "2");
+    kContested->setAuthor(2);
+    commitMove(*kContested, "2", "3");
+    kContested->setAuthor(1);
+    const auto kRefused = kContested->undo(kContested->generation());
+    RAWFRAME_EXPECT(refusedWith(kRefused, AuthoringError::Conflict) && xOf(*kContested) == "3");
+    // One author alone steps the history as before: the redo is kept.
+    const auto kAlone = opened();
+    commitMove(*kAlone, "1", "2");
+    RAWFRAME_EXPECT(kAlone->undo(1).has_value() && kAlone->redoable() == 1 && kAlone->undoable() == 0);
+}

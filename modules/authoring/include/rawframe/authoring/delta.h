@@ -157,6 +157,14 @@ using Journal = std::vector<Delta>;
 /// A journal forward in order, or backward in reverse order; all or none.
 [[nodiscard]] result::Status apply(scene::Scene& scene, const Journal& journal, bool forward);
 
+/// A journal applied as `apply` applies it to a scene other authors have
+/// changed since it was made (ADR-0085, D879): an entity or an instance is
+/// taken from where it now stands, and one made again stands at its place
+/// or the last the scene has, since other entities made or moved around it
+/// change none of its slots. Answers the journal as applied, its places
+/// those it met, so that it steps back exactly.
+[[nodiscard]] result::Result<Journal> applyRebased(scene::Scene& scene, const Journal& journal, bool forward);
+
 /// SPEC-0028's canonical record of a journal, and read back; refused
 /// (`DeltaInvalid`) in any other form.
 [[nodiscard]] result::Result<std::string> writeJournal(const Journal& journal);

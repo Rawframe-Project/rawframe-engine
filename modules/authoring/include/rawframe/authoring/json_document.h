@@ -120,9 +120,15 @@ public:
     [[nodiscard]] bool canRedo() const noexcept {
         return history_.canRedo();
     }
-    /// Takes back the last entry, or puts back the last taken back.
-    /// Refuses (`TargetStale`) another generation and (`TargetNotFound`)
-    /// with nothing to do.
+    /// Who keeps, undoes, or redoes next (ADR-0085, D879): nought, the
+    /// session's own, until told.
+    void setAuthor(std::uint32_t author) noexcept {
+        author_ = author;
+    }
+    /// Takes back the author's latest change, or puts back what they took
+    /// back last, as a scene does (D879). Refuses (`TargetStale`) another
+    /// generation, (`Conflict`) where a later change by another author
+    /// stands in its way, and (`TargetNotFound`) with nothing to do.
     [[nodiscard]] result::Result<Committed> undo(std::uint64_t generation);
     [[nodiscard]] result::Result<Committed> redo(std::uint64_t generation);
 
@@ -142,10 +148,17 @@ public:
     [[nodiscard]] const std::vector<JsonDelta>& journalAt(std::size_t entry) const noexcept {
         return history_.at(entry).journal;
     }
+    /// Who made the history's entry at `entry`, and what it is (D879).
+    [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
+        return history_.authorshipAt(entry);
+    }
 
 private:
     struct Entry {
         std::vector<JsonDelta> journal;
+        /// Whether what the entry did is its journal applied backward
+        /// (D879).
+        bool reversed = false;
         std::size_t bytes = 0;
     };
 
@@ -163,6 +176,7 @@ private:
     DocumentReader reads_ = nullptr;
     std::uint64_t generation_ = 0;
     History<Entry> history_;
+    std::uint32_t author_ = 0;
 };
 
 } // namespace rawframe::authoring

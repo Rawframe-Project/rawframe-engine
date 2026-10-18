@@ -434,6 +434,50 @@ result::Status apply(scene::Scene& scene, const Journal& journal, bool forward) 
     return {};
 }
 
+result::Result<Journal> applyRebased(scene::Scene& scene, const Journal& journal, bool forward) {
+    scene::Scene changed = scene;
+    Journal applied;
+    applied.reserve(journal.size());
+    for (std::size_t at = 0; at < journal.size(); ++at) {
+        Delta delta = forward ? journal[at] : journal[journal.size() - 1 - at];
+        SlotValue& from = forward ? delta.before : delta.after;
+        SlotValue& to = forward ? delta.after : delta.before;
+        if (delta.kind == DeltaKind::CreateNode || delta.kind == DeltaKind::DestroyNode ||
+            delta.kind == DeltaKind::Reorder) {
+            const std::optional<std::size_t> kPlace = placeOf(changed, delta.entity);
+            const std::size_t kOthers = changed.entities.size() - (kPlace.has_value() ? 1 : 0);
+            if (from.node.has_value() && kPlace.has_value()) {
+                from.node->place = *kPlace;
+            }
+            if (to.node.has_value()) {
+                to.node->place = std::min(to.node->place, kOthers);
+            }
+            if (from.place.has_value() && kPlace.has_value()) {
+                from.place = *kPlace;
+            }
+            if (to.place.has_value() && kOthers > 0) {
+                to.place = std::min(*to.place, kOthers);
+            }
+        } else if (delta.kind == DeltaKind::CreateInstance || delta.kind == DeltaKind::DestroyInstance) {
+            const std::optional<std::size_t> kNamed = namedInstance(changed, delta.entity);
+            const std::size_t kOthers = changed.instances.size() - (kNamed.has_value() ? 1 : 0);
+            if (from.instance.has_value() && kNamed.has_value()) {
+                from.instance->place = *kNamed;
+            }
+            if (to.instance.has_value()) {
+                to.instance->place = std::min(to.instance->place, kOthers);
+            }
+        }
+        RAWFRAME_TRY(apply(changed, delta, forward));
+        applied.push_back(std::move(delta));
+    }
+    if (!forward) {
+        std::ranges::reverse(applied);
+    }
+    scene = std::move(changed);
+    return applied;
+}
+
 std::string summaryOf(const Journal& journal) {
     if (journal.empty()) {
         return "no change";

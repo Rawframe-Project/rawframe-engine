@@ -3,6 +3,7 @@
 #include "rawframe/authoring/errors.h"
 #include "rawframe/schema/stable_id.h"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cmath>
@@ -275,6 +276,21 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         leftOutable = parsed->find("capture") != nullptr ? 1 : 0;
     } else if (record.verb == SessionVerb::Extension) {
         leftOutable = parsed->find("point") != nullptr ? 1 : 0;
+    }
+    // A change's author, where the verb makes one (D879).
+    if (const Value* kAuthor = parsed->find("author"); kAuthor != nullptr) {
+        const bool kChanges = record.verb == SessionVerb::Apply || record.verb == SessionVerb::ApplyTogether ||
+                              record.verb == SessionVerb::Undo || record.verb == SessionVerb::Redo ||
+                              record.verb == SessionVerb::Extension;
+        const std::string* kName = textOf(kAuthor);
+        if (!kChanges || kName == nullptr || kName->empty() || kName->size() > 64 ||
+            !std::ranges::all_of(*kName, [](char each) {
+                return static_cast<unsigned char>(each) >= 0x20 && each != 0x7f;
+            })) {
+            return malformed("a change's author is a name of 1 to 64 printable characters");
+        }
+        record.author = *kName;
+        ++leftOutable;
     }
     const std::size_t kGiven = parsed->names().size() - 1 - (parsed->find("id") != nullptr ? 1 : 0) -
                                (expects != nullptr ? 1 : 0) - (dry != nullptr ? 1 : 0) - leftOutable;

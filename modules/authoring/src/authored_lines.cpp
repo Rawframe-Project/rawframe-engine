@@ -143,7 +143,8 @@ result::Result<Committed> AuthoredLines::change(std::uint64_t generation, std::s
     RAWFRAME_TRY(reads_(written(lines)));
     const std::size_t kBytes = bytesOf(lines_) + bytesOf(lines);
     history_.append(
-        Entry{.before = std::move(lines_), .after = lines, .deltas = deltas, .summary = summary, .bytes = kBytes});
+        Entry{.before = std::move(lines_), .after = lines, .deltas = deltas, .summary = summary, .bytes = kBytes},
+        author_);
     lines_ = std::move(lines);
     ++generation_;
     return Committed{.generation = generation_, .deltas = deltas};
@@ -155,12 +156,27 @@ result::Result<Committed> AuthoredLines::step(std::uint64_t generation, bool und
                       AuthoringError::TargetStale,
                       "an undo or redo is asked against the document's generation");
     }
-    if (undo ? !canUndo() : !canRedo()) {
+    const std::optional<std::size_t> kTarget = history_.targetOf(author_, undo);
+    if (!kTarget.has_value()) {
         return refuse(result::ErrorClass::NotFound,
                       AuthoringError::TargetNotFound,
                       undo ? "there is nothing to undo" : "there is nothing to redo");
     }
-    const Entry& kEntry = history_.next(undo);
+    if (!history_.steps(*kTarget, undo)) {
+        const std::optional<std::size_t> kBlocker = history_.laterByOthers(*kTarget, author_);
+        result::Error refusal = result::fail(result::ErrorClass::Conflict,
+                                             kAuthoringDomain,
+                                             code(AuthoringError::Conflict),
+                                             "a later change by another author stands in its way")
+                                    .error();
+        if (kBlocker.has_value()) {
+            refusal = std::move(refusal)
+                          .withContext("authorNumber", std::to_string(history_.authorshipAt(*kBlocker).author))
+                          .withContext("entry", std::to_string(history_.authorshipAt(*kBlocker).serial));
+        }
+        return std::unexpected{std::move(refusal)};
+    }
+    const Entry& kEntry = history_.at(*kTarget);
     lines_ = undo ? kEntry.before : kEntry.after;
     const std::size_t kDeltas = kEntry.deltas;
     history_.stepped(undo);

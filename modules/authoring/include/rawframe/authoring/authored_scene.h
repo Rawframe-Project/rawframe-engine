@@ -182,9 +182,17 @@ public:
     [[nodiscard]] bool canRedo() const noexcept {
         return history_.canRedo();
     }
-    /// Takes back the last entry, or puts back the last taken back.
-    /// Refuses (`TargetStale`) another generation, (`Conflict`) while a
-    /// transaction is open, and (`TargetNotFound`) with nothing to do.
+    /// Who makes what commits, undoes, or redoes next (ADR-0085, D879):
+    /// nought, the session's own, until told.
+    void setAuthor(std::uint32_t author) noexcept {
+        author_ = author;
+    }
+    /// Takes back the author's latest change, or puts back what they took
+    /// back last (see history.h). Refuses (`TargetStale`) another
+    /// generation, (`Conflict`) while a transaction is open or where a
+    /// later change by another author stands in its way, naming that
+    /// change's author and number, and (`TargetNotFound`) with nothing to
+    /// do.
     [[nodiscard]] result::Result<Committed> undo(std::uint64_t generation);
     [[nodiscard]] result::Result<Committed> redo(std::uint64_t generation);
 
@@ -209,6 +217,10 @@ public:
     [[nodiscard]] const Journal& journalAt(std::size_t entry) const noexcept {
         return history_.at(entry).journal;
     }
+    /// Who made the history's entry at `entry`, and what it is (D879).
+    [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
+        return history_.authorshipAt(entry);
+    }
 
 private:
     friend class Transaction;
@@ -216,6 +228,9 @@ private:
 
     struct Entry {
         Journal journal;
+        /// Whether what the entry did is its journal applied backward: an
+        /// undo of another author's later-overtaken change (D879).
+        bool reversed = false;
         std::size_t bytes = 0;
         /// The selection before the transaction, and after it.
         std::vector<base::Bits128> selectedBefore;
@@ -250,6 +265,7 @@ private:
     std::optional<SceneView> view_;
     /// Each transaction's number, so a token outliving one is inert.
     std::uint64_t serials_ = 0;
+    std::uint32_t author_ = 0;
 };
 
 } // namespace rawframe::authoring

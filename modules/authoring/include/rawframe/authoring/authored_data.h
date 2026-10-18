@@ -74,6 +74,10 @@ public:
     /// and (`LimitExceeded`) more than a batch's operations.
     [[nodiscard]] result::Result<Committed> change(std::uint64_t generation, std::span<const Operation> operations);
 
+    /// Who changes, undoes, or redoes next (D879).
+    void setAuthor(std::uint32_t author) noexcept {
+        document_.setAuthor(author);
+    }
     [[nodiscard]] bool canUndo() const noexcept {
         return document_.canUndo();
     }
@@ -98,6 +102,10 @@ public:
     }
     [[nodiscard]] std::size_t redoable() const noexcept {
         return document_.redoable();
+    }
+    /// Who made the history's entry at `entry`, and what it is (D879).
+    [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
+        return document_.authorshipAt(entry);
     }
     [[nodiscard]] const std::vector<JsonDelta>& journalAt(std::size_t entry) const noexcept {
         return document_.journalAt(entry);

@@ -191,6 +191,10 @@ struct SessionRecord {
     SessionVerb verb = SessionVerb::Hello;
     /// The client's id for it; null when it gave none.
     document::Value id;
+    /// Who makes the change, undo, or redo it asks for (ADR-0085, D879):
+    /// a collaborator's or agent's name, empty for the session's own.
+    /// Apply, apply_together, undo, redo, and extension may name one.
+    std::string author;
     /// The scene's path under the game's directory, for apply, read, undo,
     /// redo, and the verbs naming a scene.
     std::string scene;

@@ -213,7 +213,8 @@ result::Result<Committed> AuthoredScene::commit() {
               .selectedBefore = std::move(open.selectedBefore),
               .selectedAfter = selection_,
               .viewBefore = open.viewBefore,
-              .viewAfter = view_});
+              .viewAfter = view_},
+        author_);
     return Committed{.generation = generation_, .deltas = kDeltas};
 }
 
@@ -282,23 +283,72 @@ result::Result<Committed> AuthoredScene::step(std::uint64_t generation, bool und
     if (open_.has_value()) {
         return refuse(result::ErrorClass::Conflict, AuthoringError::Conflict, "no undo or redo inside a transaction");
     }
-    if (undo ? !canUndo() : !canRedo()) {
+    const std::optional<std::size_t> kTarget = history_.targetOf(author_, undo);
+    if (!kTarget.has_value()) {
         return refuse(result::ErrorClass::NotFound,
                       AuthoringError::TargetNotFound,
                       undo ? "there is nothing to undo" : "there is nothing to redo");
     }
-    const Entry& entry = history_.next(undo);
-    auto applied = apply(scene_, entry.journal, !undo);
-    if (!applied.has_value()) {
-        // An entry is only ever applied to the scene it was made against.
-        return std::unexpected<result::Error>{std::move(applied).error().mappedTo(
-            result::ErrorClass::Internal, kAuthoringDomain, code(AuthoringError::Internal), "a history entry applies")};
+    const Entry& entry = history_.at(*kTarget);
+    if (history_.steps(*kTarget, undo)) {
+        // The history's own step: what it did, applied backward or again.
+        auto applied = apply(scene_, entry.journal, undo == entry.reversed);
+        if (!applied.has_value()) {
+            // An entry is only ever stepped on the scene it was made
+            // against.
+            return std::unexpected<result::Error>{std::move(applied).error().mappedTo(result::ErrorClass::Internal,
+                                                                                      kAuthoringDomain,
+                                                                                      code(AuthoringError::Internal),
+                                                                                      "a history entry applies")};
+        }
+        history_.stepped(undo);
+        ++generation_;
+        selection_ = heldOf(scene_, undo ? entry.selectedBefore : entry.selectedAfter);
+        view_ = undo ? entry.viewBefore : entry.viewAfter;
+        return Committed{.generation = generation_, .deltas = entry.journal.size()};
     }
-    history_.stepped(undo);
+    // Another author's change came after it (ADR-0085): taken back on the
+    // scene as it now is, as an entry of its own, unless what came after
+    // left a slot other than the entry left it.
+    scene::Scene taken = scene_;
+    auto rebased = applyRebased(taken, entry.journal, entry.reversed);
+    if (!rebased.has_value()) {
+        const std::optional<std::size_t> kBlocker = history_.laterByOthers(*kTarget, author_);
+        result::Error refusal = result::fail(result::ErrorClass::Conflict,
+                                             kAuthoringDomain,
+                                             code(AuthoringError::Conflict),
+                                             "a later change by another author stands in its way")
+                                    .error();
+        if (kBlocker.has_value()) {
+            refusal = std::move(refusal)
+                          .withContext("authorNumber", std::to_string(history_.authorshipAt(*kBlocker).author))
+                          .withContext("entry", std::to_string(history_.authorshipAt(*kBlocker).serial));
+        }
+        return std::unexpected{std::move(refusal)};
+    }
+    Journal journal = std::move(*rebased);
+    const bool kReversed = !entry.reversed;
+    scene_ = std::move(taken);
     ++generation_;
-    selection_ = heldOf(scene_, undo ? entry.selectedBefore : entry.selectedAfter);
-    view_ = undo ? entry.viewBefore : entry.viewAfter;
-    return Committed{.generation = generation_, .deltas = entry.journal.size()};
+    const std::size_t kDeltas = journal.size();
+    std::vector<base::Bits128> before = selection_;
+    selection_ = heldOf(scene_, selection_);
+    std::size_t journalBytes = 0;
+    for (const Delta& kDelta : journal) {
+        journalBytes += bytesOf(kDelta);
+    }
+    const std::size_t kBytes = journalBytes + selectionBytes(before, selection_) + 2 * sizeof(SceneView);
+    history_.append(Entry{.journal = std::move(journal),
+                          .reversed = kReversed,
+                          .bytes = kBytes,
+                          .selectedBefore = std::move(before),
+                          .selectedAfter = selection_,
+                          .viewBefore = view_,
+                          .viewAfter = view_},
+                    author_,
+                    undo ? EntryKind::Undo : EntryKind::Redo,
+                    *kTarget);
+    return Committed{.generation = generation_, .deltas = kDeltas};
 }
 
 result::Status AuthoredScene::select(std::span<const base::Bits128> entities) {

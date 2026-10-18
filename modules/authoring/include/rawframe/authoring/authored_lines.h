@@ -72,6 +72,12 @@ public:
     /// them, and (`LimitExceeded`) more than a batch's operations.
     [[nodiscard]] result::Result<Committed> change(std::uint64_t generation, std::span<const Operation> operations);
 
+    /// Who changes, undoes, or redoes next (D879). A line document keeps
+    /// whole lines before and after: an author's change another author's
+    /// came after is refused, the change in its way named.
+    void setAuthor(std::uint32_t author) noexcept {
+        author_ = author;
+    }
     [[nodiscard]] bool canUndo() const noexcept {
         return history_.canUndo();
     }
@@ -102,6 +108,10 @@ public:
     }
     /// What the history's entry at `entry` does, as `set line 12` and how
     /// many more.
+    /// Who made the history's entry at `entry`, and what it is (D879).
+    [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
+        return history_.authorshipAt(entry);
+    }
     [[nodiscard]] std::string summaryAt(std::size_t entry) const {
         return history_.at(entry).summary;
     }
@@ -131,6 +141,7 @@ private:
     DocumentReader reads_ = nullptr;
     LineRewriter rewrites_ = nullptr;
     History<Entry> history_;
+    std::uint32_t author_ = 0;
     std::uint64_t generation_ = 0;
 };
 

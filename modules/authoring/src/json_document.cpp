@@ -242,7 +242,7 @@ result::Result<Committed> JsonDocument::keep(Staged staged) {
     root_ = std::move(staged.root);
     ++generation_;
     const std::size_t kDeltas = staged.journal.size();
-    history_.append(Entry{.journal = std::move(staged.journal), .bytes = staged.bytes});
+    history_.append(Entry{.journal = std::move(staged.journal), .bytes = staged.bytes}, author_);
     return Committed{.generation = generation_, .deltas = kDeltas};
 }
 
@@ -266,28 +266,54 @@ result::Result<Committed> JsonDocument::step(std::uint64_t generation, bool undo
                       AuthoringError::TargetStale,
                       "an undo or redo is asked against the document's generation");
     }
-    if (undo ? !canUndo() : !canRedo()) {
+    const std::optional<std::size_t> kTarget = history_.targetOf(author_, undo);
+    if (!kTarget.has_value()) {
         return refuse(result::ErrorClass::NotFound,
                       AuthoringError::TargetNotFound,
                       undo ? "there is nothing to undo" : "there is nothing to redo");
     }
-    const Entry& entry = history_.next(undo);
+    const Entry& entry = history_.at(*kTarget);
+    const bool kSteps = history_.steps(*kTarget, undo);
+    // The history's own step applies what the entry did backward or again;
+    // an entry another author's change came after is taken back, as an
+    // entry of its own, where nothing since stands in its way (D879).
+    const bool kForward = kSteps ? undo == entry.reversed : entry.reversed;
     Value root = root_;
     for (std::size_t at = 0; at < entry.journal.size(); ++at) {
-        auto applied = applyTo(root, entry.journal[undo ? entry.journal.size() - 1 - at : at], !undo);
-        if (!applied.has_value()) {
-            // An entry is only ever applied to the document it was made
+        auto applied = applyTo(root, entry.journal[kForward ? at : entry.journal.size() - 1 - at], kForward);
+        if (applied.has_value()) {
+            continue;
+        }
+        if (kSteps) {
+            // An entry is only ever stepped on the document it was made
             // against.
             return std::unexpected<result::Error>{std::move(applied).error().mappedTo(result::ErrorClass::Internal,
                                                                                       kAuthoringDomain,
                                                                                       code(AuthoringError::Internal),
                                                                                       "a history entry applies")};
         }
+        const std::optional<std::size_t> kBlocker = history_.laterByOthers(*kTarget, author_);
+        result::Error refusal = result::fail(result::ErrorClass::Conflict,
+                                             kAuthoringDomain,
+                                             code(AuthoringError::Conflict),
+                                             "a later change by another author stands in its way")
+                                    .error();
+        if (kBlocker.has_value()) {
+            refusal = std::move(refusal)
+                          .withContext("authorNumber", std::to_string(history_.authorshipAt(*kBlocker).author))
+                          .withContext("entry", std::to_string(history_.authorshipAt(*kBlocker).serial));
+        }
+        return std::unexpected{std::move(refusal)};
     }
     root_ = std::move(root);
     const std::size_t kDeltas = entry.journal.size();
-    history_.stepped(undo);
     ++generation_;
+    if (kSteps) {
+        history_.stepped(undo);
+    } else {
+        Entry taken{.journal = entry.journal, .reversed = !entry.reversed, .bytes = entry.bytes};
+        history_.append(std::move(taken), author_, undo ? EntryKind::Undo : EntryKind::Redo, *kTarget);
+    }
     return Committed{.generation = generation_, .deltas = kDeltas};
 }
 
