@@ -61,6 +61,9 @@ cmp "$work/root/yard.blockout" "$work/changed.blockout"
 
 # Imported from outside into a copy of Runners, declared, and cooked.
 cp -R "$repository/games/runners" "$work/runners"
+# The last session's replies go first, so the wait below never finds the
+# cook's reply among them (gate-58).
+rm -f "$work/replies"
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.import","id":2,"source":"'"$work/changed.blockout"'","as":"blockouts/yard.blockout"}'

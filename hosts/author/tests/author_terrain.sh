@@ -70,6 +70,9 @@ cmp "$work/root/field.terrain" "$work/shaped.terrain"
 
 # Imported from outside into a copy of Ledges, declared, and cooked.
 cp -R "$repository/games/ledges" "$work/ledges"
+# The last session's replies go first, so the wait below never finds the
+# cook's reply among them (gate-58).
+rm -f "$work/replies"
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.import","id":2,"source":"'"$work/shaped.terrain"'","as":"ground/field.terrain"}'
