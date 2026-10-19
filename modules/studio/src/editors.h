@@ -276,6 +276,17 @@ struct EditorsHeld {
     /// mode's button by its name, the scene a content mode was chosen
     /// from, which Transform goes back to, and how many modes were chosen.
     ui::Node modePalette{};
+    /// The viewport's own controls over it (D916): the bar of pills, each
+    /// pill and the menu it opens, the axes' disc and its three ends, and
+    /// the flying hint.
+    ui::Node viewBar{};
+    ui::Node splitBar{};
+    std::vector<std::pair<ui::Node, std::string>> viewPills;
+    ui::Node axisGizmo{};
+    std::array<ui::Node, 3> axisEnds{};
+    ui::Node flyHint{};
+    /// Whether the view was last turned to 2D.
+    bool flat = false;
     std::vector<std::pair<ui::Node, std::string>> modeButtons;
     std::string modeReturn;
     std::uint64_t modesChosen = 0;

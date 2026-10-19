@@ -257,6 +257,9 @@ private:
     void importAsked();
     void asCheckbox(ui::Node value, bool on);
     void asChooser(ui::Node line);
+    void showViewBar();
+    void showAxes();
+    [[nodiscard]] bool commandOn(std::string_view name) const;
     [[nodiscard]] std::vector<std::string> addChoices(std::string_view typed) const;
     result::Status showSources();
     bool pressBrowser(ui::Node node);

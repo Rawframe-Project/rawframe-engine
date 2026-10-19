@@ -582,6 +582,7 @@ void ShellParticipant::attachPreview() {
         shown_.overlays.insert(shown_.overlays.begin(), "grid");
     }
     showViewText();
+    showViewBar();
     say(kAttached.done ? (previewing_ ? "previewing " + scene_ : "no preview") : kAttached.message);
     if (previewing_) {
         emitter_.log(diagnostics::Severity::Info,

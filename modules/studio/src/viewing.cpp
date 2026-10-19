@@ -75,12 +75,14 @@ void ShellParticipant::seeIn2D(bool flat) {
         ++viewsSet_;
         view_ = kAnswered.view;
         previewing_ = kAnswered.previewing;
+        held_.flat = flat;
         say(flat ? "2D view" : "3D view");
     } else {
         ++refused_;
         say(kAnswered.message);
     }
     showViewText();
+    showViewBar();
 }
 
 void ShellParticipant::bookmark(std::uint8_t slot, bool go) {

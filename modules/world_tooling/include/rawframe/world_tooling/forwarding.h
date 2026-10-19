@@ -15,6 +15,7 @@
 #include "rawframe/composition/participant.h"
 #include "rawframe/world_tooling/window_input.h"
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <utility>
@@ -41,6 +42,21 @@ public:
         return area_;
     }
 
+    /// The editor's side: the parts of the area it draws its own controls
+    /// over, which keep what lands on them (D916), each as the area is.
+    void exceptOver(std::vector<std::array<float, 4>> holes) {
+        holes_ = std::move(holes);
+    }
+    /// The editor's side: whether the keys are handed over only while a
+    /// press handed over is held (D916), as an editor's viewport flies its
+    /// camera with them while a button is down and keeps them otherwise.
+    void keysWhileHeld(bool held) noexcept {
+        keysWhileHeld_ = held;
+    }
+    [[nodiscard]] bool keysOnlyWhileHeld() const noexcept {
+        return keysWhileHeld_;
+    }
+
     /// Whether the area has the keyboard.
     [[nodiscard]] bool focused() const noexcept {
         return focused_;
@@ -54,8 +70,10 @@ public:
     }
     /// Whether `x`, `y` is over the area.
     [[nodiscard]] bool over(float x, float y) const noexcept {
-        return area_.has_value() && x >= (*area_)[0] && y >= (*area_)[1] && x < (*area_)[0] + (*area_)[2] &&
-               y < (*area_)[1] + (*area_)[3];
+        const auto kIn = [x, y](const std::array<float, 4>& box) {
+            return x >= box[0] && y >= box[1] && x < box[0] + box[2] && y < box[1] + box[3];
+        };
+        return area_.has_value() && kIn(*area_) && std::ranges::none_of(holes_, kIn);
     }
     /// The host's side: `event` handed over, its point already the area's.
     void give(WindowInput event) {
@@ -70,6 +88,8 @@ public:
 
 private:
     std::optional<std::array<float, 4>> area_;
+    std::vector<std::array<float, 4>> holes_;
+    bool keysWhileHeld_ = false;
     bool focused_ = false;
     std::vector<WindowInput> given_;
 };

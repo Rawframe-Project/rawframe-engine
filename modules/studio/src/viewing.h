@@ -12,9 +12,16 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rawframe::studio {
+
+/// Whether `menu` is one of the viewport's pills, and whether the pill
+/// lists `command` (D916).
+[[nodiscard]] bool isPill(std::string_view menu);
+[[nodiscard]] bool pillLists(std::string_view pill, std::string_view command);
+
 
 struct PreviewShown {
     /// The layers the preview leaves out (D791), and how many times a

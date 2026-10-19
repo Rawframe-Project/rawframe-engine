@@ -346,7 +346,10 @@ bool WindowHost::forwarded(const window::Event& event) {
         return true;
     case window::EventKind::KeyDown:
     case window::EventKind::KeyUp:
-        if (!forwarding_.focused()) {
+        // Held only: a key goes down there while a press is, and up there
+        // whenever it went down there (D916).
+        if (!forwarding_.focused() ||
+            (forwarding_.keysOnlyWhileHeld() && event.kind == window::EventKind::KeyDown && !forwardedPress_)) {
             return false;
         }
         forwarding_.give({.kind = event.kind == window::EventKind::KeyDown ? world_tooling::WindowInput::Kind::KeyDown
@@ -356,6 +359,9 @@ bool WindowHost::forwarded(const window::Event& event) {
                           .modifiers = event.key.modifiers});
         return true;
     case window::EventKind::TextInput:
+        if (forwarding_.keysOnlyWhileHeld() && !forwardedPress_) {
+            return false;
+        }
         if (!forwarding_.focused() || event.text.empty() || event.text.size() > world_tooling::kMostText) {
             return forwarding_.focused();
         }

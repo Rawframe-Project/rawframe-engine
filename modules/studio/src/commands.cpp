@@ -303,6 +303,7 @@ bool ShellParticipant::runCommand(std::string_view name) {
             std::erase(shown_.overlays, kName);
         }
         tellOverlays();
+        showViewBar();
         say(kName + (kOn ? " shown" : " hidden"));
         return true;
     }
@@ -323,6 +324,7 @@ bool ShellParticipant::runCommand(std::string_view name) {
         kMode != kModes.end()) {
         shown_.viewMode = std::string{kMode->second};
         tellViewMode();
+        showViewBar();
         say(shown_.viewMode + " view");
         return true;
     }
@@ -379,6 +381,23 @@ void ShellParticipant::runChord(std::string_view chord) {
     }
 }
 
+bool ShellParticipant::commandOn(std::string_view name) const {
+    // What a pill's row stands for that is on now (D916).
+    if (const auto kOverlay = std::ranges::find(kOverlays, name, &std::pair<std::string_view, std::string_view>::first);
+        kOverlay != kOverlays.end()) {
+        return std::ranges::contains(shown_.overlays, std::string{kOverlay->second});
+    }
+    if (const auto kMode = std::ranges::find(kModes, name, &std::pair<std::string_view, std::string_view>::first);
+        kMode != kModes.end()) {
+        return shown_.viewMode == kMode->second;
+    }
+    if (const auto kSplit = std::ranges::find(kSplits, name, &std::pair<std::string_view, std::uint8_t>::first);
+        kSplit != kSplits.end()) {
+        return shown_.views == kSplit->second;
+    }
+    return (name == kFlat && held_.flat) || (name == kTilted && !held_.flat);
+}
+
 void ShellParticipant::showMenu(std::size_t at) {
     const bool kWasOpen = menuOpen_ == at;
     closePopup();
@@ -407,11 +426,14 @@ void ShellParticipant::showMenu(std::size_t at) {
     const bool kChooser = menus_[at].second == kLayoutChooser;
     for (std::size_t each = 0; each < commands_.size(); ++each) {
         const Command& kCommand = commands_[each];
-        if (kChooser ? kCommand.menu != "Window" || !kCommand.name.ends_with(kLayoutSuffix)
-                     : kCommand.menu != menus_[at].second) {
+        // A viewport's pill lists its own commands (D916).
+        const bool kPill = isPill(menus_[at].second);
+        if (kPill ? !pillLists(menus_[at].second, kCommand.name)
+            : kChooser ? kCommand.menu != "Window" || !kCommand.name.ends_with(kLayoutSuffix)
+                       : kCommand.menu != menus_[at].second) {
             continue;
         }
-        auto line = row(*popup, lineOf(kCommand), kText, kRow, true);
+        auto line = row(*popup, lineOf(kCommand), kText, kPill && commandOn(kCommand.name) ? kChosen : kRow, true);
         if (!line.has_value()) {
             return;
         }

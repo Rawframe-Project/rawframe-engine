@@ -1128,6 +1128,7 @@ void ShellParticipant::showViewText() {
                                 kText,
                                 14));
     }
+    showAxes();
 }
 
 result::Status ShellParticipant::showHistory() {
