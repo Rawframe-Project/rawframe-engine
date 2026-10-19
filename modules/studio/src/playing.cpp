@@ -380,6 +380,55 @@ void ShellParticipant::markChosen() {
     }
 }
 
+void ShellParticipant::outlineChosen() {
+    if (!previewing_ || scene_.empty()) {
+        outlined_.clear();
+        return;
+    }
+    const auto kOutline = [](std::uint32_t color, const std::vector<std::string>& chosen) {
+        Value rgb = Value::array();
+        for (const unsigned kShift : {24U, 16U, 8U}) {
+            rgb.push(Value::real(static_cast<double>((color >> kShift) & 0xFFU) / 255));
+        }
+        Value entities = Value::array();
+        for (const std::string& kEntity : chosen) {
+            entities.push(Value::string(kEntity));
+        }
+        Value made = Value::object();
+        made.add("color", std::move(rgb));
+        made.add("entities", std::move(entities));
+        return made;
+    };
+    // This author's choice in the color they are shown in at a host, else
+    // the Hierarchy's; then each other's at this scene, in theirs.
+    Value outlines = Value::array();
+    outlines.push(kOutline(held_.joinedAs.empty() ? kChosen : authorColorOf(held_.joinedAs), selected_));
+    for (const Collaborating& kOther : held_.collaborators) {
+        if (kOther.author != held_.joinedAs && kOther.document == scene_ && !kOther.chosen.empty() &&
+            outlines.items().size() < 16) {
+            outlines.push(kOutline(authorColorOf(kOther.author), kOther.chosen));
+        }
+    }
+    std::string written = document::writeCompact(outlines);
+    if (written == outlined_) {
+        return;
+    }
+    outlined_ = std::move(written);
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.outline"));
+    record.add("id", Value::integer(next()));
+    record.add("scene", Value::string(scene_));
+    record.add("outlines", outlines);
+    if (ask(record).find("\"shown\":true") == std::string::npos) {
+        return;
+    }
+    ++outlinesShown_;
+    emitter_.log(diagnostics::Severity::Info,
+                 kOutlined,
+                 "the preview outlines what each author has chosen",
+                 {diagnostics::field("authors", outlines.items().size()), diagnostics::field("shown", outlinesShown_)});
+}
+
 void ShellParticipant::moveDragged(const Moved& moved) {
     // A press let go where it went down is a click, not a drag.
     if (std::abs(moved.x) < 0.01 && std::abs(moved.y) < 0.01 && std::abs(moved.z) < 0.01) {

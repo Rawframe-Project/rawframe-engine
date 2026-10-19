@@ -51,6 +51,10 @@
 
 namespace rawframe::studio {
 
+/// An author's color, the same wherever they are shown and in every
+/// collaborator's Studio (D884): red, green, blue, and opacity.
+[[nodiscard]] std::uint32_t authorColorOf(std::string_view author);
+
 inline constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"};
 inline constexpr diagnostics::EventIdentity kLayout{"studio", "studio_layout"};
 inline constexpr diagnostics::EventIdentity kStartScreen{"studio", "studio_start"};
@@ -68,6 +72,9 @@ inline constexpr diagnostics::EventIdentity kPreviewing{"studio", "studio_previe
 /// The preview shows where the chosen entity stands (D464), so its handles
 /// can be grabbed (D466).
 inline constexpr diagnostics::EventIdentity kMarked{"studio", "studio_marked"};
+/// What each author has chosen outlined in the preview, in their color
+/// (D907): how many authors' outlines it drew.
+inline constexpr diagnostics::EventIdentity kOutlined{"studio", "studio_outlined"};
 inline constexpr diagnostics::EventIdentity kNetworkRead{"studio", "studio_network"};
 /// A part of the mark lit under the pointer, as the session says (D504).
 inline constexpr diagnostics::EventIdentity kLit{"studio", "studio_lit"};
@@ -680,6 +687,9 @@ private:
     /// Has the preview mark where the chosen entity stands, or nothing for
     /// none or one with no pose (D464).
     void markChosen();
+    /// What this author and each other at the scene have chosen outlined
+    /// in its preview, each in their color, when any of it changed (D907).
+    void outlineChosen();
 
     /// The chosen scene listed again, `entity` chosen if it stands, the
     /// columns scrolled where they were: a change is not a new place.
@@ -1021,6 +1031,10 @@ private:
     double nextAttach_ = 0;
     double nextPick_ = 0;
     std::uint64_t picked_ = 0;
+    /// The outlines last asked of the preview, written, and how many times
+    /// it drew new ones (D907).
+    std::string outlined_;
+    std::uint64_t outlinesShown_ = 0;
     std::uint64_t dragged_ = 0;
     /// Of those, raised and turned (D463).
     std::uint64_t raised_ = 0;

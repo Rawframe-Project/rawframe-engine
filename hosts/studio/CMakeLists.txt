@@ -1186,6 +1186,20 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"studio_joined\".*\"code\":\"studio_previewing\".*\"code\":\"studio_frame\"[^\n]*\"passesTimed\":[1-9][0-9]*}.*cooked on the host")
+        # And outlines what a collaborator chose, in their color (D907).
+        add_test(NAME studio_joined_outlines
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/joined_outlines.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         $<TARGET_FILE:rawframe_host_author> $<TARGET_FILE:rawframe_host_cook_tool>
+                         ${PROJECT_BINARY_DIR}/hosts/client/runners_clicked.conf
+                         @level.scene @Cook "until=studio_said,status=\"cooked " @Play until=studio_previewing~600
+                         "until=studio_outlined,authors=2~600" wait=2 @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_joined_outlines PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_outlined\"[^\n]*\"authors\":2,.*\"code\":\"canvas_summary\"[^\n]*\"outlinesShown\":[1-9][0-9]*,.*ben chose the west wall")
         # A 2D game's passes timed too (D901): Runners, which draws no scene,
         # played in the viewport, its Frame tab told the canvas's and the
         # UI's times; the tab pressed where the viewport, at its least
@@ -1605,6 +1619,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "dragged from 999,520 to 1079,540.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"dragged\":1,.*scene gate.scene: [^\n]*\"id\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"rawframe.physics3d.pose\":{\"x\":-27\\.[2-6][0-9]*,\"y\":2\\.5,\"z\":-30}")
+        # What is chosen outlined in the preview (D907): the gate post chosen
+        # in the Hierarchy, a box about it drawn over the plaza.
+        add_test(NAME studio_outlines_chosen
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
+                         "@gate post" "until=studio_outlined,shown>=2" wait=2 @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_outlines_chosen PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_outlined\"[^\n]*\"authors\":1,.*\"code\":\"scene_placed_summary\"[^\n]*\"outlinesShown\":[1-9][0-9]*}")
         # The handle under the pointer drawn lit (D468): the post chosen and
         # marked, the pointer moved onto its X handle with no press, and the
         # played client draws the mark with a part lit.

@@ -348,6 +348,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     hearCook();
     hearHost();
     attachPlayed(kSeconds);
+    outlineChosen();
     pollPicks(kSeconds);
     readLogs(kSeconds);
     readNetwork(kSeconds);

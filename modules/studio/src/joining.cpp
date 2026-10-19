@@ -151,11 +151,7 @@ void ShellParticipant::hearHost() {
     }
 }
 
-namespace {
-
-/// An author's color, the same wherever they are shown and in every
-/// collaborator's Studio.
-std::uint32_t colorOf(std::string_view author) {
+std::uint32_t authorColorOf(std::string_view author) {
     constexpr std::array<std::uint32_t, 6> kPalette = {
         0xE07A5FFFU, 0x81B29AFFU, 0xF2CC8FFFU, 0x9D8DF1FFU, 0x5FA8D3FFU, 0xE5989BFFU};
     std::uint32_t hash = 2166136261U;
@@ -164,8 +160,6 @@ std::uint32_t colorOf(std::string_view author) {
     }
     return kPalette[hash % kPalette.size()];
 }
-
-} // namespace
 
 void ShellParticipant::showCollaborators() {
     clear(held_.avatars);
@@ -176,7 +170,8 @@ void ShellParticipant::showCollaborators() {
         if (kOther.author == held_.joinedAs) {
             continue;
         }
-        auto made = box(held_.avatarsNode, ui::Layout{.shrink = 0, .padding = {6, 1, 6, 1}}, colorOf(kOther.author));
+        auto made =
+            box(held_.avatarsNode, ui::Layout{.shrink = 0, .padding = {6, 1, 6, 1}}, authorColorOf(kOther.author));
         if (!made.has_value()) {
             return;
         }
