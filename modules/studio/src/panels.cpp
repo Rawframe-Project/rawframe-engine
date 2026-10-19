@@ -123,15 +123,15 @@ result::Status ShellParticipant::build() {
     // and Redo keep their places (D502).
     RAWFRAME_TRY_ASSIGN(const ui::Node kEnd, box(kToolbar, ui::Layout{.alignItems = ui::Align::Center, .gap = 6}, 0));
     // The start screen has no game to cook, play, or undo in (D781); a
-    // host joined cooks on its own machine (D885) and plays there, not yet
-    // from here.
+    // host joined cooks on its own machine (D885), its cook brought here
+    // to be played (D905).
     if (!gameOpen()) {
         menus_.clear();
     } else if (!cookTool_.empty() || held_.joined != nullptr) {
         RAWFRAME_TRY_ASSIGN(cookNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {10, 2, 10, 2}}, kRow));
         RAWFRAME_TRY(pressWords(cookNode_, cooking_.has_value() ? "Stop" : "Cook", kText, 14));
     }
-    if (session_ != nullptr && play_.has_value() && held_.joined == nullptr) {
+    if ((session_ != nullptr || held_.joined != nullptr) && play_.has_value()) {
         RAWFRAME_TRY_ASSIGN(playNode_, box(kEnd, ui::Layout{.width = ui::pixels(64), .padding = {12, 2, 10, 2}}, kRow));
         RAWFRAME_TRY(pressWords(playNode_, "Play", kText, 14));
     }

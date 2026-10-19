@@ -958,6 +958,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"cooked .*saw studio_previewing.*\"code\":\"studio_said\"[^\n]*\"status\":\"cooked [1-9][0-9]* sources, 0 reused\".*\"code\":\"scene_summary\"[^\n]*\"gameMeshes\":[1-9][0-9]*,[^\n]*\"texturesReady\":[1-9][0-9]*,")
+        # Studio joined to a host plays what it cooked there (D905): Cook on
+        # the host, then Play bringing that cook into Studio's play
+        # directory, the client's settings naming no content.
+        add_test(NAME studio_joined_plays
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/joined_plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         $<TARGET_FILE:rawframe_host_author> $<TARGET_FILE:rawframe_host_cook_tool>
+                         ${PROJECT_BINARY_DIR}/hosts/client/runners_clicked.conf
+                         @Cook "until=studio_said,status=\"cooked " @Play until=studio_cook_brought
+                         until=textures_read@play/client.log~600 @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_joined_plays PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_cook_brought\"[^\n]*\"copied\":[1-9][0-9]*,.*\"code\":\"studio_summary\"[^\n]*\"played\":1,.*\"code\":\"textures_read\".*cooked on the host")
         # The asset browser (D799): Plaza's sources narrowed to its textures,
         # one chosen and said not cooked, then cooked by Studio and said
         # cooked; its scene left out of the list while textures are shown.

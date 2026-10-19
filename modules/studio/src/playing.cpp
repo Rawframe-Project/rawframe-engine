@@ -1,3 +1,4 @@
+#include "rawframe/authoring_session/cooked_copy.h"
 #include "shell.h"
 
 #include <algorithm>
@@ -15,6 +16,11 @@ namespace rawframe::studio {
 void ShellParticipant::startPlaying() {
     if (stopping_.has_value()) {
         say("the last game is still stopping");
+        return;
+    }
+    // At a host joined, what this author cooked there is played here
+    // (D905).
+    if (held_.joined != nullptr && !bringCooked()) {
         return;
     }
     // In the viewport at its size, where one is shown (D789), unless it is
@@ -44,6 +50,33 @@ void ShellParticipant::startPlaying() {
     nextAttach_ = 0;
     static_cast<void>(pressWords(playNode_, "Stop", kText, 14));
     say("starting the game");
+}
+
+bool ShellParticipant::bringCooked() {
+    if (const result::Status kMade = privateDirectory(cookAt_); !kMade.has_value()) {
+        say(std::string{kMade.error().description()});
+        return false;
+    }
+    // By the plain name Studio cooks under at a host (D885), each piece
+    // asked as any record is.
+    const auto kCopied = authoring_session::copyCooked(
+        [this](Value record) {
+            record.add("id", Value::integer(next()));
+            return ask(record);
+        },
+        "content",
+        cookAt_ / "content");
+    if (!kCopied.has_value()) {
+        say("the cook cannot be brought here: " + std::string{kCopied.error().description()});
+        return false;
+    }
+    emitter_.log(diagnostics::Severity::Info,
+                 kCookBrought,
+                 "the cook made at the host joined brought here to be played",
+                 {diagnostics::field("copied", kCopied->copied),
+                  diagnostics::field("kept", kCopied->kept),
+                  diagnostics::field("bytes", kCopied->bytes)});
+    return true;
 }
 
 void ShellParticipant::runPlayed(bool step) {
@@ -195,7 +228,7 @@ void ShellParticipant::attachPlayed(double seconds) {
     // yet started, is tried again now and then; each try may wait for its
     // reply, so not often (D453b).
     if (!playing_.has_value()) {
-        if (preview_.has_value() && !scene_.empty()) {
+        if (preview_.has_value() && !scene_.empty() && held_.joined == nullptr) {
             nextAttach_ = seconds + 2;
             attachPreview();
         }
@@ -212,8 +245,10 @@ void ShellParticipant::attachPlayed(double seconds) {
         say("the game ended");
         return;
     }
+    // A game played from a host joined has no preview: the session that
+    // would attach it is the host's, on its machine (D905).
     const std::optional<Preview> kPreview = playing_->preview();
-    if (!kPreview.has_value()) {
+    if (!kPreview.has_value() || held_.joined != nullptr) {
         return;
     }
     preview_ = kPreview;

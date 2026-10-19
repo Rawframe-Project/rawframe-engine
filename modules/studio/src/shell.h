@@ -73,6 +73,9 @@ inline constexpr diagnostics::EventIdentity kNetworkRead{"studio", "studio_netwo
 inline constexpr diagnostics::EventIdentity kLit{"studio", "studio_lit"};
 /// A game asked to stop has ended, its server and its client both (D504).
 inline constexpr diagnostics::EventIdentity kGameEnded{"studio", "studio_game_ended"};
+/// At a host joined, the cook this author made there brought here to be
+/// played (D905): the files read over, those already here, and the bytes.
+inline constexpr diagnostics::EventIdentity kCookBrought{"studio", "studio_cook_brought"};
 /// A drag in the played game committed to the chosen scene (D457, D463,
 /// D466, D467): how, and what it moved.
 inline constexpr diagnostics::EventIdentity kDragged{"studio", "studio_dragged"};
@@ -695,6 +698,9 @@ private:
     /// The game played to preview it: its server and client started, the
     /// client attached as the chosen scene's preview once it says who it is.
     void startPlaying();
+    /// At a host joined, the cook this author made there brought into the
+    /// play directory (D905); whether it came.
+    bool bringCooked();
     /// The played game's World paused or let run, or stepped a tick (D806).
     void runPlayed(bool step);
     /// The Network panel made, a link button pressed, the server's traffic
