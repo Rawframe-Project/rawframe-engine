@@ -334,7 +334,7 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(held_.frameTab, tab(kDockTabs, kBottom("Frame")));
     RAWFRAME_TRY_ASSIGN(held_.changesTab, tab(kDockTabs, kBottom("Changes")));
     RAWFRAME_TRY_ASSIGN(held_.panelsTab, tab(kDockTabs, kBottom("Extension panels")));
-    RAWFRAME_TRY_ASSIGN(scenesColumn_, pane("Assets"));
+    RAWFRAME_TRY(makeAssets());
     RAWFRAME_TRY_ASSIGN(historyColumn_, pane("History"));
     RAWFRAME_TRY(makeConsole());
     RAWFRAME_TRY(makeNetwork());
@@ -485,32 +485,11 @@ result::Status ShellParticipant::showBroken(ui::Node body) {
 
 result::Status ShellParticipant::showScenes() {
     clear(sceneRows_);
-    if (newScene_.has_value()) {
-        static_cast<void>(tree_->remove(newSceneRow_));
-        newScene_.reset();
-    }
-    // The browser's controls first, then the documents it shows (D799),
-    // one left out holding no row, then the other sources.
+    newScene_.reset();
+    // The browser's heading and folders first, then the documents it
+    // shows (D799), one left out holding no card, then the other sources.
     RAWFRAME_TRY(showBrowser());
-    // A new scene is the session's own verb, not an operation the catalog
-    // lists, so it is always offered, above the list so a long one does not
-    // hide it. A file's absolute path typed there imports it instead (D505).
-    RAWFRAME_TRY_ASSIGN(const auto kLine, fieldRow("new scene or import", "", scenesColumn_));
-    newSceneRow_ = kLine.first;
-    newScene_ = FieldRow{.value = kLine.second, .role = FieldRow::Role::NewScene, .field = "new scene"};
-    for (std::size_t each = 0; each < scenes_.size(); ++each) {
-        if (!browser_.shows(scenes_[each])) {
-            sceneRows_.emplace_back();
-            continue;
-        }
-        RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode,
-                            row(scenesColumn_,
-                                documentLabel(scenes_[each]),
-                                kText,
-                                each == sceneAt_ && !scene_.empty() ? kChosen : kRow,
-                                true));
-        sceneRows_.push_back(kRowNode);
-    }
+    RAWFRAME_TRY(showDocuments());
     RAWFRAME_TRY(showSources());
     showTabs();
     return {};
@@ -578,7 +557,9 @@ void ShellParticipant::showScene(std::size_t at) {
         }
     }
     for (std::size_t each = 0; each < sceneRows_.size(); ++each) {
-        static_cast<void>(tree_->setLook(sceneRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
+        if (sceneRows_[each] != ui::Node{}) {
+            lightAsset(sceneRows_[each], each == at);
+        }
     }
     clear(entityRows_);
     clear(sceneFieldRows_);
@@ -652,19 +633,40 @@ void ShellParticipant::showScene(std::size_t at) {
     // Over the scene's entities, the search that chooses them (D473), then
     // the scene an instance placed in it is of: at the Hierarchy's top,
     // where a long scene does not scroll them away (D776).
+    // As the design's filter (D916): a well with the magnifier, then the
+    // instance's, each its hint until typed into.
     if (catalog_.offers("scene.find_entities")) {
-        auto line = fieldRow("find", find_, entitiesColumn_);
+        auto line = searchWell(entitiesColumn_, "find", "Filter entities", find_, 0, Icon::Search);
         if (line.has_value()) {
+            static_cast<void>(tree_->setLayout(line->first,
+                                               ui::Layout{.height = ui::pixels(26),
+                                                          .alignItems = ui::Align::Center,
+                                                          .gap = 6,
+                                                          .shrink = 0,
+                                                          .padding = {8, 4, 0, 0},
+                                                          .margin = {2, 2, 0, 4},
+                                                          .border = {1, 1, 1, 1}}));
             sceneFieldRows_.push_back(line->first);
-            findField_ = FieldRow{.value = line->second, .role = FieldRow::Role::Find, .field = "find"};
+            findField_ = FieldRow{
+                .value = line->second, .role = FieldRow::Role::Find, .field = "find", .hint = "Filter entities"};
         }
     }
     if (catalog_.offers("scene.add_instance")) {
-        auto line = fieldRow("instance of", "", entitiesColumn_);
+        auto line = searchWell(entitiesColumn_, "instance of", "Place an instance of a scene", "", 0, Icon::Prefab);
         if (line.has_value()) {
+            static_cast<void>(tree_->setLayout(line->first,
+                                               ui::Layout{.height = ui::pixels(26),
+                                                          .alignItems = ui::Align::Center,
+                                                          .gap = 6,
+                                                          .shrink = 0,
+                                                          .padding = {8, 4, 0, 0},
+                                                          .margin = {2, 2, 0, 6},
+                                                          .border = {1, 1, 1, 1}}));
             sceneFieldRows_.push_back(line->first);
-            sceneFields_.push_back(
-                FieldRow{.value = line->second, .role = FieldRow::Role::Instance, .field = "instance of"});
+            sceneFields_.push_back(FieldRow{.value = line->second,
+                                            .role = FieldRow::Role::Instance,
+                                            .field = "instance of",
+                                            .hint = "Place an instance of a scene"});
         }
     }
     const std::optional<Value> kList = entitiesShown();

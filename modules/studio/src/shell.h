@@ -243,6 +243,18 @@ private:
     /// The asset browser (D799): sources asked again, its controls, its rows.
     void listSources();
     result::Status showBrowser();
+    result::Status makeAssets();
+    result::Result<ui::Node> assetCard(const AssetCard& card);
+    void lightAsset(ui::Node node, bool chosen);
+    result::Result<std::pair<ui::Node, ui::Node>>
+    searchWell(ui::Node parent,
+               std::string_view name,
+               std::string_view hint,
+               std::string_view value,
+               float width,
+               Icon which);
+    result::Status showDocuments();
+    void importAsked();
     result::Status showSources();
     bool pressBrowser(ui::Node node);
     /// The chosen source's import settings, one set, and a recook (D800).

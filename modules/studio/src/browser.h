@@ -49,6 +49,24 @@ struct ListedSource {
 /// kind itself for one it does not name.
 [[nodiscard]] std::string kindLabel(std::string_view kind);
 
+/// A card in the Assets grid (D916): its name, the kind it is drawn as,
+/// what it says it is, its picture's image key (nought for the kind's
+/// icon), the dot's color where its cook is behind (nought for none), and
+/// whether it failed and is chosen.
+struct AssetCard {
+    std::string name;
+    std::string kind;
+    std::string what;
+    std::uint64_t picture = 0;
+    std::uint32_t dot = 0;
+    bool failed = false;
+    bool chosen = false;
+};
+
+/// Whether the file name at the end of `path` holds `search`, any case;
+/// every name holds an empty one (D916).
+[[nodiscard]] bool named(std::string_view path, std::string_view search);
+
 struct AssetBrowser {
     std::vector<ListedSource> sources;
     /// The folder shown, none for every folder; the kind shown, none for
@@ -62,13 +80,27 @@ struct AssetBrowser {
     std::vector<std::pair<ui::Node, std::string>> folderRows;
     std::vector<std::pair<ui::Node, std::string>> sourceRows;
     std::vector<ui::Node> boxes;
+    /// The pane as the design draws it (D916): its heading's parts, the
+    /// folders' column, and the cards' grid, kept while the game is open
+    /// so the grid keeps its scroll and the search its typing; what is in
+    /// them is made again, as `boxes`.
+    ui::Node crumbs{};
+    ui::Node chips{};
+    ui::Node tools{};
+    ui::Node folders{};
+    ui::Node grid{};
+    /// The search's field and what it narrows the names to, any case.
+    ui::Node searchValue{};
+    std::string search;
+    /// The heading's Import, which asks for the files to bring in.
+    ui::Node import{};
     /// The Inspector's Reimport for the chosen source, and how many times
     /// its settings were set and refused (D800).
     ui::Node reimport{};
     /// The thumbnails' size, none, small, or large (D801), its controls,
     /// and each texture's picture by the image key its row shows, made from
     /// the last cook, and how many were made.
-    std::uint32_t thumbnail = 0;
+    std::uint32_t thumbnail = 128;
     std::vector<std::pair<ui::Node, std::uint32_t>> sizeRows;
     std::map<std::uint64_t, std::shared_ptr<const texture::Texture>> pictures;
     std::uint64_t thumbnailsMade = 0;

@@ -12,6 +12,8 @@
 #include <array>
 #include <charconv>
 #include <filesystem>
+#include <map>
+#include <tuple>
 #include <set>
 #include <span>
 
@@ -108,6 +110,17 @@ std::uint64_t thumbnailKey(std::string_view path) noexcept {
     return (hash & 0x00FFFFFFFFFFFFFFULL) | 0x5400000000000000ULL;
 }
 
+bool named(std::string_view path, std::string_view search) {
+    if (search.empty()) {
+        return true;
+    }
+    const auto kLower = [](char each) {
+        return each >= 'A' && each <= 'Z' ? static_cast<char>(each - 'A' + 'a') : each;
+    };
+    const std::string_view kName = path.substr(path.find_last_of('/') + 1);
+    return std::ranges::search(kName, search, {}, kLower, kLower).begin() != kName.end();
+}
+
 const ListedSource* AssetBrowser::find(std::string_view path) const {
     const auto kFound = std::ranges::find(sources, path, &ListedSource::path);
     return kFound != sources.end() ? &*kFound : nullptr;
@@ -118,14 +131,283 @@ bool AssetBrowser::shows(std::string_view path) const {
     if (kSource == nullptr) {
         // A document no sidecar names yet (a scene just made) shows only
         // while nothing narrows the list.
-        return !folder.has_value() && !kind.has_value();
+        return !folder.has_value() && !kind.has_value() && named(path, search);
     }
     return (!folder.has_value() || kSource->folder == *folder) &&
-           (!kind.has_value() || kindOf(kSource->importer) == *kind);
+           (!kind.has_value() || kindOf(kSource->importer) == *kind) && named(path, search);
 }
 
 void ShellParticipant::listSources() {
     browser_.sources = sourcesOf(ask(assetsRecord(next())));
+}
+
+result::Status ShellParticipant::makeAssets() {
+    // As the design's Assets (D916): a heading with the folder shown, the
+    // kinds, the search, the views, and Import; then the folders' column
+    // beside the grid of cards.
+    RAWFRAME_TRY_ASSIGN(scenesColumn_,
+                        box(std::nullopt,
+                            ui::Layout{.minHeight = ui::pixels(0), .direction = ui::Direction::Column, .grow = 1},
+                            look::kPanelFill));
+    RAWFRAME_TRY(tree_->setName(scenesColumn_, "Assets"));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kHeading,
+                        box(scenesColumn_,
+                            ui::Layout{.height = ui::pixels(42),
+                                       .alignItems = ui::Align::Center,
+                                       .gap = 6,
+                                       .shrink = 0,
+                                       .padding = {12, 12, 0, 0},
+                                       .border = {0, 0, 0, 1}},
+                            0));
+    RAWFRAME_TRY(tree_->setLook(kHeading, ui::Look{.borderColor = look::kLine}));
+    RAWFRAME_TRY_ASSIGN(browser_.crumbs,
+                        box(kHeading, ui::Layout{.alignItems = ui::Align::Center, .gap = 6, .shrink = 0}, 0));
+    RAWFRAME_TRY(box(kHeading, ui::Layout{.width = ui::pixels(12), .shrink = 0}, 0));
+    // The kinds take what the heading leaves, clipped where they are more.
+    RAWFRAME_TRY_ASSIGN(
+        browser_.chips,
+        box(kHeading,
+            ui::Layout{.width = ui::pixels(0), .alignItems = ui::Align::Center, .gap = 4, .grow = 1, .shrink = 1},
+            0));
+    RAWFRAME_TRY(tree_->setLook(browser_.chips, ui::Look{.clip = true}));
+    RAWFRAME_TRY_ASSIGN(const auto kSearch, searchWell(kHeading, "Search assets", "Search", "", 180, Icon::Search));
+    browser_.searchValue = kSearch.second;
+    RAWFRAME_TRY_ASSIGN(browser_.tools,
+                        box(kHeading, ui::Layout{.alignItems = ui::Align::Center, .gap = 6, .shrink = 0}, 0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kBody,
+                        box(scenesColumn_,
+                            ui::Layout{.height = ui::pixels(0),
+                                       .minHeight = ui::pixels(0),
+                                       .direction = ui::Direction::Row,
+                                       .grow = 1},
+                            0));
+    RAWFRAME_TRY_ASSIGN(browser_.folders,
+                        box(kBody,
+                            ui::Layout{.width = ui::pixels(200),
+                                       .minHeight = ui::pixels(0),
+                                       .direction = ui::Direction::Column,
+                                       .gap = 1,
+                                       .shrink = 0,
+                                       .padding = {6, 6, 8, 10},
+                                       .border = {0, 1, 0, 0}},
+                            0));
+    RAWFRAME_TRY(tree_->setLook(browser_.folders, ui::Look{.borderColor = look::kLine}));
+    RAWFRAME_TRY(tree_->setName(browser_.folders, "Folders"));
+    RAWFRAME_TRY_ASSIGN(browser_.grid,
+                        box(kBody,
+                            ui::Layout{.width = ui::pixels(0),
+                                       .minHeight = ui::pixels(0),
+                                       .direction = ui::Direction::Row,
+                                       .alignItems = ui::Align::Start,
+                                       .gap = 12,
+                                       .grow = 1,
+                                       .padding = {16, 16, 14, 14},
+                                       .scroll = ui::Scroll::Vertical,
+                                       .wrap = true},
+                            0));
+    RAWFRAME_TRY(tree_->setRole(browser_.grid, ui::Role::ScrollView));
+    RAWFRAME_TRY(tree_->setName(browser_.grid, "Asset grid"));
+    return {};
+}
+
+result::Result<std::pair<ui::Node, ui::Node>> ShellParticipant::searchWell(
+    ui::Node parent, std::string_view name, std::string_view hint, std::string_view value, float width, Icon which) {
+    // The design's search (D916): a well with the magnifier, its words the
+    // hint until something is typed.
+    RAWFRAME_TRY_ASSIGN(const ui::Node kWell,
+                        box(parent,
+                            ui::Layout{.width = width > 0 ? ui::pixels(width) : ui::Dimension{},
+                                       .height = ui::pixels(26),
+                                       .alignItems = ui::Align::Center,
+                                       .gap = 6,
+                                       .grow = width > 0 ? 0.0F : 1.0F,
+                                       .shrink = 0,
+                                       .padding = {8, 4, 0, 0},
+                                       .border = {1, 1, 1, 1}},
+                            0));
+    RAWFRAME_TRY(tree_->setLook(kWell, ui::Look{.fill = look::kWellFill, .borderColor = look::kEdge, .radius = 5}));
+    RAWFRAME_TRY(icon(kWell, which, look::kFaintInk, 13));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kValue, tree_->addEditable(++keys_));
+    RAWFRAME_TRY(tree_->setLayout(kValue, ui::Layout{.width = ui::pixels(0), .grow = 1, .padding = {2, 2, 4, 3}}));
+    RAWFRAME_TRY(tree_->attach(kWell, kValue));
+    RAWFRAME_TRY(words(kValue, value.empty() ? hint : value, value.empty() ? look::kFaintInk : kText, look::kBodySize));
+    RAWFRAME_TRY(tree_->setRole(kValue, ui::Role::TextInput));
+    RAWFRAME_TRY(tree_->setName(kValue, name));
+    return std::pair{kWell, kValue};
+}
+
+namespace {
+
+/// The icon a source of `kind` is drawn with, and its ink (D916).
+std::pair<Icon, std::uint32_t> kindIcon(std::string_view kind) {
+    constexpr std::array<std::tuple<std::string_view, Icon, std::uint32_t>, 13> kIcons = {{
+        {"animation", Icon::Animation, 0xB48CFFFFU},
+        {"audio", Icon::Sound, 0xF2A93BFFU},
+        {"canvasmaterial", Icon::Material, 0xE0A458FFU},
+        {"font", Icon::Font, 0xC3C5CCFFU},
+        {"game", Icon::Gear, 0xA3A6AEFFU},
+        {"kest", Icon::Script, 0x7FD18BFFU},
+        {"material", Icon::Material, 0xE0A458FFU},
+        {"mesh", Icon::Mesh, 0xC3C5CCFFU},
+        {"mod", Icon::Puzzle, 0xB48CFFFFU},
+        {"postprocess", Icon::Camera, 0x8FB8FFFFU},
+        {"scene", Icon::Cube, 0x7AA9FFFFU},
+        {"text", Icon::File, 0xA3A6AEFFU},
+        {"texture", Icon::Texture, 0x8FB8FFFFU},
+    }};
+    for (const auto& [kKind, kIcon, kInk] : kIcons) {
+        if (kKind == kind) {
+            return {kIcon, kInk};
+        }
+    }
+    return {Icon::Data, 0xA3A6AEFFU};
+}
+
+/// One source of `kind`, as its card says what it is.
+std::string kindWord(std::string_view kind) {
+    if (kind == "audio") {
+        return "sound";
+    }
+    if (kind == "kest") {
+        return "script";
+    }
+    if (kind == "canvasmaterial") {
+        return "canvas material";
+    }
+    if (kind == "postprocess") {
+        return "post process";
+    }
+    return std::string{kind};
+}
+
+/// What a document Studio opens is, as a card names it.
+std::pair<std::string_view, std::string_view> documentKind(Listed listed) {
+    switch (listed) {
+    case Listed::Scene:
+        return {"scene", "scene"};
+    case Listed::Sheet:
+        return {"text", "style sheet"};
+    case Listed::Ui:
+        return {"text", "ui document"};
+    case Listed::Material:
+        return {"material", "material"};
+    case Listed::Graph:
+        return {"material", "material"};
+    case Listed::Data:
+        return {"data", "data"};
+    case Listed::Settings:
+        return {"game", "settings"};
+    case Listed::Capture:
+        return {"texture", "capture"};
+    case Listed::Blockout:
+        return {"mesh", "blockout"};
+    case Listed::Terrain:
+        return {"mesh", "terrain"};
+    case Listed::Tilemap:
+        return {"texture", "tilemap"};
+    case Listed::Scatter:
+        return {"mesh", "scatter"};
+    case Listed::Sequence:
+        return {"animation", "sequence"};
+    }
+    return {"data", "document"};
+}
+
+} // namespace
+
+result::Result<ui::Node> ShellParticipant::assetCard(const AssetCard& card) {
+    const bool kTiles = browser_.thumbnail > 0;
+    const auto [kIcon, kInk] = kindIcon(card.kind);
+    if (!kTiles) {
+        // The list: a row each, its icon, name, and what it is.
+        RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode,
+                            box(browser_.grid,
+                                ui::Layout{.width = ui::share(1),
+                                           .height = ui::pixels(26),
+                                           .alignItems = ui::Align::Center,
+                                           .gap = 8,
+                                           .shrink = 0,
+                                           .padding = {8, 8, 0, 0}},
+                                0));
+        lightAsset(kRowNode, card.chosen);
+        RAWFRAME_TRY(icon(kRowNode, kIcon, kInk, 14));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kName, box(kRowNode, ui::Layout{.width = ui::pixels(260), .shrink = 0}, 0));
+        RAWFRAME_TRY(words(kName, card.name, look::kRowInk, look::kBodySize));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kWhat, box(kRowNode, ui::Layout{.shrink = 0}, 0));
+        RAWFRAME_TRY(monoWords(kWhat, card.what, card.failed ? look::kError : look::kFaintInk, look::kSmallSize));
+        for (const ui::Node kPart : {kName, kWhat}) {
+            RAWFRAME_TRY(tree_->setInteraction(kPart, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        }
+        RAWFRAME_TRY(tree_->setRole(kRowNode, ui::Role::Button));
+        RAWFRAME_TRY(tree_->setName(kRowNode, card.name));
+        return kRowNode;
+    }
+    // A card: the picture or the kind's icon on a tile, a dot where the
+    // cook is behind, then the name and what it is.
+    constexpr float kWide = 112;
+    constexpr float kTall = 84;
+    RAWFRAME_TRY_ASSIGN(const ui::Node kCard,
+                        box(browser_.grid,
+                            ui::Layout{.width = ui::pixels(kWide + 10),
+                                       .direction = ui::Direction::Column,
+                                       .gap = 6,
+                                       .shrink = 0,
+                                       .padding = {4, 4, 4, 6},
+                                       .border = {1, 1, 1, 1}},
+                            0));
+    lightAsset(kCard, card.chosen);
+    RAWFRAME_TRY_ASSIGN(const ui::Node kTile,
+                        box(kCard,
+                            ui::Layout{.width = ui::pixels(kWide),
+                                       .height = ui::pixels(kTall),
+                                       .justify = ui::Justify::Center,
+                                       .alignItems = ui::Align::Center,
+                                       .shrink = 0,
+                                       .border = {1, 1, 1, 1}},
+                            0));
+    RAWFRAME_TRY(tree_->setLook(
+        kTile, ui::Look{.fill = look::kRaisedFill, .borderColor = look::kEdge, .radius = 5, .clip = true}));
+    RAWFRAME_TRY(tree_->setInteraction(kTile, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+    if (card.picture != 0) {
+        RAWFRAME_TRY_ASSIGN(
+            const ui::Node kImage,
+            box(kTile, ui::Layout{.width = ui::pixels(kWide - 2), .height = ui::pixels(kTall - 2), .shrink = 0}, 0));
+        RAWFRAME_TRY(tree_->setLook(kImage, ui::Look{.image = card.picture}));
+        RAWFRAME_TRY(tree_->setInteraction(kImage, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+    } else {
+        RAWFRAME_TRY(icon(kTile, kIcon, kInk, 34));
+    }
+    if (card.dot != 0) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kDot,
+                            box(kTile,
+                                ui::Layout{.width = ui::pixels(7),
+                                           .height = ui::pixels(7),
+                                           .placement = {.absolute = true,
+                                                         .x = ui::pixels(kWide - 14),
+                                                         .y = ui::pixels(6)}},
+                                0));
+        RAWFRAME_TRY(tree_->setLook(kDot, ui::Look{.fill = card.dot, .radius = 4}));
+        RAWFRAME_TRY(tree_->setInteraction(kDot, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+    }
+    RAWFRAME_TRY_ASSIGN(const ui::Node kName,
+                        box(kCard, ui::Layout{.width = ui::pixels(kWide), .shrink = 0, .padding = {1, 0, 0, 0}}, 0));
+    RAWFRAME_TRY(words(kName, card.name, look::kRowInk, look::kLabelSize));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kWhat,
+                        box(kCard, ui::Layout{.width = ui::pixels(kWide), .shrink = 0, .padding = {1, 0, 0, 0}}, 0));
+    RAWFRAME_TRY(monoWords(kWhat, card.what, card.failed ? look::kError : look::kFaintInk, look::kSmallSize));
+    for (const ui::Node kPart : {kName, kWhat}) {
+        RAWFRAME_TRY(tree_->setInteraction(kPart, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+    }
+    RAWFRAME_TRY(tree_->setRole(kCard, ui::Role::Button));
+    RAWFRAME_TRY(tree_->setName(kCard, card.name));
+    return kCard;
+}
+
+void ShellParticipant::lightAsset(ui::Node node, bool chosen) {
+    static_cast<void>(tree_->setLook(node,
+                                     ui::Look{.fill = chosen ? 0x5B9BFF1FU : 0,
+                                              .borderColor = chosen ? look::kAccent : 0,
+                                              .radius = 6}));
 }
 
 result::Status ShellParticipant::showBrowser() {
@@ -135,89 +417,196 @@ result::Status ShellParticipant::showBrowser() {
     browser_.boxes.clear();
     browser_.kindRows.clear();
     browser_.folderRows.clear();
-    // The kinds and folders the sources have, each a control that narrows
-    // the list to it, the one chosen lit.
+    browser_.sizeRows.clear();
+    browser_.import = ui::Node{};
+    if (!tree_->contains(browser_.grid)) {
+        return {};
+    }
+    // The kinds and folders the sources have, each how many it holds.
     std::set<std::string> kinds;
-    std::set<std::string> folders;
+    std::map<std::string, std::size_t> folders;
+    std::size_t every = 0;
     for (const ListedSource& kSource : browser_.sources) {
         kinds.insert(kindOf(kSource.importer));
+        ++every;
         if (!kSource.folder.empty()) {
-            folders.insert(kSource.folder);
+            ++folders[kSource.folder];
         }
     }
-    const auto kControls = [this](const std::set<std::string>& values,
-                                  const std::optional<std::string>& chosen,
-                                  std::string_view every,
-                                  bool kinded,
-                                  std::vector<std::pair<ui::Node, std::string>>& rows) -> result::Status {
-        RAWFRAME_TRY_ASSIGN(const ui::Node kBox,
-                            box(scenesColumn_, ui::Layout{.height = ui::pixels(28), .gap = 4, .shrink = 0}, 0));
-        browser_.boxes.push_back(kBox);
-        RAWFRAME_TRY_ASSIGN(const ui::Node kEvery, button(kBox, every));
-        static_cast<void>(tree_->setLook(kEvery, ui::Look{.fill = chosen.has_value() ? kRow : kChosen, .radius = 4}));
-        rows.emplace_back(kEvery, std::string{});
-        for (const std::string& kValue : values) {
-            RAWFRAME_TRY_ASSIGN(const ui::Node kControl, button(kBox, kinded ? kindLabel(kValue) : kValue + "/"));
-            static_cast<void>(
-                tree_->setLook(kControl, ui::Look{.fill = chosen == kValue ? kChosen : kRow, .radius = 4}));
-            rows.emplace_back(kControl, kValue);
+    for (const std::string& kScene : scenes_) {
+        every += browser_.find(kScene) == nullptr ? 1 : 0;
+    }
+    const auto kHeld = [this](result::Result<ui::Node> made) -> result::Result<ui::Node> {
+        if (made.has_value()) {
+            browser_.boxes.push_back(*made);
         }
-        return {};
+        return made;
     };
-    RAWFRAME_TRY(kControls(kinds, browser_.kind, "All kinds", true, browser_.kindRows));
-    if (!folders.empty()) {
-        RAWFRAME_TRY(kControls(folders, browser_.folder, "All folders", false, browser_.folderRows));
+    // Where the grid is: the game, then the folder.
+    RAWFRAME_TRY_ASSIGN(const ui::Node kGame, kHeld(box(browser_.crumbs, ui::Layout{.shrink = 0}, 0)));
+    RAWFRAME_TRY(words(kGame, description_.stem().string(), look::kLabelInk, look::kBodySize));
+    RAWFRAME_TRY(kHeld(icon(browser_.crumbs, Icon::ChevronRight, look::kOffInk, 12)));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kWhere, kHeld(box(browser_.crumbs, ui::Layout{.shrink = 0}, 0)));
+    RAWFRAME_TRY(words(kWhere, browser_.folder.has_value() ? *browser_.folder : "Everything", look::kInk, look::kBodySize));
+    // The kinds, All first, the one chosen lit.
+    const auto kChip = [&](std::string_view text, bool on) -> result::Result<ui::Node> {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kMade,
+                            kHeld(box(browser_.chips,
+                                      ui::Layout{.alignItems = ui::Align::Center,
+                                                 .shrink = 0,
+                                                 .padding = {9, 9, 4, 4},
+                                                 .border = {1, 1, 1, 1}},
+                                      0)));
+        RAWFRAME_TRY(tree_->setLook(kMade,
+                                    ui::Look{.fill = on ? look::kSelected : look::kRaisedFill,
+                                             .borderColor = on ? look::kSelectedEdge : look::kRaisedEdge,
+                                             .radius = 5}));
+        RAWFRAME_TRY(pressWords(kMade, text, on ? look::kInk : look::kSoftInk, look::kLabelSize));
+        return kMade;
+    };
+    RAWFRAME_TRY_ASSIGN(const ui::Node kAll, kChip("All", !browser_.kind.has_value()));
+    browser_.kindRows.emplace_back(kAll, std::string{});
+    for (const std::string& kKind : kinds) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kControl, kChip(kindLabel(kKind), browser_.kind == kKind));
+        browser_.kindRows.emplace_back(kControl, kKind);
     }
-    // And the thumbnails' size (D801), each a texture's or a mesh's (D899)
-    // from the last cook.
-    browser_.sizeRows.clear();
-    RAWFRAME_TRY_ASSIGN(const ui::Node kSizes,
-                        box(scenesColumn_, ui::Layout{.height = ui::pixels(28), .gap = 4, .shrink = 0}, 0));
-    browser_.boxes.push_back(kSizes);
-    for (const auto& [kName, kSize] : {std::pair<std::string_view, std::uint32_t>{"No thumbnails", 0},
-                                       std::pair<std::string_view, std::uint32_t>{"Small thumbnails", 32},
-                                       std::pair<std::string_view, std::uint32_t>{"Large thumbnails", 64}}) {
-        RAWFRAME_TRY_ASSIGN(const ui::Node kControl, button(kSizes, kName));
-        static_cast<void>(
-            tree_->setLook(kControl, ui::Look{.fill = browser_.thumbnail == kSize ? kChosen : kRow, .radius = 4}));
+    // The views, a list or cards (D801's sizes), then Import.
+    for (const auto& [kWhich, kName, kSize] : {std::tuple<Icon, std::string_view, std::uint32_t>{Icon::List, "List", 0},
+                                               std::tuple<Icon, std::string_view, std::uint32_t>{
+                                                   Icon::TilesView, "Thumbnails", 128}}) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kControl,
+                            kHeld(iconButton(browser_.tools, kWhich, kName, browser_.thumbnail == kSize)));
         browser_.sizeRows.emplace_back(kControl, kSize);
+    }
+    RAWFRAME_TRY_ASSIGN(browser_.import, kHeld(textButton(browser_.tools, Icon::Import, "Import")));
+    // A new scene is the session's own verb, not an operation the catalog
+    // lists, so it is always offered. A file's absolute path typed there
+    // imports it instead (D505).
+    RAWFRAME_TRY_ASSIGN(const auto kNew,
+                        searchWell(browser_.tools, "new scene or import", "New scene", "", 150, Icon::Plus));
+    browser_.boxes.push_back(kNew.first);
+    newSceneRow_ = kNew.first;
+    newScene_ = FieldRow{
+        .value = kNew.second, .role = FieldRow::Role::NewScene, .field = "new scene", .hint = "New scene"};
+    // The folders: the game's root, Everything, then each folder, each with
+    // its count, the one shown lit; under them, where files are dropped.
+    const auto kFolderRow = [&](std::string_view text,
+                                Icon which,
+                                std::optional<std::size_t> count,
+                                float indent,
+                                bool on) -> result::Result<ui::Node> {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode,
+                            kHeld(box(browser_.folders,
+                                      ui::Layout{.height = ui::pixels(24),
+                                                 .alignItems = ui::Align::Center,
+                                                 .gap = 6,
+                                                 .shrink = 0,
+                                                 .padding = {indent, 8, 0, 0}},
+                                      0)));
+        RAWFRAME_TRY(tree_->setLook(kRowNode, ui::Look{.fill = on ? look::kSelected : 0, .radius = 4}));
+        RAWFRAME_TRY(icon(kRowNode, which, on ? look::kInk : look::kLabelInk, 13));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kLabel, box(kRowNode, ui::Layout{.grow = 1}, 0));
+        RAWFRAME_TRY(words(kLabel, text, on ? look::kInk : look::kRowInk, look::kBodySize));
+        RAWFRAME_TRY(tree_->setInteraction(kLabel, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        if (count.has_value()) {
+            RAWFRAME_TRY_ASSIGN(const ui::Node kCount, box(kRowNode, ui::Layout{.shrink = 0}, 0));
+            RAWFRAME_TRY(monoWords(kCount, std::to_string(*count), look::kFaintInk, look::kSmallSize));
+            RAWFRAME_TRY(tree_->setInteraction(kCount, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        }
+        RAWFRAME_TRY(tree_->setRole(kRowNode, ui::Role::Button));
+        RAWFRAME_TRY(tree_->setName(kRowNode, text));
+        return kRowNode;
+    };
+    RAWFRAME_TRY(kFolderRow(description_.stem().string(), Icon::ChevronDown, std::nullopt, 6, false));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kEvery,
+                        kFolderRow("Everything", Icon::Layers, every, 20, !browser_.folder.has_value()));
+    browser_.folderRows.emplace_back(kEvery, std::string{});
+    for (const auto& [kFolder, kCount] : folders) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode,
+                            kFolderRow(kFolder,
+                                       browser_.folder == kFolder ? Icon::FolderOpen : Icon::Folder,
+                                       kCount,
+                                       20,
+                                       browser_.folder == kFolder));
+        browser_.folderRows.emplace_back(kRowNode, kFolder);
+    }
+    RAWFRAME_TRY(kHeld(box(browser_.folders, ui::Layout{.grow = 1}, 0)));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kDrop,
+                        kHeld(box(browser_.folders,
+                                  ui::Layout{.justify = ui::Justify::Center,
+                                             .shrink = 0,
+                                             .padding = {10, 10, 12, 12},
+                                             .border = {1, 1, 1, 1}},
+                                  0)));
+    RAWFRAME_TRY(tree_->setLook(kDrop, ui::Look{.borderColor = look::kEdge, .radius = 6}));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kDropWords, box(kDrop, ui::Layout{.shrink = 0}, 0));
+    RAWFRAME_TRY(words(kDropWords,
+                       browser_.folder.has_value() ? "Drop files here to import into " + *browser_.folder
+                                                   : std::string{"Drop files here to import them"},
+                       look::kFaintInk,
+                       look::kLabelSize));
+    return {};
+}
+
+result::Status ShellParticipant::showDocuments() {
+    if (!tree_->contains(browser_.grid)) {
+        sceneRows_.assign(scenes_.size(), ui::Node{});
+        return {};
+    }
+    // The documents Studio opens, each a card, the one open lit.
+    for (std::size_t each = 0; each < scenes_.size(); ++each) {
+        if (!browser_.shows(scenes_[each])) {
+            sceneRows_.emplace_back();
+            continue;
+        }
+        const Listed kListed = each < listed_.size() ? listed_[each] : Listed::Scene;
+        const auto [kKind, kWhat] = documentKind(kListed);
+        const ListedSource* kSource = browser_.find(scenes_[each]);
+        const bool kFailed = kSource != nullptr && kSource->cook == "failed";
+        const std::shared_ptr<const texture::Texture> kPicture =
+            kSource != nullptr && (kListed == Listed::Material || kListed == Listed::Graph) ? thumbnailOf(*kSource) : nullptr;
+        RAWFRAME_TRY_ASSIGN(const ui::Node kCard,
+                            assetCard(AssetCard{.name = documentLabel(scenes_[each]),
+                                                .kind = std::string{kKind},
+                                                .what = kFailed ? std::string{"cook failed"} : std::string{kWhat},
+                                                .picture = kPicture != nullptr ? thumbnailKey(scenes_[each]) : 0,
+                                                .dot = kFailed ? look::kError
+                                                       : kSource != nullptr && kSource->cook != "cooked" ? look::kWarn
+                                                                                                         : 0,
+                                                .failed = kFailed,
+                                                .chosen = each == sceneAt_ && !scene_.empty()}));
+        sceneRows_.push_back(kCard);
     }
     return {};
 }
 
 result::Status ShellParticipant::showSources() {
     browser_.sourceRows.clear();
-    // The sources that are no document Studio opens, each with its kind and
-    // how the cooks left it.
+    if (!tree_->contains(browser_.grid)) {
+        return {};
+    }
+    // The sources that are no document Studio opens, each a card with its
+    // kind and how the cooks left it.
     for (const ListedSource& kSource : browser_.sources) {
         if (std::ranges::contains(scenes_, kSource.path) || !browser_.shows(kSource.path)) {
             continue;
         }
+        const std::string kKind = kindOf(kSource.importer);
         const std::shared_ptr<const texture::Texture> kPicture = thumbnailOf(kSource);
-        const float kTall = kPicture != nullptr ? static_cast<float>(browser_.thumbnail) + 8 : 28;
+        const bool kFailed = kSource.cook == "failed";
         RAWFRAME_TRY_ASSIGN(
-            const ui::Node kRowNode,
-            box(scenesColumn_,
-                ui::Layout{.height = ui::pixels(kTall), .gap = 12, .shrink = 0, .padding = {8, 4, 8, 4}},
-                kSource.path == browser_.chosen ? kChosen : kRow));
-        if (kPicture != nullptr) {
-            const float kSide = static_cast<float>(browser_.thumbnail);
-            RAWFRAME_TRY_ASSIGN(
-                const ui::Node kImage,
-                box(kRowNode, ui::Layout{.width = ui::pixels(kSide), .height = ui::pixels(kSide), .shrink = 0}, 0));
-            static_cast<void>(tree_->setLook(kImage, ui::Look{.image = thumbnailKey(kSource.path)}));
-        }
-        // Its name pressed in a box of its own, beside the picture: a row's
-        // own words would lie under its children.
-        RAWFRAME_TRY_ASSIGN(const ui::Node kName, box(kRowNode, ui::Layout{.shrink = 0}, 0));
-        RAWFRAME_TRY(pressWords(kName, kSource.path, kText, 14));
-        RAWFRAME_TRY_ASSIGN(const ui::Node kState, box(kRowNode, ui::Layout{.shrink = 0}, 0));
-        RAWFRAME_TRY(words(kState,
-                           kindOf(kSource.importer) + ", " + std::string{cookWords(kSource.cook)},
-                           kSource.cook == "failed" ? kWarning : kQuiet,
-                           13));
-        browser_.boxes.push_back(kRowNode);
-        browser_.sourceRows.emplace_back(kName, kSource.path);
+            const ui::Node kCard,
+            assetCard(AssetCard{.name = kSource.path.substr(kSource.path.find_last_of('/') + 1),
+                                .kind = kKind,
+                                .what = kFailed ? std::string{"import failed"} : kindWord(kKind),
+                                .picture = kPicture != nullptr ? thumbnailKey(kSource.path) : 0,
+                                .dot = kFailed                     ? look::kError
+                                       : kSource.cook != "cooked" ? look::kWarn
+                                                                  : 0,
+                                .failed = kFailed,
+                                .chosen = kSource.path == browser_.chosen}));
+        browser_.boxes.push_back(kCard);
+        browser_.sourceRows.emplace_back(kCard, kSource.path);
     }
     return {};
 }
@@ -239,6 +628,16 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
         showReferences();
         return true;
     }
+    // The search, typed into as the grid narrows (D916).
+    if (node == browser_.searchValue && browser_.searchValue != ui::Node{}) {
+        beginEdit(FieldRow{
+            .value = browser_.searchValue, .role = FieldRow::Role::AssetSearch, .field = "search", .hint = "Search"});
+        return true;
+    }
+    if (node == browser_.import && browser_.import != ui::Node{}) {
+        importAsked();
+        return true;
+    }
     if (node == browser_.reimport && browser_.reimport != ui::Node{}) {
         if (!cooking_.has_value()) {
             cookOrStop();
@@ -258,7 +657,7 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
         kSize != browser_.sizeRows.end()) {
         browser_.thumbnail = kSize->second;
         static_cast<void>(showScenes());
-        say(browser_.thumbnail == 0 ? "no thumbnails" : std::to_string(browser_.thumbnail) + " pixel thumbnails");
+        say(browser_.thumbnail == 0 ? "assets listed" : "assets as thumbnails");
         return true;
     }
     if (kNarrow(browser_.kindRows, browser_.kind) || kNarrow(browser_.folderRows, browser_.folder)) {
@@ -426,6 +825,15 @@ bool ShellParticipant::importFile(const std::string& path, const std::string& as
     browser_.sources = sourcesOf(kAssets);
     say("imported " + kImported);
     return true;
+}
+
+void ShellParticipant::importAsked() {
+    // The files to bring in, typed as a path into the new scene's field
+    // or dropped on the window (D802, D505).
+    if (newScene_.has_value()) {
+        beginEdit(*newScene_);
+    }
+    say("type a file's absolute path and press Enter, or drop files on the window");
 }
 
 void ShellParticipant::takeDrops() {

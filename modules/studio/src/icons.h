@@ -90,9 +90,11 @@ enum class Icon : std::uint8_t {
     Keyboard,
     Mesh,
     Font,
+    List,
+    TilesView,
 };
 
-inline constexpr std::size_t kIconCount = 81;
+inline constexpr std::size_t kIconCount = 83;
 inline constexpr std::uint32_t kIconSide = 32;
 
 } // namespace rawframe::studio

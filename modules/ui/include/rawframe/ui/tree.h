@@ -117,6 +117,10 @@ struct Layout {
     /// scrolls is a scroll container, clipping its children at its rounded
     /// border box, and a wheel turned over it moves them.
     Scroll scroll = Scroll::None;
+    /// Whether the children break into lines along the direction, each
+    /// line after the last from the cross start, as CSS's flex-wrap: a grid
+    /// of cards (D916).
+    bool wrap = false;
 };
 
 /// A shadow of a node's rounded box, as CSS's box-shadow (D381): its color,

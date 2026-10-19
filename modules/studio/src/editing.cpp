@@ -432,7 +432,7 @@ void ShellParticipant::beginEdit(const FieldRow& row) {
     edit_ = std::make_unique<ui::TextEdit>(
         *tree_, row.value, ui::EditSettings{.caretColor = kText, .selectionColor = 0x4A6FA5AAU});
     static_cast<void>(edit_->press(ui::EditKey::SelectAll, {}));
-    static_cast<void>(tree_->setLook(row.value, ui::Look{.fill = kEditing, .radius = 3}));
+    static_cast<void>(tree_->setLook(row.value, ui::Look{.fill = look::kWellFill, .borderColor = look::kAccent, .radius = 4}));
     if (typing_ != nullptr) {
         const auto kPlace = tree_->placeOf(root_, row.value);
         typing_->focus(kPlace.has_value() ? view::UiTyping::Caret{kPlace->x, kPlace->y, kPlace->width, kPlace->height}
@@ -446,7 +446,8 @@ void ShellParticipant::endEdit() {
     }
     edit_.reset();
     if (editing_.has_value() && tree_->contains(editing_->value)) {
-        static_cast<void>(tree_->setLook(editing_->value, ui::Look{.fill = kField, .radius = 3}));
+        static_cast<void>(
+            tree_->setLook(editing_->value, ui::Look{.fill = look::kWellFill, .borderColor = look::kEdge, .radius = 4}));
     }
     editing_.reset();
     if (typing_ != nullptr) {
@@ -469,37 +470,65 @@ void ShellParticipant::take(const view::Typing& typing) {
         paletteTyped(kLeft);
         return;
     }
+    // The Assets search narrows the grid as it is typed (D916).
+    if (editing_->role == FieldRow::Role::AssetSearch) {
+        std::string typed{tree_->textOf(editing_->value)};
+        if (typed == editing_->hint) {
+            typed.clear();
+        }
+        if (kLeft == view::TypingKey::Submit || kLeft == view::TypingKey::Dismiss) {
+            const FieldRow kEdited = *editing_;
+            endEdit();
+            if (kLeft == view::TypingKey::Dismiss) {
+                browser_.search.clear();
+            }
+            static_cast<void>(words(kEdited.value,
+                                    browser_.search.empty() ? kEdited.hint : browser_.search,
+                                    browser_.search.empty() ? look::kFaintInk : kText,
+                                    look::kBodySize));
+        } else if (typed != browser_.search) {
+            browser_.search = typed;
+        } else {
+            return;
+        }
+        static_cast<void>(showScenes());
+        return;
+    }
     // Typing given or dismissed closes the list it was beside (D784).
     if ((kLeft == view::TypingKey::Submit || kLeft == view::TypingKey::Dismiss) && choosing_.has_value()) {
         closePopup();
     }
     if (kLeft == view::TypingKey::Submit) {
         const FieldRow kEdited = *editing_;
-        const std::string kTyped{tree_->textOf(kEdited.value)};
+        std::string typed{tree_->textOf(kEdited.value)};
+        // A field left showing its hint holds nothing (D916).
+        if (!kEdited.hint.empty() && typed == kEdited.hint) {
+            typed.clear();
+        }
         endEdit();
         if (kEdited.role == FieldRow::Role::View) {
-            setView(kEdited.field, kTyped);
+            setView(kEdited.field, typed);
         } else if (kEdited.role == FieldRow::Role::Instance) {
-            place(kTyped);
+            place(typed);
         } else if (kEdited.role == FieldRow::Role::NewScene) {
-            makeScene(kTyped);
+            makeScene(typed);
         } else if (kEdited.role == FieldRow::Role::NewGame) {
-            makeGame(kTyped);
+            makeGame(typed);
         } else if (kEdited.role == FieldRow::Role::Shortcut) {
-            setKeys(kEdited.field, kTyped);
+            setKeys(kEdited.field, typed);
         } else if (kEdited.role == FieldRow::Role::Editor) {
-            setEditor(kTyped);
+            setEditor(typed);
         } else if (kEdited.role == FieldRow::Role::CommitMessage) {
-            commitChanges(kTyped);
+            commitChanges(typed);
         } else if (kEdited.role == FieldRow::Role::ExportSetting) {
-            setExport(kEdited.field, kTyped);
+            setExport(kEdited.field, typed);
         } else if (kEdited.role == FieldRow::Role::OpenGame) {
-            chooseGame(std::filesystem::path{kTyped});
+            chooseGame(std::filesystem::path{typed});
         } else if (kEdited.role == FieldRow::Role::Find) {
-            find_ = kTyped;
+            find_ = typed;
             refresh(entity_.empty() ? std::nullopt : std::optional<std::string>{entity_});
         } else {
-            apply(kEdited, kTyped);
+            apply(kEdited, typed);
         }
     } else if (kLeft == view::TypingKey::Dismiss) {
         const FieldRow::Role kRole = editing_->role;

@@ -76,7 +76,9 @@ struct FieldRow {
         CommitMessage,
         /// The Export dialog's output, title, or address, `field` which
         /// (D872).
-        ExportSetting
+        ExportSetting,
+        /// The Assets search, what the grid's names hold (D916).
+        AssetSearch
     };
     ui::Node value{};
     Role role = Role::Field;
@@ -85,6 +87,8 @@ struct FieldRow {
     std::string kind;
     /// The catalog's field, its hints with it (D784).
     Catalog::Field type{};
+    /// The words a field shows while empty, read as nothing typed (D916).
+    std::string hint;
 };
 
 /// A button on a component or a field and the operation it asks: Remove,

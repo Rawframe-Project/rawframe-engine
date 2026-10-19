@@ -103,6 +103,8 @@ ICONS = [
     ("keyboard", '<rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4 7h1M7 7h1M10 7h2M4 9.5h8"/>', False),
     ("mesh", '<path d="M2 12L8 2l6 10z"/><path d="M5 7h6M8 2v10M2 12l6-5 6 5"/>', False),
     ("font", '<path d="M3 13.5L7.5 2.5h1L13 13.5M5 9h6"/>', False),
+    ("list", '<path d="M5.5 4h8.5M5.5 8h8.5M5.5 12h8.5M2 4h1M2 8h1M2 12h1"/>', False),
+    ("tiles_view", '<rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/>', False),
 ]
 
 

@@ -213,6 +213,10 @@ result::Status Tree::setLayout(Node node, const Layout& layout) {
     style.container.direction = static_cast<muiFlexDirection>(layout.direction);
     style.container.justify = static_cast<muiJustify>(layout.justify);
     style.container.alignItems = alignOf(layout.alignItems);
+    if (layout.wrap) {
+        style.container.wrap = mui_wrapWrap;
+        style.container.alignContent = mui_alignContentStart;
+    }
     style.container.rowGap = layout.gap;
     style.container.columnGap = layout.gap;
     style.item.grow = layout.grow;
