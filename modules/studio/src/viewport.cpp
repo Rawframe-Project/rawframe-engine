@@ -67,8 +67,17 @@ void ShellParticipant::forwardInput() {
         static_cast<void>(inViewport_.forwarding->take());
         return;
     }
+    // Only what shows of it: the viewport keeps its least height where
+    // the center is shorter, running on under the dock, whose tabs a press
+    // there is for (D901).
     const ui::Rect kAt = tree_->placedRectOf(viewport_);
-    inViewport_.forwarding->forwardOver(std::array<float, 4>{kAt.x, kAt.y, kAt.width, kAt.height});
+    const ui::Rect kCenter = tree_->placedRectOf(centerColumn_);
+    const float kTop = std::max(kAt.y, kCenter.y);
+    const float kLeft = std::max(kAt.x, kCenter.x);
+    const float kBottom = std::min(kAt.y + kAt.height, kCenter.y + kCenter.height);
+    const float kRight = std::min(kAt.x + kAt.width, kCenter.x + kCenter.width);
+    inViewport_.forwarding->forwardOver(
+        std::array<float, 4>{kLeft, kTop, std::max(0.0F, kRight - kLeft), std::max(0.0F, kBottom - kTop)});
     std::vector<world_tooling::WindowInput> events = inViewport_.forwarding->take();
     // In records of at most the most one carries.
     for (std::size_t from = 0; from < events.size(); from += world_tooling::kMostWindowInputs) {
