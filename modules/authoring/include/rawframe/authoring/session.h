@@ -48,6 +48,12 @@
 // stop; that operation still answers, cancelled. `import` copies a file
 // from outside (an absolute `source`) into the game's directory at `as`,
 // gives it a sidecar, and declares it in the game's description (D503).
+// `cooked_file` reads back a piece of a file a cook in the session wrote,
+// its manifest or a locator the manifest gives, from `offset`, as Base64
+// with the file's size (D905), so a cook is brought to another machine:
+//
+//   {"kind":"authoring.cooked_file","id":17,"output":"/games/plaza-content","file":"content.manifest","offset":0}
+//
 // Several authors share a session (ADR-0085): a change, undo, or redo may
 // name its `author`, and an author undoes only their own (D879); each says
 // what they have chosen and where they look, and may claim a document or
@@ -167,6 +173,10 @@ enum class SessionVerb : std::uint8_t {
     Cook,
     /// A running operation asked to stop (D502).
     Cancel,
+    /// A file of a cook's output read back a piece at a time: its manifest
+    /// or a file the manifest locates, so what was cooked elsewhere is
+    /// played here (D905).
+    CookedFile,
     /// A file from outside made one of the game's assets (D503).
     Import,
     /// The game's Studio extensions and the commands each offers, and one
@@ -261,9 +271,14 @@ struct SessionRecord {
     std::vector<std::string> overlays;
     /// Apply together's, two or more, each scene named once (D497).
     std::vector<SessionPart> parts;
-    /// Cook's: where it cooks to, and the cache it reuses, if any (D502).
+    /// Cook's: where it cooks to, and the cache it reuses, if any (D502);
+    /// cooked_file's, the output it reads from.
     std::string output;
     std::optional<std::string> cache;
+    /// Cooked file's: the file, `content.manifest` or a locator its
+    /// manifest gives, and where in it to read from (D905).
+    std::string file;
+    std::uint64_t offset = 0;
     /// Cancel's: the id the operation to stop was given.
     document::Value operation;
     /// Import's: the file, and where under the game's directory it goes.

@@ -37,7 +37,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 47> kVerbs = {
+constexpr std::array<VerbName, 48> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -74,6 +74,7 @@ constexpr std::array<VerbName, 47> kVerbs = {
     VerbName{.kind = "authoring.apply_together", .verb = SessionVerb::ApplyTogether},
     VerbName{.kind = "authoring.cook", .verb = SessionVerb::Cook},
     VerbName{.kind = "authoring.cancel", .verb = SessionVerb::Cancel},
+    VerbName{.kind = "authoring.cooked_file", .verb = SessionVerb::CookedFile},
     VerbName{.kind = "authoring.import", .verb = SessionVerb::Import},
     VerbName{.kind = "authoring.extensions", .verb = SessionVerb::Extensions},
     VerbName{.kind = "authoring.extension", .verb = SessionVerb::Extension},
@@ -128,6 +129,8 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Import:
     case SessionVerb::Step:
         return Members{.required = 2, .optional = 0};
+    case SessionVerb::CookedFile:
+        return Members{.required = 3, .optional = 0};
     case SessionVerb::Run:
         return Members{.required = 1, .optional = 0};
     case SessionVerb::Traffic:
@@ -403,6 +406,23 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         }
         record.source = *source;
         record.as = *as;
+        return record;
+    }
+    case SessionVerb::CookedFile: {
+        // A file the cook wrote, by its manifest's name or a locator the
+        // manifest gives; whether the output is one this session cooked,
+        // and the locator one, is the session's to say.
+        const std::string* kOutput = textOf(parsed->find("output"));
+        const std::string* kFile = textOf(parsed->find("file"));
+        const Value* kOffset = parsed->find("offset");
+        const std::optional<std::int64_t> kAt = kOffset != nullptr ? kOffset->integer() : std::nullopt;
+        if (kOutput == nullptr || !absolute(*kOutput) || kFile == nullptr || kFile->empty() || kFile->size() > 256 ||
+            !kAt.has_value() || *kAt < 0) {
+            return malformed("cooked_file names an absolute output, a file of it, and an offset");
+        }
+        record.output = *kOutput;
+        record.file = *kFile;
+        record.offset = static_cast<std::uint64_t>(*kAt);
         return record;
     }
     case SessionVerb::Cancel: {

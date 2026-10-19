@@ -288,6 +288,18 @@ RAWFRAME_TEST(ACookNamesWhereItCooksToAndACancelItsOperation) {
                     kCancel->operation.text() != nullptr && *kCancel->operation.text() == "c");
     RAWFRAME_EXPECT(refusedWith(readSessionRecord(R"({"kind":"authoring.cancel","operation":null})", id),
                                 AuthoringError::ValidationFailed));
+    // A cook's file read back (D905): an absolute output, a file, and an
+    // offset; the session judges the rest.
+    const auto kPiece = readSessionRecord(
+        R"({"kind":"authoring.cooked_file","id":3,"output":"/content","file":"objects/ab","offset":4})", id);
+    RAWFRAME_EXPECT(kPiece.has_value() && kPiece->verb == SessionVerb::CookedFile && kPiece->output == "/content" &&
+                    kPiece->file == "objects/ab" && kPiece->offset == 4);
+    for (const char* kRefused : {R"({"kind":"authoring.cooked_file","output":"content","file":"a","offset":0})",
+                                 R"({"kind":"authoring.cooked_file","output":"/content","file":"","offset":0})",
+                                 R"({"kind":"authoring.cooked_file","output":"/content","file":"a","offset":-1})",
+                                 R"({"kind":"authoring.cooked_file","output":"/content","file":"a"})"}) {
+        RAWFRAME_EXPECT(refusedWith(readSessionRecord(kRefused, id), AuthoringError::ValidationFailed));
+    }
     // Stopped as asked is no error.
     RAWFRAME_EXPECT(writeCancelled(document::Value::integer(9), "requested") ==
                     "{\"kind\":\"authoring.reply\",\"id\":9,\"cancelled\":{\"reason\":\"requested\"}}\n");
