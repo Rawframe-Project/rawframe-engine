@@ -13,6 +13,9 @@ struct Sky
     // looks, the jittered view's inverse; and the view unjittered and the
     // frame before's.
     float4 environment;
+    // The ground's light below the horizon (D304), for the sky drawn
+    // without a picture (D914).
+    float4 ground;
     float4x4 toDirection;
     float4x4 unjittered;
     float4x4 previous;
@@ -57,17 +60,26 @@ Corner vs(uint vertex : SV_VulkanVertexID)
 Written fs(Corner corner)
 {
     Written written;
-    if (sky.environment.w < 0.5)
-    {
-        written.color = float4(sky.light.rgb * exposure[0].value.y, 1.0);
-        written.motion = float2(0.0);
-        return written;
-    }
     // A point at the far end of depth is a direction: the view's inverse
     // takes it back to the way it looks.
     const float3 toward = normalize(mul(sky.toDirection, float4(corner.seen, 0.0, 1.0)).xyz);
-    const float3 picture = environmentTexture.SampleLevel(environmentSampler, toward, 0.0).rgb;
-    written.color = float4(picture * sky.light.rgb * exposure[0].value.y, 1.0);
+    if (sky.environment.w < 0.5)
+    {
+        // Without a picture, a clear day's (D914): paler and brighter at
+        // the horizon, deeper overhead, and the ground's light below it,
+        // as the sky the models are lit by would look.
+        const float grey = dot(sky.light.rgb, float3(0.2126, 0.7152, 0.0722));
+        const float3 horizon = lerp(sky.light.rgb, float3(grey, grey, grey), 0.45) * 2.4;
+        const float3 overhead = sky.light.rgb * 1.3;
+        const float3 above = lerp(horizon, overhead, pow(saturate(toward.y), 0.5));
+        const float3 below = lerp(horizon * 0.8, sky.ground.rgb, saturate(-toward.y * 8.0));
+        written.color = float4((toward.y >= 0.0 ? above : below) * exposure[0].value.y, 1.0);
+    }
+    else
+    {
+        const float3 picture = environmentTexture.SampleLevel(environmentSampler, toward, 0.0).rgb;
+        written.color = float4(picture * sky.light.rgb * exposure[0].value.y, 1.0);
+    }
     const float4 now = mul(sky.unjittered, float4(toward, 0.0));
     const float4 before = mul(sky.previous, float4(toward, 0.0));
     written.motion =

@@ -208,11 +208,58 @@ void addLightLines(const LightInstance& light, std::vector<SceneLine>& lines) {
     ring(kEnd, kAxes[0], kAxes[1], kRange * std::tan(kOuter), kLit, lines);
 }
 
+namespace {
+
+/// The ground's grid an editor shows (D914), on the plane where Y is
+/// nought, a hair above it so a floor there does not hide it: a line a
+/// meter, brighter every ten, about the point under the eye, as far out
+/// as the eye is high and at least forty meters; the X axis red and the Z
+/// axis blue where they pass, as an editor's grid draws them. Behind what
+/// is nearer, so it reads as the ground's.
+void addGridLines(const std::array<double, 3>& eye, std::vector<SceneLine>& lines) {
+    constexpr double kAbove = 0.002;
+    constexpr std::array<float, 4> kMinor{0.36F, 0.37F, 0.40F, 1};
+    constexpr std::array<float, 4> kMajor{0.52F, 0.53F, 0.57F, 1};
+    constexpr std::array<float, 4> kAxisX{0.85F, 0.3F, 0.3F, 1};
+    constexpr std::array<float, 4> kAxisZ{0.3F, 0.45F, 0.9F, 1};
+    // A meter a line out to sixty, ten past that, so the lines stay
+    // within the frame's budget however high the eye.
+    const double kReach = std::clamp(std::abs(eye[1]) * 3, 25.0, 2000.0);
+    const double kStep = kReach > 60 ? 10 : 1;
+    const double kMiddleX = std::round(eye[0] / kStep) * kStep;
+    const double kMiddleZ = std::round(eye[2] / kStep) * kStep;
+    const auto kLines = static_cast<std::int64_t>(kReach / kStep);
+    for (std::int64_t at = -kLines; at <= kLines && lines.size() + 2 <= kMostSceneLines; ++at) {
+        const double kX = kMiddleX + (static_cast<double>(at) * kStep);
+        const double kZ = kMiddleZ + (static_cast<double>(at) * kStep);
+        const auto kKind = [kStep](double place) {
+            return std::abs(std::remainder(place, kStep * 10)) < kStep / 2;
+        };
+        const float kMinorWidth = kWidth * 0.4F;
+        lines.push_back(SceneLine{.from = {kX, kAbove, kMiddleZ - kReach},
+                                  .to = {kX, kAbove, kMiddleZ + kReach},
+                                  .color = std::abs(kX) < kStep / 2 ? kAxisZ : (kKind(kX) ? kMajor : kMinor),
+                                  .width = kKind(kX) ? kWidth * 0.6F : kMinorWidth,
+                                  .ofView = true});
+        lines.push_back(SceneLine{.from = {kMiddleX - kReach, kAbove, kZ},
+                                  .to = {kMiddleX + kReach, kAbove, kZ},
+                                  .color = std::abs(kZ) < kStep / 2 ? kAxisX : (kKind(kZ) ? kMajor : kMinor),
+                                  .width = kKind(kZ) ? kWidth * 0.6F : kMinorWidth,
+                                  .ofView = true});
+    }
+}
+
+} // namespace
+
 void drawOverlays(world::World& world,
                   std::uint8_t overlays,
                   std::span<const LightInstance> lights,
                   std::optional<world::ColumnQuery>& bodies,
+                  const std::array<double, 3>& eye,
                   std::vector<SceneLine>& lines) {
+    if ((overlays & static_cast<std::uint8_t>(view::Overlay::Grid)) != 0) {
+        addGridLines(eye, lines);
+    }
     if ((overlays & static_cast<std::uint8_t>(view::Overlay::Colliders)) != 0) {
         if (!bodies.has_value()) {
             const auto kBody = world.registry().find(physics3d::Body3D::kComponentTypeId);

@@ -689,7 +689,12 @@ private:
     /// The overlays' lines after the mark's (D798).
     void addOverlays(world::World& world, std::uint8_t overlays) {
         const std::size_t kBefore = lines_.size();
-        drawOverlays(world, overlays, scene_->extractedLights(), bodies_, lines_);
+        drawOverlays(world,
+                     overlays,
+                     scene_->extractedLights(),
+                     bodies_,
+                     preview_->looking().has_value() ? preview_->looking()->eye : std::array<double, 3>{},
+                     lines_);
         overlayLines_ += lines_.size() - kBefore;
     }
 

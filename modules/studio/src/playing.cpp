@@ -556,10 +556,30 @@ void ShellParticipant::attachPreview() {
     // Edited, it is seen through the editor's camera, on the whole scene
     // where the scene keeps no view of its own (D913).
     if (previewing_ && playing_.has_value() && playing_->edited() && !view_.has_value()) {
-        const Answered kFramed = answeredOf(ask(frameRecord(next(), scene_)));
-        if (kFramed.done) {
-            view_ = kFramed.view;
+        Answered framed = answeredOf(ask(frameRecord(next(), scene_)));
+        // Nothing in it stands anywhere: from above the ground's middle.
+        if (!framed.done) {
+            Value standing = Value::object();
+            const auto kPoint = [](double x, double y, double z) {
+                Value point = Value::array();
+                point.push(Value::real(x));
+                point.push(Value::real(y));
+                point.push(Value::real(z));
+                return point;
+            };
+            standing.add("eye", kPoint(12, 9, 12));
+            standing.add("target", kPoint(0, 0, 0));
+            standing.add("fieldOfView", Value::real(60));
+            framed = answeredOf(ask(viewRecord(next(), scene_, standing)));
         }
+        if (framed.done) {
+            view_ = framed.view;
+        }
+    }
+    // With the ground's grid, as an editor's viewport has it (D914).
+    if (previewing_ && playing_.has_value() && playing_->edited() && !std::exchange(held_.gridShown, true) &&
+        std::ranges::find(shown_.overlays, "grid") == shown_.overlays.end()) {
+        shown_.overlays.insert(shown_.overlays.begin(), "grid");
     }
     showViewText();
     say(kAttached.done ? (previewing_ ? "previewing " + scene_ : "no preview") : kAttached.message);

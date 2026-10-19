@@ -56,14 +56,16 @@ enum class ViewMode : std::uint8_t {
 [[nodiscard]] Region previewRegion(std::size_t count, std::size_t at) noexcept;
 
 /// What a preview draws over its scene (D798), a bit each: each body's
-/// collider, each light's reach. Named by `overlayNamed`'s names, which
-/// are what a tool sends.
+/// collider, each light's reach, and the ground's grid an editor shows
+/// (D914). Named by `overlayNamed`'s names, which are what a tool sends.
 enum class Overlay : std::uint8_t {
     Colliders = 1,
-    Lights = 2
+    Lights = 2,
+    Grid = 4
 };
 
-/// The overlay named `name` ("colliders", "lights"), none for another.
+/// The overlay named `name` ("colliders", "lights", "grid"), none for
+/// another.
 [[nodiscard]] std::optional<Overlay> overlayNamed(std::string_view name) noexcept;
 
 /// One figure of the frame a preview last drew (D842): what the scene

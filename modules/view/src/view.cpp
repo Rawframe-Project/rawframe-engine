@@ -199,6 +199,9 @@ std::optional<Overlay> overlayNamed(std::string_view name) noexcept {
     if (name == "lights") {
         return Overlay::Lights;
     }
+    if (name == "grid") {
+        return Overlay::Grid;
+    }
     return std::nullopt;
 }
 

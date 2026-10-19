@@ -165,11 +165,14 @@ struct SkyBlock {
     /// of the target looks, the jittered view's inverse; and the view
     /// unjittered and the frame before's, for the picture's motion.
     std::array<float, 4> environment{};
+    /// The ground's light, below the horizon of a sky with no picture
+    /// (D914).
+    std::array<float, 4> ground{};
     Matrix4 toDirection{};
     Matrix4 unjittered{};
     Matrix4 previous{};
 };
-static_assert(sizeof(SkyBlock) == 224, "the sky's shaders read it as 224 bytes");
+static_assert(sizeof(SkyBlock) == 240, "the sky's shaders read it as 240 bytes");
 
 /// What the temporal pass reads (D291): whether the picture before may be
 /// reused.

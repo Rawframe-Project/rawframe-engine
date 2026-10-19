@@ -350,6 +350,7 @@ struct SceneRenderer::State {
         }
         now.sky = SkyBlock{.light = now.block.sky,
                            .environment = now.block.environment,
+                           .ground = now.block.ground,
                            .toDirection = inverseOf(now.block.viewProjection),
                            .unjittered = now.block.unjittered,
                            .previous = now.block.previous};

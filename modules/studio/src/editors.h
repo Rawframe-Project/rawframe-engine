@@ -98,6 +98,9 @@ enum class Listed : std::uint8_t {
 struct EditorsHeld {
     /// The most rows a data document or the settings list.
     static constexpr std::size_t kMostRows = 512;
+    /// Whether the edit view's grid was put on once (D914), after which
+    /// it is the author's to toggle.
+    bool gridShown = false;
     /// The chosen blockout's lines as last read (D850), the pixels a meter
     /// is drawn in its plan (D851), and whether the last press was on a
     /// footprint there, which a drag moves (D852).

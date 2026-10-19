@@ -55,12 +55,13 @@ void addOutlineLines(const std::array<double, 6>& box,
 
 /// The overlays `overlays` asks for (`view::Overlay` bits), appended to
 /// `lines` until it holds `kMostSceneLines`: each body's collider in
-/// `world`, `bodies` resolved on first need and kept, and each light in
-/// `lights`.
+/// `world`, `bodies` resolved on first need and kept, each light in
+/// `lights`, and the ground's grid about the point under `eye` (D914).
 void drawOverlays(world::World& world,
                   std::uint8_t overlays,
                   std::span<const LightInstance> lights,
                   std::optional<world::ColumnQuery>& bodies,
+                  const std::array<double, 3>& eye,
                   std::vector<SceneLine>& lines);
 
 } // namespace rawframe::render_scene
