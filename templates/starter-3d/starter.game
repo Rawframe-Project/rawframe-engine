@@ -4,6 +4,7 @@
 # from above the ground's near edge. Everything here is the new game's to
 # change.
 program starter.kest
+physics3d gravity 0 -9.81 0
 component 0ddf8849-b458-4e59-a943-cf645990ec84 starter.mover Mover
 component 4f0684c7-8546-43d8-8642-b9b3efe65b03 starter.ground Ground
 component e6e4409c-3b6b-4935-95bf-6027499b5e69 starter.stick controls.Stick
@@ -17,6 +18,15 @@ field starter.mover x unit m
 field starter.mover z unit m
 replicate starter.mover starter.ground
 
+# The scene's parts (D917): each body drawn as its shape, painted where it
+# has paint, and each lamp a light with a bulb; what an editor's New menu
+# makes, and every part kept with the World.
+component 8ebaeb28-62b2-4f1a-abd5-ee2173192aee starter.paint Paint
+field starter.paint color color
+field starter.paint material asset material
+component 66dfed30-3111-4e4c-b18d-4001a325727f starter.lamp rawframe.model.PointLight
+replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity starter.paint starter.lamp
+
 # Each player is given a box, moved by its stick, which a client makes from
 # its player's actions (starter.actions) with sample.kest.
 player starter.stick starter.mover
@@ -24,16 +34,23 @@ input starter.stick
 actions starter.actions
 sample sample.kest sample
 
-# What a client draws: each box and the ground where they are, and the
-# whole ground seen from above its near edge.
+# What a client draws: each box where it is, and the whole ground seen
+# from above its near edge; then each part, lamp, and the sun (D917).
 component dc501cf5-d960-4979-9b07-a03749c9389d starter.look rawframe.model.Model
 component b926bea2-c918-49aa-a717-8921e325a39e starter.spot rawframe.model.Placed
 component d21c7518-70fb-40ea-9b3d-65acb9658f1d starter.view rawframe.model.Camera
 presentation starter.look starter.spot on starter.mover
 present starter.dress dress read starter.mover write starter.look write starter.spot
-component c0a30c8e-dc2c-4cbd-b48b-cf2304853e04 starter.floor rawframe.model.Model
-component 0525d949-3f08-4d2e-98d0-418140504148 starter.laid rawframe.model.Placed
-presentation starter.floor starter.laid on starter.ground
-present starter.lay lay read starter.ground write starter.floor write starter.laid
 presentation starter.view on player
 present starter.frame frame write starter.view
+component d1a72614-5f24-4d4e-9fac-bcd94a181654 starter.part rawframe.model.Model
+presentation starter.part on rawframe.physics3d.body
+present starter.paint_part dressPart read rawframe.physics3d.body write starter.part entities lookup starter.paint
+component f54bfe93-3cc1-4bf8-8c5f-5a03b8b45654 starter.light rawframe.model.PointLight
+component 85c058b7-5b63-4469-94db-4e69227a2a70 starter.bulb rawframe.model.Model
+presentation starter.light starter.bulb on starter.lamp
+present starter.shine shine read starter.lamp write starter.light
+present starter.light_bulb bulb read starter.lamp write starter.bulb
+component b8e03315-9a4a-4a90-8a5b-0ff0245aec1a starter.sun rawframe.model.Sun
+presentation starter.sun on player
+present starter.daylight sun write starter.sun

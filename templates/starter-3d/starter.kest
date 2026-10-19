@@ -4,18 +4,22 @@ module starter
 // its stick, the server moving it and keeping it on the ground; a client
 // draws each box and the ground where they are, seen from above the
 // ground's near edge. A new game made from it starts here.
+//
+// And its scene's parts (D917): every body a part drawn as its shape, in
+// its paint where it has one, every lamp a light where its pose is, and a
+// sun over all of it, so what an author places in an editor shows.
 
 import controls
 import rawframe.model
+import rawframe.physics3d
 import rawframe.world
 
 // How far a box moves in a tick at a full stick, in meters.
 const SPEED: f64 = 0.1
 
-// A box's half size, and its color and the ground's (0xRRGGBBAA).
+// A box's half size, and its color (0xRRGGBBAA).
 const HALF: f32 = 0.5
 const BOX_COLOR: u32 = 0xe8743bff
-const GROUND_COLOR: u32 = 0x6b8e4eff
 
 // A player's box: where it stands on the ground.
 struct Mover {
@@ -28,6 +32,18 @@ struct Mover {
 struct Ground {
     side: f32
 }
+
+// A part's paint: its color, and its material where it names one (D917).
+struct Paint {
+    color: u32
+    material: u64
+}
+
+// A part's color where it has no paint.
+const PART_COLOR: u32 = 0xb8bcc4ff
+
+extern fn Paint.has(entity: world.Entity) -> bool
+extern fn Paint.get(entity: world.Entity) -> Paint
 
 // The ground's entities and each one's ground, which the move system looks
 // up (its `lookup` in starter.game).
@@ -71,13 +87,53 @@ fn dress(count: i32, movers: [Mover], looks: [model.Model], spots: [model.Placed
     }
 }
 
-// And the ground, a tenth of a meter thick under height nought.
-fn lay(count: i32, grounds: [Ground], looks: [model.Model], spots: [model.Placed]) {
+// Each part drawn as its body's shape, its size the body's, in its paint.
+fn dressPart(count: i32, bodies: [physics3d.Body3D], looks: [model.Model], entities: [world.Entity]) {
     let i = 0
     while i < count {
-        let half = grounds[i].side * 0.5
-        looks[i] = model.Model(model.BOX, half, 0.05, half, GROUND_COLOR, u64(0), 0.0)
-        spots[i] = model.Placed(true, 0.0, -0.05, 0.0)
+        let b = bodies[i]
+        let look = model.Model(model.BOX, b.width, b.height, b.depth, PART_COLOR, u64(0), 0.0)
+        if b.shape == physics3d.SPHERE {
+            look = model.Model(model.SPHERE, b.width, b.width, b.width, PART_COLOR, u64(0), 0.0)
+        }
+        if b.shape == physics3d.CAPSULE {
+            look = model.Model(model.CAPSULE, b.width, (b.height + b.width) * 0.5, b.width, PART_COLOR, u64(0), 0.0)
+        }
+        if b.shape == physics3d.CYLINDER {
+            look = model.Model(model.CYLINDER, b.width, b.height, b.width, PART_COLOR, u64(0), 0.0)
+        }
+        if Paint.has(entities[i]) {
+            let paint = Paint.get(entities[i])
+            look.color = paint.color
+            look.material = paint.material
+        }
+        looks[i] = look
+        i = i + 1
+    }
+}
+
+// Each lamp's light as the scene sets it, and a small bulb where it hangs.
+fn shine(count: i32, lamps: [model.PointLight], lights: [model.PointLight]) {
+    let i = 0
+    while i < count {
+        lights[i] = lamps[i]
+        i = i + 1
+    }
+}
+
+fn bulb(count: i32, lamps: [model.PointLight], looks: [model.Model]) {
+    let i = 0
+    while i < count {
+        looks[i] = model.Model(model.SPHERE, 0.12, 0.12, 0.12, lamps[i].color, u64(0), 0.0)
+        i = i + 1
+    }
+}
+
+// The sun, high and a little behind the eye, and the sky's light.
+fn sun(count: i32, suns: [model.Sun]) {
+    let i = 0
+    while i < count {
+        suns[i] = model.Sun(0.35, -0.8, -0.45, 60000.0, model.kelvin(5600.0), 0.0093)
         i = i + 1
     }
 }

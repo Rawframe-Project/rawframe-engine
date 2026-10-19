@@ -2,15 +2,70 @@
   "kind": "rawframe.scene",
   "formatVersion": 1,
   "schema": {
-    "starter.ground": "680baa2755a44d15"
+    "rawframe.physics3d.body": "333aeeed8b31cb31",
+    "rawframe.physics3d.pose": "4c7ea4a8be350db8",
+    "rawframe.physics3d.velocity": "26f3f6625f0df9ec",
+    "starter.ground": "680baa2755a44d15",
+    "starter.lamp": "b6595e9ad55fdfdf",
+    "starter.paint": "a30c777b9587547c"
   },
   "entities": [
     {
       "id": "8ee96339-f4d6-4dfe-8588-ded8f09fb6c6",
       "name": "ground",
       "components": {
+        "rawframe.physics3d.body": {
+          "depth": 10,
+          "height": 0.05,
+          "shape": 1,
+          "width": 10
+        },
+        "rawframe.physics3d.pose": {
+          "y": -0.05
+        },
+        "rawframe.physics3d.velocity": {},
         "starter.ground": {
           "side": 20
+        },
+        "starter.paint": {
+          "color": 1804488447
+        }
+      }
+    },
+    {
+      "id": "d4583c01-f9de-4c30-b8fd-8db7105963f4",
+      "name": "cube",
+      "components": {
+        "rawframe.physics3d.body": {
+          "depth": 0.5,
+          "height": 0.5,
+          "shape": 1,
+          "width": 0.5
+        },
+        "rawframe.physics3d.pose": {
+          "x": -3,
+          "y": 0.5,
+          "z": -2
+        },
+        "rawframe.physics3d.velocity": {},
+        "starter.paint": {
+          "color": 1334828287
+        }
+      }
+    },
+    {
+      "id": "b7f8f075-2804-44ff-9349-d40d8d4477ae",
+      "name": "lamp",
+      "components": {
+        "rawframe.physics3d.pose": {
+          "x": 2,
+          "y": 2.5,
+          "z": 1
+        },
+        "starter.lamp": {
+          "color": 4292452607,
+          "lumens": 1200,
+          "range": 10
         }
       }
     }

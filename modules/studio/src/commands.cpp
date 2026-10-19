@@ -119,6 +119,13 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     kOffer("Duplicate", "Edit", {"Ctrl+D"}, duplicateNode_);
     kOffer("Delete", "Edit", {"Delete"}, deleteNode_);
     kOffer("New", "Entity", {"Ctrl+Shift+N"}, newNode_);
+    // The parts the game can be given (D917), in the Entity menu and under
+    // the Hierarchy's plus.
+    if (tree_->contains(newNode_)) {
+        for (const std::string& kName : partCommands()) {
+            commands_.push_back(Command{.name = kName, .menu = "Entity", .keys = kKeys(kName, {})});
+        }
+    }
     kOffer("Move to", "Entity", {}, moveNode_);
     kOffer("Restore", "Entity", {}, restoreNode_);
     kOffer("Remove instance", "Entity", {}, uninstanceNode_);
@@ -152,6 +159,14 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     }
     if (held_.layoutChooser != ui::Node{}) {
         menus_.emplace_back(held_.layoutChooser, std::string{kLayoutChooser});
+    }
+    if (tree_->contains(held_.newMenu)) {
+        menus_.emplace_back(held_.newMenu, "New entity");
+    }
+    for (const auto& [kPill, kMenu] : held_.viewPills) {
+        if (tree_->contains(kPill)) {
+            menus_.emplace_back(kPill, kMenu);
+        }
     }
     commands_.push_back(Command{.name = std::string{kPalette}, .menu = "Window", .keys = kKeys(kPalette, {"Ctrl+K"})});
     commands_.push_back(Command{.name = std::string{kPreferences}, .menu = "Window", .keys = kKeys(kPreferences, {})});
@@ -257,6 +272,10 @@ bool ShellParticipant::runCommand(std::string_view name) {
     }
     if (kCommand->name == kFrame) {
         frameChosen();
+        return true;
+    }
+    if (kCommand->name.starts_with("New ") && kCommand->menu == "Entity") {
+        createPart(kCommand->name);
         return true;
     }
     if (kCommand->name == kClaim || kCommand->name == kRelease) {

@@ -260,6 +260,9 @@ private:
     void showViewBar();
     void showAxes();
     [[nodiscard]] bool commandOn(std::string_view name) const;
+    [[nodiscard]] std::vector<std::string> partCommands() const;
+    [[nodiscard]] const Catalog::Component* lampComponent() const;
+    void createPart(std::string_view command);
     [[nodiscard]] std::vector<std::string> addChoices(std::string_view typed) const;
     result::Status showSources();
     bool pressBrowser(ui::Node node);

@@ -85,12 +85,15 @@ bool pillLists(std::string_view pill, std::string_view command) {
     if (pill == kSplitPill) {
         return command == "One view" || command == "Two views" || command == "Three views";
     }
+    if (pill == "New entity") {
+        return command.starts_with("New ");
+    }
     return false;
 }
 
 bool isPill(std::string_view menu) {
     return menu == kProjectionPill || menu == kDrawPill || menu == kShowPill || menu == kBookmarkPill ||
-           menu == kSplitPill;
+           menu == kSplitPill || menu == "New entity";
 }
 
 void ShellParticipant::showViewBar() {
@@ -99,8 +102,8 @@ void ShellParticipant::showViewBar() {
             static_cast<void>(tree_->remove(kOld));
         }
     }
-    std::erase_if(menus_, [](const std::pair<ui::Node, std::string>& menu) {
-        return isPill(menu.second);
+    std::erase_if(menus_, [this](const std::pair<ui::Node, std::string>& menu) {
+        return std::ranges::contains(held_.viewPills, menu);
     });
     held_.viewPills.clear();
     held_.viewBar = held_.splitBar = held_.axisGizmo = held_.flyHint = ui::Node{};

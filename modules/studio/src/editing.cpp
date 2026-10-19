@@ -779,6 +779,155 @@ void ShellParticipant::create() {
     commit(std::move(operation), "entity created", kIdentity);
 }
 
+namespace {
+
+/// A part the New menu makes (D917): its command, its name, its body's
+/// shape (none for a lamp or an empty), and its half sizes.
+struct PartKind {
+    std::string_view command;
+    std::string_view name;
+    std::optional<std::uint8_t> shape;
+    std::array<double, 3> half;
+};
+
+constexpr std::array<PartKind, 7> kParts = {{
+    {"New empty", "empty", std::nullopt, {0, 0, 0}},
+    {"New cube", "cube", 1, {0.5, 0.5, 0.5}},
+    {"New sphere", "sphere", 0, {0.5, 0.5, 0.5}},
+    {"New capsule", "capsule", 2, {0.4, 0.6, 0.4}},
+    {"New cylinder", "cylinder", 3, {0.5, 0.5, 0.5}},
+    {"New plane", "plane", 1, {5, 0.05, 5}},
+    {"New lamp", "lamp", std::nullopt, {0, 0, 0}},
+}};
+
+} // namespace
+
+std::vector<std::string> ShellParticipant::partCommands() const {
+    // Parts where the game has bodies and poses, a lamp where it names one;
+    // an empty entity always.
+    const auto kNamed = [this](std::string_view name) {
+        return std::ranges::any_of(catalog_.components, [&](const Catalog::Component& each) {
+            return each.name == name;
+        });
+    };
+    const bool kBodies = kNamed("rawframe.physics3d.body") && kNamed("rawframe.physics3d.pose");
+    std::vector<std::string> made;
+    for (const PartKind& kPart : kParts) {
+        if ((kPart.shape.has_value() && !kBodies) ||
+            (kPart.name == "lamp" && (lampComponent() == nullptr || !kNamed("rawframe.physics3d.pose")))) {
+            continue;
+        }
+        made.emplace_back(kPart.command);
+    }
+    return made;
+}
+
+const Catalog::Component* ShellParticipant::lampComponent() const {
+    // The game's lamp: a point light it keeps in its scenes, by name.
+    const auto kFound = std::ranges::find_if(catalog_.components, [](const Catalog::Component& each) {
+        return each.type == "rawframe.model.PointLight" && each.name.ends_with(".lamp");
+    });
+    return kFound != catalog_.components.end() ? &*kFound : nullptr;
+}
+
+void ShellParticipant::createPart(std::string_view command) {
+    const auto kPart = std::ranges::find(kParts, command, &PartKind::command);
+    if (kPart == kParts.end() || scene_.empty()) {
+        return;
+    }
+    const auto kComponent = [this](std::string_view name) -> const Catalog::Component* {
+        const auto kFound = std::ranges::find(catalog_.components, name, &Catalog::Component::name);
+        return kFound != catalog_.components.end() ? &*kFound : nullptr;
+    };
+    const std::string kIdentity = mintedIdentity();
+    std::vector<Value> operations;
+    const auto kOperation = [&](std::string_view kind) {
+        Value made = Value::object();
+        made.add("operation", Value::string(std::string{kind}));
+        made.add("entity", Value::string(kIdentity));
+        return made;
+    };
+    const auto kAdd = [&](const Catalog::Component& component) {
+        Value added = kOperation("scene.add_component");
+        added.add("component", Value::string(component.id));
+        operations.push_back(std::move(added));
+    };
+    const auto kSet = [&](const Catalog::Component& component, std::string_view field, Value typed) {
+        Value set = kOperation("scene.set_field");
+        set.add("component", Value::string(component.id));
+        set.add("field", Value::string(std::string{field}));
+        set.add("value", std::move(typed));
+        operations.push_back(std::move(set));
+    };
+    const auto kReal = [](double number) {
+        Value made = Value::object();
+        made.add("real", Value::real(number));
+        return made;
+    };
+    const auto kWhole = [](std::uint64_t number) {
+        Value made = Value::object();
+        made.add("unsigned", Value::string(std::to_string(number)));
+        return made;
+    };
+    Value created = kOperation("scene.create_entity");
+    created.add("name", Value::string(std::string{kPart->name}));
+    operations.push_back(std::move(created));
+    // Where the view looks, standing on the ground.
+    std::array<double, 3> at{0, 0, 0};
+    if (const Value* kTarget = view_.has_value() ? view_->find("target") : nullptr;
+        kTarget != nullptr && kTarget->items().size() == 3) {
+        for (std::size_t each = 0; each < 3; ++each) {
+            const Value& kItem = kTarget->items()[each];
+            at[each] = kItem.real().value_or(static_cast<double>(kItem.integer().value_or(0)));
+        }
+    }
+    at[0] = std::round(at[0] * 2) / 2;
+    at[2] = std::round(at[2] * 2) / 2;
+    at[1] = kPart->shape.has_value() ? kPart->half[1] : kPart->name == "lamp" ? 2.5 : 0.0;
+    if (kPart->name != "empty") {
+        if (const Catalog::Component* kPose = kComponent("rawframe.physics3d.pose"); kPose != nullptr) {
+            kAdd(*kPose);
+            constexpr std::array<std::string_view, 3> kAxes = {"x", "y", "z"};
+            for (std::size_t each = 0; each < 3; ++each) {
+                if (at[each] != 0) {
+                    kSet(*kPose, kAxes[each], kReal(at[each]));
+                }
+            }
+        }
+    }
+    if (kPart->shape.has_value()) {
+        if (const Catalog::Component* kBody = kComponent("rawframe.physics3d.body"); kBody != nullptr) {
+            kAdd(*kBody);
+            kSet(*kBody, "shape", kWhole(*kPart->shape));
+            kSet(*kBody, "width", kReal(kPart->half[0]));
+            kSet(*kBody, "height", kReal(kPart->half[1]));
+            kSet(*kBody, "depth", kReal(kPart->half[2]));
+        }
+        if (const Catalog::Component* kVelocity = kComponent("rawframe.physics3d.velocity"); kVelocity != nullptr) {
+            kAdd(*kVelocity);
+        }
+        // Painted where the game paints its parts.
+        const auto kPaint = std::ranges::find_if(catalog_.components, [](const Catalog::Component& each) {
+            return each.name.ends_with(".paint") && std::ranges::any_of(each.fields, [](const Catalog::Field& field) {
+                       return field.name == "color";
+                   });
+        });
+        if (kPaint != catalog_.components.end()) {
+            kAdd(*kPaint);
+            kSet(*kPaint, "color", kWhole(kPart->name == "plane" ? 0x8C9196FFU : 0xC9CDD4FFU));
+        }
+    }
+    if (kPart->name == "lamp") {
+        if (const Catalog::Component* kLamp = lampComponent(); kLamp != nullptr) {
+            kAdd(*kLamp);
+            kSet(*kLamp, "lumens", kReal(800));
+            kSet(*kLamp, "range", kReal(8));
+            kSet(*kLamp, "color", kWhole(0xFFE2B8FFU));
+        }
+    }
+    commitAll(std::move(operations), std::string{kPart->name} + " made", kIdentity);
+}
+
 void ShellParticipant::openEditor(const Diagnostic& at) {
     // Only the game's own files: a place a log names may point anywhere.
     const std::optional<std::filesystem::path> kFile = gameFile(description_.parent_path(), at.file);

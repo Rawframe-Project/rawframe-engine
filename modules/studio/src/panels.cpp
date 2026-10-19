@@ -250,8 +250,12 @@ result::Status ShellParticipant::build() {
     // The Hierarchy's own switch, the played World in place of the
     // document's (D808), and New, as the design's plus.
     RAWFRAME_TRY_ASSIGN(live_.button, textButton(kLeftTabs, std::nullopt, "Live", ButtonKind::Quiet));
+    // The plus opens the New menu (D917); New itself, an empty entity, is
+    // on the shelf.
+    held_.newMenu = ui::Node{};
     if (catalog_.offers("scene.create_entity")) {
-        RAWFRAME_TRY_ASSIGN(newNode_, iconButton(kLeftTabs, Icon::Plus, "New"));
+        RAWFRAME_TRY_ASSIGN(held_.newMenu, iconButton(kLeftTabs, Icon::Plus, "New entity"));
+        RAWFRAME_TRY_ASSIGN(newNode_, button(held_.shelf, "New"));
     }
     RAWFRAME_TRY(box(kLeftTabs, ui::Layout{.width = ui::pixels(4), .shrink = 0}, 0));
     RAWFRAME_TRY_ASSIGN(entitiesColumn_, dockColumn(leftDock_, placed("Hierarchy", SurfaceKind::Panel, "Left")));
@@ -921,6 +925,10 @@ void ShellParticipant::showEntity(std::size_t at) {
                        : kEach.kind == "truth" ? std::string{"false"}
                        : kEach.kind == "real" || kEach.kind == "signed" || kEach.kind == "unsigned" ? std::string{"0"}
                                                                                                     : std::string{};
+                // A labelled number's default by its label (D916).
+                if (!kType.labels.empty()) {
+                    text = shownAs(kType, text);
+                }
             }
             auto line = fieldRow(kEach.name, text, std::nullopt, kEach.text.has_value(), prettyField(kEach.name));
             if (!line.has_value()) {
