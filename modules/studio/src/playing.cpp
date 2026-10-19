@@ -228,7 +228,7 @@ void ShellParticipant::attachPlayed(double seconds) {
     // yet started, is tried again now and then; each try may wait for its
     // reply, so not often (D453b).
     if (!playing_.has_value()) {
-        if (preview_.has_value() && !scene_.empty() && held_.joined == nullptr) {
+        if (preview_.has_value() && !scene_.empty()) {
             nextAttach_ = seconds + 2;
             attachPreview();
         }
@@ -245,10 +245,10 @@ void ShellParticipant::attachPlayed(double seconds) {
         say("the game ended");
         return;
     }
-    // A game played from a host joined has no preview: the session that
-    // would attach it is the host's, on its machine (D905).
+    // At a host joined, the preview is held beside the link to it, the
+    // game playing here (D906).
     const std::optional<Preview> kPreview = playing_->preview();
-    if (!kPreview.has_value() || held_.joined != nullptr) {
+    if (!kPreview.has_value()) {
         return;
     }
     preview_ = kPreview;

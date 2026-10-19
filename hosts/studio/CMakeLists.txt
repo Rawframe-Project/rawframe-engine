@@ -1171,6 +1171,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"studio_frame\"[^\n]*\"draws\":[1-9][0-9]*,\"figures\":40,\"steps\":[1-9][0-9]*,\"captures\":1,[^\n]*\"passesTimed\":[1-9][0-9]*}.*\"exit\":\"clean_stop\"")
+        # And previews it (D906): the preview held beside the link to the
+        # host, its frame read in the Frame tab.
+        add_test(NAME studio_joined_previews
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/joined_plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         $<TARGET_FILE:rawframe_host_author> $<TARGET_FILE:rawframe_host_cook_tool>
+                         ${PROJECT_BINARY_DIR}/hosts/client/runners_clicked.conf
+                         @level.scene @Cook "until=studio_said,status=\"cooked " @Play until=studio_previewing~600
+                         @Frame "until=studio_frame,passesTimed>=1~600" @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_joined_previews PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_joined\".*\"code\":\"studio_previewing\".*\"code\":\"studio_frame\"[^\n]*\"passesTimed\":[1-9][0-9]*}.*cooked on the host")
         # A 2D game's passes timed too (D901): Runners, which draws no scene,
         # played in the viewport, its Frame tab told the canvas's and the
         # UI's times; the tab pressed where the viewport, at its least
