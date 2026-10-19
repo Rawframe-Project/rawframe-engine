@@ -53,6 +53,9 @@ struct PlaySettings {
     /// The device the first client is tried as (D809): its window's size,
     /// the mouse played as a finger; none for this machine as it is.
     std::optional<std::array<std::uint32_t, 2>> device;
+    /// Played to be edited (D912): the server's World edited, so it shows
+    /// the documents and nothing plays, and follows them often.
+    bool edited = false;
 };
 
 /// Makes `path` a directory of this user's alone, or refuses one that is
@@ -88,6 +91,10 @@ public:
     /// How many of the other players' clients were started.
     [[nodiscard]] std::size_t others() const noexcept {
         return others_.size();
+    }
+    /// Whether it is played to be edited (D912), not played.
+    [[nodiscard]] bool edited() const noexcept {
+        return settings_.edited;
     }
     /// How many times the game has been launched.
     [[nodiscard]] int launches() const noexcept {

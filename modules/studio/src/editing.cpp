@@ -165,7 +165,11 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         chooseMode(kChosenMode);
     } else if (play_.has_value() && node == playNode_) {
         endEdit();
-        if (playing_.has_value()) {
+        if (playing_.has_value() && playing_->edited()) {
+            // The edited game makes way for the played one (D912).
+            stopPlaying();
+            playAsked_ = true;
+        } else if (playing_.has_value()) {
             stopPlaying();
         } else {
             startPlaying();

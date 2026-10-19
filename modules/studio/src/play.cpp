@@ -210,7 +210,8 @@ result::Status Play::launch() {
                                      // Its scenes followed once a second: an edit Studio
                                      // applies writes a scene, which the World then takes
                                      // (D410, D446), as ADR-0032 has a live edit go.
-                                     {"kest.reload_every", "60"}},
+                                     // Edited, ten times a second (D912).
+                                     {"kest.reload_every", settings_.edited ? "12" : "60"}},
                                     {{"kest.game", kGame},
                                      {"network.quic.self_signed", "true"},
                                      {"network.quic.fingerprint_file", (kAt / "server.fingerprint").string()},
@@ -221,7 +222,8 @@ result::Status Play::launch() {
                                      {"tooling.grants", "inspect debug run"},
                                      // Layers replicated, so the client hides
                                      // one (D791); the client is told so too.
-                                     {"kest.replicate_layers", "true"}})));
+                                     {"kest.replicate_layers", "true"}}) +
+                             (settings_.edited ? "world.edited = true\n" : "")));
     // Played in Studio's viewport (D789, D790): its window kept hidden at
     // the viewport's size, so a point there is the same point here, and
     // each picture streamed; those settings Studio's, not the game's.

@@ -51,6 +51,7 @@ studio.play.client = $3
 studio.play.server_settings = $5
 studio.play.client_settings = $work/client.conf
 studio.play.directory = $work/play
+studio.edit_view = ${STUDIO_EDIT_VIEW:-false}
 CONF
 if [ -n "${STUDIO_COOK:-}" ]; then
     echo "studio.cook = $STUDIO_COOK" >>"$work/studio.conf"

@@ -13,7 +13,41 @@
 
 namespace rawframe::studio {
 
-void ShellParticipant::startPlaying() {
+void ShellParticipant::keepEditing() {
+    if (!play_.has_value() || playing_.has_value() || stopping_.has_value() || held_.joined != nullptr) {
+        return;
+    }
+    if (std::exchange(playAsked_, false)) {
+        startPlaying();
+        return;
+    }
+    if (!editView_ || broken_.has_value()) {
+        return;
+    }
+    // A game opened opens on its first scene, as an editor opens a
+    // project on its main one (D912).
+    if (scene_.empty() && !std::exchange(editOpened_, true)) {
+        if (const auto kFirst = std::ranges::find(listed_, Listed::Scene);
+            kFirst != listed_.end() && static_cast<std::size_t>(kFirst - listed_.begin()) < scenes_.size()) {
+            showScene(static_cast<std::size_t>(kFirst - listed_.begin()));
+        }
+    }
+    if (scene_.empty() || !chosen(Listed::Scene) || cooking_.has_value()) {
+        return;
+    }
+    // Drawn from the game's content as Studio cooks it: cooked once first
+    // where nothing is yet.
+    std::error_code error;
+    if (!cookTool_.empty() && !std::filesystem::is_regular_file(cookAt_ / "content" / "content.manifest", error)) {
+        if (!std::exchange(editCooked_, true)) {
+            cookOrStop();
+        }
+        return;
+    }
+    startPlaying(true);
+}
+
+void ShellParticipant::startPlaying(bool edited) {
     if (stopping_.has_value()) {
         say("the last game is still stopping");
         return;
@@ -33,8 +67,16 @@ void ShellParticipant::startPlaying() {
             std::array<std::uint32_t, 2>{kAt.width >= 64 ? static_cast<std::uint32_t>(kAt.width) : 640U,
                                          kAt.height >= 64 ? static_cast<std::uint32_t>(kAt.height) : 360U};
     }
-    // With the players chosen, each a client (D804).
-    play_->players = players_;
+    // With the players chosen, each a client (D804); edited, one, in the
+    // viewport (D912).
+    play_->players = edited ? 1 : players_;
+    play_->edited = edited;
+    if (edited && !play_->viewport.has_value()) {
+        const ui::Rect kAt = tree_->contains(viewport_) ? tree_->placedRectOf(viewport_) : ui::Rect{};
+        play_->viewport =
+            std::array<std::uint32_t, 2>{kAt.width >= 64 ? static_cast<std::uint32_t>(kAt.width) : 640U,
+                                         kAt.height >= 64 ? static_cast<std::uint32_t>(kAt.height) : 360U};
+    }
     auto started = Play::start(*play_);
     if (!started.has_value()) {
         say(std::string{started.error().description()});
@@ -48,6 +90,10 @@ void ShellParticipant::startPlaying() {
     tails_.emplace_back(playing_->directory() / "server.log", ConsoleLine::Source::Server);
     tails_.emplace_back(playing_->directory() / "client.log", ConsoleLine::Source::Client);
     nextAttach_ = 0;
+    if (edited) {
+        say("showing " + scene_);
+        return;
+    }
     static_cast<void>(pressWords(playNode_, "Stop", kText, 14));
     say("starting the game");
 }

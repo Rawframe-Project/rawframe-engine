@@ -721,7 +721,12 @@ private:
 
     /// The game played to preview it: its server and client started, the
     /// client attached as the chosen scene's preview once it says who it is.
-    void startPlaying();
+    /// `edited`, played to be edited, shown in the viewport (D912).
+    void startPlaying(bool edited = false);
+    /// The open scene shown in the viewport while nothing plays (D912):
+    /// once cooked, the game played edited; Play asked while it shows
+    /// starts once it has stopped.
+    void keepEditing();
     /// At a host joined, the cook this author made there brought into the
     /// play directory (D905); whether it came.
     bool bringCooked();
@@ -1033,6 +1038,13 @@ private:
     std::uint64_t rebound_ = 0;
     std::optional<Play> playing_;
     std::optional<Play> stopping_;
+    /// The viewport shows the scene being edited (D912), unless
+    /// `studio.edit_view` is false; Play pressed while it shows, to start
+    /// once it stopped; whether the first cook for it was asked.
+    bool editView_ = true;
+    bool playAsked_ = false;
+    bool editCooked_ = false;
+    bool editOpened_ = false;
     ui::Node playNode_{};
     std::uint64_t played_ = 0;
     /// The mark's part last said lit (D504).

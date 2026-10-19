@@ -62,15 +62,28 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         held_.joinToken = std::string{*kJoinToken};
     }
     // A game Studio plays itself to preview it (D445).
-    const auto kPlayServer = configuration.path("studio.play.server");
-    const auto kPlayClient = configuration.path("studio.play.client");
-    if (kPlayServer.has_value() != kPlayClient.has_value()) {
+    const auto kConfiguredServer = configuration.path("studio.play.server");
+    const auto kConfiguredClient = configuration.path("studio.play.client");
+    if (kConfiguredServer.has_value() != kConfiguredClient.has_value()) {
         return misconfigured("playing needs studio.play.server and studio.play.client together");
+    }
+    // Named, or beside Studio, where its package puts them, so Studio
+    // opened by itself plays (D912).
+    std::optional<std::string> kPlayServer;
+    std::optional<std::string> kPlayClient;
+    if (kConfiguredServer.has_value()) {
+        kPlayServer = std::string{*kConfiguredServer};
+        kPlayClient = std::string{*kConfiguredClient};
+    } else if (const std::filesystem::path kBesideServer = process::besideSelf("rawframe-server"),
+               kBesideClient = process::besideSelf("rawframe-client");
+               !kBesideServer.empty() && !kBesideClient.empty()) {
+        kPlayServer = kBesideServer.string();
+        kPlayClient = kBesideClient.string();
     }
     if (kPlayServer.has_value()) {
         play_ =
-            PlaySettings{.server = std::string{*kPlayServer},
-                         .client = std::string{*kPlayClient},
+            PlaySettings{.server = *kPlayServer,
+                         .client = *kPlayClient,
                          .serverSettings = std::string{configuration.path("studio.play.server_settings").value_or("")},
                          .clientSettings = std::string{configuration.path("studio.play.client_settings").value_or("")}};
         playDirectory_ = std::string{configuration.path("studio.play.directory").value_or("")};
@@ -78,6 +91,8 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         // the viewport by default now its input reaches the game (D790).
         RAWFRAME_TRY_ASSIGN(inViewport_.inViewport, configuration.truth("studio.play_in_viewport", true));
     }
+    // The scene being edited shown in the viewport, played edited (D912).
+    RAWFRAME_TRY_ASSIGN(editView_, configuration.truth("studio.edit_view", true));
     // The cook tool: named, or beside Studio, where an export puts it; the
     // content goes where the game plays (D502).
     cookTool_ = std::string{configuration.path("studio.cook").value_or(process::besideSelf("rawframe-cook").string())};
@@ -347,6 +362,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     const double kSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began_).count() + 1;
     hearCook();
     hearHost();
+    keepEditing();
     attachPlayed(kSeconds);
     outlineChosen();
     pollPicks(kSeconds);
