@@ -5,12 +5,15 @@
 // preview (D433); and a collaborator's of a shared session's host
 // (host.h), what `rawframe-author join` speaks through (D881).
 
+#include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring_session/session.h"
 #include "rawframe/document/json.h"
 #include "rawframe/network/provider.h"
 #include "rawframe/network_quic/quic.h"
 
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,6 +23,7 @@
 namespace rawframe::authoring_session {
 
 class LineClient;
+class Preview;
 
 /// One connection to a tooling endpoint, welcomed; said `tooling.end` and
 /// closed when it goes.
@@ -94,9 +98,15 @@ private:
 /// hello answered with the host's welcome, what the host says unasked
 /// given by `poll`, and `end` ending the connection. A record the host
 /// answers when it ends (`cook`) is answered as a session answers it,
-/// later, through `poll` (D885).
+/// later, through `poll` (D885). The preview of a game played here, which
+/// the host cannot reach, is held here (D906): `preview` and the records
+/// that only act on it are answered here, the view handed it where this
+/// author looks, as they say it and as the host answers.
 class JoinedSession final : public Answering {
 public:
+    JoinedSession(const JoinedSession&) = delete;
+    JoinedSession& operator=(const JoinedSession&) = delete;
+    ~JoinedSession() override;
     /// Joins as `HostLink::open` does; `said` is the welcome, or why not.
     static std::unique_ptr<JoinedSession>
     open(std::string_view endpoint, const char* pinFile, const char* tokenFile, std::string& said);
@@ -108,9 +118,16 @@ public:
 
 private:
     JoinedSession(std::unique_ptr<HostLink> link, std::string welcome);
+    /// A record for the preview held here, answered here.
+    [[nodiscard]] std::string answerHere(std::string_view line);
+    /// Where this author looks in `scene`, as a record or a reply says it,
+    /// handed the preview where it shows that scene.
+    void looked(const document::Value& said, std::string_view scene);
 
     std::unique_ptr<HostLink> link_;
     std::string welcome_;
+    std::unique_ptr<Preview> preview_;
+    std::map<std::string, authoring::SceneView, std::less<>> views_;
 };
 
 /// Whether a reply line is an answer rather than an error.

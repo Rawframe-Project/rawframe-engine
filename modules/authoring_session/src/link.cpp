@@ -1,13 +1,16 @@
 #include "rawframe/authoring_session/link.h"
 
 #include "line_client.h"
+#include "previewing.h"
 #include "rawframe/authoring/errors.h"
 #include "rawframe/authoring/session.h"
 #include "rawframe/authoring_session/host.h"
 #include "rawframe/document/json.h"
 #include "rawframe/network_quic/quic.h"
 #include "rawframe/world_tooling/server.h"
+#include "replies.h"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cstdint>
@@ -166,8 +169,115 @@ bool HostLink::closed() const noexcept {
     return client_->closed();
 }
 
+namespace {
+
+/// The records that act on a played game's preview alone (D906), which a
+/// host joined cannot reach: the game plays on this machine.
+constexpr std::array<std::string_view, 15> kPreviewed = {"authoring.preview",
+                                                         "authoring.pick",
+                                                         "authoring.mark",
+                                                         "authoring.preview_input",
+                                                         "authoring.hide_layers",
+                                                         "authoring.view_mode",
+                                                         "authoring.split",
+                                                         "authoring.overlays",
+                                                         "authoring.run",
+                                                         "authoring.step",
+                                                         "authoring.traffic",
+                                                         "authoring.profile",
+                                                         "authoring.drawn_frame",
+                                                         "authoring.live_entities",
+                                                         "authoring.live_entity"};
+
+} // namespace
+
 JoinedSession::JoinedSession(std::unique_ptr<HostLink> link, std::string welcome)
     : link_(std::move(link)), welcome_(std::move(welcome)) {
+}
+
+JoinedSession::~JoinedSession() = default;
+
+void JoinedSession::looked(const document::Value& said, std::string_view scene) {
+    const document::Value* kView = said.find("view");
+    const std::optional<authoring::SceneView> kRead =
+        kView != nullptr && !kView->isNull() ? authoring::readSceneView(*kView) : std::nullopt;
+    if (!kRead.has_value()) {
+        return;
+    }
+    views_.insert_or_assign(std::string{scene}, *kRead);
+    if (preview_ != nullptr && preview_->scene() == scene) {
+        static_cast<void>(preview_->forward(std::string{scene}, kRead, {}));
+    }
+}
+
+std::string JoinedSession::answerHere(std::string_view line) {
+    document::Value idRead;
+    const auto kRecord = authoring::readSessionRecord(line, idRead);
+    if (!kRecord.has_value()) {
+        return authoring::writeRefusal(idRead, kRecord.error());
+    }
+    const authoring::SessionRecord& kAsked = *kRecord;
+    if (preview_ == nullptr) {
+        preview_ = std::make_unique<Preview>();
+    }
+    const auto kFound = views_.find(kAsked.scene);
+    const std::optional<authoring::SceneView> kView =
+        kFound != views_.end() ? std::optional{kFound->second} : std::nullopt;
+    const auto kRefused = [](std::string_view why) {
+        return std::unexpected{result::fail(result::ErrorClass::FailedPrecondition,
+                                            authoring::kAuthoringDomain,
+                                            authoring::code(authoring::AuthoringError::UnsupportedOperation),
+                                            why)
+                                   .error()};
+    };
+    const auto kAnswer = [&]() -> result::Result<document::Value> {
+        switch (kAsked.verb) {
+        case authoring::SessionVerb::Preview: {
+            RAWFRAME_TRY(preview_->open(kAsked));
+            document::Value made = document::Value::object();
+            made.add("kind", document::Value::string("authoring.preview"));
+            made.add("reopened", document::Value::boolean(false));
+            made.add("previewing", document::Value::boolean(preview_->forward(kAsked.scene, kView, {})));
+            return made;
+        }
+        case authoring::SessionVerb::Pick:
+            // No document is held here to grab a handle in or turn the
+            // view of: what was met is answered, for the author to choose.
+            return preview_->picked(kAsked, nullptr);
+        case authoring::SessionVerb::Mark:
+            return preview_->marked(kAsked);
+        case authoring::SessionVerb::PreviewInput:
+            return preview_->inputted(kAsked);
+        case authoring::SessionVerb::HideLayers:
+            return preview_->hid(kAsked);
+        case authoring::SessionVerb::ViewMode:
+            return preview_->moded(kAsked);
+        case authoring::SessionVerb::Split:
+            return preview_->split(kAsked, kView);
+        case authoring::SessionVerb::Overlays:
+            return preview_->overlaid(kAsked);
+        case authoring::SessionVerb::Run:
+        case authoring::SessionVerb::Step:
+            return preview_->ran(kAsked);
+        case authoring::SessionVerb::Traffic:
+            return preview_->trafficOf(kAsked);
+        case authoring::SessionVerb::Profile:
+        case authoring::SessionVerb::DrawnFrame:
+            // A capture is a file of the game's, which the host keeps.
+            if (!kAsked.capture.empty()) {
+                return kRefused("a capture is kept beside the game, which the host holds");
+            }
+            return kAsked.verb == authoring::SessionVerb::Profile ? preview_->profileOf(kAsked)
+                                                                  : preview_->drawnOf(kAsked);
+        case authoring::SessionVerb::LiveEntities:
+        case authoring::SessionVerb::LiveEntity:
+            return preview_->live(kAsked);
+        default:
+            return kRefused("the record is the host's");
+        }
+    }();
+    return kAnswer.has_value() ? authoring::writeReply(kAsked.id, *kAnswer)
+                               : authoring::writeRefusal(kAsked.id, kAnswer.error());
 }
 
 std::unique_ptr<JoinedSession>
@@ -209,6 +319,16 @@ std::string JoinedSession::answer(std::string_view line, bool& ended) {
                                                     "the host closed")
                                            .error());
     }
+    if (std::ranges::find(kPreviewed, kNamed) != kPreviewed.end()) {
+        return answerHere(line);
+    }
+    // Where this author looks, as said, for the preview held here.
+    const document::Value* kScene = kParsed.has_value() ? kParsed->find("scene") : nullptr;
+    const std::string kSceneNamed =
+        kScene != nullptr && kScene->kind() == document::Value::Kind::String ? *kScene->text() : std::string{};
+    if ((kNamed == "authoring.present" || kNamed == "authoring.view") && !kSceneNamed.empty()) {
+        looked(*kParsed, kSceneNamed);
+    }
     std::string asked{line};
     if (const document::Value* kOperation = kParsed.has_value() ? kParsed->find("operation") : nullptr;
         kNamed == "authoring.cancel" && kOperation != nullptr) {
@@ -230,6 +350,12 @@ std::string JoinedSession::answer(std::string_view line, bool& ended) {
                                                     authoring::code(authoring::AuthoringError::Internal),
                                                     "the host closed or did not answer")
                                            .error());
+    }
+    // And as the host answers, where a record turned it (frame, undo).
+    if (const auto kSaid = document::parse(*kReply); kSaid.has_value() && !kSceneNamed.empty()) {
+        if (const document::Value* kAnswered = kSaid->find("answer"); kAnswered != nullptr) {
+            looked(*kAnswered, kSceneNamed);
+        }
     }
     return *kReply + "\n";
 }

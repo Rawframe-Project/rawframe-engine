@@ -288,7 +288,7 @@ private:
         case authoring::SessionVerb::Split: {
             bool reopened = false;
             RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
-            return preview_.split(record, *open->document);
+            return preview_.split(record, open->document->view());
         }
         case authoring::SessionVerb::Assets: {
             Value made = Value::object();
@@ -881,7 +881,7 @@ private:
 
     /// Hands the preview the scene's view, where it previews it.
     bool forward(const std::string& name, const OpenScene& open) {
-        return preview_.forward(name, *open.document, pathsOf(open.document->scene(), *catalog_));
+        return preview_.forward(name, open.document->view(), pathsOf(open.document->scene(), *catalog_));
     }
 
     /// `select`: the scene's selection, in place of what was (D417).

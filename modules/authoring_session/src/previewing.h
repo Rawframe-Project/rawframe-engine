@@ -50,12 +50,13 @@ public:
     /// Gives the preview's player its camera back, and lets the preview go.
     void letGo();
 
-    /// Hands the preview `scene`'s view where it previews `name` and the
-    /// view changed since it was last told, and the paths its splines make
-    /// where they changed (D891); whether the preview is live. A preview
-    /// that does not answer is let go.
+    /// Hands the preview the scene's `view` where it previews `name` and
+    /// the view changed since it was last told, and the paths its splines
+    /// make where they changed (D891); whether the preview is live. A
+    /// preview that does not answer is let go. Only the view, not the
+    /// scene: a preview held beside a host joined has no document (D906).
     bool forward(const std::string& name,
-                 const authoring::AuthoredScene& scene,
+                 const std::optional<authoring::SceneView>& view,
                  std::vector<std::vector<std::array<double, 3>>> paths);
 
     /// `pick` (D456): the preview's newest press, if it is new, asked of the
@@ -80,7 +81,8 @@ public:
     [[nodiscard]] result::Result<document::Value> drawnOf(const authoring::SessionRecord& record);
     /// `split` (D797): the preview of `record.scene` shown in one, two,
     /// or four views, told with its look from now on; whether it splits.
-    [[nodiscard]] document::Value split(const authoring::SessionRecord& record, const authoring::AuthoredScene& scene);
+    [[nodiscard]] document::Value split(const authoring::SessionRecord& record,
+                                        const std::optional<authoring::SceneView>& view);
     [[nodiscard]] result::Result<document::Value> picked(const authoring::SessionRecord& record,
                                                          authoring::AuthoredScene* previewed);
     /// `run` and `step` (D806): the previewed game's World paused, let

@@ -117,7 +117,7 @@ void Preview::letGo() {
 /// the view changed since it was last told; whether the preview is
 /// live. A preview that does not answer is let go.
 bool Preview::forward(const std::string& name,
-                      const authoring::AuthoredScene& scene,
+                      const std::optional<authoring::SceneView>& view,
                       std::vector<std::vector<std::array<double, 3>>> paths) {
     if (preview_ == nullptr || name != scene_) {
         return false;
@@ -146,14 +146,14 @@ bool Preview::forward(const std::string& name,
         }
         pathsTold_ = std::move(paths);
     }
-    const std::optional<authoring::SceneView>& kView = scene.view();
+    const std::optional<authoring::SceneView>& kView = view;
     if (told_ && kView == previewed_) {
         return true;
     }
     Value look = Value::object();
     look.add("kind", Value::string("tooling.look"));
     look.add("id", Value::integer(static_cast<std::int64_t>(++looks_)));
-    look.add("view", viewOf(scene));
+    look.add("view", viewValue(kView));
     // The views beside it, from the top, the front, and the side of its
     // target, as far as its eye is (D797).
     if (views_ > 1 && kView.has_value()) {
@@ -330,7 +330,7 @@ Value Preview::viewMovedBy(const Value& clicked, authoring::AuthoredScene* previ
     if (!previewed->setView(movedBy(kWas, kChange)).has_value()) {
         return Value{};
     }
-    forward(scene_, *previewed, pathsTold_.value_or(std::vector<std::vector<std::array<double, 3>>>{}));
+    forward(scene_, previewed->view(), pathsTold_.value_or(std::vector<std::vector<std::array<double, 3>>>{}));
     return viewOf(*previewed);
 }
 
@@ -593,12 +593,12 @@ Value Preview::moded(const authoring::SessionRecord& record) {
     return made;
 }
 
-Value Preview::split(const authoring::SessionRecord& record, const authoring::AuthoredScene& scene) {
+Value Preview::split(const authoring::SessionRecord& record, const std::optional<authoring::SceneView>& view) {
     views_ = record.views;
     told_ = false;
     splitShown_ = 0;
     const bool kLive =
-        forward(record.scene, scene, pathsTold_.value_or(std::vector<std::vector<std::array<double, 3>>>{}));
+        forward(record.scene, view, pathsTold_.value_or(std::vector<std::vector<std::array<double, 3>>>{}));
     Value made = Value::object();
     made.add("kind", Value::string("authoring.split"));
     made.add("views", Value::integer(static_cast<std::int64_t>(views_)));
