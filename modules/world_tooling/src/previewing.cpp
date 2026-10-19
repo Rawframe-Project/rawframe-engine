@@ -118,6 +118,59 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         made.add("drawn", Value::boolean(settings.previewer != nullptr && settings.previewer->paths(paths)));
         return replyLine(id, "answer", std::move(made));
     }
+    if (kind == "tooling.outlines") {
+        // What each author has chosen, outlined (D907): the view's. At most
+        // 16 authors' of at most 64 boxes, 256 in all.
+        if (!settings.grants.view) {
+            return errorLine(id, ToolingError::NotGranted, "outlining needs the view grant");
+        }
+        const Value* kOutlines = record.find("outlines");
+        std::vector<std::pair<std::array<float, 3>, std::vector<std::array<double, 6>>>> outlines;
+        std::size_t boxes = 0;
+        bool sound = kOutlines != nullptr && kOutlines->kind() == Value::Kind::Array && kOutlines->items().size() <= 16;
+        for (std::size_t at = 0; sound && at < kOutlines->items().size(); ++at) {
+            const Value& kOutline = kOutlines->items()[at];
+            const std::optional<std::array<double, 3>> kColor = pointOf(kOutline.find("color"));
+            const Value* kBoxes = kOutline.find("boxes");
+            sound = kOutline.kind() == Value::Kind::Object && kOutline.names().size() == 2 && kColor.has_value() &&
+                    std::ranges::all_of(*kColor,
+                                        [](double each) {
+                                            return each >= 0 && each <= 1;
+                                        }) &&
+                    kBoxes != nullptr && kBoxes->kind() == Value::Kind::Array && kBoxes->items().size() <= 64 &&
+                    (boxes += kBoxes->items().size()) <= 256;
+            std::vector<std::array<double, 6>> made;
+            for (std::size_t each = 0; sound && each < kBoxes->items().size(); ++each) {
+                const Value& kBox = kBoxes->items()[each];
+                const std::optional<std::array<double, 3>> kCenter = pointOf(kBox.find("center"));
+                const std::optional<std::array<double, 3>> kHalf = pointOf(kBox.find("half"));
+                sound = kBox.kind() == Value::Kind::Object && kBox.names().size() == 2 && kCenter.has_value() &&
+                        kHalf.has_value() && std::ranges::all_of(*kHalf, [](double side) {
+                            return side >= 0;
+                        });
+                if (sound) {
+                    made.push_back(
+                        {(*kCenter)[0], (*kCenter)[1], (*kCenter)[2], (*kHalf)[0], (*kHalf)[1], (*kHalf)[2]});
+                }
+            }
+            if (sound) {
+                outlines.emplace_back(std::array<float, 3>{static_cast<float>((*kColor)[0]),
+                                                           static_cast<float>((*kColor)[1]),
+                                                           static_cast<float>((*kColor)[2])},
+                                      std::move(made));
+            }
+        }
+        if (!sound) {
+            return errorLine(id,
+                             ToolingError::Malformed,
+                             "outlines are at most 16, each a color of three numbers from 0 to 1 and at most 64 "
+                             "boxes of a center and half sides, 256 boxes in all");
+        }
+        Value made = Value::object();
+        made.add("kind", Value::string("tooling.outlined"));
+        made.add("drawn", Value::boolean(settings.previewer != nullptr && settings.previewer->outlines(outlines)));
+        return replyLine(id, "answer", std::move(made));
+    }
     if (kind == "tooling.hide") {
         // The layers the preview leaves out (D791): the view's.
         if (!settings.grants.view) {

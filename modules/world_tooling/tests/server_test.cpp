@@ -246,8 +246,14 @@ public:
         paths_ = paths;
         return true;
     }
+    bool outlines(
+        const std::vector<std::pair<std::array<float, 3>, std::vector<std::array<double, 6>>>>& outlines) override {
+        outlines_ = outlines;
+        return true;
+    }
     std::optional<Look> kept;
     std::vector<std::vector<std::array<double, 3>>> paths_;
+    std::vector<std::pair<std::array<float, 3>, std::vector<std::array<double, 6>>>> outlines_;
     std::vector<Look> split_;
     std::vector<std::string> overlays_;
 };
@@ -339,6 +345,33 @@ RAWFRAME_TEST(LookingMovesThePreviewUnderTheViewGrant) {
     RAWFRAME_EXPECT(provider.sent[1].find(R"("id":12,"error":{"code":"malformed")") != std::string::npos &&
                     provider.sent[1].find(R"("id":13,"error":{"code":"malformed")") != std::string::npos &&
                     preview.paths_.size() == 1);
+    // Each author's choice outlined (D907): a color and boxes handed on; a
+    // color past one, a box with a side below nought, or a box of another
+    // form refused, the outlines kept.
+    provider.say(1,
+                 R"({"kind":"tooling.outlines","id":14,"outlines":[{"color":[1,0.5,0],"boxes":[)"
+                 R"({"center":[1,2,3],"half":[0.5,1,0.5]}]},{"color":[0,0,1],"boxes":[]}]})"
+                 "\n"
+                 R"({"kind":"tooling.outlines","id":15,"outlines":[{"color":[2,0,0],"boxes":[]}]})"
+                 "\n"
+                 R"({"kind":"tooling.outlines","id":16,"outlines":[{"color":[1,1,1],"boxes":[)"
+                 R"({"center":[0,0,0],"half":[-1,1,1]}]}]})"
+                 "\n"
+                 R"({"kind":"tooling.outlines","id":17,"outlines":[{"color":[1,1,1],"boxes":[{"center":[0,0,0]}]}]})"
+                 "\n");
+    server->serve(nullptr, {}, {});
+    RAWFRAME_EXPECT(provider.sent[1].find(R"("id":14,"answer":{"kind":"tooling.outlined","drawn":true})") !=
+                        std::string::npos &&
+                    preview.outlines_.size() == 2 && preview.outlines_[0].first[1] == 0.5F &&
+                    preview.outlines_[0].second.size() == 1 &&
+                    preview.outlines_[0].second[0] == (std::array<double, 6>{1, 2, 3, 0.5, 1, 0.5}) &&
+                    preview.outlines_[1].second.empty());
+    for (const char* kRefused : {R"("id":15,"error":{"code":"malformed")",
+                                 R"("id":16,"error":{"code":"malformed")",
+                                 R"("id":17,"error":{"code":"malformed")"}) {
+        RAWFRAME_EXPECT(provider.sent[1].find(kRefused) != std::string::npos);
+    }
+    RAWFRAME_EXPECT(preview.outlines_.size() == 2);
     // Granted but with no preview here: not found.
     FedProvider other;
     auto bare = *ToolingServer::create(other, {.token = kToken, .grants = {.view = true}});

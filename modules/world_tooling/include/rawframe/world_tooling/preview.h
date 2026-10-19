@@ -110,6 +110,14 @@ public:
     virtual bool paths(const std::vector<std::vector<std::array<double, 3>>>& /*paths*/) {
         return false;
     }
+    /// Outlines what each author has chosen, each its color (red, green,
+    /// blue from nought to one) and its boxes (a center and half the sides
+    /// along x, y, and z), in place of those it outlined (D907); whether the
+    /// Runtime outlines them.
+    virtual bool
+    outlines(const std::vector<std::pair<std::array<float, 3>, std::vector<std::array<double, 6>>>>& /*outlines*/) {
+        return false;
+    }
     /// Takes what an author did in an editor's viewport showing the
     /// preview as its own window's (D790), in order; whether the Runtime
     /// takes such input.

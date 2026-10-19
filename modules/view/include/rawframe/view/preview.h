@@ -90,6 +90,15 @@ struct PassTiming {
     std::uint64_t nanoseconds = 0;
 };
 
+/// What one author has chosen, outlined in the preview in their color
+/// (D907): the color, red, green, and blue from nought to one, and a box
+/// about each chosen thing, its center and then half its sides along x, y,
+/// and z, in World meters.
+struct Outline {
+    std::array<float, 3> color{};
+    std::vector<std::array<double, 6>> boxes;
+};
+
 /// The most steps a frame's description keeps: a capture of a crowded
 /// frame says how many it left out.
 inline constexpr std::size_t kMostFrameSteps = 4096;
@@ -149,6 +158,19 @@ public:
     }
     [[nodiscard]] std::uint64_t pathsShown() const noexcept {
         return pathsShown_;
+    }
+
+    /// What each author has chosen, outlined over the scene while it looks
+    /// (D907), in place of what was; counted, so a reader tells new ones.
+    void showOutlines(std::vector<Outline> outlines) {
+        outlines_ = std::move(outlines);
+        ++outlinesShown_;
+    }
+    [[nodiscard]] const std::vector<Outline>& outlines() const noexcept {
+        return outlines_;
+    }
+    [[nodiscard]] std::uint64_t outlinesShown() const noexcept {
+        return outlinesShown_;
     }
 
     /// The layers whose entities the preview leaves out (D791), as
@@ -323,6 +345,8 @@ private:
     std::vector<PassTiming> timings_;
     mutable bool timesAsked_ = false;
     std::uint64_t pathsShown_ = 0;
+    std::vector<Outline> outlines_;
+    std::uint64_t outlinesShown_ = 0;
     std::optional<Ray> pointing_;
     double wheel_ = 0;
     std::array<double, 2> orbit_{};

@@ -120,6 +120,15 @@ public:
         camera.showPaths(paths);
         return true;
     }
+    bool outlines(
+        const std::vector<std::pair<std::array<float, 3>, std::vector<std::array<double, 6>>>>& outlines) override {
+        std::vector<view::Outline> shown;
+        for (const auto& [kColor, kBoxes] : outlines) {
+            shown.push_back(view::Outline{.color = kColor, .boxes = kBoxes});
+        }
+        camera.showOutlines(std::move(shown));
+        return true;
+    }
     std::optional<world_tooling::Clicked> clicked() const override {
         const std::optional<view::Ray>& kRay = camera.lastClick();
         const std::optional<view::Ray>& kPointing = camera.pointing();
