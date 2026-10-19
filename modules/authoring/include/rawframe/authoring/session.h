@@ -318,6 +318,12 @@ struct SessionRecord {
 /// name it.
 [[nodiscard]] result::Result<SessionRecord> readSessionRecord(std::string_view line, document::Value& idRead);
 
+/// A view as records give it (`view`, `bookmark`, `present`, and the
+/// replies that say where a scene is looked from): an eye and a target of
+/// three numbers each and a field of view; none for anything else. Its
+/// ranges are the scene's to check.
+[[nodiscard]] std::optional<SceneView> readSceneView(const document::Value& view);
+
 /// A reply line, its line feed included.
 [[nodiscard]] std::string writeReply(const document::Value& id, document::Value answer);
 

@@ -255,6 +255,14 @@ result::Result<SessionRecord> together(const Value& parsed, SessionRecord record
 
 } // namespace
 
+std::optional<SceneView> readSceneView(const document::Value& view) {
+    SceneView made;
+    if (!readView(&view, made)) {
+        return std::nullopt;
+    }
+    return made;
+}
+
 result::Result<SessionRecord> readSessionRecord(std::string_view line, document::Value& idRead) {
     idRead = Value{};
     auto parsed = document::parse(line, document::ReadLimits{.maximumBytes = kMaximumSessionRecordBytes});
