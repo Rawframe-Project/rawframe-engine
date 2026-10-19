@@ -43,6 +43,12 @@ void readHints(const document::Value& field, Catalog::Field& into);
 /// typed into.
 [[nodiscard]] std::vector<std::string> choicesOf(const Catalog::Field& type);
 
+/// A field's name as words, its first capital ("fixedRotation" reads
+/// "Fixed rotation"), and a component's by its own last part, a pose the
+/// entity's transform (D915).
+[[nodiscard]] std::string prettyField(std::string_view name);
+[[nodiscard]] std::string prettyComponent(std::string_view name);
+
 /// The game's assets an asset field is chosen from (D786): none, then each
 /// of its kind by name; nothing for a field that holds no asset.
 [[nodiscard]] std::vector<std::string> assetChoices(const Catalog::Field& type, std::span<const Asset> assets);

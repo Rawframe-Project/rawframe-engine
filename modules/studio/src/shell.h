@@ -435,7 +435,15 @@ private:
     result::Result<std::pair<ui::Node, ui::Node>> fieldRow(std::string_view name,
                                                            std::string_view value,
                                                            std::optional<ui::Node> column = std::nullopt,
-                                                           bool set = true);
+                                                           bool set = true,
+                                                           std::string_view shown = {});
+    /// The Inspector as the design draws it (inspector.cpp, D915): its head,
+    /// the entity's icon and its name, the name's field where it may be
+    /// renamed; a run of axes at `place` (how many, nought for none); and
+    /// those axes as one row of colored fields.
+    result::Result<std::optional<ui::Node>> inspectorHead(std::string_view name, bool brought, bool renamed);
+    [[nodiscard]] static std::size_t axesAt(std::span<const FieldShown> shown, std::size_t place);
+    result::Status vectorRow(const std::string& component, std::span<const FieldShown> axes);
 
     /// `row`'s field takes the keyboard, its text chosen whole.
     void beginEdit(const FieldRow& row);

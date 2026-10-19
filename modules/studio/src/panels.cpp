@@ -846,14 +846,11 @@ void ShellParticipant::showEntity(std::size_t at) {
     static_cast<void>(ask(selectRecord(next(), scene_, selected_)));
     // And marked in its preview, where it stands (D464).
     markChosen();
-    // The scene's own entity is named; an instance's is its source's.
-    if (catalog_.offers("scene.rename_entity") && !brought_[at]) {
-        auto line = fieldRow("name", names_[at]);
-        if (!line.has_value()) {
-            return;
-        }
-        componentRows_.push_back(line->first);
-        fields_.push_back(FieldRow{.value = line->second, .role = FieldRow::Role::Name, .field = "name"});
+    // The Inspector's head (D915): the entity's icon and its name, the
+    // scene's own entity named here, an instance's its source's.
+    if (auto head = inspectorHead(names_[at], brought_[at], catalog_.offers("scene.rename_entity") && !brought_[at]);
+        head.has_value() && head->has_value()) {
+        fields_.push_back(FieldRow{.value = **head, .role = FieldRow::Role::Name, .field = "name"});
     }
     const std::optional<Value> kRead = read(scene_, "scene.read_entity", entity_);
     const Value* components = kRead.has_value() ? kRead->find("components") : nullptr;
@@ -872,7 +869,22 @@ void ShellParticipant::showEntity(std::size_t at) {
             return;
         }
         ++components_;
-        for (const FieldShown& kEach : fieldsShown(catalog_.component(kComponent), each.find("fields"))) {
+        const std::vector<FieldShown> kFieldsShown = fieldsShown(catalog_.component(kComponent), each.find("fields"));
+        // Runs of axes shown as one row of colored X, Y, and Z (D915).
+        std::size_t skip = 0;
+        for (std::size_t place = 0; place < kFieldsShown.size(); ++place) {
+            if (skip > 0) {
+                --skip;
+                continue;
+            }
+            if (const std::size_t kAxes = axesAt(kFieldsShown, place); kAxes > 0) {
+                if (!vectorRow(kComponent, std::span{kFieldsShown}.subspan(place, kAxes)).has_value()) {
+                    return;
+                }
+                skip = kAxes - 1;
+                continue;
+            }
+            const FieldShown& kEach = kFieldsShown[place];
             // A reference shows the name of the entity it names, if it has one.
             std::string text = kEach.text.value_or(std::string{});
             if (kEach.kind == "entity") {
@@ -892,7 +904,7 @@ void ShellParticipant::showEntity(std::size_t at) {
                     text = assetShown(*held);
                 }
             }
-            auto line = fieldRow(kEach.name, text, std::nullopt, kEach.text.has_value());
+            auto line = fieldRow(kEach.name, text, std::nullopt, kEach.text.has_value(), prettyField(kEach.name));
             if (!line.has_value()) {
                 return;
             }
@@ -940,17 +952,26 @@ void ShellParticipant::showEntity(std::size_t at) {
 
 result::Status
 ShellParticipant::componentHeading(std::string_view name, const std::string& component, bool brought, bool stale) {
+    // As the design's section (D915): a line above, the chevron, the
+    // component's own name strong, its full name quiet in the fixed face,
+    // and its buttons at its end.
     RAWFRAME_TRY_ASSIGN(const ui::Node kHeading,
                         box(componentsColumn_,
-                            ui::Layout{.height = ui::pixels(28),
-                                       .justify = ui::Justify::SpaceBetween,
-                                       .alignItems = ui::Align::Center,
+                            ui::Layout{.alignItems = ui::Align::Center,
+                                       .gap = 8,
                                        .shrink = 0,
-                                       .padding = {8, 0, 2, 0}},
-                            kRow));
+                                       .padding = {6, 4, 6, 6},
+                                       .margin = {0, 0, 6, 0},
+                                       .border = {0, 0, 1, 0}},
+                            0));
+    RAWFRAME_TRY(tree_->setLook(kHeading, ui::Look{.borderColor = 0x24262CFFU}));
     componentRows_.push_back(kHeading);
-    RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeading, ui::Layout{.padding = {0, 4, 0, 4}}, 0));
-    RAWFRAME_TRY(words(kTitle, name, kText, 14));
+    RAWFRAME_TRY(icon(kHeading, Icon::ChevronDown, look::kFaintInk, 12));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeading, ui::Layout{.shrink = 0}, 0));
+    RAWFRAME_TRY(strongWords(kTitle, prettyComponent(name), look::kInk));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kOwner, box(kHeading, ui::Layout{.shrink = 1}, 0));
+    RAWFRAME_TRY(monoWords(kOwner, name, look::kFaintInk, look::kSmallSize));
+    RAWFRAME_TRY(box(kHeading, ui::Layout{.grow = 1}, 0));
     // The heading's buttons together at its end.
     RAWFRAME_TRY_ASSIGN(const ui::Node kActions, box(kHeading, ui::Layout{.alignItems = ui::Align::Center}, 0));
     // A component the scene was authored against another layout of is
@@ -975,14 +996,14 @@ ShellParticipant::componentHeading(std::string_view name, const std::string& com
 }
 
 result::Status ShellParticipant::action(ui::Node row, std::string_view text, ActionButton asked) {
-    RAWFRAME_TRY_ASSIGN(asked.node, box(row, ui::Layout{.padding = {8, 2, 8, 2}, .margin = {0, 2, 0, 2}}, kPanel));
-    RAWFRAME_TRY(pressWords(asked.node, text, kQuiet, 13));
+    RAWFRAME_TRY_ASSIGN(asked.node, box(row, ui::Layout{.padding = {6, 6, 2, 2}, .margin = {2, 2, 0, 0}}, 0));
+    RAWFRAME_TRY(pressWords(asked.node, text, look::kFaintInk, look::kLabelSize));
     actions_.push_back(std::move(asked));
     return {};
 }
 
-result::Result<std::pair<ui::Node, ui::Node>>
-ShellParticipant::fieldRow(std::string_view name, std::string_view value, std::optional<ui::Node> column, bool set) {
+result::Result<std::pair<ui::Node, ui::Node>> ShellParticipant::fieldRow(
+    std::string_view name, std::string_view value, std::optional<ui::Node> column, bool set, std::string_view shown) {
     // As the design's property row (D915): a label of 96 pixels, then the
     // field's well.
     RAWFRAME_TRY_ASSIGN(const ui::Node kLine,
@@ -995,7 +1016,7 @@ ShellParticipant::fieldRow(std::string_view name, std::string_view value, std::o
                             0));
     RAWFRAME_TRY_ASSIGN(const ui::Node kName, box(kLine, ui::Layout{.width = ui::pixels(96), .shrink = 0}, 0));
     // A field the scene sets reads brighter than one at its default.
-    RAWFRAME_TRY(words(kName, name, set ? look::kSoftInk : look::kLabelInk, look::kLabelSize));
+    RAWFRAME_TRY(words(kName, shown.empty() ? name : shown, set ? look::kSoftInk : look::kLabelInk, look::kLabelSize));
     RAWFRAME_TRY_ASSIGN(const ui::Node kValue, tree_->addEditable(++keys_));
     RAWFRAME_TRY(tree_->setLayout(kValue,
                                   ui::Layout{.width = ui::pixels(0),
