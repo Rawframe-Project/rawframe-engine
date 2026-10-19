@@ -517,8 +517,13 @@ void ShellParticipant::showScene(std::size_t at) {
     fields_.clear();
     const bool kChanged = scene_ != scenes_[at];
     if (kChanged) {
-        // What was chosen was the other scene's (D787).
+        // What was chosen was the other scene's (D787), and a source chosen
+        // in Assets gives the Inspector up to it (D916).
         selected_.clear();
+        browser_.chosen.clear();
+        for (const auto& [kCard, kPath] : browser_.sourceRows) {
+            lightAsset(kCard, false);
+        }
         anchor_.reset();
         // Each scene its own history.
         undoable_ = 0;
@@ -922,6 +927,13 @@ void ShellParticipant::showEntity(std::size_t at) {
                 return;
             }
             componentRows_.push_back(line->first);
+            // A truth checked in its box, a field of a few values chosen
+            // from its list (D916).
+            if (kEach.kind == "truth") {
+                asCheckbox(line->second, text == "true");
+            } else if (!kType.cases.empty() || !kType.labels.empty()) {
+                asChooser(line->first);
+            }
             // Its unit and range beside it, and a color's swatch.
             if (const std::string kHint = hintText(kType); !kHint.empty()) {
                 if (auto hint = box(line->first, ui::Layout{.shrink = 0}, 0); hint.has_value()) {
@@ -954,11 +966,24 @@ void ShellParticipant::showEntity(std::size_t at) {
         }
     }
     showSections(kRead);
+    // As the design's Add component (D916): pressed, the catalog's
+    // components listed under it, narrowed as a name is typed.
     if (catalog_.offers("scene.add_component")) {
-        auto line = fieldRow("add", "");
+        auto line = searchWell(componentsColumn_, "add", "Add component", "", 0, Icon::Plus);
         if (line.has_value()) {
+            static_cast<void>(tree_->setLayout(line->first,
+                                               ui::Layout{.height = ui::pixels(30),
+                                                          .alignItems = ui::Align::Center,
+                                                          .gap = 6,
+                                                          .shrink = 0,
+                                                          .padding = {10, 6, 0, 0},
+                                                          .margin = {6, 6, 10, 8},
+                                                          .border = {1, 1, 1, 1}}));
+            static_cast<void>(tree_->setLook(
+                line->first, ui::Look{.fill = look::kRaisedFill, .borderColor = look::kRaisedEdge, .radius = 5}));
             componentRows_.push_back(line->first);
-            fields_.push_back(FieldRow{.value = line->second, .role = FieldRow::Role::Add, .field = "add"});
+            fields_.push_back(
+                FieldRow{.value = line->second, .role = FieldRow::Role::Add, .field = "add", .hint = "Add component"});
         }
     }
 }

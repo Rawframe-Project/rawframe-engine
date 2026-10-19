@@ -5,6 +5,7 @@
 
 #include "rawframe/authoring_session/game.h"
 #include "rawframe/document/json.h"
+#include "hints.h"
 #include "records.h"
 #include "shell.h"
 
@@ -625,7 +626,6 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
         ++browser_.chosenCount;
         static_cast<void>(showScenes());
         showImportSettings();
-        showReferences();
         return true;
     }
     // The search, typed into as the grid narrows (D916).
@@ -688,16 +688,97 @@ void ShellParticipant::showImportSettings() {
     actions_.clear();
     fields_.clear();
     browser_.reimport = ui::Node{};
+    browser_.referenceRows.clear();
     const auto kParsed = document::parse(ask(importSettingsRecord(next(), browser_.chosen)));
     const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
     const Value* kImporter = kAnswer != nullptr ? kAnswer->find("importer") : nullptr;
     if (kImporter == nullptr || kImporter->text() == nullptr) {
         return;
     }
-    const auto kHeader = row(componentsColumn_, browser_.chosen + "  " + *kImporter->text(), kText, kPanel);
-    if (kHeader.has_value()) {
-        componentRows_.push_back(*kHeader);
+    const auto kKept = [this](result::Result<ui::Node> made) {
+        if (made.has_value()) {
+            componentRows_.push_back(*made);
+        }
+        return made;
+    };
+    // As the design's (D916): its picture or its kind's icon, its name and
+    // kind, how the cooks left it, then its importer's settings, what uses
+    // it, and Reimport.
+    const ListedSource* kSource = browser_.find(browser_.chosen);
+    const std::string kKind = kindOf(*kImporter->text());
+    const std::shared_ptr<const texture::Texture> kPicture = kSource != nullptr ? thumbnailOf(*kSource) : nullptr;
+    if (auto tile = kKept(box(componentsColumn_,
+                              ui::Layout{.height = ui::pixels(180),
+                                         .justify = ui::Justify::Center,
+                                         .alignItems = ui::Align::Center,
+                                         .shrink = 0,
+                                         .margin = {6, 6, 4, 8},
+                                         .border = {1, 1, 1, 1}},
+                              0));
+        tile.has_value()) {
+        static_cast<void>(tree_->setLook(
+            *tile, ui::Look{.fill = look::kRaisedFill, .borderColor = look::kEdge, .radius = 6, .clip = true}));
+        if (kPicture != nullptr) {
+            if (auto image = box(*tile, ui::Layout{.width = ui::pixels(176), .height = ui::pixels(176), .shrink = 0}, 0);
+                image.has_value()) {
+                static_cast<void>(tree_->setLook(*image, ui::Look{.image = thumbnailKey(browser_.chosen)}));
+            }
+        } else {
+            const auto [kIcon, kInk] = kindIcon(kKind);
+            static_cast<void>(icon(*tile, kIcon, kInk, 48));
+        }
     }
+    if (auto head = kKept(box(componentsColumn_,
+                              ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {8, 8, 2, 6}},
+                              0));
+        head.has_value()) {
+        if (auto name = box(*head, ui::Layout{.shrink = 1}, 0); name.has_value()) {
+            static_cast<void>(
+                strongWords(*name, browser_.chosen.substr(browser_.chosen.find_last_of('/') + 1), look::kInk, 14));
+        }
+        if (auto kind = box(*head, ui::Layout{.shrink = 0}, 0); kind.has_value()) {
+            static_cast<void>(words(*kind, kindWord(kKind), look::kFaintInk, look::kLabelSize));
+        }
+    }
+    // A cook behind, or one that failed and why.
+    if (kSource != nullptr && kSource->cook != "cooked") {
+        const bool kFailed = kSource->cook == "failed";
+        if (auto banner = kKept(box(componentsColumn_,
+                                    ui::Layout{.shrink = 0, .padding = {10, 10, 7, 7}, .margin = {6, 6, 4, 4}, .border = {1, 1, 1, 1}},
+                                    0));
+            banner.has_value()) {
+            static_cast<void>(tree_->setLook(*banner,
+                                             ui::Look{.fill = kFailed ? 0x3A1E22FFU : 0x33291AFFU,
+                                                      .borderColor = kFailed ? 0x6B2F35FFU : 0x5C4520FFU,
+                                                      .radius = 5}));
+            static_cast<void>(words(*banner,
+                                    kFailed ? "Import failed" + (kSource->problem.empty() ? "" : ": " + kSource->problem)
+                                            : std::string{"Not cooked yet: cook to use it"},
+                                    kFailed ? look::kError : look::kWarn,
+                                    look::kLabelSize));
+        }
+    }
+    const auto kSection = [&](std::string_view title, std::string_view quiet) {
+        auto heading = kKept(box(componentsColumn_,
+                                 ui::Layout{.alignItems = ui::Align::Center,
+                                            .gap = 8,
+                                            .shrink = 0,
+                                            .padding = {8, 8, 8, 6},
+                                            .margin = {0, 0, 6, 0},
+                                            .border = {0, 0, 1, 0}},
+                                 0));
+        if (!heading.has_value()) {
+            return;
+        }
+        static_cast<void>(tree_->setLook(*heading, ui::Look{.borderColor = 0x24262CFFU}));
+        if (auto titled = box(*heading, ui::Layout{.shrink = 0}, 0); titled.has_value()) {
+            static_cast<void>(strongWords(*titled, title, look::kInk));
+        }
+        if (auto quieted = box(*heading, ui::Layout{.shrink = 1}, 0); quieted.has_value()) {
+            static_cast<void>(monoWords(*quieted, quiet, look::kFaintInk, look::kSmallSize));
+        }
+    };
+    kSection("Import", *kImporter->text());
     // Each setting its importer offers, as the sidecar has it or at its
     // fallback, chosen from its choices where it has them.
     const Value* kSettings = kAnswer->find("settings");
@@ -708,10 +789,10 @@ void ShellParticipant::showImportSettings() {
         if (kName == nullptr || kName->text() == nullptr || kType == nullptr || kType->text() == nullptr) {
             continue;
         }
-        const Value* kKept = kSettings != nullptr && kSettings->kind() == Value::Kind::Object
-                                 ? kSettings->find(*kName->text())
-                                 : nullptr;
-        const Value* kValue = kKept != nullptr ? kKept : kOffered.find("fallback");
+        const Value* kSetting = kSettings != nullptr && kSettings->kind() == Value::Kind::Object
+                                    ? kSettings->find(*kName->text())
+                                    : nullptr;
+        const Value* kValue = kSetting != nullptr ? kSetting : kOffered.find("fallback");
         Catalog::Field type{.name = *kName->text(), .kind = *kType->text()};
         if (const Value* kChoices = kOffered.find("choices"); kChoices != nullptr) {
             for (const Value& kChoice : kChoices->items()) {
@@ -720,25 +801,53 @@ void ShellParticipant::showImportSettings() {
                 }
             }
         }
-        auto line = fieldRow(
-            *kName->text(), kValue != nullptr ? shownText(*kValue) : std::string{}, std::nullopt, kKept != nullptr);
+        const std::string kValueText = kValue != nullptr ? shownText(*kValue) : std::string{};
+        auto line = fieldRow(*kName->text(), kValueText, std::nullopt, kSetting != nullptr, prettyField(*kName->text()));
         if (!line.has_value()) {
             return;
         }
         componentRows_.push_back(line->first);
+        if (*kType->text() == "truth") {
+            asCheckbox(line->second, kValueText == "true");
+        } else if (!type.cases.empty()) {
+            asChooser(line->first);
+        }
         fields_.push_back(FieldRow{.value = line->second,
                                    .role = FieldRow::Role::ImportSetting,
                                    .field = *kName->text(),
                                    .kind = *kType->text(),
                                    .type = std::move(type)});
     }
-    if (auto made = button(componentsColumn_, "Reimport"); made.has_value()) {
-        browser_.reimport = *made;
-        componentRows_.push_back(*made);
+    // What uses it, each pressed to choose it (D803).
+    const auto kReferences = document::parse(ask(assetReferencesRecord(next(), browser_.chosen)));
+    const Value* kFound = kReferences.has_value() ? kReferences->find("answer") : nullptr;
+    const Value* kUsedBy = kFound != nullptr ? kFound->find("usedBy") : nullptr;
+    const std::size_t kUsers = kUsedBy != nullptr ? kUsedBy->items().size() : 0;
+    kSection("Used by", std::to_string(kUsers));
+    for (const Value& kPath : kUsedBy != nullptr ? kUsedBy->items() : std::span<const Value>{}) {
+        if (kPath.text() == nullptr) {
+            continue;
+        }
+        if (auto made = kKept(row(componentsColumn_, *kPath.text(), kText, kRow, true)); made.has_value()) {
+            browser_.referenceRows.emplace_back(*made, *kPath.text());
+        }
     }
-    if (auto made = button(componentsColumn_, "References"); made.has_value()) {
-        browser_.references = *made;
-        componentRows_.push_back(*made);
+    if (kUsers == 0) {
+        static_cast<void>(kKept(row(componentsColumn_, "Nothing uses it yet", look::kFaintInk, kRow, false)));
+    }
+    if (auto buttons = kKept(box(componentsColumn_,
+                                 ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {8, 8, 12, 8}},
+                                 0));
+        buttons.has_value()) {
+        if (auto made = textButton(*buttons, std::nullopt, "Reimport", ButtonKind::Primary); made.has_value()) {
+            browser_.reimport = *made;
+        }
+    }
+    // The References of the center (D803), kept for the menus and keys.
+    if (!tree_->contains(browser_.references)) {
+        if (auto made = button(held_.shelf, "References"); made.has_value()) {
+            browser_.references = *made;
+        }
     }
 }
 

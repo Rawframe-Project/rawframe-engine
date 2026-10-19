@@ -400,10 +400,21 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         if (kConnecting.has_value() && kFieldAt->role == FieldRow::Role::GraphInput) {
             endEdit();
             connectGraphInput(*kFieldAt, *kConnecting);
+        } else if (kFieldAt->role == FieldRow::Role::Add) {
+            const FieldRow kAdding = *kFieldAt;
+            beginEdit(kAdding);
+            showChoices(kAdding, addChoices({}));
+        } else if ((kFieldAt->role == FieldRow::Role::Field || kFieldAt->role == FieldRow::Role::ImportSetting) &&
+                   kFieldAt->kind == "truth") {
+            // A truth's box toggles it (D916).
+            const FieldRow kToggled = *kFieldAt;
+            endEdit();
+            apply(kToggled, tree_->textOf(kToggled.value) == "true" ? "false" : "true");
         } else if (const std::vector<std::string> kChoices = choicesOf(kFieldAt->type).empty()
                                                                  ? assetChoices(kFieldAt->type, assets_)
                                                                  : choicesOf(kFieldAt->type);
-                   kFieldAt->role == FieldRow::Role::Field && !kChoices.empty()) {
+                   (kFieldAt->role == FieldRow::Role::Field || kFieldAt->role == FieldRow::Role::ImportSetting) &&
+                   !kChoices.empty()) {
             // A field of a few values is chosen from its list, or typed
             // still, as a name always was (D455, D784).
             beginEdit(*kFieldAt);
@@ -440,6 +451,21 @@ void ShellParticipant::beginEdit(const FieldRow& row) {
     }
 }
 
+std::vector<std::string> ShellParticipant::addChoices(std::string_view typed) const {
+    // The catalog's components a scene's entity may hold, any case, at most
+    // a list's worth.
+    std::vector<std::string> listed;
+    for (const Catalog::Component& kEach : catalog_.components) {
+        if (kEach.uiNode || (listed.size() >= 14)) {
+            continue;
+        }
+        if (named(kEach.name, typed) || named(prettyComponent(kEach.name), typed)) {
+            listed.push_back(kEach.name);
+        }
+    }
+    return listed;
+}
+
 void ShellParticipant::endEdit() {
     if (edit_ == nullptr) {
         return;
@@ -468,6 +494,27 @@ void ShellParticipant::take(const view::Typing& typing) {
     const std::optional<view::TypingKey> kLeft = view::edit(*edit_, typing);
     if (editing_->role == FieldRow::Role::Palette) {
         paletteTyped(kLeft);
+        return;
+    }
+    // Add component's list narrows as a name is typed, and Enter adds the
+    // first it lists (D916).
+    if (editing_->role == FieldRow::Role::Add && kLeft != view::TypingKey::Dismiss) {
+        std::string typed{tree_->textOf(editing_->value)};
+        if (typed == editing_->hint) {
+            typed.clear();
+        }
+        const std::vector<std::string> kNamed = addChoices(typed);
+        if (kLeft != view::TypingKey::Submit) {
+            showChoices(*editing_, kNamed);
+            return;
+        }
+        const FieldRow kAdding = *editing_;
+        closePopup();
+        endEdit();
+        if (!kNamed.empty() && std::ranges::find(kNamed, typed) == kNamed.end()) {
+            typed = kNamed.front();
+        }
+        apply(kAdding, typed);
         return;
     }
     // The Assets search narrows the grid as it is typed (D916).

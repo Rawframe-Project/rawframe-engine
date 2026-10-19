@@ -255,6 +255,9 @@ private:
                Icon which);
     result::Status showDocuments();
     void importAsked();
+    void asCheckbox(ui::Node value, bool on);
+    void asChooser(ui::Node line);
+    [[nodiscard]] std::vector<std::string> addChoices(std::string_view typed) const;
     result::Status showSources();
     bool pressBrowser(ui::Node node);
     /// The chosen source's import settings, one set, and a recook (D800).

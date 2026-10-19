@@ -263,4 +263,33 @@ result::Status ShellParticipant::vectorRow(const std::string& component,
     return {};
 }
 
+void ShellParticipant::asCheckbox(ui::Node value, bool on) {
+    // A truth as the design's box (D916): checked, the accent with its
+    // mark; its words kept, unseen, as the value read and toggled.
+    static_cast<void>(tree_->setLayout(value,
+                                       ui::Layout{.width = ui::pixels(16),
+                                                  .height = ui::pixels(16),
+                                                  .shrink = 0,
+                                                  .border = {1, 1, 1, 1}}));
+    static_cast<void>(tree_->setLook(value,
+                                     ui::Look{.fill = on ? look::kAccent : look::kWellFill,
+                                              .borderColor = on ? look::kAccent : look::kRaisedEdge,
+                                              .radius = 3,
+                                              .clip = true,
+                                              .image = on ? look::iconImage(Icon::Check) : 0,
+                                              .imageTint = look::kOnAccent}));
+    static_cast<void>(words(value, on ? "true" : "false", 0, 1));
+    static_cast<void>(tree_->setRole(value, ui::Role::CheckBox));
+}
+
+void ShellParticipant::asChooser(ui::Node line) {
+    // A field of a few values shows the chevron its list opens from.
+    if (auto chevron = icon(line, Icon::ChevronDown, look::kLabelInk, 12); chevron.has_value()) {
+        // Drawn over the well's end, pulled back over the line's gap.
+        static_cast<void>(tree_->setLayout(
+            *chevron,
+            ui::Layout{.width = ui::pixels(12), .height = ui::pixels(12), .shrink = 0, .margin = {-30, 18, 0, 0}}));
+    }
+}
+
 } // namespace rawframe::studio
