@@ -58,6 +58,14 @@ Cooking::~Cooking() {
     }
 }
 
+std::optional<std::filesystem::path> Cooking::writing() const {
+    if (!child_.has_value()) {
+        return std::nullopt;
+    }
+    std::error_code error;
+    return std::filesystem::weakly_canonical(output_, error);
+}
+
 result::Status Cooking::start(const document::Value& id,
                               const std::filesystem::path& sources,
                               const std::filesystem::path& output,
@@ -213,6 +221,11 @@ std::vector<std::string> Cooking::poll(bool& failed) {
     }
     if (*kExit == 0 && accounted_) {
         lastCooked_ = output_;
+        std::error_code error;
+        if (std::filesystem::path wrote = std::filesystem::weakly_canonical(output_, error);
+            !error && std::ranges::find(wrote_, wrote) == wrote_.end()) {
+            wrote_.push_back(std::move(wrote));
+        }
         Value made = Value::object();
         made.add("kind", Value::string("authoring.cooked"));
         made.add("cooked", Value::integer(static_cast<std::int64_t>(cooked_)));

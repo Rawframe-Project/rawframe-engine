@@ -84,6 +84,13 @@ public:
     [[nodiscard]] const std::optional<std::filesystem::path>& lastCooked() const noexcept {
         return lastCooked_;
     }
+    /// Every output a cook in this session wrote whole, as its system
+    /// finds it, which may be read back (D905); and the one a cook writes
+    /// now, if one does.
+    [[nodiscard]] const std::vector<std::filesystem::path>& wrote() const noexcept {
+        return wrote_;
+    }
+    [[nodiscard]] std::optional<std::filesystem::path> writing() const;
 
 private:
     std::filesystem::path program_;
@@ -104,6 +111,7 @@ private:
     std::map<std::string, SourceCooked, std::less<>> sources_;
     std::filesystem::path output_;
     std::optional<std::filesystem::path> lastCooked_;
+    std::vector<std::filesystem::path> wrote_;
 };
 
 } // namespace rawframe::authoring_session

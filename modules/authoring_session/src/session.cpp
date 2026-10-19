@@ -2,6 +2,7 @@
 
 #include "asset_references.h"
 #include "bookmarks.h"
+#include "cooked_files.h"
 #include "cooking.h"
 #include "data_kinds.h"
 #include "documents.h"
@@ -226,6 +227,9 @@ private:
             return thumbnailOf(game_, record.asset, cooking_.lastCooked(), record.size, meshPictures_);
         case authoring::SessionVerb::AssetReferences:
             return assetReferencesOf(game_, record.asset, cooking_.lastCooked(), scenesNaming(record.asset));
+        case authoring::SessionVerb::CookedFile:
+            // A cook's output read back, so it is played elsewhere (D905).
+            return cookedFileOf(cooking_.wrote(), cooking_.writing(), record.output, record.file, record.offset);
         case authoring::SessionVerb::Cancel: {
             Value made = Value::object();
             made.add("kind", Value::string("authoring.cancelling"));

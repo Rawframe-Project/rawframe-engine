@@ -93,6 +93,7 @@ constexpr std::array kKinds = {
     KindNeeds{.kind = "authoring.bookmark", .needs = Needs::Edit},
     KindNeeds{.kind = "authoring.cook", .needs = Needs::Cook},
     KindNeeds{.kind = "authoring.cancel", .needs = Needs::Cook},
+    KindNeeds{.kind = "authoring.cooked_file", .needs = Needs::Cook},
     KindNeeds{.kind = "authoring.pick", .needs = Needs::Play},
     KindNeeds{.kind = "authoring.mark", .needs = Needs::Play},
     KindNeeds{.kind = "authoring.preview_input", .needs = Needs::Play},
@@ -438,11 +439,11 @@ struct AuthoringHost::State {
             return;
         }
         std::string asked{text};
-        if (kNamed == "authoring.cook") {
+        if (kNamed == "authoring.cook" || kNamed == "authoring.cooked_file") {
             // A collaborator names its cook's output and cache by plain
             // names, which the host puts under its cooking directory, in
             // the collaborator's own: no record names a path on the host's
-            // machine (D885).
+            // machine (D885); and reads it back by the same name (D905).
             const std::optional<std::string> kCook = cookedUnder(*parsed, kWho.name);
             if (!kCook.has_value()) {
                 send(connection,
@@ -477,15 +478,17 @@ struct AuthoringHost::State {
         }
     }
 
-    /// A collaborator's cook record as the session reads it: its output
-    /// and cache, plain names, as paths under the host's cooking directory,
-    /// in the author's own; none for one that names anything else.
+    /// A collaborator's cook record, or one reading a cook's file back, as
+    /// the session reads it: its output and cache, plain names, as paths
+    /// under the host's cooking directory, in the author's own; none for
+    /// one that names anything else. A cook without a cache the session
+    /// refuses.
     [[nodiscard]] std::optional<std::string> cookedUnder(const Value& record, const std::string& author) const {
         const Value* kOutput = record.find("output");
         const Value* kCache = record.find("cache");
         const bool kCacheNamed = kCache != nullptr && kCache->kind() == Value::Kind::String;
         if (!cooks.has_value() || kOutput == nullptr || kOutput->kind() != Value::Kind::String ||
-            !plainName(*kOutput->text()) || kCache == nullptr || (!kCache->isNull() && !kCacheNamed) ||
+            !plainName(*kOutput->text()) || (kCache != nullptr && !kCache->isNull() && !kCacheNamed) ||
             (kCacheNamed && !plainName(*kCache->text()))) {
             return std::nullopt;
         }
