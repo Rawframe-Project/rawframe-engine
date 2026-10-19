@@ -16,6 +16,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <set>
@@ -366,7 +368,8 @@ public:
             diagnostics::field("textureBytes", kTextures.bytes),
             diagnostics::field("players", static_cast<std::uint64_t>(localPlayers_.size() + 1)),
             diagnostics::field("playerFrames", playerFrames_),
-            diagnostics::field("pathsShown", pathsDrawn_)};
+            diagnostics::field("pathsShown", pathsDrawn_),
+            diagnostics::field("outlinesShown", outlinesDrawn_)};
         const auto kParticles = particles_.fields();
         fields.insert(fields.end(), kParticles.begin(), kParticles.end());
         emitter_.log(diagnostics::Severity::Info, kCanvasSummary, "what one client's canvas drew", fields);
@@ -431,19 +434,49 @@ private:
         }
         canvas_->hideLayers(preview_ != nullptr ? preview_->hidden() : std::vector<std::uint32_t>{});
         // The paths the previewed scene's splines make, cyan lines in the
-        // canvas's plane (D891).
+        // canvas's plane (D891), and what each author has chosen, a
+        // rectangle about each in their color (D907).
+        bool linesChanged = false;
         if (preview_ != nullptr && preview_->pathsShown() != pathsSeen_) {
             pathsSeen_ = preview_->pathsShown();
-            std::vector<CanvasLine> lines;
+            pathLines_.clear();
             pathsDrawn_ = 0;
             for (const std::vector<std::array<double, 3>>& kPath : preview_->paths()) {
                 for (std::size_t at = 1; at < kPath.size(); ++at) {
-                    lines.push_back(CanvasLine{.from = {kPath[at - 1][0], kPath[at - 1][1]},
-                                               .to = {kPath[at][0], kPath[at][1]},
-                                               .color = 0x33D9FFFFU});
+                    pathLines_.push_back(CanvasLine{.from = {kPath[at - 1][0], kPath[at - 1][1]},
+                                                    .to = {kPath[at][0], kPath[at][1]},
+                                                    .color = 0x33D9FFFFU});
                 }
                 pathsDrawn_ += kPath.size() > 1 ? 1 : 0;
             }
+            linesChanged = true;
+        }
+        if (preview_ != nullptr && preview_->outlinesShown() != outlinesSeen_) {
+            outlinesSeen_ = preview_->outlinesShown();
+            outlineLines_.clear();
+            for (const view::Outline& kOutline : preview_->outlines()) {
+                const auto kChannel = [&kOutline](std::size_t at) {
+                    return static_cast<std::uint32_t>(std::lround(std::clamp(kOutline.color[at], 0.0F, 1.0F) * 255));
+                };
+                const std::uint32_t kColor = (kChannel(0) << 24U) | (kChannel(1) << 16U) | (kChannel(2) << 8U) | 0xFFU;
+                for (const std::array<double, 6>& kBox : kOutline.boxes) {
+                    const std::array<std::array<double, 2>, 4> kCorners = {
+                        std::array<double, 2>{kBox[0] - kBox[3], kBox[1] - kBox[4]},
+                        std::array<double, 2>{kBox[0] + kBox[3], kBox[1] - kBox[4]},
+                        std::array<double, 2>{kBox[0] + kBox[3], kBox[1] + kBox[4]},
+                        std::array<double, 2>{kBox[0] - kBox[3], kBox[1] + kBox[4]}};
+                    for (std::size_t side = 0; side < 4; ++side) {
+                        outlineLines_.push_back(
+                            CanvasLine{.from = kCorners[side], .to = kCorners[(side + 1) % 4], .color = kColor});
+                    }
+                    ++outlinesDrawn_;
+                }
+            }
+            linesChanged = true;
+        }
+        if (linesChanged) {
+            std::vector<CanvasLine> lines = pathLines_;
+            lines.insert(lines.end(), outlineLines_.begin(), outlineLines_.end());
             canvas_->showLines(std::move(lines));
         }
         canvas_->extract(*kView.world);
@@ -611,6 +644,10 @@ private:
     /// The preview's paths last seen, and how many it drew (D891).
     std::uint64_t pathsSeen_ = 0;
     std::uint64_t pathsDrawn_ = 0;
+    std::vector<CanvasLine> pathLines_;
+    std::vector<CanvasLine> outlineLines_;
+    std::uint64_t outlinesSeen_ = 0;
+    std::uint64_t outlinesDrawn_ = 0;
     std::uint64_t hidden_ = 0;
     std::uint64_t malformed_ = 0;
     std::uint64_t unknownTextures_ = 0;

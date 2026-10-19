@@ -159,6 +159,29 @@ void addColliderLines(const physics3d::Body3D& body,
     }
 }
 
+void addOutlineLines(const std::array<double, 6>& box,
+                     const std::array<float, 3>& color,
+                     std::vector<SceneLine>& lines) {
+    const auto kCorner = [&box](int corner) {
+        return Point{box[0] + ((corner & 1) != 0 ? box[3] : -box[3]),
+                     box[1] + ((corner & 2) != 0 ? box[4] : -box[4]),
+                     box[2] + ((corner & 4) != 0 ? box[5] : -box[5])};
+    };
+    // An edge joins corners one sign apart.
+    for (int corner = 0; corner < 8; ++corner) {
+        for (const int kBit : {1, 2, 4}) {
+            if ((corner & kBit) == 0) {
+                lines.push_back(SceneLine{.from = kCorner(corner),
+                                          .to = kCorner(corner | kBit),
+                                          .color = {color[0], color[1], color[2], 1},
+                                          .width = kWidth,
+                                          .ofView = true,
+                                          .over = true});
+            }
+        }
+    }
+}
+
 void addLightLines(const LightInstance& light, std::vector<SceneLine>& lines) {
     const double kRange = light.light.range;
     if (!(kRange > 0)) {

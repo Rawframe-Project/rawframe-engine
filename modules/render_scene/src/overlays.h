@@ -46,6 +46,13 @@ void addContactLines(const physics3d::Pose3D& pose, const physics3d::Contact3D& 
 /// Yellow.
 void addLightLines(const LightInstance& light, std::vector<SceneLine>& lines);
 
+/// A box an editor outlines what an author chose with (D907), its center
+/// and then half its sides along x, y, and z: its twelve edges, in
+/// `color`, drawn over what is nearer, appended to `lines`.
+void addOutlineLines(const std::array<double, 6>& box,
+                     const std::array<float, 3>& color,
+                     std::vector<SceneLine>& lines);
+
 /// The overlays `overlays` asks for (`view::Overlay` bits), appended to
 /// `lines` until it holds `kMostSceneLines`: each body's collider in
 /// `world`, `bodies` resolved on first need and kept, and each light in

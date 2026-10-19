@@ -348,17 +348,19 @@ public:
         // record may (D361).
         const std::uint64_t kHidden = scene_ != nullptr ? scene_->modelsHidden() : 0;
         if (placed_ != 0 || tracked_ != 0 || kHidden != 0 || splitFrames_ != 0 || overlayLines_ != 0 ||
-            pathsDrawn_ != 0) {
+            pathsDrawn_ != 0 || outlinesDrawn_ != 0) {
             emitter_.log(diagnostics::Severity::Info,
                          kPlacedSummary,
                          "what one client's scene drew where it was placed, where a headset's hand was, and what "
-                         "an editor's preview left out, split its window to show, or drew of a scene's splines",
+                         "an editor's preview left out, split its window to show, drew of a scene's splines, or "
+                         "outlined of what its authors chose",
                          {diagnostics::field("modelsPlaced", placed_),
                           diagnostics::field("modelsTracked", tracked_),
                           diagnostics::field("modelsHidden", kHidden),
                           diagnostics::field("splitFrames", splitFrames_),
                           diagnostics::field("overlayLines", overlayLines_),
-                          diagnostics::field("pathsShown", pathsDrawn_)});
+                          diagnostics::field("pathsShown", pathsDrawn_),
+                          diagnostics::field("outlinesShown", outlinesDrawn_)});
         }
         textureViews_.summarize(emitter_);
         const auto kParticles = particles_.fields();
@@ -583,6 +585,23 @@ private:
             }
             linesChanged = true;
         }
+        // What each author has chosen, a box about each in their color,
+        // over what is nearer, as many as the scene's lines leave room for
+        // (D907).
+        if (preview_ != nullptr && preview_->outlinesShown() != outlinesSeen_) {
+            outlinesSeen_ = preview_->outlinesShown();
+            outlineLines_.clear();
+            for (const view::Outline& kOutline : preview_->outlines()) {
+                for (const std::array<double, 6>& kBox : kOutline.boxes) {
+                    if (markLines_.size() + pathLines_.size() + outlineLines_.size() + 12 > kMostSceneLines) {
+                        break;
+                    }
+                    addOutlineLines(kBox, kOutline.color, outlineLines_);
+                    ++outlinesDrawn_;
+                }
+            }
+            linesChanged = true;
+        }
         // And what the preview draws over its scene, kind by kind, each
         // frame (D798).
         const std::uint8_t kOverlays =
@@ -590,6 +609,7 @@ private:
         if (linesChanged || kOverlays != 0 || overlaid_) {
             lines_ = markLines_;
             lines_.insert(lines_.end(), pathLines_.begin(), pathLines_.end());
+            lines_.insert(lines_.end(), outlineLines_.begin(), outlineLines_.end());
             if (kOverlays != 0) {
                 addOverlays(*kView.world, kOverlays);
             }
@@ -909,6 +929,9 @@ private:
     std::vector<SceneLine> pathLines_;
     std::uint64_t pathsSeen_ = 0;
     std::uint64_t pathsDrawn_ = 0;
+    std::vector<SceneLine> outlineLines_;
+    std::uint64_t outlinesSeen_ = 0;
+    std::uint64_t outlinesDrawn_ = 0;
     bool overlaid_ = false;
     std::optional<world::ColumnQuery> bodies_;
     std::uint64_t overlayLines_ = 0;
