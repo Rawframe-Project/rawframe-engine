@@ -17,6 +17,9 @@ namespace rawframe::world_runtime {
 ///   world.overload_ms                 how long the World may stay more than a
 ///                                     second behind before it reports itself
 ///                                     overloaded, unhealthy; 0 never (30000)
+///   world.edited                      an editor's World (D912): its ticks
+///                                     run only the systems that run while
+///                                     editing, so nothing plays (false)
 ///
 /// And `rawframe.world_runtime.checkpoints`, which restores the World from a
 /// SPEC-0011 checkpoint before the first tick and captures checkpoints at

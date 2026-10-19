@@ -525,9 +525,11 @@ result::Status ReplicationServer::declareSystems(const schema::SchemaRegistry& r
                                                .phase = world::Phase::ApplyInputs,
                                                .writes = state.inputWrites,
                                                .system = state.systems[0].get()});
+    // What an edited World holds still goes to its viewers (D912).
     systems.push_back(world::SystemDeclaration{.identity = "rawframe.replication.publish",
                                                .phase = world::Phase::Replication,
                                                .reads = state.reads,
+                                               .editing = true,
                                                .system = state.systems[1].get()});
     return {};
 }

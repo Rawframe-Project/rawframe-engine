@@ -80,6 +80,10 @@ struct SystemDeclaration {
     /// The random streams it draws from, by lower_snake_case name; at most
     /// kMaximumRandomStreamsPerOwner.
     std::span<const std::string_view> randomStreams;
+    /// Runs while the World is edited (D912): an editor's World, built from
+    /// the documents, ticks only such systems, so it shows what is written
+    /// and nothing plays.
+    bool editing = false;
     System* system = nullptr;
 };
 
@@ -121,11 +125,13 @@ public:
 
     /// Runs one tick: every phase in order, then advances `tick`. With a
     /// `clock`, each system's run is timed into the report's `times`.
+    /// `edited`, only the systems declared to run while editing run (D912).
     [[nodiscard]] result::Result<TickReport> runTick(World& world,
                                                      TickIndex& tick,
                                                      TickRate rate,
                                                      diagnostics::Emitter emitter = {},
-                                                     const execution::MonotonicSource* clock = nullptr);
+                                                     const execution::MonotonicSource* clock = nullptr,
+                                                     bool edited = false);
 
     /// Identities in execution order, phase by phase.
     [[nodiscard]] std::vector<std::string> order() const;
@@ -142,6 +148,7 @@ private:
         std::vector<schema::ComponentRuntimeId> writes;
         bool exclusive = false;
         std::vector<std::string> randomStreams;
+        bool editing = false;
         System* system = nullptr;
         std::unique_ptr<CommandBuffer> commands;
     };

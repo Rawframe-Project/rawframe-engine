@@ -47,6 +47,9 @@ struct Settings {
     /// How long a World may stay degraded before it is overloaded; nought
     /// never.
     execution::MonotonicDuration overloadAfter;
+    /// An editor's World (D912): ticks at its rate, but only the systems
+    /// that run while editing, so it shows its documents and nothing plays.
+    bool edited = false;
 };
 
 result::Result<Settings> readSettings(const composition::Configuration& configuration) {
@@ -69,6 +72,7 @@ result::Result<Settings> readSettings(const composition::Configuration& configur
                             code(WorldRuntimeError::SettingOutOfRange),
                             "a world setting is out of range");
     }
+    RAWFRAME_TRY_ASSIGN(const bool kEdited, configuration.truth("world.edited", false));
     RAWFRAME_TRY_ASSIGN(const world::TickRate kRate,
                         world::TickRate::of(static_cast<std::uint32_t>(kTicks), static_cast<std::uint32_t>(kSeconds)));
     return Settings{
@@ -79,6 +83,7 @@ result::Result<Settings> readSettings(const composition::Configuration& configur
         .degradedMs = kDegradedMs,
         .debtLimitMs = kDebtLimitMs,
         .overloadAfter = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(kOverloadMs)),
+        .edited = kEdited,
     };
 }
 
@@ -226,7 +231,7 @@ public:
                     : pacer_->due(frame.now);
         for (std::uint32_t index = 0; index < kDue.run && running_ && (!hold_ || tick_ < *hold_); ++index) {
             const execution::MonotonicInstant kStart = clock_->now();
-            auto report = schedule_->runTick(*world_, tick_, settings_.rate, emitter_, clock_);
+            auto report = schedule_->runTick(*world_, tick_, settings_.rate, emitter_, clock_, settings_.edited);
             record(clock_->now() - kStart);
             if (report.has_value()) {
                 profileTick(clock_->now() - kStart, *report);

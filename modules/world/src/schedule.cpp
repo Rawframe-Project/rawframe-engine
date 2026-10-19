@@ -154,6 +154,7 @@ result::Result<Schedule> Schedule::compile(std::span<const SystemDeclaration> de
                 .writes = {declaration.writes.begin(), declaration.writes.end()},
                 .exclusive = declaration.exclusive,
                 .randomStreams = {declaration.randomStreams.begin(), declaration.randomStreams.end()},
+                .editing = declaration.editing,
                 .system = declaration.system,
                 .commands = std::make_unique<CommandBuffer>(commandSettings),
             });
@@ -195,7 +196,8 @@ result::Result<TickReport> Schedule::runTick(World& world,
                                              TickIndex& tick,
                                              TickRate rate,
                                              diagnostics::Emitter emitter,
-                                             const execution::MonotonicSource* clock) {
+                                             const execution::MonotonicSource* clock,
+                                             bool edited) {
     TickReport report;
     report.tick = tick;
     if (clock != nullptr) {
@@ -211,6 +213,9 @@ result::Result<TickReport> Schedule::runTick(World& world,
         world.lockStructure();
         for (std::size_t index = phaseStart_[phase]; index < phaseStart_[phase + 1]; ++index) {
             Entry& entry = entries_[index];
+            if (edited && !entry.editing) {
+                continue;
+            }
             SystemContext context{world, *entry.commands, tick, rate, emitter, entry.identity, entry.randomStreams};
             const execution::MonotonicInstant kStart = clock != nullptr ? clock->now() : execution::MonotonicInstant{};
             auto ran = entry.system->run(context);
