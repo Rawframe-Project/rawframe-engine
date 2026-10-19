@@ -281,6 +281,19 @@ private:
             return preview_.live(record);
         case authoring::SessionVerb::Overlays:
             return preview_.overlaid(record);
+        case authoring::SessionVerb::Outline: {
+            // Each author's choice outlined in the preview, from the scene
+            // held here (D907); the boxes answered, so a preview held
+            // elsewhere draws them too (D906).
+            bool reopened = false;
+            RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
+            Value outlines = outlinesOf(open->document->scene(), record.outlines);
+            Value made = Value::object();
+            made.add("kind", Value::string("authoring.outlines"));
+            made.add("shown", Value::boolean(preview_.outline(record.scene, outlines)));
+            made.add("outlines", std::move(outlines));
+            return made;
+        }
         case authoring::SessionVerb::Bookmark:
             return bookmarked(record);
         case authoring::SessionVerb::Bookmarks:

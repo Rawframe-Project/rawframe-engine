@@ -104,6 +104,9 @@ public:
     /// `mark` (D464): the preview marks a point, or none; whether it shows
     /// it.
     [[nodiscard]] document::Value marked(const authoring::SessionRecord& record);
+    /// `outline` (D907): `outlines`, as `outlinesOf` makes them, handed to
+    /// the preview of `scene`, if it is previewed; whether it draws them.
+    bool outline(std::string_view scene, const document::Value& outlines);
 
 private:
     /// What the previewed game's server answers to `asked`, under the

@@ -100,6 +100,88 @@ std::optional<std::array<double, 3>> standingOf(const scene::Scene& scene, base:
     return std::nullopt;
 }
 
+std::array<double, 3> halfOf(const scene::Scene& scene, base::Bits128 entity) {
+    constexpr std::array<double, 3> kUnknown = {0.5, 0.5, 0.5};
+    const auto kEntity = std::ranges::find(scene.entities, entity, &scene::SceneEntity::id);
+    if (kEntity == scene.entities.end()) {
+        return kUnknown;
+    }
+    // By name, as `standingOf`: the session knows no physics module's types.
+    for (const scene::SceneComponent& kComponent : kEntity->components) {
+        const bool kSolid = kComponent.name == "rawframe.physics3d.body";
+        if (!kSolid && kComponent.name != "rawframe.physics2d.body") {
+            continue;
+        }
+        const auto kField = [&kComponent](std::string_view name) {
+            const auto kFound = std::ranges::find(kComponent.fields, name, &scene::SceneField::name);
+            return kFound != kComponent.fields.end() && kFound->value.kind == scene::FieldValue::Kind::Number
+                       ? std::abs(std::strtod(kFound->value.number.c_str(), nullptr))
+                       : 0.0;
+        };
+        const double kWide = kField("width");
+        const double kHigh = kField("height");
+        const double kDeep = kSolid ? kField("depth") : 0;
+        const double kAcross = kSolid ? kWide : 0;
+        // Shapes as physics3d and physics2d number them: a sphere or circle
+        // 0, a box 1, a capsule 2, a cylinder 3 (a tilemap in 2D); a mesh
+        // after.
+        const int kShape = static_cast<int>(kField("shape"));
+        std::array<double, 3> half;
+        switch (kSolid || kShape != 3 ? kShape : -1) {
+        case 0:
+            half = {kWide, kWide, kAcross};
+            break;
+        case 1:
+            half = {kWide, kHigh, kDeep};
+            break;
+        case 2:
+            half = {kWide, kHigh + kWide, kAcross};
+            break;
+        case 3:
+            half = {kWide, kHigh, kAcross};
+            break;
+        default:
+            return kSolid ? kUnknown : std::array<double, 3>{0.5, 0.5, 0};
+        }
+        return std::ranges::all_of(half,
+                                   [](double side) {
+                                       return side == 0;
+                                   })
+                   ? kUnknown
+                   : half;
+    }
+    return kUnknown;
+}
+
+document::Value outlinesOf(const scene::Scene& scene, std::span<const authoring::SessionOutline> asked) {
+    const auto kNumbers = [](const auto& numbers) {
+        document::Value made = document::Value::array();
+        for (const auto kEach : numbers) {
+            made.push(document::Value::real(static_cast<double>(kEach)));
+        }
+        return made;
+    };
+    document::Value outlines = document::Value::array();
+    for (const authoring::SessionOutline& kOutline : asked) {
+        document::Value boxes = document::Value::array();
+        for (const base::Bits128 kEntity : kOutline.entities) {
+            const std::optional<std::array<double, 3>> kAt = standingOf(scene, kEntity);
+            if (!kAt.has_value()) {
+                continue;
+            }
+            document::Value box = document::Value::object();
+            box.add("center", kNumbers(*kAt));
+            box.add("half", kNumbers(halfOf(scene, kEntity)));
+            boxes.push(std::move(box));
+        }
+        document::Value outline = document::Value::object();
+        outline.add("color", kNumbers(kOutline.color));
+        outline.add("boxes", std::move(boxes));
+        outlines.push(std::move(outline));
+    }
+    return outlines;
+}
+
 authoring::SceneView lookedView(const authoring::SceneView& view, double across, double up) noexcept {
     constexpr double kPerPixel = 1.0 / 200;
     constexpr double kHighest = (std::numbers::pi / 2) - 0.05;

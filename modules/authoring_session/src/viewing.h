@@ -8,6 +8,7 @@
 
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/operations.h"
+#include "rawframe/authoring/session.h"
 #include "rawframe/document/json.h"
 
 #include <array>
@@ -49,6 +50,19 @@ movedView(const authoring::SceneView& view, double detents, double across, doubl
 /// nought depth): the scene's own entity's, an instance's entity's as its
 /// patch sets or adds it; none for one without, or not in the scene.
 [[nodiscard]] std::optional<std::array<double, 3>> standingOf(const scene::Scene& scene, base::Bits128 entity);
+
+/// Half the sides of a box about what `entity` of `scene` fills (D907),
+/// from its 3D or 2D body by its fields' names: a sphere's or a circle's
+/// radius every way, a box's half sides, a capsule's or a cylinder's
+/// radius across and its half height (a capsule's with its ends) along y;
+/// half a meter every way for an entity with no such body of its own (an
+/// instance's, a mesh's, a tilemap's), a 2D one at nought depth.
+[[nodiscard]] std::array<double, 3> halfOf(const scene::Scene& scene, base::Bits128 entity);
+
+/// `outline`'s answer for `scene` (D907): for each author's outline its
+/// color and a box about each entity of theirs that stands somewhere, at
+/// its pose, `halfOf` it; boxes as `tooling.outlines` takes them.
+[[nodiscard]] document::Value outlinesOf(const scene::Scene& scene, std::span<const authoring::SessionOutline> asked);
 
 /// The paths `scene`'s splines make (D891), as `catalog` says which of its
 /// components are a spline and a point on one: each spline's own points,

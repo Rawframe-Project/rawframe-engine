@@ -78,6 +78,7 @@ constexpr std::array kKinds = {
     KindNeeds{.kind = "authoring.import_settings", .needs = Needs::Read},
     KindNeeds{.kind = "authoring.thumbnail", .needs = Needs::Read},
     KindNeeds{.kind = "authoring.asset_references", .needs = Needs::Read},
+    KindNeeds{.kind = "authoring.outline", .needs = Needs::Read},
     KindNeeds{.kind = "authoring.presence", .needs = Needs::Read},
     KindNeeds{.kind = "authoring.present", .needs = Needs::Read, .authored = true, .presence = true},
     KindNeeds{.kind = "authoring.leave", .needs = Needs::Read, .authored = true, .presence = true},

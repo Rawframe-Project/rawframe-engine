@@ -391,6 +391,20 @@ Value Preview::movedAlong(const Value& clicked) const {
 
 /// Has the scene's preview mark a point, or none (D464): where the
 /// author chose something. Whether the preview shows it.
+bool Preview::outline(std::string_view scene, const Value& outlines) {
+    if (preview_ == nullptr || scene != scene_) {
+        return false;
+    }
+    Value asked = Value::object();
+    asked.add("kind", Value::string("tooling.outlines"));
+    asked.add("id", Value::integer(0));
+    asked.add("outlines", outlines);
+    const auto kParsed = rawframe::document::parse(preview_->ask(rawframe::document::writeCompact(asked)).value_or(""));
+    const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* kDrawn = kAnswer != nullptr ? kAnswer->find("drawn") : nullptr;
+    return kDrawn != nullptr && kDrawn->truth().value_or(false);
+}
+
 Value Preview::marked(const authoring::SessionRecord& record) {
     bool shown = false;
     if (preview_ != nullptr && record.scene == scene_) {

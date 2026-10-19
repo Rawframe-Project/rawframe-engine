@@ -355,6 +355,16 @@ std::string JoinedSession::answer(std::string_view line, bool& ended) {
     if (const auto kSaid = document::parse(*kReply); kSaid.has_value() && !kSceneNamed.empty()) {
         if (const document::Value* kAnswered = kSaid->find("answer"); kAnswered != nullptr) {
             looked(*kAnswered, kSceneNamed);
+            // The boxes the host made of each author's choice, outlined in
+            // the preview held here (D907), which says whether it drew them.
+            const document::Value* kOutlines = kAnswered->find("outlines");
+            if (kNamed == "authoring.outline" && kOutlines != nullptr && preview_ != nullptr) {
+                document::Value answer = document::Value::object();
+                answer.add("kind", document::Value::string("authoring.outlines"));
+                answer.add("shown", document::Value::boolean(preview_->outline(kSceneNamed, *kOutlines)));
+                answer.add("outlines", *kOutlines);
+                return authoring::writeReply(kId, std::move(answer));
+            }
         }
     }
     return *kReply + "\n";
