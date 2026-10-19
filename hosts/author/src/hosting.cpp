@@ -1,13 +1,16 @@
 #include "hosting.h"
 
+#include "rawframe/authoring_session/cooked_copy.h"
 #include "rawframe/authoring_session/link.h"
 #include "rawframe/authoring_session/session.h"
 #include "rawframe/document/json.h"
 #include "rawframe/host/main.h"
 
 #include <atomic>
+#include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -114,6 +117,39 @@ int join(const char* endpoint, const char* pinFile, const char* tokenFile) {
         status = authoring_session::answered(*kReply) ? status : 1;
     }
     return status;
+}
+
+int copyCookedFrom(
+    const char* endpoint, const char* pinFile, const char* tokenFile, std::string_view name, const char* into) {
+    std::string said;
+    std::unique_ptr<authoring_session::HostLink> link =
+        authoring_session::HostLink::open(endpoint, pinFile, tokenFile, said);
+    if (link == nullptr) {
+        complain("copy-cooked", said);
+        return 1;
+    }
+    std::int64_t asked = 0;
+    const auto kCopied = authoring_session::copyCooked(
+        [&link, &asked](document::Value record) {
+            record.add("id", document::Value::integer(++asked));
+            // What the host says unasked meanwhile is not this copy's.
+            std::optional<std::string> reply = link->ask(document::writeCompact(record));
+            static_cast<void>(link->heard(0));
+            return reply.value_or(std::string{});
+        },
+        name,
+        into);
+    if (!kCopied.has_value()) {
+        complain("copy-cooked", kCopied.error().description());
+        return 1;
+    }
+    document::Value made = document::Value::object();
+    made.add("kind", document::Value::string("copied"));
+    made.add("copied", document::Value::integer(static_cast<std::int64_t>(kCopied->copied)));
+    made.add("kept", document::Value::integer(static_cast<std::int64_t>(kCopied->kept)));
+    made.add("bytes", document::Value::integer(static_cast<std::int64_t>(kCopied->bytes)));
+    say(document::writeCompact(made));
+    return 0;
 }
 
 } // namespace rawframe::author

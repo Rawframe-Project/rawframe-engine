@@ -92,6 +92,12 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_hosted)
     set_tests_properties(author_hosted PROPERTIES
                          PASS_REGULAR_EXPRESSION "three collaborators shared one hosted session")
+    # A cook made at the host brought to a collaborator's machine (D905).
+    add_test(NAME author_copies_cooked
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_copies_cooked.sh $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_copies_cooked)
+    set_tests_properties(author_copies_cooked PROPERTIES
+                         PASS_REGULAR_EXPRESSION "a cook made at the host was brought here whole")
     # An agent a collaborator of the shared session through MCP (D883).
     add_test(NAME author_mcp_joined
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_mcp_joined.sh $<TARGET_FILE:rawframe_host_author>

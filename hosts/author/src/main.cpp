@@ -78,6 +78,10 @@
 // collaborator of one, as `connect` is of an endpoint, what the host says
 // unasked written as it is heard.
 //
+// `copy-cooked` brings the cook a collaborator made at a host, by the plain
+// name it was cooked under, into a directory on this machine (D905), each
+// file checked against the cook's manifest, so it is played here.
+//
 // Exit status 0 when everything succeeded, 1 otherwise, and 2 for a usage
 // error.
 
@@ -605,6 +609,9 @@ int main(int argc, char** argv) {
     if (kVerb == "join" && argc == 5) {
         return rawframe::author::join(argv[2], argv[3], argv[4]);
     }
+    if (kVerb == "copy-cooked" && argc == 7) {
+        return rawframe::author::copyCookedFrom(argv[2], argv[3], argv[4], argv[5], argv[6]);
+    }
     if (kVerb == "host") {
         // `host <game> [<scene root>]` and its named settings, in any order.
         std::vector<std::string_view> places;
@@ -691,7 +698,8 @@ int main(int argc, char** argv) {
                "       rawframe-author host <game description> [<scene root>] --endpoint <host:port> --tokens <file>\n"
                "           --fingerprint-file <file> [--cooks <directory>] [--cook <rawframe-cook>]\n"
                "           [--thumbnail <rawframe-thumbnail>]\n"
-               "       rawframe-author join <endpoint> <pin file> <token file>\n",
+               "       rawframe-author join <endpoint> <pin file> <token file>\n"
+               "       rawframe-author copy-cooked <endpoint> <pin file> <token file> <cook name> <directory>\n",
                stderr);
     return 2;
 }

@@ -1,12 +1,13 @@
 #pragma once
 
-// `rawframe-author host` and `rawframe-author join` (ADR-0085, D881): a
-// shared authoring session and a collaborator of one, over
+// `rawframe-author host`, `join`, and `copy-cooked` (ADR-0085, D881,
+// D905): a shared authoring session and a collaborator of one, over
 // authoring_session's host and link.
 
 #include "rawframe/authoring_session/host.h"
 
 #include <filesystem>
+#include <string_view>
 
 namespace rawframe::author {
 
@@ -24,5 +25,11 @@ int hostGame(const std::filesystem::path& game,
 /// what the host said unasked written before it, until the input ends or
 /// the host closes. 0 when every reply was an answer.
 int join(const char* endpoint, const char* pinFile, const char* tokenFile);
+
+/// `rawframe-author copy-cooked`: a link to a host, then the cook this
+/// collaborator made there under `name` brought into `into` (D905), what
+/// it brought written as one line. 0 when all of it came.
+int copyCookedFrom(
+    const char* endpoint, const char* pinFile, const char* tokenFile, std::string_view name, const char* into);
 
 } // namespace rawframe::author
