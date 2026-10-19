@@ -206,7 +206,9 @@ public:
     std::optional<world_tooling::DrawnFrame> drawn(bool steps) const override {
         // Asked, the frames' passes are timed from now on (D894).
         camera.askTimes();
-        if (camera.descriptions() == 0) {
+        // A frame with no scene in it (a 2D game's, D901) has its passes'
+        // times and no figures.
+        if (camera.descriptions() == 0 && camera.passTimings().empty()) {
             return std::nullopt;
         }
         world_tooling::DrawnFrame made{.frames = camera.descriptions()};

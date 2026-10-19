@@ -65,6 +65,26 @@ public:
         if (frames_ == nullptr || failed_) {
             return;
         }
+        // Once an editor asked what the preview's frames hold, their passes
+        // are timed, and it is told the last times, each name's together
+        // (D894): the canvas's too, in a game with no scene to draw (D901).
+        if (preview_ != nullptr) {
+            const bool kAsked = preview_->timesAsked();
+            frames_->timePasses(kAsked);
+            const std::span<const render::PassTime> kTimes = frames_->passTimes();
+            if (kAsked && !kTimes.empty()) {
+                std::vector<view::PassTiming> timed;
+                for (const render::PassTime& kEach : kTimes) {
+                    const auto kSame = std::ranges::find(timed, kEach.pass, &view::PassTiming::pass);
+                    if (kSame != timed.end()) {
+                        kSame->nanoseconds += kEach.nanoseconds;
+                    } else {
+                        timed.push_back(view::PassTiming{.pass = kEach.pass, .nanoseconds = kEach.nanoseconds});
+                    }
+                }
+                preview_->passesTimed(std::move(timed));
+            }
+        }
         // Joined once the device is ready and there is something to draw,
         // drawing from the next frame planned.
         if (renderer_ == nullptr) {
@@ -130,26 +150,6 @@ public:
         if (const render::FramePace kPace = frames_->pace(); kPace.done != paced_) {
             paced_ = kPace.done;
             scene_->paced(kPace.atLeast, kPace.atMost, kPace.budget);
-        }
-        // Once an editor asked what the preview's frames hold, their passes
-        // are timed, and it is told the last times, each name's together
-        // (D894).
-        if (preview_ != nullptr) {
-            const bool kAsked = preview_->timesAsked();
-            frames_->timePasses(kAsked);
-            const std::span<const render::PassTime> kTimes = frames_->passTimes();
-            if (kAsked && !kTimes.empty()) {
-                std::vector<view::PassTiming> timed;
-                for (const render::PassTime& kEach : kTimes) {
-                    const auto kSame = std::ranges::find(timed, kEach.pass, &view::PassTiming::pass);
-                    if (kSame != timed.end()) {
-                        kSame->nanoseconds += kEach.nanoseconds;
-                    } else {
-                        timed.push_back(view::PassTiming{.pass = kEach.pass, .nanoseconds = kEach.nanoseconds});
-                    }
-                }
-                preview_->passesTimed(std::move(timed));
-            }
         }
         const auto kPlanned = frames_->planned();
         if (!kPlanned.has_value()) {

@@ -98,36 +98,42 @@ void ShellParticipant::readFrame(double seconds, std::string_view capture) {
         kLine("the preview: " + answeredOf(kReply).message, kQuiet);
         return;
     }
-    const auto kOf = [kFigures](std::string_view name) {
-        return std::to_string(figureOf(*kFigures, name));
-    };
-    kLine("draws " + kOf("draws") + ": opaque " + kOf("opaque") + " in " + kOf("opaque_batches") +
-              " batches, translucent " + kOf("translucent") + "; culled " + kOf("culled") + ", hidden " +
-              kOf("hidden") + ", unknown meshes " + kOf("unknown_meshes") + ", unknown materials " +
-              kOf("unknown_materials"),
-          kText);
-    kLine("lights " + kOf("lights") + " (culled " + kOf("lights_culled") + ", over the limit " +
-              kOf("lights_over_limit") + "); shadow cascades " + kOf("shadow_cascades") + " with " +
-              kOf("cascade_casters") + " casters, light shadow maps " + kOf("light_shadow_slots") + " with " +
-              kOf("light_shadow_casters"),
-          kText);
-    kLine("probes " + kOf("probes") + ", decals " + kOf("decals") + ", emitters " + kOf("emitters") + ", ribbons " +
-              kOf("ribbons") + ", post processes " + kOf("post_processes"),
-          kText);
-    std::string effects;
-    for (const std::string_view kEffect : {"temporal",
-                                           "fxaa",
-                                           "occlusion",
-                                           "bloom",
-                                           "reflections",
-                                           "motion_blur",
-                                           "depth_of_field",
-                                           "contact_shadows"}) {
-        if (figureOf(*kFigures, kEffect) != 0) {
-            effects += (effects.empty() ? "" : ", ") + std::string{kEffect};
+    // A game that draws no scene (a 2D game's canvas, D901) has no
+    // figures, its passes timed all the same.
+    if (kFigures->items().empty()) {
+        kLine("no scene drawn: the canvas's and the UI's passes only", kQuiet);
+    } else {
+        const auto kOf = [kFigures](std::string_view name) {
+            return std::to_string(figureOf(*kFigures, name));
+        };
+        kLine("draws " + kOf("draws") + ": opaque " + kOf("opaque") + " in " + kOf("opaque_batches") +
+                  " batches, translucent " + kOf("translucent") + "; culled " + kOf("culled") + ", hidden " +
+                  kOf("hidden") + ", unknown meshes " + kOf("unknown_meshes") + ", unknown materials " +
+                  kOf("unknown_materials"),
+              kText);
+        kLine("lights " + kOf("lights") + " (culled " + kOf("lights_culled") + ", over the limit " +
+                  kOf("lights_over_limit") + "); shadow cascades " + kOf("shadow_cascades") + " with " +
+                  kOf("cascade_casters") + " casters, light shadow maps " + kOf("light_shadow_slots") + " with " +
+                  kOf("light_shadow_casters"),
+              kText);
+        kLine("probes " + kOf("probes") + ", decals " + kOf("decals") + ", emitters " + kOf("emitters") + ", ribbons " +
+                  kOf("ribbons") + ", post processes " + kOf("post_processes"),
+              kText);
+        std::string effects;
+        for (const std::string_view kEffect : {"temporal",
+                                               "fxaa",
+                                               "occlusion",
+                                               "bloom",
+                                               "reflections",
+                                               "motion_blur",
+                                               "depth_of_field",
+                                               "contact_shadows"}) {
+            if (figureOf(*kFigures, kEffect) != 0) {
+                effects += (effects.empty() ? "" : ", ") + std::string{kEffect};
+            }
         }
+        kLine("samples " + kOf("samples") + "; effects " + (effects.empty() ? std::string{"none"} : effects), kQuiet);
     }
-    kLine("samples " + kOf("samples") + "; effects " + (effects.empty() ? std::string{"none"} : effects), kQuiet);
     // The GPU's time for each pass it timed, where the device times them
     // (D894).
     std::size_t timed = 0;
