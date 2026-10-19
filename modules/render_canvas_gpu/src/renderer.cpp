@@ -3,6 +3,7 @@
 #include "generated/sprite_container.h"
 #include "rawframe/particles_gpu/particles.h"
 #include "rawframe/render/textures.h"
+#include "rawframe/render/timing.h"
 #include "rawframe/render_canvas_gpu/errors.h"
 
 #include <algorithm>
@@ -473,6 +474,7 @@ struct CanvasRenderer::State {
         drawDef.colorTargetCount = 1;
         drawDef.accesses = reads.data();
         drawDef.accessCount = static_cast<std::uint32_t>(reads.size());
+        render::timePass(open, drawDef, "canvas");
         drawDef.neverCull = true;
         if (const mrhiResult kAdded = mrhiAddPass(native, &drawDef, &drawing); kAdded != mrhi_success) {
             return failed("the drawing pass could not be added", kAdded);

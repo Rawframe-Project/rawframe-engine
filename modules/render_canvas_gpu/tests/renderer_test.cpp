@@ -18,9 +18,12 @@
 #include "rawframe/render_canvas_gpu/renderer.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <span>
+#include <string_view>
 
 using namespace rawframe;
 using render_canvas::CanvasDraw;
@@ -171,6 +174,40 @@ RAWFRAME_TEST(TheCanvasDrawsItsFrameInOrder) {
     const std::vector<std::byte> kReloaded = kDraw();
     RAWFRAME_EXPECT(renderer.statistics().texturesUploaded == 4 && renderer.statistics().texturesReplaced == 1);
     RAWFRAME_EXPECT(near(kReloaded, 4, 4, {0, 255, 0, 255}));
+}
+
+RAWFRAME_TEST(ACanvasTimesItsDrawWhereAsked) {
+    // D901: in a frame that times its passes, on a device that writes
+    // timestamps, the canvas's draw is timed as "canvas".
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_canvas_gpu::CanvasRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const auto kWhiteTexel = image(1, {255, 255, 255, 255});
+    const render_canvas_gpu::TextureSource kTextures = [&](std::uint64_t id) {
+        return id == kWhite ? kWhiteTexel : nullptr;
+    };
+    CanvasFrame frame;
+    quad(frame, kWhite, -0.5F, 0.5F, 0.5F, -0.5F, 0xFFFFFFFF);
+    const std::array<render::FrameRecorder*, 1> kRecorders = {made->get()};
+    const std::uint64_t kBefore = (*made)->statistics().frames;
+    for (int attempt = 0; attempt < 1000 && (*made)->statistics().frames == kBefore; ++attempt) {
+        (*made)->prepare(&frame, kTextures);
+        RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+        RAWFRAME_EXPECT((*framer)->make(kRecorders, {.width = kSide, .height = kSide, .timed = true}).has_value());
+    }
+    RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value() && (*framer)->done().value_or(false));
+    if (!kDevice->adapter().has_value() || !kDevice->adapter()->timestamps) {
+        return;
+    }
+    const std::span<const render::PassTime> kTimes = (*framer)->passTimes();
+    RAWFRAME_EXPECT(std::ranges::contains(kTimes, std::string_view{"canvas"}, &render::PassTime::pass));
 }
 
 RAWFRAME_TEST(ACanvasWithNothingQueuedDrawsNothing) {

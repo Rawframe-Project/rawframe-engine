@@ -3,6 +3,7 @@
 #include "generated/ui_container.h"
 #include "rawframe/render/errors.h"
 #include "rawframe/render/textures.h"
+#include "rawframe/render/timing.h"
 
 #include <algorithm>
 #include <array>
@@ -582,6 +583,7 @@ struct UiRenderer::State {
         drawDef.accesses = reads.data();
         drawDef.accessCount = static_cast<std::uint32_t>(reads.size());
         drawDef.neverCull = true;
+        render::timePass(open, drawDef, "ui");
         if (const mrhiResult kAdded = mrhiAddPass(native, &drawDef, &drawing); kAdded != mrhi_success) {
             return failed("the UI's drawing could not be added", kAdded);
         }
