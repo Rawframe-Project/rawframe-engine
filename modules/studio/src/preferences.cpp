@@ -159,6 +159,39 @@ std::optional<Preferences> preferencesOf(std::string_view document) {
             preferences.keys.emplace(keys->names()[at], std::move(chords));
         }
     }
+    if (const Value* layouts = kParsed->find("layouts"); layouts != nullptr) {
+        if (layouts->kind() != Value::Kind::Array) {
+            return std::nullopt;
+        }
+        for (const Value& each : layouts->items()) {
+            if (each.kind() != Value::Kind::Object) {
+                return std::nullopt;
+            }
+            const Value* kName = each.find("name");
+            const Value* kDock = each.find("dock");
+            Layout made;
+            const auto kSize = [&each](const char* name, float& into) {
+                const Value* kGiven = each.find(name);
+                const std::optional<double> kNumber =
+                    kGiven != nullptr && kGiven->kind() == Value::Kind::Number ? kGiven->real() : std::nullopt;
+                if (kNumber.has_value() && std::isfinite(*kNumber)) {
+                    into = static_cast<float>(*kNumber);
+                }
+                return kNumber.has_value() && std::isfinite(*kNumber);
+            };
+            if (kName == nullptr || kName->kind() != Value::Kind::String || kName->text()->empty() ||
+                kName->text()->size() > 64 || kDock == nullptr || kDock->kind() != Value::Kind::String ||
+                !kSize("hierarchyWidth", made.hierarchyWidth) || !kSize("inspectorWidth", made.inspectorWidth) ||
+                !kSize("dockHeight", made.dockHeight)) {
+                return std::nullopt;
+            }
+            made.name = *kName->text();
+            made.dock = *kDock->text();
+            if (preferences.layouts.size() < kMostSavedLayouts) {
+                preferences.layouts.push_back(std::move(made));
+            }
+        }
+    }
     if (const Value* editor = kParsed->find("editor"); editor != nullptr) {
         if (editor->kind() != Value::Kind::String) {
             return std::nullopt;
@@ -196,6 +229,19 @@ std::string writtenPreferences(const Preferences& preferences) {
     }
     if (!preferences.editor.empty()) {
         written.add("editor", Value::string(preferences.editor));
+    }
+    if (!preferences.layouts.empty()) {
+        Value layouts = Value::array();
+        for (const Layout& kLayout : preferences.layouts) {
+            Value layout = Value::object();
+            layout.add("name", Value::string(kLayout.name));
+            layout.add("hierarchyWidth", kSize(kLayout.hierarchyWidth));
+            layout.add("inspectorWidth", kSize(kLayout.inspectorWidth));
+            layout.add("dockHeight", kSize(kLayout.dockHeight));
+            layout.add("dock", Value::string(kLayout.dock));
+            layouts.push(std::move(layout));
+        }
+        written.add("layouts", std::move(layouts));
     }
     return document::write(written);
 }

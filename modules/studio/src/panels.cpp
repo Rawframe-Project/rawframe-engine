@@ -122,6 +122,13 @@ result::Status ShellParticipant::build() {
     // The toolbar's commands at its end: Cook before Play, so Play, Undo,
     // and Redo keep their places (D502).
     RAWFRAME_TRY_ASSIGN(const ui::Node kEnd, box(kToolbar, ui::Layout{.alignItems = ui::Align::Center, .gap = 6}, 0));
+    // First the layout chooser (SPEC-0051 Part 1, D911), the layouts'
+    // commands under it, so the others keep their places too.
+    held_.layoutChooser = ui::Node{};
+    if (gameOpen()) {
+        RAWFRAME_TRY_ASSIGN(held_.layoutChooser, box(kEnd, ui::Layout{.padding = {10, 2, 10, 2}}, kRow));
+        RAWFRAME_TRY(pressWords(held_.layoutChooser, kLayoutChooser, kText, 14));
+    }
     // The start screen has no game to cook, play, or undo in (D781); a
     // host joined cooks on its own machine (D885), its cook brought here
     // to be played (D905).

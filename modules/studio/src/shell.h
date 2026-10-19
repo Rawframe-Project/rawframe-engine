@@ -57,6 +57,10 @@ namespace rawframe::studio {
 
 inline constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"};
 inline constexpr diagnostics::EventIdentity kLayout{"studio", "studio_layout"};
+/// A layout chosen or saved (D911): its name and the bottom dock's tab.
+inline constexpr diagnostics::EventIdentity kLayoutChosen{"studio", "studio_layout_chosen"};
+/// The toolbar's layout chooser, by the words on it and the menu it opens.
+inline constexpr std::string_view kLayoutChooser = "Layouts";
 inline constexpr diagnostics::EventIdentity kStartScreen{"studio", "studio_start"};
 inline constexpr diagnostics::EventIdentity kSelection{"studio", "studio_selection"};
 inline constexpr diagnostics::EventIdentity kViewported{"studio", "studio_viewport"};
@@ -262,6 +266,16 @@ private:
     };
     /// The bottom dock showing `pane`.
     void showDock(Dock pane);
+    /// The six layouts Studio ships and the author's own (SPEC-0051 Part
+    /// 3, D911), and one put in place: the docks' sizes kept as the
+    /// preferences, the bottom dock's tab shown; and the docks as they are
+    /// saved as the author's next.
+    [[nodiscard]] std::vector<Layout> layouts() const;
+    void chooseLayout(const Layout& layout);
+    void saveLayout();
+    /// The bottom dock's tabs by the names the surface table places there.
+    [[nodiscard]] static std::string_view tabOf(Dock pane);
+    [[nodiscard]] static std::optional<Dock> dockOf(std::string_view tab);
 
     /// A line added to the Console, the oldest let go past its bound.
     void addConsoleLine(ConsoleLine line);

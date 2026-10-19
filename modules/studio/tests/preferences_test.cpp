@@ -79,3 +79,17 @@ RAWFRAME_TEST(KeysAndTheEditorAreKeptAsWritten) {
     RAWFRAME_EXPECT(!preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"keys":{"Play":["P"]}})")
                          .has_value());
 }
+
+RAWFRAME_TEST(SavedLayoutsAreKeptAsWritten) {
+    Preferences kept;
+    kept.layouts.push_back(
+        Layout{.name = "Saved 1", .hierarchyWidth = 280, .inspectorWidth = 440, .dockHeight = 300, .dock = "Network"});
+    const auto kRead = preferencesOf(writtenPreferences(kept));
+    RAWFRAME_EXPECT(kRead.has_value() && *kRead == kept);
+    // A layout without its dock, or not a layout, makes no preferences.
+    RAWFRAME_EXPECT(!preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"layouts":[)"
+                                   R"({"name":"A","hierarchyWidth":1,"inspectorWidth":1,"dockHeight":0}]})")
+                         .has_value());
+    RAWFRAME_EXPECT(
+        !preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"layouts":[3]})").has_value());
+}

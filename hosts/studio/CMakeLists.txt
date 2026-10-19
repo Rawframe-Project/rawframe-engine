@@ -24,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":4,\"scenes\":14,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":82,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":4,\"scenes\":14,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":83,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its menus and the palette's field (D777), its buttons, its
     # docks as scroll panes named by their headings or tabs in SPEC-0051's
@@ -39,7 +39,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_read_aloud PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no"
                          PASS_REGULAR_EXPRESSION
-                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button File\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 panel Dock edge\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 push button Console\na11y: 2 push button Network\na11y: 2 push button Environment\na11y: 2 push button Profiler\na11y: 2 push button Frame\na11y: 2 push button Changes\na11y: 2 push button Extension panels\na11y: 2 scroll pane Assets\n.*a11y: 3 entry new scene or import\n.*a11y: 3 push button level.scene\n.*a11y: 2 panel Inspector edge\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button File\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Layouts\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 panel Dock edge\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 push button Console\na11y: 2 push button Network\na11y: 2 push button Environment\na11y: 2 push button Profiler\na11y: 2 push button Frame\na11y: 2 push button Changes\na11y: 2 push button Extension panels\na11y: 2 scroll pane Assets\n.*a11y: 3 entry new scene or import\n.*a11y: 3 push button level.scene\n.*a11y: 2 panel Inspector edge\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
     # Studio typed into by a screen reader (D613): the new scene's entry
     # takes a name inserted through AT-SPI's EditableText as typing, the
     # field begun as a press begins it, and reads it back.
@@ -1303,6 +1303,28 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"studio_mode\"[^\n]*\"mode\":\"Terrain\",\"document\":\"field.terrain\".*\"code\":\"studio_mode\"[^\n]*\"mode\":\"Blockout\",\"document\":\"yard.blockout\".*\"code\":\"studio_mode\"[^\n]*\"mode\":\"Transform\",\"document\":\"level.scene\".*\"exit\":\"clean_stop\"")
+        # The preset layouts (D911, SPEC-0051 Part 3 and its conformance 3):
+        # each of the six chosen from the Window menu or the toolbar's
+        # chooser shows its bottom tab, one Part 2 places in the bottom dock;
+        # the docks then saved as the author's own, kept in the test's
+        # preferences.
+        add_test(NAME studio_layouts
+                 COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.preferences = {work}/studio.preferences"
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/runners/runners.game level.scene @level.scene
+                         @Window "@Animation layout" "until=studio_layout_chosen,layout=\"Animation\""
+                         @Window "@Materials and effects layout" "until=studio_layout_chosen,layout=\"Materials and effects\""
+                         @Window "@UI layout" "until=studio_layout_chosen,layout=\"UI\""
+                         @Layouts "@Network test layout" "until=studio_layout_chosen,layout=\"Network test\""
+                         @Layouts "@Profiling layout" "until=studio_layout_chosen,layout=\"Profiling\""
+                         @Window "@Scene layout" "until=studio_layout_chosen,layout=\"Scene\""
+                         @Window "@Save layout" "until=studio_layout_chosen,layout=\"Saved 1\""
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_layouts PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"layouts\": \\[[ \n]*{[ \n]*\"name\": \"Saved 1\".*\"code\":\"studio_layout_chosen\"[^\n]*\"layout\":\"Animation\",\"dock\":\"History\".*\"code\":\"studio_layout_chosen\"[^\n]*\"layout\":\"Materials and effects\",\"dock\":\"Assets\".*\"code\":\"studio_layout_chosen\"[^\n]*\"layout\":\"UI\",\"dock\":\"Assets\".*\"code\":\"studio_layout_chosen\"[^\n]*\"layout\":\"Network test\",\"dock\":\"Network\".*\"code\":\"studio_layout_chosen\"[^\n]*\"layout\":\"Profiling\",\"dock\":\"Profiler\".*\"code\":\"studio_layout_chosen\"[^\n]*\"layout\":\"Scene\",\"dock\":\"Assets\".*\"code\":\"studio_layout_chosen\"[^\n]*\"layout\":\"Saved 1\",\"dock\":\"Assets\".*\"exit\":\"clean_stop\"")
         # A tilemap painted in Studio (D861): a room beside a copy of Runners,
         # its sheet's tiles as rows and its grid drawn; tile 1 chosen and a
         # cell painted with it through the session's tilemap.paint (D860),

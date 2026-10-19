@@ -14,6 +14,23 @@
 
 namespace rawframe::studio {
 
+/// An arrangement of Studio's docks (SPEC-0051 Part 3, D911): the left
+/// dock's and the Inspector's widths, the bottom dock's height (nought for
+/// its share), and the bottom dock's tab shown, by its name. Never a mode
+/// or a second editor.
+struct Layout {
+    std::string name;
+    float hierarchyWidth = 360;
+    float inspectorWidth = 360;
+    float dockHeight = 0;
+    std::string dock = "Assets";
+
+    friend bool operator==(const Layout&, const Layout&) = default;
+};
+
+/// The most layouts an author saves beside the six Studio ships.
+inline constexpr std::size_t kMostSavedLayouts = 16;
+
 struct Preferences {
     float hierarchyWidth = 360;
     float inspectorWidth = 360;
@@ -28,6 +45,8 @@ struct Preferences {
     /// The command that opens a file at a line (`studio.editor`'s form);
     /// empty for the setting's or the default.
     std::string editor;
+    /// The layouts the author saved (D911), at most kMostSavedLayouts.
+    std::vector<Layout> layouts;
 
     friend bool operator==(const Preferences&, const Preferences&) = default;
 };

@@ -35,6 +35,10 @@ constexpr std::string_view kPalette = placed("Command palette", SurfaceKind::Com
 
 /// Studio's preferences, a dialog of its own with no button.
 constexpr std::string_view kPreferences = placed("Preferences", SurfaceKind::Dialog, "Window menu");
+/// The layouts' commands (D911): each its name and " layout", and the
+/// docks saved as the author's next.
+constexpr std::string_view kLayoutSuffix = " layout";
+constexpr std::string_view kSaveLayout = "Save layout";
 
 /// How many viewport modes the extensions may add: SPEC-0051's eight, less
 /// Studio's own in the surface table (D877).
@@ -146,8 +150,18 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
         RAWFRAME_TRY(pressWords(kButton, kMenu, kText, 14));
         menus_.emplace_back(kButton, std::string{kMenu});
     }
+    if (held_.layoutChooser != ui::Node{}) {
+        menus_.emplace_back(held_.layoutChooser, std::string{kLayoutChooser});
+    }
     commands_.push_back(Command{.name = std::string{kPalette}, .menu = "Window", .keys = kKeys(kPalette, {"Ctrl+K"})});
     commands_.push_back(Command{.name = std::string{kPreferences}, .menu = "Window", .keys = kKeys(kPreferences, {})});
+    // The layouts, where the surface table places "Docks and saved
+    // layouts".
+    for (const Layout& layout : layouts()) {
+        const std::string kName = layout.name + std::string{kLayoutSuffix};
+        commands_.push_back(Command{.name = kName, .menu = "Window", .keys = kKeys(kName, {})});
+    }
+    commands_.push_back(Command{.name = std::string{kSaveLayout}, .menu = "Window", .keys = kKeys(kSaveLayout, {})});
     commands_.push_back(Command{.name = std::string{kExport}, .menu = "File", .keys = kKeys(kExport, {})});
     commands_.push_back(Command{.name = std::string{kFrame}, .menu = "View", .keys = kKeys(kFrame, {"F"})});
     // At a host joined, the chosen entity claimed and let go (D884).
@@ -301,6 +315,21 @@ bool ShellParticipant::runCommand(std::string_view name) {
         say(shown_.viewMode + " view");
         return true;
     }
+    if (kCommand->name == kSaveLayout) {
+        saveLayout();
+        return true;
+    }
+    if (kCommand->menu == "Window" && kCommand->name.ends_with(kLayoutSuffix)) {
+        const std::vector<Layout> kLayoutsMade = layouts();
+        const auto kChosenLayout =
+            std::ranges::find(kLayoutsMade,
+                              std::string_view{kCommand->name}.substr(0, kCommand->name.size() - kLayoutSuffix.size()),
+                              &Layout::name);
+        if (kChosenLayout != kLayoutsMade.end()) {
+            chooseLayout(*kChosenLayout);
+        }
+        return true;
+    }
     if (kCommand->name == kPreferences) {
         closeExport();
         openPreferences();
@@ -363,11 +392,15 @@ void ShellParticipant::showMenu(std::size_t at) {
     static_cast<void>(tree_->setName(*popup, menus_[at].second));
     popup_ = *popup;
     menuOpen_ = at;
+    // The layout chooser lists the Window menu's layouts (D911).
+    const bool kChooser = menus_[at].second == kLayoutChooser;
     for (std::size_t each = 0; each < commands_.size(); ++each) {
-        if (commands_[each].menu != menus_[at].second) {
+        const Command& kCommand = commands_[each];
+        if (kChooser ? kCommand.menu != "Window" || !kCommand.name.ends_with(kLayoutSuffix)
+                     : kCommand.menu != menus_[at].second) {
             continue;
         }
-        auto line = row(*popup, lineOf(commands_[each]), kText, kRow, true);
+        auto line = row(*popup, lineOf(kCommand), kText, kRow, true);
         if (!line.has_value()) {
             return;
         }

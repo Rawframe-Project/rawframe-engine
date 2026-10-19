@@ -224,6 +224,10 @@ struct EditorsHeld {
     std::vector<std::pair<ui::Node, std::string>> modeButtons;
     std::string modeReturn;
     std::uint64_t modesChosen = 0;
+    /// The toolbar's layout chooser, and how many layouts were put in
+    /// place (D911).
+    ui::Node layoutChooser{};
+    std::uint64_t layoutsChosen = 0;
     /// The Extension panels tab, its pane, and its rows (D878).
     ui::Node panelsTab{};
     ui::Node panelsColumn{};
