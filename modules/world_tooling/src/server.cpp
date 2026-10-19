@@ -501,6 +501,14 @@ struct ToolingServer::State {
                 look.push(Value::real(kClicked->look[1]));
                 made.add("look", std::move(look));
                 made.add("fly", Value::real(kClicked->fly));
+                // Flown where it is drawn (D913).
+                if (kClicked->flights != 0) {
+                    Value flown = Value::object();
+                    flown.add("count", Value::integer(static_cast<std::int64_t>(kClicked->flights)));
+                    flown.add("eye", kPoint(kClicked->flownEye));
+                    flown.add("target", kPoint(kClicked->flownTarget));
+                    made.add("flown", std::move(flown));
+                }
             }
             // Where the pointer is, press or none (D468).
             if (kClicked.has_value() && kClicked->pointing) {

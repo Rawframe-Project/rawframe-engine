@@ -11,11 +11,13 @@
 // what each frame it drew holds (D842).
 
 #include "rawframe/composition/participant.h"
+#include "rawframe/view/flight.h"
 #include "rawframe/view/players.h"
 #include "rawframe/view/view.h"
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -125,6 +127,43 @@ public:
     }
     [[nodiscard]] const std::optional<Perspective>& looking() const noexcept {
         return view_;
+    }
+    /// Steered as an editor's viewport camera is (D913): what the input
+    /// asks gathered until the next `fly`, which moves the view it looks
+    /// through. Counted, with the view as flown, so an editor tells where
+    /// it was flown to.
+    [[nodiscard]] Steering& steering() noexcept {
+        return steering_;
+    }
+    void fly(double seconds, double height) noexcept {
+        if (!view_.has_value() || !steers(steering_)) {
+            steering_.turn = {};
+            steering_.pan = {};
+            steering_.orbit = {};
+            steering_.wheel = 0;
+            steering_.speedWheel = 0;
+            return;
+        }
+        view_ = view::flown(*view_, flight_, steering_, seconds, height);
+        steering_.turn = {};
+        steering_.pan = {};
+        steering_.orbit = {};
+        steering_.wheel = 0;
+        steering_.speedWheel = 0;
+        ++flights_;
+    }
+    /// The point orbited about put `distance` meters ahead, as far as what
+    /// it was told to look at.
+    void aim(double distance) noexcept {
+        if (std::isfinite(distance) && distance > 0.25) {
+            flight_.pivot = distance;
+        }
+    }
+    [[nodiscard]] std::uint64_t flights() const noexcept {
+        return flights_;
+    }
+    [[nodiscard]] const Flight& flight() const noexcept {
+        return flight_;
     }
     /// A point the preview marks, where an author chose something (D464),
     /// drawn as three axes there; none for none. Counted, so a reader tells
@@ -335,6 +374,9 @@ public:
 
 private:
     std::optional<Perspective> view_;
+    Steering steering_;
+    Flight flight_;
+    std::uint64_t flights_ = 0;
     std::optional<Ray> lastClick_;
     std::uint64_t clicks_ = 0;
     std::uint16_t clickModifiers_ = 0;

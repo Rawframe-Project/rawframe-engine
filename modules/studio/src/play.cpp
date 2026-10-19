@@ -114,7 +114,7 @@ result::Status privateDirectory(const std::filesystem::path& path) {
     }
 #if !defined(_WIN32)
     // Made by another user first, it is theirs: never written into (D462).
-    struct stat held{};
+    struct stat held {};
     if (::lstat(path.c_str(), &held) != 0 || held.st_uid != ::getuid()) {
         return failed("the play directory is another user's");
     }
@@ -223,7 +223,9 @@ result::Status Play::launch() {
                                      // Layers replicated, so the client hides
                                      // one (D791); the client is told so too.
                                      {"kest.replicate_layers", "true"}}) +
-                             (settings_.edited ? "world.edited = true\n" : "")));
+                             (settings_.edited ? "world.edited = true\nreplication.interest = false\n"
+                                                 "replication.egress_bytes_per_second = 67108864\n"
+                                               : "")));
     // Played in Studio's viewport (D789, D790): its window kept hidden at
     // the viewport's size, so a point there is the same point here, and
     // each picture streamed; those settings Studio's, not the game's.
@@ -246,14 +248,17 @@ result::Status Play::launch() {
                          "render.width",
                          "render.height",
                          "render.stream",
-                         "preview.views"});
+                         "preview.views",
+                         "preview.flight"});
         const std::string kWidth = std::to_string((*settings_.viewport)[0]);
         const std::string kHeight = std::to_string((*settings_.viewport)[1]);
         viewported = "window.visible = false\nwindow.width = " + kWidth + "\nwindow.height = " + kHeight +
                      "\nrender.offscreen = true\nrender.read_every = 1\nrender.width = " + kWidth +
                      "\nrender.height = " + kHeight + "\nrender.stream = " + (kAt / "picture").string() +
                      // Split three ways at most, in the viewport only (D797).
-                     "\npreview.views = 3\n";
+                     "\npreview.views = 3\n" +
+                     // Edited, its camera flown as an editor's (D913).
+                     (settings_.edited ? "preview.flight = true\n" : "");
     }
     RAWFRAME_TRY(written(kAt / "client.conf",
                          settingsOf(kWithContent(given),

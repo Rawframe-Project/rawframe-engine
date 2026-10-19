@@ -320,6 +320,27 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
 /// they were last read (D469), told the preview as any view is: the
 /// view, or null where nothing moved.
 Value Preview::viewMovedBy(const Value& clicked, authoring::AuthoredScene* previewed) {
+    // Flown where it is drawn (D913): where it is now is the scene's view,
+    // which it already looks through, so it is not told back.
+    if (const Value* kFlown = clicked.find("flown"); kFlown != nullptr && previewed != nullptr) {
+        const Value* kCount = kFlown->find("count");
+        const std::int64_t kFlights = kCount != nullptr ? kCount->integer().value_or(0) : 0;
+        const auto kEye = pointOf(kFlown->find("eye"));
+        const auto kTarget = pointOf(kFlown->find("target"));
+        if (kFlights != flightsRead_ && kEye.has_value() && kTarget.has_value()) {
+            flightsRead_ = kFlights;
+            motionRead_ = motionOf(clicked);
+            const authoring::SceneView kFlownView{.eye = *kEye,
+                                                  .target = *kTarget,
+                                                  .fieldOfView =
+                                                      previewed->view().value_or(authoring::SceneView{}).fieldOfView};
+            if (!previewed->setView(kFlownView).has_value()) {
+                return Value{};
+            }
+            previewed_ = previewed->view();
+            return viewOf(*previewed);
+        }
+    }
     const ViewMotion kNow = motionOf(clicked);
     const ViewMotion kChange = motionSince(kNow, motionRead_);
     motionRead_ = kNow;

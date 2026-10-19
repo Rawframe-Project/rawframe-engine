@@ -553,6 +553,14 @@ void ShellParticipant::attachPreview() {
     if (kAttached.view.has_value()) {
         view_ = kAttached.view;
     }
+    // Edited, it is seen through the editor's camera, on the whole scene
+    // where the scene keeps no view of its own (D913).
+    if (previewing_ && playing_.has_value() && playing_->edited() && !view_.has_value()) {
+        const Answered kFramed = answeredOf(ask(frameRecord(next(), scene_)));
+        if (kFramed.done) {
+            view_ = kFramed.view;
+        }
+    }
     showViewText();
     say(kAttached.done ? (previewing_ ? "previewing " + scene_ : "no preview") : kAttached.message);
     if (previewing_) {

@@ -805,7 +805,8 @@ private:
     }
 
     /// `frame` (D792): the view turned on what is chosen, as `view` sets
-    /// it; refused while nothing chosen stands anywhere.
+    /// it, or with nothing chosen on the whole scene, as an editor first
+    /// shows one (D913); refused while none of it stands anywhere.
     result::Result<Value> framed(const authoring::SessionRecord& record) {
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -813,6 +814,13 @@ private:
         for (const base::Bits128 kChosen : open->document->selection()) {
             if (const auto kAt = standingOf(open->document->scene(), kChosen); kAt.has_value()) {
                 points.push_back(*kAt);
+            }
+        }
+        if (open->document->selection().empty()) {
+            for (const scene::SceneEntity& kEntity : open->document->scene().entities) {
+                if (const auto kAt = standingOf(open->document->scene(), kEntity.id); kAt.has_value()) {
+                    points.push_back(*kAt);
+                }
             }
         }
         if (points.empty()) {

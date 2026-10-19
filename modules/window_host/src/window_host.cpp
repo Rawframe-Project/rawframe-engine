@@ -411,6 +411,8 @@ result::Status WindowHost::start(window::Windows& windows) {
         // The views a preview of it may be split into, which an editor
         // playing it in its viewport allows (D797).
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kViews, kConfiguration->unsignedInteger("preview.views", 1));
+        // An editor's viewport, its camera flown here (D913).
+        RAWFRAME_TRY_ASSIGN(flying_, kConfiguration->truth("preview.flight", false));
         if (settings_.preview != nullptr) {
             settings_.preview->allow(static_cast<std::size_t>(std::min<std::uint64_t>(kViews, 4)));
         }
@@ -526,6 +528,10 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
                 windows.requestMode(window_, kWhole ? window::Mode::Windowed : window::Mode::BorderlessFullscreen));
             continue;
         }
+        // A flown preview's input is its camera's alone (D913).
+        if (fly(*event)) {
+            continue;
+        }
         bridge_->take(*event);
         // Files dropped from outside, for an editor (D802).
         if (event->kind == window::EventKind::FilesDropped) {
@@ -626,6 +632,14 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     }
     if (closing) {
         return end();
+    }
+    // The flown preview's view moved by what the input asked, at the
+    // frame's pace (D913).
+    if (flying_ && settings_.preview != nullptr) {
+        const execution::MonotonicInstant kNow = clock_.now();
+        const double kSeconds = flown_.has_value() ? static_cast<double>((kNow - *flown_).nanoseconds) / 1e9 : 0.0;
+        flown_ = kNow;
+        settings_.preview->fly(kSeconds, static_cast<double>(asked_.height));
     }
     surfaces_.update(windows);
     if (const auto kState = windows.state(window_); kState.has_value()) {
@@ -734,6 +748,121 @@ void WindowHost::followAccess(window::Windows& windows) {
     // A platform that refuses an update leaves the UI as it was last read;
     // the game plays on.
     static_cast<void>(access_.update());
+}
+
+bool WindowHost::fly(const window::Event& event) {
+    if (!flying_ || settings_.preview == nullptr || !settings_.preview->looking().has_value()) {
+        return false;
+    }
+    view::Steering& steering = settings_.preview->steering();
+    const auto kHeld = [](std::uint16_t modifiers, window::Modifier modifier) {
+        return (modifiers & static_cast<std::uint16_t>(modifier)) != 0;
+    };
+    switch (event.kind) {
+    case window::EventKind::ButtonDown: {
+        const std::array<float, 2> kAt{event.pointer.position.x, event.pointer.position.y};
+        if (event.pointer.button == window::MouseButton::Right) {
+            turning_ = kAt;
+            return true;
+        }
+        if (event.pointer.button == window::MouseButton::Middle) {
+            panning_ = kAt;
+            return true;
+        }
+        if (event.pointer.button == window::MouseButton::Left &&
+            kHeld(event.pointer.modifiers, window::Modifier::Alt)) {
+            altOrbiting_ = kAt;
+            return true;
+        }
+        // A left press picks and drags, as it does in any preview.
+        return false;
+    }
+    case window::EventKind::ButtonUp:
+        if (event.pointer.button == window::MouseButton::Right) {
+            turning_.reset();
+            // The keys fly only while it is held.
+            steering = view::Steering{.turn = steering.turn, .pan = steering.pan, .orbit = steering.orbit};
+            return true;
+        }
+        if (event.pointer.button == window::MouseButton::Middle) {
+            panning_.reset();
+            return true;
+        }
+        if (event.pointer.button == window::MouseButton::Left && altOrbiting_.has_value()) {
+            altOrbiting_.reset();
+            return true;
+        }
+        return false;
+    case window::EventKind::CursorMoved: {
+        const std::array<float, 2> kAt{event.pointer.position.x, event.pointer.position.y};
+        const auto kCarry = [&kAt](std::optional<std::array<float, 2>>& from, std::array<double, 2>& into) {
+            if (from.has_value()) {
+                into[0] += kAt[0] - (*from)[0];
+                into[1] += kAt[1] - (*from)[1];
+                from = kAt;
+            }
+        };
+        kCarry(turning_, steering.turn);
+        kCarry(panning_, steering.pan);
+        kCarry(altOrbiting_, steering.orbit);
+        // The pointer still points, for the handle lit under it.
+        return false;
+    }
+    case window::EventKind::Wheel:
+        // The window's wheel turned away is positive; toward the author
+        // counts so here. With the right button held, it sets the speed.
+        (turning_.has_value() ? steering.speedWheel : steering.wheel) += -event.motion.y;
+        return true;
+    case window::EventKind::KeyDown:
+    case window::EventKind::KeyUp: {
+        const bool kDown = event.kind == window::EventKind::KeyDown;
+        constexpr std::uint16_t kW = 0x1A;
+        constexpr std::uint16_t kA = 0x04;
+        constexpr std::uint16_t kS = 0x16;
+        constexpr std::uint16_t kD = 0x07;
+        constexpr std::uint16_t kQ = 0x14;
+        constexpr std::uint16_t kE = 0x08;
+        constexpr std::uint16_t kLeftShift = 0xE1;
+        constexpr std::uint16_t kRightShift = 0xE5;
+        bool* held = nullptr;
+        switch (event.key.usage) {
+        case kW:
+            held = &steering.forward;
+            break;
+        case kA:
+            held = &steering.left;
+            break;
+        case kS:
+            held = &steering.back;
+            break;
+        case kD:
+            held = &steering.right;
+            break;
+        case kQ:
+            held = &steering.down;
+            break;
+        case kE:
+            held = &steering.up;
+            break;
+        case kLeftShift:
+        case kRightShift:
+            steering.faster = kDown;
+            return turning_.has_value();
+        default:
+            return false;
+        }
+        // Flown only while the right button turns, else the key is the
+        // editor's (W, E, R choose a tool).
+        if (!turning_.has_value()) {
+            *held = false;
+            return false;
+        }
+        *held = kDown;
+        return true;
+    }
+    default:
+        return false;
+    }
 }
 
 void WindowHost::moveView(const window::Event& event) {

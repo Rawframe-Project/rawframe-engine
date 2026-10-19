@@ -119,6 +119,10 @@ public:
             kEgress > (std::uint64_t{1} << 30U) ? 0 : kEgress * kRate.seconds * kPeriod / kRate.ticks;
         RAWFRAME_TRY_ASSIGN(const bool kCapture,
                             captureAsked(context.configuration(), "replication.divergence_capture"));
+        // Every entity to every viewer, whatever the game's interest, where
+        // the World is an editor's (D913): what is edited is far from any
+        // player.
+        RAWFRAME_TRY_ASSIGN(const bool kInterest, context.configuration().truth("replication.interest", true));
         if (kPerPublish < 64) {
             return missing(
                 "replication.egress_bytes_per_second allows at least 64 bytes a publish, and at most 1 GiB/s");
@@ -132,7 +136,7 @@ public:
                     .playerComponents = {plan->playerComponents().begin(), plan->playerComponents().end()},
                     .input = plan->input(),
                     .perception = plan->perceivedInput(),
-                    .interest = plan->interest(),
+                    .interest = kInterest ? plan->interest() : std::optional<InterestSettings>{},
                     .units = plan->streamedUnits(),
                     .maximumMapped = plan->maximumMapped(),
                     .statePeriod = static_cast<std::uint32_t>(kPeriod),

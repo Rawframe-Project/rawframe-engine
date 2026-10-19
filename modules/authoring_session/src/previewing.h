@@ -163,6 +163,9 @@ private:
     std::optional<Point> mark_;
     /// The preview's wheel and right-drag totals as last read (D469, D472).
     ViewMotion motionRead_;
+    /// How many times the preview had flown its own camera when last read
+    /// (D913).
+    std::int64_t flightsRead_ = 0;
     /// The part of it drawn lit: 0 none, 1 to 3 an axis, 4 the ring (D468).
     std::uint8_t lit_ = 0;
 };

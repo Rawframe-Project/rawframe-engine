@@ -56,6 +56,11 @@ struct Clicked {
     /// wheel's detents (D472).
     std::array<double, 2> look{};
     double fly = 0;
+    /// Where the preview's own camera was flown to (D913): how many times,
+    /// and its eye and the point ahead it orbits about; nought before.
+    std::uint64_t flights = 0;
+    std::array<double, 3> flownEye{};
+    std::array<double, 3> flownTarget{};
 };
 
 /// One step of the frame a preview last drew (D842): a pass by its

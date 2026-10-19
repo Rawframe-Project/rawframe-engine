@@ -20,6 +20,10 @@ namespace rawframe::world_replication {
 ///                                    every tick (0)
 ///   replication.egress_bytes_per_second
 ///                                    state bytes per connection (65536)
+///   replication.interest             false sends every entity to every
+///                                    connection, whatever the game's
+///                                    interest, as an editor's World does
+///                                    (D913) (true)
 ///
 /// `rawframe.replication.bots` plays headless clients against a server,
 /// each with its own mirror World, steering its player at random:

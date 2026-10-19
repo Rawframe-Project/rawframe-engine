@@ -43,6 +43,7 @@
 #endif
 
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <numbers>
 #include <optional>
@@ -108,6 +109,9 @@ public:
             return false;
         }
         camera.look(kView);
+        // Orbited about what it was told to look at (D913).
+        camera.aim(
+            std::hypot(look->target[0] - look->eye[0], look->target[1] - look->eye[1], look->target[2] - look->eye[2]));
         return true;
     }
     bool mark(const std::optional<std::array<double, 3>>& at, std::uint8_t lit) override {
@@ -133,7 +137,8 @@ public:
         const std::optional<view::Ray>& kRay = camera.lastClick();
         const std::optional<view::Ray>& kPointing = camera.pointing();
         if (!kRay.has_value() && !kPointing.has_value() && camera.wheel() == 0 && camera.fly() == 0 &&
-            camera.orbit() == std::array<double, 2>{} && camera.look() == std::array<double, 2>{}) {
+            camera.orbit() == std::array<double, 2>{} && camera.look() == std::array<double, 2>{} &&
+            camera.flights() == 0) {
             return std::nullopt;
         }
         // A thousand metres along the press's direction: past anything a
@@ -145,6 +150,11 @@ public:
                                     .orbit = camera.orbit(),
                                     .look = camera.look(),
                                     .fly = camera.fly()};
+        if (camera.flights() != 0 && camera.looking().has_value()) {
+            made.flights = camera.flights();
+            made.flownEye = camera.looking()->eye;
+            made.flownTarget = view::pivotOf(*camera.looking(), camera.flight());
+        }
         if (kRay.has_value()) {
             made.origin = kRay->origin;
             made.toward = {kRay->direction[0] * kReach, kRay->direction[1] * kReach, kRay->direction[2] * kReach};

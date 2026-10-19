@@ -145,6 +145,17 @@ private:
     /// Where the pointer was while the right button is held in a preview,
     /// so its moves orbit the preview's view (D469); none while it is not.
     std::optional<std::array<float, 2>> orbiting_;
+    /// Flown as an editor's viewport camera (D913), where `preview.flight`
+    /// says so: the input is the preview's, the game hears none of it.
+    /// Where the pointer was while the right button turns, the middle
+    /// pans, or Alt and the left orbit; when it was last flown.
+    bool flying_ = false;
+    std::optional<std::array<float, 2>> turning_;
+    std::optional<std::array<float, 2>> panning_;
+    std::optional<std::array<float, 2>> altOrbiting_;
+    std::optional<execution::MonotonicInstant> flown_;
+    /// What the input asks of a flown preview's view; whether it took it.
+    bool fly(const window::Event& event);
     /// The modifiers last told while a preview looks, for the wheel's
     /// records, which name none (D472).
     std::uint16_t modifiers_ = 0;
