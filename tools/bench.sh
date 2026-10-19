@@ -62,6 +62,19 @@ quieter() {
         waited=$((waited + 5))
     done
 }
+# Whether the machine is loaded past its processors now: a measurement
+# past its bounds taken so, after the waits above ran out, says what it
+# measured but is not judged (D908). At loads of 370 to 440 on 24
+# processors, other projects' and the trees' together, the plaza and the
+# crowd were measured past SPEC-0013's ceilings three times each while
+# alone they keep well inside them.
+overloaded() {
+    awk -v most="$(nproc 2>/dev/null || echo 2)" '{ exit !($1 >= most) }' /proc/loadavg 2>/dev/null
+}
+unjudged() {
+    printf 'bench %s: %s; not judged, measured at the load average %s on %s processors\n' "$1" "$2" \
+        "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || echo unknown)" "$(nproc 2>/dev/null || echo 2)"
+}
 games=(arena runners plaza crowd)
 for game in "${games[@]}"; do
     {
@@ -129,7 +142,11 @@ if mine and p95 > 2 * statistics.median(mine) + 0.5:
                 quieter "$game" "$verdict"
                 continue
             fi
-            printf 'bench %s: %s\n' "$game" "$verdict"; failures=$((failures + 1))
+            if overloaded; then
+                unjudged "$game" "$verdict"
+            else
+                printf 'bench %s: %s\n' "$game" "$verdict"; failures=$((failures + 1))
+            fi
         else
             printf '%s\t%s\t%s\t%s\t64\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$commit" "$machine" \
                 "$game" "$ticks" "$p50" "$p95" "$p99" "$kest95" >>"$results"
@@ -142,7 +159,8 @@ done
 # past its bounds is measured up to twice more, each once the machine is
 # quieter, and fails only if past them each time, as each game's is above
 # (D504, D509, D896): the checkpoint's hold is one capture's, which one
-# preemption puts past its 5 ms.
+# preemption puts past its 5 ms. Past them on a machine still loaded past
+# its processors, it is not judged (D908).
 held() {
     "$2"
     for _ in 1 2; do
@@ -152,6 +170,10 @@ held() {
         quieter "$1" "$verdict"
         "$2"
     done
+    if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]] && overloaded; then
+        unjudged "$1" "$verdict"
+        return
+    fi
     printf 'bench %s: %s\n' "$1" "$verdict"
     if [ "$mode" = check ] && [[ "$verdict" == FAIL* ]]; then
         failures=$((failures + 1))
