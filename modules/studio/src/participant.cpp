@@ -1,4 +1,7 @@
 #include "generated/studio_font.h"
+#include "generated/studio_font_mono.h"
+#include "generated/studio_font_strong.h"
+#include "generated/studio_icons.h"
 #include "rawframe/authoring_session/attach.h"
 #include "rawframe/authoring_session/game.h"
 #include "rawframe/material/instance.h"
@@ -147,12 +150,27 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         RAWFRAME_TRY_ASSIGN(seat_, context.capability(ui::kAccessSeat));
     }
     RAWFRAME_TRY_ASSIGN(tree_, ui::Tree::create());
-    // Studio's own font, embedded, sanitized as the cook sanitizes a
+    // Studio's own fonts, embedded, sanitized as the cook sanitizes a
     // game's (ADR-0049), never an unchecked font in the tree.
-    const std::span<const std::byte> kFontBytes = std::as_bytes(std::span{kStudioFont});
-    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kSanitized, font_import::sanitize(kFontBytes));
-    RAWFRAME_TRY_ASSIGN(font_, tree_->addFont(kSanitized));
+    const auto kAdded = [this](std::span<const std::byte> bytes) -> result::Result<ui::Font> {
+        RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kSanitized, font_import::sanitize(bytes));
+        return tree_->addFont(kSanitized);
+    };
+    RAWFRAME_TRY_ASSIGN(font_, kAdded(std::as_bytes(std::span{kStudioFont})));
+    RAWFRAME_TRY_ASSIGN(strongFont_, kAdded(std::as_bytes(std::span{kStudioStrongFont})));
+    RAWFRAME_TRY_ASSIGN(monoFont_, kAdded(std::as_bytes(std::span{kStudioMonoFont})));
     RAWFRAME_TRY(tree_->setDefaultFont(font_));
+    // Its icons, one texture each (D915).
+    constexpr std::size_t kIconBytes = std::size_t{kIconSide} * kIconSide * 4;
+    static_assert(sizeof(kStudioIcons) == kIconBytes * kIconCount, "the icons are as icons.h names them");
+    icons_.clear();
+    for (std::size_t each = 0; each < kIconCount; ++each) {
+        texture::Texture made{.format = texture::Format::Rgba8Srgb};
+        const auto* kFirst = reinterpret_cast<const std::byte*>(kStudioIcons.data()) + (each * kIconBytes);
+        made.levels.push_back(texture::Level{
+            .width = kIconSide, .height = kIconSide, .bytes = std::vector<std::byte>{kFirst, kFirst + kIconBytes}});
+        icons_.push_back(std::make_shared<const texture::Texture>(std::move(made)));
+    }
     return build();
 }
 
@@ -586,6 +604,10 @@ void ShellParticipant::resize(std::uint32_t width, std::uint32_t height, bool /*
 }
 
 std::shared_ptr<const texture::Texture> ShellParticipant::image(std::uint64_t id) const {
+    // An icon (D915).
+    if (id >= look::kIconImageBase && id < look::kIconImageBase + icons_.size()) {
+        return icons_[id - look::kIconImageBase];
+    }
     // The played game's picture, in the viewport (D789).
     if (id == kViewportImage) {
         return inViewport_.picture;

@@ -67,6 +67,10 @@ bool ShellParticipant::beforePress() {
 }
 
 void ShellParticipant::pressOn(ui::Node node, bool moving) {
+    // The toolbar's own (D915).
+    if (pressFrame(node)) {
+        return;
+    }
     // A graph's node on the canvas stands for its row (D819), as does a
     // blockout's footprint, which a drag then moves (D852), and a mark on a
     // clip's timeline, moved in time by a drag (D890).

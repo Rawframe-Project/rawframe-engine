@@ -94,7 +94,7 @@ void ShellParticipant::startPlaying(bool edited) {
         say("showing " + scene_);
         return;
     }
-    static_cast<void>(pressWords(playNode_, "Stop", kText, 14));
+    relabel(playNode_, "Stop", Icon::Stop);
     say("starting the game");
 }
 
@@ -169,7 +169,7 @@ void ShellParticipant::stopPlaying() {
     playing_->stop();
     stopping_ = std::move(playing_);
     playing_.reset();
-    static_cast<void>(pressWords(playNode_, "Play", kText, 14));
+    relabel(playNode_, "Play", Icon::Play);
     say("game stopped");
 }
 
@@ -200,7 +200,7 @@ void ShellParticipant::cookOrStop() {
         return;
     }
     cooking_ = kId;
-    static_cast<void>(pressWords(cookNode_, "Stop", kText, 14));
+    relabel(cookNode_, "Stop");
     say("cooking");
 }
 
@@ -236,7 +236,7 @@ void ShellParticipant::hearCookLine(const std::string& line) {
         break;
     }
     cooking_.reset();
-    static_cast<void>(pressWords(cookNode_, "Cook", kText, 14));
+    relabel(cookNode_, "Cook");
     // Each source as the cook left it (D799), its thumbnail from this cook
     // (D801).
     listSources();

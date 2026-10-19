@@ -31,6 +31,7 @@
 #include "rawframe/world_tooling/forwarding.h"
 #include "records.h"
 #include "rows.h"
+#include "theme.h"
 #include "viewing.h"
 
 #include <algorithm>
@@ -100,19 +101,20 @@ inline constexpr diagnostics::EventIdentity kSearched{"studio", "studio_searched
 /// before it stops Studio, however slowly frames come (D489).
 inline constexpr diagnostics::EventIdentity kSaid{"studio", "studio_said"};
 
-/// Studio's colors, 0xRRGGBBAA: the window behind everything, a panel, a
-/// row, and the header.
-inline constexpr std::uint32_t kBackground = 0x1E1F24FFU;
-inline constexpr std::uint32_t kPanel = 0x2A2C33FFU;
-inline constexpr std::uint32_t kRow = 0x3A3D47FFU;
-inline constexpr std::uint32_t kChosen = 0x4A6FA5FFU;
-inline constexpr std::uint32_t kField = 0x23252BFFU;
-inline constexpr std::uint32_t kEditing = 0x1A1C21FFU;
-inline constexpr std::uint32_t kHeaderFill = 0x30343FFFU;
-inline constexpr std::uint32_t kText = 0xE6E8EEFFU;
-inline constexpr std::uint32_t kQuiet = 0x9AA0ADFFU;
+/// Studio's colors, 0xRRGGBBAA, the design's (theme.h, D915): the window
+/// behind everything, a panel, a row, and the header.
+inline constexpr std::uint32_t kBackground = look::kWindowFill;
+inline constexpr std::uint32_t kPanel = look::kPanelFill;
+/// A row is clear until chosen (D915); a button is raised (button()).
+inline constexpr std::uint32_t kRow = 0x00000000U;
+inline constexpr std::uint32_t kChosen = look::kSelected;
+inline constexpr std::uint32_t kField = look::kWellFill;
+inline constexpr std::uint32_t kEditing = 0x0B0C0FFFU;
+inline constexpr std::uint32_t kHeaderFill = look::kBarFill;
+inline constexpr std::uint32_t kText = look::kInk;
+inline constexpr std::uint32_t kQuiet = look::kLabelInk;
 /// Words that warn: a chord two commands share (D782).
-inline constexpr std::uint32_t kWarning = 0xE8B04AFFU;
+inline constexpr std::uint32_t kWarning = look::kWarn;
 
 /// The shell: a session on the game, and the UI that shows it.
 class ShellParticipant final : public composition::Participant, public ui::UiFrames {
@@ -136,6 +138,50 @@ public:
 private:
     /// A box of `color` as `layout` places it under `parent`, if any.
     result::Result<ui::Node> box(std::optional<ui::Node> parent, const ui::Layout& layout, std::uint32_t color);
+
+    /// The frame's parts as the design draws them (frame.cpp, D915): an
+    /// icon button, lit while `on`; a button with words and an icon; a
+    /// button relabeled in place; a separator; a tab and its strip; the
+    /// title row with the mark.
+    result::Result<ui::Node> iconButton(ui::Node parent, Icon which, std::string_view name, bool on = false);
+    void setIconButton(ui::Node button, bool on, bool enabled = true);
+    result::Result<ui::Node>
+    textButton(ui::Node parent, std::optional<Icon> which, std::string_view text, ButtonKind kind = ButtonKind::Normal);
+    void relabel(ui::Node button, std::string_view text, std::optional<Icon> which = std::nullopt);
+    result::Status separator(ui::Node parent);
+    result::Result<ui::Node> tab(ui::Node strip, std::string_view text, bool on = false);
+    void setTab(ui::Node tab, bool on);
+    result::Result<ui::Node> tabStrip(ui::Node parent);
+    result::Result<ui::Node> titleRow(ui::Node root);
+    /// A dock's scrolling column under its tabs, named for assistive
+    /// technology.
+    result::Result<ui::Node> dockColumn(ui::Node parent, std::string_view name);
+    /// The title row's middle: the game, and the document open.
+    void showTitle();
+    /// A Hierarchy row as the design's (D915): indented `depth` steps, a
+    /// chevron where it has children, its kind's icon, and its name.
+    result::Result<ui::Node> entityRow(ui::Node column,
+                                       std::string_view label,
+                                       std::size_t depth,
+                                       bool parent,
+                                       Icon which,
+                                       std::uint32_t iconInk,
+                                       std::uint32_t ink);
+    /// The toolbar under the title row and the status bar (D915).
+    result::Status toolbar(ui::Node root);
+    result::Status statusBar(ui::Node root);
+    /// The toolbar's lit buttons as Studio's state has them now.
+    void showToolbar();
+    /// A press on the toolbar's tools, World, snaps, 3D and 2D, players, or
+    /// a command's button, done; whether it was one.
+    bool pressFrame(ui::Node node);
+
+    /// An icon `side` pixels square under `parent`, tinted `color`
+    /// (D915); it takes no presses of its own.
+    result::Result<ui::Node> icon(ui::Node parent, Icon which, std::uint32_t color, float side = 16);
+    /// Words in Studio's strong weight, and in its fixed-width face.
+    result::Status strongWords(ui::Node node, std::string_view text, std::uint32_t color, float size = look::kBodySize);
+    result::Status monoWords(ui::Node node, std::string_view text, std::uint32_t color, float size = look::kLabelSize);
 
     /// Words on `node`, in Studio's font.
     result::Status words(ui::Node node, std::string_view text, std::uint32_t color, float size = 15);
@@ -292,7 +338,9 @@ private:
 
     /// The commands the window's buttons do (D777), then a button in `bar`
     /// for each menu that has any, and the palette's field after them.
-    result::Status showMenus(ui::Node bar);
+    /// The menus in `bar`, and the palette's field at `searchAt`, else
+    /// after them.
+    result::Status showMenus(ui::Node bar, std::optional<ui::Node> searchAt = std::nullopt);
 
     /// Does the command named `name`; false when there is none.
     bool runCommand(std::string_view name);
@@ -1155,6 +1203,11 @@ private:
     std::uint64_t components_ = 0;
     std::string title_;
     ui::Font font_{};
+    /// The strong weight and the fixed-width face beside it (D915), and
+    /// the icons, each a texture handed by its image key.
+    ui::Font strongFont_{};
+    ui::Font monoFont_{};
+    std::vector<std::shared_ptr<const texture::Texture>> icons_;
     std::uint64_t records_ = 0;
     std::uint64_t framesDrawn_ = 0;
     diagnostics::Emitter emitter_;

@@ -70,9 +70,19 @@ void ShellParticipant::showModes() {
         // quiet: choosing it says so.
         const auto kContent = std::ranges::find(kContentModes, kMode, &std::pair<std::string_view, Listed>::first);
         const bool kHas = kContent == kContentModes.end() || std::ranges::contains(listed_, kContent->second);
-        auto made = box(held_.modePalette, ui::Layout{.padding = {8, 4, 8, 4}}, kMode == active ? kChosen : kRow);
-        if (!made.has_value() || !pressWords(*made, kMode, kHas ? kText : kQuiet, 13).has_value()) {
+        // Each by its icon (D915), an extension's its puzzle piece.
+        const Icon kIcon = kMode == "Transform"  ? Icon::Move
+                           : kMode == "Blockout" ? Icon::Blockout
+                           : kMode == "Terrain"  ? Icon::Terrain
+                           : kMode == "Tiles"    ? Icon::Tiles
+                           : kMode == "Scatter"  ? Icon::Scatter
+                                                 : Icon::Puzzle;
+        auto made = iconButton(held_.modePalette, kIcon, kMode, kMode == active);
+        if (!made.has_value()) {
             return;
+        }
+        if (!kHas) {
+            setIconButton(*made, false, false);
         }
         held_.modeButtons.emplace_back(*made, kMode);
     }

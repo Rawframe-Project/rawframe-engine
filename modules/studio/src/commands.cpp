@@ -88,11 +88,11 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 3> kModes = 
     {{"Lit", "lit"}, {"Unlit", "unlit"}, {"Normals", "normals"}}};
 
 /// What the palette's field reads while it does not hold the keyboard.
-constexpr std::string_view kPaletteHint = "commands  Ctrl+K";
+constexpr std::string_view kPaletteHint = "Search commands, assets, entities    Ctrl K";
 
 } // namespace
 
-result::Status ShellParticipant::showMenus(ui::Node bar) {
+result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node> searchAt) {
     commands_.clear();
     menus_.clear();
     // A command's keys are its own unless the preferences give it others
@@ -146,8 +146,8 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
              }))) {
             continue;
         }
-        RAWFRAME_TRY_ASSIGN(const ui::Node kButton, box(bar, ui::Layout{.shrink = 0, .padding = {8, 3, 8, 3}}, 0));
-        RAWFRAME_TRY(pressWords(kButton, kMenu, kText, 14));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kButton, box(bar, ui::Layout{.shrink = 0, .padding = {9, 9, 4, 4}}, 0));
+        RAWFRAME_TRY(pressWords(kButton, kMenu, look::kSoftInk, look::kBodySize));
         menus_.emplace_back(kButton, std::string{kMenu});
     }
     if (held_.layoutChooser != ui::Node{}) {
@@ -224,11 +224,22 @@ result::Status ShellParticipant::showMenus(ui::Node bar) {
     }
     // The palette's field, as a field named "commands" is read (D575).
     RAWFRAME_TRY_ASSIGN(const ui::Node kSearch, tree_->addEditable(++keys_));
-    RAWFRAME_TRY(tree_->setLayout(
-        kSearch, ui::Layout{.width = ui::pixels(220), .height = ui::pixels(22), .shrink = 0, .padding = {6, 2, 6, 2}}));
-    RAWFRAME_TRY(tree_->setLook(kSearch, ui::Look{.fill = kField, .radius = 3}));
-    RAWFRAME_TRY(tree_->attach(bar, kSearch));
-    RAWFRAME_TRY(words(kSearch, kPaletteHint, kQuiet, 14));
+    RAWFRAME_TRY(tree_->setLayout(kSearch,
+                                  ui::Layout{.width = ui::pixels(300),
+                                             .height = ui::pixels(24),
+                                             .alignItems = ui::Align::Center,
+                                             .shrink = 0,
+                                             .padding = {28, 8, 0, 0},
+                                             .border = {1, 1, 1, 1}}));
+    RAWFRAME_TRY(tree_->setLook(kSearch, ui::Look{.fill = look::kBarFill, .borderColor = look::kEdge, .radius = 4}));
+    RAWFRAME_TRY(tree_->attach(searchAt.value_or(bar), kSearch));
+    RAWFRAME_TRY(words(kSearch, kPaletteHint, look::kFaintInk, look::kLabelSize));
+    // Its magnifier, drawn over its start (D915).
+    RAWFRAME_TRY_ASSIGN(const ui::Node kGlass, icon(kSearch, Icon::Search, look::kFaintInk, 14));
+    RAWFRAME_TRY(tree_->setLayout(kGlass,
+                                  ui::Layout{.width = ui::pixels(14),
+                                             .height = ui::pixels(14),
+                                             .placement = {.absolute = true, .x = ui::pixels(8), .y = ui::pixels(4)}}));
     RAWFRAME_TRY(tree_->setRole(kSearch, ui::Role::TextInput));
     RAWFRAME_TRY(tree_->setName(kSearch, "commands"));
     palette_ = FieldRow{.value = kSearch, .role = FieldRow::Role::Palette, .field = "commands"};
@@ -449,7 +460,7 @@ void ShellParticipant::paletteTyped(std::optional<view::TypingKey> left) {
                                                       ? std::optional{popupRows_.front().second}
                                                       : std::nullopt;
         endEdit();
-        static_cast<void>(words(palette_->value, kPaletteHint, kQuiet, 14));
+        static_cast<void>(words(palette_->value, kPaletteHint, look::kFaintInk, look::kLabelSize));
         closePopup();
         if (kFirst.has_value()) {
             const std::string kName = commands_[*kFirst].name;
@@ -474,7 +485,7 @@ void ShellParticipant::closePalette() {
         endEdit();
     }
     if (palette_.has_value()) {
-        static_cast<void>(words(palette_->value, kPaletteHint, kQuiet, 14));
+        static_cast<void>(words(palette_->value, kPaletteHint, look::kFaintInk, look::kLabelSize));
     }
 }
 

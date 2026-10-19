@@ -63,7 +63,12 @@ void ShellParticipant::followSplitter() {
     }
     preferences_ = held(preferences_);
     static_cast<void>(tree_->setLayout(leftDock_, leftLayout(preferences_.hierarchyWidth)));
-    static_cast<void>(tree_->setLayout(componentsColumn_, columnLayout(preferences_.inspectorWidth)));
+    static_cast<void>(tree_->setLayout(held_.rightDock,
+                                       ui::Layout{.width = ui::pixels(preferences_.inspectorWidth),
+                                                  .minHeight = ui::pixels(0),
+                                                  .direction = ui::Direction::Column,
+                                                  .shrink = 0,
+                                                  .border = {1, 0, 0, 0}}));
     static_cast<void>(tree_->setLayout(bottomDock_, dockLayout(preferences_.dockHeight)));
     if (kReleased) {
         releaseSplitter();

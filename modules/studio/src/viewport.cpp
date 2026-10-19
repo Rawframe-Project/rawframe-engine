@@ -40,15 +40,20 @@ void ShellParticipant::showViewport() {
     // Under the view's fields, the rest of the center: the played game's
     // pictures while it plays here (D789).
     auto made = box(centerColumn_,
-                    ui::Layout{.height = ui::pixels(0), .minHeight = ui::pixels(240), .grow = 1, .shrink = 0},
+                    ui::Layout{.height = ui::pixels(0), .minHeight = ui::pixels(0), .grow = 1, .shrink = 1},
                     kBackground);
     if (!made.has_value()) {
         return;
     }
     viewport_ = *made;
     viewRows_.push_back(viewport_);
-    static_cast<void>(tree_->setLook(viewport_, ui::Look{.fill = kBackground, .image = kViewportImage}));
+    static_cast<void>(tree_->setLook(viewport_, ui::Look{.fill = 0x0B0D10FFU, .image = kViewportImage}));
     static_cast<void>(tree_->setName(viewport_, "Viewport"));
+    // What is drawn over it last, so it lies on top (D915).
+    if (tree_->contains(held_.modePalette)) {
+        static_cast<void>(tree_->detach(held_.modePalette));
+        static_cast<void>(tree_->attach(centerColumn_, held_.modePalette));
+    }
 }
 
 void ShellParticipant::forwardInput() {

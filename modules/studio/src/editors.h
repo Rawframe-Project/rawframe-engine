@@ -4,16 +4,19 @@
 // D827): the kinds of document listed with the scenes, and what the data,
 // settings, graph, clip, and UI editors last read and laid out.
 
+#include "icons.h"
 #include "rawframe/authoring_session/link.h"
 #include "rawframe/diagnostics/identity.h"
 #include "rawframe/document/json.h"
 #include "rawframe/process/child.h"
 #include "rawframe/ui/tree.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -95,12 +98,57 @@ enum class Listed : std::uint8_t {
     Sequence,
 };
 
+/// What kind of button the frame draws (D915), as the design's: an icon
+/// alone, a raised one, the accent's, a quiet one, a tab.
+enum class ButtonKind : std::uint8_t {
+    Icon,
+    Normal,
+    Primary,
+    Quiet,
+    Tab
+};
+
+/// A drawn button's parts, so it is lit or relabeled in place: its icon
+/// and which, its label, its kind, and its words.
+struct ButtonParts {
+    ui::Node icon{};
+    std::optional<Icon> which;
+    ui::Node label{};
+    ButtonKind kind = ButtonKind::Normal;
+    std::string text;
+};
+
 struct EditorsHeld {
     /// The most rows a data document or the settings list.
     static constexpr std::size_t kMostRows = 512;
     /// Whether the edit view's grid was put on once (D914), after which
     /// it is the author's to toggle.
     bool gridShown = false;
+    /// Each drawn button's parts by its node's key (D915); the toolbar's
+    /// buttons that run a command by its name.
+    std::map<std::uint64_t, ButtonParts> buttonParts;
+    std::vector<std::pair<ui::Node, std::string>> commandButtons;
+    /// Where the title row puts the palette's field; the toolbar's tools,
+    /// World, snaps, 3D and 2D, players, and the status bar's figures.
+    ui::Node searchAt{};
+    std::array<ui::Node, 4> tools{};
+    std::uint8_t tool = 1;
+    ui::Node worldButton{};
+    bool local = false;
+    ui::Node moveSnap{};
+    ui::Node turnSnap{};
+    ui::Node threeD{};
+    ui::Node twoD{};
+    ui::Node playersButton{};
+    ui::Node statusFigures{};
+    /// What the frame does not draw but the commands reach (D915); the
+    /// right dock and its tabs.
+    ui::Node shelf{};
+    ui::Node rightDock{};
+    ui::Node inspectorTab{};
+    ui::Node sceneSettingsTab{};
+    ui::Node titleGame{};
+    ui::Node titleDocument{};
     /// The chosen blockout's lines as last read (D850), the pixels a meter
     /// is drawn in its plan (D851), and whether the last press was on a
     /// footprint there, which a drag moves (D852).
