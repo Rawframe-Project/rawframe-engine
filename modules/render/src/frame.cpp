@@ -2,6 +2,7 @@
 
 #include "rawframe/render/display.h"
 #include "rawframe/render/errors.h"
+#include "rawframe/render/timing.h"
 
 #include <cmath>
 #include <maul-rhi/device.h>
@@ -446,6 +447,15 @@ std::optional<std::uint32_t> Frame::time(std::string_view pass) {
     }
     timed.emplace_back(pass);
     return static_cast<std::uint32_t>(2 * (timed.size() - 1));
+}
+
+void timePass(Frame& frame, mrhiPassDef& def, std::string_view pass) {
+    if (const std::optional<std::uint32_t> kAt = frame.time(pass); kAt.has_value()) {
+        def.timestampQuerySet = mrhiQuerySetId{.index1 = static_cast<std::uint32_t>(frame.timestamps >> 32U),
+                                               .generation = static_cast<std::uint32_t>(frame.timestamps)};
+        def.timestampBegin = *kAt;
+        def.timestampEnd = *kAt + 1;
+    }
 }
 
 const FramerStatistics& Framer::statistics() const noexcept {

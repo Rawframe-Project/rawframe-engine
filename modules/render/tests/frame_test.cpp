@@ -6,6 +6,7 @@
 
 #include "rawframe/render/errors.h"
 #include "rawframe/render/frame.h"
+#include "rawframe/render/timing.h"
 #include "rawframe/test/test.h"
 
 #include <array>
@@ -78,13 +79,8 @@ public:
             mrhiClearColor{.red = color_[0], .green = color_[1], .blue = color_[2], .alpha = color_[3]};
         def.colorTargetCount = 1;
         def.neverCull = true;
-        // Timed by its name, where the frame times its passes (D894).
-        if (const std::optional<std::uint32_t> kAt = frame.time(name_); kAt.has_value()) {
-            def.timestampQuerySet = mrhiQuerySetId{.index1 = static_cast<std::uint32_t>(frame.timestamps >> 32U),
-                                                   .generation = static_cast<std::uint32_t>(frame.timestamps)};
-            def.timestampBegin = *kAt;
-            def.timestampEnd = *kAt + 1;
-        }
+        // Timed by its name, where the frame times its passes (D894, D901).
+        render::timePass(frame, def, name_);
         if (mrhiAddPass(frame.device->native(), &def, &pass_) != mrhi_success) {
             return std::unexpected<result::Error>{result::fail(result::ErrorClass::Unavailable,
                                                                render::kRenderDomain,

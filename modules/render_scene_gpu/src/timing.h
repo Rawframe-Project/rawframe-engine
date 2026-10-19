@@ -2,12 +2,11 @@
 
 // The scene's passes timed on the GPU (D894): the renderer points the
 // timer at the frame it declares, and each pass it times is named as it
-// is added, its start and end written to the frame's timestamps where the
-// frame times its passes.
+// is added, through render's one timing of a pass (D901).
 
 #include "rawframe/render/frame.h"
+#include "rawframe/render/timing.h"
 
-#include <cstdint>
 #include <maul-rhi/frame.h>
 #include <string_view>
 
@@ -21,14 +20,8 @@ public:
     }
     /// `def`'s pass, of the graphics class, timed as `pass`.
     void time(mrhiPassDef& def, std::string_view pass) const {
-        if (frame_ == nullptr) {
-            return;
-        }
-        if (const std::optional<std::uint32_t> kAt = frame_->time(pass); kAt.has_value()) {
-            def.timestampQuerySet = mrhiQuerySetId{.index1 = static_cast<std::uint32_t>(frame_->timestamps >> 32U),
-                                                   .generation = static_cast<std::uint32_t>(frame_->timestamps)};
-            def.timestampBegin = *kAt;
-            def.timestampEnd = *kAt + 1;
+        if (frame_ != nullptr) {
+            render::timePass(*frame_, def, pass);
         }
     }
 
