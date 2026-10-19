@@ -443,7 +443,8 @@ private:
     /// those axes as one row of colored fields.
     result::Result<std::optional<ui::Node>> inspectorHead(std::string_view name, bool brought, bool renamed);
     [[nodiscard]] static std::size_t axesAt(std::span<const FieldShown> shown, std::size_t place);
-    result::Status vectorRow(const std::string& component, std::span<const FieldShown> axes);
+    result::Status
+    vectorRow(const std::string& component, std::string_view componentName, std::span<const FieldShown> axes);
 
     /// `row`'s field takes the keyboard, its text chosen whole.
     void beginEdit(const FieldRow& row);

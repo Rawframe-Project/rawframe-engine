@@ -2,6 +2,8 @@
 #include "shell.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>
 
 namespace rawframe::studio {
@@ -572,7 +574,7 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
         return;
     }
     // An entity on a locked layer is not edited (D788).
-    if (row.role == FieldRow::Role::Field || row.role == FieldRow::Role::Name) {
+    if (row.role == FieldRow::Role::Field || row.role == FieldRow::Role::Name || row.role == FieldRow::Role::Turn) {
         for (const std::string& kEach : selected_.empty() ? std::vector<std::string>{entity_} : selected_) {
             if (const std::optional<std::string> kLayer = lockedOf(kEach); kLayer.has_value()) {
                 ++lockRefused_;
@@ -588,6 +590,36 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
         operation.add("style", Value::string(entity_));
         operation.add("name", Value::string(text));
         commit(std::move(operation), "renamed " + text, entity_);
+        return;
+    }
+    // A turn typed in degrees sets the pose's quaternion whole (D915).
+    if (row.role == FieldRow::Role::Turn) {
+        char* end = nullptr;
+        const double kDegrees = std::strtod(text.c_str(), &end);
+        if (text.empty() || end != text.c_str() + text.size() || !std::isfinite(kDegrees)) {
+            refuse("turn " + row.field + ": degrees");
+            return;
+        }
+        std::array<double, 3> turn = held_.turn;
+        turn[row.field == "x" ? 0 : row.field == "y" ? 1 : 2] = kDegrees;
+        const std::array<double, 4> kQuaternion = quaternionOf(turn);
+        std::vector<Value> operations;
+        constexpr std::array<std::string_view, 4> kParts = {"qx", "qy", "qz", "qw"};
+        for (std::size_t each = 0; each < 4; ++each) {
+            Value part = operationOn("scene.set_field");
+            part.add("component", Value::string(row.component));
+            part.add("field", Value::string(std::string{kParts[each]}));
+            char written[64];
+            std::snprintf(written, sizeof(written), "%.9g", kQuaternion[each]);
+            const std::optional<Value> kValue = typedValue("real", written);
+            if (!kValue.has_value()) {
+                refuse("turn " + row.field + ": degrees");
+                return;
+            }
+            part.add("value", *kValue);
+            operations.push_back(std::move(part));
+        }
+        commitAll(std::move(operations), "turned about " + row.field + " to " + text, entity_);
         return;
     }
     Value operation;

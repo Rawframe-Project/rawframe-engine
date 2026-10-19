@@ -386,22 +386,6 @@ struct UiRenderer::State {
     void choose() {
         held->begin(kImageUploadBytes);
         static_cast<void>(held->choose(0, clear));
-        imageBlocks.clear();
-        imageTextures.clear();
-        for (const ui::Image& kImage : list->images) {
-            const std::shared_ptr<const texture::Texture> kTexture =
-                kImage.image != 0 && images ? images(kImage.image) : nullptr;
-            const bool kHeld = kTexture != nullptr && !kTexture->levels.empty() && held->choose(kImage.image, kTexture);
-            imageTextures.push_back(kHeld ? kImage.image : 0);
-            const std::array<float, kImageFloats> kBlock = imageBlockOf(
-                kImage, list->scale, kHeld ? kTexture->levels[0].width : 1, kHeld ? kTexture->levels[0].height : 1);
-            imageBlocks.insert(imageBlocks.end(), kBlock.begin(), kBlock.end());
-            if (kHeld) {
-                ++statistics.images;
-            } else {
-                ++statistics.imagesWaiting;
-            }
-        }
         // The glyph atlas, a new texture whenever its coverage changed.
         atlasHeld = false;
         const ui::GlyphAtlas* kAtlas = list->atlas;
@@ -451,6 +435,26 @@ struct UiRenderer::State {
                 colorsRevision = kColors->revision;
             }
             colorsHeld = held->choose(kColorsId, colors);
+        }
+        // Then the images, after the text's atlases: a picture streamed
+        // every frame (an editor's viewport, D789) would else spend the
+        // frame's uploads before a changed atlas, whose words would wait
+        // for as long as the picture streams (D915).
+        imageBlocks.clear();
+        imageTextures.clear();
+        for (const ui::Image& kImage : list->images) {
+            const std::shared_ptr<const texture::Texture> kTexture =
+                kImage.image != 0 && images ? images(kImage.image) : nullptr;
+            const bool kHeld = kTexture != nullptr && !kTexture->levels.empty() && held->choose(kImage.image, kTexture);
+            imageTextures.push_back(kHeld ? kImage.image : 0);
+            const std::array<float, kImageFloats> kBlock = imageBlockOf(
+                kImage, list->scale, kHeld ? kTexture->levels[0].width : 1, kHeld ? kTexture->levels[0].height : 1);
+            imageBlocks.insert(imageBlocks.end(), kBlock.begin(), kBlock.end());
+            if (kHeld) {
+                ++statistics.images;
+            } else {
+                ++statistics.imagesWaiting;
+            }
         }
     }
 

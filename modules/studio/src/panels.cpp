@@ -878,7 +878,10 @@ void ShellParticipant::showEntity(std::size_t at) {
                 continue;
             }
             if (const std::size_t kAxes = axesAt(kFieldsShown, place); kAxes > 0) {
-                if (!vectorRow(kComponent, std::span{kFieldsShown}.subspan(place, kAxes)).has_value()) {
+                if (!vectorRow(kComponent,
+                               name != nullptr && name->text() != nullptr ? *name->text() : std::string{},
+                               std::span{kFieldsShown}.subspan(place, kAxes))
+                         .has_value()) {
                     return;
                 }
                 skip = kAxes - 1;
@@ -903,6 +906,14 @@ void ShellParticipant::showEntity(std::size_t at) {
                 if (const Asset* held = assetHeld(assets_, text); held != nullptr) {
                     text = assetShown(*held);
                 }
+            }
+            // Unset, its default shown quiet (D915): nought, false, or its
+            // first case.
+            if (!kEach.text.has_value()) {
+                text = !kType.cases.empty()    ? kType.cases.front()
+                       : kEach.kind == "truth" ? std::string{"false"}
+                       : kEach.kind == "real" || kEach.kind == "signed" || kEach.kind == "unsigned" ? std::string{"0"}
+                                                                                                    : std::string{};
             }
             auto line = fieldRow(kEach.name, text, std::nullopt, kEach.text.has_value(), prettyField(kEach.name));
             if (!line.has_value()) {
@@ -1026,7 +1037,7 @@ result::Result<std::pair<ui::Node, ui::Node>> ShellParticipant::fieldRow(
                                              .border = {1, 1, 1, 1}}));
     RAWFRAME_TRY(tree_->setLook(kValue, ui::Look{.fill = look::kWellFill, .borderColor = look::kEdge, .radius = 4}));
     RAWFRAME_TRY(tree_->attach(kLine, kValue));
-    RAWFRAME_TRY(words(kValue, value, kText, look::kBodySize));
+    RAWFRAME_TRY(words(kValue, value, set ? kText : look::kFaintInk, look::kBodySize));
     // Read as a field named by its name, its text its value (D575).
     RAWFRAME_TRY(tree_->setRole(kValue, ui::Role::TextInput));
     RAWFRAME_TRY(tree_->setName(kValue, name));

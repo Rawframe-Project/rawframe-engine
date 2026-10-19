@@ -5,6 +5,9 @@
 #include "../src/hints.h"
 #include "rawframe/test/test.h"
 
+#include <array>
+#include <cmath>
+
 using namespace rawframe::studio;
 
 namespace {
@@ -52,4 +55,22 @@ RAWFRAME_TEST(AnAssetFieldIsChosenFromItsKindsAssets) {
     RAWFRAME_EXPECT(assetChoices(Catalog::Field{.kind = "unsigned"}, kAssets).empty());
     RAWFRAME_EXPECT(typedAs(kTexture, "none") == "0");
     RAWFRAME_EXPECT(typedAs(kTexture, "brick.png") == "brick.png");
+}
+
+// A turn shown in degrees and typed back sets the same quaternion
+// (D915): each axis alone, and all three together, read back as typed.
+RAWFRAME_TEST(ATurnInDegreesReadsBackAsTyped) {
+    for (const std::array<double, 3> kTyped : {std::array<double, 3>{0, 90, 0},
+                                               std::array<double, 3>{30, 0, 0},
+                                               std::array<double, 3>{0, 0, -45},
+                                               std::array<double, 3>{20, -70, 15}}) {
+        const std::array<double, 3> kRead = degreesOf(quaternionOf(kTyped));
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+            RAWFRAME_EXPECT(std::abs(kRead[axis] - kTyped[axis]) < 0.01);
+        }
+    }
+    // A quarter turn about Y is the quaternion every engine writes for it.
+    const std::array<double, 4> kQuarter = quaternionOf({0, 90, 0});
+    RAWFRAME_EXPECT(std::abs(kQuarter[1] - std::sqrt(0.5)) < 1e-9 && std::abs(kQuarter[3] - std::sqrt(0.5)) < 1e-9);
+    RAWFRAME_EXPECT((degreesOf({0, 0, 0, 1}) == std::array<double, 3>{0, 0, 0}));
 }

@@ -7,6 +7,7 @@
 #include "rawframe/document/json.h"
 #include "records.h"
 
+#include <array>
 #include <optional>
 #include <span>
 #include <string>
@@ -48,6 +49,12 @@ void readHints(const document::Value& field, Catalog::Field& into);
 /// entity's transform (D915).
 [[nodiscard]] std::string prettyField(std::string_view name);
 [[nodiscard]] std::string prettyComponent(std::string_view name);
+
+/// A turn as the Inspector shows it (D915): degrees about X, Y, and Z,
+/// applied Z first, then X, then Y (yaw over pitch over roll), from a unit
+/// quaternion (x, y, z, w), and back.
+[[nodiscard]] std::array<double, 3> degreesOf(const std::array<double, 4>& quaternion) noexcept;
+[[nodiscard]] std::array<double, 4> quaternionOf(const std::array<double, 3>& degrees) noexcept;
 
 /// The game's assets an asset field is chosen from (D786): none, then each
 /// of its kind by name; nothing for a field that holds no asset.

@@ -149,6 +149,10 @@ struct EditorsHeld {
     ui::Node sceneSettingsTab{};
     ui::Node titleGame{};
     ui::Node titleDocument{};
+    /// The chosen entity's turn as the Inspector shows it, in degrees, and
+    /// the pose it is of (D915).
+    std::array<double, 3> turn{};
+    std::string turnComponent;
     /// The chosen blockout's lines as last read (D850), the pixels a meter
     /// is drawn in its plan (D851), and whether the last press was on a
     /// footprint there, which a drag moves (D852).

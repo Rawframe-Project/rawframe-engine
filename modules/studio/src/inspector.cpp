@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
+#include <numbers>
 
 namespace rawframe::studio {
 
@@ -19,10 +21,24 @@ struct AxisRun {
     std::size_t count;
     std::string_view label;
 };
-constexpr std::array<AxisRun, 4> kRuns = {{{{"x", "y", "z", ""}, 3, "Position"},
+constexpr std::array<AxisRun, 5> kRuns = {{{{"x", "y", "z", ""}, 3, "Position"},
                                            {{"qx", "qy", "qz", "qw"}, 4, "Rotation"},
                                            {{"width", "height", "depth", ""}, 3, "Size"},
+                                           {{"angularX", "angularY", "angularZ", ""}, 3, "Angular"},
                                            {{"x", "y", "", ""}, 2, "Position"}}};
+
+/// A number as a field shows it: whole bare, else as few digits as it
+/// needs.
+std::string shownNumber(double value) {
+    if (value == std::round(value) && std::abs(value) < 1e15) {
+        return std::to_string(static_cast<std::int64_t>(value));
+    }
+    std::string text = std::to_string(value);
+    while (text.ends_with('0')) {
+        text.pop_back();
+    }
+    return text;
+}
 
 bool numeric(const FieldShown& field) {
     return field.kind == "real" || field.kind == "signed" || field.kind == "unsigned";
@@ -51,6 +67,43 @@ std::string prettyField(std::string_view name) {
         made[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(made[0])));
     }
     return made;
+}
+
+std::array<double, 3> degreesOf(const std::array<double, 4>& quaternion) noexcept {
+    const auto [kX, kY, kZ, kW] = quaternion;
+    const double kLength = std::sqrt((kX * kX) + (kY * kY) + (kZ * kZ) + (kW * kW));
+    if (!(kLength > 0) || !std::isfinite(kLength)) {
+        return {};
+    }
+    const double x = kX / kLength;
+    const double y = kY / kLength;
+    const double z = kZ / kLength;
+    const double w = kW / kLength;
+    constexpr double kDegrees = 180 / std::numbers::pi;
+    const double kPitch = std::asin(std::clamp(2 * ((w * x) - (y * z)), -1.0, 1.0));
+    const double kYaw = std::atan2(2 * ((x * z) + (w * y)), 1 - (2 * ((x * x) + (y * y))));
+    const double kRoll = std::atan2(2 * ((x * y) + (w * z)), 1 - (2 * ((x * x) + (z * z))));
+    // Shown to a hundredth, without a negative nought.
+    const auto kRoundedOf = [](double radians) {
+        const double kRounded = std::round(radians * kDegrees * 100) / 100;
+        return kRounded == 0 ? 0.0 : kRounded;
+    };
+    return {kRoundedOf(kPitch), kRoundedOf(kYaw), kRoundedOf(kRoll)};
+}
+
+std::array<double, 4> quaternionOf(const std::array<double, 3>& degrees) noexcept {
+    constexpr double kHalf = std::numbers::pi / 360;
+    const double kCx = std::cos(degrees[0] * kHalf);
+    const double kSx = std::sin(degrees[0] * kHalf);
+    const double kCy = std::cos(degrees[1] * kHalf);
+    const double kSy = std::sin(degrees[1] * kHalf);
+    const double kCz = std::cos(degrees[2] * kHalf);
+    const double kSz = std::sin(degrees[2] * kHalf);
+    // Yaw, then pitch, then roll: qy qx qz.
+    return {(kCy * kSx * kCz) + (kSy * kCx * kSz),
+            (kSy * kCx * kCz) - (kCy * kSx * kSz),
+            (kCy * kCx * kSz) - (kSy * kSx * kCz),
+            (kCy * kCx * kCz) + (kSy * kSx * kSz)};
 }
 
 std::string prettyComponent(std::string_view name) {
@@ -116,12 +169,19 @@ std::size_t ShellParticipant::axesAt(std::span<const FieldShown> shown, std::siz
     return 0;
 }
 
-result::Status ShellParticipant::vectorRow(const std::string& component, std::span<const FieldShown> axes) {
+result::Status ShellParticipant::vectorRow(const std::string& component,
+                                           std::string_view componentName,
+                                           std::span<const FieldShown> axes) {
     std::string_view label = "Value";
     for (const AxisRun& kRun : kRuns) {
         if (kRun.count == axes.size() && axes.front().name == kRun.names[0]) {
             label = kRun.label;
+            break;
         }
+    }
+    // A place is a pose's; a velocity's x, y, z its linear part.
+    if (axes.front().name == "x" && !componentName.ends_with(".pose")) {
+        label = componentName.find("velocity") != std::string_view::npos ? "Linear" : "Value";
     }
     RAWFRAME_TRY_ASSIGN(
         const ui::Node kLine,
@@ -132,9 +192,25 @@ result::Status ShellParticipant::vectorRow(const std::string& component, std::sp
     RAWFRAME_TRY_ASSIGN(const ui::Node kName, box(kLine, ui::Layout{.width = ui::pixels(96), .shrink = 0}, 0));
     RAWFRAME_TRY(words(kName, label, look::kLabelInk, look::kLabelSize));
     RAWFRAME_TRY_ASSIGN(const ui::Node kAxes, box(kLine, ui::Layout{.width = ui::pixels(0), .gap = 4, .grow = 1}, 0));
+    // A pose's turn in degrees about X, Y, and Z, its quaternion the
+    // session's (D915).
+    const bool kTurn = axes.size() == 4 && axes.front().name == "qx" && componentName.ends_with(".pose");
+    std::array<double, 3> turned{};
+    if (kTurn) {
+        std::array<double, 4> quaternion{0, 0, 0, 1};
+        for (std::size_t each = 0; each < 4; ++each) {
+            if (axes[each].text.has_value()) {
+                quaternion[each] = std::strtod(axes[each].text->c_str(), nullptr);
+            }
+        }
+        turned = degreesOf(quaternion);
+        held_.turn = turned;
+        held_.turnComponent = component;
+    }
+    const std::size_t kShownAxes = kTurn ? 3 : axes.size();
     constexpr std::array<std::uint32_t, 4> kInks = {look::kAxisX, look::kAxisY, look::kAxisZ, look::kLabelInk};
     constexpr std::array<std::string_view, 4> kLetters = {"X", "Y", "Z", "W"};
-    for (std::size_t each = 0; each < axes.size(); ++each) {
+    for (std::size_t each = 0; each < kShownAxes; ++each) {
         const FieldShown& kAxis = axes[each];
         RAWFRAME_TRY_ASSIGN(
             const ui::Node kWell,
@@ -160,15 +236,29 @@ result::Status ShellParticipant::vectorRow(const std::string& component, std::sp
             ui::Layout{.width = ui::pixels(0), .minHeight = ui::pixels(23), .grow = 1, .padding = {6, 4, 3, 3}}));
         RAWFRAME_TRY(tree_->setLook(kValue, ui::Look{}));
         RAWFRAME_TRY(tree_->attach(kWell, kValue));
+        const bool kSet = kTurn ? std::ranges::any_of(axes,
+                                                      [](const FieldShown& field) {
+                                                          return field.text.has_value();
+                                                      })
+                                : kAxis.text.has_value();
         RAWFRAME_TRY(monoWords(kValue,
-                               kAxis.text.value_or(std::string{}),
-                               kAxis.text.has_value() ? look::kInk : look::kFaintInk,
+                               kTurn ? shownNumber(turned[each])
+                                     : kAxis.text.value_or(std::string{kAxis.name == "qw" ? "1" : "0"}),
+                               kSet ? look::kInk : look::kFaintInk,
                                look::kLabelSize));
         RAWFRAME_TRY(tree_->setRole(kValue, ui::Role::TextInput));
-        RAWFRAME_TRY(tree_->setName(kValue, kAxis.name));
+        const std::string kFieldName = kTurn ? std::string{kLetters[each] == "X"   ? "x"
+                                                           : kLetters[each] == "Y" ? "y"
+                                                                                   : "z"}
+                                             : kAxis.name;
+        RAWFRAME_TRY(tree_->setName(kValue, kTurn ? "turn " + kFieldName : kAxis.name));
         const Catalog::Field kType = kAxis.type.value_or(Catalog::Field{.name = kAxis.name, .kind = kAxis.kind});
-        fields_.push_back(
-            FieldRow{.value = kValue, .component = component, .field = kAxis.name, .kind = kAxis.kind, .type = kType});
+        fields_.push_back(FieldRow{.value = kValue,
+                                   .role = kTurn ? FieldRow::Role::Turn : FieldRow::Role::Field,
+                                   .component = component,
+                                   .field = kFieldName,
+                                   .kind = kAxis.kind,
+                                   .type = kType});
     }
     return {};
 }

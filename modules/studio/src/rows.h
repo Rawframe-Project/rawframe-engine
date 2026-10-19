@@ -42,6 +42,9 @@ struct FieldRow {
         GraphInput,
         /// The command palette's search (D777).
         Palette,
+        /// A pose's turn about an axis in degrees, `field` x, y, or z, its
+        /// quaternion set whole (D915).
+        Turn,
         /// The start screen's new game's name, and a game to open (D781).
         NewGame,
         OpenGame,
