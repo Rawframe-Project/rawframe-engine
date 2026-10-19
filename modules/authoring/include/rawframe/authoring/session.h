@@ -140,6 +140,9 @@ enum class SessionVerb : std::uint8_t {
     Bookmarks,
     /// The scene's preview split into one, two, or three views (D797).
     Split,
+    /// What each author has chosen, a box about each in the preview, in
+    /// their color (D907).
+    Outline,
     /// What the scene's preview draws over it, by the overlays' names
     /// (D798).
     Overlays,
@@ -197,6 +200,13 @@ enum class SessionVerb : std::uint8_t {
     Release,
     Leave,
     End,
+};
+
+/// One author's outline asked of a scene's preview (D907): their color,
+/// red, green, and blue from nought to one, and the entities they chose.
+struct SessionOutline {
+    std::array<double, 3> color{};
+    std::vector<base::Bits128> entities;
 };
 
 /// A scene's part of `apply_together`: its path and its atomic request.
@@ -269,6 +279,8 @@ struct SessionRecord {
     std::uint8_t views = 1;
     /// `overlays`' names, at most 8 of at most 32 bytes (D798).
     std::vector<std::string> overlays;
+    /// `outline`'s, at most 16 authors' of at most 64 entities (D907).
+    std::vector<SessionOutline> outlines;
     /// Apply together's, two or more, each scene named once (D497).
     std::vector<SessionPart> parts;
     /// Cook's: where it cooks to, and the cache it reuses, if any (D502);

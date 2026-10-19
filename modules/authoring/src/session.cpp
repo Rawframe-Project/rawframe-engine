@@ -37,7 +37,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 48> kVerbs = {
+constexpr std::array<VerbName, 49> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -60,6 +60,7 @@ constexpr std::array<VerbName, 48> kVerbs = {
     VerbName{.kind = "authoring.bookmarks", .verb = SessionVerb::Bookmarks},
     VerbName{.kind = "authoring.split", .verb = SessionVerb::Split},
     VerbName{.kind = "authoring.overlays", .verb = SessionVerb::Overlays},
+    VerbName{.kind = "authoring.outline", .verb = SessionVerb::Outline},
     VerbName{.kind = "authoring.import_settings", .verb = SessionVerb::ImportSettings},
     VerbName{.kind = "authoring.set_import_settings", .verb = SessionVerb::SetImportSettings},
     VerbName{.kind = "authoring.thumbnail", .verb = SessionVerb::Thumbnail},
@@ -125,6 +126,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::ViewMode:
     case SessionVerb::Split:
     case SessionVerb::Overlays:
+    case SessionVerb::Outline:
     case SessionVerb::Cook:
     case SessionVerb::Import:
     case SessionVerb::Step:
@@ -460,6 +462,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::Bookmarks:
     case SessionVerb::Split:
     case SessionVerb::Overlays:
+    case SessionVerb::Outline:
     case SessionVerb::Run:
     case SessionVerb::Step:
     case SessionVerb::Traffic:
@@ -504,6 +507,34 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         record.extension = *kExtension;
         record.component = *kComponent;
         record.entities.push_back(kId.value);
+    } else if (record.verb == SessionVerb::Outline) {
+        // Only bounded: what each entity is, and where, is the scene's.
+        const Value* kOutlines = parsed->find("outlines");
+        bool sound = kOutlines != nullptr && kOutlines->kind() == Value::Kind::Array && kOutlines->items().size() <= 16;
+        for (std::size_t at = 0; sound && at < kOutlines->items().size(); ++at) {
+            const Value& kOutline = kOutlines->items()[at];
+            const std::optional<std::array<double, 3>> kColor = pointIn(kOutline.find("color"));
+            const Value* kEntities = kOutline.find("entities");
+            sound = kOutline.kind() == Value::Kind::Object && kOutline.names().size() == 2 && kColor.has_value() &&
+                    std::ranges::all_of(*kColor,
+                                        [](double each) {
+                                            return each >= 0 && each <= 1;
+                                        }) &&
+                    kEntities != nullptr && kEntities->kind() == Value::Kind::Array && kEntities->items().size() <= 64;
+            SessionOutline made{.color = kColor.value_or(std::array<double, 3>{}), .entities = {}};
+            for (std::size_t each = 0; sound && each < kEntities->items().size(); ++each) {
+                const std::string* kText = textOf(&kEntities->items()[each]);
+                const base::Bits128Parse kId =
+                    kText != nullptr ? schema::parseStableIdText(*kText) : base::Bits128Parse{};
+                sound = kId.parsed;
+                made.entities.push_back(kId.value);
+            }
+            record.outlines.push_back(std::move(made));
+        }
+        if (!sound) {
+            return malformed("outlines are at most 16, each a color of three numbers from 0 to 1 and at most 64 "
+                             "entities by their SourceEntityIds");
+        }
     } else if (record.verb == SessionVerb::Select || record.verb == SessionVerb::Extension ||
                record.verb == SessionVerb::ExtensionPanel) {
         // An extension's command is run on the entities chosen, as select
