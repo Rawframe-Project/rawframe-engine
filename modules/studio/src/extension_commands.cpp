@@ -37,6 +37,7 @@ void ShellParticipant::switchExtensionMode(const std::string& mode) {
     if (held_.extensionMode.has_value() && held_.extensionMode->second == mode) {
         held_.extensionMode.reset();
         say(mode + " mode off");
+        showModes();
         return;
     }
     const auto kOffering = std::ranges::find_if(extensions_, [&](const ListedExtension& extension) {
@@ -47,6 +48,7 @@ void ShellParticipant::switchExtensionMode(const std::string& mode) {
     }
     held_.extensionMode = std::pair{kOffering->path, mode};
     say(mode + " mode: click in the played scene");
+    showModes();
 }
 
 void ShellParticipant::runExtensionMode(const std::array<double, 3>& point, const std::optional<std::string>& picked) {

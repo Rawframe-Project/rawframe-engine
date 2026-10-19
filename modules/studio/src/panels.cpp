@@ -230,6 +230,18 @@ result::Status ShellParticipant::build() {
         RAWFRAME_TRY_ASSIGN(upNode_, button(kOrdering, "Up"));
         RAWFRAME_TRY_ASSIGN(downNode_, button(kOrdering, "Down"));
     }
+    // The mode palette on the center's left edge (SPEC-0051, D910), its
+    // buttons the new tree's.
+    held_.modeButtons.clear();
+    RAWFRAME_TRY_ASSIGN(held_.modePalette,
+                        box(kUpper,
+                            ui::Layout{.width = ui::pixels(86),
+                                       .direction = ui::Direction::Column,
+                                       .gap = 4,
+                                       .shrink = 0,
+                                       .padding = {0, 8, 0, 8}},
+                            0));
+    RAWFRAME_TRY(tree_->setName(held_.modePalette, "Mode palette"));
     // The center: the open documents' tabs, then the active one's view,
     // which the viewport takes over (state.md item 28 step 5).
     RAWFRAME_TRY_ASSIGN(centerColumn_,
@@ -279,7 +291,9 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(componentsColumn_,
                         column(kBody, placed("Inspector", SurfaceKind::Panel, "Right"), preferences_.inspectorWidth));
     RAWFRAME_TRY(showMenus(kStart));
-    return showScenes();
+    RAWFRAME_TRY(showScenes());
+    showModes();
+    return {};
 }
 
 void ShellParticipant::showDock(Dock pane) {
@@ -447,6 +461,8 @@ void ShellParticipant::showScene(std::size_t at) {
     scene_ = scenes_[at];
     sceneAt_ = at;
     showTabs(at);
+    // The mode it is in, lit in the palette (D910).
+    showModes();
     if (kChanged) {
         // A scene's view is the session's, unknown here until it says,
         // and its search starts empty. A style sheet has neither, nor a

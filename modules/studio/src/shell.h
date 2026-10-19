@@ -746,6 +746,13 @@ private:
     /// An extension's viewport mode switched on, or off again (D877), and
     /// run where a pick in the viewport met the scene.
     void switchExtensionMode(const std::string& mode);
+    /// The mode palette's buttons, the mode in use lit: Studio's own modes
+    /// as the surface table places them, then the extensions' (D910).
+    void showModes();
+    /// A viewport mode chosen (D910): Transform, the scene's own editing; a
+    /// content mode, its document opened in the center, the scene it left
+    /// kept for Transform; an extension's, switched on or off.
+    void chooseMode(const std::string& mode);
     void runExtensionMode(const std::array<double, 3>& point, const std::optional<std::string>& picked);
     /// The Inspector's sections the game's extensions offer for the
     /// entity shown, of the components `read` lists it with (D875).

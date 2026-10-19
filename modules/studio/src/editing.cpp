@@ -157,6 +157,12 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     if ((!cookTool_.empty() || held_.joined != nullptr) && node == cookNode_) {
         endEdit();
         cookOrStop();
+    } else if (const auto kMode = std::ranges::find(held_.modeButtons, node, &std::pair<ui::Node, std::string>::first);
+               kMode != held_.modeButtons.end()) {
+        // A viewport mode chosen in the palette (D910).
+        endEdit();
+        const std::string kChosenMode = kMode->second;
+        chooseMode(kChosenMode);
     } else if (play_.has_value() && node == playNode_) {
         endEdit();
         if (playing_.has_value()) {

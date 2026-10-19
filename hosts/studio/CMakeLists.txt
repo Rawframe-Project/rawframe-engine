@@ -24,7 +24,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":4,\"scenes\":14,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":77,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":4,\"scenes\":14,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":82,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its menus and the palette's field (D777), its buttons, its
     # docks as scroll panes named by their headings or tabs in SPEC-0051's
@@ -1286,6 +1286,23 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "field.terrain written: yes\n.*heights\n0 0 0 0 0\n.*layers\n1000\n.*\"code\":\"studio_terrain\"[^\n]*\"samples\":25,\"layers\":2,\"blocks\":16,\"strokes\":2}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"field.terrain\",[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
+        # The mode palette on the center's left edge (D910): Runners' level
+        # open, Terrain chosen opens the game's terrain, Blockout its
+        # blockout, Tiles says it has no tilemap, and Transform goes back to
+        # the level.
+        add_test(NAME studio_mode_palette
+                 COMMAND ${CMAKE_COMMAND} -E env
+                         "STUDIO_EXTRA_FILES=${CMAKE_CURRENT_SOURCE_DIR}/tests/terrains/field.terrain=field.terrain ${CMAKE_CURRENT_SOURCE_DIR}/tests/blockouts/yard.blockout=yard.blockout"
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/runners/runners.game level.scene @level.scene wait=1
+                         @Terrain "until=studio_mode,mode=\"Terrain\"" @Blockout "until=studio_mode,mode=\"Blockout\"" @Tiles
+                         "until=studio_said,status=\"the game has no tiles document" @Transform "until=studio_mode,mode=\"Transform\""
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_mode_palette PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_mode\"[^\n]*\"mode\":\"Terrain\",\"document\":\"field.terrain\".*\"code\":\"studio_mode\"[^\n]*\"mode\":\"Blockout\",\"document\":\"yard.blockout\".*\"code\":\"studio_mode\"[^\n]*\"mode\":\"Transform\",\"document\":\"level.scene\".*\"exit\":\"clean_stop\"")
         # A tilemap painted in Studio (D861): a room beside a copy of Runners,
         # its sheet's tiles as rows and its grid drawn; tile 1 chosen and a
         # cell painted with it through the session's tilemap.paint (D860),

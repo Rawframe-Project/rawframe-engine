@@ -29,6 +29,9 @@ inline constexpr diagnostics::EventIdentity kPlanShown{"studio", "studio_plan"};
 inline constexpr diagnostics::EventIdentity kTerrainShown{"studio", "studio_terrain"};
 inline constexpr diagnostics::EventIdentity kTilemapShown{"studio", "studio_tilemap"};
 inline constexpr diagnostics::EventIdentity kScatterShown{"studio", "studio_scatter"};
+/// A viewport mode chosen in the mode palette (D910): which, and the
+/// document it shows.
+inline constexpr diagnostics::EventIdentity kModeChosen{"studio", "studio_mode"};
 inline constexpr diagnostics::EventIdentity kSequenceShown{"studio", "studio_sequence"};
 /// Studio joined to a shared session's host, and what it heard there
 /// unasked (D882).
@@ -214,6 +217,13 @@ struct EditorsHeld {
     /// The extension's viewport mode on, by its extension's path and its
     /// name, none for none (D877).
     std::optional<std::pair<std::string, std::string>> extensionMode;
+    /// The mode palette on the center's left edge (D910): its column, each
+    /// mode's button by its name, the scene a content mode was chosen
+    /// from, which Transform goes back to, and how many modes were chosen.
+    ui::Node modePalette{};
+    std::vector<std::pair<ui::Node, std::string>> modeButtons;
+    std::string modeReturn;
+    std::uint64_t modesChosen = 0;
     /// The Extension panels tab, its pane, and its rows (D878).
     ui::Node panelsTab{};
     ui::Node panelsColumn{};

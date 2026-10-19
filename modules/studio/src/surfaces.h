@@ -75,12 +75,12 @@ inline constexpr auto kSurfaces = std::to_array<Surface>({
     {"Graphs", SurfaceKind::DocumentEditor, "Center", "the graph document", ""},
     {"Frame capture", SurfaceKind::DocumentEditor, "Center", "the capture file", ""},
     {"Sequences", SurfaceKind::DocumentEditor, "Center", "the sequence document", ""},
-    // Viewport modes, some still their documents' editors in the center.
+    // Viewport modes, in the mode palette on the center's left edge (D910).
     {"Transform", SurfaceKind::ViewportMode, "Mode palette", "scene.set_field", ""},
-    {"Blockout", SurfaceKind::ViewportMode, "Center", "the blockout document", "the mode palette"},
-    {"Terrain", SurfaceKind::ViewportMode, "Center", "terrain.brush; the terrain document", "the mode palette"},
-    {"Tiles", SurfaceKind::ViewportMode, "Center", "tilemap.paint; the tilemap document", "the mode palette"},
-    {"Scatter", SurfaceKind::ViewportMode, "Center", "the scatter document", "the mode palette"},
+    {"Blockout", SurfaceKind::ViewportMode, "Mode palette", "the blockout document", ""},
+    {"Terrain", SurfaceKind::ViewportMode, "Mode palette", "terrain.brush; the terrain document", ""},
+    {"Tiles", SurfaceKind::ViewportMode, "Mode palette", "tilemap.paint; the tilemap document", ""},
+    {"Scatter", SurfaceKind::ViewportMode, "Mode palette", "the scatter document", ""},
     // Overlays over the viewport.
     {"View modes", SurfaceKind::Overlay, "View menu", "none needed: presentation", ""},
     {"2D editing", SurfaceKind::Overlay, "View menu", "the same scene document", ""},
