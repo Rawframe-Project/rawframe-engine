@@ -152,6 +152,25 @@ void ShellParticipant::showViewBar() {
         held_.viewPills.emplace_back(*made, std::string{menu});
         menus_.emplace_back(*made, std::string{menu});
     };
+    // While the game plays, not edited, it is the game's: only who has
+    // its input, as the design's (D916).
+    if (playing_.has_value() && !playing_->edited()) {
+        if (auto bar = kOverlay({.absolute = true, .x = ui::pixels(0), .y = ui::pixels(look::kTabHeight)},
+                                ui::Direction::Row);
+            bar.has_value()) {
+            held_.viewBar = *bar;
+            if (auto label = box(*bar, ui::Layout{.shrink = 0, .padding = {9, 9, 5, 5}, .border = {1, 1, 1, 1}}, 0);
+                label.has_value()) {
+                static_cast<void>(
+                    tree_->setLook(*label, ui::Look{.fill = 0x121317E6U, .borderColor = 0x35507FFFU, .radius = 5}));
+                static_cast<void>(words(*label,
+                                        players_ == 1 ? std::string{"Client 1 \u00B7 has input"} : "Client 1 of " + std::to_string(players_) + " \u00B7 has input",
+                                        look::kRowInk,
+                                        look::kLabelSize));
+            }
+        }
+        return;
+    }
     // The pills along the top, as the design's.
     if (auto bar = kOverlay({.absolute = true, .x = ui::pixels(0), .y = ui::pixels(look::kTabHeight)},
                             ui::Direction::Row);

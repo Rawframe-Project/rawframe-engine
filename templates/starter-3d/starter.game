@@ -54,3 +54,6 @@ present starter.light_bulb bulb read starter.lamp write starter.bulb
 component b8e03315-9a4a-4a90-8a5b-0ff0245aec1a starter.sun rawframe.model.Sun
 presentation starter.sun on player
 present starter.daylight sun write starter.sun
+component b4abbb7b-1744-4505-bb92-59a7a0eccda7 starter.sky rawframe.model.Sky
+presentation starter.sky on player
+present starter.clear_sky sky write starter.sky

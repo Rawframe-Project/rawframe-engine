@@ -91,14 +91,24 @@ void ShellParticipant::relabel(ui::Node button, std::string_view text, std::opti
     }
     ButtonParts& parts = kFound->second;
     const bool kPrimary = parts.kind == ButtonKind::Primary;
-    const std::uint32_t kInkOf = kPrimary                          ? look::kOnAccent
+    // A primary button that stops is drawn red, as the design's Stop (D916).
+    const bool kStops = kPrimary && which == Icon::Stop;
+    if (kPrimary) {
+        static_cast<void>(tree_->setLook(button,
+                                         ui::Look{.fill = kStops ? 0x5A2027FFU : look::kAccent,
+                                                  .borderColor = kStops ? 0x8A3540FFU : look::kAccent,
+                                                  .radius = 5}));
+    }
+    const std::uint32_t kInkOf = kStops                            ? 0xFFD9D9FFU
+                                 : kPrimary                        ? look::kOnAccent
                                  : parts.kind == ButtonKind::Quiet ? look::kSoftInk
                                                                    : look::kInk;
     static_cast<void>(kPrimary ? strongWords(parts.label, text, kInkOf)
                                : words(parts.label, text, kInkOf, look::kBodySize));
     if (which.has_value() && tree_->contains(parts.icon)) {
         parts.which = which;
-        static_cast<void>(tree_->setLook(parts.icon, ui::Look{.image = look::iconImage(*which), .imageTint = kInkOf}));
+        static_cast<void>(tree_->setLook(
+            parts.icon, ui::Look{.image = look::iconImage(*which), .imageTint = kStops ? 0xFF6B6BFFU : kInkOf}));
     }
     parts.text = std::string{text};
     static_cast<void>(tree_->setName(button, text));
@@ -251,6 +261,9 @@ result::Status ShellParticipant::toolbar(ui::Node root) {
                                                  .padding = {10, 12, 0, 0},
                                                  .margin = {6, 0, 0, 0},
                                                  .border = {1, 1, 1, 1}}));
+        if (kPlaying) {
+            relabel(playNode_, "Stop", Icon::Stop);
+        }
         RAWFRAME_TRY_ASSIGN(
             held_.playersButton,
             textButton(kBar,

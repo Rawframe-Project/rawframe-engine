@@ -129,11 +129,19 @@ fn bulb(count: i32, lamps: [model.PointLight], looks: [model.Model]) {
     }
 }
 
-// The sun, high and a little behind the eye, and the sky's light.
+// The sun, high and a little behind the eye, and a clear day's sky.
 fn sun(count: i32, suns: [model.Sun]) {
     let i = 0
     while i < count {
-        suns[i] = model.Sun(0.35, -0.8, -0.45, 60000.0, model.kelvin(5600.0), 0.0093)
+        suns[i] = model.Sun(0.35, -0.8, -0.45, 100000.0, model.kelvin(5600.0), 0.0093)
+        i = i + 1
+    }
+}
+
+fn sky(count: i32, skies: [model.Sky]) {
+    let i = 0
+    while i < count {
+        skies[i] = model.Sky(8000.0, 0x7fb0f0ff, 0x7c7c7cff, u64(0))
         i = i + 1
     }
 }

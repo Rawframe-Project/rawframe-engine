@@ -95,6 +95,7 @@ void ShellParticipant::startPlaying(bool edited) {
         return;
     }
     relabel(playNode_, "Stop", Icon::Stop);
+    showViewBar();
     say("starting the game");
 }
 
@@ -170,6 +171,7 @@ void ShellParticipant::stopPlaying() {
     stopping_ = std::move(playing_);
     playing_.reset();
     relabel(playNode_, "Play", Icon::Play);
+    showViewBar();
     say("game stopped");
 }
 
@@ -298,7 +300,9 @@ void ShellParticipant::attachPlayed(double seconds) {
         return;
     }
     preview_ = kPreview;
-    if (scene_.empty()) {
+    // A game played, not edited, shows its own camera, as a game window
+    // does (D916); only the edited one is the editor's view.
+    if (scene_.empty() || (editView_ && !playing_->edited())) {
         return;
     }
     attachPreview();
