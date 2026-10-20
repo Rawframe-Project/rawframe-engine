@@ -448,7 +448,13 @@ result::Status ShellParticipant::showBrowser() {
         folders.try_emplace(kFolder, 0);
     }
     for (const std::string& kScene : scenes_) {
-        every += browser_.find(kScene) == nullptr ? 1 : 0;
+        // A document with no sidecar counts in its folder too (D929).
+        if (browser_.find(kScene) == nullptr) {
+            ++every;
+            if (const std::size_t kSlash = kScene.rfind('/'); kSlash != std::string::npos) {
+                ++folders[kScene.substr(0, kSlash)];
+            }
+        }
     }
     every += authoring_session::filesBeside(description_, ".kest").size();
     const auto kHeld = [this](result::Result<ui::Node> made) -> result::Result<ui::Node> {

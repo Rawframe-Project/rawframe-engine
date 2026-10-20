@@ -6,7 +6,8 @@
 # from where it is now; an empty folder removed, and a texture removed
 # with its sidecar and its line. Refused: the game's description, a path
 # leaving the directory, a target taken, a file not there, a folder made
-# twice, and a folder moved into itself.
+# twice, a folder moved into itself, and a
+# path through a link.
 #
 # usage: author_files.sh <rawframe-author> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -30,6 +31,11 @@ cp "$work/plaza/paving.png" "$work/plaza/spare.png"
 sed 's/"resourceId": *"[0-9a-f]\{32\}"/"resourceId": "5bae0000000000000000000000000001"/' \
     "$work/plaza/paving.png.rfmeta" >"$work/plaza/spare.png.rfmeta"
 echo "texture 5bae000000000001 spare.png" >>"$work/plaza/plaza.game"
+# A link in the game to a folder outside it, which nothing moves or
+# removes through (where the system makes links).
+mkdir -p "$work/elsewhere"
+echo kept >"$work/elsewhere/kept.txt"
+ln -s "$work/elsewhere" "$work/plaza/elsewhere" 2>/dev/null || true
 resource=$(sed -n 's/.*"resourceId": *"\([0-9a-f]\{32\}\)".*/\1/p' "$work/plaza/paving.png.rfmeta")
 
 reply() { grep "\"id\":$1," "$work/replies"; }
@@ -51,6 +57,8 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.make_folder","id":14,"folder":"textures"}'
     echo '{"kind":"authoring.move_file","id":15,"from":"textures","to":"textures/inner"}'
     echo '{"kind":"authoring.remove_file","id":16,"path":"kest.project"}'
+    echo '{"kind":"authoring.move_file","id":19,"from":"elsewhere/kept.txt","to":"kept.txt"}'
+    echo '{"kind":"authoring.remove_file","id":20,"path":"elsewhere"}'
     echo '{"kind":"authoring.cook","id":17,"output":"'"$work/content"'","cache":null}'
     # Each wait ends as the reply comes; four minutes only bounds a cook
     # on a sanitized tree under load (D507).
@@ -83,6 +91,11 @@ reply 13 | grep -q '"code":"target_not_found"'
 reply 14 | grep -q '"code":"conflict"'
 reply 15 | grep -q '"code":"validation_failed"'
 reply 16 | grep -q '"code":"validation_failed"'
+if [ -L "$work/plaza/elsewhere" ]; then
+    reply 19 | grep -q '"code":"validation_failed"'
+    reply 20 | grep -q '"code":"validation_failed"'
+    [[ -f "$work/elsewhere/kept.txt" && -L "$work/plaza/elsewhere" ]]
+fi
 # The game cooks from where its files are now.
 reply 17 | grep -q '"answer":{"kind":"authoring.cooked"'
 grep -q 'textures/paving.png' "$work/content/cook.receipt"

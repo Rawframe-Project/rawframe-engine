@@ -313,6 +313,9 @@ struct EditorsHeld {
     /// The Preferences dialog's pages, the one shown, and its close (D923).
     std::vector<std::pair<ui::Node, std::size_t>> preferencePages;
     std::size_t preferencePage = 0;
+    /// The preferences' Keys page and About page, the Help menu's (D930).
+    static constexpr std::size_t kKeysPage = 1;
+    static constexpr std::size_t kAboutPage = 4;
     ui::Node preferencesX{};
     /// Whether the right dock shows the Scene settings tab (D921).
     bool sceneSettingsShown = false;

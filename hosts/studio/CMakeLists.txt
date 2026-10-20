@@ -979,6 +979,17 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"studio_cook_brought\"[^\n]*\"copied\":[1-9][0-9]*,.*\"code\":\"studio_summary\"[^\n]*\"played\":1,.*\"code\":\"textures_read\".*cooked on the host")
+        # The Help menu (D930): About opens the preferences' About page, and
+        # W switches the viewport to the move tool as the toolbar names it.
+        add_test(NAME studio_helps
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/plaza/plaza.game gate.scene @Help "@About Rawframe Studio  F1"
+                         "until=studio_said,status=\"about Rawframe Studio" "@Close" keys=R "until=studio_said,status=\"scale tool"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_helps PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION "\"status\":\"about Rawframe Studio.*\"status\":\"scale tool")
         # Assets' file operations (D929): in a copy of Plaza a folder made
         # and listed though empty, a material dragged onto it and moved
         # there, another renamed, keeping its extension, and a third

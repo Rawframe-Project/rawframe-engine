@@ -73,13 +73,41 @@ bool kept(const std::filesystem::path& game, std::string_view path) {
     return kPath == game.filename() || kPath == "kest.project" || hidden(kPath);
 }
 
-/// Refused unless `path` is under the game's directory and not kept.
+/// Whether `path` under the game's directory reaches nothing through a
+/// link: no part of it that is there is one, and where it is now is under
+/// the directory as the file system resolves it. A collaborator's record
+/// names only paths, so a link a game holds never takes a move or a
+/// removal outside it (D929).
+bool unlinked(const std::filesystem::path& game, std::string_view path) {
+    std::error_code error;
+    const std::filesystem::path kRoot = std::filesystem::canonical(game.parent_path(), error);
+    if (error) {
+        return false;
+    }
+    std::filesystem::path at = kRoot;
+    for (const std::filesystem::path& kPart : std::filesystem::path{std::string{path}}) {
+        at /= kPart;
+        const std::filesystem::file_status kStatus = std::filesystem::symlink_status(at, error);
+        if (std::filesystem::is_symlink(kStatus)) {
+            return false;
+        }
+        if (!std::filesystem::exists(kStatus)) {
+            break;
+        }
+    }
+    const std::filesystem::path kResolved = std::filesystem::weakly_canonical(kRoot / std::string{path}, error);
+    const auto [kEnd, kAt] = std::ranges::mismatch(kRoot, kResolved);
+    return !error && kEnd == kRoot.end();
+}
+
+/// Refused unless `path` is under the game's directory, reached through
+/// no link, and not kept.
 result::Status movable(const std::filesystem::path& game, std::string_view path) {
-    if (!staysUnder(path) || kept(game, path)) {
+    if (!staysUnder(path) || kept(game, path) || !unlinked(game, path)) {
         return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
                                        result::ErrorClass::InvalidArgument,
-                                       "a file moved or removed is under the game's directory, and neither its "
-                                       "description nor its Kest project")
+                                       "a file moved or removed is under the game's directory, reached through "
+                                       "no link, and neither its description nor its Kest project")
                                    .withContext("path", std::string{path})};
     }
     return {};
@@ -182,8 +210,9 @@ std::vector<std::string> namedIn(const std::filesystem::path& game, std::string_
             return static_cast<char>(std::tolower(each));
         });
         std::error_code sized;
-        if (!entry->is_regular_file() || entry->path() == game || extension == content::kSidecarSuffix ||
-            std::ranges::contains(kUnread, extension) || entry->file_size(sized) > kMostNamingBytes) {
+        if (entry->is_symlink() || !entry->is_regular_file() || entry->path() == game ||
+            extension == content::kSidecarSuffix || std::ranges::contains(kUnread, extension) ||
+            entry->file_size(sized) > kMostNamingBytes) {
             continue;
         }
         if (names(textOf(entry->path()), path)) {

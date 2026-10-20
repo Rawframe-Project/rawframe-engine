@@ -1,7 +1,9 @@
+#include "rawframe/process/self.h"
 #include "shell.h"
 
 #include <algorithm>
 #include <array>
+#include <filesystem>
 
 namespace rawframe::studio {
 
@@ -85,7 +87,7 @@ void ShellParticipant::openPreferences() {
                          0);
         pages.has_value()) {
         static_cast<void>(tree_->setLook(*pages, ui::Look{.borderColor = look::kLine}));
-        constexpr std::array<std::string_view, 4> kPages = {"General", "Keys", "Agent and MCP", "Extensions"};
+        constexpr std::array<std::string_view, 5> kPages = {"General", "Keys", "Agent and MCP", "Extensions", "About"};
         for (std::size_t each = 0; each < kPages.size(); ++each) {
             auto page = box(
                 *pages,
@@ -183,7 +185,7 @@ void ShellParticipant::openPreferences() {
                  "each change it makes shows in History with its name, and Undo takes it back.");
         kMono("rawframe-author mcp " + description_.string());
         kHeading("Together", "Two authors on one game: File, then the game's host, as rawframe-author host and join.");
-    } else {
+    } else if (held_.preferencePage == 3) {
         // The game's extensions (SPEC-0051's Preferences: Extensions,
         // D874): each by its path, what its doors are of, and its
         // commands, or why it offers none.
@@ -206,6 +208,36 @@ void ShellParticipant::openPreferences() {
                 static_cast<void>(row(kContent, "  " + kCommand, kQuiet, 0U));
             }
         }
+    } else {
+        // What Studio is, how its viewport is flown, and the programs it
+        // found beside it (D930).
+        kHeading("Rawframe Studio",
+                 "An editor over the engine's headless tools: what it does to a game, rawframe-author and the "
+                 "tools beside it do without it, and an agent through MCP.");
+        kMono("Build unreleased  ·  engine C++23  ·  gameplay in Kest");
+        kHeading("The viewport", "");
+        for (const std::string_view kLine : {"Right mouse held: look, with W A S D to fly and Q E down and up",
+                                             "Shift held while flying: faster; the wheel then sets the speed",
+                                             "Alt and left mouse: orbit about the point ahead",
+                                             "Middle mouse: pan, and the wheel alone: in and out",
+                                             "F: frame what is chosen  ·  Q W E R: select, move, rotate, scale",
+                                             "Ctrl K: find a command, an asset, or an entity  ·  F5: play"}) {
+            static_cast<void>(row(kContent, std::string{kLine}, kText, 0U));
+        }
+        kHeading("Beside Studio", "The programs Studio cooks, plays, and exports with, found in its own folder.");
+        for (const std::string_view kTool :
+             {"rawframe-cook", "rawframe-server", "rawframe-client", "rawframe-author", "rawframe-thumbnail"}) {
+            std::error_code error;
+            const std::filesystem::path kProgram = process::besideSelf(std::string{kTool});
+            const bool kThere =
+                std::filesystem::exists(kProgram, error) || std::filesystem::exists(kProgram.string() + ".exe", error);
+            static_cast<void>(row(kContent,
+                                  std::string{kTool} + (kThere ? ": found" : ": missing, so install Studio again"),
+                                  kThere ? kText : kWarning,
+                                  0U));
+        }
+        kHeading("Where Studio keeps things", "Its preferences and recent games, in your user folder, not the game.");
+        kMono(preferencesFile_.string());
     }
     if (auto foot = box(*card,
                         ui::Layout{.height = ui::pixels(50),

@@ -27,7 +27,13 @@ std::string lowered(std::string_view text) {
 
 /// The menus in the menu bar's order, none named as a command is, so a
 /// screen reader's "Play" is the button (D777).
-constexpr std::string_view kMenus[] = {"File", "Edit", "Entity", "Game", "Extensions", "View", "Window"};
+constexpr std::string_view kMenus[] = {"File", "Edit", "Entity", "Game", "Extensions", "View", "Window", "Help"};
+
+/// The Help menu's commands (D930): the keys each command has, and what
+/// Studio is, how its viewport is flown, and what it found beside it, each
+/// a page of the preferences, as nothing there is configuration.
+constexpr std::string_view kShortcuts = "Keyboard shortcuts";
+constexpr std::string_view kAbout = "About Rawframe Studio";
 
 /// The palette's own command, which has no button: it gives the palette's
 /// field the keyboard.
@@ -106,8 +112,16 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 7> kFileComm
 
 /// The commands a menu draws a line above, each beginning a group of its
 /// own as an editor's menus do.
-constexpr std::array<std::string_view, 9> kGroupsBegun = {
-    "Save", "Import files", "Close game", "Quit", "Duplicate", "Move to", "Assets", kPalette, kSaveLayout};
+constexpr std::array<std::string_view, 10> kGroupsBegun = {"Save",
+                                                           "Import files",
+                                                           "Close game",
+                                                           "Quit",
+                                                           "Duplicate",
+                                                           "Move to",
+                                                           "Assets",
+                                                           kPalette,
+                                                           kSaveLayout,
+                                                           "Select tool"};
 
 /// What the palette's field reads while it does not hold the keyboard.
 constexpr std::string_view kPaletteHint = "Search commands, assets, entities    Ctrl K";
@@ -154,6 +168,15 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     kOffer("Up", "Entity", {}, upNode_);
     kOffer("Down", "Entity", {}, downNode_);
     kOffer("Play", "Game", {"F5"}, playNode_);
+    // The viewport's tools by their keys, as the toolbar names them (D930);
+    // while a press flies the view the keys are the flight's.
+    for (const auto& [kName, kKey, kAt] :
+         {std::tuple<std::string_view, std::string_view, std::size_t>{"Select tool", "Q", 0},
+          std::tuple<std::string_view, std::string_view, std::size_t>{"Move tool", "W", 1},
+          std::tuple<std::string_view, std::string_view, std::size_t>{"Rotate tool", "E", 2},
+          std::tuple<std::string_view, std::string_view, std::size_t>{"Scale tool", "R", 3}}) {
+        kOffer(kName, "Edit", {std::string{kKey}}, held_.tools[kAt]);
+    }
     kOffer("Assets", "Window", {}, assetsTab_);
     kOffer("History", "Window", {}, historyTab_);
     kOffer("Console", "Window", {}, consoleTab_);
@@ -170,7 +193,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
                                  [&](const Command& command) {
                                      return command.menu == kMenu;
                                  }) &&
-            kMenu != "File" && kMenu != "Window" && kMenu != "View" &&
+            kMenu != "File" && kMenu != "Window" && kMenu != "View" && kMenu != "Help" &&
             (kMenu != "Extensions" || std::ranges::all_of(extensions_, [](const ListedExtension& extension) {
                  return extension.commands.empty() && extension.modes.empty();
              }))) {
@@ -193,6 +216,8 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     }
     commands_.push_back(Command{.name = std::string{kPalette}, .menu = "Window", .keys = kKeys(kPalette, {"Ctrl+K"})});
     commands_.push_back(Command{.name = std::string{kPreferences}, .menu = "Window", .keys = kKeys(kPreferences, {})});
+    commands_.push_back(Command{.name = std::string{kShortcuts}, .menu = "Help", .keys = kKeys(kShortcuts, {})});
+    commands_.push_back(Command{.name = std::string{kAbout}, .menu = "Help", .keys = kKeys(kAbout, {"F1"})});
     // The layouts, where the surface table places "Docks and saved
     // layouts".
     for (const Layout& layout : layouts()) {
@@ -396,6 +421,14 @@ bool ShellParticipant::runCommand(std::string_view name) {
         if (kChosenLayout != kLayoutsMade.end()) {
             chooseLayout(*kChosenLayout);
         }
+        return true;
+    }
+    if (kCommand->name == kShortcuts || kCommand->name == kAbout) {
+        closeExport();
+        closePreferences();
+        held_.preferencePage = kCommand->name == kShortcuts ? EditorsHeld::kKeysPage : EditorsHeld::kAboutPage;
+        openPreferences();
+        say(kCommand->name == kShortcuts ? "keyboard shortcuts" : "about Rawframe Studio");
         return true;
     }
     if (kCommand->name == kPreferences) {
