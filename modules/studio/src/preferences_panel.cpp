@@ -97,8 +97,14 @@ void ShellParticipant::openPreferences() {
             }
             static_cast<void>(
                 tree_->setLook(*page, ui::Look{.fill = each == held_.preferencePage ? kChosen : 0U, .radius = 4}));
-            static_cast<void>(pressWords(
-                *page, kPages[each], each == held_.preferencePage ? look::kInk : look::kSoftInk, look::kBodySize));
+            if (auto said = box(*page, ui::Layout{.shrink = 0}, 0); said.has_value()) {
+                static_cast<void>(words(
+                    *said, kPages[each], each == held_.preferencePage ? look::kInk : look::kSoftInk, look::kBodySize));
+                static_cast<void>(
+                    tree_->setInteraction(*said, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+            }
+            static_cast<void>(tree_->setRole(*page, ui::Role::Button));
+            static_cast<void>(tree_->setName(*page, kPages[each]));
             held_.preferencePages.emplace_back(*page, each);
         }
     }
