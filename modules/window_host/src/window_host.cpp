@@ -448,6 +448,7 @@ result::Status WindowHost::start(window::Windows& windows) {
         }
     }
     asked_ = made.size;
+    shownMode_ = made.mode;
     RAWFRAME_TRY_ASSIGN(const window::WindowId kWindow, windows.create(made));
     if (place.has_value()) {
         static_cast<void>(windows.requestPosition(kWindow, *place));
@@ -491,6 +492,11 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     bool closing = closing_.asked();
     if (showing_.asked() && std::exchange(showWhenAsked_, false)) {
         static_cast<void>(windows.requestVisible(window_, true));
+        // Shown, a window made hidden takes its mode again: Win32 shows it
+        // restored (D943).
+        if (shownMode_ != window::Mode::Windowed) {
+            static_cast<void>(windows.requestMode(window_, shownMode_));
+        }
     }
     const bool kWasSuspended = suspended_.load(std::memory_order_relaxed);
     // The touch screen's halves split the window as it is now (D387).

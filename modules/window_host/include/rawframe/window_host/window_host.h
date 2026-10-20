@@ -182,6 +182,7 @@ private:
     /// Lent where the window waits hidden until asked (D942).
     view::WindowShowing showing_;
     bool showWhenAsked_ = false;
+    window::Mode shownMode_ = window::Mode::Windowed;
     std::vector<std::pair<window::RequestId, std::uint64_t>> dialogsShown_;
     /// Either, as the Host's frames tell its participants.
     std::atomic<bool> suspended_{false};

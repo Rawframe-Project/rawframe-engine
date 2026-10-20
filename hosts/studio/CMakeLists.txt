@@ -9,9 +9,14 @@ rawframe_host(NAME studio_tool OUTPUT rawframe-studio
     SOURCES src/main.cpp
     DEPS studio window_host render render_canvas_gpu host window composition result base
 )
-# Its icon in the program file itself on Windows (D920).
+# Its icon in the program file itself on Windows (D920), and a program of
+# windows, not of the console: opened from Explorer it shows no console
+# beside it, its main still its entry (D943). A parent that hands it files
+# for its output, as the tests do, still has them written.
 if(WIN32)
     target_sources(rawframe_host_studio_tool PRIVATE resources/rawframe-studio.rc)
+    set_target_properties(rawframe_host_studio_tool PROPERTIES WIN32_EXECUTABLE TRUE)
+    target_link_options(rawframe_host_studio_tool PRIVATE "LINKER:/ENTRY:mainCRTStartup")
 endif()
 
 find_program(RAWFRAME_XVFB Xvfb)
