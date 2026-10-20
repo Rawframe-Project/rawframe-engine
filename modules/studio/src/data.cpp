@@ -1,6 +1,11 @@
 #include "hints.h"
 #include "shell.h"
 
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <cstdio>
+
 namespace rawframe::studio {
 
 namespace {
@@ -79,10 +84,26 @@ void ShellParticipant::showData() {
                               const std::string& path,
                               const std::string& label,
                               std::size_t depth) -> void {
-        auto added = row(entitiesColumn_, std::string(2 * depth, ' ') + label, kText, kRow, true);
+        // A tree row as the design's (D923): what it is named, and the list
+        // it is in quieter, read by its whole label.
+        const std::size_t kOpen = label.rfind(" (");
+        const bool kInList = kOpen != std::string::npos && label.ends_with(')');
+        const bool kHolds = std::ranges::any_of(at.items(), [](const Value& held) {
+            return listed(held);
+        });
+        auto added = entityRow(entitiesColumn_,
+                               kInList ? label.substr(0, kOpen) : label,
+                               depth,
+                               kHolds,
+                               depth == 0 ? Icon::Data : Icon::Cube,
+                               depth == 0 ? look::kLabelInk : look::kEntityInk,
+                               look::kRowInk,
+                               kInList ? std::string_view{label}.substr(kOpen + 2, label.size() - kOpen - 3)
+                                       : std::string_view{});
         if (!added.has_value() || entityRows_.size() >= EditorsHeld::kMostRows) {
             return;
         }
+        static_cast<void>(tree_->setName(*added, label));
         entityRows_.push_back(*added);
         entities_.push_back(path);
         names_.push_back(label);
@@ -137,6 +158,216 @@ void ShellParticipant::showData() {
         showCanvas(*kGraph, "graph.");
     } else if (kNamed == "animation.clip") {
         showTimeline(*sheet_);
+    } else {
+        showDataTables();
+    }
+    // A row chosen at once, the Inspector saying what it holds: the first
+    // inside the document.
+    if (entityRows_.size() > 1 && (entity_.empty() || !std::ranges::contains(entities_, entity_))) {
+        // The first that holds a value of its own, not only rows.
+        std::size_t first = 1;
+        for (std::size_t each = 1; each < held_.data.size(); ++each) {
+            if (std::ranges::any_of(held_.data[each].items(), [](const Value& held) {
+                    return !listed(held);
+                })) {
+                first = each;
+                break;
+            }
+        }
+        showDataEntry(first);
+    }
+}
+
+namespace {
+
+/// A value as a table's cell says it: text as it reads, a number short, a
+/// list of plain values apart by commas, a list of rows by how many.
+std::string cellOf(const Value& value) {
+    std::string made;
+    switch (value.kind()) {
+    case Value::Kind::String:
+        made = *value.text();
+        std::ranges::replace(made, '\n', ' ');
+        break;
+    case Value::Kind::Number: {
+        std::array<char, 32> text{};
+        std::snprintf(text.data(), text.size(), "%g", value.real().value_or(0));
+        made = text.data();
+        break;
+    }
+    case Value::Kind::Bool:
+        made = value.truth().value_or(false) ? "yes" : "no";
+        break;
+    case Value::Kind::Array:
+        if (std::ranges::all_of(value.items(), [](const Value& item) {
+                return !listed(item);
+            })) {
+            for (const Value& kItem : value.items()) {
+                made += (made.empty() ? "" : ", ") + cellOf(kItem);
+            }
+        } else {
+            made = std::to_string(value.items().size()) + (value.items().size() == 1 ? " row" : " rows");
+        }
+        break;
+    case Value::Kind::Object:
+        made = std::to_string(value.names().size()) + " fields";
+        break;
+    case Value::Kind::Null:
+        break;
+    }
+    return made.size() > 44 ? made.substr(0, 43) + "\u2026" : made;
+}
+
+} // namespace
+
+void ShellParticipant::showDataTables() {
+    clear(viewRows_);
+    held_.canvasParts.clear();
+    held_.canvasBoxes.clear();
+    if (!sheet_.has_value()) {
+        return;
+    }
+    auto pane = box(centerColumn_,
+                    ui::Layout{.height = ui::pixels(0),
+                               .minHeight = ui::pixels(0),
+                               .direction = ui::Direction::Column,
+                               .gap = 18,
+                               .grow = 1,
+                               .padding = {20, 20, 16, 16},
+                               .scroll = ui::Scroll::Vertical},
+                    0);
+    if (!pane.has_value()) {
+        return;
+    }
+    viewRows_.push_back(*pane);
+    static_cast<void>(tree_->setName(*pane, "Tables"));
+    std::size_t tables = 0;
+    for (std::size_t each = 0; each < sheet_->names().size(); ++each) {
+        const std::string& kMember = sheet_->names()[each];
+        const Value& kList = sheet_->items()[each];
+        // A keyed list, or a map of rows by their names (a strings
+        // document's entries).
+        const bool kKeyed = kList.kind() == Value::Kind::Array && keyed(kList);
+        const bool kMap = kList.kind() == Value::Kind::Object && !kList.names().empty() &&
+                          std::ranges::all_of(kList.items(), [](const Value& item) {
+                              return item.kind() == Value::Kind::Object;
+                          });
+        if (!kKeyed && !kMap) {
+            continue;
+        }
+        // Its columns: the key, then the plain values its rows hold, the
+        // first rows' order, a few.
+        std::vector<std::string> columns;
+        const std::string kKey = kKeyed ? *keyOf(kList.items().front()) : std::string{"key"};
+        columns.push_back(kKey);
+        for (const Value& kItem : kList.items()) {
+            for (std::size_t field = 0; field < kItem.names().size() && columns.size() < 6; ++field) {
+                if (!std::ranges::contains(columns, kItem.names()[field]) &&
+                    (!listed(kItem.items()[field]) || kItem.items()[field].kind() == Value::Kind::Array)) {
+                    columns.push_back(kItem.names()[field]);
+                }
+            }
+        }
+        auto table = box(*pane, ui::Layout{.direction = ui::Direction::Column, .shrink = 0}, 0);
+        if (!table.has_value()) {
+            return;
+        }
+        ++tables;
+        if (auto title =
+                box(*table,
+                    ui::Layout{.alignItems = ui::Align::Center, .gap = 10, .shrink = 0, .padding = {2, 2, 0, 8}},
+                    0);
+            title.has_value()) {
+            if (auto named = box(*title, ui::Layout{.shrink = 0}, 0); named.has_value()) {
+                static_cast<void>(strongWords(*named, prettyField(kMember), look::kInk, 17));
+            }
+            if (auto counted = box(*title, ui::Layout{.shrink = 0}, 0); counted.has_value()) {
+                static_cast<void>(
+                    words(*counted,
+                          std::to_string(kList.items().size()) + (kList.items().size() == 1 ? " row" : " rows"),
+                          look::kFaintInk,
+                          look::kLabelSize));
+            }
+        }
+        auto frame =
+            box(*table, ui::Layout{.direction = ui::Direction::Column, .shrink = 0, .border = {1, 1, 1, 1}}, 0);
+        if (!frame.has_value()) {
+            return;
+        }
+        static_cast<void>(tree_->setLook(
+            *frame, ui::Look{.fill = 0x17181CFFU, .borderColor = look::kEdge, .radius = 6, .clip = true}));
+        const auto kLine = [&](bool heading, std::uint32_t fill) -> std::optional<ui::Node> {
+            auto line = box(*frame,
+                            ui::Layout{.height = ui::pixels(heading ? 30 : 34),
+                                       .alignItems = ui::Align::Center,
+                                       .gap = 12,
+                                       .shrink = 0,
+                                       .padding = {12, 12, 0, 0},
+                                       .border = {0, 0, 0, 1}},
+                            0);
+            if (!line.has_value()) {
+                return std::nullopt;
+            }
+            static_cast<void>(tree_->setLook(*line, ui::Look{.fill = fill, .borderColor = look::kLine}));
+            return *line;
+        };
+        const auto kCell = [this](ui::Node line, std::string_view text, std::uint32_t ink, bool mono, bool strong) {
+            auto cell = box(line, ui::Layout{.width = ui::pixels(0), .grow = 1, .shrink = 1}, 0);
+            if (!cell.has_value()) {
+                return;
+            }
+            static_cast<void>(tree_->setLook(*cell, ui::Look{.clip = true}));
+            static_cast<void>(strong ? strongWords(*cell, text, ink, look::kBodySize)
+                              : mono ? monoWords(*cell, text, ink, look::kSmallSize)
+                                     : words(*cell, text, ink, look::kBodySize));
+            static_cast<void>(tree_->setInteraction(*cell, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        };
+        if (auto heading = kLine(true, 0); heading.has_value()) {
+            for (const std::string& kColumn : columns) {
+                std::string upper = prettyField(kColumn);
+                std::ranges::transform(upper, upper.begin(), [](char letter) {
+                    return static_cast<char>(std::toupper(static_cast<unsigned char>(letter)));
+                });
+                kCell(*heading, upper, look::kFaintInk, true, false);
+            }
+        }
+        for (std::size_t item = 0; item < kList.items().size(); ++item) {
+            const Value& kItem = kList.items()[item];
+            const std::string kPath = kKeyed ? kMember + "[" + kKey + "=" + *kItem.find(kKey)->text() + "]"
+                                             : joined(kMember, kList.names()[item]);
+            const auto kListed = std::ranges::find(entities_, kPath);
+            if (kListed == entities_.end()) {
+                continue;
+            }
+            const auto kEntity = static_cast<std::size_t>(kListed - entities_.begin());
+            auto line = kLine(false, kPath == entity_ ? kChosen : 0U);
+            if (!line.has_value()) {
+                return;
+            }
+            held_.canvasParts.emplace_back(*line, kEntity);
+            held_.canvasBoxes.emplace_back(*line, kEntity);
+            static_cast<void>(tree_->setRole(*line, ui::Role::Button));
+            static_cast<void>(tree_->setName(*line, (kKeyed ? labelOf(kItem, kKey) : kList.names()[item]) + " row"));
+            for (std::size_t column = 0; column < columns.size(); ++column) {
+                const Value* kValue = kItem.find(columns[column]);
+                kCell(*line,
+                      !kKeyed && column == 0 ? kList.names()[item]
+                      : kValue != nullptr    ? cellOf(*kValue)
+                                             : std::string{},
+                      column == 0 ? look::kInk : look::kSoftInk,
+                      column != 0,
+                      column == 0);
+            }
+        }
+    }
+    if (tables == 0) {
+        if (auto none = box(*pane, ui::Layout{.shrink = 0}, 0); none.has_value()) {
+            static_cast<void>(words(*none,
+                                    "This document holds no lists of rows. Choose a part in the Hierarchy to edit "
+                                    "its values in the Inspector.",
+                                    look::kFaintInk,
+                                    look::kBodySize));
+        }
     }
 }
 
@@ -155,10 +386,14 @@ void ShellParticipant::showDataEntry(std::size_t at) {
     // A clip's timeline laid out again, the chosen track's curve with it;
     // a graph's canvas marked (D827, D836).
     const Value* kKind = sheet_.has_value() ? sheet_->find("kind") : nullptr;
-    if (kKind != nullptr && kKind->kind() == Value::Kind::String && *kKind->text() == "animation.clip") {
+    const std::string kKindName = kKind != nullptr && kKind->kind() == Value::Kind::String ? *kKind->text() : "";
+    if (kKindName == "animation.clip") {
         showTimeline(*sheet_);
-    } else {
+    } else if (kKindName == "animation.graph") {
         markCanvas();
+    } else {
+        // The tables again, the chosen row lit (D923).
+        showDataTables();
     }
     clear(componentRows_);
     actions_.clear();

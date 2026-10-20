@@ -212,12 +212,29 @@ void ShellParticipant::showUi() {
             if (component == nullptr || component->text() == nullptr) {
                 continue;
             }
-            // Who else has it chosen, or holds it, when joined (D886).
-            auto added = row(entitiesColumn_,
-                             std::string(2 * depth, ' ') + *component->text() + presenceMarks(*component->text()),
-                             kText,
-                             kRow,
-                             true);
+            // Who else has it chosen, or holds it, when joined (D886); a
+            // tree row as the design's, what the node is after its name
+            // (D923).
+            const Value* kChildren = each.find("children");
+            const bool kParent = kChildren != nullptr && !kChildren->items().empty();
+            const std::string_view kKind = each.find("text") != nullptr    ? "text"
+                                           : each.find("image") != nullptr ? "image"
+                                           : each.find("shows") != nullptr ? "shows"
+                                           : kParent                       ? "box"
+                                                                           : "node";
+            const std::string& kComponent = *component->text();
+            const std::size_t kDot = kComponent.find_last_of('.');
+            auto added = entityRow(entitiesColumn_,
+                                   (kDot == std::string::npos ? kComponent : kComponent.substr(kDot + 1)) +
+                                       presenceMarks(kComponent),
+                                   depth,
+                                   kParent,
+                                   kKind == "text"    ? Icon::Script
+                                   : kKind == "image" ? Icon::Texture
+                                                      : Icon::Ui,
+                                   look::kEntityInk,
+                                   look::kRowInk,
+                                   kKind);
             if (!added.has_value()) {
                 return;
             }
@@ -233,6 +250,10 @@ void ShellParticipant::showUi() {
     kList(kList, sheet_.has_value() ? sheet_->find("nodes") : nullptr, 0);
     if (sheet_.has_value()) {
         showUiPreview(*sheet_);
+    }
+    // A node chosen at once, so the Inspector says what it is.
+    if (!entities_.empty() && (entity_.empty() || !std::ranges::contains(entities_, entity_))) {
+        showNode(0);
     }
 }
 
@@ -256,19 +277,59 @@ void ShellParticipant::showNode(std::size_t at) {
     if (chosen == nullptr) {
         return;
     }
-    // Every field a node has, in the document's order, set or not.
-    for (const std::string_view kMember : ui::nodeMembers()) {
-        if (kMember == "component" || kMember == "children") {
-            continue;
+    // Its name, then every field a node has in the document's order: those
+    // it sets first, then the rest (D923).
+    if (auto head =
+            box(componentsColumn_,
+                ui::Layout{.direction = ui::Direction::Column, .gap = 3, .shrink = 0, .padding = {12, 12, 10, 8}},
+                0);
+        head.has_value()) {
+        componentRows_.push_back(*head);
+        if (auto name = box(*head, ui::Layout{.shrink = 0}, 0); name.has_value()) {
+            static_cast<void>(strongWords(*name, entity_, look::kInk, 15));
         }
-        const Value* held = chosen->find(kMember);
-        auto line = fieldRow(kMember, held != nullptr ? partText(*held) : std::string{}, std::nullopt, held != nullptr);
-        if (!line.has_value()) {
-            return;
+    }
+    for (const bool kSetHere : {true, false}) {
+        if (auto heading = box(componentsColumn_,
+                               ui::Layout{.alignItems = ui::Align::Center,
+                                          .gap = 8,
+                                          .shrink = 0,
+                                          .padding = {10, 10, 10, 6},
+                                          .border = {0, 0, 1, 0}},
+                               0);
+            heading.has_value()) {
+            componentRows_.push_back(*heading);
+            static_cast<void>(tree_->setLook(*heading, ui::Look{.borderColor = look::kLine}));
+            if (auto titled = box(*heading, ui::Layout{.shrink = 0}, 0); titled.has_value()) {
+                static_cast<void>(strongWords(*titled, kSetHere ? "Set" : "Everything else", look::kInk));
+            }
+            if (auto quiet = box(*heading, ui::Layout{.shrink = 1}, 0); quiet.has_value()) {
+                static_cast<void>(monoWords(*quiet,
+                                            kSetHere ? "what this node says" : "at their defaults, typed to set",
+                                            look::kFaintInk,
+                                            look::kSmallSize));
+            }
         }
-        componentRows_.push_back(line->first);
-        fields_.push_back(
-            FieldRow{.value = line->second, .role = FieldRow::Role::NodeField, .field = std::string{kMember}});
+        for (const std::string_view kMember : ui::nodeMembers()) {
+            if (kMember == "component" || kMember == "children") {
+                continue;
+            }
+            const Value* held = chosen->find(kMember);
+            if ((held != nullptr) != kSetHere) {
+                continue;
+            }
+            auto line = fieldRow(kMember,
+                                 held != nullptr ? partText(*held) : std::string{},
+                                 std::nullopt,
+                                 held != nullptr,
+                                 prettyField(kMember));
+            if (!line.has_value()) {
+                return;
+            }
+            componentRows_.push_back(line->first);
+            fields_.push_back(
+                FieldRow{.value = line->second, .role = FieldRow::Role::NodeField, .field = std::string{kMember}});
+        }
     }
     components_ = 1;
 }

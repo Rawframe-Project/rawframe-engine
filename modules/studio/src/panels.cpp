@@ -143,7 +143,8 @@ result::Result<ui::Node> ShellParticipant::entityRow(ui::Node column,
                                                      bool parent,
                                                      Icon which,
                                                      std::uint32_t iconInk,
-                                                     std::uint32_t ink) {
+                                                     std::uint32_t ink,
+                                                     std::string_view quiet) {
     RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode,
                         box(column,
                             ui::Layout{.height = ui::pixels(look::kRowHeight),
@@ -161,6 +162,12 @@ result::Result<ui::Node> ShellParticipant::entityRow(ui::Node column,
     RAWFRAME_TRY_ASSIGN(const ui::Node kLabel, box(kRowNode, ui::Layout{.shrink = 1}, 0));
     RAWFRAME_TRY(words(kLabel, label, ink, look::kBodySize));
     RAWFRAME_TRY(tree_->setInteraction(kLabel, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+    // What it is, quieter, after its name (D923).
+    if (!quiet.empty()) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kQuietLabel, box(kRowNode, ui::Layout{.shrink = 1}, 0));
+        RAWFRAME_TRY(monoWords(kQuietLabel, quiet, look::kFaintInk, look::kSmallSize));
+        RAWFRAME_TRY(tree_->setInteraction(kQuietLabel, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+    }
     RAWFRAME_TRY(tree_->setRole(kRowNode, ui::Role::Button));
     RAWFRAME_TRY(tree_->setName(kRowNode, label));
     return kRowNode;

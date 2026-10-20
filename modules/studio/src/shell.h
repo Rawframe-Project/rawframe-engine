@@ -173,7 +173,8 @@ private:
                                        bool parent,
                                        Icon which,
                                        std::uint32_t iconInk,
-                                       std::uint32_t ink);
+                                       std::uint32_t ink,
+                                       std::string_view quiet = {});
     /// The toolbar under the title row and the status bar (D915).
     result::Status toolbar(ui::Node root);
     result::Status statusBar(ui::Node root);
@@ -701,6 +702,9 @@ private:
     /// column, read whole (`data.read`); one of them, its values each a
     /// field; and a value set through `data.set` (D812).
     void showData();
+    /// The data document's keyed lists as tables in the center, a row each,
+    /// pressed to choose it (D923).
+    void showDataTables();
     /// A graph's nodes laid out in the center by how far wires run into
     /// them, wires drawn (D819); `prefix` what each node id is among the
     /// rows' entities. A node pressed is its row pressed.
