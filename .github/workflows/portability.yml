@@ -402,11 +402,13 @@ jobs:
           set -euo pipefail
           tools/package_studio.sh out/windows-development studio runners plaza tycoon
           for game in runners plaza tycoon; do
-            (cd studio && cp "$game.conf" opened.conf && printf 'host.maximum_iterations = 600\n' >>opened.conf &&
+            # The package names no game (D921): each opened as the start
+            # screen opens it, with preferences of its own.
+            (cd studio && printf 'studio.game = games/%s/%s.game\nstudio.preferences = opened.preferences\nhost.maximum_iterations = 600\n' "$game" "$game" >opened.conf &&
               timeout 120 ./rawframe-studio.exe --config opened.conf >opened.log 2>&1) || true
             grep -q '"code":"studio_shown"' studio/opened.log || { cat studio/opened.log; echo "studio did not open $game"; exit 1; }
             echo "studio opened $game"
-            rm studio/opened.conf studio/opened.log
+            rm -rf studio/opened.conf studio/opened.log studio/opened.preferences studio/pictures
           done
       - name: Keep Studio
         uses: actions/upload-artifact@v7
