@@ -142,7 +142,14 @@ void ShellParticipant::showData() {
             const std::string& kMember = at.names()[each];
             const Value& kHeld = at.items()[each];
             if (kHeld.kind() == Value::Kind::Object) {
-                self(self, kHeld, joined(path, kMember), kMember, depth + 1);
+                // An animation graph's node by its kind, its identity
+                // quieter after it (D940).
+                const bool kNode = path == "graph" && kHeld.find("type") != nullptr;
+                self(self,
+                     kHeld,
+                     joined(path, kMember),
+                     kNode ? graphNodeLabel(kHeld) + " (" + kMember + ")" : kMember,
+                     depth + 1);
             } else if (kHeld.kind() == Value::Kind::Array && keyed(kHeld)) {
                 for (const Value& kItem : kHeld.items()) {
                     const std::string kKey = *keyOf(kItem);

@@ -379,7 +379,17 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
         for (std::size_t param = 0;
              kParams != nullptr && kParams->kind() == Value::Kind::Object && param < kParams->names().size();
              ++param) {
-            if (!kLine(kParams->names()[param], constantText(kParams->items()[param]), 0).has_value()) {
+            // A resource a node names, as a clip, by the game's file of it
+            // rather than its identity (D940).
+            std::string shown = constantText(kParams->items()[param]);
+            if (const Value& kParam = kParams->items()[param];
+                kParam.kind() == Value::Kind::String && kParam.text() != nullptr) {
+                if (const auto kSource = std::ranges::find(browser_.sources, *kParam.text(), &ListedSource::id);
+                    kSource != browser_.sources.end()) {
+                    shown = kSource->path;
+                }
+            }
+            if (!kLine(kParams->names()[param], shown, 0).has_value()) {
                 return;
             }
         }
