@@ -469,6 +469,19 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "saw studio_said,status=\"0 extensions read again.*saw studio_said,status=\"extensions.*found None in this game. at.*\"exit\":\"clean_stop\"")
+    # Escape closes what is open over the frame (D942): the export dialog
+    # opened from the File menu, then closed by the key with no field
+    # holding the keyboard.
+    add_test(NAME studio_escapes
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @File @Export "until=studio_said,status=\"export\""
+                     keys=Escape "until=studio_said,status=\"closed\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_escapes PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "pressed Escape.*saw studio_said,status=\"closed.*\"exit\":\"clean_stop\"")
     # A scene's history (D454): ground renamed three times, the history
     # lists the three; its first entry clicked undoes the two after it,
     # and its last clicked redoes them. The history sits under the view's

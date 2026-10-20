@@ -547,6 +547,18 @@ void ShellParticipant::endEdit() {
 void ShellParticipant::take(const view::Typing& typing) {
     // A shortcut does its command whether or not a field holds the
     // keyboard (D777).
+    if (typing.kind == view::Typing::Kind::Chord && typing.text == "Escape") {
+        // What is open over the frame closed, as an editor's Escape does
+        // (D942): a menu, the export dialog, the preferences.
+        const bool kOpen = popup_.has_value() || held_.exportDialog.has_value() || dialog_.has_value();
+        closePopup();
+        closeExport();
+        closePreferences();
+        if (kOpen) {
+            say("closed");
+        }
+        return;
+    }
     if (typing.kind == view::Typing::Kind::Chord) {
         runChord(typing.text);
         return;

@@ -660,6 +660,11 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             typed->key == view::TypingKey::Delete) {
             typed = view::Typing{.kind = view::Typing::Kind::Chord, .text = "Delete"};
         }
+        // As is Escape, an editor's dialog or menu closed by it (D942).
+        if (typed.has_value() && !typing_.editing() && typed->kind == view::Typing::Kind::Key &&
+            typed->key == view::TypingKey::Dismiss) {
+            typed = view::Typing{.kind = view::Typing::Kind::Chord, .text = "Escape"};
+        }
         if (!typed.has_value() && !typing_.editing()) {
             typed = letterOf(*event);
         }
