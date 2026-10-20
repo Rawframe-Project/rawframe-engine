@@ -17,7 +17,18 @@ void ShellParticipant::keepEditing() {
     if (!play_.has_value() || playing_.has_value() || stopping_.has_value() || held_.joined != nullptr) {
         return;
     }
-    if (std::exchange(playAsked_, false)) {
+    // Play asked for cooks first where the content is behind, as an
+    // editor builds before it runs (D923).
+    if (playAsked_) {
+        if (cooking_.has_value()) {
+            return;
+        }
+        if (!std::exchange(playCooked_, true) && cookBehind()) {
+            cookOrStop();
+            return;
+        }
+        playAsked_ = false;
+        playCooked_ = false;
         startPlaying();
         return;
     }
@@ -30,6 +41,11 @@ void ShellParticipant::keepEditing() {
         if (const auto kFirst = std::ranges::find(listed_, Listed::Scene);
             kFirst != listed_.end() && static_cast<std::size_t>(kFirst - listed_.begin()) < scenes_.size()) {
             showScene(static_cast<std::size_t>(kFirst - listed_.begin()));
+        } else if (!documentChosen()) {
+            // A game with no scene, its world made in Kest, still has its
+            // viewport, where Play shows it (D923).
+            clear(viewRows_);
+            showViewport();
         }
     }
     if (scene_.empty() || !chosen(Listed::Scene) || cooking_.has_value()) {
@@ -45,6 +61,19 @@ void ShellParticipant::keepEditing() {
         return;
     }
     startPlaying(true);
+}
+
+bool ShellParticipant::cookBehind() const {
+    if (cookTool_.empty() || held_.joined != nullptr) {
+        return false;
+    }
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(cookAt_ / "content" / "content.manifest", error)) {
+        return true;
+    }
+    return std::ranges::any_of(browser_.sources, [](const ListedSource& source) {
+        return source.cook != "cooked" && source.cook != "failed";
+    });
 }
 
 void ShellParticipant::startPlaying(bool edited) {
@@ -170,6 +199,10 @@ void ShellParticipant::stopPlaying() {
     playing_->stop();
     stopping_ = std::move(playing_);
     playing_.reset();
+    // The scene's own entities again in the Hierarchy (D923).
+    if (live_.on) {
+        switchLive();
+    }
     relabel(playNode_, "Play", Icon::Play);
     showViewBar();
     say("game stopped");
@@ -232,9 +265,11 @@ void ShellParticipant::hearCookLine(const std::string& line) {
         break;
     case Heard::Kind::Failed:
         say(kHeard.text);
+        playAsked_ = false;
         break;
     case Heard::Kind::Cancelled:
         say("cook stopped");
+        playAsked_ = false;
         break;
     }
     cooking_.reset();
@@ -301,15 +336,18 @@ void ShellParticipant::attachPlayed(double seconds) {
     }
     preview_ = kPreview;
     // A game played, not edited, shows its own camera, as a game window
-    // does (D916); only the edited one is the editor's view.
-    if (scene_.empty() || (editView_ && !playing_->edited())) {
+    // does (D916): observed, so the Hierarchy lists its World live
+    // (D923); only the edited one is the editor's view.
+    preview_->observe = editView_ && !playing_->edited();
+    if (scene_.empty()) {
         return;
     }
     attachPreview();
 }
 
 void ShellParticipant::pollPicks(double seconds) {
-    if (!previewing_ || !preview_.has_value() || preview_->serverEndpoint.empty() || seconds < nextPick_) {
+    if (!previewing_ || !preview_.has_value() || preview_->serverEndpoint.empty() || preview_->observe ||
+        seconds < nextPick_) {
         return;
     }
     nextPick_ = seconds + 0.25;
@@ -656,7 +694,14 @@ void ShellParticipant::attachPreview() {
     }
     showViewText();
     showViewBar();
-    say(kAttached.done ? (previewing_ ? "previewing " + scene_ : "no preview") : kAttached.message);
+    if (!preview_->observe) {
+        say(kAttached.done ? (previewing_ ? "previewing " + scene_ : "no preview") : kAttached.message);
+    }
+    // A game played lists its World live in the Hierarchy, as an
+    // editor's play mode does (D923).
+    if (previewing_ && preview_->observe && !live_.on) {
+        switchLive();
+    }
     if (previewing_) {
         emitter_.log(diagnostics::Severity::Info,
                      kPreviewing,

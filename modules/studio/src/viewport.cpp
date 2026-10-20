@@ -33,8 +33,14 @@ void ShellParticipant::followPicture() {
     texture::Texture made{.format = texture::Format::Rgba8Srgb};
     made.levels.push_back(
         texture::Level{.width = read->width, .height = read->height, .bytes = std::move(read->pixels)});
+    const bool kFirst = inViewport_.picture == nullptr;
     inViewport_.picture = std::make_shared<const texture::Texture>(std::move(made));
     ++inViewport_.picturesShown;
+    // The game's first picture: it plays now, which the status line says
+    // until something else is said (D923).
+    if (kFirst && !playing_->edited()) {
+        say("playing " + description_.stem().string());
+    }
 }
 
 void ShellParticipant::showViewport() {
@@ -138,7 +144,8 @@ void ShellParticipant::showViewBar() {
         if (!made.has_value()) {
             return;
         }
-        static_cast<void>(tree_->setLook(*made, ui::Look{.fill = 0x121317E6U, .borderColor = 0xFFFFFF14U, .radius = 5}));
+        static_cast<void>(
+            tree_->setLook(*made, ui::Look{.fill = 0x121317E6U, .borderColor = 0xFFFFFF14U, .radius = 5}));
         if (which.has_value()) {
             static_cast<void>(icon(*made, *which, look::kSoftInk, 13));
         }
@@ -155,8 +162,13 @@ void ShellParticipant::showViewBar() {
     // While the game plays, not edited, it is the game's: only who has
     // its input, as the design's (D916).
     if (playing_.has_value() && !playing_->edited()) {
-        if (auto bar = kOverlay({.absolute = true, .x = ui::pixels(0), .y = ui::pixels(look::kTabHeight)},
-                                ui::Direction::Row);
+        // Nothing of Studio's over the game's own top corners, where its
+        // HUD is likely to be: no mode palette, and the label below.
+        if (tree_->contains(held_.modePalette)) {
+            static_cast<void>(tree_->detach(held_.modePalette));
+        }
+        if (auto bar =
+                kOverlay({.absolute = true, .x = ui::pixels(0), .y = ui::share(1), .anchorY = 1}, ui::Direction::Row);
             bar.has_value()) {
             held_.viewBar = *bar;
             if (auto label = box(*bar, ui::Layout{.shrink = 0, .padding = {9, 9, 5, 5}, .border = {1, 1, 1, 1}}, 0);
@@ -164,16 +176,21 @@ void ShellParticipant::showViewBar() {
                 static_cast<void>(
                     tree_->setLook(*label, ui::Look{.fill = 0x121317E6U, .borderColor = 0x35507FFFU, .radius = 5}));
                 static_cast<void>(words(*label,
-                                        players_ == 1 ? std::string{"Client 1 \u00B7 has input"} : "Client 1 of " + std::to_string(players_) + " \u00B7 has input",
+                                        players_ == 1 ? std::string{"Client 1 \u00B7 has input"}
+                                                      : "Client 1 of " + std::to_string(players_) + " \u00B7 has input",
                                         look::kRowInk,
                                         look::kLabelSize));
             }
         }
         return;
     }
+    if (tree_->contains(held_.modePalette) && !documentChosen()) {
+        static_cast<void>(tree_->detach(held_.modePalette));
+        static_cast<void>(tree_->attach(centerColumn_, held_.modePalette));
+    }
     // The pills along the top, as the design's.
-    if (auto bar = kOverlay({.absolute = true, .x = ui::pixels(0), .y = ui::pixels(look::kTabHeight)},
-                            ui::Direction::Row);
+    if (auto bar =
+            kOverlay({.absolute = true, .x = ui::pixels(0), .y = ui::pixels(look::kTabHeight)}, ui::Direction::Row);
         bar.has_value()) {
         held_.viewBar = *bar;
         kPill(*bar, kProjectionPill, std::nullopt, held_.flat ? "Top" : "Perspective");
@@ -188,24 +205,26 @@ void ShellParticipant::showViewBar() {
         kPill(*bar, kShowPill, Icon::Eye, "Show: " + (showing.empty() ? std::string{"nothing"} : showing));
         kPill(*bar, kBookmarkPill, Icon::Bookmark, "Bookmarks");
     }
-    if (auto bar = kOverlay(
-            {.absolute = true, .x = ui::share(1), .y = ui::pixels(look::kTabHeight), .anchorX = 1}, ui::Direction::Row);
+    if (auto bar = kOverlay({.absolute = true, .x = ui::share(1), .y = ui::pixels(look::kTabHeight), .anchorX = 1},
+                            ui::Direction::Row);
         bar.has_value()) {
         held_.splitBar = *bar;
         kPill(*bar, kSplitPill, Icon::Split, "Split");
     }
     // The axes' disc under the split, each end its axis's color.
-    if (auto disc = kOverlay(
-            {.absolute = true, .x = ui::share(1), .y = ui::pixels(look::kTabHeight + 40), .anchorX = 1},
-            ui::Direction::Row);
+    if (auto disc =
+            kOverlay({.absolute = true, .x = ui::share(1), .y = ui::pixels(look::kTabHeight + 40), .anchorX = 1},
+                     ui::Direction::Row);
         disc.has_value()) {
         held_.axisGizmo = *disc;
         static_cast<void>(tree_->setName(*disc, "Axes"));
         if (auto round = box(*disc, ui::Layout{.width = ui::pixels(64), .height = ui::pixels(64), .shrink = 0}, 0);
             round.has_value()) {
-            static_cast<void>(tree_->setLook(*round, ui::Look{.fill = 0x0B0D10B0U, .borderColor = 0xFFFFFF14U, .radius = 32}));
+            static_cast<void>(
+                tree_->setLook(*round, ui::Look{.fill = 0x0B0D10B0U, .borderColor = 0xFFFFFF14U, .radius = 32}));
             static_cast<void>(tree_->setLayout(
-                *round, ui::Layout{.width = ui::pixels(64), .height = ui::pixels(64), .shrink = 0, .border = {1, 1, 1, 1}}));
+                *round,
+                ui::Layout{.width = ui::pixels(64), .height = ui::pixels(64), .shrink = 0, .border = {1, 1, 1, 1}}));
             static_cast<void>(tree_->setInteraction(*round, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
             constexpr std::array<std::uint32_t, 3> kInks = {look::kAxisX, look::kAxisY, look::kAxisZ};
             constexpr std::array<std::string_view, 3> kLetters = {"X", "Y", "Z"};
@@ -228,7 +247,8 @@ void ShellParticipant::showViewBar() {
         showAxes();
     }
     // How the view is flown, at its bottom left.
-    if (auto hint = kOverlay({.absolute = true, .x = ui::pixels(0), .y = ui::share(1), .anchorY = 1}, ui::Direction::Row);
+    if (auto hint =
+            kOverlay({.absolute = true, .x = ui::pixels(0), .y = ui::share(1), .anchorY = 1}, ui::Direction::Row);
         hint.has_value()) {
         held_.flyHint = *hint;
         static_cast<void>(tree_->setInteraction(*hint, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
@@ -244,7 +264,8 @@ void ShellParticipant::showViewBar() {
             if (!made.has_value()) {
                 break;
             }
-            static_cast<void>(tree_->setLook(*made, ui::Look{.fill = 0x121317E6U, .borderColor = 0xFFFFFF14U, .radius = 5}));
+            static_cast<void>(
+                tree_->setLook(*made, ui::Look{.fill = 0x121317E6U, .borderColor = 0xFFFFFF14U, .radius = 5}));
             if (auto key = box(*made, ui::Layout{.shrink = 0, .padding = {4, 4, 1, 1}, .border = {1, 1, 1, 1}}, 0);
                 key.has_value()) {
                 static_cast<void>(tree_->setLook(*key, ui::Look{.borderColor = look::kRaisedEdge, .radius = 3}));
@@ -296,15 +317,15 @@ void ShellParticipant::showAxes() {
         }
         const double kAcross = right[each];
         const double kHigh = kUp[each];
-        static_cast<void>(tree_->setLayout(
-            held_.axisEnds[each],
-            ui::Layout{.width = ui::pixels(14),
-                       .height = ui::pixels(14),
-                       .justify = ui::Justify::Center,
-                       .alignItems = ui::Align::Center,
-                       .placement = {.absolute = true,
-                                     .x = ui::pixels(static_cast<float>(25 + 20 * kAcross)),
-                                     .y = ui::pixels(static_cast<float>(25 - 20 * kHigh))}}));
+        static_cast<void>(
+            tree_->setLayout(held_.axisEnds[each],
+                             ui::Layout{.width = ui::pixels(14),
+                                        .height = ui::pixels(14),
+                                        .justify = ui::Justify::Center,
+                                        .alignItems = ui::Align::Center,
+                                        .placement = {.absolute = true,
+                                                      .x = ui::pixels(static_cast<float>(25 + 20 * kAcross)),
+                                                      .y = ui::pixels(static_cast<float>(25 - 20 * kHigh))}}));
     }
 }
 
@@ -313,10 +334,11 @@ void ShellParticipant::showViewportNote() {
     // the edit view waits for, the game starting, or that it stopped.
     std::string note;
     if (tree_->contains(viewport_) && (inViewport_.picture == nullptr || !playing_.has_value())) {
-        note = cooking_.has_value()                              ? "Cooking the game to show it here..."
-               : playing_.has_value() && playing_->running()    ? "Starting the game..."
-               : playing_.has_value() || held_.editStopped      ? "The game stopped. The Console says why."
-                                                                : "";
+        note = cooking_.has_value()                          ? "Cooking the game to show it here..."
+               : playing_.has_value() && playing_->running() ? "Starting the game..."
+               : playing_.has_value() || held_.editStopped   ? "The game stopped. The Console says why."
+               : scene_.empty() ? "This game makes its world in Kest. Press Play to run it here."
+                                : "";
     }
     if (note == held_.viewportNoteText && (note.empty() || tree_->contains(held_.viewportNote))) {
         return;
@@ -329,17 +351,15 @@ void ShellParticipant::showViewportNote() {
     if (note.empty()) {
         return;
     }
-    auto made = box(centerColumn_,
-                    ui::Layout{.alignItems = ui::Align::Center,
-                               .gap = 8,
-                               .padding = {14, 14, 9, 9},
-                               .border = {1, 1, 1, 1},
-                               .placement = {.absolute = true,
-                                             .x = ui::share(0.5),
-                                             .y = ui::share(0.45),
-                                             .anchorX = 0.5,
-                                             .anchorY = 0.5}},
-                    0);
+    auto made = box(
+        centerColumn_,
+        ui::Layout{
+            .alignItems = ui::Align::Center,
+            .gap = 8,
+            .padding = {14, 14, 9, 9},
+            .border = {1, 1, 1, 1},
+            .placement = {.absolute = true, .x = ui::share(0.5), .y = ui::share(0.45), .anchorX = 0.5, .anchorY = 0.5}},
+        0);
     if (!made.has_value()) {
         return;
     }

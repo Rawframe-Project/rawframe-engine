@@ -79,6 +79,8 @@ struct FieldRow {
         ExportSetting,
         /// The Assets search, what the grid's names hold (D916).
         AssetSearch,
+        /// The Console's filter, what its lines shown hold (D923).
+        ConsoleSearch,
         /// The start screen's search of the games opened last, or a path
         /// to open, and the new game's folder (D918).
         GameSearch,

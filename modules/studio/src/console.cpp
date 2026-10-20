@@ -96,6 +96,12 @@ std::optional<ConsoleLine> consoleLineOf(std::string_view record, ConsoleLine::S
                               : kSeverity == "warning"                     ? ConsoleLine::Level::Warning
                                                                            : ConsoleLine::Level::Info};
     line.text = std::string{textOf(kParsed->find("code"))} + ": " + std::string{textOf(kParsed->find("message"))};
+    line.domain = textOf(kParsed->find("domain"));
+    if (const Value* time = kParsed->find("time"); time != nullptr) {
+        if (const Value* wall = time->find("wallUnixNanoseconds"); wall != nullptr) {
+            line.wall = wall->integer().value_or(0);
+        }
+    }
     // What went wrong, said in its fields, after what the record is; and a
     // place in the game's own files any of them names.
     if (const Value* fields = kParsed->find("fields"); fields != nullptr) {

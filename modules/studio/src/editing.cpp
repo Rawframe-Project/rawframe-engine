@@ -178,7 +178,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         } else if (playing_.has_value()) {
             stopPlaying();
         } else {
-            startPlaying();
+            playAsked_ = true;
         }
     } else if (broken_.has_value() && node == openNode_) {
         openEditor(*diagnostic_);
@@ -195,7 +195,8 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
                    std::ranges::find(held_.settingsHeadings, node, &std::pair<ui::Node, std::size_t>::first);
                kHeading != held_.settingsHeadings.end() && kHeading->second < entityRows_.size()) {
         showSettingsGroup(kHeading->second);
-    } else if (const auto kEmpty = std::ranges::find(held_.emptyButtons, node, &std::pair<ui::Node, std::string>::first);
+    } else if (const auto kEmpty =
+                   std::ranges::find(held_.emptyButtons, node, &std::pair<ui::Node, std::string>::first);
                kEmpty != held_.emptyButtons.end()) {
         const std::string kCommand = kEmpty->second;
         createPart(kCommand);
@@ -215,14 +216,18 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         return;
     } else if (const auto kFilter = std::ranges::find(consoleFilters_, node, &std::pair<ui::Node, int>::first);
                kFilter != consoleFilters_.end()) {
-        // A source's button shows or hides its lines; the last shows
-        // warnings and errors alone, or everything (D778).
-        if (kFilter->second < 3) {
-            consoleSources_[static_cast<std::size_t>(kFilter->second)] =
-                !consoleSources_[static_cast<std::size_t>(kFilter->second)];
-        } else {
-            consoleProblems_ = !consoleProblems_;
-        }
+        // A source's chip shows or hides its lines (D778), and a level's
+        // its level's (D923).
+        auto& shown = kFilter->second < 3 ? consoleSources_[static_cast<std::size_t>(kFilter->second)]
+                                          : consoleLevels_[static_cast<std::size_t>(kFilter->second - 3)];
+        shown = !shown;
+        showConsole();
+    } else if (node == consoleSearchValue_ && consoleSearchValue_ != ui::Node{}) {
+        beginEdit(FieldRow{
+            .value = consoleSearchValue_, .role = FieldRow::Role::ConsoleSearch, .field = "filter", .hint = "Filter"});
+    } else if (node == consoleClear_ && consoleClear_ != ui::Node{}) {
+        console_.clear();
+        consoleEpoch_ = 0;
         showConsole();
     } else if (const auto kLogged = std::ranges::find(consoleRows_, node, &std::pair<ui::Node, std::size_t>::first);
                kLogged != consoleRows_.end()) {
@@ -451,7 +456,8 @@ void ShellParticipant::beginEdit(const FieldRow& row) {
     edit_ = std::make_unique<ui::TextEdit>(
         *tree_, row.value, ui::EditSettings{.caretColor = kText, .selectionColor = 0x4A6FA5AAU});
     static_cast<void>(edit_->press(ui::EditKey::SelectAll, {}));
-    static_cast<void>(tree_->setLook(row.value, ui::Look{.fill = look::kWellFill, .borderColor = look::kAccent, .radius = 4}));
+    static_cast<void>(
+        tree_->setLook(row.value, ui::Look{.fill = look::kWellFill, .borderColor = look::kAccent, .radius = 4}));
     if (typing_ != nullptr) {
         const auto kPlace = tree_->placeOf(root_, row.value);
         typing_->focus(kPlace.has_value() ? view::UiTyping::Caret{kPlace->x, kPlace->y, kPlace->width, kPlace->height}
@@ -480,8 +486,8 @@ void ShellParticipant::endEdit() {
     }
     edit_.reset();
     if (editing_.has_value() && tree_->contains(editing_->value)) {
-        static_cast<void>(
-            tree_->setLook(editing_->value, ui::Look{.fill = look::kWellFill, .borderColor = look::kEdge, .radius = 4}));
+        static_cast<void>(tree_->setLook(editing_->value,
+                                         ui::Look{.fill = look::kWellFill, .borderColor = look::kEdge, .radius = 4}));
     }
     editing_.reset();
     if (typing_ != nullptr) {
@@ -553,6 +559,30 @@ void ShellParticipant::take(const view::Typing& typing) {
         }
         return;
     }
+    // The Console's filter narrows its lines as it is typed (D923).
+    if (editing_->role == FieldRow::Role::ConsoleSearch) {
+        std::string typed{tree_->textOf(editing_->value)};
+        if (typed == editing_->hint) {
+            typed.clear();
+        }
+        if (kLeft == view::TypingKey::Submit || kLeft == view::TypingKey::Dismiss) {
+            const FieldRow kEdited = *editing_;
+            endEdit();
+            if (kLeft == view::TypingKey::Dismiss) {
+                consoleSearch_.clear();
+            }
+            static_cast<void>(words(kEdited.value,
+                                    consoleSearch_.empty() ? kEdited.hint : consoleSearch_,
+                                    consoleSearch_.empty() ? look::kFaintInk : kText,
+                                    look::kBodySize));
+        } else if (typed != consoleSearch_) {
+            consoleSearch_ = typed;
+        } else {
+            return;
+        }
+        showConsole();
+        return;
+    }
     // The Assets search narrows the grid as it is typed (D916).
     if (editing_->role == FieldRow::Role::AssetSearch) {
         std::string typed{tree_->textOf(editing_->value)};
@@ -619,9 +649,9 @@ void ShellParticipant::take(const view::Typing& typing) {
         const FieldRow::Role kRole = editing_->role;
         endEdit();
         if (kRole == FieldRow::Role::NewGame || kRole == FieldRow::Role::OpenGame ||
-            kRole == FieldRow::Role::GameFolder ||
-            kRole == FieldRow::Role::Shortcut || kRole == FieldRow::Role::Editor ||
-            kRole == FieldRow::Role::CommitMessage || kRole == FieldRow::Role::ExportSetting) {
+            kRole == FieldRow::Role::GameFolder || kRole == FieldRow::Role::Shortcut ||
+            kRole == FieldRow::Role::Editor || kRole == FieldRow::Role::CommitMessage ||
+            kRole == FieldRow::Role::ExportSetting) {
             return;
         }
         if (kRole == FieldRow::Role::View) {

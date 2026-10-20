@@ -247,13 +247,8 @@ private:
     result::Status makeAssets();
     result::Result<ui::Node> assetCard(const AssetCard& card);
     void lightAsset(ui::Node node, bool chosen);
-    result::Result<std::pair<ui::Node, ui::Node>>
-    searchWell(ui::Node parent,
-               std::string_view name,
-               std::string_view hint,
-               std::string_view value,
-               float width,
-               Icon which);
+    result::Result<std::pair<ui::Node, ui::Node>> searchWell(
+        ui::Node parent, std::string_view name, std::string_view hint, std::string_view value, float width, Icon which);
     result::Status showDocuments();
     void importAsked();
     void showRecent();
@@ -1004,11 +999,18 @@ private:
     std::vector<LogTail> tails_;
     double nextLogRead_ = 0;
     /// Its rows with the lines they show, and its filters: the sources
-    /// shown, by `ConsoleLine::Source`, and warnings and errors alone.
+    /// shown, by `ConsoleLine::Source`, and the levels, by
+    /// `ConsoleLine::Level` (D923); its chips, numbered by source then
+    /// level; what is typed in its filter; when its first line was said.
     std::vector<std::pair<ui::Node, std::size_t>> consoleRows_;
     std::array<bool, 3> consoleSources_{true, true, true};
-    bool consoleProblems_ = false;
+    std::array<bool, 3> consoleLevels_{true, true, true};
     std::vector<std::pair<ui::Node, int>> consoleFilters_;
+    ui::Node consoleChips_{};
+    ui::Node consoleSearchValue_{};
+    ui::Node consoleClear_{};
+    std::string consoleSearch_;
+    std::int64_t consoleEpoch_ = 0;
     std::uint64_t consoleLines_ = 0;
     /// The center: the documents' tabs, then the active one's view.
     ui::Node centerColumn_{};
@@ -1145,6 +1147,10 @@ private:
     /// once it stopped; whether the first cook for it was asked.
     bool editView_ = true;
     bool playAsked_ = false;
+    /// Whether the game asked for was cooked first, where its content
+    /// was behind (D923).
+    bool playCooked_ = false;
+    [[nodiscard]] bool cookBehind() const;
     bool editCooked_ = false;
     bool editOpened_ = false;
     ui::Node playNode_{};

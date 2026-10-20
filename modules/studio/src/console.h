@@ -33,6 +33,10 @@ struct ConsoleLine {
     Level level = Level::Info;
     std::string text;
     std::optional<Diagnostic> at;
+    /// The part of the engine that said it (the record's `domain`), and
+    /// when, in nanoseconds since the Unix epoch; nought where unknown.
+    std::string domain;
+    std::int64_t wall = 0;
 };
 
 /// A log record's Console line, or none for a line that is not a log
