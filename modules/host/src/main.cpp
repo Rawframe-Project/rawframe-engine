@@ -6,6 +6,7 @@
 #include "rawframe/composition/configuration.h"
 #include "rawframe/host/host.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <csignal>
@@ -202,9 +203,18 @@ int hostMain(int argc, char** argv, const ProcessEntry& entry) {
                 return exitCode(HostExit::InvalidInvocation);
             }
         } else if (!entry.fileKey.empty() && !kArgument.starts_with("--")) {
-            // A file opened with the program (D920).
+            // A file opened with the program (D920): one line of the
+            // configuration, so a path holding a line's end or another
+            // control character, which could add lines of its own, is
+            // refused.
             std::error_code error;
             const std::string kOpened = std::filesystem::absolute(argv[index], error).generic_string();
+            if (error || std::ranges::any_of(kOpened, [](char each) {
+                    return static_cast<unsigned char>(each) < 0x20 || each == 0x7F;
+                })) {
+                std::fprintf(stderr, "%.*s: the file's path cannot be read\n", kName, entry.name.data());
+                return exitCode(HostExit::InvalidInvocation);
+            }
             configurationText += "\n" + std::string{entry.fileKey} + " = " + kOpened + "\n";
         } else {
             std::fprintf(stderr, "usage: %.*s [--config <file>]\n", kName, entry.name.data());
