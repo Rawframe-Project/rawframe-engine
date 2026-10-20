@@ -106,6 +106,10 @@ struct Physics3DStatistics {
 };
 
 inline constexpr std::string_view kStepSystem = "rawframe.physics3d.step";
+/// While the World is edited, when nothing steps, the bodies follow their
+/// entities all the same, unmoved by the physics, so what a ray meets is
+/// what the author sees: a click in an editor's view picks it (D927).
+inline constexpr std::string_view kMirrorSystem = "rawframe.physics3d.mirror";
 
 /// A static body's share of the static geometry (D400): its entity, its
 /// triangles' span of the indices, and the box its triangles fill.
@@ -200,8 +204,8 @@ public:
     [[nodiscard]] static result::Result<std::unique_ptr<Physics3D>> create(const Physics3DSettings& settings);
     ~Physics3D() override;
 
-    /// Contributes kStepSystem. The registry must hold the nine physics
-    /// components at the engine's sizes.
+    /// Contributes kStepSystem, and kMirrorSystem after it. The registry
+    /// must hold the nine physics components at the engine's sizes.
     [[nodiscard]] result::Status declareSystems(const schema::SchemaRegistry& registry,
                                                 std::vector<world::SystemDeclaration>& systems) noexcept override;
 

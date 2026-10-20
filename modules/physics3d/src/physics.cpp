@@ -78,6 +78,7 @@ struct Physics3D::State {
     std::vector<schema::ComponentRuntimeId> reads;
     std::vector<schema::ComponentRuntimeId> writes;
     std::unique_ptr<world::System> system;
+    std::unique_ptr<world::System> mirrorSystem;
     std::vector<Row> rows;
     /// Changes whenever a static body is made or removed (D400).
     std::uint64_t staticRevision = 0;
@@ -402,6 +403,25 @@ struct Physics3D::State {
     }
 
     result::Status step(world::World& world, world::TickRate rate, world::TickIndex tick) {
+        follow(world, true);
+        followJoints(world);
+        stepFollowed(world, rate, tick);
+        return {};
+    }
+
+    /// The bodies made to follow their entities while the World is edited
+    /// and nothing steps (kMirrorSystem, D927): where the step ran this
+    /// tick, nothing more.
+    void mirror(world::World& world, world::TickIndex tick) {
+        if (stepped && lastTick == tick.value) {
+            return;
+        }
+        follow(world, false);
+    }
+
+    /// 1-3. The bodies follow their entities; `simulated`, with what
+    /// gameplay asked of them since the last step, impulses and targets.
+    void follow(world::World& world, bool simulated) {
         rows.clear();
         bodies->forEach(world,
                         [this](world::EntityHandle entity, const Body3D& body, Pose3D& pose, Velocity3D& velocity) {
@@ -469,7 +489,7 @@ struct Physics3D::State {
                     }
                 }
             }
-            if (impulse) {
+            if (simulated && impulse) {
                 auto* const kImpulse = static_cast<Impulse3D*>(world.getErased(row.entity, *impulse));
                 if (kImpulse != nullptr && !same(*kImpulse, Impulse3D{})) {
                     if (finite(kImpulse->x) && finite(kImpulse->y) && finite(kImpulse->z) &&
@@ -482,7 +502,7 @@ struct Physics3D::State {
                     *kImpulse = Impulse3D{};
                 }
             }
-            if (target) {
+            if (simulated && target) {
                 auto* const kTarget = static_cast<Target3D*>(world.getErased(row.entity, *target));
                 if (kTarget != nullptr && kTarget->set) {
                     const Pose3D kGoal{.x = kTarget->x,
@@ -502,9 +522,9 @@ struct Physics3D::State {
                 }
             }
         }
+    }
 
-        followJoints(world);
-
+    void stepFollowed(world::World& world, world::TickRate rate, world::TickIndex tick) {
         // 4. Characters find their moves, in entity order and each against
         // the world as the last step left it; then one step of the tick's
         // length.
@@ -555,7 +575,6 @@ struct Physics3D::State {
         attachments->follow(world, statistics.attachmentsRefused);
         lastTick = tick.value;
         stepped = true;
-        return {};
     }
 
     /// A cast's closest hit as the answer a script reads.
@@ -598,6 +617,19 @@ public:
     }
     result::Status run(world::SystemContext& context) noexcept override {
         return state_->step(context.world, context.rate, context.tick);
+    }
+
+private:
+    Physics3D::State* state_;
+};
+
+class Mirror final : public world::System {
+public:
+    explicit Mirror(Physics3D::State& state) noexcept : state_(&state) {
+    }
+    result::Status run(world::SystemContext& context) noexcept override {
+        state_->mirror(context.world, context.tick);
+        return {};
     }
 
 private:
@@ -710,6 +742,13 @@ result::Status Physics3D::declareSystems(const schema::SchemaRegistry& registry,
                                                .reads = state.reads,
                                                .writes = state.writes,
                                                .system = state.system.get()});
+    state.mirrorSystem = std::make_unique<Mirror>(state);
+    systems.push_back(world::SystemDeclaration{.identity = kMirrorSystem,
+                                               .phase = world::Phase::PostSimulation,
+                                               .reads = state.reads,
+                                               .writes = state.writes,
+                                               .editing = true,
+                                               .system = state.mirrorSystem.get()});
     return {};
 }
 
