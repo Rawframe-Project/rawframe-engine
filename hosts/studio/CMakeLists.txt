@@ -1474,19 +1474,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              "opening.sequence written: yes\nsequence 1\nduration 4\ntrack gate\nplay 1 gate 0000000000000000\nevent 2 0000000000000001 opened\nplay 3 gate [0-9a-f]+\n.*\"code\":\"studio_summary\"[^\n]*\"applied\":2,\"refused\":0,")
         # The World panel (D870): Runners' level's three platforms listed as
         # instances, the first streamed atomic and then persistent through
-        # the session's scene.stream_instance, and written.
+        # the session's scene.stream_instance by its mode's chip, and
+        # written; the second's row chooses it (D936).
         add_test(NAME studio_world
                  COMMAND ${CMAKE_COMMAND} -E env STUDIO_SHOW_WRITTEN=1
                          ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          games/runners/runners.game level.scene @level.scene @Layers @World until=studio_world
-                         "@platform.scene  1  each" "until=studio_said,status=\"district streamed atomic"
-                         "@platform.scene  1  atomic" "until=studio_said,status=\"district streamed persistent"
+                         "@platform 1 mode stream" "until=studio_said,status=\"district streamed atomic"
+                         "@platform 1 mode atomic" "until=studio_said,status=\"district streamed persistent"
+                         "@platform 2 platform.scene" wait=1
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_world PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "level.scene written: yes\n.*\"streaming\": \"persistent\".*\"code\":\"studio_world\"[^\n]*\"instances\":3,\"districts\":1}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
+                             "level.scene written: yes\n.*\"streaming\": \"persistent\".*\"code\":\"studio_world\"[^\n]*\"instances\":3,\"districts\":1}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":[0-9]+,\"entity\":\"[0-9a-f]+-[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
         # Version control (D871): a copy of Runners kept in git, an entity
         # made in its level, the Changes tab running git only once the
         # repository is trusted, then listing the level changed and its diff,
