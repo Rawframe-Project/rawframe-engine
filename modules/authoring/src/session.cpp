@@ -753,8 +753,14 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         // together, the token the preview's.
         const Value* kServer =
             kPreview != nullptr && kPreview->kind() == Value::Kind::Object ? kPreview->find("server") : nullptr;
-        const bool kObject = kPreview != nullptr && kPreview->kind() == Value::Kind::Object &&
-                             kPreview->names().size() == (kServer != nullptr ? 4U : 3U);
+        // And `observe`: the game seen through its own camera, as it plays,
+        // the scene's view never handed it (D923).
+        const Value* kObserve =
+            kPreview != nullptr && kPreview->kind() == Value::Kind::Object ? kPreview->find("observe") : nullptr;
+        const bool kObject =
+            kPreview != nullptr && kPreview->kind() == Value::Kind::Object &&
+            kPreview->names().size() == 3U + (kServer != nullptr ? 1U : 0U) + (kObserve != nullptr ? 1U : 0U) &&
+            (kObserve == nullptr || kObserve->truth().has_value());
         const std::string* kEndpoint = kObject ? textOf(kPreview->find("endpoint")) : nullptr;
         const std::string* kPin = kObject ? textOf(kPreview->find("pinFile")) : nullptr;
         const std::string* kToken = kObject ? textOf(kPreview->find("tokenFile")) : nullptr;
@@ -767,9 +773,12 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             (kServer != nullptr && (kServerEndpoint == nullptr || kServerPin == nullptr || kServerEndpoint->empty() ||
                                     kServerPin->empty()))) {
             return malformed("preview is null, or holds an endpoint, a pinFile, and a tokenFile, and perhaps a server "
-                             "of an endpoint and a pinFile");
+                             "of an endpoint and a pinFile, and an observe truth");
         }
-        record.preview = PreviewTarget{.endpoint = *kEndpoint, .pinFile = *kPin, .tokenFile = *kToken};
+        record.preview = PreviewTarget{.endpoint = *kEndpoint,
+                                       .pinFile = *kPin,
+                                       .tokenFile = *kToken,
+                                       .observe = kObserve != nullptr && *kObserve->truth()};
         if (kServer != nullptr) {
             record.preview->serverEndpoint = *kServerEndpoint;
             record.preview->serverPinFile = *kServerPin;

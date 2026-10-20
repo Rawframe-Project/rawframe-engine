@@ -256,6 +256,8 @@ struct Preview {
     /// none.
     std::string serverEndpoint;
     std::string serverPinFile;
+    /// Only observed as it plays, its own camera kept (D923).
+    bool observe = false;
 };
 
 /// `authoring.view` of `scene`.

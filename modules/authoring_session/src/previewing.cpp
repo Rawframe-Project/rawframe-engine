@@ -94,6 +94,7 @@ result::Status Preview::open(const authoring::SessionRecord& record) {
         }
     }
     scene_ = record.scene;
+    observe_ = record.preview->observe;
     previewed_ = std::nullopt;
     told_ = false;
     pathsTold_.reset();
@@ -122,7 +123,7 @@ bool Preview::forward(const std::string& name,
     if (preview_ == nullptr || name != scene_) {
         return false;
     }
-    if (!pathsTold_.has_value() || *pathsTold_ != paths) {
+    if (!observe_ && (!pathsTold_.has_value() || *pathsTold_ != paths)) {
         Value listed = Value::array();
         for (const std::vector<std::array<double, 3>>& kPath : paths) {
             Value points = Value::array();
@@ -146,7 +147,8 @@ bool Preview::forward(const std::string& name,
         }
         pathsTold_ = std::move(paths);
     }
-    const std::optional<authoring::SceneView>& kView = view;
+    // Observed, the game keeps its own camera (D923).
+    const std::optional<authoring::SceneView> kView = observe_ ? std::nullopt : view;
     if (told_ && kView == previewed_) {
         return true;
     }
@@ -184,7 +186,7 @@ bool Preview::forward(const std::string& name,
 }
 
 result::Result<Value> Preview::picked(const authoring::SessionRecord& record, authoring::AuthoredScene* previewed) {
-    if (preview_ == nullptr || server_ == nullptr || record.scene != scene_) {
+    if (preview_ == nullptr || server_ == nullptr || record.scene != scene_ || observe_) {
         return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
                                        result::ErrorClass::FailedPrecondition,
                                        "picking needs the scene previewed, with its game's server")
@@ -413,7 +415,7 @@ Value Preview::movedAlong(const Value& clicked) const {
 /// Has the scene's preview mark a point, or none (D464): where the
 /// author chose something. Whether the preview shows it.
 bool Preview::outline(std::string_view scene, const Value& outlines) {
-    if (preview_ == nullptr || scene != scene_) {
+    if (preview_ == nullptr || scene != scene_ || observe_) {
         return false;
     }
     Value asked = Value::object();
@@ -428,7 +430,7 @@ bool Preview::outline(std::string_view scene, const Value& outlines) {
 
 Value Preview::marked(const authoring::SessionRecord& record) {
     bool shown = false;
-    if (preview_ != nullptr && record.scene == scene_) {
+    if (preview_ != nullptr && record.scene == scene_ && !observe_) {
         const auto kReply = preview_->ask(rawframe::document::writeCompact(markRecord(record.mark, 0)));
         const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
         const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
@@ -477,7 +479,7 @@ result::Result<Value> Preview::inputted(const authoring::SessionRecord& record) 
 
 Value Preview::hid(const authoring::SessionRecord& record) {
     bool hidden = false;
-    if (preview_ != nullptr && record.scene == scene_) {
+    if (preview_ != nullptr && record.scene == scene_ && !observe_) {
         Value asked = Value::object();
         asked.add("kind", Value::string("tooling.hide"));
         asked.add("id", Value::integer(0));
@@ -610,7 +612,7 @@ result::Result<Value> Preview::live(const authoring::SessionRecord& record) {
 
 Value Preview::moded(const authoring::SessionRecord& record) {
     bool shown = false;
-    if (preview_ != nullptr && record.scene == scene_) {
+    if (preview_ != nullptr && record.scene == scene_ && !observe_) {
         Value asked = Value::object();
         asked.add("kind", Value::string("tooling.view_mode"));
         asked.add("id", Value::integer(0));
@@ -676,7 +678,7 @@ Value Preview::overlaid(const authoring::SessionRecord& record) {
     for (const std::string& kName : record.overlays) {
         names.push(Value::string(kName));
     }
-    if (preview_ != nullptr && record.scene == scene_) {
+    if (preview_ != nullptr && record.scene == scene_ && !observe_) {
         Value asked = Value::object();
         asked.add("kind", Value::string("tooling.overlays"));
         asked.add("id", Value::integer(0));

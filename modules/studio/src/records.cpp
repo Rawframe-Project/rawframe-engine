@@ -664,6 +664,9 @@ Value previewRecord(std::int64_t id, std::string_view scene, const Preview* prev
         server.add("pinFile", Value::string(preview->serverPinFile));
         made.add("server", std::move(server));
     }
+    if (preview->observe) {
+        made.add("observe", Value::boolean(true));
+    }
     record.add("preview", std::move(made));
     return record;
 }

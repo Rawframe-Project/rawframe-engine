@@ -226,6 +226,9 @@ struct PreviewTarget {
     /// the preview's.
     std::optional<std::string> serverEndpoint;
     std::optional<std::string> serverPinFile;
+    /// Whether the game is only observed as it plays: seen through its own
+    /// camera, never the scene's view (D923).
+    bool observe = false;
 };
 
 /// One record from a client, read whole.

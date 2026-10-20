@@ -143,6 +143,8 @@ private:
     /// told, and the looks asked of it.
     std::unique_ptr<ToolingLink> preview_;
     std::string scene_;
+    /// Whether the game is only observed, its own camera kept (D923).
+    bool observe_ = false;
     std::optional<authoring::SceneView> previewed_;
     bool told_ = false;
     /// The paths it was last told to draw (D891), none before.

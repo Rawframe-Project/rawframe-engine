@@ -4,6 +4,7 @@
 #include "surfaces.h"
 
 #include <algorithm>
+#include <cctype>
 
 namespace rawframe::studio {
 
@@ -733,12 +734,29 @@ void ShellParticipant::showScene(std::size_t at) {
         // prefab's color.
         const std::size_t kPlace = static_cast<std::size_t>(&kLine - lines.data());
         const bool kParent = kPlace + 1 < lines.size() && lines[kPlace + 1].depth > kLine.depth;
+        // Its icon by what its name says it is, as an editor's outliner
+        // tells a light from a mesh (D923).
+        std::string lower = label;
+        std::ranges::transform(lower, lower.begin(), [](char each) {
+            return static_cast<char>(std::tolower(static_cast<unsigned char>(each)));
+        });
+        const auto kNamed = [&lower](std::string_view part) {
+            return lower.find(part) != std::string::npos;
+        };
+        const auto [kIcon, kInk] = brought != nullptr ? std::pair{Icon::Prefab, look::kInstanceInk}
+                                   : kNamed("sun")    ? std::pair{Icon::Sun, look::kWarn}
+                                   : kNamed("sky")    ? std::pair{Icon::Sky, look::kAccent}
+                                   : kNamed("lamp") || kNamed("light") || kNamed("bulb")
+                                       ? std::pair{Icon::Bulb, look::kWarn}
+                                   : kNamed("camera")                    ? std::pair{Icon::Camera, look::kLabelInk}
+                                   : kNamed("player") || kNamed("spawn") ? std::pair{Icon::Person, look::kEntityInk}
+                                                                         : std::pair{Icon::Cube, look::kEntityInk};
         auto added = entityRow(entitiesColumn_,
                                label,
                                kLine.depth,
                                kParent,
-                               brought != nullptr ? Icon::Prefab : Icon::Cube,
-                               brought != nullptr ? look::kInstanceInk : look::kEntityInk,
+                               kIcon,
+                               kInk,
                                brought != nullptr ? 0xC9B2FFFFU : look::kRowInk);
         if (!added.has_value()) {
             break;

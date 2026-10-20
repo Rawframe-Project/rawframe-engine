@@ -1,4 +1,10 @@
+#include "hints.h"
 #include "shell.h"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdio>
 
 namespace rawframe::studio {
 
@@ -6,6 +12,68 @@ namespace {
 
 /// The most entities the Hierarchy lists live: a page the server gives.
 constexpr std::int64_t kMostListed = 256;
+
+/// A component's name after its module's: `starter.daylight` is
+/// `daylight`.
+std::string shortName(std::string_view name) {
+    const std::size_t kDot = name.find_last_of('.');
+    return std::string{kDot == std::string_view::npos ? name : name.substr(kDot + 1)};
+}
+
+/// The icon an entity is listed with, by what it holds, and its ink.
+std::pair<Icon, std::uint32_t> liveIcon(const std::vector<std::string>& names) {
+    const auto kHolds = [&names](std::string_view part) {
+        return std::ranges::any_of(names, [part](const std::string& name) {
+            return shortName(name).find(part) != std::string::npos;
+        });
+    };
+    if (kHolds("sun") || kHolds("daylight")) {
+        return {Icon::Sun, look::kWarn};
+    }
+    if (kHolds("sky")) {
+        return {Icon::Sky, look::kAccent};
+    }
+    if (kHolds("lamp") || kHolds("light")) {
+        return {Icon::Bulb, look::kWarn};
+    }
+    if (kHolds("camera")) {
+        return {Icon::Camera, look::kLabelInk};
+    }
+    if (kHolds("player") || kHolds("stick") || kHolds("mover")) {
+        return {Icon::Person, look::kEntityInk};
+    }
+    return {Icon::Cube, look::kEntityInk};
+}
+
+/// A field's value as the Inspector shows it: a number rounded to what
+/// reads, a color by its hex.
+std::string liveValue(std::string_view field, const Value& value) {
+    const std::optional<double> kNumber = value.kind() == Value::Kind::Number ? value.real() : std::nullopt;
+    if (!kNumber.has_value()) {
+        return document::writeCompact(value);
+    }
+    if (field == "color" && *kNumber >= 0 && *kNumber <= 4294967295.0 && *kNumber == std::floor(*kNumber)) {
+        std::array<char, 16> text{};
+        std::snprintf(text.data(), text.size(), "#%08llX", static_cast<unsigned long long>(*kNumber));
+        return text.data();
+    }
+    std::array<char, 32> text{};
+    if (*kNumber == std::floor(*kNumber) && std::fabs(*kNumber) < 1e15) {
+        std::snprintf(text.data(), text.size(), "%.0f", *kNumber);
+        return text.data();
+    }
+    std::snprintf(text.data(), text.size(), std::fabs(*kNumber) >= 1e5 ? "%.4g" : "%.4f", *kNumber);
+    std::string made{text.data()};
+    if (made.find('.') != std::string::npos && made.find('e') == std::string::npos) {
+        while (made.ends_with('0')) {
+            made.pop_back();
+        }
+        if (made.ends_with('.')) {
+            made.pop_back();
+        }
+    }
+    return made;
+}
 
 } // namespace
 
@@ -46,19 +114,24 @@ void ShellParticipant::showLive() {
         if (kEntity == nullptr || kEntity->text() == nullptr || kEntity->kind() != Value::Kind::String) {
             continue;
         }
-        // Its name and what it holds, the first few components by name.
-        std::string line = *kEntity->text() + " ";
-        std::size_t named = 0;
+        // As the scene's rows are (D923): its kind's icon, what it holds
+        // by the components' short names, and its id on the server.
+        std::vector<std::string> names;
         for (const Value& kComponent : kComponents != nullptr ? kComponents->items() : std::span<const Value>{}) {
-            if (kComponent.kind() == Value::Kind::String && named < 3) {
-                line += (named == 0 ? " " : ", ") + *kComponent.text();
+            if (kComponent.kind() == Value::Kind::String) {
+                names.push_back(*kComponent.text());
             }
-            ++named;
         }
-        if (named > 3) {
-            line += ", +" + std::to_string(named - 3);
+        std::string line;
+        for (std::size_t each = 0; each < names.size() && each < 2; ++each) {
+            line += (each == 0 ? "" : " \u00B7 ") + prettyField(shortName(names[each]));
         }
-        auto made = row(entitiesColumn_, line, kText, kRow, true);
+        if (names.size() > 2) {
+            line += " +" + std::to_string(names.size() - 2);
+        }
+        line += "  " + *kEntity->text();
+        const auto [kIcon, kInk] = liveIcon(names);
+        auto made = entityRow(entitiesColumn_, line, 0, false, kIcon, kInk, look::kRowInk);
         if (!made.has_value()) {
             break;
         }
@@ -81,7 +154,7 @@ void ShellParticipant::showLiveEntity(const std::string& entity) {
     live_.chosen = entity;
     live_.nextRead = 0;
     for (const auto& [kRowNode, kName] : live_.rows) {
-        static_cast<void>(tree_->setLook(kRowNode, ui::Look{.fill = kName == entity ? kChosen : kRow, .radius = 4}));
+        static_cast<void>(tree_->setLook(kRowNode, ui::Look{.fill = kName == entity ? kChosen : 0U, .radius = 4}));
     }
     readLive(0);
 }
@@ -129,24 +202,70 @@ void ShellParticipant::readLive(double seconds) {
         }
         return;
     }
-    if (auto heading = row(componentsColumn_, live_.chosen + " on the server, read only", kQuiet, kPanel);
+    // As the Inspector shows an entity (D923), read only: its id and that
+    // it is the server's, then each component's fields, numbers rounded.
+    if (auto heading =
+            box(componentsColumn_,
+                ui::Layout{.direction = ui::Direction::Column, .gap = 3, .shrink = 0, .padding = {12, 12, 10, 8}},
+                0);
         heading.has_value()) {
         componentRows_.push_back(*heading);
+        if (auto name = box(*heading, ui::Layout{.shrink = 0}, 0); name.has_value()) {
+            static_cast<void>(strongWords(*name, live_.chosen + " on the server, read only", look::kInk, 14));
+        }
+        if (auto quiet = box(*heading, ui::Layout{.shrink = 0}, 0); quiet.has_value()) {
+            static_cast<void>(words(
+                *quiet, "The World as the game plays it, read twice a second", look::kFaintInk, look::kLabelSize));
+        }
     }
     for (const Value& kComponent : kComponents->items()) {
         const Value* kName = kComponent.find("name");
         if (kName == nullptr || kName->kind() != Value::Kind::String) {
             continue;
         }
-        if (auto header = row(componentsColumn_, *kName->text(), kText, kHeaderFill); header.has_value()) {
-            componentRows_.push_back(*header);
+        auto header = box(componentsColumn_,
+                          ui::Layout{.alignItems = ui::Align::Center,
+                                     .gap = 8,
+                                     .shrink = 0,
+                                     .padding = {10, 10, 7, 6},
+                                     .border = {0, 0, 1, 0}},
+                          0);
+        if (!header.has_value()) {
+            continue;
+        }
+        componentRows_.push_back(*header);
+        static_cast<void>(tree_->setLook(*header, ui::Look{.borderColor = look::kLine}));
+        if (auto titled = box(*header, ui::Layout{.shrink = 0}, 0); titled.has_value()) {
+            static_cast<void>(strongWords(*titled, prettyField(shortName(*kName->text())), look::kInk));
+        }
+        if (auto quiet = box(*header, ui::Layout{.shrink = 1}, 0); quiet.has_value()) {
+            static_cast<void>(monoWords(*quiet, *kName->text(), look::kFaintInk, look::kSmallSize));
         }
         const Value* kFields = kComponent.find("fields");
         for (std::size_t each = 0; kFields != nullptr && each < kFields->names().size(); ++each) {
-            const std::string kLine =
-                "  " + kFields->names()[each] + "  " + document::writeCompact(kFields->items()[each]).substr(0, 96);
-            if (auto field = row(componentsColumn_, kLine, kText, kPanel); field.has_value()) {
-                componentRows_.push_back(*field);
+            auto line =
+                box(componentsColumn_,
+                    ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {14, 10, 3, 3}},
+                    0);
+            if (!line.has_value()) {
+                break;
+            }
+            componentRows_.push_back(*line);
+            if (auto label = box(*line, ui::Layout{.width = ui::pixels(110), .shrink = 0}, 0); label.has_value()) {
+                static_cast<void>(
+                    words(*label, prettyField(kFields->names()[each]), look::kLabelInk, look::kLabelSize));
+            }
+            if (auto value =
+                    box(*line,
+                        ui::Layout{.width = ui::pixels(0), .grow = 1, .padding = {8, 8, 4, 4}, .border = {1, 1, 1, 1}},
+                        0);
+                value.has_value()) {
+                static_cast<void>(
+                    tree_->setLook(*value, ui::Look{.fill = look::kWellFill, .borderColor = look::kLine, .radius = 4}));
+                static_cast<void>(monoWords(*value,
+                                            liveValue(kFields->names()[each], kFields->items()[each]).substr(0, 96),
+                                            look::kSoftInk,
+                                            look::kSmallSize));
             }
         }
     }
