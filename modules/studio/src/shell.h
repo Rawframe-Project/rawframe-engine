@@ -57,6 +57,12 @@ namespace rawframe::studio {
 /// collaborator's Studio (D884): red, green, blue, and opacity.
 [[nodiscard]] std::uint32_t authorColorOf(std::string_view author);
 
+/// A graph node's name as the canvas and the Hierarchy show it, its type's
+/// short name in words (`value_noise_2d` is "Value noise 2d"), and its
+/// kind's dot color (canvas.cpp, D923).
+[[nodiscard]] std::string graphNodeLabel(const Value& node);
+[[nodiscard]] std::uint32_t graphNodeDot(const Value& node);
+
 inline constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"};
 inline constexpr diagnostics::EventIdentity kLayout{"studio", "studio_layout"};
 /// A layout chosen or saved (D911): its name and the bottom dock's tab.

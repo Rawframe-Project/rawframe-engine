@@ -463,10 +463,28 @@ void ShellParticipant::showGraph() {
         const std::string& kId = nodes->names()[at];
         const Value* type = nodes->items()[at].find("type");
         const std::string kType = type != nullptr && type->text() != nullptr ? *type->text() : std::string{};
-        auto added = row(entitiesColumn_, kId.substr(0, 8) + "  " + kType, kText, kRow, true);
+        // As the design's (D923): its kind's dot and its name in words.
+        auto added = box(entitiesColumn_,
+                         ui::Layout{.height = ui::pixels(look::kRowHeight),
+                                    .alignItems = ui::Align::Center,
+                                    .gap = 8,
+                                    .shrink = 0,
+                                    .padding = {10, 8, 0, 0}},
+                         kRow);
         if (!added.has_value()) {
             return;
         }
+        if (auto dot = box(*added, ui::Layout{.width = ui::pixels(8), .height = ui::pixels(8), .shrink = 0}, 0);
+            dot.has_value()) {
+            static_cast<void>(tree_->setLook(*dot, ui::Look{.fill = graphNodeDot(nodes->items()[at]), .radius = 2}));
+        }
+        const std::string kLabel = graphNodeLabel(nodes->items()[at]);
+        if (auto said = box(*added, ui::Layout{.shrink = 1}, 0); said.has_value()) {
+            static_cast<void>(words(*said, kLabel, look::kRowInk, look::kBodySize));
+            static_cast<void>(tree_->setInteraction(*said, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        }
+        static_cast<void>(tree_->setRole(*added, ui::Role::Button));
+        static_cast<void>(tree_->setName(*added, kLabel + " " + kId.substr(0, 8)));
         entityRows_.push_back(*added);
         entities_.push_back(kId);
         names_.push_back(kType);
@@ -476,6 +494,55 @@ void ShellParticipant::showGraph() {
     }
     if (nodes != nullptr) {
         showCanvas(*nodes, "");
+    }
+    // The material as its last cook drew it, on a sphere, in the canvas's
+    // corner as the design's preview (D923).
+    const auto kSource = std::ranges::find(browser_.sources, scene_, &ListedSource::path);
+    const std::shared_ptr<const texture::Texture> kPicture =
+        kSource != browser_.sources.end() ? thumbnailOf(*kSource) : nullptr;
+    auto corner = box(
+        centerColumn_,
+        ui::Layout{.padding = {0, 16, 0, 16},
+                   .placement = {.absolute = true, .x = ui::share(1), .y = ui::share(1), .anchorX = 1, .anchorY = 1}},
+        0);
+    if (corner.has_value()) {
+        viewRows_.push_back(*corner);
+        static_cast<void>(tree_->setInteraction(*corner, ui::Interaction{.hits = ui::Interaction::Hits::Children}));
+    }
+    if (!corner.has_value()) {
+        return;
+    }
+    if (auto card =
+            box(*corner,
+                ui::Layout{
+                    .direction = ui::Direction::Column, .gap = 6, .padding = {10, 10, 8, 10}, .border = {1, 1, 1, 1}},
+                0);
+        card.has_value()) {
+        static_cast<void>(
+            tree_->setLook(*card, ui::Look{.fill = 0x121317F0U, .borderColor = look::kEdge, .radius = 6}));
+        if (auto said = box(*card, ui::Layout{.shrink = 0}, 0); said.has_value()) {
+            static_cast<void>(words(*said,
+                                    kPicture != nullptr ? "Preview \u00B7 sphere" : "Preview after a cook",
+                                    look::kLabelInk,
+                                    look::kLabelSize));
+        }
+        if (kPicture != nullptr) {
+            if (auto image =
+                    box(*card, ui::Layout{.width = ui::pixels(170), .height = ui::pixels(170), .shrink = 0}, 0);
+                image.has_value()) {
+                static_cast<void>(tree_->setLook(*image, ui::Look{.image = thumbnailKey(scene_)}));
+            }
+        }
+    }
+    // A node chosen at once, the Inspector saying what it is: the
+    // material's output, as the design opens on it.
+    if (entity_.empty() || !std::ranges::contains(entities_, entity_)) {
+        const auto kOutput = std::ranges::find_if(names_, [](const std::string& type) {
+            return type.find("surface") != std::string::npos || type.find("output") != std::string::npos;
+        });
+        if (!entities_.empty()) {
+            showGraphNode(kOutput != names_.end() ? static_cast<std::size_t>(kOutput - names_.begin()) : 0);
+        }
     }
 }
 
@@ -511,6 +578,43 @@ void ShellParticipant::showGraphNode(std::size_t at) {
             signature = &kType;
         }
     }
+    // As the design's (D923): the node's name and what it is, then its
+    // params and inputs under headings, a wired input saying what it is
+    // wired from, then its outputs, each pressed to connect it (D733).
+    const auto kSection = [this](std::string_view title, std::string_view quiet) {
+        auto heading = box(componentsColumn_,
+                           ui::Layout{.alignItems = ui::Align::Center,
+                                      .gap = 8,
+                                      .shrink = 0,
+                                      .padding = {10, 10, 10, 6},
+                                      .border = {0, 0, 1, 0}},
+                           0);
+        if (!heading.has_value()) {
+            return false;
+        }
+        componentRows_.push_back(*heading);
+        static_cast<void>(tree_->setLook(*heading, ui::Look{.borderColor = look::kLine}));
+        if (auto titled = box(*heading, ui::Layout{.shrink = 0}, 0); titled.has_value()) {
+            static_cast<void>(strongWords(*titled, title, look::kInk));
+        }
+        if (auto quieted = box(*heading, ui::Layout{.shrink = 1}, 0); quieted.has_value()) {
+            static_cast<void>(monoWords(*quieted, quiet, look::kFaintInk, look::kSmallSize));
+        }
+        return true;
+    };
+    if (auto head =
+            box(componentsColumn_,
+                ui::Layout{.direction = ui::Direction::Column, .gap = 3, .shrink = 0, .padding = {12, 12, 10, 8}},
+                0);
+        head.has_value()) {
+        componentRows_.push_back(*head);
+        if (auto name = box(*head, ui::Layout{.shrink = 0}, 0); name.has_value()) {
+            static_cast<void>(strongWords(*name, graphNodeLabel(*chosen), look::kInk, 15));
+        }
+        if (auto what = box(*head, ui::Layout{.shrink = 0}, 0); what.has_value()) {
+            static_cast<void>(monoWords(*what, names_[at], look::kFaintInk, look::kSmallSize));
+        }
+    }
     for (const auto& [kMember, kRole] : {std::pair{std::string_view{"params"}, FieldRow::Role::GraphParam},
                                          std::pair{std::string_view{"inputs"}, FieldRow::Role::GraphInput}}) {
         const Value* held = chosen->find(kMember);
@@ -528,16 +632,38 @@ void ShellParticipant::showGraphNode(std::size_t at) {
         if (names.empty()) {
             continue;
         }
-        auto heading = row(componentsColumn_, kMember, kQuiet, kPanel);
-        if (!heading.has_value()) {
+        if (!kSection(kMember == "params" ? "Node" : "Inputs",
+                      kMember == "params" ? "its settings" : "a constant, or a wire from another node")) {
             return;
         }
-        componentRows_.push_back(*heading);
         ++components_;
         for (const std::string& kName : names) {
             const Value* given = held != nullptr ? held->find(kName) : nullptr;
-            auto line =
-                fieldRow(kName, given != nullptr ? partText(*given) : std::string{}, std::nullopt, given != nullptr);
+            const Value* kFrom =
+                given != nullptr && given->kind() == Value::Kind::Object ? given->find("node") : nullptr;
+            if (kFrom != nullptr && kFrom->text() != nullptr) {
+                // Wired: from which node's which output, which it says; a
+                // constant typed over it unwires it, and an output pressed
+                // then it wires it anew.
+                const Value* kSource = nodes->find(*kFrom->text());
+                const Value* kOutput = given->find("output");
+                const std::string kWired =
+                    "\u2190 " + (kSource != nullptr ? graphNodeLabel(*kSource) : *kFrom->text()) +
+                    (kOutput != nullptr && kOutput->text() != nullptr ? " \u00B7 " + *kOutput->text() : std::string{});
+                auto line = fieldRow(kName, kWired, std::nullopt, true, prettyField(kName));
+                if (!line.has_value()) {
+                    return;
+                }
+                static_cast<void>(words(line->second, kWired, look::kAccent, look::kBodySize));
+                componentRows_.push_back(line->first);
+                fields_.push_back(FieldRow{.value = line->second, .role = kRole, .field = kName, .kind = kWired});
+                continue;
+            }
+            auto line = fieldRow(kName,
+                                 given != nullptr ? partText(*given) : std::string{},
+                                 std::nullopt,
+                                 given != nullptr,
+                                 prettyField(kName));
             if (!line.has_value()) {
                 return;
             }
@@ -545,16 +671,13 @@ void ShellParticipant::showGraphNode(std::size_t at) {
             fields_.push_back(FieldRow{.value = line->second, .role = kRole, .field = kName});
         }
     }
-    // Then its outputs, each pressed to connect it (D733).
     const Value* outputs = signature != nullptr ? signature->find("outputs") : nullptr;
     if (outputs == nullptr || outputs->items().empty()) {
         return;
     }
-    auto heading = row(componentsColumn_, "outputs", kQuiet, kPanel);
-    if (!heading.has_value()) {
+    if (!kSection("Outputs", "pressed, then another node's input field typed")) {
         return;
     }
-    componentRows_.push_back(*heading);
     for (const Value& kOutput : outputs->items()) {
         const std::string kName = kOutput.text() != nullptr ? *kOutput.text() : std::string{};
         auto line = row(componentsColumn_, kName, kText, kRow, true);
@@ -579,6 +702,10 @@ void ShellParticipant::connectGraphInput(const FieldRow& row, const std::pair<st
 }
 
 void ShellParticipant::setGraphMember(const FieldRow& row, const std::string& text) {
+    // A wired input left saying what it is wired from is left wired.
+    if (!row.kind.empty() && text == row.kind) {
+        return;
+    }
     const bool kParam = row.role == FieldRow::Role::GraphParam;
     Value operation = Value::object();
     operation.add("operation", Value::string(kParam ? "materials.set_node_param" : "materials.set_node_input"));
