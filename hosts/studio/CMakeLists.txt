@@ -444,6 +444,18 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "level.scene written: no.*\"code\":\"studio_searched\"[^\n]*\"found\":3,\"named\":\"slope\",\"having\":\"\".*\"code\":\"studio_searched\"[^\n]*\"found\":2,\"named\":\"wall\",\"having\":\"tile\".*\"code\":\"studio_summary\"[^\n]*\"entities\":2,[^\n]*\"searched\":2,.*\"exit\":\"clean_stop\"")
+    # The palette narrowed to the scene's entities by `@` (D937): in
+    # runners' level, "@east" lists the east wall alone, and Enter chooses
+    # it.
+    add_test(NAME studio_palette_entities
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene "@commands:@east" keys=Return wait=2
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_palette_entities PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "typed @east at [0-9]+,[0-9]+.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":[0-9]+,\"entity\":\"0d077e42-123c-4358-b7e3-02e08c02e876\".*\"exit\":\"clean_stop\"")
     # A scene's history (D454): ground renamed three times, the history
     # lists the three; its first entry clicked undoes the two after it,
     # and its last clicked redoes them. The history sits under the view's

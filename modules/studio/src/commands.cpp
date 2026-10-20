@@ -622,7 +622,7 @@ void ShellParticipant::showMatches(std::string_view typed) {
         return;
     }
     auto popup = box(root_,
-                     ui::Layout{.width = ui::pixels(300),
+                     ui::Layout{.width = ui::pixels(380),
                                 .direction = ui::Direction::Column,
                                 .gap = 1,
                                 .padding = {5, 5, 5, 5},
@@ -642,7 +642,11 @@ void ShellParticipant::showMatches(std::string_view typed) {
     static_cast<void>(tree_->setRole(*popup, ui::Role::Group));
     static_cast<void>(tree_->setName(*popup, "matches"));
     popup_ = *popup;
-    const std::string kWanted = lowered(typed);
+    // `>` narrows to commands and `@` to the scene's entities, as the
+    // design's palette says at its foot (D937).
+    const bool kCommandsOnly = typed.starts_with('>');
+    const bool kEntitiesOnly = typed.starts_with('@');
+    const std::string kWanted = lowered(kCommandsOnly || kEntitiesOnly ? typed.substr(1) : typed);
     // As the design's palette (D927): the commands, then with words typed
     // the open scene's entities and the game's assets they name, each
     // under its heading.
@@ -652,7 +656,11 @@ void ShellParticipant::showMatches(std::string_view typed) {
             static_cast<void>(monoWords(*heading, text, look::kFaintInk, look::kSmallSize));
         }
     };
-    const auto kFound = [this, &popup](std::string_view name, std::string_view quiet, Icon which, std::size_t code) {
+    const auto kFound = [this, &popup](std::string_view name,
+                                       std::string_view quiet,
+                                       Icon which,
+                                       std::uint32_t ink,
+                                       std::size_t code) {
         auto line = box(*popup,
                         ui::Layout{.height = ui::pixels(28),
                                    .alignItems = ui::Align::Center,
@@ -664,7 +672,7 @@ void ShellParticipant::showMatches(std::string_view typed) {
             return;
         }
         static_cast<void>(tree_->setLook(*line, ui::Look{.fill = popupRows_.empty() ? kChosen : 0U, .radius = 4}));
-        static_cast<void>(icon(*line, which, look::kEntityInk, 14));
+        static_cast<void>(icon(*line, which, ink, 14));
         if (auto named = box(*line, ui::Layout{.width = ui::pixels(0), .grow = 1}, 0); named.has_value()) {
             static_cast<void>(tree_->setLook(*named, ui::Look{.clip = true}));
             static_cast<void>(words(*named, name, look::kRowInk, look::kBodySize));
@@ -679,7 +687,7 @@ void ShellParticipant::showMatches(std::string_view typed) {
         popupRows_.emplace_back(*line, code);
     };
     bool headed = false;
-    for (std::size_t each = 0; each < commands_.size() && popupRows_.size() < kMostCommands; ++each) {
+    for (std::size_t each = 0; each < commands_.size() && popupRows_.size() < kMostCommands && !kEntitiesOnly; ++each) {
         if (commands_[each].name == kPalette || !lowered(commands_[each].name).contains(kWanted)) {
             continue;
         }
@@ -690,14 +698,39 @@ void ShellParticipant::showMatches(std::string_view typed) {
         if (!line.has_value()) {
             return;
         }
+        // A command with no key says the menu it is in.
+        if (commands_[each].keys.empty() && !commands_[each].menu.empty()) {
+            if (auto menu = box(*line, ui::Layout{.shrink = 0}, 0); menu.has_value()) {
+                static_cast<void>(words(*menu, commands_[each].menu, look::kFaintInk, look::kSmallSize));
+                static_cast<void>(
+                    tree_->setInteraction(*menu, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+            }
+        }
         popupRows_.emplace_back(*line, each);
     }
-    if (kWanted.empty()) {
+    const auto kFoot = [this, &popup] {
+        if (auto foot = box(
+                *popup,
+                ui::Layout{
+                    .gap = 14, .shrink = 0, .padding = {10, 10, 7, 4}, .margin = {0, 0, 4, 0}, .border = {0, 0, 1, 0}},
+                0);
+            foot.has_value()) {
+            static_cast<void>(tree_->setLook(*foot, ui::Look{.borderColor = look::kRaisedEdge}));
+            for (const std::string_view kHint :
+                 {"Enter runs the first", "> commands only", "@ entities only", "Esc closes"}) {
+                if (auto hint = box(*foot, ui::Layout{.shrink = 0}, 0); hint.has_value()) {
+                    static_cast<void>(words(*hint, kHint, look::kFaintInk, look::kSmallSize));
+                }
+            }
+        }
+    };
+    if (kWanted.empty() && !kEntitiesOnly) {
+        kFoot();
         return;
     }
     headed = false;
     std::size_t entities = 0;
-    for (std::size_t each = 0; each < entities_.size() && !documentChosen() && entities < 5; ++each) {
+    for (std::size_t each = 0; each < entities_.size() && !documentChosen() && entities < 5 && !kCommandsOnly; ++each) {
         if (each >= names_.size() || names_[each].empty() || !lowered(names_[each]).contains(kWanted)) {
             continue;
         }
@@ -708,25 +741,29 @@ void ShellParticipant::showMatches(std::string_view typed) {
             });
             kHeading("ENTITIES IN " + scene);
         }
-        kFound(names_[each], "entity", Icon::Cube, kFoundEntity + each);
+        kFound(names_[each], "entity", Icon::Cube, look::kEntityInk, kFoundEntity + each);
         ++entities;
     }
     headed = false;
     std::size_t assets = 0;
-    for (std::size_t each = 0; each < browser_.sources.size() && assets < 5; ++each) {
+    for (std::size_t each = 0; each < browser_.sources.size() && assets < 5 && !kCommandsOnly && !kEntitiesOnly;
+         ++each) {
         if (!lowered(browser_.sources[each].path).contains(kWanted)) {
             continue;
         }
         if (!std::exchange(headed, true)) {
             kHeading("ASSETS");
         }
+        const auto [kIcon, kInk] = kindIcon(kindOf(browser_.sources[each].importer));
         kFound(browser_.sources[each].path,
                std::filesystem::path{browser_.sources[each].path}.extension().string().substr(
                    std::filesystem::path{browser_.sources[each].path}.has_extension() ? 1 : 0),
-               Icon::Folder,
+               kIcon,
+               kInk,
                kFoundAsset + each);
         ++assets;
     }
+    kFoot();
 }
 
 void ShellParticipant::runFound(std::size_t code) {

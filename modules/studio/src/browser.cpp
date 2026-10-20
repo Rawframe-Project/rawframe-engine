@@ -243,8 +243,6 @@ result::Result<std::pair<ui::Node, ui::Node>> ShellParticipant::searchWell(
     return std::pair{kWell, kValue};
 }
 
-namespace {
-
 /// The icon a source of `kind` is drawn with, and its ink (D916).
 std::pair<Icon, std::uint32_t> kindIcon(std::string_view kind) {
     constexpr std::array<std::tuple<std::string_view, Icon, std::uint32_t>, 13> kIcons = {{
@@ -269,6 +267,8 @@ std::pair<Icon, std::uint32_t> kindIcon(std::string_view kind) {
     }
     return {Icon::Data, 0xA3A6AEFFU};
 }
+
+namespace {
 
 /// One source of `kind`, as its card says what it is.
 std::string kindWord(std::string_view kind) {

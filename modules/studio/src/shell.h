@@ -131,6 +131,9 @@ inline constexpr std::uint32_t kQuiet = look::kLabelInk;
 inline constexpr std::uint32_t kWarning = look::kWarn;
 
 /// The shell: a session on the game, and the UI that shows it.
+/// The icon a source of `kind` is drawn with, and its ink (D916).
+[[nodiscard]] std::pair<Icon, std::uint32_t> kindIcon(std::string_view kind);
+
 class ShellParticipant final : public composition::Participant, public ui::UiFrames {
 public:
     result::Status load(composition::ParticipantContext& context);

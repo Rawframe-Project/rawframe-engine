@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <tuple>
 
 namespace rawframe::studio {
 
@@ -42,62 +43,149 @@ void ShellParticipant::openExport() {
     }
     closePopup();
     closePreferences();
+    // As the design's Export dialog (D937): its heading and the tool that
+    // does the work, a card for each target, where it goes and what it is
+    // called, what the export said, and Cancel and Export at its foot.
     auto dialog =
         box(root_,
-            ui::Layout{.width = ui::pixels(560),
+            ui::Layout{.width = ui::pixels(720),
                        .direction = ui::Direction::Column,
-                       .gap = 4,
-                       .padding = {12, 12, 12, 12},
-                       .placement = {.absolute = true, .x = ui::share(0.5F), .y = ui::share(0.1F), .anchorX = 0.5F}},
-            kHeaderFill);
+                       .border = {1, 1, 1, 1},
+                       .placement = {.absolute = true, .x = ui::share(0.5F), .y = ui::share(0.12F), .anchorX = 0.5F}},
+            0);
     if (!dialog.has_value()) {
         return;
     }
     held_.exportDialog = *dialog;
+    static_cast<void>(tree_->setLook(*dialog,
+                                     ui::Look{.fill = 0x1A1C21FFU,
+                                              .borderColor = look::kRaisedEdge,
+                                              .radius = 8,
+                                              .outerShadow = {.color = 0x00000099U, .y = 10, .blur = 30}}));
     static_cast<void>(tree_->setRole(*dialog, ui::Role::Group));
     static_cast<void>(tree_->setName(*dialog, "Export the game"));
     held_.exportTargets.clear();
     held_.exportFields.clear();
-    if (auto close = button(*dialog, "Close"); close.has_value()) {
-        held_.exportClose = *close;
-    }
-    // Each target a press, the chosen one bright; then what the export is
-    // told, a phone's address only for a phone.
-    static_cast<void>(row(*dialog, "Target", kQuiet, kHeaderFill));
-    auto targets = box(*dialog, ui::Layout{.height = ui::pixels(26), .gap = 4, .shrink = 0}, 0);
-    for (const auto& [kWord, kTarget] : kTargets) {
-        auto pressed = targets.has_value() ? box(*targets, ui::Layout{.padding = {10, 4, 10, 4}}, kRow)
-                                           : std::unexpected<result::Error>{targets.error().clone()};
-        if (!pressed.has_value()) {
-            break;
+    const std::string kGame = description_.parent_path().filename().string();
+    if (auto head = box(*dialog,
+                        ui::Layout{.height = ui::pixels(46),
+                                   .alignItems = ui::Align::Center,
+                                   .shrink = 0,
+                                   .padding = {16, 16, 0, 0},
+                                   .border = {0, 0, 0, 1}},
+                        0);
+        head.has_value()) {
+        static_cast<void>(tree_->setLook(*head, ui::Look{.borderColor = look::kRaisedEdge}));
+        if (auto title = box(*head, ui::Layout{.shrink = 0}, 0); title.has_value()) {
+            static_cast<void>(strongWords(*title, "Export " + kGame, look::kInk, 15));
         }
-        static_cast<void>(pressWords(*pressed, kWord, kWord == held_.exportTarget ? kText : kQuiet, 13));
-        held_.exportTargets.emplace_back(*pressed, std::string{kWord});
+        static_cast<void>(box(*head, ui::Layout{.grow = 1}, 0));
+        if (auto tool = box(*head, ui::Layout{.shrink = 0}, 0); tool.has_value()) {
+            static_cast<void>(monoWords(*tool, "rawframe-export", look::kFaintInk, look::kSmallSize));
+        }
+    }
+    auto body = box(*dialog, ui::Layout{.direction = ui::Direction::Column, .gap = 6, .padding = {16, 16, 14, 14}}, 0);
+    if (!body.has_value()) {
+        return;
+    }
+    // Each target a card, the chosen one lit; the desktop's named for the
+    // system Studio runs on, which it exports for.
+#if defined(_WIN32)
+    const std::array<std::pair<std::string, std::string>, 4> kCards = {{{"Windows", "a folder with " + kGame + ".exe"},
+                                                                        {"Web", "a site to serve"},
+                                                                        {"Android", "an APK, Vulkan 1.3"},
+                                                                        {"iOS", "an app for the simulator"}}};
+#elif defined(__APPLE__)
+    const std::array<std::pair<std::string, std::string>, 4> kCards = {{{"macOS", "a folder with " + kGame},
+                                                                        {"Web", "a site to serve"},
+                                                                        {"Android", "an APK, Vulkan 1.3"},
+                                                                        {"iOS", "an app for the simulator"}}};
+#else
+    const std::array<std::pair<std::string, std::string>, 4> kCards = {{{"Linux", "a folder with " + kGame},
+                                                                        {"Web", "a site to serve"},
+                                                                        {"Android", "an APK, Vulkan 1.3"},
+                                                                        {"iOS", "an app for the simulator"}}};
+#endif
+    if (auto cards = box(*body, ui::Layout{.gap = 8, .shrink = 0, .margin = {0, 0, 0, 8}}, 0); cards.has_value()) {
+        for (std::size_t each = 0; each < kTargets.size(); ++each) {
+            const bool kChosenTarget = kTargets[each].first == held_.exportTarget;
+            auto card = box(*cards,
+                            ui::Layout{.width = ui::share(0.25F),
+                                       .direction = ui::Direction::Column,
+                                       .gap = 4,
+                                       .shrink = 1,
+                                       .padding = {12, 12, 10, 10},
+                                       .border = {1, 1, 1, 1}},
+                            0);
+            if (!card.has_value()) {
+                break;
+            }
+            static_cast<void>(tree_->setLook(*card,
+                                             ui::Look{.fill = kChosenTarget ? 0x1B2A44FFU : 0x202228FFU,
+                                                      .borderColor = kChosenTarget ? look::kAccent : look::kRaisedEdge,
+                                                      .radius = 6}));
+            static_cast<void>(tree_->setRole(*card, ui::Role::Button));
+            static_cast<void>(tree_->setName(*card, std::string{kTargets[each].first}));
+            for (const auto& [kLine, kStrong] : {std::pair<std::string_view, bool>{kCards[each].first, true},
+                                                 std::pair<std::string_view, bool>{kCards[each].second, false}}) {
+                if (auto said = box(*card, ui::Layout{.shrink = 0}, 0); said.has_value()) {
+                    static_cast<void>(
+                        tree_->setInteraction(*said, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+                    static_cast<void>(kStrong ? strongWords(*said, kLine, look::kInk, look::kBodySize)
+                                              : words(*said, kLine, look::kLabelInk, look::kSmallSize));
+                }
+            }
+            held_.exportTargets.emplace_back(*card, std::string{kTargets[each].first});
+        }
     }
     const bool kPhone = held_.exportTarget == "android" || held_.exportTarget == "ios";
-    const std::array<std::pair<std::string, std::string>, 3> kFields = {
-        {{"output", exportOutput().string()},
-         {"title", held_.exportTitle.empty() ? description_.parent_path().filename().string() : held_.exportTitle},
-         {"address", held_.exportAddress}}};
-    for (const auto& [kSetting, kValue] : kFields) {
+    const std::array<std::tuple<std::string, std::string, std::string_view>, 3> kFields = {
+        {{"output", exportOutput().string(), "Into"},
+         {"title", held_.exportTitle.empty() ? kGame : held_.exportTitle, "Title"},
+         {"address", held_.exportAddress, "Server address"}}};
+    for (const auto& [kSetting, kValue, kLabel] : kFields) {
         if (kSetting == "address" && !kPhone) {
             continue;
         }
         const bool kGiven = kSetting == "output"  ? !held_.exportOutput.empty()
                             : kSetting == "title" ? !held_.exportTitle.empty()
                                                   : !held_.exportAddress.empty();
-        if (auto line = fieldRow(kSetting, kValue, *dialog, kGiven); line.has_value()) {
+        if (auto line = fieldRow(kSetting, kValue, *body, kGiven, kLabel); line.has_value()) {
             held_.exportFields.emplace_back(line->second, kSetting);
         }
     }
     if (kPhone) {
-        static_cast<void>(row(*dialog, "the address a phone reaches this machine's server by", kQuiet, kHeaderFill));
+        if (auto note = box(*body, ui::Layout{.shrink = 0, .padding = {0, 0, 0, 2}}, 0); note.has_value()) {
+            static_cast<void>(words(
+                *note, "The address a phone reaches this machine's server by.", look::kFaintInk, look::kSmallSize));
+        }
     }
-    if (auto exported = button(*dialog, held_.exporting.has_value() ? "Exporting" : "Export"); exported.has_value()) {
-        held_.exportPress = *exported;
-    }
+    // What the export said last, and while it runs a bar that says so.
     if (!held_.exportSaid.empty()) {
-        static_cast<void>(row(*dialog, held_.exportSaid, kQuiet, kHeaderFill));
+        if (auto said = box(*body, ui::Layout{.shrink = 0, .margin = {0, 0, 8, 0}}, 0); said.has_value()) {
+            static_cast<void>(wrappedWords(*said, held_.exportSaid, look::kSoftInk, look::kLabelSize));
+        }
+    }
+    if (held_.exporting.has_value()) {
+        if (auto track = box(*body, ui::Layout{.height = ui::pixels(4), .shrink = 0}, 0x2A2D35FFU); track.has_value()) {
+            static_cast<void>(box(*track, ui::Layout{.width = ui::share(0.6F)}, look::kAccent));
+        }
+    }
+    if (auto foot = box(
+            *dialog, ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {16, 16, 0, 14}}, 0);
+        foot.has_value()) {
+        static_cast<void>(box(*foot, ui::Layout{.grow = 1}, 0));
+        if (auto close =
+                textButton(*foot, std::nullopt, held_.exporting.has_value() ? "Close" : "Cancel", ButtonKind::Quiet);
+            close.has_value()) {
+            held_.exportClose = *close;
+            static_cast<void>(tree_->setName(*close, "Close"));
+        }
+        if (auto exported = textButton(
+                *foot, std::nullopt, held_.exporting.has_value() ? "Exporting" : "Export", ButtonKind::Primary);
+            exported.has_value()) {
+            held_.exportPress = *exported;
+        }
     }
 }
 
