@@ -94,6 +94,9 @@ struct AdapterDescription {
 /// textures upload within the first. Maul RHI keeps as many upload bytes
 /// again for each frame in flight.
 inline constexpr std::uint32_t kFrameUploadBytes = std::uint32_t{16} << 20U;
+/// The UI's share of them for its images. One image past it never shows,
+/// so an editor's viewport asks for a streamed picture within it (D927).
+inline constexpr std::uint32_t kUiImageUploadBytes = kFrameUploadBytes / 4;
 inline constexpr std::uint32_t kReadbackBytes = std::uint32_t{16} << 20U;
 
 /// SPEC-0024's present policies. Each falls back along its chain to what

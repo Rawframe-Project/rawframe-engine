@@ -72,7 +72,7 @@ constexpr std::uint64_t kFieldsId = ~std::uint64_t{1};
 /// And the color atlas (D669).
 constexpr std::uint64_t kColorsId = ~std::uint64_t{2};
 /// The UI's share of a frame's uploads, for its images.
-constexpr std::uint64_t kImageUploadBytes = render::kFrameUploadBytes / 8;
+constexpr std::uint64_t kImageUploadBytes = render::kUiImageUploadBytes;
 
 /// A texture's binding, its every level.
 mrhiBinding textureAt(std::uint32_t slot, mrhiResourceId resource) noexcept {

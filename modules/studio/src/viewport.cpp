@@ -474,6 +474,16 @@ void ShellParticipant::forwardInput() {
     inViewport_.forwarding->exceptOver(std::move(holes));
     inViewport_.forwarding->keysWhileHeld(playing_->edited());
     std::vector<world_tooling::WindowInput> events = inViewport_.forwarding->take();
+    // At the picture's pixels, fewer than the viewport's where it would
+    // pass the UI's uploads (D927) or the viewport grew since it started.
+    if (kAt.width > 0 && kAt.height > 0) {
+        const float kAcross = static_cast<float>(inViewport_.picture->levels[0].width) / kAt.width;
+        const float kDown = static_cast<float>(inViewport_.picture->levels[0].height) / kAt.height;
+        for (world_tooling::WindowInput& event : events) {
+            event.x *= kAcross;
+            event.y *= kDown;
+        }
+    }
     // In records of at most the most one carries.
     for (std::size_t from = 0; from < events.size(); from += world_tooling::kMostWindowInputs) {
         const std::size_t kTo = std::min(events.size(), from + world_tooling::kMostWindowInputs);
