@@ -35,6 +35,26 @@ for game in "$@"; do
 {"mcpServers": {"rawframe-$game": {"command": "./rawframe-author$exe", "args": ["mcp", "games/$game/$game.game"]}}}
 MCP
 done
+# On Linux, its icon and a desktop entry beside it, double-clicked from
+# the folder or copied to ~/.local/share/applications to sit in the
+# desktop's menu, naming where the folder is now (D926).
+if [ -z "$exe" ]; then
+    cp hosts/studio/resources/rawframe-studio.png "$into/"
+    at="$(cd "$into" && pwd)"
+    cat >"$into/rawframe-studio.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Rawframe Studio
+Comment=Make games with the Rawframe engine
+Exec="$at/rawframe-studio"
+Path=$at
+Icon=$at/rawframe-studio.png
+Terminal=false
+Categories=Development;IDE;
+StartupWMClass=rawframe-studio
+DESKTOP
+    chmod +x "$into/rawframe-studio.desktop"
+fi
 if [ -n "$exe" ]; then
     for program in "$into"/*.exe; do
         for dll in $(llvm-objdump -p "$program" | sed -n 's/^ *DLL Name: //p' | tr -d '\r'); do
