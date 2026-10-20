@@ -1,3 +1,4 @@
+#include "hints.h"
 #include "shell.h"
 
 // The Inspector as the screen design draws it (D915): the entity's head,
@@ -15,17 +16,45 @@ namespace rawframe::studio {
 namespace {
 
 /// The runs of fields shown together, and the row's label: a pose's place
-/// and turn, a box's size, a plane's place.
+/// and turn, a box's size, a plane's place, an emitter's acceleration and
+/// a beam's far end and bend.
 struct AxisRun {
     std::array<std::string_view, 4> names;
     std::size_t count;
     std::string_view label;
 };
-constexpr std::array<AxisRun, 5> kRuns = {{{{"x", "y", "z", ""}, 3, "Position"},
+constexpr std::array<AxisRun, 9> kRuns = {{{{"x", "y", "z", ""}, 3, "Position"},
                                            {{"qx", "qy", "qz", "qw"}, 4, "Rotation"},
+                                           {{"c", "s", "", ""}, 2, "Rotation"},
                                            {{"width", "height", "depth", ""}, 3, "Size"},
                                            {{"angularX", "angularY", "angularZ", ""}, 3, "Angular"},
-                                           {{"x", "y", "", ""}, 2, "Position"}}};
+                                           {{"x", "y", "", ""}, 2, "Position"},
+                                           {{"accelerationX", "accelerationY", "accelerationZ", ""}, 3, "Acceleration"},
+                                           {{"toX", "toY", "toZ", ""}, 3, "To"},
+                                           {{"bendX", "bendY", "bendZ", ""}, 3, "Bend"}}};
+
+/// An emitter's fields as the design's Particles screen groups them
+/// (D934): how many leave and from where, how they move, and how they
+/// look. The emitter is the one place particles are written, so its
+/// component is their editor; no document beside it.
+constexpr std::string_view kEmitterType = "rawframe.model.ParticleEmitter";
+struct FieldGroup {
+    std::string_view label;
+    std::array<std::string_view, 8> fields;
+};
+constexpr std::array<FieldGroup, 3> kEmitterGroups = {
+    {{"Spawn", {"rate", "lifetime", "radius", "bursts", "burstCount", "variation", "seed", ""}},
+     {"Motion", {"speed", "spread", "accelerationX", "accelerationY", "accelerationZ", "drag", "inherit", ""}},
+     {"Look", {"sizeStart", "sizeEnd", "colorStart", "colorEnd", "material", "columns", "rows", "streak"}}}};
+
+std::size_t groupOf(std::string_view field) {
+    for (std::size_t each = 0; each < kEmitterGroups.size(); ++each) {
+        if (std::ranges::contains(kEmitterGroups[each].fields, field)) {
+            return each;
+        }
+    }
+    return kEmitterGroups.size();
+}
 
 /// A number as a field shows it: whole bare, else as few digits as it
 /// needs.
@@ -207,7 +236,19 @@ result::Status ShellParticipant::vectorRow(const std::string& component,
         held_.turn = turned;
         held_.turnComponent = component;
     }
-    const std::size_t kShownAxes = kTurn ? 3 : axes.size();
+    // A 2D pose's turn, its cosine and sine, one angle about Z in degrees
+    // (D933).
+    const bool kFlatTurn = axes.size() == 2 && axes.front().name == "c" && componentName.ends_with(".pose");
+    double flatAngle = 0;
+    if (kFlatTurn) {
+        const double kC = axes[0].text.has_value() ? std::strtod(axes[0].text->c_str(), nullptr) : 1.0;
+        const double kS = axes[1].text.has_value() ? std::strtod(axes[1].text->c_str(), nullptr) : 0.0;
+        flatAngle = std::atan2(kS, kC) * 180.0 / std::numbers::pi;
+        if (std::abs(flatAngle) < 1e-9) {
+            flatAngle = 0;
+        }
+    }
+    const std::size_t kShownAxes = kTurn ? 3 : kFlatTurn ? 1 : axes.size();
     constexpr std::array<std::uint32_t, 4> kInks = {look::kAxisX, look::kAxisY, look::kAxisZ, look::kLabelInk};
     constexpr std::array<std::string_view, 4> kLetters = {"X", "Y", "Z", "W"};
     for (std::size_t each = 0; each < kShownAxes; ++each) {
@@ -226,9 +267,9 @@ result::Status ShellParticipant::vectorRow(const std::string& component,
                                            .alignItems = ui::Align::Center,
                                            .shrink = 0},
                                 0));
-        RAWFRAME_TRY(tree_->setLook(kTag, ui::Look{.fill = kInks[each]}));
+        RAWFRAME_TRY(tree_->setLook(kTag, ui::Look{.fill = kFlatTurn ? look::kAxisZ : kInks[each]}));
         RAWFRAME_TRY_ASSIGN(const ui::Node kLetter, box(kTag, ui::Layout{}, 0));
-        RAWFRAME_TRY(monoWords(kLetter, kLetters[each], 0x0B0C0FFFU, look::kSmallSize));
+        RAWFRAME_TRY(monoWords(kLetter, kFlatTurn ? "Z" : kLetters[each], 0x0B0C0FFFU, look::kSmallSize));
         RAWFRAME_TRY(tree_->setInteraction(kTag, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
         RAWFRAME_TRY_ASSIGN(const ui::Node kValue, tree_->addEditable(++keys_));
         RAWFRAME_TRY(tree_->setLayout(
@@ -236,14 +277,15 @@ result::Status ShellParticipant::vectorRow(const std::string& component,
             ui::Layout{.width = ui::pixels(0), .minHeight = ui::pixels(23), .grow = 1, .padding = {6, 4, 3, 3}}));
         RAWFRAME_TRY(tree_->setLook(kValue, ui::Look{}));
         RAWFRAME_TRY(tree_->attach(kWell, kValue));
-        const bool kSet = kTurn ? std::ranges::any_of(axes,
-                                                      [](const FieldShown& field) {
-                                                          return field.text.has_value();
-                                                      })
-                                : kAxis.text.has_value();
+        const bool kSet = kTurn || kFlatTurn ? std::ranges::any_of(axes,
+                                                                   [](const FieldShown& field) {
+                                                                       return field.text.has_value();
+                                                                   })
+                                             : kAxis.text.has_value();
         RAWFRAME_TRY(monoWords(kValue,
-                               kTurn ? shownNumber(turned[each])
-                                     : kAxis.text.value_or(std::string{kAxis.name == "qw" ? "1" : "0"}),
+                               kTurn       ? shownNumber(turned[each])
+                               : kFlatTurn ? shownNumber(flatAngle)
+                                           : kAxis.text.value_or(std::string{kAxis.name == "qw" ? "1" : "0"}),
                                kSet ? look::kInk : look::kFaintInk,
                                look::kLabelSize));
         RAWFRAME_TRY(tree_->setRole(kValue, ui::Role::TextInput));
@@ -251,19 +293,22 @@ result::Status ShellParticipant::vectorRow(const std::string& component,
                                                            : kLetters[each] == "Y" ? "y"
                                                                                    : "z"}
                                              : kAxis.name;
-        RAWFRAME_TRY(tree_->setName(kValue, kTurn ? "turn " + kFieldName : kAxis.name));
+        RAWFRAME_TRY(tree_->setName(kValue,
+                                    kFlatTurn ? std::string{"turn z"}
+                                    : kTurn   ? "turn " + kFieldName
+                                              : kAxis.name));
         const Catalog::Field kType = kAxis.type.value_or(Catalog::Field{.name = kAxis.name, .kind = kAxis.kind});
         fields_.push_back(FieldRow{.value = kValue,
-                                   .role = kTurn ? FieldRow::Role::Turn : FieldRow::Role::Field,
+                                   .role = kTurn || kFlatTurn ? FieldRow::Role::Turn : FieldRow::Role::Field,
                                    .component = component,
-                                   .field = kFieldName,
+                                   .field = kFlatTurn ? std::string{"angle"} : kFieldName,
                                    .kind = kAxis.kind,
                                    .type = kType});
     }
     // An instance's own values, each of which it may drop for its
     // source's, under the row (D443, D925).
     const bool kBrought = entityAt_ < brought_.size() && brought_[entityAt_];
-    if (kBrought && !kTurn && catalog_.offers("scene.revert_field") &&
+    if (kBrought && !kTurn && !kFlatTurn && catalog_.offers("scene.revert_field") &&
         std::ranges::any_of(axes, [](const FieldShown& field) {
             return field.text.has_value();
         })) {
@@ -284,6 +329,69 @@ result::Status ShellParticipant::vectorRow(const std::string& component,
         }
     }
     return {};
+}
+
+std::vector<FieldShown> ShellParticipant::groupedFields(const std::string& component,
+                                                        std::vector<FieldShown> fields) const {
+    if (const Catalog::Component* kType = catalog_.component(component);
+        kType != nullptr && kType->type == kEmitterType) {
+        std::ranges::stable_sort(fields, {}, [](const FieldShown& each) {
+            return groupOf(each.name);
+        });
+    }
+    return fields;
+}
+
+void ShellParticipant::fieldGroupRow(const std::string& component,
+                                     std::span<const FieldShown> fields,
+                                     std::size_t place) {
+    const Catalog::Component* kType = catalog_.component(component);
+    if (kType == nullptr || place >= fields.size()) {
+        return;
+    }
+    const std::string& kName = fields[place].name;
+    // A group's name over its first field.
+    if (const std::size_t kGroup = groupOf(kName); kType->type == kEmitterType && kGroup < kEmitterGroups.size() &&
+                                                   (place == 0 || groupOf(fields[place - 1].name) != kGroup)) {
+        if (auto heading = box(componentsColumn_, ui::Layout{.shrink = 0, .padding = {12, 10, 10, 2}}, 0);
+            heading.has_value()) {
+            componentRows_.push_back(*heading);
+            static_cast<void>(strongWords(*heading, kEmitterGroups[kGroup].label, look::kSoftInk, look::kLabelSize));
+        }
+    }
+    // Over a start and an end color, the colors a particle, a trail, or a
+    // beam passes through, as the design's Color over life.
+    const auto kEnd = std::ranges::find(fields, std::string_view{"colorEnd"}, &FieldShown::name);
+    if (kName != "colorStart" || kEnd == fields.end()) {
+        return;
+    }
+    const auto kColor = [](const FieldShown& field) {
+        const Catalog::Field kField = field.type.value_or(Catalog::Field{.name = field.name, .kind = field.kind});
+        return colorOf(shownAs(kField, field.text.value_or("4294967295"))).value_or(0xFFFFFFFFU);
+    };
+    auto line = box(componentsColumn_,
+                    ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {10, 10, 4, 4}},
+                    0);
+    if (!line.has_value()) {
+        return;
+    }
+    componentRows_.push_back(*line);
+    if (auto label = box(*line, ui::Layout{.width = ui::pixels(116), .shrink = 0}, 0); label.has_value()) {
+        static_cast<void>(words(*label, "Color over life", look::kLabelInk, look::kLabelSize));
+    }
+    if (auto bar = box(*line, ui::Layout{.height = ui::pixels(20), .grow = 1}, 0); bar.has_value()) {
+        static_cast<void>(tree_->setName(*bar, "Color over life"));
+        static_cast<void>(
+            tree_->setLook(*bar,
+                           ui::Look{.fill = 0x0B0C0FFFU,
+                                    .borderColor = look::kEdge,
+                                    .radius = 4,
+                                    .gradient = ui::GradientLook{.kind = ui::GradientLook::Kind::Linear,
+                                                                 .angle = 90,
+                                                                 .colors = {kColor(fields[place]), kColor(*kEnd), 0, 0},
+                                                                 .positions = {0, 1, 0, 0},
+                                                                 .stops = 2}}));
+    }
 }
 
 void ShellParticipant::asCheckbox(ui::Node value, bool on) {

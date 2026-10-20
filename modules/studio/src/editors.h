@@ -193,6 +193,9 @@ struct EditorsHeld {
     ui::Node prefabBack{};
     /// How tall the bar is, the view's overlays below it.
     float prefabTall = 0;
+    /// Whether a scene just opened is still to settle on a 2D game's 2D
+    /// view (D933).
+    bool flatPending = false;
     /// Its timeline (D931): the playhead's time, whether it plays and when
     /// it last moved, the key chosen, the snap, the length and how many
     /// pixels a second is; the keys' marks, the playhead's nodes and

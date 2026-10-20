@@ -247,7 +247,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     # Framing what is chosen (D792): the west wall chosen, F pressed with
     # no field holding the keyboard, and the view turned on it by the
-    # session, its target where the wall stands.
+    # session, its target where the wall stands; Runners' level opened on
+    # the 2D view framed whole first (D933), two views before F's.
     add_test(NAME studio_frames
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
@@ -256,7 +257,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_frames PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "pressed f.*\"code\":\"studio_summary\"[^\n]*\"viewsSet\":1,[^\n]*\"status\":\"framed\".*\"exit\":\"clean_stop\"")
+                         "pressed f.*\"code\":\"studio_summary\"[^\n]*\"viewsSet\":3,[^\n]*\"status\":\"framed\".*\"exit\":\"clean_stop\"")
     # Bookmarks (D796): a view kept in bookmark 2 by Control Shift 2, the
     # view moved, and Control 2 going back to it, through the session's
     # records into the scene's editor state.
@@ -765,6 +766,19 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "found sky starter.skylight at [0-9]+,[0-9]+.*\"code\":\"studio_environment\"[^\n]*\"components\":2,\"held\":2,.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"entity\":\"12d86407-91f4-4b01-a6ca-1d8f79284c35\",.*\"exit\":\"clean_stop\"")
+    # Particles kept in a scene (D934): the starter's New particles makes a
+    # fountain, its emitter shown in the design's Spawn, Motion, and Look,
+    # and its speed typed.
+    add_test(NAME studio_particles
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     templates/starter-3d/starter.game level.scene @level.scene @Entity "@New particles"
+                     "until=studio_said,status=\"particles made\"" "@speed:5" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_particles PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "typed 5 at [0-9]+,[0-9]+.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
     add_test(NAME studio_ui_preview
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>

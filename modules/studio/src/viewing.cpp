@@ -40,9 +40,11 @@ void ShellParticipant::setView(const std::string& part, const std::string& text)
     showViewText();
 }
 
-void ShellParticipant::frameChosen() {
-    if (scene_.empty() || entity_.empty()) {
-        say("choose an entity to frame");
+void ShellParticipant::frameChosen(bool quiet) {
+    // With nothing chosen, the whole scene, as the session frames it
+    // (D933).
+    if (scene_.empty()) {
+        say("open a scene to frame it");
         return;
     }
     const std::string kReply = ask(frameRecord(next(), scene_));
@@ -52,8 +54,10 @@ void ShellParticipant::frameChosen() {
         view_ = kAnswered.view;
         previewing_ = kAnswered.previewing;
         const std::size_t kCount = selected_.size();
-        say(kCount > 1 ? "framed " + std::to_string(kCount) + " entities" : "framed");
-    } else {
+        say(entity_.empty() ? "framed the scene"
+            : kCount > 1    ? "framed " + std::to_string(kCount) + " entities"
+                            : "framed");
+    } else if (!quiet) {
         ++refused_;
         say(kAnswered.message);
     }
@@ -83,6 +87,8 @@ void ShellParticipant::seeIn2D(bool flat) {
     }
     showViewText();
     showViewBar();
+    // The toolbar's 3D and 2D lit as the view now is (D933).
+    showToolbar();
 }
 
 void ShellParticipant::bookmark(std::uint8_t slot, bool go) {

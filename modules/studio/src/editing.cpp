@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <numbers>
 
 namespace rawframe::studio {
 
@@ -807,6 +808,28 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
             refuse("turn " + row.field + ": degrees");
             return;
         }
+        // A 2D pose's angle is its cosine and sine (D933).
+        if (row.field == "angle") {
+            const double kRadians = kDegrees * std::numbers::pi / 180.0;
+            std::vector<Value> operations;
+            for (const auto& [kPart, kNumber] :
+                 {std::pair<std::string_view, double>{"c", std::cos(kRadians)}, {"s", std::sin(kRadians)}}) {
+                Value part = operationOn("scene.set_field");
+                part.add("component", Value::string(row.component));
+                part.add("field", Value::string(std::string{kPart}));
+                char written[64];
+                std::snprintf(written, sizeof(written), "%.9g", std::abs(kNumber) < 1e-12 ? 0.0 : kNumber);
+                const std::optional<Value> kValue = typedValue("real", written);
+                if (!kValue.has_value()) {
+                    refuse("turn: degrees");
+                    return;
+                }
+                part.add("value", *kValue);
+                operations.push_back(std::move(part));
+            }
+            commitAll(std::move(operations), "turned to " + text + " degrees", entity_);
+            return;
+        }
         std::array<double, 3> turn = held_.turn;
         turn[row.field == "x" ? 0 : row.field == "y" ? 1 : 2] = kDegrees;
         const std::array<double, 4> kQuaternion = quaternionOf(turn);
@@ -921,7 +944,7 @@ struct PartKind {
     std::array<double, 3> half;
 };
 
-constexpr std::array<PartKind, 7> kParts = {{
+constexpr std::array<PartKind, 8> kParts = {{
     {"New empty", "empty", std::nullopt, {0, 0, 0}},
     {"New cube", "cube", 1, {0.5, 0.5, 0.5}},
     {"New sphere", "sphere", 0, {0.5, 0.5, 0.5}},
@@ -929,6 +952,7 @@ constexpr std::array<PartKind, 7> kParts = {{
     {"New cylinder", "cylinder", 3, {0.5, 0.5, 0.5}},
     {"New plane", "plane", 1, {5, 0.05, 5}},
     {"New lamp", "lamp", std::nullopt, {0, 0, 0}},
+    {"New particles", "particles", std::nullopt, {0, 0, 0}},
 }};
 
 } // namespace
@@ -945,7 +969,8 @@ std::vector<std::string> ShellParticipant::partCommands() const {
     std::vector<std::string> made;
     for (const PartKind& kPart : kParts) {
         if ((kPart.shape.has_value() && !kBodies) ||
-            (kPart.name == "lamp" && (lampComponent() == nullptr || !kNamed("rawframe.physics3d.pose")))) {
+            (kPart.name == "lamp" && (lampComponent() == nullptr || !kNamed("rawframe.physics3d.pose"))) ||
+            (kPart.name == "particles" && (emitterComponent() == nullptr || !kNamed("rawframe.physics3d.pose")))) {
             continue;
         }
         made.emplace_back(kPart.command);
@@ -957,6 +982,14 @@ const Catalog::Component* ShellParticipant::lampComponent() const {
     // The game's lamp: a point light it keeps in its scenes, by name.
     const auto kFound = std::ranges::find_if(catalog_.components, [](const Catalog::Component& each) {
         return each.type == "rawframe.model.PointLight" && each.name.ends_with(".lamp") && !each.presented;
+    });
+    return kFound != catalog_.components.end() ? &*kFound : nullptr;
+}
+
+const Catalog::Component* ShellParticipant::emitterComponent() const {
+    // The game's particles kept in its scenes (D934).
+    const auto kFound = std::ranges::find_if(catalog_.components, [](const Catalog::Component& each) {
+        return each.type == "rawframe.model.ParticleEmitter" && !each.presented;
     });
     return kFound != catalog_.components.end() ? &*kFound : nullptr;
 }
@@ -1014,7 +1047,10 @@ void ShellParticipant::createPart(std::string_view command) {
     }
     at[0] = std::round(at[0] * 2) / 2;
     at[2] = std::round(at[2] * 2) / 2;
-    at[1] = kPart->shape.has_value() ? kPart->half[1] : kPart->name == "lamp" ? 2.5 : 0.0;
+    at[1] = kPart->shape.has_value()     ? kPart->half[1]
+            : kPart->name == "lamp"      ? 2.5
+            : kPart->name == "particles" ? 0.5
+                                         : 0.0;
     if (kPart->name != "empty") {
         if (const Catalog::Component* kPose = kComponent("rawframe.physics3d.pose"); kPose != nullptr) {
             kAdd(*kPose);
@@ -1055,6 +1091,23 @@ void ShellParticipant::createPart(std::string_view command) {
             kSet(*kLamp, "range", kReal(8));
             kSet(*kLamp, "color", kWhole(0xFFE2B8FFU));
         }
+    }
+    // A fountain of soft white sparks fading to blue, to change from (D934).
+    if (const Catalog::Component* kEmitter = emitterComponent(); kPart->name == "particles" && kEmitter != nullptr) {
+        kAdd(*kEmitter);
+        for (const auto& [kName, kNumber] : {std::pair<std::string_view, double>{"rate", 60},
+                                             {"lifetime", 1.6},
+                                             {"speed", 3},
+                                             {"spread", 0.35},
+                                             {"radius", 0.1},
+                                             {"sizeStart", 0.18},
+                                             {"sizeEnd", 0.04},
+                                             {"accelerationY", -3},
+                                             {"variation", 0.3}}) {
+            kSet(*kEmitter, kName, kReal(kNumber));
+        }
+        kSet(*kEmitter, "colorStart", kWhole(0xFFFFFFFFU));
+        kSet(*kEmitter, "colorEnd", kWhole(0x5B9BFF00U));
     }
     // The first thing in a scene framed at once, where the view stood far
     // off over nothing (D923).

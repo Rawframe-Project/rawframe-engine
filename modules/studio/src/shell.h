@@ -214,6 +214,8 @@ private:
     /// Over a prefab source's view, the way back and how far an edit
     /// reaches (D932), and its back link pressed.
     void showPrefabBar();
+    /// A 2D game's scene opened put on the 2D view, framed whole (D933).
+    void settleFlat();
     bool pressPrefabBar(ui::Node node);
 
     /// The viewport's input and area handed to the game played there (D790).
@@ -290,6 +292,8 @@ private:
     [[nodiscard]] bool commandOn(std::string_view name) const;
     [[nodiscard]] std::vector<std::string> partCommands() const;
     [[nodiscard]] const Catalog::Component* lampComponent() const;
+    /// The game's scene-kept particle emitter, if it has one (D934).
+    [[nodiscard]] const Catalog::Component* emitterComponent() const;
     void createPart(std::string_view command);
     [[nodiscard]] std::vector<std::string> addChoices(std::string_view typed) const;
     result::Status showSources();
@@ -508,6 +512,12 @@ private:
     [[nodiscard]] static std::size_t axesAt(std::span<const FieldShown> shown, std::size_t place);
     result::Status
     vectorRow(const std::string& component, std::string_view componentName, std::span<const FieldShown> axes);
+    /// A component's fields in the order its Inspector groups them, and
+    /// over the field at `place` the group it begins and a color ramp
+    /// (an emitter's, D934).
+    [[nodiscard]] std::vector<FieldShown> groupedFields(const std::string& component,
+                                                        std::vector<FieldShown> fields) const;
+    void fieldGroupRow(const std::string& component, std::span<const FieldShown> fields, std::size_t place);
 
     /// `row`'s field takes the keyboard, its text chosen whole.
     void beginEdit(const FieldRow& row);
@@ -530,7 +540,7 @@ private:
     /// (`authoring.view`), which hands it to a live preview.
     void setView(const std::string& part, const std::string& text);
     /// The view turned on what is chosen, by the session (D792).
-    void frameChosen();
+    void frameChosen(bool quiet = false);
     /// The view seen in 2D or out of it (D793).
     void seeIn2D(bool flat);
     /// The scene's bookmark `slot` gone to, or kept from the view (D796).

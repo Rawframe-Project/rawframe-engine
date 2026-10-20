@@ -679,6 +679,8 @@ void ShellParticipant::showScene(std::size_t at) {
     // A document opened is what Assets' Rename and Delete act on (D929).
     if (kChanged) {
         browser_.target = scene_;
+        // A 2D game's scene settles on the 2D view (D933).
+        held_.flatPending = at < listed_.size() && listed_[at] == Listed::Scene;
     }
     showTabs(at);
     showTitle();
@@ -910,7 +912,11 @@ void ShellParticipant::showScene(std::size_t at) {
         const Value* layer = each.find("layer");
         entityLayers_.push_back(layer != nullptr ? static_cast<std::uint32_t>(layer->integer().value_or(0)) : 0);
         entities_.push_back(*id->text());
-        names_.push_back(name != nullptr && name->text() != nullptr ? *name->text() : std::string{});
+        // An instance's entity with no name of its own is named as its row
+        // is, so the Inspector's head says it (D933).
+        names_.push_back(name != nullptr && name->text() != nullptr && !name->text()->empty() ? *name->text()
+                         : brought != nullptr                                                 ? label
+                                                                                              : std::string{});
         brought_.push_back(brought != nullptr);
         removed_.push_back(kRemoved);
         const Value* place = each.find("place");
@@ -1125,7 +1131,8 @@ void ShellParticipant::showEntity(std::size_t at) {
             return;
         }
         ++components_;
-        const std::vector<FieldShown> kFieldsShown = fieldsShown(catalog_.component(kComponent), each.find("fields"));
+        const std::vector<FieldShown> kFieldsShown =
+            groupedFields(kComponent, fieldsShown(catalog_.component(kComponent), each.find("fields")));
         // Runs of axes shown as one row of colored X, Y, and Z (D915).
         std::size_t skip = 0;
         for (std::size_t place = 0; place < kFieldsShown.size(); ++place) {
@@ -1133,6 +1140,7 @@ void ShellParticipant::showEntity(std::size_t at) {
                 --skip;
                 continue;
             }
+            fieldGroupRow(kComponent, kFieldsShown, place);
             if (const std::size_t kAxes = axesAt(kFieldsShown, place); kAxes > 0) {
                 if (!vectorRow(kComponent,
                                name != nullptr && name->text() != nullptr ? *name->text() : std::string{},

@@ -29,7 +29,10 @@ field starter.paint material asset material
 component 66dfed30-3111-4e4c-b18d-4001a325727f starter.lamp rawframe.model.PointLight
 component 09afbd87-0164-426f-b817-aa67e2873d56 starter.daylight rawframe.model.Sun
 component 0d65e7c8-09d4-4b4e-85f9-82b28ea86d74 starter.skylight rawframe.model.Sky
-replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity starter.paint starter.lamp starter.daylight starter.skylight
+# Particles kept in the scene (D934): what an editor's New particles makes,
+# each client drawing them as the scene sets them.
+component 0e66fd10-9f14-45d9-bd0d-4f8804bbcf0f starter.particles rawframe.model.ParticleEmitter
+replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity starter.paint starter.lamp starter.daylight starter.skylight starter.particles
 
 # Each player is given a box, moved by its stick, which a client makes from
 # its player's actions (starter.actions) with sample.kest.

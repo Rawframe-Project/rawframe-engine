@@ -549,6 +549,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     readNetwork(kSeconds);
     readProfiler(kSeconds);
     runSequence(kSeconds);
+    settleFlat();
     readFrame(kSeconds);
     pollGit();
     pollExport();

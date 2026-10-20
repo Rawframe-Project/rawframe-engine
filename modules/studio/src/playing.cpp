@@ -53,6 +53,20 @@ bool flatGame(const std::filesystem::path& description) {
 
 } // namespace
 
+void ShellParticipant::settleFlat() {
+    // A 2D game's scene opens on the 2D view, as an editor opens a 2D
+    // project (D927), each scene it opens framed whole (D933).
+    if (!std::exchange(held_.flatPending, false) || !chosen(Listed::Scene) || !flatGame(description_)) {
+        return;
+    }
+    seeIn2D(true);
+    // Quietly: a scene of nothing or only instances has nothing of its own
+    // to frame.
+    if (held_.flat && entity_.empty()) {
+        frameChosen(true);
+    }
+}
+
 void ShellParticipant::keepEditing() {
     if (!play_.has_value() || playing_.has_value() || stopping_.has_value()) {
         return;
@@ -82,11 +96,6 @@ void ShellParticipant::keepEditing() {
         if (const auto kFirst = std::ranges::find(listed_, Listed::Scene);
             kFirst != listed_.end() && static_cast<std::size_t>(kFirst - listed_.begin()) < scenes_.size()) {
             showScene(static_cast<std::size_t>(kFirst - listed_.begin()));
-            // A 2D game opens on the 2D view, as an editor opens a 2D
-            // project (D927).
-            if (!held_.flat && flatGame(description_)) {
-                seeIn2D(true);
-            }
         } else if (!documentChosen()) {
             // A game with no scene, its world made in Kest, still has its
             // viewport, where Play shows it (D923).

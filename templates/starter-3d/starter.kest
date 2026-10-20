@@ -130,9 +130,9 @@ fn bulb(count: i32, lamps: [model.PointLight], looks: [model.Model]) {
     }
 }
 
-// The sun and the sky as the scene keeps them, which the renderer reads as
-// they are: named here so the program lays their types out for the scene
-// (a type no function names is not laid out).
-fn daylight(suns: [model.Sun], skies: [model.Sky]) -> i32 {
+// The sun, the sky, and particles as the scene keeps them, which the
+// renderer reads as they are: named here so the program lays their types
+// out for the scene (a type no function names is not laid out).
+fn daylight(suns: [model.Sun], skies: [model.Sky], emitters: [model.ParticleEmitter]) -> i32 {
     return 0
 }

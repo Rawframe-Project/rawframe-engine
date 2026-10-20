@@ -5,6 +5,7 @@
 #include "rawframe/render_canvas_gpu/renderer.h"
 #include "rawframe/render_canvas_gpu/ui.h"
 #include "rawframe/ui/frames.h"
+#include "rawframe/view/preview.h"
 
 #include <array>
 #include <cstdint>
@@ -24,7 +25,7 @@ constexpr diagnostics::EventIdentity kFailed{"canvas", "drawing_failed"};
 constexpr diagnostics::EventIdentity kUiDrawingSummary{"ui", "ui_drawing_summary"};
 constexpr diagnostics::EventIdentity kUiFailed{"ui", "ui_drawing_failed"};
 constexpr std::string_view kMaybe[] = {render::kFrames.name, render_canvas::kCanvasFrames.name};
-constexpr std::string_view kMaybeUi[] = {render::kFrames.name, ui::kUiFrames.name};
+constexpr std::string_view kMaybeUi[] = {render::kFrames.name, ui::kUiFrames.name, view::kPreviewCamera.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 /// The canvas's place in a frame: after the scene (SPEC-0024); the UI's,
 /// over everything, the scene's post processes over the composed picture
@@ -176,6 +177,11 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(frames_, context.capability(render::kFrames));
         RAWFRAME_TRY_ASSIGN(ui_, context.capability(ui::kUiFrames));
+        // An editor's preview, where a client shows one: its view leaves the
+        // game's UI out unless it asks for it (D933).
+        if (context.has(view::kPreviewCamera.name)) {
+            RAWFRAME_TRY_ASSIGN(preview_, context.capability(view::kPreviewCamera));
+        }
         return {};
     }
 
@@ -216,7 +222,9 @@ public:
         const auto kPanel = frames_->plannedPanel();
         const auto kSize = kPanel.value_or(*kPlanned);
         ui_->resize(kSize.first, kSize.second, kPanel.has_value());
-        const ui::DrawList* drawn = ui_->drawn();
+        const bool kLeftOut = preview_ != nullptr && preview_->looking().has_value() &&
+                              (preview_->overlays() & static_cast<std::uint8_t>(view::Overlay::Ui)) == 0;
+        const ui::DrawList* drawn = kLeftOut ? nullptr : ui_->drawn();
         renderer_->prepare(drawn != nullptr && !drawn->commands.empty() ? drawn : nullptr,
                            [ui = ui_](std::uint64_t id) {
                                return ui->image(id);
@@ -280,6 +288,7 @@ private:
 
     render::Frames* frames_ = nullptr;
     ui::UiFrames* ui_ = nullptr;
+    view::PreviewCamera* preview_ = nullptr;
     std::unique_ptr<UiRenderer> renderer_;
     std::optional<ui::DrawList> last_;
     std::uint64_t lastRevision_ = 0;

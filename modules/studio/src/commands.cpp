@@ -78,8 +78,8 @@ constexpr std::array<std::pair<std::string_view, std::uint32_t>, 4> kPlayers = {
 
 /// What the preview draws over its scene, each toggled (D798), by the
 /// renderer's name.
-constexpr std::array<std::pair<std::string_view, std::string_view>, 3> kOverlays = {
-    {{"Show grid", "grid"}, {"Show colliders", "colliders"}, {"Show lights", "lights"}}};
+constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kOverlays = {
+    {{"Show grid", "grid"}, {"Show colliders", "colliders"}, {"Show lights", "lights"}, {"Show game UI", "ui"}}};
 
 /// The preview split one, two, or three ways (D797).
 constexpr std::array<std::pair<std::string_view, std::uint8_t>, 3> kSplits = {
