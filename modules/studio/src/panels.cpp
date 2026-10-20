@@ -480,31 +480,124 @@ void ShellParticipant::showTabs(std::optional<std::size_t> opened) {
 }
 
 result::Status ShellParticipant::showBroken(ui::Node body) {
+    // As the design's state that never leaves Studio blank (D923): what
+    // broke, where, the lines around it, and what to do next, in a column
+    // in the middle.
+    RAWFRAME_TRY_ASSIGN(const ui::Node kBroken,
+                        box(body,
+                            ui::Layout{.direction = ui::Direction::Column,
+                                       .alignItems = ui::Align::Center,
+                                       .grow = 1,
+                                       .padding = {24, 24, 56, 24}},
+                            0));
     RAWFRAME_TRY_ASSIGN(
-        const ui::Node kBroken,
-        box(body,
-            ui::Layout{.direction = ui::Direction::Column, .gap = 8, .grow = 1, .padding = {16, 16, 16, 16}},
-            kPanel));
-    RAWFRAME_TRY_ASSIGN(const ui::Node kHeading, box(kBroken, ui::Layout{.height = ui::pixels(24), .shrink = 0}, 0));
-    RAWFRAME_TRY(words(kHeading, "The game does not read", kText, 18));
-    RAWFRAME_TRY_ASSIGN(const ui::Node kWhy, box(kBroken, ui::Layout{.shrink = 0}, 0));
-    RAWFRAME_TRY(words(kWhy, *broken_, kQuiet, 15));
+        const ui::Node kColumn,
+        box(kBroken,
+            ui::Layout{.width = ui::pixels(560), .direction = ui::Direction::Column, .gap = 12, .shrink = 1},
+            0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kMark,
+                        box(kColumn,
+                            ui::Layout{.width = ui::pixels(44),
+                                       .height = ui::pixels(44),
+                                       .justify = ui::Justify::Center,
+                                       .alignItems = ui::Align::Center,
+                                       .shrink = 0},
+                            0));
+    RAWFRAME_TRY(tree_->setLook(kMark, ui::Look{.fill = 0x4A1F24FFU, .radius = 8}));
+    RAWFRAME_TRY(icon(kMark, Icon::Error, look::kError, 20));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kHeading, box(kColumn, ui::Layout{.shrink = 0, .padding = {0, 0, 6, 0}}, 0));
+    RAWFRAME_TRY(strongWords(kHeading, description_.stem().string() + " could not be read", look::kInk, 22));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kWhy, box(kColumn, ui::Layout{.shrink = 0}, 0));
+    RAWFRAME_TRY(
+        words(kWhy,
+              *broken_ + (diagnostic_.has_value()
+                              ? ". Fix it in your editor; Studio reads the game again when you press Read again."
+                              : "."),
+              look::kSoftInk,
+              look::kBodySize));
     if (diagnostic_.has_value()) {
-        RAWFRAME_TRY_ASSIGN(const ui::Node kWhere, box(kBroken, ui::Layout{.shrink = 0}, kField));
-        RAWFRAME_TRY(words(kWhere,
-                           diagnostic_->file + ":" + std::to_string(diagnostic_->line) + ":" +
-                               std::to_string(diagnostic_->column) + "  " + diagnostic_->message,
-                           kText,
-                           15));
+        RAWFRAME_TRY_ASSIGN(
+            const ui::Node kCard,
+            box(kColumn, ui::Layout{.direction = ui::Direction::Column, .shrink = 0, .border = {1, 1, 1, 1}}, 0));
+        RAWFRAME_TRY(tree_->setLook(
+            kCard, ui::Look{.fill = 0x17181CFFU, .borderColor = 0x6B2F35FFU, .radius = 6, .clip = true}));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kWhere,
+                            box(kCard,
+                                ui::Layout{.height = ui::pixels(32),
+                                           .alignItems = ui::Align::Center,
+                                           .gap = 8,
+                                           .shrink = 0,
+                                           .padding = {12, 12, 0, 0}},
+                                0));
+        RAWFRAME_TRY(tree_->setLook(kWhere, ui::Look{.fill = 0x3A1E22FFU}));
+        RAWFRAME_TRY(icon(kWhere, Icon::Error, look::kError, 13));
+        const std::string kFile =
+            diagnostic_->file.starts_with("game/") ? diagnostic_->file.substr(5) : diagnostic_->file;
+        RAWFRAME_TRY_ASSIGN(const ui::Node kPlace, box(kWhere, ui::Layout{.shrink = 0}, 0));
+        RAWFRAME_TRY(
+            monoWords(kPlace,
+                      kFile + ":" + std::to_string(diagnostic_->line) + ":" + std::to_string(diagnostic_->column),
+                      look::kInk,
+                      look::kSmallSize));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kMessage,
+                            box(kCard, ui::Layout{.shrink = 0, .padding = {12, 12, 10, 10}}, 0));
+        RAWFRAME_TRY(words(kMessage, diagnostic_->message, look::kInk, look::kBodySize));
+        // The lines around it, from the game's own file, the one it names
+        // lit.
+        if (diagnostic_->file.starts_with("game/") && diagnostic_->line > 0) {
+            const std::optional<std::string> kFileText =
+                authoring_session::readFile((description_.parent_path() / kFile).string());
+            if (kFileText.has_value()) {
+                std::vector<std::string_view> lines;
+                for (std::size_t start = 0; start <= kFileText->size();) {
+                    const std::size_t kEnd = std::min(kFileText->find('\n', start), kFileText->size());
+                    lines.push_back(std::string_view{*kFileText}.substr(start, kEnd - start));
+                    start = kEnd + 1;
+                }
+                const auto kAt = static_cast<std::size_t>(diagnostic_->line);
+                RAWFRAME_TRY_ASSIGN(const ui::Node kSource,
+                                    box(kCard,
+                                        ui::Layout{.direction = ui::Direction::Column,
+                                                   .shrink = 0,
+                                                   .padding = {0, 0, 6, 6},
+                                                   .border = {0, 0, 1, 0}},
+                                        0));
+                RAWFRAME_TRY(tree_->setLook(kSource, ui::Look{.fill = look::kWellFill, .borderColor = look::kLine}));
+                for (std::size_t line = kAt > 2 ? kAt - 2 : 1; line <= kAt + 2 && line <= lines.size(); ++line) {
+                    RAWFRAME_TRY_ASSIGN(const ui::Node kLine,
+                                        box(kSource,
+                                            ui::Layout{.height = ui::pixels(20),
+                                                       .alignItems = ui::Align::Center,
+                                                       .gap = 12,
+                                                       .shrink = 0,
+                                                       .padding = {12, 12, 0, 0}},
+                                            0));
+                    if (line == kAt) {
+                        RAWFRAME_TRY(tree_->setLook(kLine, ui::Look{.fill = 0x4A1F24AAU}));
+                    }
+                    RAWFRAME_TRY_ASSIGN(const ui::Node kNumber,
+                                        box(kLine, ui::Layout{.width = ui::pixels(28), .shrink = 0}, 0));
+                    RAWFRAME_TRY(monoWords(
+                        kNumber, std::to_string(line), line == kAt ? look::kError : look::kOffInk, look::kSmallSize));
+                    RAWFRAME_TRY_ASSIGN(const ui::Node kCode, box(kLine, ui::Layout{.shrink = 1}, 0));
+                    std::string code{lines[line - 1].substr(0, 90)};
+                    std::ranges::replace(code, '\t', ' ');
+                    std::erase(code, '\r');
+                    RAWFRAME_TRY(monoWords(kCode, code, line == kAt ? look::kInk : look::kLabelInk, look::kSmallSize));
+                }
+            }
+        }
     }
-    RAWFRAME_TRY_ASSIGN(const ui::Node kTools,
-                        box(kBroken, ui::Layout{.height = ui::pixels(28), .gap = 6, .shrink = 0}, 0));
+    RAWFRAME_TRY_ASSIGN(
+        const ui::Node kTools,
+        box(kColumn, ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {0, 0, 4, 0}}, 0));
     // Only the game's own files are the author's to open (D453).
     if (diagnostic_.has_value() && diagnostic_->file.starts_with("game/") && !editor_.empty()) {
-        RAWFRAME_TRY_ASSIGN(openNode_, button(kTools, "Open in editor"));
+        RAWFRAME_TRY_ASSIGN(openNode_, textButton(kTools, std::nullopt, "Open in editor", ButtonKind::Primary));
     }
-    RAWFRAME_TRY_ASSIGN(retryNode_, button(kTools, "Retry"));
-    say(*broken_);
+    RAWFRAME_TRY_ASSIGN(retryNode_, textButton(kTools, std::nullopt, "Read again"));
+    say(diagnostic_.has_value() ? "1 error · " + diagnostic_->file + ":" + std::to_string(diagnostic_->line)
+                                : *broken_);
     return {};
 }
 
