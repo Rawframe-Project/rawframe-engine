@@ -369,6 +369,9 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         const ActionButton kAsked = *kAction;
         if (!kAsked.opens.empty()) {
             if (const auto kOpened = std::ranges::find(scenes_, kAsked.opens); kOpened != scenes_.end()) {
+                // The scene it was opened from, the prefab bar's way back
+                // (D932).
+                held_.prefabFrom = scene_;
                 showScene(static_cast<std::size_t>(kOpened - scenes_.begin()));
             } else {
                 say(kAsked.opens + " is not among the game's documents");
@@ -429,7 +432,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         } else {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         }
-    } else if (pressLive(node) || pressMixer(node) || pressSequence(node)) {
+    } else if (pressLive(node) || pressMixer(node) || pressSequence(node) || pressPrefabBar(node)) {
         return;
     } else if (const auto kEntity = std::ranges::find(entityRows_, node); kEntity != entityRows_.end()) {
         // Held, it may be dragged onto another (D785).

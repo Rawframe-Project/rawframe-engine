@@ -1,4 +1,6 @@
+#include "rawframe/authoring_session/game.h"
 #include "rawframe/render/capture.h"
+#include "rawframe/scene/scene.h"
 #include "rawframe/world_tooling/window_input.h"
 #include "shell.h"
 
@@ -55,6 +57,7 @@ void ShellParticipant::followPicture() {
 }
 
 void ShellParticipant::showViewport() {
+    showPrefabBar();
     // Under the view's fields, the rest of the center: the played game's
     // pictures while it plays here (D789).
     auto made = box(centerColumn_,
@@ -68,11 +71,105 @@ void ShellParticipant::showViewport() {
     static_cast<void>(tree_->setLook(viewport_, ui::Look{.fill = 0x0B0D10FFU, .image = kViewportImage}));
     static_cast<void>(tree_->setName(viewport_, "Viewport"));
     showViewBar();
-    // What is drawn over it last, so it lies on top (D915).
+    // What is drawn over it last, so it lies on top (D915), under the
+    // prefab bar where there is one (D932).
     if (tree_->contains(held_.modePalette)) {
+        static_cast<void>(
+            tree_->setLayout(held_.modePalette,
+                             ui::Layout{.direction = ui::Direction::Column,
+                                        .gap = 2,
+                                        .padding = {4, 4, 4, 4},
+                                        .border = {1, 1, 1, 1},
+                                        .placement = {.absolute = true,
+                                                      .x = ui::pixels(8),
+                                                      .y = ui::pixels(look::kTabHeight + 44 + held_.prefabTall)}}));
         static_cast<void>(tree_->detach(held_.modePalette));
         static_cast<void>(tree_->attach(centerColumn_, held_.modePalette));
     }
+}
+
+void ShellParticipant::showPrefabBar() {
+    // A scene other scenes place is a prefab's source (D932): over its
+    // view, the way back to the scene it was opened from, and how far an
+    // edit here reaches, as the design's Prefab screen.
+    held_.prefabBack = ui::Node{};
+    held_.prefabTall = 0;
+    if (!chosen(Listed::Scene) || sceneAt_ >= sceneSources_.size() || sceneSources_[sceneAt_].empty()) {
+        return;
+    }
+    const base::Bits128Parse kIdentity = base::parseBits128Hex(sceneSources_[sceneAt_]);
+    if (!kIdentity.parsed) {
+        return;
+    }
+    std::size_t instances = 0;
+    std::size_t scenes = 0;
+    for (std::size_t each = 0; each < scenes_.size() && each < listed_.size(); ++each) {
+        if (listed_[each] != Listed::Scene || each == sceneAt_) {
+            continue;
+        }
+        const auto kSceneText = authoring_session::readFile(sceneRoot_ / scenes_[each]);
+        if (!kSceneText.has_value()) {
+            continue;
+        }
+        const auto kRead = scene::readScene(*kSceneText);
+        if (!kRead.has_value()) {
+            continue;
+        }
+        const auto kHere = static_cast<std::size_t>(
+            std::ranges::count(kRead->instances, kIdentity.value, &scene::SceneInstance::scene));
+        instances += kHere;
+        scenes += kHere > 0 ? 1 : 0;
+    }
+    if (instances == 0) {
+        return;
+    }
+    auto bar = box(centerColumn_,
+                   ui::Layout{.height = ui::pixels(32),
+                              .alignItems = ui::Align::Center,
+                              .gap = 6,
+                              .shrink = 0,
+                              .padding = {12, 12, 0, 0},
+                              .border = {0, 0, 0, 1}},
+                   0);
+    if (!bar.has_value()) {
+        return;
+    }
+    viewRows_.push_back(*bar);
+    held_.prefabTall = 32;
+    static_cast<void>(tree_->setLook(*bar, ui::Look{.fill = 0x241A3AFFU, .borderColor = 0x4B3A78FFU}));
+    static_cast<void>(tree_->setName(*bar, "Prefab bar"));
+    if (!held_.prefabFrom.empty() && held_.prefabFrom != scene_ && std::ranges::contains(scenes_, held_.prefabFrom)) {
+        if (auto back = textButton(*bar, Icon::ChevronRight, documentLabel(held_.prefabFrom), ButtonKind::Quiet);
+            back.has_value()) {
+            held_.prefabBack = *back;
+            static_cast<void>(tree_->setName(*back, "Back to " + held_.prefabFrom));
+        }
+        static_cast<void>(icon(*bar, Icon::ChevronRight, look::kFaintInk, 12));
+    }
+    if (auto named = box(*bar, ui::Layout{.shrink = 0}, 0); named.has_value()) {
+        static_cast<void>(strongWords(*named, documentLabel(scene_), look::kInk, look::kBodySize));
+    }
+    static_cast<void>(box(*bar, ui::Layout{.grow = 1}, 0));
+    if (auto reach = box(*bar, ui::Layout{.shrink = 0}, 0); reach.has_value()) {
+        static_cast<void>(words(*reach,
+                                "Changes go to " + std::to_string(instances) +
+                                    (instances == 1 ? " instance in " : " instances in ") + std::to_string(scenes) +
+                                    (scenes == 1 ? " scene" : " scenes"),
+                                0xB9A6F0FFU,
+                                look::kLabelSize));
+    }
+}
+
+bool ShellParticipant::pressPrefabBar(ui::Node node) {
+    if (node != held_.prefabBack || node == ui::Node{}) {
+        return false;
+    }
+    const std::string kBack = std::exchange(held_.prefabFrom, std::string{});
+    if (const auto kAt = std::ranges::find(scenes_, kBack); kAt != scenes_.end()) {
+        showScene(static_cast<std::size_t>(kAt - scenes_.begin()));
+        say("back to " + kBack);
+    }
+    return true;
 }
 
 namespace {
@@ -201,7 +298,8 @@ void ShellParticipant::showViewBar() {
     }
     // The pills along the top, as the design's.
     if (auto bar =
-            kOverlay({.absolute = true, .x = ui::pixels(0), .y = ui::pixels(look::kTabHeight)}, ui::Direction::Row);
+            kOverlay({.absolute = true, .x = ui::pixels(0), .y = ui::pixels(look::kTabHeight + held_.prefabTall)},
+                     ui::Direction::Row);
         bar.has_value()) {
         held_.viewBar = *bar;
         kPill(*bar, kProjectionPill, std::nullopt, held_.flat ? "Top" : "Perspective");
@@ -216,16 +314,19 @@ void ShellParticipant::showViewBar() {
         kPill(*bar, kShowPill, Icon::Eye, "Show: " + (showing.empty() ? std::string{"nothing"} : showing));
         kPill(*bar, kBookmarkPill, Icon::Bookmark, "Bookmarks");
     }
-    if (auto bar = kOverlay({.absolute = true, .x = ui::share(1), .y = ui::pixels(look::kTabHeight), .anchorX = 1},
-                            ui::Direction::Row);
+    if (auto bar = kOverlay(
+            {.absolute = true, .x = ui::share(1), .y = ui::pixels(look::kTabHeight + held_.prefabTall), .anchorX = 1},
+            ui::Direction::Row);
         bar.has_value()) {
         held_.splitBar = *bar;
         kPill(*bar, kSplitPill, Icon::Split, "Split");
     }
     // The axes' disc under the split, each end its axis's color.
-    if (auto disc =
-            kOverlay({.absolute = true, .x = ui::share(1), .y = ui::pixels(look::kTabHeight + 40), .anchorX = 1},
-                     ui::Direction::Row);
+    if (auto disc = kOverlay({.absolute = true,
+                              .x = ui::share(1),
+                              .y = ui::pixels(look::kTabHeight + held_.prefabTall + 40),
+                              .anchorX = 1},
+                             ui::Direction::Row);
         disc.has_value()) {
         held_.axisGizmo = *disc;
         static_cast<void>(tree_->setName(*disc, "Axes"));

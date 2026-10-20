@@ -187,6 +187,12 @@ struct EditorsHeld {
     std::vector<std::string> scatterLines;
     /// The chosen sequence's lines as last read (D869).
     std::vector<std::string> sequenceLines;
+    /// The scene a prefab's source was opened from, and the bar's link
+    /// back to it (D932).
+    std::string prefabFrom;
+    ui::Node prefabBack{};
+    /// How tall the bar is, the view's overlays below it.
+    float prefabTall = 0;
     /// Its timeline (D931): the playhead's time, whether it plays and when
     /// it last moved, the key chosen, the snap, the length and how many
     /// pixels a second is; the keys' marks, the playhead's nodes and

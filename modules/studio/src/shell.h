@@ -211,6 +211,10 @@ private:
 
     /// The viewport, under the view's fields, showing that picture.
     void showViewport();
+    /// Over a prefab source's view, the way back and how far an edit
+    /// reaches (D932), and its back link pressed.
+    void showPrefabBar();
+    bool pressPrefabBar(ui::Node node);
 
     /// The viewport's input and area handed to the game played there (D790).
     void forwardInput();

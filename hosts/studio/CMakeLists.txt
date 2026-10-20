@@ -1428,6 +1428,19 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "opening.sequence written: yes\nsequence 1\nduration 6\ntrack gate\ntrack track2\nplay 1 gate 0000000000000000\nevent 2 0000000000000001 opened\n.*\"code\":\"studio_sequence\"[^\n]*\"lines\":6,\"tracks\":2,\"plays\":1,\"events\":1,\"animators\":[0-9]+}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"opening.sequence\",[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
+        # A prefab's source (D932): Runners' level's platform instance opens
+        # its scene, which shows over its view how far an edit reaches and
+        # goes back to the level.
+        add_test(NAME studio_prefab_bar
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/runners/runners.game level.scene @level.scene "@platform 1" "@Open platform.scene" wait=3
+                         "@Back to level.scene"
+                         "until=studio_said,status=\"back to level.scene"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_prefab_bar PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION "found Back to level.scene at.*\"status\":\"back to level.scene")
         # The sequence's timeline (D931): the playhead put on the ruler, a
         # key added there starting the game's animator, its time typed in
         # the Inspector, the key kept in time order, as one step each.
