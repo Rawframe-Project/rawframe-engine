@@ -799,6 +799,10 @@ private:
     void showCanvas(const Value& nodes, const std::string& prefix);
     /// A clip's lanes (D827), a UI document laid out (D832): parts as rows.
     void showTimeline(const Value& clip);
+    /// The clip's transport and ruler pressed, and its playhead moved on
+    /// while it plays (D939).
+    bool pressClip(ui::Node node);
+    void runClip(double seconds);
     void showUiPreview(const Value& document);
     void showSheetPreview(const Value& sheet);
     void markUiPreview();

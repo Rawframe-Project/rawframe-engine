@@ -5,6 +5,7 @@
 #include <array>
 #include <cctype>
 #include <cstdio>
+#include <map>
 
 namespace rawframe::studio {
 
@@ -77,13 +78,39 @@ void ShellParticipant::showData() {
     if (!sheet_.has_value()) {
         return;
     }
+    // A clip's tracks by their bones and channels, its keys by their times
+    // (D939).
+    const Value* kSheetKind = sheet_->find("kind");
+    const std::map<std::string, std::string, std::less<>> kBones =
+        kSheetKind != nullptr && kSheetKind->text() != nullptr && *kSheetKind->text() == "animation.clip"
+            ? boneNamesOf(*sheet_)
+            : std::map<std::string, std::string, std::less<>>{};
+    const bool kClip =
+        kSheetKind != nullptr && kSheetKind->text() != nullptr && *kSheetKind->text() == "animation.clip";
+    const auto kClipLabel = [&kBones, kClip](const Value& item, const std::string& member, std::size_t place) {
+        const Value* kBone = item.find("bone");
+        const Value* kChannel = item.find("channel");
+        const Value* kTime = item.find("time");
+        if (kClip && member == "tracks" && kBone != nullptr && kBone->text() != nullptr) {
+            const auto kNamed = kBones.find(*kBone->text());
+            return std::optional<std::string>{
+                (kNamed != kBones.end() ? kNamed->second : "track " + std::to_string(place + 1)) + " · " +
+                (kChannel != nullptr && kChannel->text() != nullptr ? *kChannel->text() : std::string{}) + " (tracks)"};
+        }
+        if (kClip && member == "keys" && kTime != nullptr && kTime->real().has_value()) {
+            char said[32];
+            std::snprintf(said, sizeof said, "%g", *kTime->real());
+            return std::optional<std::string>{"key at " + std::string{said} + " s (keys)"};
+        }
+        return std::optional<std::string>{};
+    };
     // The document first, then each object and keyed item in it before
     // what it holds, as the document nests them.
-    const auto kList = [this](const auto& self,
-                              const Value& at,
-                              const std::string& path,
-                              const std::string& label,
-                              std::size_t depth) -> void {
+    const auto kList = [this, &kClipLabel](const auto& self,
+                                           const Value& at,
+                                           const std::string& path,
+                                           const std::string& label,
+                                           std::size_t depth) -> void {
         // A tree row as the design's (D923): what it is named, and the list
         // it is in quieter, read by its whole label.
         const std::size_t kOpen = label.rfind(" (");
@@ -139,10 +166,13 @@ void ShellParticipant::showData() {
                         under[item] = under[static_cast<std::size_t>(*kAt)] + 1;
                     }
                     const std::optional<std::string> kName = nameOf(kItem);
+                    const std::optional<std::string> kLabelled = kClipLabel(kItem, kMember, item);
                     self(self,
                          kItem,
                          joined(path, kMember + "[" + std::to_string(item) + "]"),
-                         kName.has_value() ? *kName + " (" + kMember + ")" : kMember + " " + std::to_string(item + 1),
+                         kLabelled.has_value() ? *kLabelled
+                         : kName.has_value()   ? *kName + " (" + kMember + ")"
+                                               : kMember + " " + std::to_string(item + 1),
                          depth + 1 + std::min<std::size_t>(under[item], 8));
                 }
             }

@@ -436,7 +436,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         } else {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         }
-    } else if (pressLive(node) || pressMixer(node) || pressSequence(node) || pressPrefabBar(node)) {
+    } else if (pressLive(node) || pressMixer(node) || pressSequence(node) || pressClip(node) || pressPrefabBar(node)) {
         return;
     } else if (const auto kEntity = std::ranges::find(entityRows_, node); kEntity != entityRows_.end()) {
         // Held, it may be dragged onto another (D785).

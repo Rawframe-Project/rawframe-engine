@@ -34,10 +34,28 @@ constexpr float kMargin = 16;
 constexpr std::uint32_t kLaneFill = 0x26282EFFU;
 constexpr std::uint32_t kTick = 0x50545EFFU;
 
+/// A box of the timeline's sheet at a place of it.
+ui::Layout placedAt(float x, float y, float width, float height) {
+    return ui::Layout{.width = ui::pixels(width),
+                      .height = ui::pixels(height),
+                      .shrink = 0,
+                      .placement = ui::Placement{.absolute = true, .x = ui::pixels(x), .y = ui::pixels(y)}};
+}
+
+constexpr std::uint32_t kKeyFill = 0xC9CDD4FFU;
+constexpr std::uint32_t kPlayhead = 0xE5484DFFU;
+
 /// `seconds` said short, as `0.5`.
 std::string timeText(double seconds) {
     char made[32];
     std::snprintf(made, sizeof made, "%g", seconds);
+    return made;
+}
+
+/// The playhead's time as the transport says it, as `0.40 s`.
+std::string clockText(double seconds) {
+    char made[32];
+    std::snprintf(made, sizeof made, "%.2f s", seconds);
     return made;
 }
 
@@ -147,6 +165,47 @@ void ShellParticipant::showTimeline(const Value& clip) {
     }
     const float kLanesTall = kRuler + kLane * static_cast<float>(lanes.size());
     const float kTall = kLanesTall + (curved.has_value() ? kCurve + kMargin : 0) + kMargin;
+    // As the design's Animation screen (D939): over the lanes, the
+    // transport: to the start, play and pause, where the playhead is of
+    // the clip's length and what it holds, and whether it loops.
+    held_.clipLength = kLength;
+    held_.clipTime = std::clamp(held_.clipTime, 0.0, kLength);
+    held_.clipTall = kTall;
+    const std::string* kLoopWord = textOf(clip, "loop");
+    held_.clipLoops = kLoopWord != nullptr && *kLoopWord == "loop";
+    if (auto bar = box(centerColumn_,
+                       ui::Layout{.height = ui::pixels(40),
+                                  .alignItems = ui::Align::Center,
+                                  .gap = 8,
+                                  .shrink = 0,
+                                  .padding = {12, 12, 0, 0},
+                                  .border = {0, 0, 0, 1}},
+                       0);
+        bar.has_value()) {
+        viewRows_.push_back(*bar);
+        static_cast<void>(tree_->setLook(*bar, ui::Look{.borderColor = look::kLine}));
+        held_.clipStart = iconButton(*bar, Icon::Undo, "To the clip's start").value_or(ui::Node{});
+        held_.clipPlay =
+            iconButton(*bar, held_.clipPlaying ? Icon::Pause : Icon::Play, "Play the clip", held_.clipPlaying)
+                .value_or(ui::Node{});
+        if (auto now = box(*bar, ui::Layout{.shrink = 0, .padding = {6, 0, 0, 0}}, 0); now.has_value()) {
+            held_.clipNow = *now;
+            static_cast<void>(monoWords(*now, clockText(held_.clipTime), look::kInk, look::kBodySize));
+        }
+        if (auto of = box(*bar, ui::Layout{.shrink = 0}, 0); of.has_value()) {
+            static_cast<void>(words(*of,
+                                    "of " + timeText(kLength) + " s · " + std::to_string(kTracks.size()) +
+                                        (kTracks.size() == 1 ? " track, " : " tracks, ") + std::to_string(keys) +
+                                        (keys == 1 ? " key" : " keys"),
+                                    look::kFaintInk,
+                                    look::kLabelSize));
+        }
+        static_cast<void>(box(*bar, ui::Layout{.grow = 1}, 0));
+        held_.clipLoop = textButton(*bar,
+                                    held_.clipLoops ? std::optional<Icon>{Icon::Check} : std::nullopt,
+                                    held_.clipLoops ? "Loops" : "Loop")
+                             .value_or(ui::Node{});
+    }
     auto pane = box(
         centerColumn_,
         ui::Layout{
@@ -208,9 +267,13 @@ void ShellParticipant::showTimeline(const Value& clip) {
                 continue;
             }
             const std::size_t kEntity = static_cast<std::size_t>(kListed - entities_.begin());
-            auto mark = box(*sheet,
-                            kPlace(kAt(kSeconds) - kMark / 2, kY + (kLane - 2 * kMark) / 2, kMark, 2 * kMark),
-                            kPath == entity_ ? kChosen : kRow);
+            // A key as the design's diamond-like mark, the chosen one lit.
+            auto mark = box(
+                *sheet, kPlace(kAt(kSeconds) - kMark / 2 - 1, kY + (kLane - kMark - 2) / 2, kMark + 2, kMark + 2), 0);
+            if (mark.has_value()) {
+                static_cast<void>(
+                    tree_->setLook(*mark, ui::Look{.fill = kPath == entity_ ? look::kAccent : kKeyFill, .radius = 3}));
+            }
             if (!mark.has_value() || !tree_->setRole(*mark, ui::Role::Button).has_value() ||
                 !tree_->setName(*mark, lanes[each].name + " at " + timeText(kSeconds)).has_value()) {
                 return;
@@ -262,6 +325,17 @@ void ShellParticipant::showTimeline(const Value& clip) {
         }
         sampled = samples.size();
     }
+    // The ruler pressed puts the playhead there, and the playhead over all.
+    if (auto ruler = box(*sheet, kPlace(kAt(0), 0, static_cast<float>(kLength) * kPerSecondShown, kRuler), 0);
+        ruler.has_value()) {
+        held_.clipRuler = *ruler;
+        static_cast<void>(tree_->setRole(*ruler, ui::Role::Button));
+        static_cast<void>(tree_->setName(*ruler, "Clip ruler"));
+    }
+    if (auto head = box(*sheet, kPlace(kAt(held_.clipTime) - 1, 0, 2, kTall), kPlayhead); head.has_value()) {
+        held_.clipHead = *head;
+        static_cast<void>(tree_->setInteraction(*head, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+    }
     emitter_.log(diagnostics::Severity::Info,
                  kCurveShown,
                  "the chosen track's values over its clip",
@@ -277,6 +351,77 @@ void ShellParticipant::showTimeline(const Value& clip) {
                   diagnostics::field("markers", markers),
                   diagnostics::field("named", boneNames.size()),
                   diagnostics::field("marks", held_.canvasBoxes.size())});
+}
+
+bool ShellParticipant::pressClip(ui::Node node) {
+    if (node == ui::Node{} || !sheet_.has_value() || !tree_->contains(held_.clipHead)) {
+        return false;
+    }
+    if (node == held_.clipRuler) {
+        // The playhead where the ruler was pressed, on a hundredth.
+        const ui::Rect kAt = tree_->placedRectOf(held_.clipRuler);
+        const double kTime = (pressedAt_[0] - kAt.x) / std::max(1.0F, held_.timelineScale);
+        held_.clipTime = std::clamp(std::round(kTime * 100) / 100, 0.0, held_.clipLength);
+        showTimeline(*sheet_);
+        say("playhead at " + timeText(held_.clipTime) + " s");
+        return true;
+    }
+    if (node == held_.clipStart) {
+        held_.clipTime = 0;
+        showTimeline(*sheet_);
+        say("playhead at the start");
+        return true;
+    }
+    if (node == held_.clipPlay) {
+        held_.clipPlaying = !held_.clipPlaying;
+        if (held_.clipPlaying && held_.clipTime >= held_.clipLength) {
+            held_.clipTime = 0;
+        }
+        held_.clipRan = std::nullopt;
+        showTimeline(*sheet_);
+        say(held_.clipPlaying ? "playing the clip" : "paused at " + clockText(held_.clipTime));
+        return true;
+    }
+    if (node == held_.clipLoop) {
+        Value operation = Value::object();
+        operation.add("operation", Value::string("data.set"));
+        operation.add("path", Value::string("loop"));
+        operation.add("value", Value::string(held_.clipLoops ? "clamp" : "loop"));
+        commit(std::move(operation), held_.clipLoops ? "the clip plays once" : "the clip loops", std::nullopt);
+        return true;
+    }
+    return false;
+}
+
+void ShellParticipant::runClip(double seconds) {
+    // The playhead moved on while it plays, wrapping where the clip loops
+    // and stopping at its end where it does not; only the head and the
+    // time said again.
+    if (!held_.clipPlaying || !sheet_.has_value() || !tree_->contains(held_.clipHead)) {
+        held_.clipRan = std::nullopt;
+        return;
+    }
+    const double kSince = held_.clipRan.has_value() ? seconds - *held_.clipRan : 0;
+    held_.clipRan = seconds;
+    double time = held_.clipTime + kSince;
+    if (time >= held_.clipLength) {
+        if (held_.clipLoops && held_.clipLength > 0) {
+            time = std::fmod(time, held_.clipLength);
+        } else {
+            held_.clipTime = held_.clipLength;
+            held_.clipPlaying = false;
+            showTimeline(*sheet_);
+            say("the clip ended at " + timeText(held_.clipLength) + " s");
+            return;
+        }
+    }
+    held_.clipTime = time;
+    static_cast<void>(tree_->setLayout(
+        held_.clipHead,
+        placedAt(kLabelWidth + static_cast<float>(time) * held_.timelineScale - 1, 0, 2, held_.clipTall)));
+    if (tree_->contains(held_.clipNow)) {
+        static_cast<void>(monoWords(held_.clipNow, clockText(time), look::kInk, look::kBodySize));
+    }
 }
 
 void ShellParticipant::dropKey(std::size_t at, float moved) {

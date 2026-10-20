@@ -169,6 +169,21 @@ struct EditorsHeld {
     /// none is: a mark pressed there is a press on the plan too, and a drag
     /// moves its key, event, or marker in time (D890).
     float timelineScale = 0;
+    /// The clip's playhead and its transport (D939): where it is, the
+    /// clip's length and whether it loops, whether it plays and when it
+    /// last moved, and the transport's, ruler's, and head's nodes.
+    double clipTime = 0;
+    double clipLength = 0;
+    bool clipLoops = false;
+    bool clipPlaying = false;
+    std::optional<double> clipRan;
+    float clipTall = 0;
+    ui::Node clipStart{};
+    ui::Node clipPlay{};
+    ui::Node clipLoop{};
+    ui::Node clipNow{};
+    ui::Node clipRuler{};
+    ui::Node clipHead{};
     /// The chosen terrain's map, each block and the place in meters a
     /// stroke there brushes, and the brush (D856).
     std::vector<std::pair<ui::Node, std::array<double, 2>>> mapBlocks;

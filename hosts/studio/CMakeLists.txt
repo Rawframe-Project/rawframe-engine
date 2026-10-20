@@ -701,6 +701,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "found hips translation at 0.25 at.*amble/walk.rfanim written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"amble/walk.rfanim\",[^\n]*\"entity\":\"tracks.0..keys.1.\",[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
+    # A clip's transport (D939): Tycoon's idle played and paused, its
+    # playhead put halfway by the ruler, and its loop turned off, written
+    # as a clip that plays once.
+    add_test(NAME studio_plays_clip
+             COMMAND ${CMAKE_COMMAND} -E env STUDIO_SHOW_WRITTEN=1
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/tycoon/tycoon.game amble/idle.rfanim @Animations wheel=457,650,4 @amble/idle.rfanim
+                     "@Play the clip" "until=studio_said,status=\"playing the clip\"" wait=1 "@Play the clip"
+                     "until=studio_said,status=\"paused at" "@Clip ruler" "until=studio_said,status=\"playhead at 1 s\""
+                     @Loops "until=studio_said,status=\"the clip plays once\""
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_plays_clip PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "saw studio_said,status=\"playing the clip.*saw studio_said,status=\"paused at.*saw studio_said,status=\"playhead at 1 s.*amble/idle.rfanim written: yes\n.*\"loop\": \"clamp\".*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
     # A node the surface reads is not deleted: the session refuses what
     # leaves a graph that does not read (D728), and Studio says so.
     add_test(NAME studio_graph_keeps
