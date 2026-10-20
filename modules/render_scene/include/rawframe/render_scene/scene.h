@@ -300,6 +300,10 @@ struct SceneLights {
     /// light `sky` scales, in place of the sky's and the ground's; nought
     /// for none.
     std::uint64_t environment = 0;
+    /// Whether a sky with no picture is drawn as a clear day's, deeper
+    /// overhead and paler at the horizon, as an editor's view shows it
+    /// (D914, D925); a game's own view draws its light flat.
+    bool graded = false;
 };
 
 /// A punctual light as the extract stage copies it out of the World, where
@@ -889,6 +893,10 @@ public:
     /// The lines each frame from the next draws (D464), in place of those
     /// before, at most `kMostSceneLines`.
     void show(std::span<const SceneLine> lines);
+
+    /// Whether each frame from the next draws a sky with no picture
+    /// graded, as an editor's view does (D925).
+    void gradeSky(bool graded) noexcept;
 
     /// The game's materials and post-process materials, read again, in
     /// place of those it was made with, as each frame from the next draws

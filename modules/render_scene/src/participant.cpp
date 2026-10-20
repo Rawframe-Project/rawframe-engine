@@ -606,6 +606,9 @@ private:
         // frame (D798).
         const std::uint8_t kOverlays =
             preview_ != nullptr && preview_->looking().has_value() ? preview_->overlays() : 0;
+        // An editor's view sees a sky with no picture as a clear day's
+        // (D914, D925).
+        scene_->gradeSky(preview_ != nullptr && preview_->looking().has_value());
         if (linesChanged || kOverlays != 0 || overlaid_) {
             lines_ = markLines_;
             lines_.insert(lines_.end(), pathLines_.begin(), pathLines_.end());

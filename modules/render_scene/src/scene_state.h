@@ -74,6 +74,8 @@ struct Scene::State {
     void posePalette(const world_animation::AnimationQueries* poses, ModelInstance& instance);
     std::optional<Sun> sunNow;
     std::optional<Sky> skyNow;
+    /// Whether the sky is drawn graded (D925).
+    bool gradedSky = false;
     std::vector<const ModelInstance*> order;
     SceneFrame frame;
     /// What the frame before drew (D291): each model's turn and scale, and

@@ -18,7 +18,7 @@ if(RAWFRAME_BUILD_TESTS)
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(author_new_game PROPERTIES
                              PASS_REGULAR_EXPRESSION
-                             "\"kind\": \"authoring.new_game\".*\"files\": 10,[ \n]*\"identities\": 11.*identities: none shared.*refused: over a game, and under a bad name.*\"bots\":4,\"admitted\":4,[^\n]*\"sourceFailures\":0,.*\"code\":\"tick_summary\"[^\n]*\"entities\":5}")
+                             "\"kind\": \"authoring.new_game\".*\"files\": 10,[ \n]*\"identities\": 15.*identities: none shared.*refused: over a game, and under a bad name.*\"bots\":4,\"admitted\":4,[^\n]*\"sourceFailures\":0,.*\"code\":\"tick_summary\"[^\n]*\"entities\":9}")
     endif()
     # What authors are told of a game's fields (D783).
     add_test(NAME author_field_hints

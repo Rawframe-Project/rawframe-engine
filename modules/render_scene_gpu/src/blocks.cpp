@@ -93,7 +93,7 @@ FrameBlock blockOf(const render_scene::SceneFrame& frame, std::uint32_t width, s
     block.toSun = {kLights.toSun[0], kLights.toSun[1], kLights.toSun[2], 0};
     block.sun = {kLights.sun[0], kLights.sun[1], kLights.sun[2], kLights.sunWidth};
     block.sky = {kLights.sky[0], kLights.sky[1], kLights.sky[2], 0};
-    block.ground = {kLights.ground[0], kLights.ground[1], kLights.ground[2], 0};
+    block.ground = {kLights.ground[0], kLights.ground[1], kLights.ground[2], kLights.graded ? 1.0F : 0.0F};
     block.exposure = {factorOf(frame.exposure), 0, 0, 0};
     block.occlusion = {frame.occlusion.enabled ? 1.0F : 0.0F, 0, 0, 0};
     block.forward = {frame.forward[0], frame.forward[1], frame.forward[2], 0};

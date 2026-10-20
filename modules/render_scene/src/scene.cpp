@@ -106,7 +106,8 @@ void Scene::State::lights() {
         .sun = {kSunColor[0] * kIlluminance, kSunColor[1] * kIlluminance, kSunColor[2] * kIlluminance},
         .sky = {kSkyColor[0] * kLuminance, kSkyColor[1] * kLuminance, kSkyColor[2] * kLuminance},
         .sunWidth = 2 * std::tan(std::clamp(std::isfinite(kSun.angle) ? kSun.angle : 0.0F, 0.0F, kMostSunAngle) / 2),
-        .environment = kSky.environment};
+        .environment = kSky.environment,
+        .graded = gradedSky};
     // The ground, level and unshadowed: what reaches it, the sun's at
     // its height and the whole upper sky's (π times its luminance),
     // given back evenly by its albedo.
@@ -655,6 +656,10 @@ void Scene::replaceMaterials(std::vector<SceneMaterial> materials,
 
 void Scene::show(std::span<const SceneLine> lines) {
     state_->lines = soundLines(lines);
+}
+
+void Scene::gradeSky(bool graded) noexcept {
+    state_->gradedSky = graded;
 }
 
 std::array<float, 2> temporalJitter(std::uint64_t frame) noexcept {

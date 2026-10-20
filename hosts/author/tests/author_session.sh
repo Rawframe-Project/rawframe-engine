@@ -159,7 +159,8 @@ reply 5 | grep -q '"view":{"eye":\[3,1,3\],"target":\[0,1,0\],"fieldOfView":70}'
 reply 7 | grep -q '"view":{"eye":\[0,20,0.5\]'
 # Framing what is chosen (D792): both walls, 80 meters apart, framed
 # from straight ahead of where the view looked, their middle its target
-# and far enough to hold them; nothing chosen is refused.
+# and far enough to hold them; nothing chosen frames every posed entity
+# of the scene, as an editor's F does with nothing chosen.
 cp "$work/original.scene" "$work/root/level.scene"
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
@@ -170,7 +171,7 @@ cp "$work/original.scene" "$work/root/level.scene"
     echo '{"kind":"authoring.frame","id":6,"scene":"level.scene"}'
 } | "$author" session "$game" "$work/root" >"$work/replies" || true
 reply 4 | grep -q '"kind":"authoring.view",.*"view":{"eye":\[0,10,57.98[0-9]*\],"target":\[0,10,0\],"fieldOfView":90},"previewing":false,"framed":2'
-reply 6 | grep -q '"code":"validation_failed".*nothing chosen in the scene has a pose to frame'
+reply 6 | grep -q '"kind":"authoring.view",.*"previewing":false,"framed":6'
 cmp "$work/root/level.scene" "$work/original.scene"
 
 # Bookmarks (D796): kept in the scene's editor state beside it, not the

@@ -14,7 +14,8 @@ struct Sky
     // frame before's.
     float4 environment;
     // The ground's light below the horizon (D304), for the sky drawn
-    // without a picture (D914).
+    // without a picture (D914); w is 1 where it is drawn graded, an
+    // editor's view (D925).
     float4 ground;
     float4x4 toDirection;
     float4x4 unjittered;
@@ -63,7 +64,12 @@ Written fs(Corner corner)
     // A point at the far end of depth is a direction: the view's inverse
     // takes it back to the way it looks.
     const float3 toward = normalize(mul(sky.toDirection, float4(corner.seen, 0.0, 1.0)).xyz);
-    if (sky.environment.w < 0.5)
+    if (sky.environment.w < 0.5 && sky.ground.w < 0.5)
+    {
+        // A game's own view: the sky's light, flat.
+        written.color = float4(sky.light.rgb * exposure[0].value.y, 1.0);
+    }
+    else if (sky.environment.w < 0.5)
     {
         // Without a picture, a clear day's (D914): paler and brighter at
         // the horizon, deeper overhead, and the ground's light below it,

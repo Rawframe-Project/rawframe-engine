@@ -849,8 +849,8 @@ void ShellParticipant::showScene(std::size_t at) {
         // Its icon by what its name says it is, as an editor's outliner
         // tells a light from a mesh (D923).
         std::string lower = label;
-        std::ranges::transform(lower, lower.begin(), [](char each) {
-            return static_cast<char>(std::tolower(static_cast<unsigned char>(each)));
+        std::ranges::transform(lower, lower.begin(), [](char letter) {
+            return static_cast<char>(std::tolower(static_cast<unsigned char>(letter)));
         });
         const auto kNamed = [&lower](std::string_view part) {
             return lower.find(part) != std::string::npos;
