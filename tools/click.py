@@ -203,9 +203,10 @@ def brightness(x, display, root, at, y):
     if not image:
         return 0
     info = image.contents
-    data = bytes(ctypes.cast(info.data, ctypes.POINTER(ctypes.c_ubyte * (info.bytes_per_line * info.height))).contents)
-    values = [data[row * info.bytes_per_line + column * 4 + channel]
-              for row in range(5) for column in range(5) for channel in range(3)]
+    pitch = info.bytes_per_line
+    data = bytes(ctypes.cast(info.data, ctypes.POINTER(ctypes.c_ubyte * (pitch * info.height))).contents)
+    x.XDestroyImage(image)
+    values = [data[row * pitch + column * 4 + channel] for row in range(5) for column in range(5) for channel in range(3)]
     return sum(values) / len(values)
 
 
@@ -321,6 +322,7 @@ def main():
     x.XDefaultRootWindow.restype = ctypes.c_ulong
     x.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
     x.XGetImage.restype = ctypes.POINTER(XImage)
+    x.XDestroyImage.argtypes = [ctypes.POINTER(XImage)]
     x.XGetImage.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_int, ctypes.c_uint,
                             ctypes.c_uint, ctypes.c_ulong, ctypes.c_int]
     x.XFlush.argtypes = [ctypes.c_void_p]
@@ -346,6 +348,7 @@ def main():
             info = image.contents
             data = ctypes.cast(info.data, ctypes.POINTER(ctypes.c_ubyte * (info.bytes_per_line * info.height))).contents
             lit += 1 if any(bytes(data)) else 0
+            x.XDestroyImage(image)
     def press(name, held):
         # A chord, "Control_L+z": the keys before the last held through it
         # (D777).

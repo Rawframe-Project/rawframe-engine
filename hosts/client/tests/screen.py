@@ -43,6 +43,7 @@ def main():
     x.XGetImage.restype = ctypes.POINTER(XImage)
     x.XGetImage.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_int, ctypes.c_uint,
                             ctypes.c_uint, ctypes.c_ulong, ctypes.c_int]
+    x.XDestroyImage.argtypes = [ctypes.POINTER(XImage)]
     display = x.XOpenDisplay(None)
     if not display:
         sys.exit("screen.py: no X display")
@@ -59,13 +60,18 @@ def main():
         if not image:
             continue
         info = image.contents
-        rows = bytes(ctypes.cast(info.data, ctypes.POINTER(ctypes.c_ubyte * (info.bytes_per_line * info.height))).contents)
+        width, height, pitch = info.width, info.height, info.bytes_per_line
+        rows = bytes(ctypes.cast(info.data, ctypes.POINTER(ctypes.c_ubyte * (pitch * height))).contents)
+        # Each picture copied, then given back: kept, a quarter second's
+        # 3.7 MB grew a long run to gigabytes (D945).
+        x.XDestroyImage(image)
         counted = 0
-        for row in range(info.height):
-            line = array.array("I", rows[row * info.bytes_per_line:row * info.bytes_per_line + info.width * 4])
-            counted += sum(1 for pixel in line if pixel & 0xFFFFFF)
+        for row in range(height):
+            line = array.array("I", rows[row * pitch:row * pitch + width * 4])
+            # Black whatever the unused top byte holds, counted in C.
+            counted += width - line.count(0) - line.count(0xFF000000)
         if counted > most:
-            most, best = counted, (info.width, info.height, info.bytes_per_line, rows)
+            most, best = counted, (width, height, pitch, rows)
         lit += 1 if counted else 0
         if resize and lit == 4:
             # No window manager runs: the client's window is a child of the

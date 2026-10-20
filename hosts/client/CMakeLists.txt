@@ -9,6 +9,10 @@ rawframe_host(NAME client OUTPUT rawframe-client
     DEPS window_host host view game_content input_kest network_quic world_tooling window world_animation world_audio render_canvas world_ui render_scene world_kest world_localization
          world_replication world_runtime composition diagnostics result base
 )
+# On Windows the client program shows Rawframe's mark in Explorer (D945).
+if(WIN32)
+    target_sources(rawframe_host_client PRIVATE resources/rawframe-client.rc)
+endif()
 # Where Maul RHI is built, the client draws its scene and canvas on the one
 # device and shows them in its window (D280, D286).
 set(RAWFRAME_CLIENT_DRAWS OFF)

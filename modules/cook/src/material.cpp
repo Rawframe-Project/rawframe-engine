@@ -139,9 +139,10 @@ result::Result<Artifact> cookProgram(const graph::Document& document,
     if (*exited != 0) {
         const std::vector<std::byte> kLog = bytesOf(kWork / "toolchain.log");
         kRemove();
-        return toolFailed(
-            "the shader toolchain failed building a program material: " +
-            std::string{reinterpret_cast<const char*>(kLog.data()), std::min<std::size_t>(kLog.size(), 2000)});
+        // Its end, where a tool's error and Python's exception are said.
+        const std::size_t kKept = std::min<std::size_t>(kLog.size(), 2000);
+        return toolFailed("the shader toolchain failed building a program material: " +
+                          std::string{reinterpret_cast<const char*>(kLog.data() + (kLog.size() - kKept)), kKept});
     }
     material::ProgramMaterial made{.shading = kGenerated.shading,
                                    .blend = kGenerated.blend,

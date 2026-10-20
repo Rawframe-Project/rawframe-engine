@@ -2,7 +2,8 @@
 # Packages Studio for an author with no build of their own (D768): Studio,
 # the cook tool, the dedicated server, the client, the authoring tool, the
 # thumbnail tool, and what Export runs (the export and build tools, the
-# launcher, the install tool; D944) from one build tree, beside the templates and the
+# launcher, the install tool; D944) from one build tree, with the shader
+# toolchain where the machine has one (D945), beside the templates and the
 # sources of the games named, which Studio's start screen offers as
 # samples. Studio opens as an application does, with no configuration and
 # no script (D920): double-clicked, it shows its start screen. A Windows
@@ -31,6 +32,41 @@ thumbnail="$tree/hosts/thumbnail/rawframe-thumbnail$exe"
 # What Studio's Export runs: the export tool finds the others beside it.
 cp "$tree/hosts/export/rawframe-export$exe" "$tree/hosts/build/rawframe-build$exe" \
     "$tree/launcher/play/rawframe-play$exe" "$tree/launcher/install/rawframe-install$exe" "$into/"
+# The shader toolchain, where this machine has one (RAWFRAME_SLANGC or
+# slangc, dxc, spirv-cross, spirv-val, spirv-dis and spirv-as on the path),
+# so the packaged cook builds a material graph the blob cannot fold (D484,
+# D945): the generator and the sources it reads laid out as the engine's
+# tree lays them, the programs in its bin, their libraries beside them on
+# Windows and in its lib elsewhere, dxc's without their debugging symbols.
+# Python is the machine's own.
+slangc="${RAWFRAME_SLANGC:-$(command -v slangc || true)}"
+dxc="$(command -v dxc || true)"
+cross="$(command -v spirv-cross || true)"
+validator="$(command -v spirv-val || true)"
+disassembler="$(command -v spirv-dis || true)"
+assembler="$(command -v spirv-as || true)"
+if [ -n "$slangc" ] && [ -n "$dxc" ] && [ -n "$cross" ] && [ -n "$validator" ] && [ -n "$disassembler" ] &&
+    [ -n "$assembler" ]; then
+    shaders="$into/shader-tools"
+    mkdir -p "$shaders/tools" "$shaders/third_party/maul-rhi/tools" "$shaders/third_party/maul-rhi/docs/contract" \
+        "$shaders/modules/render_scene_gpu/shaders" "$shaders/bin" "$shaders/lib"
+    cp tools/gen_shaders.py "$shaders/tools/"
+    cp third_party/maul-rhi/tools/*.py "$shaders/third_party/maul-rhi/tools/"
+    cp third_party/maul-rhi/docs/contract/mrhi.json "$shaders/third_party/maul-rhi/docs/contract/"
+    cp modules/render_scene_gpu/shaders/* "$shaders/modules/render_scene_gpu/shaders/"
+    cp "$slangc" "$dxc" "$cross" "$validator" "$disassembler" "$assembler" "$shaders/bin/"
+    if [ -n "$exe" ]; then
+        cp "$(dirname "$slangc")"/*.dll "$(dirname "$dxc")"/*.dll "$shaders/bin/"
+    else
+        cp -R "$(dirname "$slangc")/../lib/." "$shaders/lib/"
+        rm -rf "$shaders/lib/pkgconfig"
+        for library in libdxcompiler.so libdxil.so; do
+            strip --strip-unneeded -o "$shaders/lib/$library" "$(dirname "$dxc")/../lib/$library"
+        done
+    fi
+else
+    echo "package_studio.sh: no shader toolchain here; the packaged cook refuses a material graph the blob cannot fold" >&2
+fi
 # The templates a new game is made from (D780).
 cp -R templates "$into/templates"
 for game in "$@"; do
@@ -60,14 +96,17 @@ DESKTOP
     chmod +x "$into/rawframe-studio.desktop"
 fi
 if [ -n "$exe" ]; then
-    for program in "$into"/*.exe; do
+    # Each program's beside it: the toolchain's in its bin too.
+    for program in "$into"/*.exe "$into"/shader-tools/bin/*.exe; do
+        [ -e "$program" ] || continue
+        beside="$(dirname "$program")"
         for dll in $(llvm-objdump -p "$program" | sed -n 's/^ *DLL Name: //p' | tr -d '\r'); do
-            [ -e "$into/$dll" ] && continue
+            [ -e "$beside/$dll" ] && continue
             found="$(find "$tree" -name "$dll" -print -quit)"
             [ -z "$found" ] && [ -e "/c/Windows/System32/$dll" ] && case "${dll,,}" in
             vcruntime* | msvcp* | concrt*) found="/c/Windows/System32/$dll" ;;
             esac
-            [ -n "$found" ] && cp "$found" "$into/"
+            [ -n "$found" ] && cp "$found" "$beside/"
         done
     done
 fi

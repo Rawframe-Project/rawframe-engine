@@ -16,9 +16,11 @@
 //
 // A material whose graph the blob cannot fold is built with the shader
 // toolchain (D484): the engine's tools/gen_shaders.py run by the python3 on
-// the path, with the pinned Slang compiler RAWFRAME_SLANGC names or the
-// slangc on the path, and dxc and spirv-cross on the path. Without them
-// such a material is refused, and every other source cooks as before.
+// the path (`python` or `py` on Windows), with the pinned Slang compiler
+// RAWFRAME_SLANGC names or the slangc on the path, and dxc, spirv-cross,
+// spirv-val, spirv-dis and spirv-as on the path; or the toolchain Studio's
+// package lays beside this tool in `shader-tools` (D945). Without them such
+// a material is refused, and every other source cooks as before.
 
 #include "rawframe/host/main.h"
 
@@ -88,15 +90,26 @@ rawframe::content::ResourceId freshIdentity() {
     return rawframe::content::ResourceId{made};
 }
 
-/// The file named `name` in the first directory of the path that has one;
-/// an empty path for none.
+/// The program named `name` in the first directory of the path that has
+/// one, with the system's ending for a program (`.exe` on Windows, whose
+/// path is split at `;`, and never its WindowsApps aliases); an empty path
+/// for none.
 std::filesystem::path onPath(std::string_view name) {
+#if defined(_WIN32)
+    constexpr char kSeparator = ';';
+    const std::string kFile = std::string{name} + ".exe";
+#else
+    constexpr char kSeparator = ':';
+    const std::string kFile{name};
+#endif
     const char* kPath = std::getenv("PATH");
     std::string_view path = kPath != nullptr ? kPath : "";
     while (!path.empty()) {
-        const std::size_t kEnd = std::min(path.find(':'), path.size());
-        const std::filesystem::path kFound = std::filesystem::path{std::string{path.substr(0, kEnd)}} / name;
-        if (std::filesystem::is_regular_file(kFound)) {
+        const std::size_t kEnd = std::min(path.find(kSeparator), path.size());
+        const std::string_view kDirectory = path.substr(0, kEnd);
+        const std::filesystem::path kFound = std::filesystem::path{std::string{kDirectory}} / kFile;
+        // Windows' WindowsApps holds python.exe that opens the Store.
+        if (!kDirectory.ends_with("WindowsApps") && std::filesystem::is_regular_file(kFound)) {
             return kFound;
         }
         path.remove_prefix(std::min(kEnd + 1, path.size()));
@@ -104,24 +117,71 @@ std::filesystem::path onPath(std::string_view name) {
     return {};
 }
 
+/// The program `name` in the `bin` of a toolchain packaged beside this
+/// tool (D945); an empty path for none.
+std::filesystem::path packagedTool(const std::filesystem::path& packaged, std::string_view name) {
+#if defined(_WIN32)
+    const std::filesystem::path kBeside = packaged / "bin" / (std::string{name} + ".exe");
+#else
+    const std::filesystem::path kBeside = packaged / "bin" / std::string{name};
+#endif
+    std::error_code error;
+    return std::filesystem::is_regular_file(kBeside, error) ? kBeside : std::filesystem::path{};
+}
+
 /// The shader toolchain where all of it is found (D484), its identity the
-/// digest of every file it runs or reads: the generator, Maul RHI's tools,
-/// the scene's Slang sources, the Slang compiler with its libraries, dxc,
-/// and spirv-cross; none where any is missing.
+/// digest of every file it runs or reads: the generator, Maul RHI's tools
+/// and the contract its container writer reads, the scene's Slang sources, the Slang compiler with its libraries, dxc,
+/// spirv-cross, spirv-val, spirv-dis, and spirv-as; none where any is
+/// missing. A
+/// toolchain packaged beside this tool (`shader-tools`, as Studio's package
+/// lays one out, D945) is taken first: the generator and the sources under
+/// it as in the engine's tree, the programs in its `bin`; else the engine
+/// tree's generator this tool was built from, and the programs on the path
+/// (the Slang compiler where RAWFRAME_SLANGC names it, unless the package
+/// has its own). Python is `python3`, or on Windows `python` or `py`.
 std::optional<rawframe::cook::ShaderTools> shaderTools() {
     namespace fs = std::filesystem;
-    const fs::path kGenerator = RAWFRAME_SHADER_GENERATOR;
+    std::error_code error;
+    const fs::path kPackaged = fs::canonical(rawframe::process::ownExecutable(), error).parent_path() / "shader-tools";
+    const fs::path kBesideGenerator = kPackaged / "tools" / "gen_shaders.py";
+    const bool kBeside = fs::is_regular_file(kBesideGenerator, error);
+    const fs::path kGenerator = kBeside ? kBesideGenerator : fs::path{RAWFRAME_SHADER_GENERATOR};
+    const auto kTool = [&kPackaged](std::string_view name) {
+        const fs::path kFound = packagedTool(kPackaged, name);
+        return kFound.empty() ? onPath(name) : kFound;
+    };
     const char* kNamed = std::getenv("RAWFRAME_SLANGC");
-    const fs::path kSlangc = kNamed != nullptr ? fs::path{kNamed} : onPath("slangc");
-    const fs::path kPython = onPath("python3");
-    const fs::path kDxc = onPath("dxc");
-    const fs::path kCross = onPath("spirv-cross");
-    if (!fs::is_regular_file(kGenerator) || !fs::is_regular_file(kSlangc) || kPython.empty() || kDxc.empty() ||
-        kCross.empty()) {
+    const fs::path kOwnSlangc = packagedTool(kPackaged, "slangc");
+    const fs::path kSlangc = !kOwnSlangc.empty() ? kOwnSlangc : kNamed != nullptr ? fs::path{kNamed} : onPath("slangc");
+    fs::path python = onPath("python3");
+#if defined(_WIN32)
+    // Python's installer for Windows puts `py` on the path by default, and
+    // `python` only when asked to.
+    for (const std::string_view kName : {"python", "py"}) {
+        if (python.empty()) {
+            python = onPath(kName);
+        }
+    }
+#endif
+    const fs::path kDxc = kTool("dxc");
+    const fs::path kCross = kTool("spirv-cross");
+    const fs::path kValidator = kTool("spirv-val");
+    const fs::path kDisassembler = kTool("spirv-dis");
+    const fs::path kAssembler = kTool("spirv-as");
+    if (!fs::is_regular_file(kGenerator) || !fs::is_regular_file(kSlangc) || python.empty() || kDxc.empty() ||
+        kCross.empty() || kValidator.empty() || kDisassembler.empty() || kAssembler.empty()) {
         return std::nullopt;
     }
     const fs::path kRoot = kGenerator.parent_path().parent_path();
-    std::vector<fs::path> files = {kGenerator, kSlangc, kDxc, kCross};
+    std::vector<fs::path> files = {kGenerator,
+                                   kRoot / "third_party" / "maul-rhi" / "docs" / "contract" / "mrhi.json",
+                                   kSlangc,
+                                   kDxc,
+                                   kCross,
+                                   kValidator,
+                                   kDisassembler,
+                                   kAssembler};
     std::error_code failed;
     for (const fs::path& kDirectory : {kRoot / "third_party" / "maul-rhi" / "tools",
                                        kRoot / "modules" / "render_scene_gpu" / "shaders",
@@ -135,6 +195,15 @@ std::optional<rawframe::cook::ShaderTools> shaderTools() {
         std::ranges::sort(held);
         files.insert(files.end(), held.begin(), held.end());
     }
+    // On Windows the Slang compiler's libraries are beside it.
+    std::vector<fs::path> libraries;
+    for (const fs::directory_entry& each : fs::directory_iterator{kSlangc.parent_path(), failed}) {
+        if (each.is_regular_file() && each.path().extension() == ".dll") {
+            libraries.push_back(each.path());
+        }
+    }
+    std::ranges::sort(libraries);
+    files.insert(files.end(), libraries.begin(), libraries.end());
     rawframe::base::Sha256 identity;
     for (const fs::path& kFile : files) {
         const auto kDigest = rawframe::cook::digestOfFile(kFile);
@@ -144,7 +213,7 @@ std::optional<rawframe::cook::ShaderTools> shaderTools() {
         identity.update(kFile.filename().string());
         identity.update(*kDigest);
     }
-    return rawframe::cook::ShaderTools{.python = kPython, .generator = kGenerator, .identity = identity.finish()};
+    return rawframe::cook::ShaderTools{.python = python, .generator = kGenerator, .identity = identity.finish()};
 }
 
 } // namespace

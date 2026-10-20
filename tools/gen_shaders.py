@@ -24,6 +24,10 @@
 # directory given, as the cook builds them for a game's material (D484,
 # D488).
 #
+# A toolchain laid out as Studio's package lays one (D945) has the programs
+# in a `bin` beside `tools`: they are taken first, its Slang compiler before
+# the one RAWFRAME_SLANGC names, as the cook takes them.
+#
 # usage: tools/gen_shaders.py
 #        tools/gen_shaders.py --material <material.slang> <directory>
 
@@ -35,6 +39,9 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BIN = os.path.join(ROOT, "bin")
+if os.path.isdir(BIN):
+    os.environ["PATH"] = BIN + os.pathsep + os.environ.get("PATH", "")
 WRITER = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_container.py")
 METAL = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_msl.py")
 DXIL = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_dxil.py")
@@ -42,6 +49,9 @@ DXIL = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_dxil.py")
 # the language is defined by the pinned compiler until it is ratified
 # (ADR-0026).
 SLANGC = os.environ.get("RAWFRAME_SLANGC", "slangc")
+for packaged in (os.path.join(BIN, "slangc"), os.path.join(BIN, "slangc.exe")):
+    if os.path.isfile(packaged):
+        SLANGC = packaged
 SLANG_VERSION = "2026.19"
 # The containers whose vertex position must be invariant (D475).
 INVARIANT = ("scene",)
