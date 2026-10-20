@@ -22,7 +22,8 @@ constexpr std::string_view kMaybe[] = {view::kUiPointing.name,
                                        ui::kAccessSeat.name,
                                        world_tooling::kForwarding.name,
                                        view::kFilesDropped.name,
-                                       view::kFileDialogs.name};
+                                       view::kFileDialogs.name,
+                                       view::kWindowClosing.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 result::Status misconfigured(std::string_view why) {
@@ -274,6 +275,9 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         RAWFRAME_TRY_ASSIGN(dropped_, context.capability(view::kFilesDropped));
     }
     // The platform's file dialogs (D918).
+    if (context.has(view::kWindowClosing.name)) {
+        RAWFRAME_TRY_ASSIGN(closing_, context.capability(view::kWindowClosing));
+    }
     if (context.has(view::kFileDialogs.name)) {
         RAWFRAME_TRY_ASSIGN(dialogs_, context.capability(view::kFileDialogs));
     }

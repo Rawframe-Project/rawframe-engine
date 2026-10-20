@@ -25,6 +25,7 @@
 #include "rawframe/ui/frames.h"
 #include "rawframe/ui/text_edit.h"
 #include "rawframe/ui/tree.h"
+#include "rawframe/view/closing.h"
 #include "rawframe/view/dialogs.h"
 #include "rawframe/view/dropping.h"
 #include "rawframe/view/pointing.h"
@@ -264,6 +265,8 @@ private:
     void askDialog(view::FileDialogs::Kind kind, std::string title, std::string forWhat);
     void takeDialogs();
     void openFolder(const std::filesystem::path& folder);
+    /// The game open closed, the start screen shown (D923).
+    void closeGame();
     void asCheckbox(ui::Node value, bool on);
     void asChooser(ui::Node line);
     void showViewBar();
@@ -389,6 +392,8 @@ private:
 
     /// The menu at `at` in a popup under its button, or closed if it is
     /// the one open.
+    /// A menu's line for `command`, lit where `lit` (D923).
+    result::Result<ui::Node> menuLine(ui::Node popup, const Command& command, bool lit);
     void showMenu(std::size_t at);
 
     /// The commands whose names hold `typed`, in a popup under the
@@ -1140,6 +1145,8 @@ private:
     /// The file dialogs the window shows (D918), each asked by its ticket
     /// and what its answer is for.
     view::FileDialogs* dialogs_ = nullptr;
+    /// Where Quit asks the window to close (D923); none without a window.
+    view::WindowClosing* closing_ = nullptr;
     std::uint64_t dialogTickets_ = 0;
     std::vector<std::pair<std::uint64_t, std::string>> dialogsAsked_;
     std::uint64_t made_ = 0;

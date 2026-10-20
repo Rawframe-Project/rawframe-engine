@@ -24,6 +24,7 @@
 #include "rawframe/input_window/bridge.h"
 #include "rawframe/result/result.h"
 #include "rawframe/ui/access.h"
+#include "rawframe/view/closing.h"
 #include "rawframe/view/dialogs.h"
 #include "rawframe/view/dropping.h"
 #include "rawframe/view/headset.h"
@@ -176,6 +177,7 @@ private:
     /// An editor's file dialogs (D918): asked, shown over the window, and
     /// each request's ticket until it completes.
     view::FileDialogs dialogs_;
+    view::WindowClosing closing_;
     std::vector<std::pair<window::RequestId, std::uint64_t>> dialogsShown_;
     /// Either, as the Host's frames tell its participants.
     std::atomic<bool> suspended_{false};

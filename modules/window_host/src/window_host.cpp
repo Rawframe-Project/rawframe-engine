@@ -385,6 +385,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     lent_.push_back(composition::LentCapability{view::kHeadsetAway.name, composition::provideAs(away_)});
     lent_.push_back(composition::LentCapability{view::kFilesDropped.name, composition::provideAs(dropped_)});
     lent_.push_back(composition::LentCapability{view::kFileDialogs.name, composition::provideAs(dialogs_)});
+    lent_.push_back(composition::LentCapability{view::kWindowClosing.name, composition::provideAs(closing_)});
     lent_.insert(lent_.end(), settings_.lent.begin(), settings_.lent.end());
     request_.lent = lent_;
     request_.suspended = &suspended_;
@@ -477,7 +478,8 @@ result::Status WindowHost::start(window::Windows& windows) {
 }
 
 window::FrameOutcome WindowHost::frame(window::Windows& windows) {
-    bool closing = false;
+    // An editor asking to close is a press on the close button (D923).
+    bool closing = closing_.asked();
     const bool kWasSuspended = suspended_.load(std::memory_order_relaxed);
     // The touch screen's halves split the window as it is now (D387).
     if (const auto kState = windows.state(window_); kState.has_value()) {
@@ -574,9 +576,8 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             if (const auto kShown = std::ranges::find(
                     dialogsShown_, event->completion.request, &std::pair<window::RequestId, std::uint64_t>::first);
                 kShown != dialogsShown_.end()) {
-                view::FileDialogs::Answer answer{.ticket = kShown->second,
-                                                 .unsupported = event->completion.outcome ==
-                                                                window::Outcome::Unsupported};
+                view::FileDialogs::Answer answer{
+                    .ticket = kShown->second, .unsupported = event->completion.outcome == window::Outcome::Unsupported};
                 if (event->completion.outcome == window::Outcome::Done) {
                     answer.paths = windows.dialogFiles(event->completion.request).value_or(std::vector<std::string>{});
                 }

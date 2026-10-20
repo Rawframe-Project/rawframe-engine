@@ -87,6 +87,23 @@ constexpr std::string_view kKeep = "Set bookmark ";
 constexpr std::array<std::pair<std::string_view, std::string_view>, 3> kModes = {
     {{"Lit", "lit"}, {"Unlit", "unlit"}, {"Normals", "normals"}}};
 
+/// A menu's card: raised over the window, edged, with a shadow (D923).
+constexpr ui::Look kMenuLook{.fill = 0x1E2026FFU,
+                             .borderColor = look::kRaisedEdge,
+                             .radius = 7,
+                             .outerShadow = {.color = 0x00000080U, .y = 6, .blur = 18}};
+
+/// The File menu's commands in its order, each with its key (D923).
+constexpr std::array<std::pair<std::string_view, std::string_view>, 7> kFileCommands = {{
+    {"New game", ""},
+    {"Open game", "Ctrl+O"},
+    {"Save", "Ctrl+S"},
+    {"Import files", "Ctrl+I"},
+    {kExport, ""},
+    {"Close game", ""},
+    {"Quit", "Ctrl+Q"},
+}};
+
 /// What the palette's field reads while it does not hold the keyboard.
 constexpr std::string_view kPaletteHint = "Search commands, assets, entities    Ctrl K";
 
@@ -177,7 +194,20 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
         commands_.push_back(Command{.name = kName, .menu = "Window", .keys = kKeys(kName, {})});
     }
     commands_.push_back(Command{.name = std::string{kSaveLayout}, .menu = "Window", .keys = kKeys(kSaveLayout, {})});
-    commands_.push_back(Command{.name = std::string{kExport}, .menu = "File", .keys = kKeys(kExport, {})});
+    // The File menu as an editor's (D923): a game made, opened, and
+    // closed, what is saved, files brought in and the game sent out, and
+    // Studio quit.
+    for (const auto& [kName, kKey] : kFileCommands) {
+        if (kName == kExport) {
+            commands_.push_back(Command{.name = std::string{kExport}, .menu = "File", .keys = kKeys(kExport, {})});
+            continue;
+        }
+        commands_.push_back(Command{
+            .name = std::string{kName},
+            .menu = "File",
+            .keys =
+                kKeys(kName, kKey.empty() ? std::vector<std::string>{} : std::vector<std::string>{std::string{kKey}})});
+    }
     commands_.push_back(Command{.name = std::string{kFrame}, .menu = "View", .keys = kKeys(kFrame, {"F"})});
     // At a host joined, the chosen entity claimed and let go (D884).
     if (held_.joined != nullptr) {
@@ -368,6 +398,24 @@ bool ShellParticipant::runCommand(std::string_view name) {
         say(dialog_.has_value() ? "preferences" : "preferences closed");
         return true;
     }
+    if (kCommand->menu == "File" && kCommand->name != kExport) {
+        if (kCommand->name == "New game" || kCommand->name == "Close game") {
+            closeGame();
+        } else if (kCommand->name == "Open game") {
+            askDialog(view::FileDialogs::Kind::Folder, "Open a game's folder", "open");
+        } else if (kCommand->name == "Save") {
+            say("saved: Studio writes each change to the game's files as it is made");
+        } else if (kCommand->name == "Import files") {
+            importAsked();
+        } else if (kCommand->name == "Quit") {
+            if (closing_ != nullptr) {
+                closing_->ask();
+            } else {
+                say("this window cannot be closed from here");
+            }
+        }
+        return true;
+    }
     if (kCommand->name == kExport) {
         openExport();
         say(held_.exportDialog.has_value() ? "export" : "export closed");
@@ -417,6 +465,34 @@ bool ShellParticipant::commandOn(std::string_view name) const {
     return (name == kFlat && held_.flat) || (name == kTilted && !held_.flat);
 }
 
+result::Result<ui::Node> ShellParticipant::menuLine(ui::Node popup, const Command& command, bool lit) {
+    // A line as the design's menus (D923): its name, and its key at the
+    // end in the fixed-width face; lit where it is on, or the first match.
+    RAWFRAME_TRY_ASSIGN(const ui::Node kLine,
+                        box(popup,
+                            ui::Layout{.height = ui::pixels(28),
+                                       .alignItems = ui::Align::Center,
+                                       .gap = 12,
+                                       .shrink = 0,
+                                       .padding = {10, 10, 0, 0}},
+                            0));
+    RAWFRAME_TRY(tree_->setLook(kLine, ui::Look{.fill = lit ? kChosen : 0U, .radius = 4}));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kName, box(kLine, ui::Layout{.width = ui::pixels(0), .grow = 1}, 0));
+    RAWFRAME_TRY(words(kName, command.name, look::kRowInk, look::kBodySize));
+    RAWFRAME_TRY(tree_->setInteraction(kName, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+    if (!command.keys.empty()) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kKey, box(kLine, ui::Layout{.shrink = 0}, 0));
+        RAWFRAME_TRY(monoWords(kKey,
+                               command.keys.front() == "Delete" ? std::string{"Del"} : command.keys.front(),
+                               look::kFaintInk,
+                               look::kSmallSize));
+        RAWFRAME_TRY(tree_->setInteraction(kKey, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+    }
+    RAWFRAME_TRY(tree_->setRole(kLine, ui::Role::Button));
+    RAWFRAME_TRY(tree_->setName(kLine, lineOf(command)));
+    return kLine;
+}
+
 void ShellParticipant::showMenu(std::size_t at) {
     const bool kWasOpen = menuOpen_ == at;
     closePopup();
@@ -424,12 +500,16 @@ void ShellParticipant::showMenu(std::size_t at) {
         return;
     }
     auto popup = box(root_,
-                     ui::Layout{.width = ui::pixels(240),
+                     ui::Layout{.width = ui::pixels(260),
                                 .direction = ui::Direction::Column,
-                                .gap = 2,
-                                .padding = {4, 4, 4, 4},
+                                .gap = 1,
+                                .padding = {5, 5, 5, 5},
+                                .border = {1, 1, 1, 1},
                                 .placement = {.absolute = true}},
-                     kHeaderFill);
+                     0);
+    if (popup.has_value()) {
+        static_cast<void>(tree_->setLook(*popup, kMenuLook));
+    }
     if (!popup.has_value() ||
         !tree_
              ->setPopup(*popup,
@@ -447,12 +527,12 @@ void ShellParticipant::showMenu(std::size_t at) {
         const Command& kCommand = commands_[each];
         // A viewport's pill lists its own commands (D916).
         const bool kPill = isPill(menus_[at].second);
-        if (kPill ? !pillLists(menus_[at].second, kCommand.name)
+        if (kPill      ? !pillLists(menus_[at].second, kCommand.name)
             : kChooser ? kCommand.menu != "Window" || !kCommand.name.ends_with(kLayoutSuffix)
                        : kCommand.menu != menus_[at].second) {
             continue;
         }
-        auto line = row(*popup, lineOf(kCommand), kText, kPill && commandOn(kCommand.name) ? kChosen : kRow, true);
+        auto line = menuLine(*popup, kCommand, kPill && commandOn(kCommand.name));
         if (!line.has_value()) {
             return;
         }
@@ -466,12 +546,16 @@ void ShellParticipant::showMatches(std::string_view typed) {
         return;
     }
     auto popup = box(root_,
-                     ui::Layout{.width = ui::pixels(260),
+                     ui::Layout{.width = ui::pixels(300),
                                 .direction = ui::Direction::Column,
-                                .gap = 2,
-                                .padding = {4, 4, 4, 4},
+                                .gap = 1,
+                                .padding = {5, 5, 5, 5},
+                                .border = {1, 1, 1, 1},
                                 .placement = {.absolute = true}},
-                     kHeaderFill);
+                     0);
+    if (popup.has_value()) {
+        static_cast<void>(tree_->setLook(*popup, kMenuLook));
+    }
     if (!popup.has_value() ||
         !tree_
              ->setPopup(*popup,
@@ -487,7 +571,7 @@ void ShellParticipant::showMatches(std::string_view typed) {
         if (commands_[each].name == kPalette || !lowered(commands_[each].name).contains(kWanted)) {
             continue;
         }
-        auto line = row(*popup, lineOf(commands_[each]), kText, popupRows_.empty() ? kChosen : kRow, true);
+        auto line = menuLine(*popup, commands_[each], popupRows_.empty());
         if (!line.has_value()) {
             return;
         }
