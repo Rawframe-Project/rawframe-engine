@@ -144,6 +144,9 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         showMenu(static_cast<std::size_t>(kMenu - menus_.begin()));
         return;
     }
+    if (pressSession(node)) {
+        return;
+    }
     closePopup();
     if (palette_.has_value() && node == palette_->value) {
         openPalette();

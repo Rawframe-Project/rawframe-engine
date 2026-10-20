@@ -403,6 +403,8 @@ struct EditorsHeld {
     std::vector<Collaborating> collaborators;
     ui::Node avatarsNode{};
     std::vector<ui::Node> avatars;
+    /// The session's card, while it is open (D935).
+    ui::Node sessionCard{};
     bool saidJoined = false;
     bool toldClosed = false;
 };

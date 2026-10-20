@@ -450,7 +450,11 @@ void ShellParticipant::showViewportNote() {
                : playing_.has_value() && playing_->running() ? "Starting the game..."
                : playing_.has_value() || held_.editStopped   ? "The game stopped. The Console says why."
                : scene_.empty() ? "This game makes its world in Kest. Press Play to run it here."
-                                : "";
+               // Joined, the scene is the host's, which Play shows as cooked
+               // there (D905, D935); the edit view plays only this author's
+               // own files.
+               : held_.joined != nullptr ? "The scene is the host's: Play shows it as the host cooks it."
+                                         : "";
     }
     // An empty scene's first steps, over its view (D923).
     if (note.empty() && tree_->contains(viewport_) && chosen(Listed::Scene) && entities_.empty() && !live_.on &&

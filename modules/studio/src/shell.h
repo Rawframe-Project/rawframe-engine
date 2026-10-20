@@ -217,6 +217,12 @@ private:
     /// A 2D game's scene opened put on the 2D view, framed whole (D933).
     void settleFlat();
     bool pressPrefabBar(ui::Node node);
+    /// An author's initials in their color, `size` across (D935); what the
+    /// presence says another is doing; and the session's card opened from
+    /// the title bar's avatars.
+    result::Result<ui::Node> avatar(ui::Node parent, std::string_view author, float size);
+    [[nodiscard]] std::string doingOf(const Collaborating& other) const;
+    bool pressSession(ui::Node node);
 
     /// The viewport's input and area handed to the game played there (D790).
     void forwardInput();

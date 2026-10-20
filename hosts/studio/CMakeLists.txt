@@ -98,7 +98,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_joins PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "found bens ground at.*\"code\":\"studio_joined\"[^\n]*\"author\":\"ada\".*\"code\":\"studio_host_heard\"[^\n]*\"kind\":\"changed\",\"author\":\"ben\",\"document\":\"level.scene\".*\"code\":\"studio_summary\"[^\n]*\"status\":\"cooked [0-9]+ sources.*\"exit\":\"clean_stop\".*ben's rename kept.*the host's level holds it.*cooked on the host")
+                         "found Session at.*found bens ground at.*\"code\":\"studio_joined\"[^\n]*\"author\":\"ada\".*\"code\":\"studio_host_heard\"[^\n]*\"kind\":\"changed\",\"author\":\"ben\",\"document\":\"level.scene\".*\"code\":\"studio_summary\"[^\n]*\"status\":\"cooked [0-9]+ sources.*\"exit\":\"clean_stop\".*ben's rename kept.*the host's level holds it.*cooked on the host")
     # The others at a host shown, their choices and claims in the
     # Hierarchy, and a claim made from the Edit menu (D884).
     add_test(NAME studio_presence

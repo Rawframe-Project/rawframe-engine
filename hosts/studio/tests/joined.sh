@@ -4,7 +4,9 @@
 # token the host's owner gave her, and Ben joining headless. Studio says
 # what it has open, which Ben waits to hear; Ben renames the ground; Studio
 # hears his change and shows the level as the host now holds it, the row
-# Ben named found in its Hierarchy by that name; then Cook cooks the game
+# Ben named found in its Hierarchy by that name, the title bar's Session
+# pressed for the session's card, of Ada alone as Ben has nothing open
+# (D935); then Cook cooks the game
 # on the host, into Ada's own directory there (D885). Prints what
 # clicked.sh prints.
 #
@@ -45,7 +47,8 @@ STUDIO_SETTINGS="studio.join.endpoint = 127.0.0.1:$port
 studio.join.pin_file = $work/pin
 studio.join.token_file = $work/ada.token" \
     bash "$here/clicked.sh" "$studio" games/runners/runners.game level.scene @level.scene \
-    "until=studio_host_heard,author=\"ben\"" wait=1 "@bens ground" @Cook "until=studio_said,status=\"cooked"
+    "until=studio_host_heard,author=\"ben\"" wait=1 @Session "until=studio_said,status=\"in this session: 1\"" \
+    "@bens ground" @Cook "until=studio_said,status=\"cooked"
 status=$?
 grep -q '"id":1,"answer":{"kind":"authoring.outcome"' "$work/ben.out" && echo "ben's rename kept"
 grep -q '"bens ground"' "$work/hosted/level.scene" && echo "the host's level holds it"

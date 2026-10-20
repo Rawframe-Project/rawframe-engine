@@ -4,8 +4,9 @@
 # the west wall and claims the ground; Studio's title bar shows him, and
 # its Hierarchy says the wall is his choice and the ground his lock. Ada
 # chooses the east wall and claims it from the Edit menu; Ben's rename of
-# it is then refused naming her. Prints what clicked.sh prints, then Ben's
-# refusal.
+# it is then refused naming her; Ben's avatar pressed shows the session's
+# card of the two of them (D935). Prints what clicked.sh prints, then
+# Ben's refusal.
 #
 #   presence.sh <rawframe-studio> <rawframe-author>
 set -uo pipefail
@@ -54,7 +55,8 @@ studio.join.pin_file = $work/pin
 studio.join.token_file = $work/ada.token" \
     bash "$here/clicked.sh" "$studio" games/runners/runners.game level.scene @level.scene \
     "until=studio_presence_shown,marked=2" "@west wall  [ben]" "@ground  [locked by ben]" "@east wall" @Edit "@Claim chosen" \
-    "until=studio_said,status=\"claimed east wall" "until=studio_presence_shown,marked=3"
+    "until=studio_said,status=\"claimed east wall" "until=studio_presence_shown,marked=3" \
+    @ben "until=studio_said,status=\"in this session: 2\""
 status=$?
 wait "$benning"
 grep -q '"id":3,"error":{"code":"conflict",.*"author":"ada"' "$work/ben.out" && echo "ben refused ada's east wall"

@@ -334,6 +334,17 @@ result::Status ShellParticipant::statusBar(ui::Node root) {
     RAWFRAME_TRY_ASSIGN(statusNode_, box(kBar, ui::Layout{}, 0));
     RAWFRAME_TRY(box(kBar, ui::Layout{.grow = 1}, 0));
     RAWFRAME_TRY_ASSIGN(held_.statusFigures, box(kBar, ui::Layout{.alignItems = ui::Align::Center, .gap = 14}, 0));
+    // Joined to a host, where (D935).
+    if (held_.joined != nullptr) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kJoinedAt,
+                            box(kBar, ui::Layout{.alignItems = ui::Align::Center, .gap = 6, .shrink = 0}, 0));
+        RAWFRAME_TRY_ASSIGN(
+            const ui::Node kDot,
+            box(kJoinedAt, ui::Layout{.width = ui::pixels(7), .height = ui::pixels(7), .shrink = 0}, 0));
+        RAWFRAME_TRY(tree_->setLook(kDot, ui::Look{.fill = 0x3DBB6BFFU, .radius = 3.5F}));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kWhere, box(kJoinedAt, ui::Layout{.shrink = 0}, 0));
+        RAWFRAME_TRY(words(kWhere, "Joined " + held_.joinEndpoint + " as " + held_.joinedAs, look::kLabelInk, 12));
+    }
     // Then, at its end, the game's branch, where it is under version
     // control (D871).
     RAWFRAME_TRY_ASSIGN(held_.branchNode, box(kBar, ui::Layout{}, 0));
