@@ -479,6 +479,65 @@ void ShellParticipant::outlineChosen() {
                  {diagnostics::field("authors", outlines.items().size()), diagnostics::field("shown", outlinesShown_)});
 }
 
+void ShellParticipant::scaleDragged(const Moved& moved, std::map<std::string, double, std::less<>>& pose) {
+    // Sized by how far the drag went to the view's right (or up, by the
+    // height handle): a meter doubles it, a meter back halves it (D922).
+    std::array<double, 2> right{1, 0};
+    if (view_.has_value()) {
+        const Value* kEye = view_->find("eye");
+        const Value* kTarget = view_->find("target");
+        if (kEye != nullptr && kTarget != nullptr && kEye->items().size() == 3 && kTarget->items().size() == 3) {
+            const double kX = kTarget->items()[0].real().value_or(0) - kEye->items()[0].real().value_or(0);
+            const double kZ = kTarget->items()[2].real().value_or(0) - kEye->items()[2].real().value_or(0);
+            const double kLength = std::hypot(kX, kZ);
+            if (kLength > 1e-6) {
+                right = {-kZ / kLength, kX / kLength};
+            }
+        }
+    }
+    const double kAlong = moved.how == Moved::How::Height ? moved.y : moved.x * right[0] + moved.z * right[1];
+    const double kFactor = std::clamp(std::exp2(kAlong), 0.05, 20.0);
+    static_cast<void>(pose);
+    std::string why;
+    const std::optional<Catalog::Component> kBody = componentNamed(catalog_, "rawframe.physics3d.body", why);
+    const std::optional<Value> kRead = read(scene_, "scene.read_entity", moved.source);
+    const Value* kComponents = kRead.has_value() ? kRead->find("components") : nullptr;
+    if (!kBody.has_value() || kComponents == nullptr) {
+        say("only a body is sized by dragging");
+        return;
+    }
+    std::vector<Value> operations;
+    for (const Value& kEach : kComponents->items()) {
+        const Value* kId = kEach.find("component");
+        if (kId == nullptr || kId->text() == nullptr || *kId->text() != kBody->id) {
+            continue;
+        }
+        const std::vector<FieldShown> kSizes = fieldsShown(&*kBody, kEach.find("fields"));
+        for (const std::string_view kSide : {"width", "height", "depth"}) {
+            const auto kSize = std::ranges::find(kSizes, kSide, &FieldShown::name);
+            double now = 0.5;
+            if (kSize != kSizes.end() && kSize->text.has_value()) {
+                now = std::strtod(kSize->text->c_str(), nullptr);
+            }
+            Value operation = Value::object();
+            operation.add("operation", Value::string("scene.set_field"));
+            operation.add("entity", Value::string(moved.source));
+            operation.add("component", Value::string(kBody->id));
+            operation.add("field", Value::string(std::string{kSide}));
+            Value value = Value::object();
+            value.add("real", Value::real(std::max(0.01, std::round(now * kFactor * 1000) / 1000)));
+            operation.add("value", std::move(value));
+            operations.push_back(std::move(operation));
+        }
+    }
+    if (operations.empty()) {
+        say("only a body is sized by dragging");
+        return;
+    }
+    ++dragged_;
+    commitAll(std::move(operations), "sized by dragging", moved.source);
+}
+
 void ShellParticipant::moveDragged(const Moved& moved) {
     // A press let go where it went down is a click, not a drag.
     if (std::abs(moved.x) < 0.01 && std::abs(moved.y) < 0.01 && std::abs(moved.z) < 0.01) {
@@ -498,10 +557,20 @@ void ShellParticipant::moveDragged(const Moved& moved) {
     const auto kPlaced = [this](double was, double by) {
         return by != 0 ? snapped(was + by, snap_.move) : was;
     };
-    if (moved.how == Moved::How::Move) {
+    // The toolbar's tool says what a drag does (D922): Select only
+    // chooses, Rotate turns whatever was grabbed, Scale sizes the body.
+    if (held_.tool == 0) {
+        return;
+    }
+    if (held_.tool == 3) {
+        scaleDragged(moved, pose);
+        return;
+    }
+    const Moved::How kHow = held_.tool == 2 ? Moved::How::Turn : moved.how;
+    if (kHow == Moved::How::Move) {
         changed = {{"x", kPlaced(pose["x"], moved.x)}, {"z", kPlaced(pose["z"], moved.z)}};
         done = "moved by dragging";
-    } else if (moved.how == Moved::How::Height) {
+    } else if (kHow == Moved::How::Height) {
         changed = {{"y", kPlaced(pose["y"], moved.y)}};
         done = "raised by dragging";
         ++raised_;

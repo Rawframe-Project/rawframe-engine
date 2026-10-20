@@ -266,6 +266,7 @@ private:
     void showRight(bool sceneSettings);
     void showNothingChosen();
     void showViewportNote();
+    void scaleDragged(const Moved& moved, std::map<std::string, double, std::less<>>& pose);
     void showAxes();
     [[nodiscard]] bool commandOn(std::string_view name) const;
     [[nodiscard]] std::vector<std::string> partCommands() const;
