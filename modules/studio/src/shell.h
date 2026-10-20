@@ -804,6 +804,11 @@ private:
     bool pressClip(ui::Node node);
     void runClip(double seconds);
     void showUiPreview(const Value& document);
+    /// What a UI node's text, font, image, or style identity names (D941):
+    /// a label's message from its strings table, an asset's file, a class's
+    /// name; and a label's message alone, its arguments as `{name}`.
+    [[nodiscard]] std::string uiNamed(std::string_view member, std::string_view value);
+    [[nodiscard]] std::string labelMessage(std::uint64_t label);
     void showSheetPreview(const Value& sheet);
     void markUiPreview();
     void forgetUiPreview();

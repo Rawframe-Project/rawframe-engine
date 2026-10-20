@@ -327,6 +327,18 @@ void ShellParticipant::showNode(std::size_t at) {
                 return;
             }
             componentRows_.push_back(line->first);
+            // What an identity names, under its field (D941).
+            if (const std::string kNamed = held != nullptr && (kMember == "text" || kMember == "font" ||
+                                                               kMember == "image" || kMember == "style")
+                                               ? uiNamed(kMember, partText(*held))
+                                               : std::string{};
+                !kNamed.empty()) {
+                if (auto named = box(componentsColumn_, ui::Layout{.shrink = 0, .padding = {136, 10, 0, 4}}, 0);
+                    named.has_value()) {
+                    componentRows_.push_back(*named);
+                    static_cast<void>(words(*named, kNamed, look::kSoftInk, look::kSmallSize));
+                }
+            }
             fields_.push_back(
                 FieldRow{.value = line->second, .role = FieldRow::Role::NodeField, .field = std::string{kMember}});
         }

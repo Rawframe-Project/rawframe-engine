@@ -2,6 +2,7 @@
 #include "rawframe/ui/styles.h"
 #include "shell.h"
 
+#include <charconv>
 #include <map>
 
 namespace rawframe::studio {
@@ -15,7 +16,82 @@ constexpr float kScreenHeight = 540;
 constexpr std::uint32_t kScreenFill = 0x101216FFU;
 constexpr float kFrame = 2;
 
+/// `value` as the 16 hexadecimal digits a document writes an identity in.
+std::optional<std::uint64_t> hexIdOf(std::string_view value) {
+    std::uint64_t made = 0;
+    const auto [kStop, kError] = std::from_chars(value.data(), value.data() + value.size(), made, 16);
+    if (kError != std::errc{} || kStop != value.data() + value.size() || made == 0) {
+        return std::nullopt;
+    }
+    return made;
+}
+
 } // namespace
+
+std::string ShellParticipant::labelMessage(std::uint64_t label) {
+    const auto kAsset = std::ranges::find_if(assets_, [label](const Asset& each) {
+        return each.kind == "label" && each.id == label;
+    });
+    const std::size_t kSlash = kAsset != assets_.end() ? kAsset->name.find('/') : std::string::npos;
+    if (kSlash == std::string::npos) {
+        return {};
+    }
+    const std::optional<Value> kRead = read(kAsset->name.substr(0, kSlash), "data.read");
+    const Value* kData = kRead.has_value() ? kRead->find("data") : nullptr;
+    const Value* kEntries = kData != nullptr ? kData->find("entries") : nullptr;
+    const Value* kEntry = kEntries != nullptr ? kEntries->find(kAsset->name.substr(kSlash + 1)) : nullptr;
+    const Value* kMessage = kEntry != nullptr ? kEntry->find("message") : nullptr;
+    if (kMessage == nullptr || kMessage->text() == nullptr) {
+        return {};
+    }
+    // `{$coins :integer}` said as `{coins}`.
+    std::string made;
+    const std::string& kWritten = *kMessage->text();
+    for (std::size_t at = 0; at < kWritten.size(); ++at) {
+        if (kWritten.compare(at, 2, "{$") == 0) {
+            const std::size_t kEnd = kWritten.find('}', at);
+            const std::size_t kName = kWritten.find_first_of(" }", at + 2);
+            if (kEnd != std::string::npos && kName != std::string::npos) {
+                made += "{" + kWritten.substr(at + 2, kName - at - 2) + "}";
+                at = kEnd;
+                continue;
+            }
+        }
+        made += kWritten[at];
+    }
+    return made;
+}
+
+std::string ShellParticipant::uiNamed(std::string_view member, std::string_view value) {
+    const std::optional<std::uint64_t> kId = hexIdOf(value);
+    if (!kId.has_value()) {
+        return {};
+    }
+    if (member == "style") {
+        const auto kSheetAt = std::ranges::find(listed_, Listed::Sheet);
+        const std::optional<Value> kSheetRead =
+            kSheetAt != listed_.end()
+                ? read(scenes_[static_cast<std::size_t>(kSheetAt - listed_.begin())], "styles.read_sheet")
+                : std::nullopt;
+        const Value* kSheet = kSheetRead.has_value() ? kSheetRead->find("sheet") : nullptr;
+        const Value* kStyles = kSheet != nullptr ? kSheet->find("styles") : nullptr;
+        for (const Value& kStyle : kStyles != nullptr ? kStyles->items() : std::span<const Value>{}) {
+            const Value* kStyleId = kStyle.find("styleId");
+            const Value* kName = kStyle.find("name");
+            if (kStyleId != nullptr && kStyleId->text() != nullptr && *kStyleId->text() == value && kName != nullptr &&
+                kName->text() != nullptr) {
+                return "." + *kName->text();
+            }
+        }
+        return {};
+    }
+    if (member == "text") {
+        const std::string kMessage = labelMessage(*kId);
+        return kMessage.empty() ? std::string{} : "\"" + kMessage + "\"";
+    }
+    const auto kAsset = std::ranges::find(assets_, *kId, &Asset::id);
+    return kAsset != assets_.end() ? kAsset->name : std::string{};
+}
 
 void ShellParticipant::showUiPreview(const Value& document) {
     clear(viewRows_);
@@ -48,11 +124,14 @@ void ShellParticipant::showUiPreview(const Value& document) {
             }
         }
     }
-    auto pane = box(
-        centerColumn_,
-        ui::Layout{
-            .height = ui::pixels(0), .minHeight = ui::pixels(240), .grow = 1, .shrink = 0, .scroll = ui::Scroll::Both},
-        kBackground);
+    auto pane = box(centerColumn_,
+                    ui::Layout{.height = ui::pixels(0),
+                               .minHeight = ui::pixels(240),
+                               .direction = ui::Direction::Column,
+                               .grow = 1,
+                               .shrink = 0,
+                               .scroll = ui::Scroll::Both},
+                    0x0D0E11FFU);
     if (!pane.has_value()) {
         return;
     }
@@ -64,10 +143,27 @@ void ShellParticipant::showUiPreview(const Value& document) {
                                  .direction = ui::Direction::Column,
                                  .alignItems = ui::Align::Start,
                                  .shrink = 0,
-                                 .margin = {16, 16, 16, 16}},
+                                 .margin = {16, 16, 24, 8},
+                                 .border = {1, 1, 1, 1}},
                       kScreenFill);
     if (!screen.has_value()) {
         return;
+    }
+    // As the design's UI screen (D941): the screen raised over the pane,
+    // and what draws it said under it.
+    static_cast<void>(tree_->setLook(*screen,
+                                     ui::Look{.fill = kScreenFill,
+                                              .borderColor = look::kRaisedEdge,
+                                              .radius = 4,
+                                              .outerShadow = {.color = 0x00000080U, .y = 6, .blur = 20}}));
+    if (auto said = box(*pane, ui::Layout{.shrink = 0, .margin = {16, 16, 0, 16}}, 0); said.has_value()) {
+        static_cast<void>(
+            words(*said,
+                  "Laid out as the game's UI tree lays it out, " + std::to_string(static_cast<int>(kScreenWidth)) +
+                      " by " + std::to_string(static_cast<int>(kScreenHeight)) +
+                      (held_.previewStyles.empty() ? std::string{} : ", its style sheet's classes applied"),
+                  look::kFaintInk,
+                  look::kSmallSize));
     }
     // Each node a box inside its parent's, laid out and looking as the
     // game's tree would make it from its fields (ui::layoutOf, lookOf),
@@ -97,7 +193,14 @@ void ShellParticipant::showUiPreview(const Value& document) {
         if (kNode.fields.text != 0 || !kNode.shows.empty()) {
             const float kSize = kNode.fields.textSize > 0 ? kNode.fields.textSize : 14;
             const std::uint32_t kColor = kNode.fields.textColor != 0 ? kNode.fields.textColor : kText;
-            static_cast<void>(words(*node, kNode.shows.empty() ? kNode.component : kNode.shows, kColor, kSize));
+            // Its label's message where the game's strings say one (D941).
+            const std::string kMessage = kNode.fields.text != 0 ? labelMessage(kNode.fields.text) : std::string{};
+            static_cast<void>(words(*node,
+                                    !kNode.shows.empty() ? kNode.shows
+                                    : !kMessage.empty()  ? kMessage
+                                                         : kNode.component,
+                                    kColor,
+                                    kSize));
         }
         laid += kLaidOut.has_value() ? 1 : 0;
         // Named and pressed as its row: the node's component.
