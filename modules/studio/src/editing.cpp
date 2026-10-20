@@ -191,6 +191,10 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         }
     } else if (broken_.has_value()) {
         return;
+    } else if (const auto kHeading =
+                   std::ranges::find(held_.settingsHeadings, node, &std::pair<ui::Node, std::size_t>::first);
+               kHeading != held_.settingsHeadings.end() && kHeading->second < entityRows_.size()) {
+        showSettingsGroup(kHeading->second);
     } else if (const auto kEmpty = std::ranges::find(held_.emptyButtons, node, &std::pair<ui::Node, std::string>::first);
                kEmpty != held_.emptyButtons.end()) {
         const std::string kCommand = kEmpty->second;

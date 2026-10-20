@@ -40,6 +40,14 @@ void ShellParticipant::showModes() {
     if (held_.modePalette == ui::Node{} || !gameOpen()) {
         return;
     }
+    // Over a scene's viewport only: a document with no viewport has no
+    // modes (D922).
+    if (documentChosen() && !scene_.empty()) {
+        if (tree_->contains(held_.modePalette)) {
+            static_cast<void>(tree_->detach(held_.modePalette));
+        }
+        return;
+    }
     // The mode in use: an extension's while it is on, a content mode while
     // its document is chosen, else Transform.
     std::string active{kTransform};

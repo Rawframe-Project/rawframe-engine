@@ -290,6 +290,8 @@ struct EditorsHeld {
     ui::Node viewportNote{};
     std::string viewportNoteText;
     bool editStopped = false;
+    /// The settings page's section headings, each its section (D922).
+    std::vector<std::pair<ui::Node, std::size_t>> settingsHeadings;
     /// The Inspector's empty state's buttons, each its New command (D922).
     std::vector<std::pair<ui::Node, std::string>> emptyButtons;
     /// Whether the right dock shows the Scene settings tab (D921).
