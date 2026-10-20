@@ -195,6 +195,16 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
                    std::ranges::find(held_.settingsHeadings, node, &std::pair<ui::Node, std::size_t>::first);
                kHeading != held_.settingsHeadings.end() && kHeading->second < entityRows_.size()) {
         showSettingsGroup(kHeading->second);
+    } else if (const auto kStart =
+                   std::ranges::find(held_.sceneStartButtons, node, &std::pair<ui::Node, std::string>::first);
+               kStart != held_.sceneStartButtons.end()) {
+        // An empty scene's first steps (D923).
+        const std::string kCommand = kStart->second;
+        if (kCommand == "Import") {
+            importAsked();
+        } else {
+            createPart(kCommand);
+        }
     } else if (const auto kEmpty =
                    std::ranges::find(held_.emptyButtons, node, &std::pair<ui::Node, std::string>::first);
                kEmpty != held_.emptyButtons.end()) {
@@ -997,7 +1007,13 @@ void ShellParticipant::createPart(std::string_view command) {
             kSet(*kLamp, "color", kWhole(0xFFE2B8FFU));
         }
     }
+    // The first thing in a scene framed at once, where the view stood far
+    // off over nothing (D923).
+    const bool kFirst = entities_.empty();
     commitAll(std::move(operations), std::string{kPart->name} + " made", kIdentity);
+    if (kFirst && !entity_.empty()) {
+        frameChosen();
+    }
 }
 
 void ShellParticipant::openEditor(const Diagnostic& at) {

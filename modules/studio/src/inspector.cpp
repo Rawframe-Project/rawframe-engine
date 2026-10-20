@@ -266,11 +266,8 @@ result::Status ShellParticipant::vectorRow(const std::string& component,
 void ShellParticipant::asCheckbox(ui::Node value, bool on) {
     // A truth as the design's box (D916): checked, the accent with its
     // mark; its words kept, unseen, as the value read and toggled.
-    static_cast<void>(tree_->setLayout(value,
-                                       ui::Layout{.width = ui::pixels(16),
-                                                  .height = ui::pixels(16),
-                                                  .shrink = 0,
-                                                  .border = {1, 1, 1, 1}}));
+    static_cast<void>(tree_->setLayout(
+        value, ui::Layout{.width = ui::pixels(16), .height = ui::pixels(16), .shrink = 0, .border = {1, 1, 1, 1}}));
     static_cast<void>(tree_->setLook(value,
                                      ui::Look{.fill = on ? look::kAccent : look::kWellFill,
                                               .borderColor = on ? look::kAccent : look::kRaisedEdge,
@@ -325,7 +322,8 @@ void ShellParticipant::showNothingChosen() {
         static_cast<void>(strongWords(*title, "Nothing chosen", look::kInk, 14));
     }
     if (auto what = box(*made, ui::Layout{.shrink = 0}, 0); what.has_value()) {
-        static_cast<void>(words(*what, "Choose an entity in the Hierarchy or the viewport,", look::kLabelInk, look::kLabelSize));
+        static_cast<void>(wrappedWords(
+            *what, "Choose an entity in the Hierarchy or the viewport,", look::kLabelInk, look::kLabelSize));
     }
     if (auto what = box(*made, ui::Layout{.shrink = 0}, 0); what.has_value()) {
         static_cast<void>(words(*what, "or make one:", look::kLabelInk, look::kLabelSize));
@@ -334,7 +332,8 @@ void ShellParticipant::showNothingChosen() {
         buttons.has_value()) {
         held_.emptyButtons.clear();
         for (const std::string& kCommand : partCommands()) {
-            if (kCommand != "New cube" && kCommand != "New sphere" && kCommand != "New lamp" && kCommand != "New empty") {
+            if (kCommand != "New cube" && kCommand != "New sphere" && kCommand != "New lamp" &&
+                kCommand != "New empty") {
                 continue;
             }
             std::string label = kCommand.substr(4);

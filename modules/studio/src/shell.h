@@ -193,6 +193,8 @@ private:
 
     /// Words on `node`, in Studio's font.
     result::Status words(ui::Node node, std::string_view text, std::uint32_t color, float size = 15);
+    /// Words that wrap to their node's width, for a sentence or two.
+    result::Status wrappedWords(ui::Node node, std::string_view text, std::uint32_t color, float size = 15);
 
     /// A column under `parent` headed `heading`, its row's width or `width`.
     result::Result<ui::Node> column(ui::Node parent, std::string_view heading, float width = 0);
@@ -268,6 +270,7 @@ private:
     void showRight(bool sceneSettings);
     void showNothingChosen();
     void showViewportNote();
+    void showEmptyScene();
     void showSettingsPage(const std::vector<std::string>& sections);
     void scaleDragged(const Moved& moved, std::map<std::string, double, std::less<>>& pose);
     void showAxes();

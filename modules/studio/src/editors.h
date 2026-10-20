@@ -299,6 +299,8 @@ struct EditorsHeld {
     std::vector<std::pair<ui::Node, std::size_t>> settingsHeadings;
     /// The Inspector's empty state's buttons, each its New command (D922).
     std::vector<std::pair<ui::Node, std::string>> emptyButtons;
+    /// The empty scene's first steps over the viewport (D923).
+    std::vector<std::pair<ui::Node, std::string>> sceneStartButtons;
     /// Whether the right dock shows the Scene settings tab (D921).
     bool sceneSettingsShown = false;
     /// The Hierarchy's plus, which opens the New menu (D917).

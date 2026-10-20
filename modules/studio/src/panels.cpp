@@ -23,6 +23,10 @@ result::Status ShellParticipant::words(ui::Node node, std::string_view text, std
     return tree_->setText(node, text, ui::TextLook{.font = font_, .size = size, .color = color, .wrap = false});
 }
 
+result::Status ShellParticipant::wrappedWords(ui::Node node, std::string_view text, std::uint32_t color, float size) {
+    return tree_->setText(node, text, ui::TextLook{.font = font_, .size = size, .color = color, .wrap = true});
+}
+
 result::Status ShellParticipant::strongWords(ui::Node node, std::string_view text, std::uint32_t color, float size) {
     return tree_->setText(node, text, ui::TextLook{.font = strongFont_, .size = size, .color = color, .wrap = false});
 }
@@ -509,12 +513,12 @@ result::Status ShellParticipant::showBroken(ui::Node body) {
     RAWFRAME_TRY(strongWords(kHeading, description_.stem().string() + " could not be read", look::kInk, 22));
     RAWFRAME_TRY_ASSIGN(const ui::Node kWhy, box(kColumn, ui::Layout{.shrink = 0}, 0));
     RAWFRAME_TRY(
-        words(kWhy,
-              *broken_ + (diagnostic_.has_value()
-                              ? ". Fix it in your editor; Studio reads the game again when you press Read again."
-                              : "."),
-              look::kSoftInk,
-              look::kBodySize));
+        wrappedWords(kWhy,
+                     *broken_ + (diagnostic_.has_value()
+                                     ? ". Fix it in your editor; Studio reads the game again when you press Read again."
+                                     : "."),
+                     look::kSoftInk,
+                     look::kBodySize));
     if (diagnostic_.has_value()) {
         RAWFRAME_TRY_ASSIGN(
             const ui::Node kCard,
@@ -545,8 +549,11 @@ result::Status ShellParticipant::showBroken(ui::Node body) {
         // The lines around it, from the game's own file, the one it names
         // lit.
         if (diagnostic_->file.starts_with("game/") && diagnostic_->line > 0) {
+            // Only one of the game's own files: a diagnostic names its file,
+            // and a hostile game could name one outside it.
+            const std::optional<std::filesystem::path> kNamed = gameFile(description_.parent_path(), diagnostic_->file);
             const std::optional<std::string> kFileText =
-                authoring_session::readFile((description_.parent_path() / kFile).string());
+                kNamed.has_value() ? authoring_session::readFile(*kNamed) : std::nullopt;
             if (kFileText.has_value()) {
                 std::vector<std::string_view> lines;
                 for (std::size_t start = 0; start <= kFileText->size();) {
@@ -871,6 +878,14 @@ void ShellParticipant::showScene(std::size_t at) {
         removed_.push_back(kRemoved);
         const Value* place = each.find("place");
         places_.push_back(place != nullptr ? place->integer() : std::nullopt);
+    }
+    // An empty scene says so, as the design's (D923).
+    if (lines.empty()) {
+        if (auto note = box(entitiesColumn_, ui::Layout{.shrink = 0, .padding = {12, 12, 8, 8}}, 0); note.has_value()) {
+            sceneFieldRows_.push_back(*note);
+            static_cast<void>(wrappedWords(
+                *note, "Nothing here yet. New entities show up in this list.", look::kFaintInk, look::kLabelSize));
+        }
     }
     // The Layers count what the scene has now, and the environment says
     // what holds its light.

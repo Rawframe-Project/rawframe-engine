@@ -197,12 +197,13 @@ void ShellParticipant::showConsole() {
     if (passing.empty()) {
         auto none = box(consoleList_, ui::Layout{.shrink = 0, .padding = {14, 14, 12, 12}}, 0);
         if (none.has_value()) {
-            static_cast<void>(words(*none,
-                                    console_.empty() ? "Nothing said yet. Lines from Studio, and from the server and "
-                                                       "the client while the game plays, show here."
-                                                     : "No line passes the filters.",
-                                    look::kFaintInk,
-                                    look::kBodySize));
+            static_cast<void>(wrappedWords(*none,
+                                           console_.empty()
+                                               ? "Nothing said yet. Lines from Studio, and from the server and "
+                                                 "the client while the game plays, show here."
+                                               : "No line passes the filters.",
+                                           look::kFaintInk,
+                                           look::kBodySize));
             consoleRows_.emplace_back(*none, console_.size());
         }
         return;

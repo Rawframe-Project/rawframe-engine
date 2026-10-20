@@ -340,6 +340,11 @@ void ShellParticipant::showViewportNote() {
                : scene_.empty() ? "This game makes its world in Kest. Press Play to run it here."
                                 : "";
     }
+    // An empty scene's first steps, over its view (D923).
+    if (note.empty() && tree_->contains(viewport_) && chosen(Listed::Scene) && entities_.empty() && !live_.on &&
+        !(playing_.has_value() && !playing_->edited())) {
+        note = "empty";
+    }
     if (note == held_.viewportNoteText && (note.empty() || tree_->contains(held_.viewportNote))) {
         return;
     }
@@ -349,6 +354,10 @@ void ShellParticipant::showViewportNote() {
     }
     held_.viewportNote = ui::Node{};
     if (note.empty()) {
+        return;
+    }
+    if (note == "empty") {
+        showEmptyScene();
         return;
     }
     auto made = box(
@@ -369,6 +378,51 @@ void ShellParticipant::showViewportNote() {
     static_cast<void>(icon(*made, cooking_.has_value() ? Icon::Cook : Icon::Play, look::kLabelInk, 14));
     if (auto said = box(*made, ui::Layout{.shrink = 0}, 0); said.has_value()) {
         static_cast<void>(words(*said, note, look::kSoftInk, look::kBodySize));
+    }
+}
+
+void ShellParticipant::showEmptyScene() {
+    auto made = box(
+        centerColumn_,
+        ui::Layout{
+            .width = ui::pixels(300),
+            .direction = ui::Direction::Column,
+            .gap = 4,
+            .padding = {14, 14, 12, 12},
+            .border = {1, 1, 1, 1},
+            .placement = {.absolute = true, .x = ui::share(0.5), .y = ui::share(0.45), .anchorX = 0.5, .anchorY = 0.5}},
+        0);
+    if (!made.has_value()) {
+        return;
+    }
+    held_.viewportNote = *made;
+    viewRows_.push_back(*made);
+    static_cast<void>(tree_->setLook(*made, ui::Look{.fill = 0x121317F0U, .borderColor = look::kEdge, .radius = 8}));
+    if (auto title = box(*made, ui::Layout{.shrink = 0, .padding = {0, 0, 0, 6}}, 0); title.has_value()) {
+        static_cast<void>(strongWords(*title, "An empty scene", look::kInk, 15));
+    }
+    held_.sceneStartButtons.clear();
+    const std::vector<std::string> kParts = partCommands();
+    for (const auto& [kCommand, kLabel, kWhich] :
+         {std::tuple<std::string_view, std::string_view, Icon>{"New cube", "Add a cube", Icon::Plus},
+          std::tuple<std::string_view, std::string_view, Icon>{"New lamp", "Add a lamp", Icon::Bulb},
+          std::tuple<std::string_view, std::string_view, Icon>{"New empty", "Add an empty entity", Icon::Cube}}) {
+        if (!std::ranges::contains(kParts, std::string{kCommand})) {
+            continue;
+        }
+        if (auto button = textButton(*made, kWhich, kLabel, ButtonKind::Quiet); button.has_value()) {
+            held_.sceneStartButtons.emplace_back(*button, std::string{kCommand});
+        }
+    }
+    if (auto button = textButton(*made, Icon::Folder, "Import an asset", ButtonKind::Quiet); button.has_value()) {
+        held_.sceneStartButtons.emplace_back(*button, std::string{"Import"});
+    }
+    if (auto said = box(*made, ui::Layout{.shrink = 0, .padding = {0, 0, 8, 0}}, 0); said.has_value()) {
+        static_cast<void>(wrappedWords(*said,
+                                       "Or write " + std::filesystem::path{scene_}.filename().string() +
+                                           " in your editor; Studio shows it when you save.",
+                                       look::kFaintInk,
+                                       look::kLabelSize));
     }
 }
 
@@ -402,7 +456,7 @@ void ShellParticipant::forwardInput() {
     // Studio's own controls over it keep their presses, and while it is
     // edited the keys are Studio's but while a press there flies (D916).
     std::vector<std::array<float, 4>> holes;
-    std::vector<ui::Node> over{held_.modePalette, held_.axisGizmo};
+    std::vector<ui::Node> over{held_.modePalette, held_.axisGizmo, held_.viewportNote};
     for (const auto& [kPill, kMenu] : held_.viewPills) {
         over.push_back(kPill);
     }
