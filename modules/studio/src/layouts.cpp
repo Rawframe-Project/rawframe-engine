@@ -26,7 +26,7 @@ std::string_view ShellParticipant::tabOf(Dock pane) {
                                                        bottom("History"),
                                                        bottom("Console"),
                                                        bottom("Network"),
-                                                       bottom("Environment"),
+                                                       placed("Environment", SurfaceKind::Panel, "Right"),
                                                        bottom("Profiler"),
                                                        bottom("Frame"),
                                                        bottom("Changes"),

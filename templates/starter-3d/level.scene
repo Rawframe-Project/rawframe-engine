@@ -5,11 +5,38 @@
     "rawframe.physics3d.body": "333aeeed8b31cb31",
     "rawframe.physics3d.pose": "4c7ea4a8be350db8",
     "rawframe.physics3d.velocity": "26f3f6625f0df9ec",
+    "starter.daylight": "5824b2f93bfb68b6",
     "starter.ground": "680baa2755a44d15",
     "starter.lamp": "b6595e9ad55fdfdf",
-    "starter.paint": "a30c777b9587547c"
+    "starter.paint": "a30c777b9587547c",
+    "starter.skylight": "94fd72043820ec29"
   },
   "entities": [
+    {
+      "id": "daadd58c-6be5-4635-a9f0-dafcb7584153",
+      "name": "sun",
+      "components": {
+        "starter.daylight": {
+          "angle": 0.0093,
+          "color": 4294240511,
+          "directionX": 0.35,
+          "directionY": -0.8,
+          "directionZ": -0.45,
+          "illuminance": 1e+05
+        }
+      }
+    },
+    {
+      "id": "12d86407-91f4-4b01-a6ca-1d8f79284c35",
+      "name": "sky",
+      "components": {
+        "starter.skylight": {
+          "color": 2142302463,
+          "ground": 2088533247,
+          "luminance": 8000
+        }
+      }
+    },
     {
       "id": "8ee96339-f4d6-4dfe-8588-ded8f09fb6c6",
       "name": "ground",

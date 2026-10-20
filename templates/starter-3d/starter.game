@@ -20,12 +20,16 @@ replicate starter.mover starter.ground
 
 # The scene's parts (D917): each body drawn as its shape, painted where it
 # has paint, and each lamp a light with a bulb; what an editor's New menu
-# makes, and every part kept with the World.
+# makes, and every part kept with the World. The scene keeps its sun and
+# sky too, which an editor's Scene settings show; a lamp's light, the sun,
+# and the sky are drawn as the scene sets them, sent as they are.
 component 8ebaeb28-62b2-4f1a-abd5-ee2173192aee starter.paint Paint
 field starter.paint color color
 field starter.paint material asset material
 component 66dfed30-3111-4e4c-b18d-4001a325727f starter.lamp rawframe.model.PointLight
-replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity starter.paint starter.lamp
+component 09afbd87-0164-426f-b817-aa67e2873d56 starter.daylight rawframe.model.Sun
+component 0d65e7c8-09d4-4b4e-85f9-82b28ea86d74 starter.skylight rawframe.model.Sky
+replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity starter.paint starter.lamp starter.daylight starter.skylight
 
 # Each player is given a box, moved by its stick, which a client makes from
 # its player's actions (starter.actions) with sample.kest.
@@ -46,14 +50,6 @@ present starter.frame frame write starter.view
 component d1a72614-5f24-4d4e-9fac-bcd94a181654 starter.part rawframe.model.Model
 presentation starter.part on rawframe.physics3d.body
 present starter.paint_part dressPart read rawframe.physics3d.body write starter.part entities lookup starter.paint
-component f54bfe93-3cc1-4bf8-8c5f-5a03b8b45654 starter.light rawframe.model.PointLight
 component 85c058b7-5b63-4469-94db-4e69227a2a70 starter.bulb rawframe.model.Model
-presentation starter.light starter.bulb on starter.lamp
-present starter.shine shine read starter.lamp write starter.light
+presentation starter.bulb on starter.lamp
 present starter.light_bulb bulb read starter.lamp write starter.bulb
-component b8e03315-9a4a-4a90-8a5b-0ff0245aec1a starter.sun rawframe.model.Sun
-presentation starter.sun on player
-present starter.daylight sun write starter.sun
-component b4abbb7b-1744-4505-bb92-59a7a0eccda7 starter.sky rawframe.model.Sky
-presentation starter.sky on player
-present starter.clear_sky sky write starter.sky

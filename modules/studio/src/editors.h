@@ -285,6 +285,8 @@ struct EditorsHeld {
     ui::Node axisGizmo{};
     std::array<ui::Node, 3> axisEnds{};
     ui::Node flyHint{};
+    /// Whether the right dock shows the Scene settings tab (D921).
+    bool sceneSettingsShown = false;
     /// The Hierarchy's plus, which opens the New menu (D917).
     ui::Node newMenu{};
     /// Whether the view was last turned to 2D.

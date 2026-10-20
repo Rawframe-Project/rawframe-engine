@@ -263,6 +263,7 @@ private:
     void asCheckbox(ui::Node value, bool on);
     void asChooser(ui::Node line);
     void showViewBar();
+    void showRight(bool sceneSettings);
     void showAxes();
     [[nodiscard]] bool commandOn(std::string_view name) const;
     [[nodiscard]] std::vector<std::string> partCommands() const;

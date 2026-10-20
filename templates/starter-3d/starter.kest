@@ -87,6 +87,15 @@ fn dress(count: i32, movers: [Mover], looks: [model.Model], spots: [model.Placed
     }
 }
 
+// The eye above the ground's near edge, looking along -Z and down at it.
+fn frame(count: i32, views: [model.Camera]) {
+    let i = 0
+    while i < count {
+        views[i] = model.Camera(0.0, 12.0, 14.0, 0.0, -0.7, 1.0, 0.1, 15.0, u32(0), model.FIXED)
+        i = i + 1
+    }
+}
+
 // Each part drawn as its body's shape, its size the body's, in its paint.
 fn dressPart(count: i32, bodies: [physics3d.Body3D], looks: [model.Model], entities: [world.Entity]) {
     let i = 0
@@ -112,15 +121,7 @@ fn dressPart(count: i32, bodies: [physics3d.Body3D], looks: [model.Model], entit
     }
 }
 
-// Each lamp's light as the scene sets it, and a small bulb where it hangs.
-fn shine(count: i32, lamps: [model.PointLight], lights: [model.PointLight]) {
-    let i = 0
-    while i < count {
-        lights[i] = lamps[i]
-        i = i + 1
-    }
-}
-
+// A small bulb where each lamp hangs, its light's color.
 fn bulb(count: i32, lamps: [model.PointLight], looks: [model.Model]) {
     let i = 0
     while i < count {
@@ -129,28 +130,9 @@ fn bulb(count: i32, lamps: [model.PointLight], looks: [model.Model]) {
     }
 }
 
-// The sun, high and a little behind the eye, and a clear day's sky.
-fn sun(count: i32, suns: [model.Sun]) {
-    let i = 0
-    while i < count {
-        suns[i] = model.Sun(0.35, -0.8, -0.45, 100000.0, model.kelvin(5600.0), 0.0093)
-        i = i + 1
-    }
-}
-
-fn sky(count: i32, skies: [model.Sky]) {
-    let i = 0
-    while i < count {
-        skies[i] = model.Sky(8000.0, 0x7fb0f0ff, 0x7c7c7cff, u64(0))
-        i = i + 1
-    }
-}
-
-// The eye above the ground's near edge, looking along -Z and down at it.
-fn frame(count: i32, views: [model.Camera]) {
-    let i = 0
-    while i < count {
-        views[i] = model.Camera(0.0, 12.0, 14.0, 0.0, -0.7, 1.0, 0.1, 15.0, u32(0), model.FIXED)
-        i = i + 1
-    }
+// The sun and the sky as the scene keeps them, which the renderer reads as
+// they are: named here so the program lays their types out for the scene
+// (a type no function names is not laid out).
+fn daylight(suns: [model.Sun], skies: [model.Sky]) -> i32 {
+    return 0
 }

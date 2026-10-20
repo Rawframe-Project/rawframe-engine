@@ -339,7 +339,6 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(historyTab_, tab(kDockTabs, kBottom("History")));
     RAWFRAME_TRY_ASSIGN(networkTab_, tab(kDockTabs, kBottom("Network")));
     RAWFRAME_TRY_ASSIGN(profilerTab_, tab(kDockTabs, kBottom("Profiler")));
-    RAWFRAME_TRY_ASSIGN(environmentTab_, tab(kDockTabs, kBottom("Environment")));
     RAWFRAME_TRY_ASSIGN(held_.frameTab, tab(kDockTabs, kBottom("Frame")));
     RAWFRAME_TRY_ASSIGN(held_.changesTab, tab(kDockTabs, kBottom("Changes")));
     RAWFRAME_TRY_ASSIGN(held_.panelsTab, tab(kDockTabs, kBottom("Extension panels")));
@@ -369,6 +368,10 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(const ui::Node kRightTabs, tabStrip(held_.rightDock));
     RAWFRAME_TRY_ASSIGN(held_.inspectorTab, tab(kRightTabs, "Inspector", true));
     RAWFRAME_TRY_ASSIGN(held_.sceneSettingsTab, tab(kRightTabs, "Scene settings"));
+    // The Environment panel is the Scene settings tab, as the design's
+    // (D921).
+    environmentTab_ = held_.sceneSettingsTab;
+    held_.sceneSettingsShown = false;
     RAWFRAME_TRY_ASSIGN(componentsColumn_,
                         dockColumn(held_.rightDock, placed("Inspector", SurfaceKind::Panel, "Right")));
     RAWFRAME_TRY(showMenus(kStart, held_.searchAt));
@@ -378,6 +381,11 @@ result::Status ShellParticipant::build() {
 }
 
 void ShellParticipant::showDock(Dock pane) {
+    // The Environment is the right dock's Scene settings (D921).
+    if (pane == Dock::Environment) {
+        showRight(true);
+        return;
+    }
     const auto kPaneOf = [this](Dock dock) {
         return dock == Dock::Assets        ? scenesColumn_
                : dock == Dock::History     ? historyColumn_
@@ -754,7 +762,7 @@ void ShellParticipant::showScene(std::size_t at) {
     if (leftShown_ == Left::World) {
         showWorld();
     }
-    if (dockShown_ == Dock::Environment) {
+    if (held_.sceneSettingsShown) {
         showEnvironment();
     }
 }
@@ -792,7 +800,28 @@ std::optional<Value> ShellParticipant::entitiesShown() {
     return found;
 }
 
+void ShellParticipant::showRight(bool sceneSettings) {
+    // The right dock's two tabs: the Inspector, or the scene's settings,
+    // the Environment panel (D921).
+    if (sceneSettings != held_.sceneSettingsShown && tree_->contains(held_.rightDock)) {
+        const ui::Node kOut = sceneSettings ? componentsColumn_ : held_.environmentColumn;
+        const ui::Node kIn = sceneSettings ? held_.environmentColumn : componentsColumn_;
+        static_cast<void>(tree_->detach(kOut));
+        static_cast<void>(tree_->attach(held_.rightDock, kIn));
+        held_.sceneSettingsShown = sceneSettings;
+    }
+    setTab(held_.inspectorTab, !sceneSettings);
+    setTab(held_.sceneSettingsTab, sceneSettings);
+    if (sceneSettings) {
+        showEnvironment();
+    }
+}
+
 void ShellParticipant::showEntity(std::size_t at) {
+    // What is chosen shows in the Inspector.
+    if (held_.sceneSettingsShown) {
+        showRight(false);
+    }
     if (chosen(Listed::Sheet)) {
         showClass(at);
         return;

@@ -7,6 +7,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
 #include <functional>
 #include <iterator>
 #include <random>
@@ -20,6 +21,16 @@ std::string shown(const Value& value) {
         const Value& kOnly = *value.find(value.names().front());
         if (kOnly.kind() == Value::Kind::String) {
             return *kOnly.text();
+        }
+        // A whole number written whole, as an author reads it (100000, not
+        // 1e+05; D921); the rest as JSON writes them, exact.
+        if (kOnly.kind() == Value::Kind::Number && kOnly.real().has_value()) {
+            const double kNumber = *kOnly.real();
+            if (kNumber == std::floor(kNumber) && std::abs(kNumber) < 1e15) {
+                char made[32];
+                std::snprintf(made, sizeof made, "%.0f", kNumber == 0 ? 0.0 : kNumber);
+                return made;
+            }
         }
         return document::writeCompact(kOnly);
     }
