@@ -1,0 +1,3 @@
+// An exported game's icon in Windows' Explorer and taskbar (D944): Rawframe's
+// mark, Studio's own file.
+1 ICON "../../../hosts/studio/resources/rawframe-studio.ico"

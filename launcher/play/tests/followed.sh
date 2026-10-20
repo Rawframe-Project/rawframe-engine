@@ -40,7 +40,7 @@ composition="$("$build" compose "$work/mirror" "$root" tool "$work/0.2.0.composi
 echo "followed: published $composition"
 
 play() {
-    "$out/rawframe-play" 2>"$work/play-$1.txt"
+    "$out/runners" 2>"$work/play-$1.txt"
     if grep -q '"device_unavailable"' "$out/client.log" && [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then
         echo "skip: no device"
         exit 0

@@ -34,7 +34,9 @@
 // beside this program unless `--tools` names their directory, or a
 // `--<tool> <path>` names one (`--cook`, `--build`, `--server`, `--client`,
 // `--play`). The output directory must not exist, or be empty. Running the
-// folder's `rawframe-play` plays the game; `export.receipt` lists what was
+// folder's launcher, named after the game's directory (`rawframe-play` where
+// that name is one of the other programs', D944), plays the game;
+// `export.receipt` lists what was
 // written, each file's SHA-256, the Build's root, and the Composition.
 //
 // The folder's library is installed as `rawframe-install` leaves one: its
@@ -112,6 +114,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -262,11 +265,63 @@ std::string bindingText(const rawframe::input::Binding& binding) {
            " (up, down, left, right)";
 }
 
+/// The launcher's name in an exported folder: the game's directory, as a
+/// player looks for it (`stalls.exe`), unless that is a name the folder's
+/// other programs have (D944).
+std::string launcherOf(const std::string& game) {
+    if (game.empty() || game == "rawframe-server" || game == "rawframe-client" || game == "rawframe-install") {
+        return "rawframe-play";
+    }
+    return game;
+}
+
+/// The C++ runtime's libraries the programs import on Windows, from beside
+/// this tool (where Studio's package keeps them) or else the system's
+/// directory; Microsoft lets an application carry them in its own folder
+/// (D944). None elsewhere, and none of a build that does not import them.
+std::vector<fs::path> runtimeFor(const fs::path& self) {
+    std::vector<fs::path> found;
+#if defined(_WIN32)
+    const char* system = std::getenv("SystemRoot");
+    for (const char* name : {"msvcp140.dll", "msvcp140_2.dll", "vcruntime140.dll", "vcruntime140_1.dll"}) {
+        std::error_code error;
+        if (fs::is_regular_file(self.parent_path() / name, error)) {
+            found.push_back(self.parent_path() / name);
+        } else if (system != nullptr && fs::is_regular_file(fs::path{system} / "System32" / name, error)) {
+            found.push_back(fs::path{system} / "System32" / name);
+        }
+    }
+#else
+    static_cast<void>(self);
+#endif
+    return found;
+}
+
+/// The game's name in its subject, as `content::validSubject` reads one:
+/// its directory's name in lower case, each run of anything but a letter or
+/// a digit one `-`, none at either end, and `game` where nothing is left; a
+/// game made in Studio is `my_game` (D944).
+std::string subjectNameOf(std::string_view game) {
+    std::string name;
+    for (const char kEach : game) {
+        const char kLower = kEach >= 'A' && kEach <= 'Z' ? static_cast<char>(kEach - 'A' + 'a') : kEach;
+        if ((kLower >= 'a' && kLower <= 'z') || (kLower >= '0' && kLower <= '9')) {
+            name += kLower;
+        } else if (!name.empty() && name.back() != '-') {
+            name += '-';
+        }
+    }
+    while (!name.empty() && name.back() == '-') {
+        name.pop_back();
+    }
+    return name.empty() ? std::string{"game"} : name;
+}
+
 /// What a player of the exported game reads first: how to start it, and
 /// each action of the game's `actions` file with its default bindings.
 std::string
-howToPlay(const std::filesystem::path& game, const std::string& gameFile, const std::string& suffix, bool headset) {
-    std::string text = "To play, run rawframe-play" + suffix +
+howToPlay(const std::filesystem::path& game, const std::string& gameFile, const std::string& launcher, bool headset) {
+    std::string text = "To play, run " + launcher +
                        " in this folder: it starts the game's server, then the game in a window.\n"
                        "Closing the window ends both. The server's and the game's records are\n"
                        "written beside them, in server.log and client.log. F11, or Alt and Enter,\n"
@@ -542,6 +597,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     const std::string kName = kGame.filename().string();
+    const std::string kSubject = publisher + "/" + subjectNameOf(kName);
     const auto kSidecar = readText(kGame / (gameFile + ".rfmeta"));
     const auto kResource = kSidecar ? resourceOf(*kSidecar) : std::nullopt;
     if (!kResource.has_value()) {
@@ -595,7 +651,7 @@ int main(int argc, char** argv) {
     const auto kBuilt = runTool(kTool("build"),
                                 {(kWork / "cooked").string(),
                                  (kWork / "build").string(),
-                                 publisher + "/" + kName,
+                                 kSubject,
                                  version,
                                  std::string{kWeb       ? "web"
                                              : kAndroid ? "android"
@@ -641,13 +697,15 @@ int main(int argc, char** argv) {
     // The programs, and what each reads: every path under the folder.
     const Exported kExported{.output = kOutput,
                              .record = kRecord,
-                             .subject = publisher + "/" + kName,
+                             .subject = kSubject,
                              .follow = follow,
                              .channel = channel,
                              .gameResource = kGameResource,
                              .port = *port,
                              .title = title,
                              .suffix = kSuffix,
+                             .launcher = launcherOf(kName),
+                             .runtime = runtimeFor(kSelf),
                              .headset = headset.value_or(false)};
     std::vector<std::string> written = std::move(installed);
     const bool kWritten =
@@ -718,7 +776,8 @@ int main(int argc, char** argv) {
     }
     // How to play it, for a native folder's player.
     if (target == Target::Native) {
-        if (!writeText(kOutput / "README.txt", howToPlay(kGame, gameFile, kSuffix, headset.value_or(false)))) {
+        if (!writeText(kOutput / "README.txt",
+                       howToPlay(kGame, gameFile, kExported.launcher + kSuffix, headset.value_or(false)))) {
             std::fputs("rawframe-export: README.txt cannot be written\n", stderr);
             return 1;
         }

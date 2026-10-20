@@ -44,6 +44,10 @@
 //
 // It ends with the client's exit code, or 1 when the server did not listen
 // or ended first, or 2 for a configuration it cannot read.
+//
+// On Windows it is a windowed program, so a player starting it sees no
+// console; started so, with no standard error, its own lines go to
+// `play.log` beside it (D944).
 
 #include "rawframe/composition/configuration.h"
 #include "rawframe/process/child.h"
@@ -53,7 +57,9 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -93,11 +99,23 @@ BOOL WINAPI askStopOnEvent(DWORD event) {
         return FALSE;
     }
 }
+
+VOID CALLBACK askStopOnEventSet(PVOID, BOOLEAN) {
+    askStop(0);
+}
 #endif
 
 void bridgeStops() {
 #if defined(_WIN32)
     ::SetConsoleCtrlHandler(&askStopOnEvent, TRUE);
+    // Started by Studio or another launcher, it is asked by the event it
+    // inherited (D944).
+    if (const char* event = std::getenv(process::kStopVariable); event != nullptr) {
+        auto* held = reinterpret_cast<HANDLE>(static_cast<std::uintptr_t>(std::strtoull(event, nullptr, 10)));
+        HANDLE wait = nullptr;
+        static_cast<void>(
+            ::RegisterWaitForSingleObject(&wait, held, &askStopOnEventSet, nullptr, INFINITE, WT_EXECUTEONLYONCE));
+    }
 #else
     std::signal(SIGINT, &askStop);
     std::signal(SIGTERM, &askStop);
@@ -228,6 +246,16 @@ bool followed(const Follow& follow, std::chrono::milliseconds grace) {
 } // namespace
 
 int main(int argc, char** argv) {
+#if defined(_WIN32)
+    if (HANDLE standardError = ::GetStdHandle(STD_ERROR_HANDLE); standardError == nullptr ||
+                                                                 standardError == INVALID_HANDLE_VALUE ||
+                                                                 ::GetFileType(standardError) == FILE_TYPE_UNKNOWN) {
+        std::error_code beside;
+        const std::filesystem::path kLog =
+            std::filesystem::canonical(process::ownExecutable(), beside).parent_path() / "play.log";
+        static_cast<void>(std::freopen(kLog.string().c_str(), "w", stderr));
+    }
+#endif
     std::filesystem::path file;
     if (argc == 3 && std::string_view{argv[1]} == "--config") {
         file = argv[2];

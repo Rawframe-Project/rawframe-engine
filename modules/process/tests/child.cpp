@@ -1,13 +1,14 @@
 // What the process tests start (child_test.cpp): `exit <code>` ends with
 // that code; `say <words>...` writes its words to its standard output, then
 // "said" to its standard error, and ends; `wait` says "waiting", waits for
-// a stop request (SIGTERM, or Ctrl+Break on Windows), and ends with code 3,
-// or with code 4 after ten seconds without one; `parent` writes the parent
-// it was told to stop with (D646), or "none".
+// a stop request (SIGTERM, or on Windows Ctrl+Break or its stop event set,
+// D944), and ends with code 3, or with code 4 after ten seconds without one;
+// `parent` writes the parent it was told to stop with (D646), or "none".
 
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <string_view>
@@ -34,6 +35,10 @@ BOOL WINAPI askStopOnEvent(DWORD event) {
         return TRUE;
     }
     return FALSE;
+}
+
+VOID CALLBACK askStopOnEventSet(PVOID, BOOLEAN) {
+    stopAsked.store(true);
 }
 #endif
 
@@ -66,6 +71,12 @@ int main(int argc, char** argv) {
     if (kMode == "wait") {
 #if defined(_WIN32)
         ::SetConsoleCtrlHandler(&askStopOnEvent, TRUE);
+        if (const char* event = std::getenv("RAWFRAME_STOP"); event != nullptr) {
+            auto* held = reinterpret_cast<HANDLE>(static_cast<std::uintptr_t>(std::strtoull(event, nullptr, 10)));
+            HANDLE wait = nullptr;
+            static_cast<void>(
+                ::RegisterWaitForSingleObject(&wait, held, &askStopOnEventSet, nullptr, INFINITE, WT_EXECUTEONLYONCE));
+        }
 #else
         std::signal(SIGTERM, &askStop);
 #endif

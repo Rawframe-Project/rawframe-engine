@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Packages Studio for an author with no build of their own (D768): Studio,
-# the cook tool, the dedicated server, the client, the authoring tool, and
-# the thumbnail tool from one build tree, beside the templates and the
+# the cook tool, the dedicated server, the client, the authoring tool, the
+# thumbnail tool, and what Export runs (the export and build tools, the
+# launcher, the install tool; D944) from one build tree, beside the templates and the
 # sources of the games named, which Studio's start screen offers as
 # samples. Studio opens as an application does, with no configuration and
 # no script (D920): double-clicked, it shows its start screen. A Windows
@@ -27,6 +28,9 @@ cp "$tree/hosts/studio/rawframe-studio$exe" "$tree/hosts/cook/rawframe-cook$exe"
 # scene's renderer (D899).
 thumbnail="$tree/hosts/thumbnail/rawframe-thumbnail$exe"
 [ -e "$thumbnail" ] && cp "$thumbnail" "$into/"
+# What Studio's Export runs: the export tool finds the others beside it.
+cp "$tree/hosts/export/rawframe-export$exe" "$tree/hosts/build/rawframe-build$exe" \
+    "$tree/launcher/play/rawframe-play$exe" "$tree/launcher/install/rawframe-install$exe" "$into/"
 # The templates a new game is made from (D780).
 cp -R templates "$into/templates"
 for game in "$@"; do

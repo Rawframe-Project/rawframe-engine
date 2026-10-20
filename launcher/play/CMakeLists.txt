@@ -5,6 +5,13 @@ rawframe_host(NAME play_tool OUTPUT rawframe-play
     SOURCES src/main.cpp
     DEPS process composition result base
 )
+# A windowed program on Windows: a player starting an exported game sees no
+# console (D944); `main` stays the entry. Rawframe's mark as its icon.
+if(WIN32)
+    target_sources(rawframe_host_play_tool PRIVATE resources/rawframe-play.rc)
+    set_target_properties(rawframe_host_play_tool PROPERTIES WIN32_EXECUTABLE TRUE)
+    target_link_options(rawframe_host_play_tool PRIVATE "LINKER:/ENTRY:mainCRTStartup")
+endif()
 
 if(RAWFRAME_BUILD_TESTS)
     add_test(NAME play_usage COMMAND rawframe_host_play_tool --config)

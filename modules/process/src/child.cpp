@@ -2,9 +2,14 @@
 
 #include "rawframe/process/errors.h"
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #if defined(_WIN32)
 // WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file (D237).
@@ -61,15 +66,16 @@ void appendQuoted(std::wstring& line, const std::wstring& argument) {
 }
 
 /// This process's environment as a block CreateProcessW takes, with its
-/// identity for a child that stops with it (D646) in place of any it was
-/// given itself.
-std::wstring environmentFor(const ChildSettings& settings) {
-    const std::wstring kPrefix = wide(std::string{kParentVariable} + "=");
+/// identity for a child that stops with it (D646) and the child's own stop
+/// event (D944) in place of any it was given itself.
+std::wstring environmentFor(const ChildSettings& settings, HANDLE stop) {
+    const std::wstring kParent = wide(std::string{kParentVariable} + "=");
+    const std::wstring kStop = wide(std::string{kStopVariable} + "=");
     std::wstring block;
     if (wchar_t* strings = ::GetEnvironmentStringsW(); strings != nullptr) {
         for (const wchar_t* each = strings; *each != L'\0'; each += std::wstring_view{each}.size() + 1) {
             const std::wstring_view kEntry{each};
-            if (kEntry.substr(0, kPrefix.size()) != kPrefix) {
+            if (!kEntry.starts_with(kParent) && !kEntry.starts_with(kStop)) {
                 block.append(kEntry);
                 block += L'\0';
             }
@@ -77,30 +83,40 @@ std::wstring environmentFor(const ChildSettings& settings) {
         ::FreeEnvironmentStringsW(strings);
     }
     if (settings.stopsWithThis) {
-        block += kPrefix + std::to_wstring(::GetCurrentProcessId());
+        block += kParent + std::to_wstring(::GetCurrentProcessId());
         block += L'\0';
     }
+    block += kStop + std::to_wstring(reinterpret_cast<std::uintptr_t>(stop));
+    block += L'\0';
     block += L'\0';
     return block;
+}
+
+void closeHandles(std::span<HANDLE const> handles) {
+    for (HANDLE each : handles) {
+        if (each != nullptr && each != INVALID_HANDLE_VALUE) {
+            ::CloseHandle(each);
+        }
+    }
 }
 #endif
 
 } // namespace
 
 Child::Child(Child&& other) noexcept
-    : id_(std::exchange(other.id_, 0)), handle_(std::exchange(other.handle_, nullptr)), code_(other.code_) {
+    : id_(std::exchange(other.id_, 0)), handle_(std::exchange(other.handle_, nullptr)),
+      stop_(std::exchange(other.stop_, nullptr)), code_(other.code_) {
 }
 
 Child& Child::operator=(Child&& other) noexcept {
     if (this != &other) {
         kill();
 #if defined(_WIN32)
-        if (handle_ != nullptr) {
-            ::CloseHandle(handle_);
-        }
+        closeHandles(std::array<HANDLE, 2>{handle_, stop_});
 #endif
         id_ = std::exchange(other.id_, 0);
         handle_ = std::exchange(other.handle_, nullptr);
+        stop_ = std::exchange(other.stop_, nullptr);
         code_ = other.code_;
     }
     return *this;
@@ -116,69 +132,82 @@ result::Result<Child> Child::start(const ChildSettings& settings) {
         line += L' ';
         appendQuoted(line, wide(argument));
     }
-    // Its output and input as handles it inherits; it shares this process's
-    // console, so a Ctrl+Break to its own group reaches it.
+    // Its output, its input, and its stop event as handles it inherits, and
+    // only those, so a child started at the same time on another thread
+    // holds none of this one's files open (D944).
     SECURITY_ATTRIBUTES inherited{
         .nLength = sizeof(SECURITY_ATTRIBUTES), .lpSecurityDescriptor = nullptr, .bInheritHandle = TRUE};
     const std::wstring kOutput = settings.output.empty() ? std::wstring{L"NUL"} : settings.output.wstring();
-    HANDLE output = ::CreateFileW(kOutput.c_str(),
-                                  GENERIC_WRITE,
-                                  FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                  &inherited,
-                                  CREATE_ALWAYS,
-                                  FILE_ATTRIBUTE_NORMAL,
-                                  nullptr);
-    HANDLE input = ::CreateFileW(L"NUL",
-                                 GENERIC_READ,
-                                 FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                 &inherited,
-                                 OPEN_EXISTING,
-                                 FILE_ATTRIBUTE_NORMAL,
-                                 nullptr);
-    if (output == INVALID_HANDLE_VALUE || input == INVALID_HANDLE_VALUE) {
-        if (output != INVALID_HANDLE_VALUE) {
-            ::CloseHandle(output);
-        }
-        if (input != INVALID_HANDLE_VALUE) {
-            ::CloseHandle(input);
-        }
+    std::array<HANDLE, 3> handed{::CreateFileW(kOutput.c_str(),
+                                               GENERIC_WRITE,
+                                               FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                               &inherited,
+                                               CREATE_ALWAYS,
+                                               FILE_ATTRIBUTE_NORMAL,
+                                               nullptr),
+                                 ::CreateFileW(L"NUL",
+                                               GENERIC_READ,
+                                               FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                               &inherited,
+                                               OPEN_EXISTING,
+                                               FILE_ATTRIBUTE_NORMAL,
+                                               nullptr),
+                                 ::CreateEventW(&inherited, TRUE, FALSE, nullptr)};
+    const auto [kOutputHandle, kInputHandle, kStopHandle] = handed;
+    if (kOutputHandle == INVALID_HANDLE_VALUE || kInputHandle == INVALID_HANDLE_VALUE || kStopHandle == nullptr) {
+        closeHandles(handed);
         return refuse(ProcessError::StartFailed, "the child's output could not be opened");
     }
-    STARTUPINFOW startup{};
-    startup.cb = sizeof startup;
-    startup.dwFlags = STARTF_USESTDHANDLES;
-    startup.hStdInput = input;
-    startup.hStdOutput = output;
-    startup.hStdError = output;
+    SIZE_T listSize = 0;
+    static_cast<void>(::InitializeProcThreadAttributeList(nullptr, 1, 0, &listSize));
+    std::vector<std::byte> listBytes(listSize);
+    auto* list = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(listBytes.data());
+    if (::InitializeProcThreadAttributeList(list, 1, 0, &listSize) == FALSE) {
+        closeHandles(handed);
+        return refuse(ProcessError::StartFailed, "the system has no room to start a process");
+    }
+    const BOOL kListed = ::UpdateProcThreadAttribute(
+        list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, handed.data(), sizeof(HANDLE) * handed.size(), nullptr, nullptr);
+    STARTUPINFOEXW startup{};
+    startup.StartupInfo.cb = sizeof startup;
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startup.StartupInfo.hStdInput = kInputHandle;
+    startup.StartupInfo.hStdOutput = kOutputHandle;
+    startup.StartupInfo.hStdError = kOutputHandle;
+    startup.lpAttributeList = list;
     PROCESS_INFORMATION made{};
-    std::wstring environment = environmentFor(settings);
-    const BOOL kStarted = ::CreateProcessW(kProgram.c_str(),
-                                           line.data(),
-                                           nullptr,
-                                           nullptr,
-                                           TRUE,
-                                           CREATE_NEW_PROCESS_GROUP | CREATE_UNICODE_ENVIRONMENT,
-                                           environment.data(),
-                                           nullptr,
-                                           &startup,
-                                           &made);
-    ::CloseHandle(output);
-    ::CloseHandle(input);
-    if (kStarted == FALSE) {
+    std::wstring environment = environmentFor(settings, kStopHandle);
+    // A console of its own with no window: a windowed parent (Studio, an
+    // exported game's launcher) shows no console for each child, and one in
+    // a console keeps that console its own.
+    const BOOL kStarted = kListed != FALSE && ::CreateProcessW(kProgram.c_str(),
+                                                               line.data(),
+                                                               nullptr,
+                                                               nullptr,
+                                                               TRUE,
+                                                               CREATE_NEW_PROCESS_GROUP | CREATE_UNICODE_ENVIRONMENT |
+                                                                   CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT,
+                                                               environment.data(),
+                                                               nullptr,
+                                                               &startup.StartupInfo,
+                                                               &made) != FALSE;
+    ::DeleteProcThreadAttributeList(list);
+    closeHandles(std::array<HANDLE, 2>{kOutputHandle, kInputHandle});
+    if (!kStarted) {
+        ::CloseHandle(kStopHandle);
         return refuse(ProcessError::StartFailed, "the system would not start the program");
     }
     ::CloseHandle(made.hThread);
     Child child;
     child.id_ = made.dwProcessId;
     child.handle_ = made.hProcess;
+    child.stop_ = kStopHandle;
     return child;
 }
 
 Child::~Child() {
     kill();
-    if (handle_ != nullptr) {
-        ::CloseHandle(handle_);
-    }
+    closeHandles(std::array<HANDLE, 2>{handle_, stop_});
 }
 
 std::optional<int> Child::exited() noexcept {
@@ -197,7 +226,7 @@ result::Status Child::requestStop() noexcept {
     if (handle_ == nullptr || exited().has_value()) {
         return refuse(ProcessError::StopFailed, "the child has ended");
     }
-    if (::GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, static_cast<DWORD>(id_)) == FALSE) {
+    if (::SetEvent(stop_) == FALSE) {
         return refuse(ProcessError::StopFailed, "the system would not tell the child to stop");
     }
     return {};

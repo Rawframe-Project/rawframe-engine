@@ -10,24 +10,31 @@
 # secret), the fonts the client read from the folder's library, the
 # players admitted, the frames shown, whether the window carried the title
 # the export was given (D519), how each side stopped, and whether
-# the launcher ended with the client's code. A machine with no adapter the
-# client allows skips, unless RAWFRAME_REQUIRE_GPU is set. Run under an X
-# server, from the repository root.
+# the launcher ended with the client's code. The game is exported from a
+# folder named as Studio names a new game, with capitals and underscores,
+# which its subject cannot carry (D944): the launcher takes the folder's
+# name. A machine with no adapter the client allows skips, unless
+# RAWFRAME_REQUIRE_GPU is set. Run under an X server, from the repository
+# root.
 #
 #   exported.sh <rawframe-export> <rawframe-cook> <rawframe-build> <rawframe-server> <rawframe-client>
 #               <rawframe-play> <game directory> <output directory>
 set -uo pipefail
 
 out="$8"
-rm -rf "$out" "$out.keys"
+rm -rf "$out" "$out.keys" "$out.game"
+# The game under a folder name of an author's.
+mkdir -p "$out.game"
+cp -R "$7" "$out.game/Stalls_Market"
 # The studio's key, made apart from the folder.
 kid="$("$3" key studio "$out.keys" | cut -d' ' -f2)"
 # A port nothing holds right now.
 port="$(python3 "$(dirname "$0")/../../../tools/free_port.py")"
-"$1" "$7" "$out" --port "$port" --key "$out.keys/$kid.key" --publisher studio --cook "$2" --build "$3" \
-    --server "$4" --client "$5" --play "$6" --title "Stalls, a market" || exit 1
+"$1" "$out.game/Stalls_Market" "$out" --game "$(basename "$7").game" --port "$port" --key "$out.keys/$kid.key" \
+    --publisher studio --cook "$2" --build "$3" --server "$4" --client "$5" --play "$6" --title "Stalls, a market" ||
+    exit 1
 printf 'host.maximum_iterations = 7200\n' >>"$out/client.conf"
-"$out/rawframe-play" &
+"$out/Stalls_Market" &
 play=$!
 for _ in $(seq 600); do
     grep -q '"code":"bots_admitted"' "$out/client.log" 2>/dev/null && break

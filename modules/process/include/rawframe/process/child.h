@@ -41,13 +41,22 @@ struct ChildSettings {
 /// its parent's identity in.
 inline constexpr const char* kParentVariable = "RAWFRAME_PARENT";
 
+/// The environment variable a child on Windows is told the handle of its
+/// stop event in (D944): an event it inherits, set when it is asked to
+/// stop. A Host waits on it, as a POSIX child takes SIGTERM; a child has a
+/// console of its own with no window, so no console event reaches it from
+/// this process.
+inline constexpr const char* kStopVariable = "RAWFRAME_STOP";
+
 class Child {
 public:
     /// Starts the program. Refuses (`unavailable`, StartFailed) what the
     /// system will not run. Where the system cannot tell before the child
     /// runs, a program that cannot be executed ends at once with code 127,
-    /// as a shell would report it. On Windows the child inherits this
-    /// process's inheritable handles.
+    /// as a shell would report it. On Windows the child inherits only its
+    /// input, its output, and its stop event, and runs with a console of its
+    /// own that shows no window (D944), whether this process has a console
+    /// or is a windowed program.
     [[nodiscard]] static result::Result<Child> start(const ChildSettings& settings);
 
     Child(Child&& other) noexcept;
@@ -63,9 +72,8 @@ public:
     [[nodiscard]] std::optional<int> exited() noexcept;
 
     /// Asks it to stop as a Host stops on a stop request: SIGTERM on POSIX,
-    /// Ctrl+Break to its own process group on Windows (where it shares this
-    /// process's console). Refuses (`unavailable`, StopFailed) a child that
-    /// has ended.
+    /// its stop event set on Windows (`kStopVariable`). Refuses
+    /// (`unavailable`, StopFailed) a child that has ended.
     [[nodiscard]] result::Status requestStop() noexcept;
 
     /// Ends it at once and reaps it; nothing for one that has ended.
@@ -82,6 +90,8 @@ private:
     std::uint64_t id_ = 0;
     /// The process's handle on Windows; unused on POSIX.
     void* handle_ = nullptr;
+    /// Its stop event on Windows; unused on POSIX.
+    void* stop_ = nullptr;
     std::optional<int> code_;
 };
 

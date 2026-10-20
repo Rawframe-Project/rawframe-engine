@@ -149,11 +149,16 @@ bool writeNative(const Exported& exported, const std::array<fs::path, 4>& progra
     const std::string& kSuffix = exported.suffix;
     const std::array<std::string, 4> kFiles{"rawframe-server" + kSuffix,
                                             "rawframe-client" + kSuffix,
-                                            "rawframe-play" + kSuffix,
+                                            exported.launcher + kSuffix,
                                             "rawframe-install" + kSuffix};
     // The install program only for a game that follows a channel.
     for (std::size_t at = 0; at < (exported.follow.has_value() ? 4U : 3U); ++at) {
         if (!copyInto(programs[at], exported, kFiles[at], written)) {
+            return false;
+        }
+    }
+    for (const fs::path& kLibrary : exported.runtime) {
+        if (!copyInto(kLibrary, exported, kLibrary.filename().string(), written)) {
             return false;
         }
     }
@@ -187,7 +192,7 @@ bool writeNative(const Exported& exported, const std::array<fs::path, 4>& progra
                             "# flat where it has none (D658).\nxr.headset = true\n"
                           : std::string{});
     const std::string kPlay =
-        "# Run rawframe-play" + kSuffix +
+        "# Run " + exported.launcher + kSuffix +
         " to play: it starts the server, then the client.\n"
         "play.server = rawframe-server" +
         kSuffix + "\nplay.server_config = server.conf\nplay.server_log = server.log\n" +
@@ -216,6 +221,11 @@ bool writeWeb(const Exported& exported, const WebFiles& from, std::vector<std::s
         !copyInto(from.ui, exported, "web/maul-ui.mjs", written) ||
         !copyInto(from.server, exported, "server/rawframe-server" + exported.suffix, written)) {
         return false;
+    }
+    for (const fs::path& kLibrary : exported.runtime) {
+        if (!copyInto(kLibrary, exported, "server/" + kLibrary.filename().string(), written)) {
+            return false;
+        }
     }
     for (const char* module : {"client.mjs", "sound.mjs", "transport.mjs", "wasi.mjs"}) {
         if (!copyInto(from.page / module, exported, std::string{"web/page/"} + module, written)) {

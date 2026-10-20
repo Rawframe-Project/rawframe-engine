@@ -38,6 +38,12 @@ struct Exported {
     std::string title;
     /// The programs' suffix on this system (`.exe` on Windows).
     std::string suffix;
+    /// The launcher's name, before the suffix (D944).
+    std::string launcher;
+    /// The C++ runtime's libraries a Windows folder carries beside its
+    /// programs, so a machine without Visual C++'s redistributable plays
+    /// (D944); none elsewhere.
+    std::vector<fs::path> runtime;
     /// Whether a native client is shown on a headset where one answers
     /// (D658).
     bool headset = false;

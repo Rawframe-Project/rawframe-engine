@@ -15,6 +15,7 @@
 #include <string>
 
 #if defined(_WIN32)
+#include <cstdint>
 #include <cstdlib>
 #include <windows.h>
 #elif defined(__linux__)
@@ -59,6 +60,18 @@ BOOL WINAPI requestStopOnEvent(DWORD event) {
 
 VOID CALLBACK requestStopOnParentEnd(PVOID, BOOLEAN) {
     requestStop(0);
+}
+
+/// A child of a Rawframe program has a console of its own with no window,
+/// so its parent asks it to stop by setting the event it inherited, whose
+/// handle `RAWFRAME_STOP` names (D944); waited on through the system's
+/// thread pool, it is taken as any stop.
+void stopWhenAsked(const char* event) {
+    // An inherited handle's value, as the parent wrote it.
+    auto* held = reinterpret_cast<HANDLE>(static_cast<std::uintptr_t>(std::strtoull(event, nullptr, 10)));
+    HANDLE wait = nullptr;
+    static_cast<void>(
+        ::RegisterWaitForSingleObject(&wait, held, &requestStopOnParentEnd, nullptr, INFINITE, WT_EXECUTEONLYONCE));
 }
 
 /// A program started to stop with its parent (D646) waits on it through the
@@ -142,6 +155,9 @@ void installStopBridge() {
     ::SetConsoleCtrlHandler(&requestStopOnEvent, TRUE);
     if (const char* parent = std::getenv("RAWFRAME_PARENT"); parent != nullptr) {
         stopWithParent(parent);
+    }
+    if (const char* event = std::getenv("RAWFRAME_STOP"); event != nullptr) {
+        stopWhenAsked(event);
     }
 #elif defined(__unix__) || defined(__APPLE__)
     struct sigaction action{};

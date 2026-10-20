@@ -69,7 +69,7 @@ jobs:
             --server "$tree/hosts/dedicated_server/rawframe-server" \
             --client "$tree/hosts/client/rawframe-client" --play "$tree/launcher/play/rawframe-play"
           printf 'host.maximum_iterations = 7200\n' >>"$RUNNER_TEMP/read/client.conf"
-          (cd "$RUNNER_TEMP/read" && ./rawframe-play) &
+          (cd "$RUNNER_TEMP/read" && ./tycoon) &
           play=$!
           for _ in $(seq 120); do
             grep -q '"code":"bots_admitted"' "$RUNNER_TEMP/read/client.log" 2>/dev/null && break
@@ -336,10 +336,10 @@ jobs:
             out/windows-development/modules/render_scene_gpu/rawframe_render_scene_gpu_tests.exe "$test"
           done
       # The sample games to play on Windows (D515): each exported as the
-      # export tool makes a folder, whose rawframe-play starts its server and
-      # then its client in a window, with the DLLs its programs import from
-      # the build beside them (MsQuic's and OpenSSL's, say) and the C++
-      # runtime's, kept two weeks.
+      # export tool makes a folder, whose launcher (named for the game,
+      # D944) starts its server and then its client in a window, with the
+      # DLLs its programs import from the build beside them (MsQuic's and
+      # OpenSSL's, say) and the C++ runtime's, kept two weeks.
       - name: Export the sample games
         shell: bash
         run: |
@@ -379,7 +379,7 @@ jobs:
             printf 'host.maximum_iterations = 600\n' >>"$RUNNER_TEMP/$game/client.conf"
             # The plaza starts on the whole screen (D523).
             [ "$game" = plaza ] && printf 'window.fullscreen = true\n' >>"$RUNNER_TEMP/$game/client.conf"
-            (cd "$RUNNER_TEMP/$game" && timeout 180 ./rawframe-play.exe; echo "$game: rawframe-play exit $?")
+            (cd "$RUNNER_TEMP/$game" && timeout 180 "./$game.exe"; echo "$game: launcher exit $?")
             for log in server client; do
               grep -o '"code":"\(bots_admitted\|frame_summary\|device_ready\|device_unavailable\|start_failed\)"[^}]*}[^}]*}' \
                 "$RUNNER_TEMP/$game/$log.log" || echo "$game $log: nothing of note"
@@ -428,7 +428,7 @@ jobs:
           set +e -uo pipefail
           cp -r played/tycoon "$RUNNER_TEMP/read"
           printf 'host.maximum_iterations = 7200\n' >>"$RUNNER_TEMP/read/client.conf"
-          (cd "$RUNNER_TEMP/read" && timeout 180 ./rawframe-play.exe) &
+          (cd "$RUNNER_TEMP/read" && timeout 180 ./tycoon.exe) &
           play=$!
           for _ in $(seq 120); do
             grep -q '"code":"bots_admitted"' "$RUNNER_TEMP/read/client.log" 2>/dev/null && break
