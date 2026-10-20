@@ -345,6 +345,59 @@ void ShellParticipant::showRecent() {
         }
         recentRows_.emplace_back(*line, kDescription);
     }
+    // The sample games beside Studio, which its package brings (D920),
+    // those not among the games opened.
+    std::error_code beside;
+    const std::filesystem::path kSamples =
+        std::filesystem::canonical(process::ownExecutable(), beside).parent_path() / "games";
+    std::vector<std::filesystem::path> samples;
+    for (auto entry = std::filesystem::directory_iterator(kSamples, beside);
+         !beside && entry != std::filesystem::directory_iterator();
+         entry.increment(beside)) {
+        const std::optional<std::filesystem::path> kDescription = descriptionIn(entry->path());
+        if (kDescription.has_value() &&
+            std::ranges::none_of(recentRows_, [&](const auto& row) { return row.second == *kDescription; }) &&
+            named(kDescription->stem().string(), gameSearch_)) {
+            samples.push_back(*kDescription);
+        }
+    }
+    std::ranges::sort(samples);
+    if (!samples.empty()) {
+        if (auto heading = box(recentList_, ui::Layout{.shrink = 0, .padding = {2, 2, 14, 2}}, 0); heading.has_value()) {
+            static_cast<void>(strongWords(*heading, "Samples beside Studio", look::kLabelInk, look::kLabelSize));
+            recentRows_.emplace_back(*heading, std::filesystem::path{});
+        }
+    }
+    for (const std::filesystem::path& kSample : samples) {
+        auto line = box(recentList_,
+                        ui::Layout{.alignItems = ui::Align::Center, .gap = 14, .shrink = 0, .padding = {12, 14, 8, 8}},
+                        0);
+        if (!line.has_value()) {
+            return;
+        }
+        static_cast<void>(tree_->setLook(*line, ui::Look{.radius = 6}));
+        static_cast<void>(tree_->setRole(*line, ui::Role::Button));
+        static_cast<void>(tree_->setName(*line, kSample.stem().string()));
+        if (auto tile = box(*line,
+                            ui::Layout{.width = ui::pixels(72),
+                                       .height = ui::pixels(36),
+                                       .justify = ui::Justify::Center,
+                                       .alignItems = ui::Align::Center,
+                                       .shrink = 0},
+                            0);
+            tile.has_value()) {
+            static_cast<void>(tree_->setLook(*tile, ui::Look{.fill = look::kRaisedFill, .radius = 5}));
+            static_cast<void>(tree_->setInteraction(*tile, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+            static_cast<void>(icon(*tile, Icon::Folder, look::kLabelInk, 16));
+        }
+        if (auto title = box(*line, ui::Layout{.shrink = 0}, 0); title.has_value()) {
+            static_cast<void>(tree_->setInteraction(*title, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+            std::string shown = kSample.stem().string();
+            shown[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(shown[0])));
+            static_cast<void>(strongWords(*title, shown, look::kSoftInk, look::kBodySize));
+        }
+        recentRows_.emplace_back(*line, kSample);
+    }
     if (recentRows_.empty()) {
         if (auto none = box(recentList_, ui::Layout{.shrink = 0, .padding = {4, 4, 10, 0}}, 0); none.has_value()) {
             static_cast<void>(words(*none,

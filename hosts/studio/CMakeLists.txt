@@ -9,6 +9,10 @@ rawframe_host(NAME studio_tool OUTPUT rawframe-studio
     SOURCES src/main.cpp
     DEPS studio window_host render render_canvas_gpu host window composition result base
 )
+# Its icon in the program file itself on Windows (D920).
+if(WIN32)
+    target_sources(rawframe_host_studio_tool PRIVATE resources/rawframe-studio.rc)
+endif()
 
 find_program(RAWFRAME_XVFB Xvfb)
 if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)

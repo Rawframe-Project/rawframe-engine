@@ -286,6 +286,20 @@ result::Result<RequestId> Windows::requestFileDialog(WindowId window, const File
     return requested(kStatus, request, "a file dialog request");
 }
 
+result::Result<RequestId> Windows::requestIcon(WindowId window, std::span<const IconImage> images) {
+    std::vector<mwinIconImage> made;
+    for (const IconImage& kImage : images) {
+        made.push_back(mwinIconImage{.width = kImage.width,
+                                     .height = kImage.height,
+                                     .stride = static_cast<std::size_t>(kImage.width) * 4,
+                                     .pixels = kImage.pixels.data()});
+    }
+    mwinRequestId request{};
+    const mwinResult kStatus = mwinRequestIcon(
+        platform_->context, toMaul(window), made.data(), static_cast<std::uint32_t>(made.size()), &request);
+    return requested(kStatus, request, "an icon request");
+}
+
 result::Result<std::vector<std::string>> Windows::dialogFiles(RequestId request) const {
     const mwinRequestId kRequest{.index1 = request.index, .generation = request.generation};
     std::size_t length = 0;

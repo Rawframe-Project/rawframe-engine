@@ -36,6 +36,13 @@ struct ProcessEntry {
     HostDriver drive = nullptr;
     /// The program's shutdown budget when its configuration names none.
     std::uint32_t defaultShutdownBudgetMs = 5000;
+    /// Configuration lines, one a line, each taken where the file names
+    /// none of its key (D920): an application opened with no file, as a
+    /// double-click opens it, still has what it needs.
+    std::string_view defaults;
+    /// The key a lone path argument sets, as a file opened with the program
+    /// is passed to it (D920); empty for none.
+    std::string_view fileKey;
 };
 
 [[nodiscard]] int hostMain(int argc, char** argv, const ProcessEntry& entry);

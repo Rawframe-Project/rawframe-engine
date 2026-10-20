@@ -201,9 +201,35 @@ int hostMain(int argc, char** argv, const ProcessEntry& entry) {
                 std::fprintf(stderr, "%.*s: cannot read the configuration file\n", kName, entry.name.data());
                 return exitCode(HostExit::InvalidInvocation);
             }
+        } else if (!entry.fileKey.empty() && !kArgument.starts_with("--")) {
+            // A file opened with the program (D920).
+            std::error_code error;
+            const std::string kOpened = std::filesystem::absolute(argv[index], error).generic_string();
+            configurationText += "\n" + std::string{entry.fileKey} + " = " + kOpened + "\n";
         } else {
             std::fprintf(stderr, "usage: %.*s [--config <file>]\n", kName, entry.name.data());
             return exitCode(HostExit::InvalidInvocation);
+        }
+    }
+    // The program's own defaults where the file names none of a key (D920).
+    if (!entry.defaults.empty()) {
+        const auto kGiven = composition::Configuration::parse(configurationText, base);
+        std::string_view rest = entry.defaults;
+        while (!rest.empty() && kGiven.has_value()) {
+            const std::size_t kEnd = rest.find('\n');
+            const std::string_view kLine = rest.substr(0, kEnd);
+            rest = kEnd == std::string_view::npos ? std::string_view{} : rest.substr(kEnd + 1);
+            const std::size_t kEquals = kLine.find('=');
+            if (kEquals == std::string_view::npos) {
+                continue;
+            }
+            std::string_view key = kLine.substr(0, kEquals);
+            while (!key.empty() && key.back() == ' ') {
+                key.remove_suffix(1);
+            }
+            if (!kGiven->text(key).has_value()) {
+                configurationText += "\n" + std::string{kLine} + "\n";
+            }
         }
     }
     const auto kConfiguration = composition::Configuration::parse(configurationText, base);

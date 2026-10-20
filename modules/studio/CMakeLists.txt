@@ -15,6 +15,10 @@ rawframe_embedded_file(TARGET rawframe_studio FILE "${CMAKE_CURRENT_SOURCE_DIR}/
                        HEADER studio_font_mono.h SYMBOL kStudioMonoFont)
 rawframe_embedded_file(TARGET rawframe_studio FILE "${CMAKE_CURRENT_SOURCE_DIR}/icons/icons.rgba"
                        HEADER studio_icons.h SYMBOL kStudioIcons)
+# Studio's own icon as its window shows it, 32, 64, and 256 pixels square,
+# RGBA (the logo kit's app icon; D920).
+rawframe_embedded_file(TARGET rawframe_studio FILE "${CMAKE_CURRENT_SOURCE_DIR}/icons/app_icon.rgba"
+                       HEADER studio_app_icon.h SYMBOL kStudioAppIcon)
 
 rawframe_module_tests(NAME studio SOURCES tests/records_test.cpp tests/console_test.cpp tests/hierarchy_test.cpp tests/hints_test.cpp tests/preferences_test.cpp)
 if(TARGET rawframe_studio_tests AND TARGET rawframe_process_child)

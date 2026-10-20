@@ -59,6 +59,9 @@ struct WindowHostSettings {
     /// host shows a preview an editor plays in its viewport (D790). It
     /// outlives the WindowHost.
     world_tooling::Injection* injection = nullptr;
+    /// The window's icon, its images' pixels outliving the WindowHost
+    /// (D920); none for the platform's own.
+    std::vector<window::IconImage> icon;
 };
 
 class WindowHost final : public window::Program {

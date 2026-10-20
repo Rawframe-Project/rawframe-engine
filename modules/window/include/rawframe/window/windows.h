@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -106,6 +107,14 @@ struct Limits {
 
 struct Platform;
 
+/// An image of a window's icon (D920): RGBA with straight alpha, 8 bits a
+/// channel, rows from the top, at most 256 pixels a side.
+struct IconImage {
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::span<const std::uint8_t> pixels;
+};
+
 /// A file dialog to show (D918): what it chooses, its title, the absolute
 /// folder it opens in, the name a save offers, and the kinds of file it
 /// offers, each a name and its extensions without dots joined by ';'; all
@@ -177,6 +186,11 @@ public:
     /// Cancelled when the user closes it, and Unsupported where there are
     /// no paths (the web).
     [[nodiscard]] result::Result<RequestId> requestFileDialog(WindowId window, const FileDialog& dialog);
+    /// The window's icon, as its title bar, the taskbar, and the window
+    /// switcher show it, at most four images, each platform taking the
+    /// nearest (D920); none for the platform's own. The web and Wayland
+    /// compositors without toplevel icons answer Unsupported.
+    [[nodiscard]] result::Result<RequestId> requestIcon(WindowId window, std::span<const IconImage> images);
     /// The absolute paths a file dialog completed Done with.
     [[nodiscard]] result::Result<std::vector<std::string>> dialogFiles(RequestId request) const;
 

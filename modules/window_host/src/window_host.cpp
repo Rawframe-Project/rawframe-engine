@@ -411,6 +411,12 @@ result::Status WindowHost::start(window::Windows& windows) {
         if (kFullscreen) {
             made.mode = window::Mode::BorderlessFullscreen;
         }
+        // An editor opened as an application, its window as large as the
+        // screen lets it (D920).
+        RAWFRAME_TRY_ASSIGN(const bool kMaximized, kConfiguration->truth("window.maximized", false));
+        if (kMaximized && !kFullscreen) {
+            made.mode = window::Mode::Maximized;
+        }
         made.size = {.width = static_cast<float>(kWidth), .height = static_cast<float>(kHeight)};
         // Kept hidden, as an editor keeps a game it shows in its own
         // viewport, the pictures streamed to it (D789).
@@ -438,6 +444,11 @@ result::Status WindowHost::start(window::Windows& windows) {
     }
     surfaces_.watch(kWindow);
     window_ = kWindow;
+    // Its own icon, where the program has one (D920); a platform that shows
+    // none answers so, which changes nothing.
+    if (!settings_.icon.empty()) {
+        static_cast<void>(windows.requestIcon(window_, settings_.icon));
+    }
     // The UI read by a screen reader where the platform has a bus for it,
     // AT-SPI's (D571), unless `ui.accessibility` says not; the participant
     // whose tree is the window's seats it, and says whether it is read.

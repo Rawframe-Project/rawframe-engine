@@ -1,6 +1,7 @@
 #include "generated/studio_font.h"
 #include "generated/studio_font_mono.h"
 #include "generated/studio_font_strong.h"
+#include "generated/studio_app_icon.h"
 #include "generated/studio_icons.h"
 #include "rawframe/authoring_session/attach.h"
 #include "rawframe/authoring_session/game.h"
@@ -31,6 +32,103 @@ result::Status misconfigured(std::string_view why) {
                                                        why)
                                               .error()};
 }
+
+#if defined(__linux__) && !defined(__ANDROID__)
+/// A PNG of `side` square RGBA pixels, its image data stored without
+/// compression: what a desktop entry's icon needs, made with no library.
+std::string pngOf(std::span<const std::uint8_t> pixels, std::uint32_t side) {
+    const auto kCrc = [](std::string_view bytes) {
+        std::uint32_t crc = 0xFFFFFFFFU;
+        for (const char kByte : bytes) {
+            crc ^= static_cast<unsigned char>(kByte);
+            for (int bit = 0; bit < 8; ++bit) {
+                crc = (crc >> 1U) ^ (0xEDB88320U & (0U - (crc & 1U)));
+            }
+        }
+        return crc ^ 0xFFFFFFFFU;
+    };
+    const auto kWord = [](std::string& into, std::uint32_t value) {
+        for (int shift = 24; shift >= 0; shift -= 8) {
+            into.push_back(static_cast<char>((value >> static_cast<unsigned>(shift)) & 0xFFU));
+        }
+    };
+    const auto kChunk = [&](std::string& into, std::string_view kind, const std::string& data) {
+        kWord(into, static_cast<std::uint32_t>(data.size()));
+        const std::string kTagged = std::string{kind} + data;
+        into += kTagged;
+        kWord(into, kCrc(kTagged));
+    };
+    // Each row its filter byte, then its pixels.
+    std::string raw;
+    for (std::uint32_t row = 0; row < side; ++row) {
+        raw.push_back('\0');
+        const auto* kRow = pixels.data() + (static_cast<std::size_t>(row) * side * 4);
+        raw.append(reinterpret_cast<const char*>(kRow), static_cast<std::size_t>(side) * 4);
+    }
+    // zlib: stored blocks of at most 65,535 bytes, then Adler-32.
+    std::string deflated{"\x78\x01", 2};
+    for (std::size_t at = 0; at < raw.size(); at += 65535) {
+        const std::size_t kSize = std::min<std::size_t>(65535, raw.size() - at);
+        deflated.push_back(at + kSize == raw.size() ? '\1' : '\0');
+        deflated.push_back(static_cast<char>(kSize & 0xFFU));
+        deflated.push_back(static_cast<char>(kSize >> 8U));
+        deflated.push_back(static_cast<char>(~kSize & 0xFFU));
+        deflated.push_back(static_cast<char>((~kSize >> 8U) & 0xFFU));
+        deflated.append(raw, at, kSize);
+    }
+    std::uint32_t low = 1;
+    std::uint32_t high = 0;
+    for (const char kByte : raw) {
+        low = (low + static_cast<unsigned char>(kByte)) % 65521U;
+        high = (high + low) % 65521U;
+    }
+    kWord(deflated, (high << 16U) | low);
+    std::string made{"\x89PNG\r\n\x1a\n", 8};
+    std::string header;
+    kWord(header, side);
+    kWord(header, side);
+    header += std::string{"\x08\x06\x00\x00\x00", 5};
+    kChunk(made, "IHDR", header);
+    kChunk(made, "IDAT", deflated);
+    kChunk(made, "IEND", {});
+    return made;
+}
+
+/// Studio in the desktop's applications, with its icon, the first time a
+/// packaged Studio runs (D920): a package is Studio beside its templates.
+void offerToDesktop() {
+    const char* const kHome = std::getenv("HOME");
+    std::error_code error;
+    const std::filesystem::path kProgram = std::filesystem::canonical(process::ownExecutable(), error);
+    if (kHome == nullptr || error || !std::filesystem::is_directory(kProgram.parent_path() / "templates", error)) {
+        return;
+    }
+    const std::filesystem::path kShare = std::filesystem::path{kHome} / ".local" / "share";
+    const std::filesystem::path kEntry = kShare / "applications" / "rawframe-studio.desktop";
+    const std::filesystem::path kIcon = kShare / "icons" / "hicolor" / "256x256" / "apps" / "rawframe-studio.png";
+    const std::string kLine = "Exec=\"" + kProgram.string() + "\" %f\n";
+    if (const std::optional<std::string> kNow = authoring_session::readFile(kEntry);
+        kNow.has_value() && kNow->find(kLine) != std::string::npos) {
+        return;
+    }
+    std::filesystem::create_directories(kEntry.parent_path(), error);
+    std::filesystem::create_directories(kIcon.parent_path(), error);
+    const std::span<const std::uint8_t> kPixels = appIconPixels().subspan((32 * 32 + 64 * 64) * 4);
+    if (std::FILE* file = std::fopen(kIcon.string().c_str(), "wb")) {
+        const std::string kPng = pngOf(kPixels, 256);
+        static_cast<void>(std::fwrite(kPng.data(), 1, kPng.size(), file));
+        std::fclose(file);
+    }
+    if (std::FILE* file = std::fopen(kEntry.string().c_str(), "wb")) {
+        const std::string kText = "[Desktop Entry]\nType=Application\nName=Rawframe Studio\n"
+                                  "Comment=Make games with the Rawframe engine\n" +
+                                  kLine + "Icon=rawframe-studio\nTerminal=false\nCategories=Development;Game;\n"
+                                          "StartupWMClass=rawframe-studio\n";
+        static_cast<void>(std::fwrite(kText.data(), 1, kText.size(), file));
+        std::fclose(file);
+    }
+}
+#endif
 
 } // namespace
 
@@ -108,6 +206,9 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         std::string{configuration.path("studio.export").value_or(process::besideSelf("rawframe-export").string())};
     // The templates a new game is made from, and where new games go:
     // named, or beside Studio, where its package puts them (D781).
+#if defined(__linux__) && !defined(__ANDROID__)
+    offerToDesktop();
+#endif
     // The templates are a folder beside Studio's program; new games go to
     // the author's own "Rawframe Games" folder, as an installed Studio's
     // own folder may not be written (D918).
@@ -120,13 +221,29 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     // Studio's own preferences, the docks' sizes and the games opened last,
     // where `studio.preferences` keeps them (D779); a file that does not
     // read leaves the defaults.
-    if (const auto kKept = configuration.path("studio.preferences"); kKept.has_value()) {
+    // Unnamed, the author's own settings folder keeps them (D920), so an
+    // application opened by a double-click remembers the games opened.
+    std::optional<std::filesystem::path> kept;
+    if (const auto kNamed = configuration.path("studio.preferences"); kNamed.has_value()) {
+        kept = std::filesystem::path{*kNamed};
+    } else if (const char* kAppData = std::getenv("APPDATA"); kAppData != nullptr) {
+        kept = std::filesystem::path{kAppData} / "Rawframe" / "studio.preferences";
+    } else if (const char* kConfig = std::getenv("XDG_CONFIG_HOME"); kConfig != nullptr && *kConfig != '\0') {
+        kept = std::filesystem::path{kConfig} / "rawframe" / "studio.preferences";
+    } else if (kHome != nullptr) {
+        kept = std::filesystem::path{kHome} / ".config" / "rawframe" / "studio.preferences";
+    }
+    if (kept.has_value()) {
+        std::error_code made;
+        std::filesystem::create_directories(kept->parent_path(), made);
+    }
+    if (const auto& kKept = kept; kKept.has_value()) {
         preferencesFile_ = *kKept;
         if (std::FILE* file = std::fopen(preferencesFile_.string().c_str(), "rb")) {
-            std::string kept(64 * 1024, '\0');
-            kept.resize(std::fread(kept.data(), 1, kept.size(), file));
+            std::string text(64 * 1024, '\0');
+            text.resize(std::fread(text.data(), 1, text.size(), file));
             std::fclose(file);
-            preferences_ = preferencesOf(kept).value_or(Preferences{});
+            preferences_ = preferencesOf(text).value_or(Preferences{});
         }
     }
     // VS Code by default; any editor that opens a file at a line by its
@@ -639,6 +756,11 @@ result::Result<composition::ParticipantOwner> make(composition::ParticipantConte
 }
 
 } // namespace
+
+std::span<const std::uint8_t> appIconPixels() noexcept {
+    static_assert(sizeof(kStudioAppIcon) == (32 * 32 + 64 * 64 + 256 * 256) * 4, "the icon is as kAppIconSides names");
+    return {reinterpret_cast<const std::uint8_t*>(kStudioAppIcon.data()), sizeof(kStudioAppIcon)};
+}
 
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept {
     registrar.submit(composition::ParticipantDeclaration{

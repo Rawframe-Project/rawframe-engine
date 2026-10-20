@@ -2,7 +2,9 @@
 
 #include "rawframe/composition/registrar.h"
 
+#include <array>
 #include <cstdint>
+#include <span>
 
 namespace rawframe::studio {
 
@@ -25,6 +27,12 @@ namespace rawframe::studio {
 ///   studio.preview.pin_file     its certificate's fingerprint file, and
 ///   studio.preview.token_file   its token file
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
+
+/// Studio's own icon for its window (D920): the app icon square at each of
+/// `kAppIconSides` pixels, RGBA, one after another, held for the program's
+/// life.
+inline constexpr std::array<std::uint32_t, 3> kAppIconSides = {32, 64, 256};
+[[nodiscard]] std::span<const std::uint8_t> appIconPixels() noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::World);
 

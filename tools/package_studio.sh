@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Packages Studio for an author with no build of their own (D768): Studio,
 # the cook tool, the dedicated server, the client, the authoring tool, and
-# the thumbnail tool from one build tree, beside the sources of the games named and a
-# configuration for each, so Studio opens the game, cooks it, and plays it
-# from its header. A Windows
+# the thumbnail tool from one build tree, beside the templates and the
+# sources of the games named, which Studio's start screen offers as
+# samples. Studio opens as an application does, with no configuration and
+# no script (D920): double-clicked, it shows its start screen. A Windows
 # tree's programs take the DLLs they import from the tree, and the C++
-# runtime's from the system, and each game has a batch file opening Studio
-# on it. Each game also has an MCP configuration giving an agent the game's
-# authoring tools without Studio (D773): `claude --mcp-config <game>.mcp.json`
-# from the folder.
+# runtime's from the system. Each game also has an MCP configuration giving
+# an agent the game's authoring tools without Studio (D773):
+# `claude --mcp-config <game>.mcp.json` from the folder.
 #
 #   tools/package_studio.sh <build tree> <folder> <game>...
 set -euo pipefail
@@ -31,19 +31,9 @@ thumbnail="$tree/hosts/thumbnail/rawframe-thumbnail$exe"
 cp -R templates "$into/templates"
 for game in "$@"; do
     cp -R "games/$game" "$into/games/$game"
-    cat >"$into/$game.conf" <<CONF
-# Studio on $game: Cook, then Play, from its header.
-studio.game = games/$game/$game.game
-studio.play.server = rawframe-server$exe
-studio.play.client = rawframe-client$exe
-render.device = any
-CONF
     cat >"$into/$game.mcp.json" <<MCP
 {"mcpServers": {"rawframe-$game": {"command": "./rawframe-author$exe", "args": ["mcp", "games/$game/$game.game"]}}}
 MCP
-    if [ -n "$exe" ]; then
-        printf 'rawframe-studio.exe --config %s.conf\r\n' "$game" >"$into/studio-$game.bat"
-    fi
 done
 if [ -n "$exe" ]; then
     for program in "$into"/*.exe; do
