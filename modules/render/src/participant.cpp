@@ -4,6 +4,7 @@
 #include "rawframe/render/device.h"
 #include "rawframe/render/headset.h"
 #include "rawframe/render/registrar.h"
+#include "rawframe/window/windows.h"
 
 #include <map>
 #include <memory>
@@ -68,6 +69,7 @@ public:
                                                       .error()};
         }
         settings_ = DeviceSettings{.allowSoftware = *kWanted == "any"};
+        RAWFRAME_TRY_ASSIGN(says_, context.configuration().truth("render.unavailable_says", false));
         // A headset's runtime makes the device where one answered (D593).
         if (context.has(kHeadset.name)) {
             RAWFRAME_TRY_ASSIGN(Headset * headset, context.capability(kHeadset));
@@ -155,6 +157,10 @@ public:
 
     Device* ready() noexcept override {
         return opened_ && !lostSeen_ ? device_.get() : nullptr;
+    }
+
+    std::optional<std::string> failure() const override {
+        return failure_;
     }
 
     std::optional<std::pair<std::uint64_t, PreparedSurface>> prepare(window::WindowId window) noexcept override {
@@ -367,9 +373,28 @@ private:
                      "no device could be had: nothing is drawn",
                      {diagnostics::field("reason", std::string{error.description()}),
                       diagnostics::field("vulkanDevices", std::string{seen})});
+        failure_ = std::string{error.description()} +
+                   (seen.empty() ? std::string{} : " (the system's Vulkan devices: " + std::string{seen} + ")");
+        // Said where nothing else can be (D927): the device a program draws
+        // its every word with is the one missing.
+        if (says_ && !said_) {
+            said_ = true;
+            static_cast<void>(window::showMessage(window::Message{
+                .title = "The graphics card could not start",
+                .text = "Nothing can be drawn: " + *failure_ +
+                        ".\n\nIt needs a GPU with Vulkan 1.3 (Direct3D 12 on Windows).\n\nWhat to try:\n"
+                        "1. Update the graphics driver from its maker's site.\n"
+                        "2. On a laptop with two GPUs, choose the faster one for this program.\n"
+                        "3. Work without a view: rawframe-author and rawframe-cook make and cook a game "
+                        "from its text documents.",
+                .kind = window::Message::Kind::Error}));
+        }
     }
 
     std::optional<DeviceSettings> settings_;
+    bool says_ = false;
+    bool said_ = false;
+    std::optional<std::string> failure_;
     PresentPolicy policy_ = PresentPolicy::Vsync;
     OutputMode output_ = OutputMode::SdrSrgb;
     std::optional<PresentPolicy> used_;

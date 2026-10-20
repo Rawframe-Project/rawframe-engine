@@ -239,6 +239,9 @@ public:
     /// The device, ready and not lost; none while it opens, when the
     /// process asked for none, and once it failed or was lost.
     [[nodiscard]] virtual Device* ready() noexcept = 0;
+    /// Why no device could be had, once one was asked for and none came;
+    /// none before, while it opens, and once it is ready (D927).
+    [[nodiscard]] virtual std::optional<std::string> failure() const = 0;
     /// SPEC-0024's `prepare` for a window's surface, by the process's
     /// present policy: the surface and what was found, or none while the
     /// window has no surface on the device. Once a frame, before drawing.

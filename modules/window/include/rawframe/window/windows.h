@@ -233,6 +233,26 @@ public:
     virtual void stop(Windows& windows, const result::Status& status) = 0;
 };
 
+/// A message the platform shows in a box of its own, which waits for the
+/// person to close it (D927): one a program shows where it can draw nothing
+/// of its own, before any window or without a device to draw one with.
+struct Message {
+    enum class Kind : std::uint8_t {
+        Information,
+        Warning,
+        Error
+    };
+    std::string title;
+    std::string text;
+    Kind kind = Kind::Error;
+};
+
+/// Shows `message` and returns once it is closed: on the main thread only.
+/// Unsupported where the platform has no box to show (Android, a Linux
+/// without zenity or kdialog); invalid for text that is not UTF-8, holds a
+/// NUL, or passes 512 bytes of title or 8,192 of text.
+[[nodiscard]] result::Status showMessage(const Message& message);
+
 struct RunSettings {
     Limits limits;
 };

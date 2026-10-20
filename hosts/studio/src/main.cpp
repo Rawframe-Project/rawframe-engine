@@ -63,15 +63,15 @@ host::HostExit play(const host::HostRequest& request) noexcept {
 } // namespace
 
 int main(int argc, char** argv) {
-    return host::hostMain(
-        argc,
-        argv,
-        {.name = "rawframe-studio",
-         .role = composition::TargetRole::Tool,
-         .registrars = kRegistrars,
-         .drive = &play,
-         // Opened as an application is, with no file (D920): drawn on the
-         // best device there is, a game given as its argument opened.
-         .defaults = "render.device = any\nwindow.maximized = true\nwindow.width = 1280\nwindow.height = 760\n",
-         .fileKey = "studio.game"});
+    return host::hostMain(argc,
+                          argv,
+                          {.name = "rawframe-studio",
+                           .role = composition::TargetRole::Tool,
+                           .registrars = kRegistrars,
+                           .drive = &play,
+                           // Opened as an application is, with no file (D920): drawn on the
+                           // best device there is, a game given as its argument opened.
+                           .defaults = "render.device = any\nrender.unavailable_says = true\nwindow.maximized = "
+                                       "true\nwindow.width = 1280\nwindow.height = 760\n",
+                           .fileKey = "studio.game"});
 }

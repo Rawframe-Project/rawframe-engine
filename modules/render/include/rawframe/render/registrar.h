@@ -25,6 +25,10 @@ namespace rawframe::render {
 ///                    no device
 ///   render.present   SPEC-0024's present policy: `vsync` (the default),
 ///                    `adaptive_vsync`, `low_latency_vsync`, or `immediate`
+///   render.unavailable_says  `true` to say in the platform's message box,
+///                    once, that no device could be had, why, and what to
+///                    try (`false`): for a program that is nothing without
+///                    its view, as an editor is (D927)
 ///
 /// And the World-scoped participant `rawframe.render.frame` (D285), which
 /// owns the frames (`rawframe.render.frames`, frame.h): at the start of each

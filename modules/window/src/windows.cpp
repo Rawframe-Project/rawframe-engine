@@ -6,6 +6,7 @@
 #include <maul-window/input.h>
 #include <maul-window/monitor.h>
 #include <maul-window/native.h>
+#include <maul-window/services.h>
 #include <maul-window/window.h>
 #include <utility>
 
@@ -132,6 +133,22 @@ mwinAppDef mwinAndroidMain(void) {
 #endif
 
 namespace rawframe::window {
+
+result::Status showMessage(const Message& message) {
+    mwinMessageBoxDef def = mwinDefaultMessageBoxDef();
+    def.title = message.title.data();
+    def.titleLength = message.title.size();
+    def.message = message.text.data();
+    def.messageLength = message.text.size();
+    def.kind = message.kind == Message::Kind::Information ? mwin_messageInfo
+               : message.kind == Message::Kind::Warning   ? mwin_messageWarning
+                                                          : mwin_messageError;
+    def.buttons = mwin_buttonsOk;
+    if (const mwinResult kStatus = mwinShowMessageBox(&def, nullptr); kStatus != mwin_success) {
+        return failure(kStatus, "a message box");
+    }
+    return {};
+}
 
 result::Result<WindowId> Windows::create(const WindowSettings& settings) {
     mwinWindowDef def = mwinDefaultWindowDef();
