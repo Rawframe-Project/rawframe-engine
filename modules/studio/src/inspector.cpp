@@ -366,8 +366,8 @@ void ShellParticipant::fieldGroupRow(const std::string& component,
         return;
     }
     const auto kColor = [](const FieldShown& field) {
-        const Catalog::Field kField = field.type.value_or(Catalog::Field{.name = field.name, .kind = field.kind});
-        return colorOf(shownAs(kField, field.text.value_or("4294967295"))).value_or(0xFFFFFFFFU);
+        const Catalog::Field kColorType = field.type.value_or(Catalog::Field{.name = field.name, .kind = field.kind});
+        return colorOf(shownAs(kColorType, field.text.value_or("4294967295"))).value_or(0xFFFFFFFFU);
     };
     auto line = box(componentsColumn_,
                     ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {10, 10, 4, 4}},

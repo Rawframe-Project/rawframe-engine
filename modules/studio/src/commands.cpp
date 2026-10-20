@@ -112,7 +112,11 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 7> kFileComm
 
 /// The commands a menu draws a line above, each beginning a group of its
 /// own as an editor's menus do.
-constexpr std::array<std::string_view, 10> kGroupsBegun = {"Save",
+/// The Extensions menu's own commands, after the extensions' (D938).
+constexpr std::string_view kManageExtensions = "Manage extensions";
+constexpr std::string_view kReloadExtensions = "Reload extensions";
+
+constexpr std::array<std::string_view, 11> kGroupsBegun = {"Save",
                                                            "Import files",
                                                            "Close game",
                                                            "Quit",
@@ -121,7 +125,8 @@ constexpr std::array<std::string_view, 10> kGroupsBegun = {"Save",
                                                            "Assets",
                                                            kPalette,
                                                            kSaveLayout,
-                                                           "Select tool"};
+                                                           "Select tool",
+                                                           kManageExtensions};
 
 /// What the palette's field reads while it does not hold the keyboard.
 constexpr std::string_view kPaletteHint = "Search commands, assets, entities    Ctrl K";
@@ -194,9 +199,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
                                      return command.menu == kMenu;
                                  }) &&
             kMenu != "File" && kMenu != "Window" && kMenu != "View" && kMenu != "Help" &&
-            (kMenu != "Extensions" || std::ranges::all_of(extensions_, [](const ListedExtension& extension) {
-                 return extension.commands.empty() && extension.modes.empty();
-             }))) {
+            (kMenu != "Extensions" || !gameOpen())) {
             continue;
         }
         RAWFRAME_TRY_ASSIGN(const ui::Node kButton, box(bar, ui::Layout{.shrink = 0, .padding = {9, 9, 4, 4}}, 0));
@@ -297,6 +300,15 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
                 commands_.push_back(Command{.name = kName, .menu = "Extensions", .keys = kKeys(kName, {})});
             }
         }
+    }
+    // Then, as the design's Extensions menu (D938), the game's extensions
+    // in the preferences, and read again from its extensions/ folder.
+    if (gameOpen()) {
+        commands_.push_back(Command{
+            .name = std::string{kManageExtensions}, .menu = "Extensions", .keys = kKeys(kManageExtensions, {})});
+        commands_.push_back(Command{.name = std::string{kReloadExtensions},
+                                    .menu = "Extensions",
+                                    .keys = kKeys(kReloadExtensions, {"Ctrl+Alt+R"})});
     }
     // The palette's field, as a field named "commands" is read (D575).
     RAWFRAME_TRY_ASSIGN(const ui::Node kSearch, tree_->addEditable(++keys_));
@@ -458,6 +470,21 @@ bool ShellParticipant::runCommand(std::string_view name) {
     if (kCommand->name == kExport) {
         openExport();
         say(held_.exportDialog.has_value() ? "export" : "export closed");
+        return true;
+    }
+    if (kCommand->name == kManageExtensions) {
+        closeExport();
+        closePreferences();
+        held_.preferencePage = EditorsHeld::kExtensionsPage;
+        openPreferences();
+        say("extensions");
+        return true;
+    }
+    if (kCommand->name == kReloadExtensions) {
+        extensions_ = extensionsOf(ask(extensionsRecord(next())));
+        rebuild();
+        say(std::to_string(extensions_.size()) + (extensions_.size() == 1 ? " extension" : " extensions") +
+            " read again");
         return true;
     }
     if (kCommand->menu == "Extensions") {

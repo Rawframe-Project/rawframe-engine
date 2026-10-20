@@ -456,6 +456,19 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "typed @east at [0-9]+,[0-9]+.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":[0-9]+,\"entity\":\"0d077e42-123c-4358-b7e3-02e08c02e876\".*\"exit\":\"clean_stop\"")
+    # The Extensions menu with no extensions (D938): shown all the same,
+    # its extensions read again, then its preferences page opened.
+    add_test(NAME studio_extensions_menu
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @Extensions "@Reload extensions  Ctrl+Alt+R"
+                     "until=studio_said,status=\"0 extensions read again\"" @Extensions "@Manage extensions"
+                     "until=studio_said,status=\"extensions\"" "@None in this game." wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_extensions_menu PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "saw studio_said,status=\"0 extensions read again.*saw studio_said,status=\"extensions.*found None in this game. at.*\"exit\":\"clean_stop\"")
     # A scene's history (D454): ground renamed three times, the history
     # lists the three; its first entry clicked undoes the two after it,
     # and its last clicked redoes them. The history sits under the view's
