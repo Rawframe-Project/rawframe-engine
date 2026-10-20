@@ -30,6 +30,11 @@ void ShellParticipant::followPicture() {
         return;
     }
     inViewport_.pictureSequence = read->sequence;
+    // Shown opaque: a camera's picture, whatever its device left in its
+    // alpha (Direct3D 12's software adapter leaves nought, D923).
+    for (std::size_t at = 3; at < read->pixels.size(); at += 4) {
+        read->pixels[at] = std::byte{0xFF};
+    }
     texture::Texture made{.format = texture::Format::Rgba8Srgb};
     made.levels.push_back(
         texture::Level{.width = read->width, .height = read->height, .bytes = std::move(read->pixels)});

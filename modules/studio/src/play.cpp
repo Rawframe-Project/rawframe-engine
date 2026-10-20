@@ -273,7 +273,11 @@ result::Status Play::launch() {
                                      {"ui.reload_every", "60"},
                                      // And its content, a material Studio cooks
                                      // again drawn as it plays (D734).
-                                     {"content.reload_every", "60"}},
+                                     {"content.reload_every", "60"},
+                                     // Kept running however far behind a slow
+                                     // device leaves it: an author's preview, not
+                                     // a player's game (D923).
+                                     {"world.overload_ms", "0"}},
                                     {{"kest.game", kGame},
                                      {"network.quic.pin_file", (kAt / "server.fingerprint").string()},
                                      {"bots.endpoint", "127.0.0.1:" + kPort},
@@ -307,7 +311,8 @@ result::Status Play::launch() {
                                          {"bots.player", "true"},
                                          {"render.device", "any"},
                                          {"window.width", "640"},
-                                         {"window.height", "360"}},
+                                         {"window.height", "360"},
+                                         {"world.overload_ms", "0"}},
                                         {{"kest.game", kGame},
                                          {"network.quic.pin_file", (kAt / "server.fingerprint").string()},
                                          {"bots.endpoint", "127.0.0.1:" + kPort},
