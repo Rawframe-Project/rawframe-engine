@@ -133,6 +133,11 @@ struct Asset {
 /// assets at `as` under its directory; and what the answer says it made,
 /// as Studio says it: its kind and its path, or empty for a refusal.
 [[nodiscard]] Value importRecord(std::int64_t id, std::string_view source, std::string_view as);
+/// A file or folder of the game's moved, one removed, and a folder made,
+/// each by its path under the game's directory (D929).
+[[nodiscard]] Value moveFileRecord(std::int64_t id, std::string_view from, std::string_view to);
+[[nodiscard]] Value removeFileRecord(std::int64_t id, std::string_view path);
+[[nodiscard]] Value makeFolderRecord(std::int64_t id, std::string_view folder);
 [[nodiscard]] std::string importedIn(std::string_view reply);
 
 /// `authoring.cook` (D502): the game cooked into `output`, reusing what

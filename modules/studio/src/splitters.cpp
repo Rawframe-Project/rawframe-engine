@@ -38,6 +38,10 @@ void ShellParticipant::followSplitter() {
     if (kReleased && heldEntity_.has_value()) {
         dropEntity();
     }
+    // And an asset's card onto a folder moves it there (D929).
+    if (kReleased && browser_.held.has_value()) {
+        dropAsset();
+    }
     const std::optional<std::array<float, 2>> kPointer = kReleased && releasedAt_.has_value() ? releasedAt_
                                                          : pointing_ != nullptr               ? pointing_->pointer()
                                                                                 : std::optional<std::array<float, 2>>{};

@@ -154,6 +154,12 @@ enum class SessionVerb : std::uint8_t {
     Thumbnail,
     /// What a source uses and what uses it, by the last cook (D803).
     AssetReferences,
+    /// A file or folder of the game's moved with its sidecar and the
+    /// description's lines naming it, one removed, and a folder made
+    /// (D929).
+    MoveFile,
+    RemoveFile,
+    MakeFolder,
     /// The previewed game's World paused, let run, or asked (D806).
     Run,
     /// The paused World stepped some ticks (D806).
@@ -296,7 +302,8 @@ struct SessionRecord {
     std::uint64_t offset = 0;
     /// Cancel's: the id the operation to stop was given.
     document::Value operation;
-    /// Import's: the file, and where under the game's directory it goes.
+    /// Import's: the file, and where under the game's directory it goes;
+    /// a move's `as` where its `asset` goes (D929).
     std::string source;
     std::string as;
     /// Extension's: the extension, by its path under the game's directory,
@@ -308,7 +315,8 @@ struct SessionRecord {
     /// the scene records it by; the entity is `entities`' one.
     std::string component;
     /// Import settings': the source's path under the game's directory, and
-    /// the settings given it, an object (D800).
+    /// the settings given it, an object (D800); the file moved or removed,
+    /// or the folder made (D929).
     std::string asset;
     document::Value settings;
     /// Thumbnail's: the most pixels on its longer side, 16 to 256 (D801).

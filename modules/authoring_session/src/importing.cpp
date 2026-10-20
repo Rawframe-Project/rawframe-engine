@@ -55,19 +55,6 @@ constexpr std::array<Taken, 18> kTaken = {Taken{".png", "texture", "rawframe.tex
                                           Taken{".ttf", "font", "rawframe.font"},
                                           Taken{".otf", "font", "rawframe.font"}};
 
-/// Whether `path` stays where it is put: relative, with no `..` and no
-/// root, drive, or scheme.
-bool staysUnder(std::string_view path) {
-    const std::filesystem::path kPath{std::string{path}};
-    if (path.empty() || kPath.is_absolute() || kPath.has_root_name() || kPath.has_root_directory() ||
-        path.find(':') != std::string_view::npos || path.find('\\') != std::string_view::npos) {
-        return false;
-    }
-    return std::ranges::none_of(kPath, [](const std::filesystem::path& part) {
-        return part == ".." || part == ".";
-    });
-}
-
 /// The files a glTF names beside it, its buffers' and its images', as
 /// relative paths; refused when one would leave its directory.
 result::Result<std::vector<std::string>> namedBy(const std::filesystem::path& gltf) {
@@ -137,6 +124,17 @@ std::string hexOf(std::uint64_t id) {
 }
 
 } // namespace
+
+bool staysUnder(std::string_view path) {
+    const std::filesystem::path kPath{std::string{path}};
+    if (path.empty() || kPath.is_absolute() || kPath.has_root_name() || kPath.has_root_directory() ||
+        path.find(':') != std::string_view::npos || path.find('\\') != std::string_view::npos) {
+        return false;
+    }
+    return std::ranges::none_of(kPath, [](const std::filesystem::path& part) {
+        return part == ".." || part == ".";
+    });
+}
 
 document::Value importedOf(const Imported& made) {
     std::array<char, base::kBits128HexDigits> digits{};

@@ -279,6 +279,11 @@ def main():
             toX, toY = (int(part) for part in argument[len("move="):].split(","))
             points.append((toX, toY, ("move",)))
             continue
+        if argument.startswith("drag=@") and argument.split(",")[1:2] and argument.split(",")[1].startswith("@"):
+            # From a control onto another, both by their names (D929).
+            name, onto, *rest = argument[len("drag="):].split(",")
+            points.append((name, None, ("dragto", onto, rest[0] if rest else "", 1)))
+            continue
         if argument.startswith("drag=@"):
             # From a control by its name, by an offset in pixels (D852).
             name, dx, dy, *rest = argument[len("drag="):].split(",")
@@ -446,6 +451,13 @@ def main():
             continue
         if isinstance(text, tuple) and text[0] == "dragby":
             text = ("drag", at + text[1], y + text[2], text[3], text[4])
+        if isinstance(text, tuple) and text[0] == "dragto":
+            ontoX, ontoY = named_point(text[1][1:])
+            if ontoX is None:
+                print(f"no control named {text[1][1:]}")
+                continue
+            print(f"found {text[1][1:]} at {ontoX},{ontoY}")
+            text = ("drag", ontoX, ontoY, text[2], text[3])
         if isinstance(text, tuple) and text[0] == "drag":
             # Pressed at the point, held a second, carried to the other in
             # ten steps a tenth of a second apart, held a second, and let go

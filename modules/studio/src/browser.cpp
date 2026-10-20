@@ -397,7 +397,10 @@ result::Result<ui::Node> ShellParticipant::assetCard(const AssetCard& card) {
     }
     RAWFRAME_TRY_ASSIGN(const ui::Node kName,
                         box(kCard, ui::Layout{.width = ui::pixels(kWide), .shrink = 0, .padding = {1, 0, 0, 0}}, 0));
-    RAWFRAME_TRY(words(kName, card.name, look::kRowInk, look::kLabelSize));
+    // Its file's name under its tile, the folder the tree's, kept within
+    // the tile; named whole for assistive technology (D929).
+    RAWFRAME_TRY(tree_->setLook(kName, ui::Look{.clip = true}));
+    RAWFRAME_TRY(words(kName, card.name.substr(card.name.rfind('/') + 1), look::kRowInk, look::kLabelSize));
     RAWFRAME_TRY_ASSIGN(const ui::Node kWhat,
                         box(kCard, ui::Layout{.width = ui::pixels(kWide), .shrink = 0, .padding = {1, 0, 0, 0}}, 0));
     RAWFRAME_TRY(monoWords(kWhat, card.what, card.failed ? look::kError : look::kFaintInk, look::kSmallSize));
@@ -423,6 +426,8 @@ result::Status ShellParticipant::showBrowser() {
     browser_.folderRows.clear();
     browser_.sizeRows.clear();
     browser_.import = ui::Node{};
+    browser_.newFolder = browser_.rename = browser_.remove = ui::Node{};
+    browser_.removeSure = browser_.removeKeep = browser_.typed = browser_.rootRow = ui::Node{};
     if (!tree_->contains(browser_.grid)) {
         return {};
     }
@@ -436,6 +441,11 @@ result::Status ShellParticipant::showBrowser() {
         if (!kSource.folder.empty()) {
             ++folders[kSource.folder];
         }
+    }
+    // Every folder, those with nothing in them too, and those a folder is
+    // in (D929).
+    for (const std::string& kFolder : browser_.folderList) {
+        folders.try_emplace(kFolder, 0);
     }
     for (const std::string& kScene : scenes_) {
         every += browser_.find(kScene) == nullptr ? 1 : 0;
@@ -485,6 +495,38 @@ result::Status ShellParticipant::showBrowser() {
         browser_.sizeRows.emplace_back(kControl, kSize);
     }
     RAWFRAME_TRY_ASSIGN(browser_.import, kHeld(textButton(browser_.tools, Icon::Import, "Import")));
+    // A folder made, and the file or folder last pressed renamed or
+    // deleted, as an editor's browser does (D929); a name being typed in
+    // the field in their place, and a deletion asked waiting to be sure.
+    if (browser_.typing != AssetBrowser::Typing::None) {
+        const bool kFolder = browser_.typing == AssetBrowser::Typing::Folder;
+        RAWFRAME_TRY_ASSIGN(const auto kTyped,
+                            searchWell(browser_.tools,
+                                       kFolder ? "New folder name" : "Rename to",
+                                       kFolder ? "Folder name" : "",
+                                       kFolder ? std::string{} : renamedFrom(),
+                                       170,
+                                       kFolder ? Icon::Folder : Icon::File));
+        browser_.boxes.push_back(kTyped.first);
+        browser_.typed = kTyped.second;
+    } else if (!browser_.removing.empty()) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kAsk, kHeld(box(browser_.tools, ui::Layout{.shrink = 0}, 0)));
+        RAWFRAME_TRY(words(kAsk, "Delete " + browser_.removing + "?", look::kInk, look::kBodySize));
+        RAWFRAME_TRY_ASSIGN(browser_.removeSure,
+                            kHeld(textButton(browser_.tools, Icon::Trash, "Delete for good", ButtonKind::Primary)));
+        RAWFRAME_TRY(tree_->setLook(browser_.removeSure,
+                                    ui::Look{.fill = look::kError, .borderColor = look::kError, .radius = 5}));
+        RAWFRAME_TRY_ASSIGN(browser_.removeKeep, kHeld(textButton(browser_.tools, std::nullopt, "Keep")));
+    } else {
+        RAWFRAME_TRY_ASSIGN(browser_.newFolder, kHeld(textButton(browser_.tools, Icon::Folder, "New folder")));
+        // Never the game's description or its Kest project, which the
+        // session keeps where they are.
+        if (!browser_.target.empty() && browser_.target != description_.filename().string() &&
+            browser_.target != "kest.project") {
+            RAWFRAME_TRY_ASSIGN(browser_.rename, kHeld(textButton(browser_.tools, std::nullopt, "Rename")));
+            RAWFRAME_TRY_ASSIGN(browser_.remove, kHeld(iconButton(browser_.tools, Icon::Trash, "Delete")));
+        }
+    }
     // A new scene is the session's own verb, not an operation the catalog
     // lists, so it is always offered. A file's absolute path typed there
     // imports it instead (D505).
@@ -500,7 +542,8 @@ result::Status ShellParticipant::showBrowser() {
                                 Icon which,
                                 std::optional<std::size_t> count,
                                 float indent,
-                                bool on) -> result::Result<ui::Node> {
+                                bool on,
+                                std::string_view name = {}) -> result::Result<ui::Node> {
         RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode,
                             kHeld(box(browser_.folders,
                                       ui::Layout{.height = ui::pixels(24),
@@ -520,20 +563,26 @@ result::Status ShellParticipant::showBrowser() {
             RAWFRAME_TRY(tree_->setInteraction(kCount, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
         }
         RAWFRAME_TRY(tree_->setRole(kRowNode, ui::Role::Button));
-        RAWFRAME_TRY(tree_->setName(kRowNode, text));
+        RAWFRAME_TRY(tree_->setName(kRowNode, name.empty() ? text : name));
         return kRowNode;
     };
-    RAWFRAME_TRY(kFolderRow(description_.stem().string(), Icon::ChevronDown, std::nullopt, 6, false));
+    // The game's own row, where a card let go goes to its root (D929).
+    RAWFRAME_TRY_ASSIGN(browser_.rootRow,
+                        kFolderRow(description_.stem().string(), Icon::ChevronDown, std::nullopt, 6, false));
     RAWFRAME_TRY_ASSIGN(const ui::Node kEvery,
                         kFolderRow("Everything", Icon::Layers, every, 20, !browser_.folder.has_value()));
     browser_.folderRows.emplace_back(kEvery, std::string{});
+    // Each folder under the one it is in, by its own name, named whole for
+    // assistive technology (D929).
     for (const auto& [kFolder, kCount] : folders) {
+        const auto kDepth = static_cast<float>(std::ranges::count(kFolder, '/'));
         RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode,
-                            kFolderRow(kFolder,
+                            kFolderRow(std::string_view{kFolder}.substr(kFolder.rfind('/') + 1),
                                        browser_.folder == kFolder ? Icon::FolderOpen : Icon::Folder,
                                        kCount,
-                                       20,
-                                       browser_.folder == kFolder));
+                                       20 + (14 * kDepth),
+                                       browser_.folder == kFolder,
+                                       kFolder));
         browser_.folderRows.emplace_back(kRowNode, kFolder);
     }
     RAWFRAME_TRY(kHeld(box(browser_.folders, ui::Layout{.grow = 1}, 0)));
@@ -653,6 +702,7 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
     // A script opens in the author's editor (D919).
     if (const auto kScript = std::ranges::find(browser_.scriptRows, node, &std::pair<ui::Node, std::string>::first);
         kScript != browser_.scriptRows.end()) {
+        browser_.target = kScript->second;
         openEditor(Diagnostic{.file = "game/" + kScript->second, .line = 1, .column = 1});
         return true;
     }
@@ -664,6 +714,25 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
     }
     if (node == browser_.import && browser_.import != ui::Node{}) {
         importAsked();
+        return true;
+    }
+    // Assets' file operations (D929).
+    if (node == browser_.newFolder && node != ui::Node{}) {
+        beginFolder();
+        return true;
+    }
+    if (node == browser_.rename && node != ui::Node{}) {
+        beginRename();
+        return true;
+    }
+    if (node == browser_.remove && node != ui::Node{}) {
+        browser_.removing = browser_.target;
+        static_cast<void>(showScenes());
+        say("delete " + browser_.removing + "? It is gone for good, its sidecar with it");
+        return true;
+    }
+    if ((node == browser_.removeSure || node == browser_.removeKeep) && node != ui::Node{}) {
+        removeAsked(node == browser_.removeSure);
         return true;
     }
     if (node == browser_.reimport && browser_.reimport != ui::Node{}) {
@@ -689,6 +758,10 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
         return true;
     }
     if (kNarrow(browser_.kindRows, browser_.kind) || kNarrow(browser_.folderRows, browser_.folder)) {
+        // A folder pressed is what Rename and Delete act on (D929).
+        if (std::ranges::contains(browser_.folderRows, node, &std::pair<ui::Node, std::string>::first)) {
+            browser_.target = browser_.folder.value_or(std::string{});
+        }
         static_cast<void>(showScenes());
         say(std::string{browser_.kind.has_value() ? kindLabel(*browser_.kind) : "All kinds"} + " in " +
             (browser_.folder.has_value() ? *browser_.folder + "/" : std::string{"all folders"}));
@@ -699,6 +772,11 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
         return false;
     }
     browser_.chosen = kSource->second;
+    browser_.target = kSource->second;
+    // Held, it may be dragged onto a folder (D929).
+    if (pointerPress_) {
+        browser_.held = kSource->second;
+    }
     ++browser_.chosenCount;
     showImportSettings();
     // Lit as the list is made again.

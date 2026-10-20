@@ -75,6 +75,7 @@ inline constexpr diagnostics::EventIdentity kStartScreen{"studio", "studio_start
 inline constexpr diagnostics::EventIdentity kSelection{"studio", "studio_selection"};
 inline constexpr diagnostics::EventIdentity kViewported{"studio", "studio_viewport"};
 inline constexpr diagnostics::EventIdentity kBrowsed{"studio", "studio_assets"};
+inline constexpr diagnostics::EventIdentity kFilesChanged{"studio", "studio_files"};
 inline constexpr diagnostics::EventIdentity kPlayedRecord{"studio", "studio_played"};
 /// The image key the viewport's picture is drawn under (D789).
 inline constexpr std::uint64_t kViewportImage = 0x5649455750ULL;
@@ -571,6 +572,26 @@ private:
     /// Greets the session and reads what it offers and the game's scenes;
     /// false, with `broken_` set, when the game does not read (D453).
     bool openGame();
+    /// The documents Studio opens, read from the game's directory as it
+    /// is: its scenes, then each kind it edits, then its description.
+    void listDocuments();
+
+    /// Assets' file operations (D929): a folder's name and the target's
+    /// new one begun in the heading's field and taken from it; the target
+    /// moved, removed once confirmed, or kept; a card let go on a folder;
+    /// the lists read again after any, the open document followed.
+    void beginFolder();
+    void beginRename();
+    /// What the rename field begins with: the target's name, a file's
+    /// without its extension.
+    [[nodiscard]] std::string renamedFrom() const;
+    void madeFolder(const std::string& typed);
+    void renamed(const std::string& typed);
+    void moveFile(const std::string& from, const std::string& to);
+    void removeAsked(bool sure);
+    void refreshFiles(const std::string& from, const std::string& to);
+    void dropAsset();
+    void logFiles(std::string_view verb, std::string_view from, std::string_view to, std::size_t named);
 
     /// The game that does not read: why, where, and what to do.
     result::Status showBroken(ui::Node body);

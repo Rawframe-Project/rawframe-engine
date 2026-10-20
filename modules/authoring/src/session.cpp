@@ -37,7 +37,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 49> kVerbs = {
+constexpr std::array<VerbName, 52> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -65,6 +65,9 @@ constexpr std::array<VerbName, 49> kVerbs = {
     VerbName{.kind = "authoring.set_import_settings", .verb = SessionVerb::SetImportSettings},
     VerbName{.kind = "authoring.thumbnail", .verb = SessionVerb::Thumbnail},
     VerbName{.kind = "authoring.asset_references", .verb = SessionVerb::AssetReferences},
+    VerbName{.kind = "authoring.move_file", .verb = SessionVerb::MoveFile},
+    VerbName{.kind = "authoring.remove_file", .verb = SessionVerb::RemoveFile},
+    VerbName{.kind = "authoring.make_folder", .verb = SessionVerb::MakeFolder},
     VerbName{.kind = "authoring.run", .verb = SessionVerb::Run},
     VerbName{.kind = "authoring.step", .verb = SessionVerb::Step},
     VerbName{.kind = "authoring.traffic", .verb = SessionVerb::Traffic},
@@ -157,9 +160,12 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Cancel:
     case SessionVerb::ImportSettings:
     case SessionVerb::AssetReferences:
+    case SessionVerb::RemoveFile:
+    case SessionVerb::MakeFolder:
         return Members{.required = 1, .optional = 0};
     case SessionVerb::SetImportSettings:
     case SessionVerb::Thumbnail:
+    case SessionVerb::MoveFile:
         return Members{.required = 2, .optional = 0};
     }
     return {};
@@ -403,6 +409,29 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
                 return malformed("set_import_settings gives the settings to change, an object");
             }
             record.settings = *kSettings;
+        }
+        return record;
+    }
+    case SessionVerb::MoveFile:
+    case SessionVerb::RemoveFile:
+    case SessionVerb::MakeFolder: {
+        // Paths under the game's directory, the session's to check there
+        // (D929).
+        const auto kPath = [&parsed](const char* member) {
+            const std::string* kText = textOf(parsed->find(member));
+            return kText != nullptr && !kText->empty() && kText->size() <= 1024 ? kText : nullptr;
+        };
+        const std::string* kFirst = kPath(record.verb == SessionVerb::MoveFile     ? "from"
+                                          : record.verb == SessionVerb::RemoveFile ? "path"
+                                                                                   : "folder");
+        const std::string* kTo = record.verb == SessionVerb::MoveFile ? kPath("to") : kFirst;
+        if (kFirst == nullptr || kTo == nullptr) {
+            return malformed("move_file names `from` and `to`, remove_file a `path`, make_folder a `folder`, each "
+                             "under the game's directory");
+        }
+        record.asset = *kFirst;
+        if (record.verb == SessionVerb::MoveFile) {
+            record.as = *kTo;
         }
         return record;
     }

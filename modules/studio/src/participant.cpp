@@ -387,6 +387,12 @@ bool ShellParticipant::openGame() {
     browser_.sources = sourcesOf(kAssets);
     // The game's extensions, their commands Studio's own (D874).
     extensions_ = extensionsOf(ask(extensionsRecord(next())));
+    browser_.folderList = foldersOf(kAssets);
+    listDocuments();
+    return true;
+}
+
+void ShellParticipant::listDocuments() {
     std::vector<std::pair<std::string, std::string>> scenes;
     for (const auto& [kIdentity, kPath] : authoring_session::scenesBeside(description_)) {
         std::error_code error;
@@ -444,7 +450,6 @@ bool ShellParticipant::openGame() {
         sceneSources_.emplace_back();
         listed_.push_back(Listed::Settings);
     }
-    return true;
 }
 
 result::Status ShellParticipant::start(composition::ParticipantContext& context) noexcept {
@@ -732,7 +737,11 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("thumbnailsMade", browser_.thumbnailsMade),
                   diagnostics::field("referencesShown", browser_.referencesShown),
                   diagnostics::field("dropped", browser_.dropped),
-                  diagnostics::field("droppedImported", browser_.droppedImported)});
+                  diagnostics::field("droppedImported", browser_.droppedImported),
+                  diagnostics::field("folders", static_cast<std::uint64_t>(browser_.folderList.size())),
+                  diagnostics::field("moved", browser_.moved),
+                  diagnostics::field("removed", browser_.removed),
+                  diagnostics::field("foldersMade", browser_.foldersMade)});
     // And what the start screen did (D781): the games made from templates,
     // the game Studio ended on, if any, and the games kept as opened last.
     emitter_.log(diagnostics::Severity::Info,

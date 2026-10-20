@@ -33,6 +33,10 @@ struct Imported {
     bool mapped = false;
 };
 
+/// Whether `path` stays where it is put: relative, with no `..` and no
+/// root, drive, or scheme.
+[[nodiscard]] bool staysUnder(std::string_view path);
+
 /// The answer an import gives: `authoring.imported` with what it made.
 [[nodiscard]] document::Value importedOf(const Imported& made);
 

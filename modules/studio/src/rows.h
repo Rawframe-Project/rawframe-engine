@@ -54,6 +54,10 @@ struct FieldRow {
         Editor,
         /// A chosen source's import setting, `field` its name (D800).
         ImportSetting,
+        /// A new folder's name in Assets, and the name the target of Assets
+        /// is renamed to (D929).
+        NewFolder,
+        RenameFile,
         /// A data document's value, `field` its path, `kind` "string" for
         /// text or "json" (D812).
         DataValue,

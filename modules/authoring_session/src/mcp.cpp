@@ -540,6 +540,35 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"source", "as"}),
                                annotationsOf(false, false)));
     }
+    // The game's files moved, removed, and its folders made (D929).
+    {
+        Value properties = Value::object();
+        properties.add("from", property("string", false, "The file's or folder's path under the game's directory."));
+        properties.add("to", property("string", false, "Where it goes under the game's directory."));
+        tools.push_back(toolOf("file_move",
+                               "Moves or renames a file or folder of the game's, a source with its sidecar so it "
+                               "keeps its identity, and renames the game description's lines naming it; says the "
+                               "other files whose text names the old path.",
+                               schemaOf(std::move(properties), {"from", "to"}),
+                               annotationsOf(false, false)));
+    }
+    {
+        Value properties = Value::object();
+        properties.add("path", property("string", false, "The file's or folder's path under the game's directory."));
+        tools.push_back(toolOf("file_remove",
+                               "Removes a file of the game's with its sidecar, or a folder with all it holds, and "
+                               "the game description's lines naming them; says the files whose text still names it.",
+                               schemaOf(std::move(properties), {"path"}),
+                               annotationsOf(false, true)));
+    }
+    {
+        Value properties = Value::object();
+        properties.add("folder", property("string", false, "The folder's path under the game's directory."));
+        tools.push_back(toolOf("folder_make",
+                               "Makes a folder under the game's directory, and those it is in.",
+                               schemaOf(std::move(properties), {"folder"}),
+                               annotationsOf(false, false)));
+    }
     // The played game paused, let run, and stepped (D806).
     {
         Value properties = Value::object();
@@ -896,6 +925,16 @@ McpBridge::State::callSession(const Value& id, std::string_view name, const Valu
         made = record("authoring.import", recordId);
         copy("source", "source");
         copy("as", "as");
+    } else if (name == "file_move") {
+        made = record("authoring.move_file", recordId);
+        copy("from", "from");
+        copy("to", "to");
+    } else if (name == "file_remove") {
+        made = record("authoring.remove_file", recordId);
+        copy("path", "path");
+    } else if (name == "folder_make") {
+        made = record("authoring.make_folder", recordId);
+        copy("folder", "folder");
     } else if (name == "game_run") {
         made = record("authoring.run", recordId);
         copy("scene", "scene");

@@ -36,6 +36,7 @@ void ShellParticipant::pressAt(float x, float y) {
     const bool kMoving = beforePress();
     const auto kHit = tree_->hit(root_, x, y);
     heldEntity_.reset();
+    browser_.held.reset();
     if (kHit.has_value() && kHit->node.has_value()) {
         // Only a pointer's press holds a row to drag; a screen reader's
         // press is let go as it is made.
@@ -410,6 +411,14 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         endEdit();
         stepTo(static_cast<std::size_t>(kEntry - entryRows_.begin()));
     } else if (const auto kScene = std::ranges::find(sceneRows_, node); kScene != sceneRows_.end()) {
+        // What Assets' Rename and Delete act on, and held to be dragged
+        // onto a folder (D929).
+        if (const auto kAt = static_cast<std::size_t>(kScene - sceneRows_.begin()); kAt < scenes_.size()) {
+            browser_.target = scenes_[kAt];
+            if (pointerPress_) {
+                browser_.held = scenes_[kAt];
+            }
+        }
         if (moving && chosen(Listed::Ui) && static_cast<std::size_t>(kScene - sceneRows_.begin()) == sceneAt_) {
             moveNodeInto(std::nullopt);
         } else if (moving && chosen(Listed::Ui)) {
@@ -664,6 +673,10 @@ void ShellParticipant::take(const view::Typing& typing) {
             place(typed);
         } else if (kEdited.role == FieldRow::Role::NewScene) {
             makeScene(typed);
+        } else if (kEdited.role == FieldRow::Role::NewFolder) {
+            madeFolder(typed);
+        } else if (kEdited.role == FieldRow::Role::RenameFile) {
+            renamed(typed);
         } else if (kEdited.role == FieldRow::Role::NewGame) {
             makeGame(typed);
         } else if (kEdited.role == FieldRow::Role::GameFolder) {
@@ -696,6 +709,9 @@ void ShellParticipant::take(const view::Typing& typing) {
         if (kRole == FieldRow::Role::View) {
             showViewText();
         } else if (kRole == FieldRow::Role::NewScene) {
+            static_cast<void>(showScenes());
+        } else if (kRole == FieldRow::Role::NewFolder || kRole == FieldRow::Role::RenameFile) {
+            browser_.typing = AssetBrowser::Typing::None;
             static_cast<void>(showScenes());
         } else if (kRole == FieldRow::Role::Instance || kRole == FieldRow::Role::Find) {
             refresh(entity_.empty() ? std::nullopt : std::optional<std::string>{entity_});

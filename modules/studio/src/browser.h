@@ -37,6 +37,10 @@ struct ListedSource {
 /// an entry out of shape left out.
 [[nodiscard]] std::vector<ListedSource> sourcesOf(std::string_view reply);
 
+/// The folders an `authoring.assets` answer lists, those with nothing in
+/// them too (D929).
+[[nodiscard]] std::vector<std::string> foldersOf(std::string_view reply);
+
 /// The kind an importer makes, as the browser filters by it: its name after
 /// `rawframe.`.
 [[nodiscard]] std::string kindOf(std::string_view importer);
@@ -125,6 +129,34 @@ struct AssetBrowser {
     /// How many times a source was chosen, and the folder and kind narrowed.
     std::uint64_t chosenCount = 0;
     std::uint64_t narrowed = 0;
+    /// Every folder the session lists (D929); what New folder, Rename and
+    /// Delete act on, the card or folder last pressed, by its path under
+    /// the game's directory; the heading's controls for them; the name
+    /// being typed, a new folder's or the target's, in its field; the
+    /// target asked to be deleted, and its confirmation's controls.
+    std::vector<std::string> folderList;
+    std::string target;
+    ui::Node newFolder{};
+    ui::Node rename{};
+    ui::Node remove{};
+    enum class Typing : std::uint8_t {
+        None,
+        Folder,
+        Rename
+    };
+    Typing typing = Typing::None;
+    ui::Node typed{};
+    std::string removing;
+    ui::Node removeSure{};
+    ui::Node removeKeep{};
+    /// A card held, dragged onto a folder or the game's own row to move it
+    /// there; that row.
+    std::optional<std::string> held;
+    ui::Node rootRow{};
+    /// How many files were moved and removed, and folders made.
+    std::uint64_t moved = 0;
+    std::uint64_t removed = 0;
+    std::uint64_t foldersMade = 0;
 
     /// The source listed at `path`, if any.
     [[nodiscard]] const ListedSource* find(std::string_view path) const;

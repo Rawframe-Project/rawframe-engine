@@ -7,6 +7,7 @@
 #include "data_kinds.h"
 #include "documents.h"
 #include "extensions.h"
+#include "files.h"
 #include "handles.h"
 #include "importing.h"
 #include "presence.h"
@@ -219,6 +220,20 @@ private:
             RAWFRAME_TRY(load());
             return importedOf(kMade);
         }
+        case authoring::SessionVerb::MoveFile:
+        case authoring::SessionVerb::RemoveFile: {
+            // What was open of it let go, and the game read again, so it
+            // declares the file where it is now (D929).
+            const bool kRemoved = record.verb == authoring::SessionVerb::RemoveFile;
+            RAWFRAME_TRY_ASSIGN(const FilesChanged kChanged,
+                                kRemoved ? removeFile(game_, record.asset) : moveFile(game_, record.asset, record.as));
+            letGoUnder(record.asset);
+            catalog_.reset();
+            RAWFRAME_TRY(load());
+            return filesChangedOf(kChanged, kRemoved);
+        }
+        case authoring::SessionVerb::MakeFolder:
+            return makeFolder(game_, record.asset);
         case authoring::SessionVerb::ImportSettings:
             return importSettingsOf(game_, record.asset, importers_);
         case authoring::SessionVerb::SetImportSettings:
@@ -308,6 +323,12 @@ private:
             made.add("kind", Value::string("authoring.assets"));
             made.add("assets", assets_);
             made.add("sources", sourcesValue());
+            // Every folder, those with nothing in them too (D929).
+            Value folders = Value::array();
+            for (const std::string& kFolder : foldersBeside(game_)) {
+                folders.push(Value::string(kFolder));
+            }
+            made.add("folders", std::move(folders));
             return made;
         }
         }
@@ -903,6 +924,17 @@ private:
         made.add("reopened", Value::boolean(reopened));
         made.add("previewing", Value::boolean(forward(record.scene, *open)));
         return made;
+    }
+
+    /// The documents open at `path` or under it, a folder, let go: moved or
+    /// removed, they are read again from where they are when next named.
+    void letGoUnder(const std::string& path) {
+        const std::filesystem::path kPath = std::filesystem::weakly_canonical(root_ / path);
+        std::erase_if(scenes_, [&kPath](const auto& open) {
+            const std::filesystem::path kOpen{open.first};
+            const auto [kEnd, kAt] = std::ranges::mismatch(kPath, kOpen);
+            return kEnd == kPath.end();
+        });
     }
 
     /// The previewed scene, open, if it is.

@@ -979,6 +979,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"studio_cook_brought\"[^\n]*\"copied\":[1-9][0-9]*,.*\"code\":\"studio_summary\"[^\n]*\"played\":1,.*\"code\":\"textures_read\".*cooked on the host")
+        # Assets' file operations (D929): in a copy of Plaza a folder made
+        # and listed though empty, a material dragged onto it and moved
+        # there, another renamed, keeping its extension, and a third
+        # deleted once confirmed; each a session verb the game's files show.
+        add_test(NAME studio_files
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/plaza/plaza.game gate.scene "@New folder" wait=1 keys=a,r,t,Return
+                         "until=studio_files,folders>=1" "drag=@brass.rfmaterial,@art" "until=studio_files,moved>=1"
+                         @marble.rfmaterial @Rename wait=1 keys=s,t,o,n,e,Return "until=studio_files,moved>=2"
+                         @monitor.rfmaterial @Delete "@Delete for good" "until=studio_files,removed>=1"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_files PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"status\":\"art/ made.*\"status\":\"moved brass.rfmaterial to art/brass.rfmaterial.*\"status\":\"renamed marble.rfmaterial to stone.rfmaterial.*\"status\":\"deleted monitor.rfmaterial.*\"code\":\"studio_assets\"[^\n]*\"moved\":2,\"removed\":1,\"foldersMade\":1")
         # The asset browser (D799): Plaza's sources narrowed to its textures,
         # one chosen and said not cooked, then cooked by Studio and said
         # cooked; its scene left out of the list while textures are shown.

@@ -279,6 +279,31 @@ std::string litIn(std::string_view reply) {
     return kLit != nullptr && kLit->text() != nullptr ? *kLit->text() : std::string{};
 }
 
+Value moveFileRecord(std::int64_t id, std::string_view from, std::string_view to) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.move_file"));
+    record.add("id", Value::integer(id));
+    record.add("from", Value::string(std::string{from}));
+    record.add("to", Value::string(std::string{to}));
+    return record;
+}
+
+Value removeFileRecord(std::int64_t id, std::string_view path) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.remove_file"));
+    record.add("id", Value::integer(id));
+    record.add("path", Value::string(std::string{path}));
+    return record;
+}
+
+Value makeFolderRecord(std::int64_t id, std::string_view folder) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.make_folder"));
+    record.add("id", Value::integer(id));
+    record.add("folder", Value::string(std::string{folder}));
+    return record;
+}
+
 Value assetsRecord(std::int64_t id) {
     Value record = Value::object();
     record.add("kind", Value::string("authoring.assets"));

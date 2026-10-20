@@ -676,6 +676,10 @@ void ShellParticipant::showScene(std::size_t at) {
     }
     scene_ = scenes_[at];
     sceneAt_ = at;
+    // A document opened is what Assets' Rename and Delete act on (D929).
+    if (kChanged) {
+        browser_.target = scene_;
+    }
     showTabs(at);
     showTitle();
     // The mode it is in, lit in the palette (D910).

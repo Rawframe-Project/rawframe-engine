@@ -159,6 +159,13 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_imports)
     set_tests_properties(author_imports PROPERTIES
                          PASS_REGULAR_EXPRESSION "imported a texture and a mesh into the plaza and cooked them")
+    # A game's files moved, removed, and its folders made through a
+    # session, then cooked from where they are (D929).
+    add_test(NAME author_files
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_files.sh $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/author_files)
+    set_tests_properties(author_files PROPERTIES
+                         PASS_REGULAR_EXPRESSION "moved, removed, and made the plaza's files and folders and cooked it")
     # A blockout authored line by line and cooked as a mesh (D848, D849).
     add_test(NAME author_blockout
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_blockout.sh $<TARGET_FILE:rawframe_host_author>
