@@ -97,6 +97,10 @@ struct ComponentSchema {
     /// path or a point on it, whose curve a preview draws (D891).
     bool splinePath = false;
     bool splinePoint = false;
+    /// Made by a client that draws, from its `presentation` lines, and
+    /// never on a server: a scene holding one draws nothing of it, so an
+    /// editor offers none to add (D919).
+    bool presented = false;
     /// The Kest type the game declares it of, as its line names it, so a
     /// tool finds a game's sun or sky by the engine's type (D834).
     std::string type;

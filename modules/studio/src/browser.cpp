@@ -437,6 +437,7 @@ result::Status ShellParticipant::showBrowser() {
     for (const std::string& kScene : scenes_) {
         every += browser_.find(kScene) == nullptr ? 1 : 0;
     }
+    every += authoring_session::filesBeside(description_, ".kest").size();
     const auto kHeld = [this](result::Result<ui::Node> made) -> result::Result<ui::Node> {
         if (made.has_value()) {
             browser_.boxes.push_back(*made);
@@ -578,6 +579,22 @@ result::Status ShellParticipant::showDocuments() {
                                                 .chosen = each == sceneAt_ && !scene_.empty()}));
         sceneRows_.push_back(kCard);
     }
+    // The game's Kest scripts, each opened in the author's editor (D919).
+    browser_.scriptRows.clear();
+    if (browser_.folder.has_value() || (browser_.kind.has_value() && *browser_.kind != "kest")) {
+        return {};
+    }
+    for (const std::filesystem::path& kFile : authoring_session::filesBeside(description_, ".kest")) {
+        std::error_code error;
+        const std::string kRelative = std::filesystem::relative(kFile, description_.parent_path(), error).generic_string();
+        if (error || !named(kRelative, browser_.search)) {
+            continue;
+        }
+        RAWFRAME_TRY_ASSIGN(const ui::Node kCard,
+                            assetCard(AssetCard{.name = kFile.filename().string(), .kind = "kest", .what = "script"}));
+        browser_.boxes.push_back(kCard);
+        browser_.scriptRows.emplace_back(kCard, kRelative);
+    }
     return {};
 }
 
@@ -626,6 +643,12 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
         ++browser_.chosenCount;
         static_cast<void>(showScenes());
         showImportSettings();
+        return true;
+    }
+    // A script opens in the author's editor (D919).
+    if (const auto kScript = std::ranges::find(browser_.scriptRows, node, &std::pair<ui::Node, std::string>::first);
+        kScript != browser_.scriptRows.end()) {
+        openEditor(Diagnostic{.file = "game/" + kScript->second, .line = 1, .column = 1});
         return true;
     }
     // The search, typed into as the grid narrows (D916).

@@ -90,6 +90,10 @@ result::Result<authoring::ComponentCatalog> catalogOf(const rawframe::world_kest
             .uiNode = rawframe::world_kest::ofEngineType(component, "rawframe.ui.Node"),
             .splinePath = rawframe::world_kest::ofEngineType(component, "rawframe.spline.Spline"),
             .splinePoint = rawframe::world_kest::ofEngineType(component, "rawframe.spline.Point"),
+            .presented = std::ranges::any_of(game.presentation,
+                                             [&component](const rawframe::world_kest::GamePresentation& line) {
+                                                 return std::ranges::contains(line.components, component.name);
+                                             }),
             .type = component.kestType};
         std::vector<std::string> references;
         for (const rawframe::world_kest::GameEntityField& field : game.entityFields) {

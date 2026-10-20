@@ -339,6 +339,8 @@ struct Catalog {
         bool uiNode = false;
         /// The Kest type the game declares it of (D834).
         std::string type;
+        /// Made only by a client that draws (D919): never added to a scene.
+        bool presented = false;
     };
     std::vector<std::string> operations;
     std::vector<Component> components;

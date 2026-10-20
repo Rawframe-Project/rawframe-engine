@@ -770,6 +770,9 @@ std::string writeDiscovery(const ComponentCatalog* catalog) {
             if (component.uiNode) {
                 each.add("uiNode", Value::boolean(true));
             }
+            if (component.presented) {
+                each.add("presented", Value::boolean(true));
+            }
             each.add("fields", std::move(fields));
             if (!component.type.empty()) {
                 each.add("type", Value::string(component.type));

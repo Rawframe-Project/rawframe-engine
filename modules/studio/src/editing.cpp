@@ -456,7 +456,7 @@ std::vector<std::string> ShellParticipant::addChoices(std::string_view typed) co
     // a list's worth.
     std::vector<std::string> listed;
     for (const Catalog::Component& kEach : catalog_.components) {
-        if (kEach.uiNode || (listed.size() >= 14)) {
+        if (kEach.uiNode || kEach.presented || listed.size() >= 14) {
             continue;
         }
         if (named(kEach.name, typed) || named(prettyComponent(kEach.name), typed)) {
@@ -856,7 +856,7 @@ std::vector<std::string> ShellParticipant::partCommands() const {
 const Catalog::Component* ShellParticipant::lampComponent() const {
     // The game's lamp: a point light it keeps in its scenes, by name.
     const auto kFound = std::ranges::find_if(catalog_.components, [](const Catalog::Component& each) {
-        return each.type == "rawframe.model.PointLight" && each.name.ends_with(".lamp");
+        return each.type == "rawframe.model.PointLight" && each.name.ends_with(".lamp") && !each.presented;
     });
     return kFound != catalog_.components.end() ? &*kFound : nullptr;
 }
@@ -971,12 +971,27 @@ void ShellParticipant::openEditor(const Diagnostic& at) {
         return;
     }
     const char* const kPath = std::getenv("PATH");
-    const auto kProgram = programOnPath(kWords.front(), kPath != nullptr ? kPath : "");
-    if (!kProgram.has_value()) {
+    auto program = programOnPath(kWords.front(), kPath != nullptr ? kPath : "");
+    std::vector<std::string> arguments(kWords.begin() + 1, kWords.end());
+    // Where the editor named is not there, the file opens as the system
+    // opens it (D919).
+    if (!program.has_value()) {
+#if defined(_WIN32)
+        constexpr std::string_view kOpener = "explorer.exe";
+#elif defined(__APPLE__)
+        constexpr std::string_view kOpener = "open";
+#else
+        constexpr std::string_view kOpener = "xdg-open";
+#endif
+        program = programOnPath(std::string{kOpener}, kPath != nullptr ? kPath : "");
+        arguments = {kFile->string()};
+    }
+    if (!program.has_value()) {
         say("no editor " + kWords.front() + " is on the path; studio.editor names one");
         return;
     }
-    const std::vector<std::string> kArguments(kWords.begin() + 1, kWords.end());
+    const auto& kProgram = program;
+    const std::vector<std::string>& kArguments = arguments;
     // A batch file's arguments are parsed again by cmd.exe: a file name
     // holding what it acts on would run as a command (D453a).
     if (isBatch(*kProgram) && !std::ranges::all_of(kArguments, batchSafe)) {
@@ -993,7 +1008,7 @@ void ShellParticipant::openEditor(const Diagnostic& at) {
     // launcher, as VS Code's `code`, hands the file over and returns.
     editors_.push_back(std::move(*started));
     ++opened_;
-    say("opened " + diagnostic_->file.substr(5) + " at line " + std::to_string(diagnostic_->line));
+    say("opened " + at.file.substr(5) + " at line " + std::to_string(at.line));
 }
 
 void ShellParticipant::duplicate() {

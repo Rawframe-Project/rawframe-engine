@@ -79,6 +79,8 @@ struct AssetBrowser {
     std::vector<std::pair<ui::Node, std::string>> kindRows;
     std::vector<std::pair<ui::Node, std::string>> folderRows;
     std::vector<std::pair<ui::Node, std::string>> sourceRows;
+    /// The game's scripts' cards, each by its path in the game (D919).
+    std::vector<std::pair<ui::Node, std::string>> scriptRows;
     std::vector<ui::Node> boxes;
     /// The pane as the design draws it (D916): its heading's parts, the
     /// folders' column, and the cards' grid, kept while the game is open
