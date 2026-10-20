@@ -33,7 +33,9 @@
 # the program stopped, once the mouse is over the point (D477). The
 # arguments `freeze` and `thaw` stop the program and let it go on, so what
 # comes between, clicks and the wheel among it, is read in one frame
-# (D479). An argument `quick=` and X key names presses them a few
+# (D479); `tree` prints every control the accessibility bus shows, a line
+# each, and `shot=` and a path keeps the screen there as xwd keeps it
+# (D925). An argument `quick=` and X key names presses them a few
 # milliseconds apart with the program running, as a quick player does,
 # so they reach it within one world tick (D506). An argument
 # `move=` and a point moves the pointer there with no press, a second
@@ -56,7 +58,8 @@
 # gives it to assistive technology, `#n` after it for the n-th so named
 # (D774): found through the accessibility bus the test started
 # (AT_SPI_BUS_ADDRESS) by tools/atspi.py when its turn comes, since what
-# came before may have moved it, in the application CLICK_APPLICATION
+# came before may have moved it, `|` and a pixel offset after it for a
+# point beside it (D925), in the application CLICK_APPLICATION
 # names, rawframe-studio unless set; between `freeze` and `thaw`, before
 # the program is stopped, since a stopped program answers nobody.
 # Five seconds after, it stops the program whose pid its pid file holds
@@ -69,7 +72,7 @@
 #                 | wheel=<x>,<y>,<turns>[,<key>] | drag=<x>,<y>,<x>,<y>[,<key>]
 #                 | frozen=<key>[,<key>...] | quick=<key>[,<key>...]
 #                 | frozenclick=<x>,<y>:<text>
-#                 | move=<x>,<y> | freeze | thaw
+#                 | move=<x>,<y> | freeze | thaw | tree | shot=<path>
 #                 | orbit=<x>,<y>,<x>,<y>[,<key>] | wait=<seconds>
 #                 | until=<code>[,<field>=<value> | ,<field>>=<number>][#<count>][@<log>][~<seconds>]
 #                 | edit=<file>:<text>:<text>
@@ -80,6 +83,7 @@ import ctypes.util
 import os
 import re
 import signal
+import subprocess
 import sys
 import time
 
@@ -189,7 +193,12 @@ def stop(pid_file):
 
 def brightness(x, display, root, at, y):
     """The mean of the red, green, and blue of the five by five pixels
-    around a point."""
+    around a point; 0 for a point off the screen, which X refuses to read
+    (D925)."""
+    screen = x.XDefaultScreen(display)
+    if not (2 <= at < x.XDisplayWidth(display, screen) - 2 and 2 <= y < x.XDisplayHeight(display, screen) - 2):
+        print(f"{at},{y} is off the screen", flush=True)
+        return 0
     image = x.XGetImage(display, root, at - 2, y - 2, 5, 5, 0xFFFFFFFF, 2)
     if not image:
         return 0
@@ -207,11 +216,20 @@ def named_point(name):
 
     address = os.environ.get("AT_SPI_BUS_ADDRESS", "")
     application = os.environ.get("CLICK_APPLICATION", "rawframe-studio")
+    # `|` and an offset in pixels after the name: a point beside the
+    # control, as where a row it adds in the same frame will be (D925).
+    dx = dy = 0
+    if "|" in name:
+        name, _, offset = name.rpartition("|")
+        dx, dy = (int(part) for part in offset.split(","))
     for _ in range(30):
         owner = atspi.application(address, application) if address else None
-        point = atspi.centre(address, owner, name) if owner else None
+        # A control before words of the same name, as a button's own label
+        # (D925); the words where no control is so named.
+        point = (atspi.centre(address, owner, name, unless="label") or atspi.centre(address, owner, name)
+                 if owner else None)
         if point is not None:
-            return point
+            return point[0] + dx, point[1] + dy
         time.sleep(0.2)
     return None, None
 
@@ -241,7 +259,10 @@ def main():
         if argument.startswith("quick="):
             points.append((None, "quick", argument[len("quick="):].split(",")))
             continue
-        if argument in ("freeze", "thaw"):
+        if argument.startswith("shot="):
+            points.append((None, None, ("shot", argument[len("shot="):])))
+            continue
+        if argument in ("freeze", "thaw", "tree"):
             points.append((None, None, (argument,)))
             continue
         if argument.startswith("until="):
@@ -396,6 +417,19 @@ def main():
                 os.kill(int(told.read().strip()), signal.SIGSTOP if text[0] == "freeze" else signal.SIGCONT)
             print("froze the program" if text[0] == "freeze" else "let the program go on")
             time.sleep(0.5 if text[0] == "freeze" else 1.5)
+            continue
+        if isinstance(text, tuple) and text[0] == "shot":
+            with open(text[1], "wb") as shot:
+                subprocess.run(["xwd", "-root", "-silent"], stdout=shot, check=False)
+            print(f"screen kept in {text[1]}")
+            continue
+        if isinstance(text, tuple) and text[0] == "tree":
+            import atspi
+
+            address = os.environ.get("AT_SPI_BUS_ADDRESS", "")
+            owner = atspi.application(address, os.environ.get("CLICK_APPLICATION", "rawframe-studio")) if address else None
+            for path, role, label in atspi.walk(address, owner) if owner else ():
+                print(f"tree: {role} {label}")
             continue
         if isinstance(text, tuple) and text[0] == "edit":
             with open(text[1], encoding="utf-8") as read:

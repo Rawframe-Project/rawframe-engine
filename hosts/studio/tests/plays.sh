@@ -26,14 +26,15 @@ for pair in ${STUDIO_EXTRA_FILES:-}; do
     mkdir -p "$work/game/$(dirname "${pair#*=}")"
     cp "${pair%%=*}" "$work/game/${pair#*=}"
 done
-# The played client's window beside Studio's, clear of where Studio is
-# clicked: with no window manager, a later window lies over an earlier.
+# The played client's window over Studio's viewport, clear of its docks,
+# where Studio is clicked (D925): with no window manager, a later window
+# lies over an earlier.
 if [ -n "${STUDIO_COOK:-}" ]; then
     grep -v '^content.root' "$6" >"$work/client.conf"
 else
     cat "$6" >"$work/client.conf"
 fi
-printf 'window.width = 560\nwindow.height = 360\nwindow.x = 700\nwindow.y = 340\n' >>"$work/client.conf"
+printf 'window.width = 560\nwindow.height = 360\nwindow.x = 366\nwindow.y = 100\n' >>"$work/client.conf"
 # A played client that falls behind keeps playing: under a full check's
 # crowd a sanitized one ran thirty seconds behind and stopped itself as
 # overloaded before Studio read its server, which then held no connection
@@ -65,6 +66,11 @@ fi
 if ! grep -q '^studio.play_in_viewport' "$work/studio.conf"; then
     echo "studio.play_in_viewport = false" >>"$work/studio.conf"
 fi
+# Its window the screen's size: no window manager runs to maximize it (D925).
+grep -q '^window.height' "$work/studio.conf" || printf 'window.height = 720\n' >>"$work/studio.conf"
+# Its preferences its own, never those of whoever runs it (D925).
+grep -q '^studio.preferences' "$work/studio.conf" ||
+    printf 'studio.preferences = %s\n' "$work/studio.preferences" >>"$work/studio.conf"
 "$1" --config "$work/studio.conf" >"$work/studio.log" 2>&1 &
 studio=$!
 echo "$studio" >"$work/studio.pid"

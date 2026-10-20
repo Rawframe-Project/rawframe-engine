@@ -3,9 +3,9 @@
 
 #include "browser.h"
 
+#include "hints.h"
 #include "rawframe/authoring_session/game.h"
 #include "rawframe/document/json.h"
-#include "hints.h"
 #include "records.h"
 #include "shell.h"
 
@@ -14,9 +14,9 @@
 #include <charconv>
 #include <filesystem>
 #include <map>
-#include <tuple>
 #include <set>
 #include <span>
+#include <tuple>
 
 namespace rawframe::studio {
 
@@ -163,25 +163,31 @@ result::Status ShellParticipant::makeAssets() {
     RAWFRAME_TRY(tree_->setLook(kHeading, ui::Look{.borderColor = look::kLine}));
     RAWFRAME_TRY_ASSIGN(browser_.crumbs,
                         box(kHeading, ui::Layout{.alignItems = ui::Align::Center, .gap = 6, .shrink = 0}, 0));
-    RAWFRAME_TRY(box(kHeading, ui::Layout{.width = ui::pixels(12), .shrink = 0}, 0));
-    // The kinds take what the heading leaves, clipped where they are more.
-    RAWFRAME_TRY_ASSIGN(
-        browser_.chips,
-        box(kHeading,
-            ui::Layout{.width = ui::pixels(0), .alignItems = ui::Align::Center, .gap = 4, .grow = 1, .shrink = 1},
-            0));
-    RAWFRAME_TRY(tree_->setLook(browser_.chips, ui::Look{.clip = true}));
+    RAWFRAME_TRY(box(kHeading, ui::Layout{.grow = 1}, 0));
     RAWFRAME_TRY_ASSIGN(const auto kSearch, searchWell(kHeading, "Search assets", "Search", "", 180, Icon::Search));
     browser_.searchValue = kSearch.second;
     RAWFRAME_TRY_ASSIGN(browser_.tools,
                         box(kHeading, ui::Layout{.alignItems = ui::Align::Center, .gap = 6, .shrink = 0}, 0));
-    RAWFRAME_TRY_ASSIGN(const ui::Node kBody,
+    // The kinds on a row of their own under it, the whole width theirs,
+    // scrolled sideways where they are still more (D925).
+    RAWFRAME_TRY_ASSIGN(browser_.chips,
                         box(scenesColumn_,
-                            ui::Layout{.height = ui::pixels(0),
-                                       .minHeight = ui::pixels(0),
-                                       .direction = ui::Direction::Row,
-                                       .grow = 1},
+                            ui::Layout{.height = ui::pixels(34),
+                                       .alignItems = ui::Align::Center,
+                                       .gap = 4,
+                                       .shrink = 0,
+                                       .padding = {12, 12, 0, 0},
+                                       .border = {0, 0, 0, 1},
+                                       .scroll = ui::Scroll::Horizontal},
                             0));
+    RAWFRAME_TRY(tree_->setLook(browser_.chips, ui::Look{.borderColor = look::kLine, .clip = true}));
+    RAWFRAME_TRY(tree_->setRole(browser_.chips, ui::Role::ScrollView));
+    RAWFRAME_TRY(tree_->setName(browser_.chips, "Asset kinds"));
+    RAWFRAME_TRY_ASSIGN(
+        const ui::Node kBody,
+        box(scenesColumn_,
+            ui::Layout{.height = ui::pixels(0), .minHeight = ui::pixels(0), .direction = ui::Direction::Row, .grow = 1},
+            0));
     RAWFRAME_TRY_ASSIGN(browser_.folders,
                         box(kBody,
                             ui::Layout{.width = ui::pixels(200),
@@ -379,14 +385,13 @@ result::Result<ui::Node> ShellParticipant::assetCard(const AssetCard& card) {
         RAWFRAME_TRY(icon(kTile, kIcon, kInk, 34));
     }
     if (card.dot != 0) {
-        RAWFRAME_TRY_ASSIGN(const ui::Node kDot,
-                            box(kTile,
-                                ui::Layout{.width = ui::pixels(7),
-                                           .height = ui::pixels(7),
-                                           .placement = {.absolute = true,
-                                                         .x = ui::pixels(kWide - 14),
-                                                         .y = ui::pixels(6)}},
-                                0));
+        RAWFRAME_TRY_ASSIGN(
+            const ui::Node kDot,
+            box(kTile,
+                ui::Layout{.width = ui::pixels(7),
+                           .height = ui::pixels(7),
+                           .placement = {.absolute = true, .x = ui::pixels(kWide - 14), .y = ui::pixels(6)}},
+                0));
         RAWFRAME_TRY(tree_->setLook(kDot, ui::Look{.fill = card.dot, .radius = 4}));
         RAWFRAME_TRY(tree_->setInteraction(kDot, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
     }
@@ -405,10 +410,8 @@ result::Result<ui::Node> ShellParticipant::assetCard(const AssetCard& card) {
 }
 
 void ShellParticipant::lightAsset(ui::Node node, bool chosen) {
-    static_cast<void>(tree_->setLook(node,
-                                     ui::Look{.fill = chosen ? 0x5B9BFF1FU : 0,
-                                              .borderColor = chosen ? look::kAccent : 0,
-                                              .radius = 6}));
+    static_cast<void>(tree_->setLook(
+        node, ui::Look{.fill = chosen ? 0x5B9BFF1FU : 0, .borderColor = chosen ? look::kAccent : 0, .radius = 6}));
 }
 
 result::Status ShellParticipant::showBrowser() {
@@ -449,16 +452,17 @@ result::Status ShellParticipant::showBrowser() {
     RAWFRAME_TRY(words(kGame, description_.stem().string(), look::kLabelInk, look::kBodySize));
     RAWFRAME_TRY(kHeld(icon(browser_.crumbs, Icon::ChevronRight, look::kOffInk, 12)));
     RAWFRAME_TRY_ASSIGN(const ui::Node kWhere, kHeld(box(browser_.crumbs, ui::Layout{.shrink = 0}, 0)));
-    RAWFRAME_TRY(words(kWhere, browser_.folder.has_value() ? *browser_.folder : "Everything", look::kInk, look::kBodySize));
+    RAWFRAME_TRY(
+        words(kWhere, browser_.folder.has_value() ? *browser_.folder : "Everything", look::kInk, look::kBodySize));
     // The kinds, All first, the one chosen lit.
     const auto kChip = [&](std::string_view text, bool on) -> result::Result<ui::Node> {
-        RAWFRAME_TRY_ASSIGN(const ui::Node kMade,
-                            kHeld(box(browser_.chips,
-                                      ui::Layout{.alignItems = ui::Align::Center,
-                                                 .shrink = 0,
-                                                 .padding = {9, 9, 4, 4},
-                                                 .border = {1, 1, 1, 1}},
-                                      0)));
+        RAWFRAME_TRY_ASSIGN(
+            const ui::Node kMade,
+            kHeld(
+                box(browser_.chips,
+                    ui::Layout{
+                        .alignItems = ui::Align::Center, .shrink = 0, .padding = {8, 8, 3, 3}, .border = {1, 1, 1, 1}},
+                    0)));
         RAWFRAME_TRY(tree_->setLook(kMade,
                                     ui::Look{.fill = on ? look::kSelected : look::kRaisedFill,
                                              .borderColor = on ? look::kSelectedEdge : look::kRaisedEdge,
@@ -473,9 +477,9 @@ result::Status ShellParticipant::showBrowser() {
         browser_.kindRows.emplace_back(kControl, kKind);
     }
     // The views, a list or cards (D801's sizes), then Import.
-    for (const auto& [kWhich, kName, kSize] : {std::tuple<Icon, std::string_view, std::uint32_t>{Icon::List, "List", 0},
-                                               std::tuple<Icon, std::string_view, std::uint32_t>{
-                                                   Icon::TilesView, "Thumbnails", 128}}) {
+    for (const auto& [kWhich, kName, kSize] :
+         {std::tuple<Icon, std::string_view, std::uint32_t>{Icon::List, "List", 0},
+          std::tuple<Icon, std::string_view, std::uint32_t>{Icon::TilesView, "Thumbnails", 128}}) {
         RAWFRAME_TRY_ASSIGN(const ui::Node kControl,
                             kHeld(iconButton(browser_.tools, kWhich, kName, browser_.thumbnail == kSize)));
         browser_.sizeRows.emplace_back(kControl, kSize);
@@ -488,8 +492,8 @@ result::Status ShellParticipant::showBrowser() {
                         searchWell(browser_.tools, "new scene or import", "New scene", "", 150, Icon::Plus));
     browser_.boxes.push_back(kNew.first);
     newSceneRow_ = kNew.first;
-    newScene_ = FieldRow{
-        .value = kNew.second, .role = FieldRow::Role::NewScene, .field = "new scene", .hint = "New scene"};
+    newScene_ =
+        FieldRow{.value = kNew.second, .role = FieldRow::Role::NewScene, .field = "new scene", .hint = "New scene"};
     // The folders: the game's root, Everything, then each folder, each with
     // its count, the one shown lit; under them, where files are dropped.
     const auto kFolderRow = [&](std::string_view text,
@@ -533,13 +537,12 @@ result::Status ShellParticipant::showBrowser() {
         browser_.folderRows.emplace_back(kRowNode, kFolder);
     }
     RAWFRAME_TRY(kHeld(box(browser_.folders, ui::Layout{.grow = 1}, 0)));
-    RAWFRAME_TRY_ASSIGN(const ui::Node kDrop,
-                        kHeld(box(browser_.folders,
-                                  ui::Layout{.justify = ui::Justify::Center,
-                                             .shrink = 0,
-                                             .padding = {10, 10, 12, 12},
-                                             .border = {1, 1, 1, 1}},
-                                  0)));
+    RAWFRAME_TRY_ASSIGN(
+        const ui::Node kDrop,
+        kHeld(box(browser_.folders,
+                  ui::Layout{
+                      .justify = ui::Justify::Center, .shrink = 0, .padding = {10, 10, 12, 12}, .border = {1, 1, 1, 1}},
+                  0)));
     RAWFRAME_TRY(tree_->setLook(kDrop, ui::Look{.borderColor = look::kEdge, .radius = 6}));
     RAWFRAME_TRY_ASSIGN(const ui::Node kDropWords, box(kDrop, ui::Layout{.shrink = 0}, 0));
     RAWFRAME_TRY(words(kDropWords,
@@ -566,13 +569,14 @@ result::Status ShellParticipant::showDocuments() {
         const ListedSource* kSource = browser_.find(scenes_[each]);
         const bool kFailed = kSource != nullptr && kSource->cook == "failed";
         const std::shared_ptr<const texture::Texture> kPicture =
-            kSource != nullptr && (kListed == Listed::Material || kListed == Listed::Graph) ? thumbnailOf(*kSource) : nullptr;
+            kSource != nullptr && (kListed == Listed::Material || kListed == Listed::Graph) ? thumbnailOf(*kSource)
+                                                                                            : nullptr;
         RAWFRAME_TRY_ASSIGN(const ui::Node kCard,
                             assetCard(AssetCard{.name = documentLabel(scenes_[each]),
                                                 .kind = std::string{kKind},
                                                 .what = kFailed ? std::string{"cook failed"} : std::string{kWhat},
                                                 .picture = kPicture != nullptr ? thumbnailKey(scenes_[each]) : 0,
-                                                .dot = kFailed ? look::kError
+                                                .dot = kFailed                                           ? look::kError
                                                        : kSource != nullptr && kSource->cook != "cooked" ? look::kWarn
                                                                                                          : 0,
                                                 .failed = kFailed,
@@ -586,7 +590,8 @@ result::Status ShellParticipant::showDocuments() {
     }
     for (const std::filesystem::path& kFile : authoring_session::filesBeside(description_, ".kest")) {
         std::error_code error;
-        const std::string kRelative = std::filesystem::relative(kFile, description_.parent_path(), error).generic_string();
+        const std::string kRelative =
+            std::filesystem::relative(kFile, description_.parent_path(), error).generic_string();
         if (error || !named(kRelative, browser_.search)) {
             continue;
         }
@@ -612,17 +617,16 @@ result::Status ShellParticipant::showSources() {
         const std::string kKind = kindOf(kSource.importer);
         const std::shared_ptr<const texture::Texture> kPicture = thumbnailOf(kSource);
         const bool kFailed = kSource.cook == "failed";
-        RAWFRAME_TRY_ASSIGN(
-            const ui::Node kCard,
-            assetCard(AssetCard{.name = kSource.path.substr(kSource.path.find_last_of('/') + 1),
-                                .kind = kKind,
-                                .what = kFailed ? std::string{"import failed"} : kindWord(kKind),
-                                .picture = kPicture != nullptr ? thumbnailKey(kSource.path) : 0,
-                                .dot = kFailed                     ? look::kError
-                                       : kSource.cook != "cooked" ? look::kWarn
-                                                                  : 0,
-                                .failed = kFailed,
-                                .chosen = kSource.path == browser_.chosen}));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kCard,
+                            assetCard(AssetCard{.name = kSource.path.substr(kSource.path.find_last_of('/') + 1),
+                                                .kind = kKind,
+                                                .what = kFailed ? std::string{"import failed"} : kindWord(kKind),
+                                                .picture = kPicture != nullptr ? thumbnailKey(kSource.path) : 0,
+                                                .dot = kFailed                    ? look::kError
+                                                       : kSource.cook != "cooked" ? look::kWarn
+                                                                                  : 0,
+                                                .failed = kFailed,
+                                                .chosen = kSource.path == browser_.chosen}));
         browser_.boxes.push_back(kCard);
         browser_.sourceRows.emplace_back(kCard, kSource.path);
     }
@@ -643,6 +647,7 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
         ++browser_.chosenCount;
         static_cast<void>(showScenes());
         showImportSettings();
+        showReferences();
         return true;
     }
     // A script opens in the author's editor (D919).
@@ -742,7 +747,8 @@ void ShellParticipant::showImportSettings() {
         static_cast<void>(tree_->setLook(
             *tile, ui::Look{.fill = look::kRaisedFill, .borderColor = look::kEdge, .radius = 6, .clip = true}));
         if (kPicture != nullptr) {
-            if (auto image = box(*tile, ui::Layout{.width = ui::pixels(176), .height = ui::pixels(176), .shrink = 0}, 0);
+            if (auto image =
+                    box(*tile, ui::Layout{.width = ui::pixels(176), .height = ui::pixels(176), .shrink = 0}, 0);
                 image.has_value()) {
                 static_cast<void>(tree_->setLook(*image, ui::Look{.image = thumbnailKey(browser_.chosen)}));
             }
@@ -751,9 +757,10 @@ void ShellParticipant::showImportSettings() {
             static_cast<void>(icon(*tile, kIcon, kInk, 48));
         }
     }
-    if (auto head = kKept(box(componentsColumn_,
-                              ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {8, 8, 2, 6}},
-                              0));
+    if (auto head =
+            kKept(box(componentsColumn_,
+                      ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {8, 8, 2, 6}},
+                      0));
         head.has_value()) {
         if (auto name = box(*head, ui::Layout{.shrink = 1}, 0); name.has_value()) {
             static_cast<void>(
@@ -766,17 +773,19 @@ void ShellParticipant::showImportSettings() {
     // A cook behind, or one that failed and why.
     if (kSource != nullptr && kSource->cook != "cooked") {
         const bool kFailed = kSource->cook == "failed";
-        if (auto banner = kKept(box(componentsColumn_,
-                                    ui::Layout{.shrink = 0, .padding = {10, 10, 7, 7}, .margin = {6, 6, 4, 4}, .border = {1, 1, 1, 1}},
-                                    0));
+        if (auto banner = kKept(
+                box(componentsColumn_,
+                    ui::Layout{.shrink = 0, .padding = {10, 10, 7, 7}, .margin = {6, 6, 4, 4}, .border = {1, 1, 1, 1}},
+                    0));
             banner.has_value()) {
             static_cast<void>(tree_->setLook(*banner,
                                              ui::Look{.fill = kFailed ? 0x3A1E22FFU : 0x33291AFFU,
                                                       .borderColor = kFailed ? 0x6B2F35FFU : 0x5C4520FFU,
                                                       .radius = 5}));
             static_cast<void>(words(*banner,
-                                    kFailed ? "Import failed" + (kSource->problem.empty() ? "" : ": " + kSource->problem)
-                                            : std::string{"Not cooked yet: cook to use it"},
+                                    kFailed
+                                        ? "Import failed" + (kSource->problem.empty() ? "" : ": " + kSource->problem)
+                                        : std::string{"Not cooked yet: cook to use it"},
                                     kFailed ? look::kError : look::kWarn,
                                     look::kLabelSize));
         }
@@ -825,7 +834,8 @@ void ShellParticipant::showImportSettings() {
             }
         }
         const std::string kValueText = kValue != nullptr ? shownText(*kValue) : std::string{};
-        auto line = fieldRow(*kName->text(), kValueText, std::nullopt, kSetting != nullptr, prettyField(*kName->text()));
+        auto line =
+            fieldRow(*kName->text(), kValueText, std::nullopt, kSetting != nullptr, prettyField(*kName->text()));
         if (!line.has_value()) {
             return;
         }
@@ -858,17 +868,17 @@ void ShellParticipant::showImportSettings() {
     if (kUsers == 0) {
         static_cast<void>(kKept(row(componentsColumn_, "Nothing uses it yet", look::kFaintInk, kRow, false)));
     }
-    if (auto buttons = kKept(box(componentsColumn_,
-                                 ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {8, 8, 12, 8}},
-                                 0));
+    if (auto buttons =
+            kKept(box(componentsColumn_,
+                      ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {8, 8, 12, 8}},
+                      0));
         buttons.has_value()) {
         if (auto made = textButton(*buttons, std::nullopt, "Reimport", ButtonKind::Primary); made.has_value()) {
             browser_.reimport = *made;
         }
-    }
-    // The References of the center (D803), kept for the menus and keys.
-    if (!tree_->contains(browser_.references)) {
-        if (auto made = button(held_.shelf, "References"); made.has_value()) {
+        // Everything that uses it, in the center (D803), beside Reimport
+        // (D925).
+        if (auto made = textButton(*buttons, std::nullopt, "References", ButtonKind::Normal); made.has_value()) {
             browser_.references = *made;
         }
     }
@@ -1014,15 +1024,29 @@ void ShellParticipant::showReferences() {
     // then what uses it, each source pressed to choose it.
     clear(viewRows_);
     viewFields_.clear();
+    clear(held_.cameraRows);
+    // As the design's lists: a heading with its count, then each source
+    // with its kind's mark, pressed to choose it and see its own (D925).
     const auto kSection = [&](std::string_view title, const Value* listed) {
-        auto header = row(centerColumn_, std::string{title}, kQuiet, kPanel);
-        if (header.has_value()) {
+        const std::size_t kCount = listed != nullptr ? listed->items().size() : 0;
+        if (auto header =
+                box(centerColumn_,
+                    ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {16, 16, 14, 6}},
+                    0);
+            header.has_value()) {
             browser_.referenceBoxes.push_back(*header);
+            if (auto named = box(*header, ui::Layout{.shrink = 0}, 0); named.has_value()) {
+                static_cast<void>(strongWords(*named, std::string{title}, look::kInk));
+            }
+            if (auto counted = box(*header, ui::Layout{.shrink = 0}, 0); counted.has_value()) {
+                static_cast<void>(monoWords(*counted, std::to_string(kCount), look::kFaintInk, look::kSmallSize));
+            }
         }
-        const bool kNone = listed == nullptr || listed->items().empty();
-        if (kNone) {
-            if (auto none = row(centerColumn_, "nothing", kQuiet, kPanel); none.has_value()) {
+        if (kCount == 0) {
+            if (auto none = box(centerColumn_, ui::Layout{.shrink = 0, .padding = {16, 16, 2, 6}}, 0);
+                none.has_value()) {
                 browser_.referenceBoxes.push_back(*none);
+                static_cast<void>(words(*none, "Nothing", look::kFaintInk, look::kBodySize));
             }
             return;
         }
@@ -1030,14 +1054,27 @@ void ShellParticipant::showReferences() {
             if (kPath.text() == nullptr) {
                 continue;
             }
-            if (auto made = row(centerColumn_, *kPath.text(), kText, kRow, true); made.has_value()) {
+            const auto kSource = std::ranges::find(browser_.sources, *kPath.text(), &ListedSource::path);
+            const auto [kIcon, kInk] = kindIcon(kSource != browser_.sources.end() ? kindOf(kSource->importer) : "");
+            if (auto made = entityRow(centerColumn_, *kPath.text(), 0, false, kIcon, kInk, look::kRowInk);
+                made.has_value()) {
+                static_cast<void>(tree_->setLayout(*made,
+                                                   ui::Layout{.height = ui::pixels(28),
+                                                              .alignItems = ui::Align::Center,
+                                                              .gap = 8,
+                                                              .shrink = 0,
+                                                              .padding = {16, 16, 0, 0},
+                                                              .margin = {8, 8, 0, 0}}));
                 browser_.referenceBoxes.push_back(*made);
                 browser_.referenceRows.emplace_back(*made, *kPath.text());
             }
         }
     };
+    if (tree_->contains(held_.modePalette)) {
+        static_cast<void>(tree_->detach(held_.modePalette));
+    }
     kSection(browser_.chosen + " uses", kAnswer->find("uses"));
-    kSection("used by", kAnswer->find("usedBy"));
+    kSection("Used by", kAnswer->find("usedBy"));
     ++browser_.referencesShown;
     say(browser_.chosen + ": " + std::to_string(browser_.referenceRows.size()) + " references");
 }

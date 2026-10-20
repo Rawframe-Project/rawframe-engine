@@ -62,6 +62,7 @@ std::span<const Value> itemsOf(const Value& clip, std::string_view name) {
 void ShellParticipant::showTimeline(const Value& clip) {
     clear(viewRows_);
     viewFields_.clear();
+    clear(held_.cameraRows);
     held_.canvasParts.clear();
     held_.canvasBoxes.clear();
     const Value* kDuration = clip.find("duration");

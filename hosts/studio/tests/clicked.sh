@@ -84,6 +84,11 @@ if [ -n "${STUDIO_PREFERENCES:-}" ]; then
     printf 'studio.preferences = %s\n' "$work/studio.preferences" >>"$work/studio.conf"
 fi
 export STUDIO_EDITED="$work/edited"
+# Its window the screen's size: no window manager runs to maximize it (D925).
+grep -q '^window.height' "$work/studio.conf" || printf 'window.height = 720\n' >>"$work/studio.conf"
+# Its preferences its own, never those of whoever runs it (D925).
+grep -q '^studio.preferences' "$work/studio.conf" ||
+    printf 'studio.preferences = %s\n' "$work/studio.preferences" >>"$work/studio.conf"
 "$1" --config "$work/studio.conf" >"$work/log" 2>&1 &
 studio=$!
 echo "$studio" >"$work/studio.pid"

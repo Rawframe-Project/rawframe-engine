@@ -205,6 +205,11 @@ struct EditorsHeld {
     /// The environment panel: its pane, its rows, each entity's button and
     /// row, and each component it offers to add, by its identity (D834).
     ui::Node environmentColumn{};
+    /// Its list of the scene's environment, and below it the viewport's
+    /// camera as numbers (D925).
+    ui::Node environmentList{};
+    ui::Node viewCamera{};
+    std::vector<ui::Node> cameraRows;
     std::vector<ui::Node> environmentRows;
     std::vector<std::pair<ui::Node, std::size_t>> environmentParts;
     std::vector<std::pair<ui::Node, std::string>> environmentAdds;

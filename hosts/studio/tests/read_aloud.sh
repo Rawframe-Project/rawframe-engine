@@ -8,7 +8,8 @@
 # AT-SPI's Action interface, a few seconds apart; one given as
 # `type=<entry name>:<text>` instead has the text inserted into that entry
 # through AT-SPI's EditableText interface (D613), and the entry's text read
-# back. A last argument `until=` and a status waits, up to a minute, for
+# back, and `tree` walks and prints the tree again as it is then (D925).
+# A last argument `until=` and a status waits, up to a minute, for
 # Studio to say it. Then it is asked to stop, and its log printed. Run under
 # an X server, from the repository root.
 #
@@ -33,6 +34,11 @@ host.iteration_rate = 120
 render.device = any
 studio.game = $work/game/$(basename "$2")
 CONF
+# Its window the screen's size: no window manager runs to maximize it (D925).
+grep -q '^window.height' "$work/studio.conf" || printf 'window.height = 720\n' >>"$work/studio.conf"
+# Its preferences its own, never those of whoever runs it (D925).
+grep -q '^studio.preferences' "$work/studio.conf" ||
+    printf 'studio.preferences = %s\n' "$work/studio.preferences" >>"$work/studio.conf"
 AT_SPI_BUS_ADDRESS="$address" "$1" --config "$work/studio.conf" >"$work/log" 2>&1 &
 studio=$!
 
@@ -83,6 +89,10 @@ for asked in "${@:4}"; do
         continue
     fi
     [ -z "$name" ] && break
+    if [ "$asked" = tree ]; then
+        PRINT=1 walk /org/a11y/atspi/accessible/root 0
+        continue
+    fi
     if [[ "$asked" == type=* ]]; then
         spec="${asked#type=}"
         role_wanted="entry"

@@ -68,6 +68,7 @@ void ShellParticipant::showTilemap() {
     showTilePaint();
     clear(viewRows_);
     viewFields_.clear();
+    clear(held_.cameraRows);
     const std::uint32_t kPer = (std::max(kMap->columns, kMap->rows) + kMostBlocks - 1) / kMostBlocks;
     const std::uint32_t kAcross = (kMap->columns + kPer - 1) / kPer;
     const std::uint32_t kDown = (kMap->rows + kPer - 1) / kPer;

@@ -50,6 +50,7 @@ ui::Look overlaid(ui::Look under, const ui::StyleLook& over) {
 void ShellParticipant::showSheetPreview(const Value& sheet) {
     clear(viewRows_);
     viewFields_.clear();
+    clear(held_.cameraRows);
     held_.canvasParts.clear();
     held_.canvasBoxes.clear();
     forgetUiPreview();

@@ -57,6 +57,7 @@ void ShellParticipant::showSequence() {
     showSequenceLines();
     clear(viewRows_);
     viewFields_.clear();
+    clear(held_.cameraRows);
     const auto kSequence = sequence::parseSequence(text);
     if (!kSequence.has_value()) {
         return;

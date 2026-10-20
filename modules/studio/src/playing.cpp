@@ -14,11 +14,12 @@
 namespace rawframe::studio {
 
 void ShellParticipant::keepEditing() {
-    if (!play_.has_value() || playing_.has_value() || stopping_.has_value() || held_.joined != nullptr) {
+    if (!play_.has_value() || playing_.has_value() || stopping_.has_value()) {
         return;
     }
     // Play asked for cooks first where the content is behind, as an
-    // editor builds before it runs (D923).
+    // editor builds before it runs (D923); joined, it plays what this
+    // author cooked at the host (D905, D925).
     if (playAsked_) {
         if (cooking_.has_value()) {
             return;
@@ -32,7 +33,7 @@ void ShellParticipant::keepEditing() {
         startPlaying();
         return;
     }
-    if (!editView_ || broken_.has_value() || !gameOpen()) {
+    if (!editView_ || broken_.has_value() || !gameOpen() || held_.joined != nullptr) {
         return;
     }
     // A game opened opens on its first scene, as an editor opens a

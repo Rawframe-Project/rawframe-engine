@@ -63,6 +63,7 @@ void ShellParticipant::showScatter() {
     showScatterLines();
     clear(viewRows_);
     viewFields_.clear();
+    clear(held_.cameraRows);
     const auto kScatter = scatter::parseScatter(text);
     if (!kScatter.has_value()) {
         return;

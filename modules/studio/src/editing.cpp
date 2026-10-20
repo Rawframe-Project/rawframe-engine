@@ -466,6 +466,11 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
 void ShellParticipant::beginEdit(const FieldRow& row) {
     endEdit();
     editing_ = row;
+    // A field showing its hint is empty once begun, so what is put in it,
+    // typed or inserted by a screen reader, is all it holds (D925).
+    if (!row.hint.empty() && tree_->textOf(row.value) == row.hint) {
+        static_cast<void>(words(row.value, "", kText, look::kBodySize));
+    }
     edit_ = std::make_unique<ui::TextEdit>(
         *tree_, row.value, ui::EditSettings{.caretColor = kText, .selectionColor = 0x4A6FA5AAU});
     static_cast<void>(edit_->press(ui::EditKey::SelectAll, {}));
@@ -554,11 +559,17 @@ void ShellParticipant::take(const view::Typing& typing) {
         if (kLeft == view::TypingKey::Submit) {
             endEdit();
             std::error_code error;
-            if (!typed.empty() && std::filesystem::exists(typed, error)) {
+            if (std::filesystem::path{typed}.extension() == ".game") {
+                // A description typed is opened, or said not to be one.
+                gameSearch_.clear();
+                chooseGame(typed);
+            } else if (!typed.empty() && std::filesystem::exists(typed, error)) {
                 gameSearch_.clear();
                 openFolder(typed);
             } else if (recentRows_.size() == 1 && !recentRows_.front().second.empty()) {
                 chooseGame(recentRows_.front().second);
+            } else if (!typed.empty()) {
+                say("no game opened before is named " + typed + ", and no folder is there");
             }
             return;
         }

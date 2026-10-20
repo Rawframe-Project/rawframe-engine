@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <format>
 #include <utility>
 
 // The scene's view as Studio edits it: typed into the view's fields, and
@@ -77,12 +78,28 @@ std::string viewText(const std::optional<Value>& view, std::string_view part) {
     if (held == nullptr) {
         return {};
     }
+    // Each number to a millimetre or a thousandth of a degree, as an
+    // editor's fields show them; typed back, it is still exact enough.
+    const auto kShown = [](const Value& each) {
+        const std::optional<double> kReal = each.real();
+        if (!kReal.has_value()) {
+            return document::writeCompact(each);
+        }
+        std::string text = std::format("{:.3f}", *kReal);
+        while (text.ends_with('0')) {
+            text.pop_back();
+        }
+        if (text.ends_with('.')) {
+            text.pop_back();
+        }
+        return text == "-0" ? std::string{"0"} : text;
+    };
     if (held->kind() != Value::Kind::Array) {
-        return document::writeCompact(*held);
+        return kShown(*held);
     }
     std::string text;
     for (const Value& each : held->items()) {
-        text += (text.empty() ? "" : " ") + document::writeCompact(each);
+        text += (text.empty() ? "" : " ") + kShown(each);
     }
     return text;
 }

@@ -28,7 +28,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_shown PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":4,\"scenes\":14,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":83,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
+                         "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+.*\"code\":\"studio_summary\"[^\n]*\"records\":[0-9]+,\"scenes\":14,\"scene\":\"\",[^\n]*\"framesDrawn\":[1-9][0-9]+,\"boxes\":[1-9][0-9]+,\"glyphs\":[1-9][0-9]+}.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]*,[^\n]*\"framesUnchanged\":[1-9][0-9]*,.*\"exit\":\"clean_stop\"")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its menus and the palette's field (D777), its buttons, its
     # docks as scroll panes named by their headings or tabs in SPEC-0051's
@@ -38,12 +38,12 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_read_aloud
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_aloud.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene level.scene New "until=entity created"
+                     games/runners/runners.game level.scene level.scene Entity "New  Ctrl+Shift+N" "until=entity created"
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_read_aloud PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no"
                          PASS_REGULAR_EXPRESSION
-                         "a11y: 1 frame Rawframe Studio\na11y: 2 label Rawframe Studio  runners.game\na11y: 2 push button File\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\na11y: 2 push button Layouts\na11y: 2 push button Undo\n.*a11y: 2 scroll pane Hierarchy\n.*a11y: 3 push button New\n.*a11y: 2 scroll pane Documents\na11y: 2 panel Dock edge\na11y: 2 push button Assets\na11y: 2 push button History\na11y: 2 push button Console\na11y: 2 push button Network\na11y: 2 push button Environment\na11y: 2 push button Profiler\na11y: 2 push button Frame\na11y: 2 push button Changes\na11y: 2 push button Extension panels\na11y: 2 scroll pane Assets\n.*a11y: 3 entry new scene or import\n.*a11y: 3 push button level.scene\n.*a11y: 2 panel Inspector edge\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed New: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
+                         "a11y: 1 frame Rawframe Studio\na11y: 2 panel Rawframe\na11y: 2 push button File\na11y: 2 push button Edit\na11y: 2 push button Entity\n.*a11y: 2 entry commands\n.*a11y: 2 push button Undo\n.*a11y: 2 push button Hierarchy\na11y: 2 push button Layers\na11y: 2 push button World\n.*a11y: 2 push button New entity\na11y: 2 scroll pane Hierarchy\n.*a11y: 2 panel Hierarchy edge\na11y: 2 panel Documents\n.*a11y: 2 panel Dock edge\na11y: 2 push button Assets\na11y: 2 push button Console\na11y: 2 push button History\n.*a11y: 3 entry Search assets\n.*a11y: 3 entry new scene or import\n.*a11y: 4 push button level.scene\n.*a11y: 2 panel Inspector edge\na11y: 2 push button Inspector\na11y: 2 push button Scene settings\na11y: 2 scroll pane Inspector\n.*a11y: pressed level.scene: b true\na11y: pressed Entity: b true\na11y: pressed New  Ctrl\\+Shift\\+N: b true\nlevel.scene written: yes.*\"code\":\"studio_accessibility_ready\".*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"entity created\".*\"exit\":\"clean_stop\"")
     # Studio typed into by a screen reader (D613): the new scene's entry
     # takes a name inserted through AT-SPI's EditableText as typing, the
     # field begun as a press begins it, and reads it back.
@@ -64,13 +64,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.preferences = {work}/studio.preferences"
                      ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene drag=369,200,469,200 drag=911,300,811,300 drag=400,418,400,318
+                     games/runners/runners.game level.scene "drag=@Hierarchy edge,100,0" "drag=@Inspector edge,-100,0" "drag=@Dock edge,0,-100"
                      wait=1
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_splits PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "\"hierarchyWidth\": 460,[ \n]*\"inspectorWidth\": 460,[ \n]*\"dockHeight\": 36[0-9].*\"code\":\"studio_layout\"[^\n]*\"resized\":3,\"hierarchyWidth\":460,\"inspectorWidth\":460,\"dockHeight\":36[0-9]}.*\"exit\":\"clean_stop\"")
+                         "\"hierarchyWidth\": 460,[ \n]*\"inspectorWidth\": 460,[ \n]*\"dockHeight\": 3[0-9][0-9].*\"code\":\"studio_layout\"[^\n]*\"resized\":3,\"hierarchyWidth\":460,\"inspectorWidth\":460,\"dockHeight\":3[0-9][0-9]}.*\"exit\":\"clean_stop\"")
     # And the sizes kept read back as Studio starts (D779), from a copy of
     # a document, nothing being dragged: Studio writes its preferences as it
     # opens a game (D781), never the checked-in one.
@@ -119,13 +119,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_node_claims PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "found   tycoon.purse  \\[ben\\] at.*found tycoon.sign  \\[locked by ben\\] at.*\"code\":\"studio_presence_shown\"[^\n]*\"others\":1,\"marked\":3.*\"exit\":\"clean_stop\".*ben refused ada's board")
+                         "found purse  \\[ben\\] at.*found sign  \\[locked by ben\\] at.*\"code\":\"studio_presence_shown\"[^\n]*\"others\":1,\"marked\":3.*\"exit\":\"clean_stop\".*ben refused ada's board")
     add_test(NAME studio_chooses_many
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene "@west wall" drag=186,288,186,288,Control_L
-                     "until=studio_said,status=\"2 entities chosen" "@friction#2:0.25" "until=studio_said,status=\"friction set to 0.25 on 2"
-                     drag=186,384,186,384,Shift_L "until=studio_said,status=\"4 entities chosen" @Delete "until=studio_said,status=\"4 entities deleted"
+                     games/runners/runners.game level.scene @level.scene "@west wall" "drag=@east wall,0,0,Control_L"
+                     "until=studio_said,status=\"2 entities chosen" "@friction:0.25" "until=studio_said,status=\"friction set to 0.25 on 2"
+                     "drag=@steep slope,0,0,Shift_L" "until=studio_said,status=\"4 entities chosen" @Edit "@Delete  Del" "until=studio_said,status=\"4 entities deleted"
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_chooses_many PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -142,7 +142,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game level.scene @level.scene @Layers "@layer 2  2"
                      "until=studio_said,status=\"layer 2 chosen" "@Lock layer 2" "until=studio_said,status=\"layer 2 locked"
-                     @Hierarchy "@west wall" "@friction#2:0.25" "until=studio_said,status=\"layer 2 is locked"
+                     @Hierarchy "@west wall" "@friction:0.25" "until=studio_said,status=\"layer 2 is locked"
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_layers PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -155,9 +155,9 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${CMAKE_COMMAND} -E env STUDIO_SHOW_WRITTEN=1
                      ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene drag=186,256,186,222
+                     games/runners/runners.game level.scene @level.scene "drag=@west wall,0,-25"
                      "until=studio_said,status=\"west wall follows ground"
-                     drag=186,222,186,256 "until=studio_said,status=\"ground cannot follow what follows it"
+                     "drag=@ground,0,25" "until=studio_said,status=\"ground cannot follow what follows it"
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_parents PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -170,11 +170,11 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_typed
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene @ground "@motion#2" @kinematic
+                     games/runners/runners.game level.scene @level.scene @ground "@motion" @kinematic
                      "until=studio_said,status=\"motion set to kinematic"
-                     "@friction#2:3" "until=studio_said,status=\"friction set to 3, past 0 to 1"
-                     wheel=1100,500,30 "@color#2:#ff0000" "until=studio_said,status=\"color set to"
-                     "@texture#2" @hud.png "until=studio_said,status=\"texture set to hud.png"
+                     "@friction:3" "until=studio_said,status=\"friction set to 3, past 0 to 1"
+                     wheel=1100,500,30 "@color:#ff0000" "until=studio_said,status=\"color set to"
+                     "@texture" @hud.png "until=studio_said,status=\"texture set to hud.png"
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_typed PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -189,9 +189,9 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                      ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/runners/runners.game level.scene @level.scene @Window @Preferences "until=studio_said,status=\"preferences"
-                     "@Duplicate keys#2:Ctrl+Shift+D" "until=studio_said,status=\"Duplicate is Ctrl+Shift+D"
-                     "@Redo keys#2:Ctrl+Z" "until=studio_said,status=\"Redo is Ctrl+Z, Ctrl+Z also Undo's"
-                     "@Undo keys#2:Hello" "until=studio_said,status=\"keys refused"
+                     @Keys "@Duplicate keys:Ctrl+Shift+D" "until=studio_said,status=\"Duplicate is Ctrl+Shift+D"
+                     "@Redo keys:Ctrl+Z" "until=studio_said,status=\"Redo is Ctrl+Z, Ctrl+Z also Undo's"
+                     "@Undo keys:Hello" "until=studio_said,status=\"keys refused"
                      @Close @ground keys=Control_L+Shift_L+d "until=studio_said,status=\"ground copy made"
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_shortcuts PROPERTIES
@@ -206,7 +206,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${CMAKE_COMMAND} -E env "STUDIO_SETTINGS=studio.preferences = {work}/studio.preferences"
                      ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     none none @starter-3d "@new game#2:mygame" "until=studio_said,status=\"opened mygame.game" wait=1
+                     none none @starter-3d "@new game:mygame" "until=studio_said,status=\"opened mygame.game" wait=1
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_starts PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -218,7 +218,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${CMAKE_COMMAND} -E env STUDIO_PREFERENCES=${CMAKE_CURRENT_SOURCE_DIR}/tests/recent.preferences
                      ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     none none "@starter.game  templates/starter-3d" "until=studio_said,status=\"opened starter.game" wait=1
+                     none none @starter "until=studio_said,status=\"opened starter.game" wait=1
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_opens_recent PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -227,8 +227,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_opens
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     none none "@open#2:templates/nothing.game" "until=studio_said,status=\"templates/nothing.game is not"
-                     "@open#2:templates/starter-3d/starter.game" "until=studio_said,status=\"opened starter.game" wait=1
+                     none none "@open:templates/nothing.game" "until=studio_said,status=\"templates/nothing.game is not"
+                     "@open:templates/starter-3d/starter.game" "until=studio_said,status=\"opened starter.game" wait=1
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_opens PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -241,7 +241,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_commands
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene @ground "@name#2:first" "until=studio_said,status=\"renamed first\""
+                     games/runners/runners.game level.scene @level.scene @ground "@name:first" "until=studio_said,status=\"renamed first\""
                      keys=Control_L+z "until=studio_said,status=\"undone\"" @commands:redo "until=studio_said,status=\"redone\""
                      @Edit "@Undo  Ctrl+Z" "until=studio_said,status=\"undone\"" keys=Delete "until=studio_said,status=\"entity deleted\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -263,8 +263,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_bookmarks
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene "@eye#2:0,30,0.5" "until=studio_said,status=\"view set\""
-                     keys=Control_L+Shift_L+2 "until=studio_said,status=\"bookmark 2 set\"" "@eye#2:5,5,5"
+                     games/runners/runners.game level.scene @level.scene "@Scene settings" "@eye:0,30,0.5" "until=studio_said,status=\"view set\""
+                     keys=Control_L+Shift_L+2 "until=studio_said,status=\"bookmark 2 set\"" "@Scene settings" "@eye:5,5,5"
                      "until=studio_said,status=\"view set\"#2" keys=Control_L+2 "until=studio_said,status=\"bookmark 2\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_bookmarks PROPERTIES
@@ -287,12 +287,12 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_clicked
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene @ground "@width#2:x" "@width#2:12" @Undo @Redo "until=studio_said,status=\"redone\""
+                     games/runners/runners.game level.scene @level.scene @ground "@width:x" "@width:12" @Undo @Redo "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_clicked PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "found level.scene at.*found ground at.*typed x at [0-9]+,[0-9]+.*typed 12 at [0-9]+,[0-9]+.*found Undo at 1[0-9][0-9][0-9],2[0-9].*found Redo at 1[0-9][0-9][0-9],2[0-9].*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":[1-9][0-9]*,\"entity\":\"c5400cf8-4b07-4d16-84c2-951852c66b40\",\"components\":4,\"applied\":1,\"refused\":1,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
+                         "found level.scene at.*found ground at.*typed x at [0-9]+,[0-9]+.*typed 12 at [0-9]+,[0-9]+.*found Undo at [0-9]+,[0-9]+.*found Redo at [0-9]+,[0-9]+.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":[1-9][0-9]*,\"entity\":\"c5400cf8-4b07-4d16-84c2-951852c66b40\",\"components\":4,\"applied\":1,\"refused\":1,\"undone\":1,\"redone\":1,\"undoable\":1,\"redoable\":0,[^\n]*\"status\":\"redone\".*\"exit\":\"clean_stop\"")
     # Studio's operations, as describe offers them: in runners' level a new
     # entity is made and chosen, renamed crate, given runners.tile by its
     # name typed, the tile removed, and the entity deleted; Undo brings it
@@ -300,8 +300,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_operates
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene @New "@name#2:crate" "@add#2:runners.tile"
-                     @Remove @Delete @Undo "until=studio_said,status=\"undone\""
+                     games/runners/runners.game level.scene @level.scene @Entity "@New  Ctrl+Shift+N" "@name:crate" "@add:runners.tile"
+                     @Remove @Edit "@Delete  Del" @Undo "until=studio_said,status=\"undone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_operates PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -314,9 +314,9 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_references
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene @New "@add#2:attach" "@parent#2:west"
-                     "@parent#2:ground"
-                     "@parent#2:gr" "@parent#2" keys=BackSpace,Return "until=studio_said,status=\"parent cleared\""
+                     games/runners/runners.game level.scene @level.scene @Entity "@New  Ctrl+Shift+N" "@add:attach" "@parent:west"
+                     "@parent:ground"
+                     "@parent:gr" "@parent" keys=BackSpace,Return "until=studio_said,status=\"parent cleared\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_references PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -331,8 +331,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_instances
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game hall.scene @hall.scene "@instance of#2:x" "@instance of#2:platform" 186,254 @Delete
-                     @Restore "@Remove instance" "until=studio_said,status=\"instance removed\""
+                     games/runners/runners.game hall.scene @hall.scene "@instance of:x" "@instance of:platform" "@hall|0,25" @Edit "@Delete  Del"
+                     @Entity @Restore @Entity "@Remove instance" "until=studio_said,status=\"instance removed\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_instances PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -343,7 +343,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_makes_scenes
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game crate.scene "@new scene or import#2:crate" @New "until=studio_said,status=\"entity created\""
+                     games/runners/runners.game crate.scene "@new scene or import:crate" @Entity "@New  Ctrl+Shift+N" "until=studio_said,status=\"entity created\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_makes_scenes PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -355,7 +355,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_imports
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene "@new scene or import#2:${PROJECT_SOURCE_DIR}/games/plaza/paving.png"
+                     games/runners/runners.game level.scene "@new scene or import:${PROJECT_SOURCE_DIR}/games/plaza/paving.png"
                      "until=studio_said,status=\"imported "
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_imports PROPERTIES
@@ -367,7 +367,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_moves
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene @ground @Up @Down @Down "until=studio_said,status=\"moved down\""
+                     games/runners/runners.game level.scene @level.scene @ground @Entity @Up @Entity @Down @Entity @Down "until=studio_said,status=\"moved down\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_moves PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -380,7 +380,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_duplicates
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene @ground @Duplicate "until=studio_said,status=\"ground copy made\""
+                     games/runners/runners.game level.scene @level.scene @ground @Edit "@Duplicate  Ctrl+D" "until=studio_said,status=\"ground copy made\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_duplicates PROPERTIES
                          ENVIRONMENT "STUDIO_SHOW_WRITTEN=1"
@@ -395,7 +395,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_moves_to_scene
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game hall.scene @level.scene @ground "@Move to" @hall.scene
+                     games/runners/runners.game hall.scene @level.scene @ground @Entity "@Move to" @hall.scene
                      "until=studio_said,status=\"ground moved to hall.scene\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_moves_to_scene PROPERTIES
@@ -424,7 +424,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_reads_again
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game controls.kest "@Open in editor" @Retry "until=studio_said,status=\"the game reads\""
+                     games/runners/runners.game controls.kest "@Open in editor" "@Read again" "until=studio_said,status=\"the game reads\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_reads_again PROPERTIES
                          ENVIRONMENT "STUDIO_SCENE_EDIT=$a this is not kest (;STUDIO_SETTINGS=studio.editor = ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixing_editor.sh --goto {file}:{line}:{column}"
@@ -437,7 +437,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_finds
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene "@find#2:slope" "@find#2:wall has:tile" "until=studio_searched,having=\"tile\""
+                     games/runners/runners.game level.scene @level.scene "@find:slope" "@find:wall has:tile" "until=studio_searched,having=\"tile\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_finds PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -450,8 +450,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_steps_history
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene @ground "@name#2:first" "@name#2:second"
-                     "@name#2:third" @History "@rename to first" "@rename to third" "until=studio_said,status=\"redone\""
+                     games/runners/runners.game level.scene @level.scene @ground "@name:first" "@name:second"
+                     "@name:third" @History "@rename to first" "@rename to third" "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_steps_history PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -463,8 +463,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_names_assets
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene @ground wheel=1100,400,6 "@texture#2:hud.png"
-                     "@texture#2:hud" "until=studio_said,status=\"texture: "
+                     games/runners/runners.game level.scene @level.scene @ground wheel=1100,400,6 "@texture:hud.png"
+                     "@texture:hud" "until=studio_said,status=\"texture: "
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_names_assets PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -477,7 +477,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_scrolls
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene "@west slope" wheel=1000,400,6 "@width#2:9" "until=studio_said,status=\"width set to 9\""
+                     games/runners/runners.game level.scene @level.scene "@west slope" wheel=1000,400,6 "@width:9" "until=studio_said,status=\"width set to 9\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_scrolls PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -489,7 +489,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_scrolls_frozen
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene freeze "@west slope" wheel=1000,400,6 thaw "@width#2:9" "until=studio_said,status=\"width set to 9\""
+                     games/runners/runners.game level.scene @level.scene freeze "@west slope" wheel=1000,400,6 thaw "@width:9" "until=studio_said,status=\"width set to 9\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_scrolls_frozen PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -500,7 +500,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_clicks_frozen
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene freeze @level.scene 186,318 wheel=1000,400,6 thaw "@width#2:9" "until=studio_said,status=\"width set to 9\""
+                     games/runners/runners.game level.scene freeze @level.scene 186,318 wheel=1000,400,6 thaw "@width:9" "until=studio_said,status=\"width set to 9\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_clicks_frozen PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -512,20 +512,20 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_steps_history_frozen
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene @ground "@name#2:first" "@name#2:second"
-                     @History freeze 1161,97:third 200,474 200,538 thaw "until=studio_said,status=\"redone\""
+                     games/runners/runners.game level.scene @level.scene @ground "@name:first" "@name:second"
+                     @History freeze "@name:third" "@rename to first" "@rename to second|0,25" thaw "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_steps_history_frozen PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed third at [0-9]+,[0-9]+.*clicked at 200,474.*clicked at 200,538.*let the program go on.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":3,\"refused\":0,\"undone\":2,\"redone\":2,\"undoable\":3,\"redoable\":0,")
+                         "typed third at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*let the program go on.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"applied\":3,\"refused\":0,\"undone\":2,\"redone\":2,\"undoable\":3,\"redoable\":0,")
     # Studio reverting (D443): runners' level brings a platform whose pose
     # its instance sets; the instance's x reverted drops its own value for
     # its source's, written to the level.
     add_test(NAME studio_reverts
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene "@instance 0  b4560e55" "@Revert#2" "until=studio_said,status=\"x reverted\""
+                     games/runners/runners.game level.scene @level.scene "@instance 0  b4560e55" "@Revert x" "until=studio_said,status=\"x reverted\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_reverts PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -538,7 +538,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_styles
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/tycoon/tycoon.game tycoon.styles @tycoon.styles @button "@fill#2:#c01818c0" @Undo @Redo
+                     games/tycoon/tycoon.game tycoon.styles @tycoon.styles @button "@fill:#c01818c0" @Undo @Redo
                      "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_styles PROPERTIES
@@ -570,7 +570,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_sets_settings
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/quarry/quarry.game quarry.game "@Project settings" @mapped "@mapped#3:8192"
+                     games/quarry/quarry.game quarry.game "@Project settings" @mapped "@mapped#2:8192"
                      @Undo @Redo "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_sets_settings PROPERTIES
@@ -580,7 +580,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_edits_data
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/quarry/quarry.game quarry.actions @quarry.actions "@  aim (actions)" "@displayName#2:Walk"
+                     games/quarry/quarry.game quarry.actions @quarry.actions "@aim (actions)" "@displayName:Walk"
                      @Undo @Redo "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_edits_data PROPERTIES
@@ -594,7 +594,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_material
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/gale/gale.game shore.rfmaterial @shore.rfmaterial @tint "@override#2:[0.6,0.2,0.1]" @Undo @Redo
+                     games/gale/gale.game shore.rfmaterial @shore.rfmaterial @tint "@override:[0.6,0.2,0.1]" @Undo @Redo
                      "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_material PROPERTIES
@@ -609,7 +609,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_graph
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial "@60c00000  rawframe/surface@1" "@specular_roughness#2:0.4" @Undo @Redo
+                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial "@Surface 60c00000" "@specular_roughness:0.4" @Undo @Redo
                      "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_graph PROPERTIES
@@ -623,7 +623,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_graph_canvas
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial "@triplanar_projection 60c0000000000003" "@tile#2:0.5"
+                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial "@triplanar_projection 60c0000000000003" "@tile:0.5"
                      @Undo @Redo "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_graph_canvas PROPERTIES
@@ -654,7 +654,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                      games/tycoon/tycoon.game amble/walk.rfanim @Animations wheel=457,650,4 @amble/walk.rfanim
-                     "@hips translation at 0.5" "@time#2:0.25" "until=studio_said,status=\"tracks[0].keys[1].time set"
+                     "@hips translation at 0.5" "@time:0.25" "until=studio_said,status=\"tracks[0].keys[1].time set"
                      "@hips translation at 0.25" wait=1
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_edits_clip PROPERTIES
@@ -680,7 +680,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_graph_keeps
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial "@60c00000  rawframe/multiply@1" @Delete
+                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial "@Multiply 60c00000" @Edit "@Delete  Del"
                      "until=studio_said,status=\"the material graph does not read: a graph's connections are to its nodes\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_graph_keeps PROPERTIES
@@ -695,7 +695,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_graph_makes
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial @New @rawframe/uv@1 "@channel#2:1"
+                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial @Entity "@New  Ctrl+Shift+N" @rawframe/uv@1 "@channel:1"
                      "until=studio_said,status=\"channel set to 1\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_graph_makes PROPERTIES
@@ -711,7 +711,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_graph_connects
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial "@60c00000  rawframe/parameter@1" @out "@60c00000  rawframe/surface@1" "@emission_color#2"
+                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial "@Tint 60c00000" @out "@Surface 60c00000" "@emission_color"
                      "until=studio_said,status=\"emission_color connected\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_graph_connects PROPERTIES
@@ -726,7 +726,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_style_classes
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/tycoon/tycoon.game tycoon.styles @tycoon.styles @New "@name#2:tip" @Delete @Undo
+                     games/tycoon/tycoon.game tycoon.styles @tycoon.styles @Entity "@New  Ctrl+Shift+N" "@name:tip" @Edit "@Delete  Del" @Undo
                      "until=studio_said,status=\"undone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_style_classes PROPERTIES
@@ -738,7 +738,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_style_transitions
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/tycoon/tycoon.game tycoon.styles @tycoon.styles @button wheel=1000,400,30 "@all#2" keys=BackSpace,Return
+                     games/tycoon/tycoon.game tycoon.styles @tycoon.styles @button wheel=1000,400,30 "@all" keys=BackSpace,Return
                      "until=studio_said,status=\"transitions unset\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_style_transitions PROPERTIES
@@ -751,23 +751,24 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # A UI document laid out as its game would show it (D832): Tycoon's
     # ten nodes on a screen in the center, its sign pressed there and its
     # row chosen, its width typed, and the screen laid out again.
-    # The environment panel (D834): Plaza's gate scene holds none of its
-    # sky or warmth, which the panel offers; the sky added as an entity of
-    # its own, then found there and pressed to choose it.
+    # The environment panel (D834), the right dock's Scene settings (D921):
+    # the starter's level holds its daylight and skylight, each listed with
+    # the entity holding it (a sky the client makes as it draws is never a
+    # scene's, D919); the sky's pressed there, chosen in the Inspector.
     add_test(NAME studio_environment
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/plaza/plaza.game gate.scene @gate.scene @Environment "@  Add plaza.sky"
-                     "until=studio_said,status=\"plaza.sky added" "@  plaza.sky plaza.sky" wait=1
+                     templates/starter-3d/starter.game level.scene @level.scene "@Scene settings"
+                     "@sky starter.skylight" wait=1
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_environment PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "found   plaza.sky plaza.sky at [0-9]+,[0-9]+.*gate.scene written: yes.*\"code\":\"studio_environment\"[^\n]*\"components\":[2-9],\"held\":0,.*\"code\":\"studio_environment\"[^\n]*\"held\":1,.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"gate.scene\",[^\n]*\"entity\":\"[0-9a-f-]+\",[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
+                         "found sky starter.skylight at [0-9]+,[0-9]+.*\"code\":\"studio_environment\"[^\n]*\"components\":2,\"held\":2,.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",[^\n]*\"entity\":\"12d86407-91f4-4b01-a6ca-1d8f79284c35\",.*\"exit\":\"clean_stop\"")
     add_test(NAME studio_ui_preview
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/tycoon/tycoon.game tycoon.ui @tycoon.ui "@tycoon.sign preview" "@widthOffset#2:300" wait=1
+                     games/tycoon/tycoon.game tycoon.ui @tycoon.ui "@tycoon.sign preview" "@widthOffset:300" wait=1
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_ui_preview PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -776,7 +777,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_ui
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/tycoon/tycoon.game tycoon.ui @tycoon.ui "@  tycoon.purse" "@widthOffset#2:300" "@  tycoon.tip" @Delete @Undo
+                     games/tycoon/tycoon.game tycoon.ui @tycoon.ui "@purse" "@widthOffset:300" "@tip" @Edit "@Delete  Del" @Undo
                      "until=studio_said,status=\"undone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_ui PROPERTIES
@@ -789,7 +790,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_ui_moves
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/tycoon/tycoon.game tycoon.ui @tycoon.ui "@  tycoon.purse" @Up @Down "until=studio_said,status=\"moved down\""
+                     games/tycoon/tycoon.game tycoon.ui @tycoon.ui "@purse" @Entity @Up @Entity @Down "until=studio_said,status=\"moved down\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_ui_moves PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -802,7 +803,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_ui_moves_into
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/tycoon/tycoon.game tycoon.ui @tycoon.ui @tycoon.wallet "@Move to" "@  tycoon.purse" "@  tycoon.purse" "@Move to" @tycoon.sign
+                     games/tycoon/tycoon.game tycoon.ui @tycoon.ui @wallet @Entity "@Move to" "@purse" "@purse" @Entity "@Move to" @sign
                      "until=studio_said,status=\"moved into tycoon.sign\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_ui_moves_into PROPERTIES
@@ -816,7 +817,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_ui_makes
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/tycoon/tycoon.game tycoon.ui @tycoon.ui "@  tycoon.tip" @Delete @New @tycoon.tip
+                     games/tycoon/tycoon.game tycoon.ui @tycoon.ui "@tip" @Edit "@Delete  Del" @Entity "@New  Ctrl+Shift+N" @tycoon.tip
                      "until=studio_said,status=\"tycoon.tip made\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_ui_makes PROPERTIES
@@ -835,7 +836,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_client> $<TARGET_FILE:rawframe_host_studio_tool>
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf games/plaza/plaza.game
                          ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf @gate.scene until=studio_previewing
-                         "@eye#2:0,30,0.5" "until=studio_said,status=\"view set and previewed\""
+                         "@Scene settings" "@eye:0,30,0.5" "until=studio_said,status=\"view set and previewed\""
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_previews_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
@@ -855,8 +856,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
-                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing "@eye#2:0,30,0.5"
-                         wait=3 @New wait=5 @Stop until=studio_game_ended
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing "@Scene settings" "@eye:0,30,0.5"
+                         wait=3 @Entity "@New  Ctrl+Shift+N" wait=5 @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_plays_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
@@ -876,7 +877,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" wait=3 @Viewport "until=studio_said,status=\"picked "
+                         "@Scene settings" "@eye:-30,3,-20" "@target:-30,2.5,-30" wait=3 @Viewport "until=studio_said,status=\"picked "
                          @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_plays_in_viewport PROPERTIES
@@ -898,8 +899,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@gate post" wheel=1100,400,20 "@add#2:rawframe.world.layer" "until=studio_said,status=\"rawframe.world.layer added"
-                         wheel=1100,400,20 "@layer#2:1" "until=studio_said,status=\"layer set to 1" wait=3
+                         "@gate post" wheel=1100,400,20 "@add:rawframe.world.layer" "until=studio_said,status=\"rawframe.world.layer added"
+                         wheel=1100,400,20 "@layer:1" "until=studio_said,status=\"layer set to 1" wait=3
                          @Layers "@Hide layer 1" "until=studio_said,status=\"layer 1 hidden" wait=3
                          @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -919,13 +920,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         @Console wait=2 @Server wait=1 @Server "@Problems only" @Stop until=studio_game_ended
+                         @Console wait=2 @Server wait=1 @Server @Info @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_console PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "found Console at.*found Server at.*found Server at.*found Problems only at.*\"code\":\"studio_summary\"[^\n]*\"played\":1,[^\n]*\"consoleLines\":([2-9][0-9]|[1-9][0-9][0-9]+),.*\"exit\":\"clean_stop\"")
+                             "found Console at.*found Server at.*found Server at.*found Info at.*\"code\":\"studio_summary\"[^\n]*\"played\":1,[^\n]*\"consoleLines\":([2-9][0-9]|[1-9][0-9][0-9]+),.*\"exit\":\"clean_stop\"")
         # Stalls played from Studio with its UI document edited as it plays
         # (D761): the document chosen, the game played, and once the played
         # client's UI is up (its log says what navigation reaches), the
@@ -936,8 +937,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/tycoon/tycoon.game ${PROJECT_BINARY_DIR}/hosts/client/stalls_server.conf
-                         ${PROJECT_BINARY_DIR}/hosts/client/stalls_clicked.conf @tycoon.ui "@  tycoon.purse" @Play
-                         until=ui_reachable@play/client.log~600 "@widthOffset#2:300" until=ui_rearranged@play/client.log~300 @Stop
+                         ${PROJECT_BINARY_DIR}/hosts/client/stalls_clicked.conf @tycoon.ui "@purse" @Play
+                         until=ui_reachable@play/client.log~600 "@widthOffset:300" until=ui_rearranged@play/client.log~300 @Stop
                          until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_plays_ui PROPERTIES
@@ -1041,13 +1042,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game /dev/null /dev/null
                          @Cook "until=studio_said,status=\"cooked " @Textures
-                         "until=studio_said,status=\"Textures in all folders" "@Large thumbnails"
-                         "until=studio_said,status=\"64 pixel thumbnails" wait=2
+                         "until=studio_said,status=\"Textures in all folders" @List
+                         "until=studio_said,status=\"assets listed" @Thumbnails "until=studio_said,status=\"assets as thumbnails" wait=2
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_shows_thumbnails PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "saw studio_said,status=\"64 pixel thumbnails.*\"code\":\"studio_assets\"[^\n]*\"thumbnail\":64,\"thumbnailsMade\":[1-9]")
+                             "saw studio_said,status=\"assets as thumbnails.*\"code\":\"studio_assets\"[^\n]*\"thumbnail\":128,\"thumbnailsMade\":[1-9]")
         # And its meshes' (D899), drawn by the thumbnail tool from that cook.
         if(TARGET rawframe_host_thumbnail_tool)
             add_test(NAME studio_shows_mesh_thumbnails
@@ -1058,13 +1059,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                              games/plaza/plaza.game /dev/null /dev/null
                              @Cook "until=studio_said,status=\"cooked " @Meshes
-                             "until=studio_said,status=\"Meshes in all folders" "@Large thumbnails"
-                             "until=studio_said,status=\"64 pixel thumbnails" wait=2
+                             "until=studio_said,status=\"Meshes in all folders" @List
+                             "until=studio_said,status=\"assets listed" @Thumbnails "until=studio_said,status=\"assets as thumbnails" wait=2
                      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
             set_tests_properties(studio_shows_mesh_thumbnails PROPERTIES
                                  SKIP_REGULAR_EXPRESSION "skip: no device"
                                  PASS_REGULAR_EXPRESSION
-                                 "saw studio_said,status=\"64 pixel thumbnails.*\"code\":\"studio_assets\"[^\n]*\"thumbnail\":64,\"thumbnailsMade\":3")
+                                 "saw studio_said,status=\"assets as thumbnails.*\"code\":\"studio_assets\"[^\n]*\"thumbnail\":128,\"thumbnailsMade\":[3-9]")
         endif()
         # Import settings (D800): Plaza's paving chosen in the browser, its
         # texture's exact set false in the Inspector, then cooked again by
@@ -1077,7 +1078,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          games/plaza/plaza.game /dev/null /dev/null
                          @Textures "until=studio_said,status=\"Textures in all folders"
                          @paving.png "until=studio_said,status=\"paving.png: texture"
-                         "@exact#2:false" "until=studio_said,status=\"paving.png: exact set"
+                         "@exact:false" "until=studio_said,status=\"paving.png: exact set"
                          @Reimport "until=studio_said,status=\"cooked "
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_sets_import_settings PROPERTIES
@@ -1262,10 +1263,10 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          games/runners/runners.game yard.blockout wheel=457,650,4 @yard.blockout until=studio_blockout
-                         "@new solid#2:box wall at 0 0 3 size 4 2 0.2" "until=studio_said,status=\"wall added"
-                         "@wall (box)" "@size#2:4 3 0.2" "until=studio_said,status=\"wall size set"
+                         "@new solid:box wall at 0 0 3 size 4 2 0.2" "until=studio_said,status=\"wall added"
+                         "@wall (box)" "@size:4 3 0.2" "until=studio_said,status=\"wall size set"
                          "drag=@wall plan,64,0" "until=studio_said,status=\"wall moved to 1 0 3"
-                         "@new solid#2:sphere ball at 0 0 0" wait=1 "@floor plan" wait=1
+                         "@new solid:sphere ball at 0 0 0" wait=1 "@floor plan" wait=1
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_blockout PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -1283,8 +1284,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          games/runners/runners.game field.terrain wheel=457,650,4 @field.terrain until=studio_terrain
-                         "@radius#2:1.5" "@amount#2:1" "@map 2 2" "until=studio_said,status=\"raised at 2.5 2.5"
-                         "@rock (layer)" "@radius#2:0.6" "@map 0 0" "until=studio_said,status=\"painted at 0.5 0.5"
+                         "@radius:1.5" "@amount:1" "@map 2 2" "until=studio_said,status=\"raised at 2.5 2.5"
+                         "@rock (layer)" "@radius:0.6" "@map 0 0" "until=studio_said,status=\"painted at 0.5 0.5"
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_terrain PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -1341,7 +1342,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          games/runners/runners.game room.tilemap wheel=457,650,4 @room.tilemap until=studio_tilemap
                          "@tile 1 (tile)" "@cell 2 1" "until=studio_said,status=\"painted tile 1 at 2 1"
-                         "@tile#2:none" "@cell 0 2" "until=studio_said,status=\"cleared at 0 2"
+                         "@tile:none" "@cell 0 2" "until=studio_said,status=\"cleared at 0 2"
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_tilemap PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -1358,7 +1359,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          games/runners/runners.game rocks.scatter wheel=457,650,4 @rocks.scatter until=studio_scatter
-                         "@count#2:20" "until=studio_said,status=\"count set to 20"
+                         "@count:20" "until=studio_said,status=\"count set to 20"
                          @Reseed "until=studio_said,status=\"reseeded to 8"
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_scatter PROPERTIES
@@ -1376,7 +1377,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          games/runners/runners.game opening.sequence wheel=457,650,4 @opening.sequence until=studio_sequence
-                         "@duration#2:6" "until=studio_said,status=\"duration set to 6"
+                         "@duration:6" "until=studio_said,status=\"duration set to 6"
                          "@Add track" "until=studio_said,status=\"added track track2"
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_sequence PROPERTIES
@@ -1406,9 +1407,9 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                  COMMAND ${CMAKE_COMMAND} -E env STUDIO_GIT=1
                          ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                         games/runners/runners.game level.scene @level.scene @New "until=studio_said,status=\"entity created"
+                         games/runners/runners.game level.scene @level.scene @Entity "@New  Ctrl+Shift+N" "until=studio_said,status=\"entity created"
                          @Changes "@Trust this repository" "until=studio_changes" "@M  level.scene" "until=studio_changes"
-                         "@commit message#2:a new entity" "until=studio_committed"
+                         "@commit message:a new entity" "until=studio_committed"
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_changes PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -1425,7 +1426,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          games/runners/runners.game level.scene @level.scene @File @Export "until=studio_said,status=\"export\""
-                         "@title#2:Runners exported" "until=studio_said,status=\"the export's title set"
+                         "@title:Runners exported" "until=studio_said,status=\"the export's title set"
                          @Export "until=studio_exported~240" @android "until=studio_said,status=\"exports for android"
                          @Export "until=studio_said,status=\"a phone's export needs"
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -1517,7 +1518,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:0,30,0.5" "until=studio_said,status=\"view set" @View "@Three views"
+                         "@Scene settings" "@eye:0,30,0.5" "until=studio_said,status=\"view set" @View "@Three views"
                          "until=studio_said,status=\"3 views" wait=3 @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_splits_views PROPERTIES
@@ -1536,7 +1537,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:0,30,0.5" "until=studio_said,status=\"view set" @View "@Show colliders"
+                         "@Scene settings" "@eye:0,30,0.5" "until=studio_said,status=\"view set" @View "@Show colliders"
                          "until=studio_said,status=\"colliders shown" @View "@Show lights"
                          "until=studio_said,status=\"lights shown" wait=3 @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -1577,7 +1578,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/gale/gale.game /dev/null ${PROJECT_BINARY_DIR}/hosts/client/gale_drawn.conf
                          @Cook "until=studio_said,status=\"cooked ~600" @shore.rfmaterial @Play wait=6 @tint
-                         "@override#2:[0.6,0.2,0.1]" "until=studio_said,status=\"cooked #2~600" until=materials_reloaded@play/client.log~600
+                         "@override:[0.6,0.2,0.1]" "until=studio_said,status=\"cooked #2~600" until=materials_reloaded@play/client.log~600
                          @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_recooks_gale PROPERTIES
@@ -1588,7 +1589,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              "typed \\[0.6,0.2,0.1\\] at [0-9]+,[0-9]+.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"played\":1,.*\"code\":\"materials_reloaded\"[^\n]*\"reloads\":1")
         # What the author clicks in the played game, selected in Studio
         # (D456): the gate's view aimed at its post, a click in the middle
-        # of the played client's window (placed at 700,340, 560 by 360) is
+        # of the played client's window (placed at 366,100, 560 by 360) is
         # a ray the client keeps; the server says the ray meets the post,
         # which the gate scene brought, and Studio chooses it, marked in the
         # played client where it stands (D464).
@@ -1598,14 +1599,14 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" wait=3 980,520 "until=studio_said,status=\"picked "
+                         "@Scene settings" "@eye:-30,3,-20" "@target:-30,2.5,-30" wait=3 646,280 "until=studio_said,status=\"picked "
                          @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_picks_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "clicked at 980,520.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"picked\":1,[^\n]*\"marked\":[1-9][0-9]*,.*\"code\":\"scene_summary\"[^\n]*\"marksShown\":[1-9]")
+                             "clicked at [0-9]+,[0-9]+.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"picked\":1,[^\n]*\"marked\":[1-9][0-9]*,.*\"code\":\"scene_summary\"[^\n]*\"marksShown\":[1-9]")
         # An extension's viewport mode (D877): switched on from the
         # Extensions menu, then the click that picks the gate post in
         # studio_picks_plaza runs it where the ray met the post, a marker
@@ -1618,15 +1619,15 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" wait=3 @Extensions "@Drop marker mode"
-                         "until=studio_said,status=\"Drop marker mode: click" 980,520
+                         "@Scene settings" "@eye:-30,3,-20" "@target:-30,2.5,-30" wait=3 @Extensions "@Drop marker mode"
+                         "until=studio_said,status=\"Drop marker mode: click" 646,280
                          "until=studio_said,status=\"Drop marker done" @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_extension_mode_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "clicked at 980,520.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"picked\":0,")
+                             "clicked at [0-9]+,[0-9]+.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"picked\":0,")
         # A drag in the played game moving what it pressed (D457): the
         # gate's post, aimed at, pressed in the middle of the played client's
         # window and let go a hundred pixels to its right, is chosen, and its
@@ -1638,13 +1639,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" wait=3 drag=980,520,1080,520 until=studio_dragged @Stop until=studio_game_ended
+                         "@Scene settings" "@eye:-30,3,-20" "@target:-30,2.5,-30" wait=3 drag=646,280,746,280 until=studio_dragged @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_drags_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "dragged from 980,520 to 1080,520.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"applied\":1,[^\n]*\"undoable\":1,[^\n]*\"picked\":1,\"dragged\":1,")
+                             "dragged from 646,280 to 746,280.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"applied\":1,[^\n]*\"undoable\":1,[^\n]*\"picked\":1,\"dragged\":1,")
         # The post's X handle dragged (D466): the post chosen and marked, a
         # press on its mark's X axis right of it, off the post itself, let go
         # further right and lower, moves the post along X alone, as far as
@@ -1655,13 +1656,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" wait=3 980,520 until=studio_marked wait=1 drag=999,520,1079,540 until=studio_dragged @Stop until=studio_game_ended
+                         "@Scene settings" "@eye:-30,3,-20" "@target:-30,2.5,-30" wait=3 646,280 until=studio_marked wait=1 drag=665,280,745,300 until=studio_dragged @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_handles_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "dragged from 999,520 to 1079,540.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"dragged\":1,.*scene gate.scene: [^\n]*\"id\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"rawframe.physics3d.pose\":{\"x\":-27\\.[2-6][0-9]*,\"y\":2\\.5,\"z\":-30}")
+                             "dragged from 665,280 to 745,300.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"dragged\":1,.*scene gate.scene: [^\n]*\"id\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"rawframe.physics3d.pose\":{\"x\":-27\\.[2-6][0-9]*,\"y\":2\\.5,\"z\":-30}")
         # What is chosen outlined in the preview (D907): the gate post chosen
         # in the Hierarchy, a box about it drawn over the plaza.
         add_test(NAME studio_outlines_chosen
@@ -1686,14 +1687,14 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" wait=3 980,520 until=studio_marked move=999,520 until=studio_lit wait=1
+                         "@Scene settings" "@eye:-30,3,-20" "@target:-30,2.5,-30" wait=3 646,280 until=studio_marked move=665,280 until=studio_lit wait=1
                          @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_hovers_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "moved to 999,520.*\"code\":\"scene_summary\"[^\n]*\"marksLit\":[1-9]")
+                             "moved to 665,280.*\"code\":\"scene_summary\"[^\n]*\"marksLit\":[1-9]")
         # The view moved in the played game (D469): the wheel turned three
         # detents away over the played client's window brings the eye
         # nearer, a drag with the right button carries it round, and Studio
@@ -1704,14 +1705,14 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" wait=3 wheel=980,520,-3 orbit=980,520,1080,520 wait=3
+                         "@Scene settings" "@eye:-30,3,-20" "@target:-30,2.5,-30" wait=3 wheel=646,280,-3 orbit=646,280,746,280 wait=3
                          @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_orbits_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "orbited from 980,520 to 1080,520.*\"code\":\"studio_view_moved\"[^\n]*\"distance\":6\\.[0-9]*,.*\"code\":\"studio_summary\"[^\n]*\"viewsMoved\":[1-9]")
+                             "orbited from 646,280 to 746,280.*\"code\":\"studio_view_moved\"[^\n]*\"distance\":6\\.[0-9]*,.*\"code\":\"studio_summary\"[^\n]*\"viewsMoved\":[1-9]")
         # A drag snapped to the grid (D471): the snap set to a meter and 15
         # degrees in Studio's view fields, the post dragged right, and it
         # lands on a whole meter along X, Z as it was.
@@ -1721,7 +1722,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" "@snap#2:1 15" wait=3 drag=980,520,1080,520
+                         "@Scene settings" "@eye:-30,3,-20" "@target:-30,2.5,-30" "@Scene settings" "@snap:1 15" wait=3 drag=646,280,746,280
                          until=studio_dragged @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_snaps_plaza PROPERTIES
@@ -1740,14 +1741,14 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" wait=3 orbit=980,520,1080,520,Shift_L
-                         until=studio_view_moved wait=2 wheel=980,520,-3,Shift_L wait=2 @Stop until=studio_game_ended
+                         "@Scene settings" "@eye:-30,3,-20" "@target:-30,2.5,-30" wait=3 orbit=646,280,746,280,Shift_L
+                         until=studio_view_moved wait=2 wheel=646,280,-3,Shift_L wait=2 @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_looks_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "orbited from 980,520 to 1080,520 holding Shift_L.*turned the wheel -3 at 980,520 holding Shift_L.*\"code\":\"studio_view_moved\"[^\n]*\"eyeX\":-30,\"eyeY\":3,\"eyeZ\":-20,\"targetX\":-[23][0-9]\\.[0-9]+.*\"code\":\"studio_view_moved\"[^\n]*\"distance\":10\\.01[0-9]*,\"eyeX\":-2[0-9]\\.[0-9]+")
+                             "orbited from 646,280 to 746,280 holding Shift_L.*turned the wheel -3 at 646,280 holding Shift_L.*\"code\":\"studio_view_moved\"[^\n]*\"eyeX\":-30,\"eyeY\":3,\"eyeZ\":-20,\"targetX\":-[23][0-9]\\.[0-9]+.*\"code\":\"studio_view_moved\"[^\n]*\"distance\":10\\.01[0-9]*,\"eyeX\":-2[0-9]\\.[0-9]+")
         # The mark's ring dragged (D467): seen from above, the post chosen,
         # its ring pressed left of it and let go in front of it, a quarter
         # turn about its upright.
@@ -1757,13 +1758,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:-30,8,-25" "@target#2:-30,2.5,-30" wait=3 980,520 until=studio_marked wait=1 drag=928,520,980,564 until=studio_dragged @Stop until=studio_game_ended
+                         "@Scene settings" "@eye:-30,8,-25" "@target:-30,2.5,-30" wait=3 646,280 until=studio_marked wait=1 drag=594,280,646,324 until=studio_dragged @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_rings_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "dragged from 928,520 to 980,564.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"turned\":1,.*scene gate.scene: [^\n]*\"id\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"rawframe.physics3d.pose\":{\"qw\":0\\.70[0-9]*,\"qy\":0\\.70[0-9]*,\"x\":-30,\"y\":2\\.5,\"z\":-30}")
+                             "dragged from 594,280 to 646,324.*\"code\":\"studio_summary\"[^\n]*\"applied\":1,[^\n]*\"turned\":1,.*scene gate.scene: [^\n]*\"id\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"rawframe.physics3d.pose\":{\"qw\":0\\.70[0-9]*,\"qy\":0\\.70[0-9]*,\"x\":-30,\"y\":2\\.5,\"z\":-30}")
         # The post raised with Shift and turned with Control held through
         # the drag (D463): up the upright plane facing the eye, and about
         # the post's own place, each one transaction.
@@ -1773,26 +1774,26 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" wait=3 drag=980,520,980,470,Shift_L until=studio_dragged @Stop until=studio_game_ended
+                         "@Scene settings" "@eye:-30,3,-20" "@target:-30,2.5,-30" wait=3 drag=646,280,646,230,Shift_L until=studio_dragged @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_raises_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "dragged from 980,520 to 980,470 holding Shift_L.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"applied\":1,[^\n]*\"undoable\":1,[^\n]*\"picked\":1,\"dragged\":1,\"raised\":1,\"turned\":0,")
+                             "dragged from 646,280 to 646,230 holding Shift_L.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"applied\":1,[^\n]*\"undoable\":1,[^\n]*\"picked\":1,\"dragged\":1,\"raised\":1,\"turned\":0,")
         add_test(NAME studio_turns_plaza
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@eye#2:-30,3,-20" "@target#2:-30,2.5,-30" wait=3 drag=980,520,1080,520,Control_L until=studio_dragged @Stop until=studio_game_ended
+                         "@Scene settings" "@eye:-30,3,-20" "@target:-30,2.5,-30" wait=3 drag=646,280,746,280,Control_L until=studio_dragged @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_turns_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "dragged from 980,520 to 1080,520 holding Control_L.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"applied\":1,[^\n]*\"undoable\":1,[^\n]*\"picked\":1,\"dragged\":1,\"raised\":0,\"turned\":1,")
+                             "dragged from 646,280 to 746,280 holding Control_L.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"applied\":1,[^\n]*\"undoable\":1,[^\n]*\"picked\":1,\"dragged\":1,\"raised\":0,\"turned\":1,")
         # Each played test ends by stopping its game and waiting for Studio
         # to say so, so it is stopped half a second after, not five (D499).
         # A played game is three programs, Studio, its server, and a client

@@ -638,7 +638,11 @@ void ShellParticipant::clear(std::vector<ui::Node>& rows) {
 }
 
 void ShellParticipant::showScene(std::size_t at) {
-    endEdit();
+    // A view's number being typed is kept: the camera's rows are not made
+    // again (D925).
+    if (!editing_.has_value() || editing_->role != FieldRow::Role::View) {
+        endEdit();
+    }
     fields_.clear();
     const bool kChanged = scene_ != scenes_[at];
     if (kChanged) {
@@ -675,6 +679,7 @@ void ShellParticipant::showScene(std::size_t at) {
         if (documentChosen()) {
             clear(viewRows_);
             viewFields_.clear();
+            clear(held_.cameraRows);
             held_.canvasParts.clear();
             held_.canvasBoxes.clear();
             forgetUiPreview();
@@ -1003,7 +1008,9 @@ void ShellParticipant::showEntity(std::size_t at) {
         addSequenceTrack();
         return;
     }
-    endEdit();
+    if (!editing_.has_value() || editing_->role != FieldRow::Role::View) {
+        endEdit();
+    }
     fields_.clear();
     entityAt_ = at;
     if (entity_ != entities_[at]) {
@@ -1217,7 +1224,7 @@ result::Status ShellParticipant::action(ui::Node row, std::string_view text, Act
 
 result::Result<std::pair<ui::Node, ui::Node>> ShellParticipant::fieldRow(
     std::string_view name, std::string_view value, std::optional<ui::Node> column, bool set, std::string_view shown) {
-    // As the design's property row (D915): a label of 96 pixels, then the
+    // As the design's property row (D915): a label of 116 pixels, then the
     // field's well.
     RAWFRAME_TRY_ASSIGN(const ui::Node kLine,
                         box(column.value_or(componentsColumn_),
@@ -1227,9 +1234,14 @@ result::Result<std::pair<ui::Node, ui::Node>> ShellParticipant::fieldRow(
                                        .shrink = 0,
                                        .padding = {6, 6, 3, 3}},
                             0));
-    RAWFRAME_TRY_ASSIGN(const ui::Node kName, box(kLine, ui::Layout{.width = ui::pixels(96), .shrink = 0}, 0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kName, box(kLine, ui::Layout{.width = ui::pixels(116), .shrink = 0}, 0));
     // A field the scene sets reads brighter than one at its default.
-    RAWFRAME_TRY(words(kName, shown.empty() ? name : shown, set ? look::kSoftInk : look::kLabelInk, look::kLabelSize));
+    // Its label as words, apart from the field's own name a screen reader
+    // reads (D925).
+    RAWFRAME_TRY(words(kName,
+                       shown.empty() ? prettyField(name) : std::string{shown},
+                       set ? look::kSoftInk : look::kLabelInk,
+                       look::kLabelSize));
     RAWFRAME_TRY_ASSIGN(const ui::Node kValue, tree_->addEditable(++keys_));
     RAWFRAME_TRY(tree_->setLayout(kValue,
                                   ui::Layout{.width = ui::pixels(0),
@@ -1248,25 +1260,30 @@ result::Result<std::pair<ui::Node, ui::Node>> ShellParticipant::fieldRow(
 
 void ShellParticipant::showView() {
     clear(viewRows_);
-    viewFields_.clear();
     held_.canvasParts.clear();
     held_.canvasBoxes.clear();
     forgetUiPreview();
-    // The view's numbers kept on the shelf (D915): the viewport's camera
-    // is flown, framed, and bookmarked, and these follow it.
-    auto heading = row(held_.shelf, "View", kQuiet, kPanel);
-    if (!heading.has_value()) {
-        return;
-    }
-    viewRows_.push_back(*heading);
-    for (const std::string_view kPart : {"eye", "target", "fieldOfView", "snap"}) {
-        auto line = fieldRow(kPart == "fieldOfView" ? "field of view" : kPart, {}, held_.shelf);
-        if (!line.has_value()) {
+    // The view's numbers under Scene settings (D915, D925): the viewport's
+    // camera is flown, framed, and bookmarked, and these follow it. Made
+    // once, so a scene shown again while one is typed into keeps it.
+    if (viewFields_.empty() || !tree_->contains(viewFields_.front().value)) {
+        clear(held_.cameraRows);
+        viewFields_.clear();
+        const ui::Node kCamera = tree_->contains(held_.viewCamera) ? held_.viewCamera : held_.shelf;
+        auto heading = row(kCamera, "Viewport camera", kQuiet, kPanel);
+        if (!heading.has_value()) {
             return;
         }
-        viewRows_.push_back(line->first);
-        viewFields_.push_back(
-            FieldRow{.value = line->second, .role = FieldRow::Role::View, .field = std::string{kPart}});
+        held_.cameraRows.push_back(*heading);
+        for (const std::string_view kPart : {"eye", "target", "fieldOfView", "snap"}) {
+            auto line = fieldRow(kPart == "fieldOfView" ? "field of view" : kPart, {}, kCamera);
+            if (!line.has_value()) {
+                return;
+            }
+            held_.cameraRows.push_back(line->first);
+            viewFields_.push_back(
+                FieldRow{.value = line->second, .role = FieldRow::Role::View, .field = std::string{kPart}});
+        }
     }
     showViewport();
     showViewText();
@@ -1298,6 +1315,11 @@ void ShellParticipant::showHistoryList() {
 
 void ShellParticipant::showViewText() {
     for (const FieldRow& kViewField : viewFields_) {
+        // Not the one being typed into, which a moving camera would
+        // otherwise write over as it is typed.
+        if (editing_.has_value() && editing_->value == kViewField.value) {
+            continue;
+        }
         static_cast<void>(words(kViewField.value,
                                 kViewField.field == "snap" ? snapText(snap_) : viewText(view_, kViewField.field),
                                 kText,

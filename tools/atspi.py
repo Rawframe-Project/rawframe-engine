@@ -121,7 +121,10 @@ def scroll_to(address, owner, path):
 
 def settled(address, owner, path):
     """The node's extents once a scroll it asked for has moved it: the same
-    twice running, or after a second."""
+    twice running, or after a second; first a moment for the scroll to be
+    applied at all, a program idle drawing only a few frames a second
+    (D925)."""
+    time.sleep(0.6)
     box = extents(address, owner, path)
     for _ in range(10):
         time.sleep(0.1)
@@ -132,16 +135,16 @@ def settled(address, owner, path):
     return box
 
 
-def centre(address, owner, wanted, role=None):
+def centre(address, owner, wanted, role=None, unless=None):
     """The centre of the control named `wanted`, its n-th when it ends with
-    `#n`, of `role` if given, scrolled into view first (D776); None when
-    there is none."""
+    `#n`, of `role` if given and not of `unless` (D925), scrolled into view
+    first (D776); None when there is none."""
     count = 1
     if "#" in wanted:
         wanted, nth = wanted.rsplit("#", 1)
         count = int(nth)
     for path, node_role, name in walk(address, owner):
-        if name != wanted or (role and node_role != role):
+        if name != wanted or (role and node_role != role) or (unless and node_role == unless):
             continue
         count -= 1
         if count == 0:

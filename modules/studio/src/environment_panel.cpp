@@ -35,6 +35,14 @@ std::optional<std::string_view> environmentOf(std::string_view type) {
 
 result::Status ShellParticipant::makeEnvironment() {
     RAWFRAME_TRY_ASSIGN(held_.environmentColumn, pane("Environment"));
+    RAWFRAME_TRY_ASSIGN(
+        held_.environmentList,
+        box(held_.environmentColumn, ui::Layout{.direction = ui::Direction::Column, .gap = 4, .shrink = 0}, 0));
+    RAWFRAME_TRY_ASSIGN(
+        held_.viewCamera,
+        box(held_.environmentColumn,
+            ui::Layout{.direction = ui::Direction::Column, .gap = 4, .shrink = 0, .margin = {0, 0, 10, 0}},
+            0));
     showEnvironment();
     return {};
 }
@@ -46,7 +54,7 @@ void ShellParticipant::showEnvironment() {
     held_.environmentRows.clear();
     held_.environmentParts.clear();
     held_.environmentAdds.clear();
-    const ui::Node kColumn = held_.environmentColumn;
+    const ui::Node kColumn = held_.environmentList;
     const auto kKept = [this](result::Result<ui::Node> made) {
         if (made.has_value()) {
             held_.environmentRows.push_back(*made);
@@ -55,7 +63,7 @@ void ShellParticipant::showEnvironment() {
     };
     const auto kWords = [&](std::string_view text, std::uint32_t ink, float size, bool strong) {
         if (auto made = kKept(box(kColumn, ui::Layout{.shrink = 0, .padding = {12, 12, 4, 2}}, 0)); made.has_value()) {
-            static_cast<void>(strong ? strongWords(*made, text, ink, size) : words(*made, text, ink, size));
+            static_cast<void>(strong ? strongWords(*made, text, ink, size) : wrappedWords(*made, text, ink, size));
         }
     };
     if (scene_.empty() || documentChosen()) {

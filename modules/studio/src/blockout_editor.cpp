@@ -154,6 +154,7 @@ void ShellParticipant::showBlockout() {
 void ShellParticipant::showPlan() {
     clear(viewRows_);
     viewFields_.clear();
+    clear(held_.cameraRows);
     held_.canvasParts.clear();
     held_.canvasBoxes.clear();
     // The solids as the blockout module reads them, each where it stands

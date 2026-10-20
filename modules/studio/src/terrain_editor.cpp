@@ -71,6 +71,7 @@ void ShellParticipant::showTerrain() {
     showBrush();
     clear(viewRows_);
     viewFields_.clear();
+    clear(held_.cameraRows);
     const std::uint32_t kCells = std::max(kTerrain->columns, kTerrain->rows) - 1;
     const std::uint32_t kPer = (kCells + kMostBlocks - 1) / kMostBlocks;
     const std::uint32_t kAcross = (kTerrain->columns - 1 + kPer - 1) / kPer;

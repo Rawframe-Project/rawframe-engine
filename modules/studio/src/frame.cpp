@@ -227,6 +227,8 @@ result::Status ShellParticipant::toolbar(ui::Node root) {
         RAWFRAME_TRY(separator(kBar));
         RAWFRAME_TRY_ASSIGN(held_.worldButton,
                             textButton(kBar, Icon::World, held_.local ? "Local" : "World", ButtonKind::Quiet));
+        // Read as what it switches, not as the World tab (D925).
+        RAWFRAME_TRY(tree_->setName(held_.worldButton, held_.local ? "Handles: Local" : "Handles: World"));
         RAWFRAME_TRY(separator(kBar));
         // The snaps, a press stepping each through its values.
         RAWFRAME_TRY(icon(kBar, Icon::Grid, look::kLabelInk, 14));
@@ -353,6 +355,7 @@ bool ShellParticipant::pressFrame(ui::Node node) {
     if (node == held_.worldButton) {
         held_.local = !held_.local;
         relabel(held_.worldButton, held_.local ? "Local" : "World");
+        static_cast<void>(tree_->setName(held_.worldButton, held_.local ? "Handles: Local" : "Handles: World"));
         say(held_.local ? "handles along the entity's own axes" : "handles along the World's axes");
         return true;
     }

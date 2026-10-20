@@ -51,6 +51,11 @@ studio.preview.endpoint = 127.0.0.1:$port
 studio.preview.pin_file = $work/preview.fingerprint
 studio.preview.token_file = $work/token
 CONF
+# Its window the screen's size: no window manager runs to maximize it (D925).
+grep -q '^window.height' "$work/studio.conf" || printf 'window.height = 720\n' >>"$work/studio.conf"
+# Its preferences its own, never those of whoever runs it (D925).
+grep -q '^studio.preferences' "$work/studio.conf" ||
+    printf 'studio.preferences = %s\n' "$work/studio.preferences" >>"$work/studio.conf"
 "$3" --config "$work/studio.conf" >"$work/studio.log" 2>&1 &
 studio=$!
 echo "$studio" >"$work/studio.pid"

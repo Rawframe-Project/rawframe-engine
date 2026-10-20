@@ -32,7 +32,7 @@ void ShellParticipant::openPreferences() {
         return;
     }
     dialog_ = *backdrop;
-    static_cast<void>(tree_->setLook(*backdrop, ui::Look{.fill = 0x00000088U}));
+    static_cast<void>(tree_->setLook(*backdrop, ui::Look{.fill = 0x05060A99U}));
     auto card = box(*backdrop,
                     ui::Layout{.width = ui::pixels(760),
                                .height = ui::share(0.78F),

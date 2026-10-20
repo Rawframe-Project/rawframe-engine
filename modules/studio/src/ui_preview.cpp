@@ -20,6 +20,7 @@ constexpr float kFrame = 2;
 void ShellParticipant::showUiPreview(const Value& document) {
     clear(viewRows_);
     viewFields_.clear();
+    clear(held_.cameraRows);
     held_.canvasParts.clear();
     held_.canvasBoxes.clear();
     forgetUiPreview();

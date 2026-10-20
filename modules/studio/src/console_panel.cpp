@@ -154,7 +154,8 @@ void ShellParticipant::showConsole() {
         ++levels[static_cast<std::size_t>(kLine.level)];
         ++sources[static_cast<std::size_t>(kLine.source)];
     }
-    const auto kChip = [this](std::string text, bool on, int each) {
+    // Each read by its filter's name alone, its count only shown (D925).
+    const auto kChip = [this](std::string text, std::string_view name, bool on, int each) {
         auto made = box(
             consoleChips_,
             ui::Layout{.alignItems = ui::Align::Center, .shrink = 0, .padding = {9, 9, 4, 4}, .border = {1, 1, 1, 1}},
@@ -167,17 +168,22 @@ void ShellParticipant::showConsole() {
                                                   .borderColor = on ? look::kSelectedEdge : look::kRaisedEdge,
                                                   .radius = 5}));
         static_cast<void>(pressWords(*made, text, on ? look::kInk : look::kFaintInk, look::kLabelSize));
+        static_cast<void>(tree_->setName(*made, name));
         consoleFilters_.emplace_back(*made, each);
     };
     constexpr std::array<std::string_view, 3> kLevelNames = {"Info", "Warnings", "Errors"};
     for (const int kLevel : {2, 1, 0}) {
         const auto kAt = static_cast<std::size_t>(kLevel);
-        kChip(std::string{kLevelNames[kAt]} + " " + std::to_string(levels[kAt]), consoleLevels_[kAt], 3 + kLevel);
+        kChip(std::string{kLevelNames[kAt]} + " " + std::to_string(levels[kAt]),
+              kLevelNames[kAt],
+              consoleLevels_[kAt],
+              3 + kLevel);
     }
     for (const int kSource : {0, 1, 2}) {
         const auto kAt = static_cast<std::size_t>(kSource);
         kChip(sources[kAt] > 0 ? std::string{kSources[kAt]} + " " + std::to_string(sources[kAt])
                                : std::string{kSources[kAt]},
+              kSources[kAt],
               consoleSources_[kAt],
               kSource);
     }

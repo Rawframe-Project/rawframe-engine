@@ -50,7 +50,7 @@ STUDIO_SETTINGS="studio.join.endpoint = 127.0.0.1:$port
 studio.join.pin_file = $work/pin
 studio.join.token_file = $work/ada.token" \
     bash "$here/clicked.sh" "$studio" games/tycoon/tycoon.game tycoon.ui @tycoon.ui \
-    "until=studio_presence_shown,marked=2" "@  tycoon.purse  [ben]" "@tycoon.sign  [locked by ben]" @tycoon.board \
+    "until=studio_presence_shown,marked=2" "@purse  [ben]" "@sign  [locked by ben]" @board \
     @Edit "@Claim chosen" "until=studio_said,status=\"claimed tycoon.board" "until=studio_presence_shown,marked=3"
 status=$?
 wait "$benning"

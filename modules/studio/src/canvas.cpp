@@ -129,6 +129,7 @@ std::uint32_t graphNodeDot(const Value& node) {
 void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix) {
     clear(viewRows_);
     viewFields_.clear();
+    clear(held_.cameraRows);
     held_.canvasParts.clear();
     held_.canvasBoxes.clear();
     if (nodes.kind() != Value::Kind::Object || nodes.names().empty()) {

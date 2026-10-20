@@ -189,7 +189,7 @@ result::Status ShellParticipant::vectorRow(const std::string& component,
             ui::Layout{.alignItems = ui::Align::Center, .gap = 10, .shrink = 0, .padding = {6, 6, 3, 3}},
             0));
     componentRows_.push_back(kLine);
-    RAWFRAME_TRY_ASSIGN(const ui::Node kName, box(kLine, ui::Layout{.width = ui::pixels(96), .shrink = 0}, 0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kName, box(kLine, ui::Layout{.width = ui::pixels(116), .shrink = 0}, 0));
     RAWFRAME_TRY(words(kName, label, look::kLabelInk, look::kLabelSize));
     RAWFRAME_TRY_ASSIGN(const ui::Node kAxes, box(kLine, ui::Layout{.width = ui::pixels(0), .gap = 4, .grow = 1}, 0));
     // A pose's turn in degrees about X, Y, and Z, its quaternion the
@@ -259,6 +259,29 @@ result::Status ShellParticipant::vectorRow(const std::string& component,
                                    .field = kFieldName,
                                    .kind = kAxis.kind,
                                    .type = kType});
+    }
+    // An instance's own values, each of which it may drop for its
+    // source's, under the row (D443, D925).
+    const bool kBrought = entityAt_ < brought_.size() && brought_[entityAt_];
+    if (kBrought && !kTurn && catalog_.offers("scene.revert_field") &&
+        std::ranges::any_of(axes, [](const FieldShown& field) {
+            return field.text.has_value();
+        })) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kReverts,
+                            box(componentsColumn_,
+                                ui::Layout{.alignItems = ui::Align::Center, .shrink = 0, .padding = {132, 6, 0, 2}},
+                                0));
+        componentRows_.push_back(kReverts);
+        for (const FieldShown& kAxis : axes) {
+            if (kAxis.text.has_value()) {
+                RAWFRAME_TRY(action(kReverts,
+                                    "Revert " + kAxis.name,
+                                    ActionButton{.operation = "scene.revert_field",
+                                                 .component = component,
+                                                 .field = kAxis.name,
+                                                 .done = kAxis.name + " reverted"}));
+            }
+        }
     }
     return {};
 }

@@ -104,6 +104,11 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 7> kFileComm
     {"Quit", "Ctrl+Q"},
 }};
 
+/// The commands a menu draws a line above, each beginning a group of its
+/// own as an editor's menus do.
+constexpr std::array<std::string_view, 9> kGroupsBegun = {
+    "Save", "Import files", "Close game", "Quit", "Duplicate", "Move to", "Assets", kPalette, kSaveLayout};
+
 /// What the palette's field reads while it does not hold the keyboard.
 constexpr std::string_view kPaletteHint = "Search commands, assets, entities    Ctrl K";
 
@@ -534,6 +539,13 @@ void ShellParticipant::showMenu(std::size_t at) {
             : kChooser ? kCommand.menu != "Window" || !kCommand.name.ends_with(kLayoutSuffix)
                        : kCommand.menu != menus_[at].second) {
             continue;
+        }
+        if (!kPill && !kChooser && !popupRows_.empty() && std::ranges::contains(kGroupsBegun, kCommand.name)) {
+            auto rule = box(
+                *popup, ui::Layout{.height = ui::pixels(1), .shrink = 0, .margin = {4, 4, 3, 3}}, look::kRaisedEdge);
+            if (!rule.has_value()) {
+                return;
+            }
         }
         auto line = menuLine(*popup, kCommand, kPill && commandOn(kCommand.name));
         if (!line.has_value()) {
