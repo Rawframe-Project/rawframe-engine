@@ -203,12 +203,17 @@ result::Status ShellParticipant::build() {
         showCollaborators();
     }
     held_.searchAt = kSearchAt;
-    // The toolbar: tools and snapping, Cook and Play, history and layout.
-    RAWFRAME_TRY(toolbar(root_));
+    // The toolbar: tools and snapping, Cook and Play, history and layout;
+    // the start screen has neither it nor the status bar (D918).
+    if (gameOpen()) {
+        RAWFRAME_TRY(toolbar(root_));
+    }
     RAWFRAME_TRY_ASSIGN(
         const ui::Node kBody,
         box(root_, ui::Layout{.minHeight = ui::pixels(0), .direction = ui::Direction::Row, .grow = 1}, kBackground));
-    RAWFRAME_TRY(statusBar(root_));
+    if (gameOpen()) {
+        RAWFRAME_TRY(statusBar(root_));
+    }
     // A menu or the matches, and the splitters, went with the tree they
     // were in.
     splitters_ = {};

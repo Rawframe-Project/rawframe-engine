@@ -20,6 +20,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace rawframe::window {
 
@@ -104,6 +106,24 @@ struct Limits {
 
 struct Platform;
 
+/// A file dialog to show (D918): what it chooses, its title, the absolute
+/// folder it opens in, the name a save offers, and the kinds of file it
+/// offers, each a name and its extensions without dots joined by ';'; all
+/// empty for the platform's own.
+struct FileDialog {
+    enum class Kind : std::uint8_t {
+        Open,
+        OpenMany,
+        Save,
+        Folder
+    };
+    Kind kind = Kind::Open;
+    std::string title;
+    std::string folder;
+    std::string name;
+    std::vector<std::pair<std::string, std::string>> filters;
+};
+
 /// The running window system, lent to the program for the length of one
 /// of its calls. Main thread only, as every call of the program is.
 class Windows {
@@ -151,6 +171,14 @@ public:
     /// the window while it is the root. X11, Wayland, and the web take no
     /// root and answer Unsupported.
     [[nodiscard]] result::Result<RequestId> requestAccessibilityRoot(WindowId window, void* root);
+    /// Shows the platform's file dialog over `window` (D918): the window
+    /// stays live and frames go on; its completion is Done with the paths
+    /// chosen, which `dialogFiles` reads until the next dialog completes,
+    /// Cancelled when the user closes it, and Unsupported where there are
+    /// no paths (the web).
+    [[nodiscard]] result::Result<RequestId> requestFileDialog(WindowId window, const FileDialog& dialog);
+    /// The absolute paths a file dialog completed Done with.
+    [[nodiscard]] result::Result<std::vector<std::string>> dialogFiles(RequestId request) const;
 
     /// Runs a gamepad's motors, the heavy low-frequency one and the light
     /// high-frequency one, each from nought to one, for `milliseconds` or

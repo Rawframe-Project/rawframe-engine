@@ -25,6 +25,7 @@
 #include "rawframe/ui/frames.h"
 #include "rawframe/ui/text_edit.h"
 #include "rawframe/ui/tree.h"
+#include "rawframe/view/dialogs.h"
 #include "rawframe/view/dropping.h"
 #include "rawframe/view/pointing.h"
 #include "rawframe/view/typing.h"
@@ -255,6 +256,10 @@ private:
                Icon which);
     result::Status showDocuments();
     void importAsked();
+    void showRecent();
+    void askDialog(view::FileDialogs::Kind kind, std::string title, std::string forWhat);
+    void takeDialogs();
+    void openFolder(const std::filesystem::path& folder);
     void asCheckbox(ui::Node value, bool on);
     void asChooser(ui::Node line);
     void showViewBar();
@@ -1100,6 +1105,20 @@ private:
     /// The Changes tab's commit message (D871).
     std::optional<FieldRow> commitField_;
     std::optional<FieldRow> openGameField_;
+    /// The start screen's parts (D918): the list of games and what its
+    /// search narrows them to, Open a folder, the new game's folder and
+    /// its "...", and Create and open.
+    ui::Node recentList_{};
+    std::string gameSearch_;
+    std::optional<FieldRow> gameFolderField_;
+    ui::Node openFolderNode_{};
+    ui::Node chooseFolderNode_{};
+    ui::Node createNode_{};
+    /// The file dialogs the window shows (D918), each asked by its ticket
+    /// and what its answer is for.
+    view::FileDialogs* dialogs_ = nullptr;
+    std::uint64_t dialogTickets_ = 0;
+    std::vector<std::pair<std::uint64_t, std::string>> dialogsAsked_;
     std::uint64_t made_ = 0;
     /// The Preferences dialog while open, its fields, and its Close; each
     /// command's own keys, and the editor's command as Studio's settings

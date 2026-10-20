@@ -937,8 +937,13 @@ bool ShellParticipant::importFile(const std::string& path, const std::string& as
 }
 
 void ShellParticipant::importAsked() {
-    // The files to bring in, typed as a path into the new scene's field
-    // or dropped on the window (D802, D505).
+    // The files to bring in, from the platform's dialog (D918); where it
+    // has none, typed as a path into the new scene's field or dropped on
+    // the window (D802, D505).
+    if (dialogs_ != nullptr) {
+        askDialog(view::FileDialogs::Kind::OpenMany, "Import into the game", "import");
+        return;
+    }
     if (newScene_.has_value()) {
         beginEdit(*newScene_);
     }

@@ -21,7 +21,7 @@ void ShellParticipant::keepEditing() {
         startPlaying();
         return;
     }
-    if (!editView_ || broken_.has_value()) {
+    if (!editView_ || broken_.has_value() || !gameOpen()) {
         return;
     }
     // A game opened opens on its first scene, as an editor opens a

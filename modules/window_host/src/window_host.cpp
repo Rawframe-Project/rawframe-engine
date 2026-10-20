@@ -384,6 +384,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     lent_.push_back(composition::LentCapability{ui::kAccessSeat.name, composition::provideAs(access_)});
     lent_.push_back(composition::LentCapability{view::kHeadsetAway.name, composition::provideAs(away_)});
     lent_.push_back(composition::LentCapability{view::kFilesDropped.name, composition::provideAs(dropped_)});
+    lent_.push_back(composition::LentCapability{view::kFileDialogs.name, composition::provideAs(dialogs_)});
     lent_.insert(lent_.end(), settings_.lent.begin(), settings_.lent.end());
     request_.lent = lent_;
     request_.suspended = &suspended_;
@@ -479,6 +480,23 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     // as the window's (D790).
     // Kept until acted on: a frame that waits on the players' reading acts
     // on none.
+    // An editor's file dialogs shown over the window (D918); one the
+    // window cannot show is answered unsupported at once.
+    for (view::FileDialogs::Asked& asked : dialogs_.asked()) {
+        const window::FileDialog kDialog{
+            .kind = asked.kind == view::FileDialogs::Kind::OpenMany ? window::FileDialog::Kind::OpenMany
+                    : asked.kind == view::FileDialogs::Kind::Save   ? window::FileDialog::Kind::Save
+                    : asked.kind == view::FileDialogs::Kind::Folder ? window::FileDialog::Kind::Folder
+                                                                    : window::FileDialog::Kind::Open,
+            .title = std::move(asked.title),
+            .folder = std::move(asked.folder),
+            .filters = std::move(asked.filters)};
+        if (auto shown = windows.requestFileDialog(window_, kDialog); shown.has_value()) {
+            dialogsShown_.emplace_back(*shown, asked.ticket);
+        } else {
+            dialogs_.answered(view::FileDialogs::Answer{.ticket = asked.ticket, .unsupported = true});
+        }
+    }
     if (settings_.injection != nullptr) {
         for (const world_tooling::WindowInput& kEach : settings_.injection->take()) {
             if (std::optional<window::Event> made = windowEventOf(kEach, window_); made.has_value()) {
@@ -539,6 +557,22 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             continue;
         }
         bridge_->take(*event);
+        // A file dialog's choice, for the editor that asked (D918).
+        if (event->kind == window::EventKind::RequestCompleted &&
+            event->completion.kind == window::RequestKind::FileDialog) {
+            if (const auto kShown = std::ranges::find(
+                    dialogsShown_, event->completion.request, &std::pair<window::RequestId, std::uint64_t>::first);
+                kShown != dialogsShown_.end()) {
+                view::FileDialogs::Answer answer{.ticket = kShown->second,
+                                                 .unsupported = event->completion.outcome ==
+                                                                window::Outcome::Unsupported};
+                if (event->completion.outcome == window::Outcome::Done) {
+                    answer.paths = windows.dialogFiles(event->completion.request).value_or(std::vector<std::string>{});
+                }
+                dialogs_.answered(std::move(answer));
+                dialogsShown_.erase(kShown);
+            }
+        }
         // Files dropped from outside, for an editor (D802).
         if (event->kind == window::EventKind::FilesDropped) {
             dropped_.dropped(view::FilesDropped::Drop{

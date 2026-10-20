@@ -90,7 +90,9 @@ enum class RequestKind : std::uint8_t {
     Focus,
     CursorMode,
     TextInput,
-    AccessibilityRoot
+    AccessibilityRoot,
+    /// A file dialog (D918), its paths read with `Windows::dialogFiles`.
+    FileDialog
 };
 
 /// How a request ended.

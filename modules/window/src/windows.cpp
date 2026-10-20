@@ -1,6 +1,7 @@
 #include "platform.h"
 
 #include <maul-window/accessibility.h>
+#include <maul-window/dialog.h>
 #include <maul-window/gamepad.h>
 #include <maul-window/input.h>
 #include <maul-window/monitor.h>
@@ -257,6 +258,58 @@ result::Result<RequestId> Windows::requestAccessibilityRoot(WindowId window, voi
     mwinRequestId request{};
     const mwinResult kStatus = mwinRequestAccessibilityRoot(platform_->context, toMaul(window), root, &request);
     return requested(kStatus, request, "an accessibility root request");
+}
+
+result::Result<RequestId> Windows::requestFileDialog(WindowId window, const FileDialog& dialog) {
+    mwinFileDialogDef def = mwinDefaultFileDialogDef();
+    def.kind = dialog.kind == FileDialog::Kind::OpenMany ? mwin_dialogOpenMany
+               : dialog.kind == FileDialog::Kind::Save   ? mwin_dialogSave
+               : dialog.kind == FileDialog::Kind::Folder ? mwin_dialogFolder
+                                                         : mwin_dialogOpen;
+    def.title = dialog.title.data();
+    def.titleLength = dialog.title.size();
+    def.folder = dialog.folder.data();
+    def.folderLength = dialog.folder.size();
+    def.name = dialog.name.data();
+    def.nameLength = dialog.name.size();
+    std::vector<mwinFileFilter> filters;
+    for (const auto& [kName, kExtensions] : dialog.filters) {
+        filters.push_back(mwinFileFilter{.name = kName.data(),
+                                         .nameLength = kName.size(),
+                                         .extensions = kExtensions.data(),
+                                         .extensionsLength = kExtensions.size()});
+    }
+    def.filters = filters.data();
+    def.filterCount = static_cast<std::uint32_t>(filters.size());
+    mwinRequestId request{};
+    const mwinResult kStatus = mwinRequestFileDialog(platform_->context, toMaul(window), &def, &request);
+    return requested(kStatus, request, "a file dialog request");
+}
+
+result::Result<std::vector<std::string>> Windows::dialogFiles(RequestId request) const {
+    const mwinRequestId kRequest{.index1 = request.index, .generation = request.generation};
+    std::size_t length = 0;
+    mwinResult status = mwinGetDialogFiles(platform_->context, kRequest, nullptr, 0, &length, nullptr);
+    if (status != mwin_success && status != mwin_errorCapacity) {
+        return failure(status, "a file dialog's paths");
+    }
+    std::string bytes(length, '\0');
+    status = mwinGetDialogFiles(platform_->context, kRequest, bytes.data(), bytes.size(), &length, nullptr);
+    if (status != mwin_success) {
+        return failure(status, "a file dialog's paths");
+    }
+    // Each path ended by a NUL.
+    std::vector<std::string> paths;
+    std::size_t from = 0;
+    while (from < length) {
+        const std::size_t kEnd = bytes.find('\0', from);
+        const std::size_t kTo = kEnd == std::string::npos ? length : kEnd;
+        if (kTo > from) {
+            paths.emplace_back(bytes.substr(from, kTo - from));
+        }
+        from = kTo + 1;
+    }
+    return paths;
 }
 
 DisplayFacts Windows::display(WindowId window) const {

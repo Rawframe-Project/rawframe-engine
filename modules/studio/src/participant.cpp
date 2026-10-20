@@ -9,6 +9,7 @@
 #include "shell.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 namespace rawframe::studio {
 
@@ -19,7 +20,8 @@ constexpr std::string_view kMaybe[] = {view::kUiPointing.name,
                                        view::kUiTyping.name,
                                        ui::kAccessSeat.name,
                                        world_tooling::kForwarding.name,
-                                       view::kFilesDropped.name};
+                                       view::kFilesDropped.name,
+                                       view::kFileDialogs.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 result::Status misconfigured(std::string_view why) {
@@ -106,9 +108,15 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         std::string{configuration.path("studio.export").value_or(process::besideSelf("rawframe-export").string())};
     // The templates a new game is made from, and where new games go:
     // named, or beside Studio, where its package puts them (D781).
-    templates_ =
-        std::string{configuration.path("studio.templates").value_or(process::besideSelf("templates").string())};
-    projects_ = std::string{configuration.path("studio.projects").value_or(process::besideSelf("games").string())};
+    // The templates are a folder beside Studio's program; new games go to
+    // the author's own "Rawframe Games" folder, as an installed Studio's
+    // own folder may not be written (D918).
+    std::error_code beside;
+    const std::filesystem::path kHere = std::filesystem::canonical(process::ownExecutable(), beside).parent_path();
+    templates_ = std::string{configuration.path("studio.templates").value_or((kHere / "templates").string())};
+    const char* const kHome = std::getenv("USERPROFILE") != nullptr ? std::getenv("USERPROFILE") : std::getenv("HOME");
+    const std::filesystem::path kGames = kHome != nullptr ? std::filesystem::path{kHome} / "Rawframe Games" : kHere / "games";
+    projects_ = std::string{configuration.path("studio.projects").value_or(kGames.string())};
     // Studio's own preferences, the docks' sizes and the games opened last,
     // where `studio.preferences` keeps them (D779); a file that does not
     // read leaves the defaults.
@@ -145,6 +153,10 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     // Files dropped on the window from outside (D802).
     if (context.has(view::kFilesDropped.name)) {
         RAWFRAME_TRY_ASSIGN(dropped_, context.capability(view::kFilesDropped));
+    }
+    // The platform's file dialogs (D918).
+    if (context.has(view::kFileDialogs.name)) {
+        RAWFRAME_TRY_ASSIGN(dialogs_, context.capability(view::kFileDialogs));
     }
     if (context.has(ui::kAccessSeat.name)) {
         RAWFRAME_TRY_ASSIGN(seat_, context.capability(ui::kAccessSeat));
@@ -398,6 +410,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     followPicture();
     forwardInput();
     takeDrops();
+    takeDialogs();
     followSplitter();
     // A press is acted on as the window's records come and may have
     // changed what a column holds; the wheel is turned over it laid out,

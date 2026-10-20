@@ -78,7 +78,11 @@ struct FieldRow {
         /// (D872).
         ExportSetting,
         /// The Assets search, what the grid's names hold (D916).
-        AssetSearch
+        AssetSearch,
+        /// The start screen's search of the games opened last, or a path
+        /// to open, and the new game's folder (D918).
+        GameSearch,
+        GameFolder
     };
     ui::Node value{};
     Role role = Role::Field;

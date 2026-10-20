@@ -1,7 +1,10 @@
 #include "rawframe/authoring_session/new_game.h"
+#include "rawframe/process/self.h"
 #include "shell.h"
 
 #include <algorithm>
+#include <cctype>
+#include <chrono>
 
 namespace rawframe::studio {
 
@@ -32,64 +35,326 @@ std::vector<std::filesystem::path> templatesIn(const std::filesystem::path& dire
 
 } // namespace
 
+namespace {
+
+/// What a template makes, as its card says: its description's first
+/// comment, to its first full stop past the name in brackets.
+std::string templateWords(const std::filesystem::path& folder) {
+    if (folder.filename() == "starter-3d") {
+        return "A lit scene of parts, a player, a camera, a server.";
+    }
+    return "A game to start from.";
+}
+
+/// How long ago `file` changed, as a list says it.
+std::string ageOf(const std::filesystem::path& file) {
+    std::error_code error;
+    const auto kWritten = std::filesystem::last_write_time(file, error);
+    if (error) {
+        return {};
+    }
+    const auto kHours =
+        std::chrono::duration_cast<std::chrono::hours>(std::filesystem::file_time_type::clock::now() - kWritten)
+            .count();
+    return kHours < 24 ? "today" : kHours < 48 ? "yesterday" : std::to_string(kHours / 24) + " days ago";
+}
+
+/// The game description a folder holds, if it holds one.
+std::optional<std::filesystem::path> descriptionIn(const std::filesystem::path& folder) {
+    std::error_code error;
+    if (folder.extension() == ".game" && std::filesystem::is_regular_file(folder, error)) {
+        return folder;
+    }
+    for (auto entry = std::filesystem::directory_iterator(folder, error);
+         !error && entry != std::filesystem::directory_iterator();
+         entry.increment(error)) {
+        if (entry->path().extension() == ".game") {
+            return entry->path();
+        }
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
 result::Status ShellParticipant::showStart(ui::Node body) {
     templateRows_.clear();
     recentRows_.clear();
     newGameField_.reset();
     openGameField_.reset();
+    gameFolderField_.reset();
+    // As the design's start (D918): the games opened last on the left,
+    // a new game from a template on the right.
     RAWFRAME_TRY_ASSIGN(const ui::Node kStart,
-                        box(body,
-                            ui::Layout{.direction = ui::Direction::Row,
+                        box(body, ui::Layout{.direction = ui::Direction::Row, .grow = 1}, look::kWindowFill));
+    RAWFRAME_TRY(tree_->setName(kStart, "Start"));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kOpen,
+                        box(kStart,
+                            ui::Layout{.width = ui::pixels(0),
+                                       .direction = ui::Direction::Column,
                                        .gap = 6,
                                        .grow = 1,
-                                       .padding = {16, 16, 16, 16},
+                                       .padding = {56, 56, 48, 40}},
+                            0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kOpen, ui::Layout{.shrink = 0}, 0));
+    RAWFRAME_TRY(strongWords(kTitle, "Open a game", look::kInk, 26));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kWhat, box(kOpen, ui::Layout{.shrink = 0, .margin = {0, 0, 4, 18}}, 0));
+    RAWFRAME_TRY(words(kWhat,
+                       "The games you opened last, newest first. A game is a folder with its description; Studio "
+                       "opens it as it is on disk.",
+                       look::kLabelInk,
+                       look::kBodySize));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kFind,
+                        box(kOpen, ui::Layout{.alignItems = ui::Align::Center, .gap = 10, .shrink = 0}, 0));
+    RAWFRAME_TRY_ASSIGN(const auto kSearch, searchWell(kFind, "open", "Find a game, or a game's path", gameSearch_, 0, Icon::Search));
+    RAWFRAME_TRY(tree_->setLayout(kSearch.first,
+                                  ui::Layout{.height = ui::pixels(30),
+                                             .alignItems = ui::Align::Center,
+                                             .gap = 6,
+                                             .grow = 1,
+                                             .padding = {10, 6, 0, 0},
+                                             .border = {1, 1, 1, 1}}));
+    openGameField_ = FieldRow{.value = kSearch.second,
+                              .role = FieldRow::Role::GameSearch,
+                              .field = "open",
+                              .hint = "Find a game, or a game's path"};
+    RAWFRAME_TRY_ASSIGN(openFolderNode_, textButton(kFind, Icon::Folder, "Open a folder"));
+    RAWFRAME_TRY_ASSIGN(recentList_,
+                        box(kOpen,
+                            ui::Layout{.height = ui::pixels(0),
+                                       .minHeight = ui::pixels(0),
+                                       .direction = ui::Direction::Column,
+                                       .gap = 6,
+                                       .grow = 1,
+                                       .margin = {0, 0, 10, 0},
                                        .scroll = ui::Scroll::Vertical},
-                            kBackground));
-    RAWFRAME_TRY(tree_->setName(kStart, "Start"));
-    // A new game from a template, the same as `rawframe-author new` makes
-    // (D780): the templates, the chosen one marked, then its name.
-    RAWFRAME_TRY_ASSIGN(const ui::Node kNew, column(kStart, "New game"));
+                            0));
+    RAWFRAME_TRY(tree_->setRole(recentList_, ui::Role::ScrollView));
+    RAWFRAME_TRY(tree_->setName(recentList_, "Games"));
+    showRecent();
+    // What Studio starts a game with, beside it.
+    RAWFRAME_TRY_ASSIGN(const ui::Node kBeside,
+                        box(kOpen,
+                            ui::Layout{.alignItems = ui::Align::Center,
+                                       .gap = 18,
+                                       .shrink = 0,
+                                       .padding = {14, 14, 10, 10},
+                                       .border = {1, 1, 1, 1}},
+                            0));
+    RAWFRAME_TRY(tree_->setLook(kBeside, ui::Look{.fill = look::kPanelFill, .borderColor = look::kLine, .radius = 6}));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kBesideTitle, box(kBeside, ui::Layout{.shrink = 0}, 0));
+    RAWFRAME_TRY(strongWords(kBesideTitle, "Beside Studio", look::kInk, look::kLabelSize));
+    for (const std::string_view kTool : {"rawframe-cook", "rawframe-server", "rawframe-client", "rawframe-author"}) {
+        std::error_code error;
+        std::filesystem::path program = process::besideSelf(std::string{kTool});
+        const bool kThere = std::filesystem::exists(program, error) ||
+                            std::filesystem::exists(program.string() + ".exe", error);
+        RAWFRAME_TRY_ASSIGN(const ui::Node kItem,
+                            box(kBeside, ui::Layout{.alignItems = ui::Align::Center, .gap = 6, .shrink = 0}, 0));
+        RAWFRAME_TRY(box(kItem,
+                         ui::Layout{.width = ui::pixels(7), .height = ui::pixels(7), .shrink = 0},
+                         kThere ? look::kReady : look::kError));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kName, box(kItem, ui::Layout{.shrink = 0}, 0));
+        RAWFRAME_TRY(words(kName, kTool, look::kSoftInk, look::kLabelSize));
+    }
+    // The new game: its name, its folder, its template, then Create.
+    RAWFRAME_TRY_ASSIGN(const ui::Node kNew,
+                        box(kStart,
+                            ui::Layout{.width = ui::pixels(520),
+                                       .direction = ui::Direction::Column,
+                                       .gap = 6,
+                                       .shrink = 0,
+                                       .padding = {44, 44, 48, 40},
+                                       .border = {1, 0, 0, 0}},
+                            0));
+    RAWFRAME_TRY(tree_->setLook(kNew, ui::Look{.fill = look::kBarFill, .borderColor = look::kLine}));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kNewTitle, box(kNew, ui::Layout{.shrink = 0}, 0));
+    RAWFRAME_TRY(strongWords(kNewTitle, "New game", look::kInk, 22));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kNewWhat,
+                        box(kNew, ui::Layout{.alignItems = ui::Align::Center, .gap = 4, .shrink = 0, .margin = {0, 0, 2, 16}}, 0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kNewWords, box(kNewWhat, ui::Layout{.shrink = 0}, 0));
+    RAWFRAME_TRY(words(kNewWords, "Made from a template as", look::kLabelInk, look::kBodySize));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kNewTool, box(kNewWhat, ui::Layout{.shrink = 0}, 0));
+    RAWFRAME_TRY(monoWords(kNewTool, "rawframe-author new", look::kSoftInk, look::kLabelSize));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kNewThen, box(kNewWhat, ui::Layout{.shrink = 0}, 0));
+    RAWFRAME_TRY(words(kNewThen, "makes it, then opened.", look::kLabelInk, look::kBodySize));
+    const auto kLabel = [&](std::string_view text) -> result::Status {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kMade, box(kNew, ui::Layout{.shrink = 0, .margin = {0, 0, 10, 2}}, 0));
+        return words(kMade, text, look::kLabelInk, look::kLabelSize);
+    };
+    const auto kWell = [&](ui::Node parent, std::string_view name, std::string_view value) -> result::Result<ui::Node> {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kValue, tree_->addEditable(++keys_));
+        RAWFRAME_TRY(tree_->setLayout(kValue,
+                                      ui::Layout{.width = ui::pixels(0),
+                                                 .minHeight = ui::pixels(30),
+                                                 .grow = 1,
+                                                 .padding = {10, 10, 6, 5},
+                                                 .border = {1, 1, 1, 1}}));
+        RAWFRAME_TRY(tree_->setLook(
+            kValue, ui::Look{.fill = look::kWellFill, .borderColor = look::kEdge, .radius = 4, .clip = true}));
+        RAWFRAME_TRY(tree_->attach(parent, kValue));
+        RAWFRAME_TRY(words(kValue, value, kText, look::kBodySize));
+        RAWFRAME_TRY(tree_->setRole(kValue, ui::Role::TextInput));
+        RAWFRAME_TRY(tree_->setName(kValue, name));
+        return kValue;
+    };
+    // A name no game in the folder has yet.
+    // As a Kest project is named: lowercase letters, digits, and _.
+    std::string name = "my_game";
+    for (int each = 2; std::filesystem::exists(projects_ / name); ++each) {
+        name = "my_game_" + std::to_string(each);
+    }
+    RAWFRAME_TRY(kLabel("Name"));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kNameLine, box(kNew, ui::Layout{.shrink = 0}, 0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kName, kWell(kNameLine, "new game", name));
+    newGameField_ = FieldRow{.value = kName, .role = FieldRow::Role::NewGame, .field = "new game"};
+    RAWFRAME_TRY(kLabel("Folder"));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kFolderLine, box(kNew, ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0}, 0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kFolder, kWell(kFolderLine, "folder", projects_.string()));
+    gameFolderField_ = FieldRow{.value = kFolder, .role = FieldRow::Role::GameFolder, .field = "folder"};
+    RAWFRAME_TRY_ASSIGN(chooseFolderNode_, textButton(kFolderLine, std::nullopt, "..."));
+    RAWFRAME_TRY(kLabel("Template"));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kCards, box(kNew, ui::Layout{.gap = 10, .shrink = 0, .wrap = true}, 0));
     const std::vector<std::filesystem::path> kTemplates = templatesIn(templates_);
     templateAt_ = std::min(templateAt_, kTemplates.empty() ? 0 : kTemplates.size() - 1);
     for (std::size_t each = 0; each < kTemplates.size(); ++each) {
-        RAWFRAME_TRY_ASSIGN(
-            const ui::Node kLine,
-            row(kNew, kTemplates[each].filename().string(), kText, each == templateAt_ ? kChosen : kRow, true));
-        templateRows_.emplace_back(kLine, kTemplates[each]);
+        const bool kOn = each == templateAt_;
+        RAWFRAME_TRY_ASSIGN(const ui::Node kCard,
+                            box(kCards,
+                                ui::Layout{.width = ui::pixels(206),
+                                           .direction = ui::Direction::Column,
+                                           .gap = 6,
+                                           .shrink = 0,
+                                           .padding = {10, 10, 10, 12},
+                                           .border = {1, 1, 1, 1}},
+                                0));
+        RAWFRAME_TRY(tree_->setLook(kCard,
+                                    ui::Look{.fill = kOn ? 0x1B2440FFU : look::kPanelFill,
+                                             .borderColor = kOn ? look::kAccent : look::kEdge,
+                                             .radius = 6}));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kTile,
+                            box(kCard,
+                                ui::Layout{.height = ui::pixels(92),
+                                           .justify = ui::Justify::Center,
+                                           .alignItems = ui::Align::Center,
+                                           .shrink = 0},
+                                0));
+        RAWFRAME_TRY(tree_->setLook(kTile, ui::Look{.fill = 0x1E2233FFU, .radius = 5}));
+        RAWFRAME_TRY(tree_->setInteraction(kTile, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        RAWFRAME_TRY(icon(kTile, kTemplates[each].filename().string().ends_with("2d") ? Icon::Tiles : Icon::Cube,
+                          look::kAccent, 34));
+        std::string shown = kTemplates[each].filename().string();
+        if (shown == "starter-3d") {
+            shown = "Starter 3D";
+        }
+        RAWFRAME_TRY_ASSIGN(const ui::Node kCardName, box(kCard, ui::Layout{.shrink = 0, .margin = {0, 0, 4, 0}}, 0));
+        RAWFRAME_TRY(strongWords(kCardName, shown, look::kInk, look::kBodySize));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kCardWhat, box(kCard, ui::Layout{.shrink = 0}, 0));
+        RAWFRAME_TRY(tree_->setText(kCardWhat,
+                                    templateWords(kTemplates[each]),
+                                    ui::TextLook{.font = font_, .size = look::kLabelSize, .color = look::kLabelInk}));
+        for (const ui::Node kPart : {kCardName, kCardWhat}) {
+            RAWFRAME_TRY(tree_->setInteraction(kPart, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        }
+        RAWFRAME_TRY(tree_->setRole(kCard, ui::Role::Button));
+        RAWFRAME_TRY(tree_->setName(kCard, kTemplates[each].filename().string()));
+        templateRows_.emplace_back(kCard, kTemplates[each]);
     }
     if (kTemplates.empty()) {
-        static_cast<void>(row(kNew, "no templates in " + templates_.string(), kQuiet, kPanel));
-    } else {
-        auto line = fieldRow("new game", "", kNew);
-        if (line.has_value()) {
-            newGameField_ = FieldRow{.value = line->second, .role = FieldRow::Role::NewGame, .field = "new game"};
-        }
-        static_cast<void>(row(kNew, "in " + projects_.string(), kQuiet, kPanel));
+        RAWFRAME_TRY_ASSIGN(const ui::Node kNone, box(kNew, ui::Layout{.shrink = 0}, 0));
+        RAWFRAME_TRY(words(kNone, "No templates beside Studio, in " + templates_.string(), look::kWarn, look::kLabelSize));
     }
-    // The games opened last, the latest first, those still there; then
-    // any other by its description's path.
-    RAWFRAME_TRY_ASSIGN(const ui::Node kOpen, column(kStart, "Open"));
+    RAWFRAME_TRY(box(kNew, ui::Layout{.grow = 1}, 0));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kCreateLine,
+                        box(kNew, ui::Layout{.alignItems = ui::Align::Center, .gap = 12, .shrink = 0}, 0));
+    // What Studio says here, with no status bar on the start screen.
+    RAWFRAME_TRY_ASSIGN(statusNode_, box(kCreateLine, ui::Layout{.width = ui::pixels(0), .grow = 1}, 0));
+    RAWFRAME_TRY(tree_->setLook(statusNode_, ui::Look{.clip = true}));
+    createNode_ = ui::Node{};
+    if (!kTemplates.empty()) {
+        RAWFRAME_TRY_ASSIGN(createNode_, textButton(kCreateLine, std::nullopt, "Create and open", ButtonKind::Primary));
+    }
+    say(kTemplates.empty() && recentRows_.empty() ? "open a game by its folder"
+                                                  : "make a game from a template, or open one");
+    return {};
+}
+
+void ShellParticipant::showRecent() {
+    for (const auto& [kLine, kGame] : recentRows_) {
+        static_cast<void>(tree_->remove(kLine));
+    }
+    recentRows_.clear();
+    if (!tree_->contains(recentList_)) {
+        return;
+    }
+    // The games opened last, the latest first, those still there and
+    // named as the search has it.
     for (const std::string& kRecent : preferences_.recent) {
         std::error_code error;
         const std::filesystem::path kDescription{kRecent};
-        if (!std::filesystem::is_regular_file(kDescription, error)) {
+        if (!std::filesystem::is_regular_file(kDescription, error) ||
+            !named(kDescription.parent_path().string() + "/" + kDescription.stem().string(), gameSearch_)) {
             continue;
         }
-        RAWFRAME_TRY_ASSIGN(const ui::Node kLine,
-                            row(kOpen,
-                                kDescription.filename().string() + "  " + kDescription.parent_path().string(),
-                                kText,
-                                kRow,
-                                true));
-        recentRows_.emplace_back(kLine, kDescription);
+        const bool kFirst = recentRows_.empty();
+        auto line = box(recentList_,
+                        ui::Layout{.alignItems = ui::Align::Center,
+                                   .gap = 14,
+                                   .shrink = 0,
+                                   .padding = {12, 14, 10, 10},
+                                   .border = {1, 1, 1, 1}},
+                        0);
+        if (!line.has_value()) {
+            return;
+        }
+        static_cast<void>(tree_->setLook(*line,
+                                         ui::Look{.fill = kFirst ? 0x1B2440FFU : 0,
+                                                  .borderColor = kFirst ? look::kSelectedEdge : 0,
+                                                  .radius = 6}));
+        static_cast<void>(tree_->setRole(*line, ui::Role::Button));
+        static_cast<void>(tree_->setName(*line, kDescription.stem().string()));
+        if (auto tile = box(*line,
+                            ui::Layout{.width = ui::pixels(72),
+                                       .height = ui::pixels(44),
+                                       .justify = ui::Justify::Center,
+                                       .alignItems = ui::Align::Center,
+                                       .shrink = 0},
+                            0);
+            tile.has_value()) {
+            static_cast<void>(tree_->setLook(*tile, ui::Look{.fill = look::kRaisedFill, .radius = 5}));
+            static_cast<void>(tree_->setInteraction(*tile, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+            static_cast<void>(icon(*tile, Icon::Cube, look::kEntityInk, 18));
+        }
+        if (auto texts = box(*line, ui::Layout{.width = ui::pixels(0), .direction = ui::Direction::Column, .gap = 4, .grow = 1}, 0);
+            texts.has_value()) {
+            static_cast<void>(tree_->setInteraction(*texts, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+            if (auto title = box(*texts, ui::Layout{.shrink = 0}, 0); title.has_value()) {
+                std::string shown = kDescription.stem().string();
+                if (!shown.empty()) {
+                    shown[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(shown[0])));
+                }
+                static_cast<void>(strongWords(*title, shown, look::kInk, 14));
+            }
+            if (auto path = box(*texts, ui::Layout{.shrink = 1}, 0); path.has_value()) {
+                static_cast<void>(monoWords(*path, kDescription.string(), look::kFaintInk, look::kSmallSize));
+            }
+        }
+        if (auto age = box(*line, ui::Layout{.shrink = 0}, 0); age.has_value()) {
+            static_cast<void>(tree_->setInteraction(*age, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+            static_cast<void>(words(*age, ageOf(kDescription), look::kLabelInk, look::kLabelSize));
+        }
+        recentRows_.emplace_back(*line, kDescription);
     }
-    auto line = fieldRow("open", "", kOpen);
-    if (line.has_value()) {
-        openGameField_ = FieldRow{.value = line->second, .role = FieldRow::Role::OpenGame, .field = "open"};
+    if (recentRows_.empty()) {
+        if (auto none = box(recentList_, ui::Layout{.shrink = 0, .padding = {4, 4, 10, 0}}, 0); none.has_value()) {
+            static_cast<void>(words(*none,
+                                    gameSearch_.empty() ? "No games opened yet. Make one on the right, or open a folder."
+                                                        : "No game opened before is named so; Enter opens a path.",
+                                    look::kLabelInk,
+                                    look::kBodySize));
+            recentRows_.emplace_back(*none, std::filesystem::path{});
+        }
     }
-    say(kTemplates.empty() && recentRows_.empty() ? "open a game by its description's path"
-                                                  : "make a game from a template, or open one");
-    return {};
 }
 
 void ShellParticipant::pressStart(ui::Node node) {
@@ -99,22 +364,94 @@ void ShellParticipant::pressStart(ui::Node node) {
         endEdit();
         templateAt_ = static_cast<std::size_t>(kTemplate - templateRows_.begin());
         for (std::size_t each = 0; each < templateRows_.size(); ++each) {
+            const bool kOn = each == templateAt_;
             static_cast<void>(tree_->setLook(templateRows_[each].first,
-                                             ui::Look{.fill = each == templateAt_ ? kChosen : kRow, .radius = 3}));
+                                             ui::Look{.fill = kOn ? 0x1B2440FFU : look::kPanelFill,
+                                                      .borderColor = kOn ? look::kAccent : look::kEdge,
+                                                      .radius = 6}));
         }
         say("new games from " + kTemplate->second.filename().string());
     } else if (const auto kRecent =
                    std::ranges::find(recentRows_, node, &std::pair<ui::Node, std::filesystem::path>::first);
-               kRecent != recentRows_.end()) {
+               kRecent != recentRows_.end() && !kRecent->second.empty()) {
         endEdit();
         chooseGame(kRecent->second);
     } else if (newGameField_.has_value() && node == newGameField_->value) {
         beginEdit(*newGameField_);
+    } else if (gameFolderField_.has_value() && node == gameFolderField_->value) {
+        beginEdit(*gameFolderField_);
     } else if (openGameField_.has_value() && node == openGameField_->value) {
         beginEdit(*openGameField_);
+    } else if (node == openFolderNode_ && openFolderNode_ != ui::Node{}) {
+        endEdit();
+        askDialog(view::FileDialogs::Kind::Folder, "Open a game's folder", "open");
+    } else if (node == chooseFolderNode_ && chooseFolderNode_ != ui::Node{}) {
+        endEdit();
+        askDialog(view::FileDialogs::Kind::Folder, "Where new games go", "folder");
+    } else if (node == createNode_ && createNode_ != ui::Node{} && newGameField_.has_value()) {
+        const std::string kName{tree_->textOf(newGameField_->value)};
+        endEdit();
+        makeGame(kName);
     } else {
         endEdit();
     }
+}
+
+void ShellParticipant::askDialog(view::FileDialogs::Kind kind, std::string title, std::string forWhat) {
+    if (dialogs_ == nullptr) {
+        say("this window shows no file dialogs; type the path instead");
+        return;
+    }
+    const std::uint64_t kTicket = ++dialogTickets_;
+    dialogsAsked_.emplace_back(kTicket, std::move(forWhat));
+    std::string folder = gameOpen() ? description_.parent_path().string() : projects_.string();
+    std::error_code error;
+    if (!std::filesystem::is_directory(folder, error)) {
+        folder.clear();
+    }
+    dialogs_->ask(view::FileDialogs::Asked{.ticket = kTicket, .kind = kind, .title = std::move(title), .folder = folder});
+}
+
+void ShellParticipant::takeDialogs() {
+    if (dialogs_ == nullptr) {
+        return;
+    }
+    while (std::optional<view::FileDialogs::Answer> answer = dialogs_->take()) {
+        const auto kAsked = std::ranges::find(dialogsAsked_, answer->ticket, &std::pair<std::uint64_t, std::string>::first);
+        if (kAsked == dialogsAsked_.end()) {
+            continue;
+        }
+        const std::string kFor = kAsked->second;
+        dialogsAsked_.erase(kAsked);
+        if (answer->unsupported) {
+            say("this platform shows no file dialogs; type the path instead");
+            continue;
+        }
+        if (answer->paths.empty()) {
+            continue;
+        }
+        if (kFor == "open") {
+            openFolder(answer->paths.front());
+        } else if (kFor == "folder" && gameFolderField_.has_value()) {
+            projects_ = answer->paths.front();
+            static_cast<void>(words(gameFolderField_->value, projects_.string(), kText, look::kBodySize));
+        } else if (kFor == "import") {
+            for (const std::string& kPath : answer->paths) {
+                const std::string kName = std::filesystem::path{kPath}.filename().generic_string();
+                static_cast<void>(importFile(kPath, browser_.folder.has_value() ? *browser_.folder + "/" + kName : kName));
+            }
+            static_cast<void>(showScenes());
+        }
+    }
+}
+
+void ShellParticipant::openFolder(const std::filesystem::path& folder) {
+    const std::optional<std::filesystem::path> kDescription = descriptionIn(folder);
+    if (!kDescription.has_value()) {
+        say(folder.string() + " holds no game description (.game)");
+        return;
+    }
+    chooseGame(*kDescription);
 }
 
 void ShellParticipant::chooseGame(const std::filesystem::path& description) {
@@ -123,6 +460,9 @@ void ShellParticipant::chooseGame(const std::filesystem::path& description) {
         say(description.string() + " is not a game description");
         return;
     }
+    // Each game opens on its first scene and cooks once (D912, D918).
+    editOpened_ = false;
+    editCooked_ = false;
     settle(description, description.parent_path());
     rebuild();
     say(broken_.has_value() ? *broken_ : "opened " + description.filename().string());
@@ -132,6 +472,12 @@ void ShellParticipant::makeGame(const std::string& name) {
     if (templateAt_ >= templateRows_.size()) {
         return;
     }
+    // The folder as its field has it now.
+    if (gameFolderField_.has_value() && tree_->contains(gameFolderField_->value)) {
+        projects_ = std::string{tree_->textOf(gameFolderField_->value)};
+    }
+    std::error_code error;
+    std::filesystem::create_directories(projects_, error);
     const auto kMade = authoring_session::newGame(templateRows_[templateAt_].second, projects_ / name);
     if (!kMade.has_value()) {
         ++refused_;

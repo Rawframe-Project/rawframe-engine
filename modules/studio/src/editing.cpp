@@ -517,6 +517,34 @@ void ShellParticipant::take(const view::Typing& typing) {
         apply(kAdding, typed);
         return;
     }
+    // The start screen's search narrows the games as it is typed, and
+    // Enter opens a path typed there (D918).
+    if (editing_->role == FieldRow::Role::GameSearch) {
+        std::string typed{tree_->textOf(editing_->value)};
+        if (typed == editing_->hint) {
+            typed.clear();
+        }
+        if (kLeft == view::TypingKey::Submit) {
+            endEdit();
+            std::error_code error;
+            if (!typed.empty() && std::filesystem::exists(typed, error)) {
+                gameSearch_.clear();
+                openFolder(typed);
+            } else if (recentRows_.size() == 1 && !recentRows_.front().second.empty()) {
+                chooseGame(recentRows_.front().second);
+            }
+            return;
+        }
+        if (kLeft == view::TypingKey::Dismiss) {
+            endEdit();
+            typed.clear();
+        }
+        if (typed != gameSearch_) {
+            gameSearch_ = typed;
+            showRecent();
+        }
+        return;
+    }
     // The Assets search narrows the grid as it is typed (D916).
     if (editing_->role == FieldRow::Role::AssetSearch) {
         std::string typed{tree_->textOf(editing_->value)};
@@ -561,6 +589,8 @@ void ShellParticipant::take(const view::Typing& typing) {
             makeScene(typed);
         } else if (kEdited.role == FieldRow::Role::NewGame) {
             makeGame(typed);
+        } else if (kEdited.role == FieldRow::Role::GameFolder) {
+            projects_ = typed;
         } else if (kEdited.role == FieldRow::Role::Shortcut) {
             setKeys(kEdited.field, typed);
         } else if (kEdited.role == FieldRow::Role::Editor) {
@@ -581,6 +611,7 @@ void ShellParticipant::take(const view::Typing& typing) {
         const FieldRow::Role kRole = editing_->role;
         endEdit();
         if (kRole == FieldRow::Role::NewGame || kRole == FieldRow::Role::OpenGame ||
+            kRole == FieldRow::Role::GameFolder ||
             kRole == FieldRow::Role::Shortcut || kRole == FieldRow::Role::Editor ||
             kRole == FieldRow::Role::CommitMessage || kRole == FieldRow::Role::ExportSetting) {
             return;
