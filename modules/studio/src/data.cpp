@@ -333,7 +333,13 @@ void ShellParticipant::showDataTables() {
         }
         for (std::size_t item = 0; item < kList.items().size(); ++item) {
             const Value& kItem = kList.items()[item];
-            const std::string kPath = kKeyed ? kMember + "[" + kKey + "=" + *kItem.find(kKey)->text() + "]"
+            // Each item by its own key, as the Hierarchy names it: items of
+            // one list may name theirs differently.
+            const std::optional<std::string> kOwnKey = kKeyed ? keyOf(kItem) : std::nullopt;
+            if (kKeyed && !kOwnKey.has_value()) {
+                continue;
+            }
+            const std::string kPath = kKeyed ? kMember + "[" + *kOwnKey + "=" + *kItem.find(*kOwnKey)->text() + "]"
                                              : joined(kMember, kList.names()[item]);
             const auto kListed = std::ranges::find(entities_, kPath);
             if (kListed == entities_.end()) {
@@ -347,7 +353,8 @@ void ShellParticipant::showDataTables() {
             held_.canvasParts.emplace_back(*line, kEntity);
             held_.canvasBoxes.emplace_back(*line, kEntity);
             static_cast<void>(tree_->setRole(*line, ui::Role::Button));
-            static_cast<void>(tree_->setName(*line, (kKeyed ? labelOf(kItem, kKey) : kList.names()[item]) + " row"));
+            static_cast<void>(
+                tree_->setName(*line, (kKeyed ? labelOf(kItem, *kOwnKey) : kList.names()[item]) + " row"));
             for (std::size_t column = 0; column < columns.size(); ++column) {
                 const Value* kValue = kItem.find(columns[column]);
                 kCell(*line,
