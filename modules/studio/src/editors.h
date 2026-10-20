@@ -301,6 +301,10 @@ struct EditorsHeld {
     std::vector<std::pair<ui::Node, std::string>> emptyButtons;
     /// The empty scene's first steps over the viewport (D923).
     std::vector<std::pair<ui::Node, std::string>> sceneStartButtons;
+    /// The Preferences dialog's pages, the one shown, and its close (D923).
+    std::vector<std::pair<ui::Node, std::size_t>> preferencePages;
+    std::size_t preferencePage = 0;
+    ui::Node preferencesX{};
     /// Whether the right dock shows the Scene settings tab (D921).
     bool sceneSettingsShown = false;
     /// The Hierarchy's plus, which opens the New menu (D917).
