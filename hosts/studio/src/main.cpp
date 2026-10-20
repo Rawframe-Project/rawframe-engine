@@ -20,9 +20,9 @@
 #include "rawframe/window_host/window_host.h"
 
 #include <array>
+#include <cstdio>
 #include <span>
 #include <vector>
-#include <cstdio>
 
 namespace {
 

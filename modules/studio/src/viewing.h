@@ -22,7 +22,6 @@ namespace rawframe::studio {
 [[nodiscard]] bool isPill(std::string_view menu);
 [[nodiscard]] bool pillLists(std::string_view pill, std::string_view command);
 
-
 struct PreviewShown {
     /// The layers the preview leaves out (D791), and how many times a
     /// preview was told.

@@ -404,7 +404,9 @@ RAWFRAME_TEST(APlayedGamesFilesAreItsOwnersAlone) {
     std::filesystem::create_directories(kDirectory);
     // A link where the token goes, to a file of someone else's.
     const std::filesystem::path kElsewhere = kRoot / "elsewhere";
-    { std::ofstream{kElsewhere} << "kept"; }
+    {
+        std::ofstream{kElsewhere} << "kept";
+    }
     std::filesystem::create_symlink(kElsewhere, kDirectory / "token", error);
     // Programs that are not there still find the files written first.
     static_cast<void>(Play::start(

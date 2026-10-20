@@ -114,7 +114,7 @@ result::Status privateDirectory(const std::filesystem::path& path) {
     }
 #if !defined(_WIN32)
     // Made by another user first, it is theirs: never written into (D462).
-    struct stat held {};
+    struct stat held{};
     if (::lstat(path.c_str(), &held) != 0 || held.st_uid != ::getuid()) {
         return failed("the play directory is another user's");
     }
