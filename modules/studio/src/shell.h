@@ -264,6 +264,8 @@ private:
     void asChooser(ui::Node line);
     void showViewBar();
     void showRight(bool sceneSettings);
+    void showNothingChosen();
+    void showViewportNote();
     void showAxes();
     [[nodiscard]] bool commandOn(std::string_view name) const;
     [[nodiscard]] std::vector<std::string> partCommands() const;

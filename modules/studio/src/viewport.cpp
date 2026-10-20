@@ -250,8 +250,8 @@ void ShellParticipant::showViewBar() {
                 static_cast<void>(tree_->setLook(*key, ui::Look{.borderColor = look::kRaisedEdge, .radius = 3}));
                 static_cast<void>(monoWords(*key, kKey, look::kSoftInk, 10));
             }
-            if (auto words_ = box(*made, ui::Layout{.shrink = 0}, 0); words_.has_value()) {
-                static_cast<void>(words(*words_, kWhat, look::kSoftInk, look::kLabelSize));
+            if (auto said = box(*made, ui::Layout{.shrink = 0}, 0); said.has_value()) {
+                static_cast<void>(words(*said, kWhat, look::kSoftInk, look::kLabelSize));
             }
         }
     }
@@ -305,6 +305,50 @@ void ShellParticipant::showAxes() {
                        .placement = {.absolute = true,
                                      .x = ui::pixels(static_cast<float>(25 + 20 * kAcross)),
                                      .y = ui::pixels(static_cast<float>(25 - 20 * kHigh))}}));
+    }
+}
+
+void ShellParticipant::showViewportNote() {
+    // What the viewport shows while it has no picture (D922): the cook
+    // the edit view waits for, the game starting, or that it stopped.
+    std::string note;
+    if (tree_->contains(viewport_) && (inViewport_.picture == nullptr || !playing_.has_value())) {
+        note = cooking_.has_value()                              ? "Cooking the game to show it here..."
+               : playing_.has_value() && playing_->running()    ? "Starting the game..."
+               : playing_.has_value() || held_.editStopped      ? "The game stopped. The Console says why."
+                                                                : "";
+    }
+    if (note == held_.viewportNoteText && (note.empty() || tree_->contains(held_.viewportNote))) {
+        return;
+    }
+    held_.viewportNoteText = note;
+    if (tree_->contains(held_.viewportNote)) {
+        static_cast<void>(tree_->remove(held_.viewportNote));
+    }
+    held_.viewportNote = ui::Node{};
+    if (note.empty()) {
+        return;
+    }
+    auto made = box(centerColumn_,
+                    ui::Layout{.alignItems = ui::Align::Center,
+                               .gap = 8,
+                               .padding = {14, 14, 9, 9},
+                               .border = {1, 1, 1, 1},
+                               .placement = {.absolute = true,
+                                             .x = ui::share(0.5),
+                                             .y = ui::share(0.45),
+                                             .anchorX = 0.5,
+                                             .anchorY = 0.5}},
+                    0);
+    if (!made.has_value()) {
+        return;
+    }
+    held_.viewportNote = *made;
+    viewRows_.push_back(*made);
+    static_cast<void>(tree_->setLook(*made, ui::Look{.fill = 0x121317E6U, .borderColor = 0xFFFFFF14U, .radius = 6}));
+    static_cast<void>(icon(*made, cooking_.has_value() ? Icon::Cook : Icon::Play, look::kLabelInk, 14));
+    if (auto said = box(*made, ui::Layout{.shrink = 0}, 0); said.has_value()) {
+        static_cast<void>(words(*said, note, look::kSoftInk, look::kBodySize));
     }
 }
 

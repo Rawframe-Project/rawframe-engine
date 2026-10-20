@@ -528,6 +528,8 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     forwardInput();
     takeDrops();
     takeDialogs();
+    showNothingChosen();
+    showViewportNote();
     followSplitter();
     // A press is acted on as the window's records come and may have
     // changed what a column holds; the wheel is turned over it laid out,

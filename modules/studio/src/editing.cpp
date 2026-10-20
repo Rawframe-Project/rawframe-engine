@@ -191,6 +191,10 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         }
     } else if (broken_.has_value()) {
         return;
+    } else if (const auto kEmpty = std::ranges::find(held_.emptyButtons, node, &std::pair<ui::Node, std::string>::first);
+               kEmpty != held_.emptyButtons.end()) {
+        const std::string kCommand = kEmpty->second;
+        createPart(kCommand);
     } else if ((node == held_.inspectorTab || node == held_.sceneSettingsTab) && node != ui::Node{}) {
         showRight(node == held_.sceneSettingsTab);
     } else if (node == assetsTab_ || node == historyTab_ || node == consoleTab_ || node == networkTab_ ||

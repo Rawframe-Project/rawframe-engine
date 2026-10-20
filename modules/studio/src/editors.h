@@ -285,6 +285,13 @@ struct EditorsHeld {
     ui::Node axisGizmo{};
     std::array<ui::Node, 3> axisEnds{};
     ui::Node flyHint{};
+    /// The viewport's note while it has no picture, and its words (D922),
+    /// and whether the edited game stopped of itself.
+    ui::Node viewportNote{};
+    std::string viewportNoteText;
+    bool editStopped = false;
+    /// The Inspector's empty state's buttons, each its New command (D922).
+    std::vector<std::pair<ui::Node, std::string>> emptyButtons;
     /// Whether the right dock shows the Scene settings tab (D921).
     bool sceneSettingsShown = false;
     /// The Hierarchy's plus, which opens the New menu (D917).

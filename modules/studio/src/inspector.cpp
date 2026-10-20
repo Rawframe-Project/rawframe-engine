@@ -292,4 +292,58 @@ void ShellParticipant::asChooser(ui::Node line) {
     }
 }
 
+void ShellParticipant::showNothingChosen() {
+    // With nothing chosen in a scene, the Inspector says how to choose or
+    // make something, as the design's empty state (D922).
+    if (!componentRows_.empty() || scene_.empty() || documentChosen() || !entity_.empty() || !browser_.chosen.empty() ||
+        live_.on || !tree_->contains(componentsColumn_)) {
+        return;
+    }
+    auto made = box(componentsColumn_,
+                    ui::Layout{.direction = ui::Direction::Column,
+                               .alignItems = ui::Align::Center,
+                               .gap = 8,
+                               .shrink = 0,
+                               .padding = {16, 16, 48, 16}},
+                    0);
+    if (!made.has_value()) {
+        return;
+    }
+    componentRows_.push_back(*made);
+    if (auto tile = box(*made,
+                        ui::Layout{.width = ui::pixels(44),
+                                   .height = ui::pixels(44),
+                                   .justify = ui::Justify::Center,
+                                   .alignItems = ui::Align::Center,
+                                   .shrink = 0},
+                        0);
+        tile.has_value()) {
+        static_cast<void>(tree_->setLook(*tile, ui::Look{.fill = look::kRaisedFill, .radius = 8}));
+        static_cast<void>(icon(*tile, Icon::Select, look::kLabelInk, 20));
+    }
+    if (auto title = box(*made, ui::Layout{.shrink = 0, .margin = {0, 0, 6, 0}}, 0); title.has_value()) {
+        static_cast<void>(strongWords(*title, "Nothing chosen", look::kInk, 14));
+    }
+    if (auto what = box(*made, ui::Layout{.shrink = 0}, 0); what.has_value()) {
+        static_cast<void>(words(*what, "Choose an entity in the Hierarchy or the viewport,", look::kLabelInk, look::kLabelSize));
+    }
+    if (auto what = box(*made, ui::Layout{.shrink = 0}, 0); what.has_value()) {
+        static_cast<void>(words(*what, "or make one:", look::kLabelInk, look::kLabelSize));
+    }
+    if (auto buttons = box(*made, ui::Layout{.gap = 6, .shrink = 0, .margin = {0, 0, 8, 0}, .wrap = true}, 0);
+        buttons.has_value()) {
+        held_.emptyButtons.clear();
+        for (const std::string& kCommand : partCommands()) {
+            if (kCommand != "New cube" && kCommand != "New sphere" && kCommand != "New lamp" && kCommand != "New empty") {
+                continue;
+            }
+            std::string label = kCommand.substr(4);
+            label[0] = static_cast<char>(label[0] - 'a' + 'A');
+            if (auto button = textButton(*buttons, Icon::Plus, label); button.has_value()) {
+                held_.emptyButtons.emplace_back(*button, kCommand);
+            }
+        }
+    }
+}
+
 } // namespace rawframe::studio
