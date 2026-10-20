@@ -734,6 +734,20 @@ private:
     void showSequence();
     void showSequenceLines();
     void addSequenceTrack();
+    /// The timeline's parts (D931): its Inspector, the game's animators by
+    /// identity and name, a key's line, a key put in its place in time, a
+    /// key's field set, its presses, the playhead's place, and the
+    /// playhead moved on while it plays.
+    void showSequenceInspector();
+    [[nodiscard]] std::vector<std::pair<std::uint64_t, std::string>> sequenceAnimators() const;
+    [[nodiscard]] std::string animatorName(std::uint64_t animator) const;
+    [[nodiscard]] std::optional<std::size_t> sequenceKeyLine(std::size_t key) const;
+    void
+    putSequenceKey(std::optional<std::size_t> replaced, double time, const std::string& line, const std::string& done);
+    void setSequenceKey(const FieldRow& row, const std::string& typed);
+    bool pressSequence(ui::Node node);
+    [[nodiscard]] ui::Layout playheadAt(double time) const;
+    void runSequence(double seconds);
     void setSolid(const FieldRow& row, const std::string& text);
     /// A frame's capture (D843): its figures and its steps in the entity
     /// column, the one chosen in the Inspector, nothing to edit.

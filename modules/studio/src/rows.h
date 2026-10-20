@@ -58,6 +58,9 @@ struct FieldRow {
         /// is renamed to (D929).
         NewFolder,
         RenameFile,
+        /// A sequence key's time, track, animator, or event name, `field`
+        /// its place among the keys, `kind` which (D931).
+        SequenceKey,
         /// A data document's value, `field` its path, `kind` "string" for
         /// text or "json" (D812).
         DataValue,

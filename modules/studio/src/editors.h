@@ -187,6 +187,29 @@ struct EditorsHeld {
     std::vector<std::string> scatterLines;
     /// The chosen sequence's lines as last read (D869).
     std::vector<std::string> sequenceLines;
+    /// Its timeline (D931): the playhead's time, whether it plays and when
+    /// it last moved, the key chosen, the snap, the length and how many
+    /// pixels a second is; the keys' marks, the playhead's nodes and
+    /// height, the ruler, and the transport's and the Inspector's controls.
+    double sequenceTime = 0;
+    bool sequencePlaying = false;
+    std::optional<double> sequenceRan;
+    std::optional<std::size_t> sequenceKey;
+    double sequenceSnap = 0.1;
+    double sequenceLength = 1;
+    float sequenceScale = 1;
+    float sequenceHeadTall = 0;
+    std::vector<std::pair<ui::Node, std::size_t>> sequenceKeys;
+    std::vector<ui::Node> sequenceHeads;
+    ui::Node sequenceRuler{};
+    ui::Node sequenceNow{};
+    ui::Node sequenceStart{};
+    ui::Node sequencePlay{};
+    ui::Node sequenceAddKey{};
+    ui::Node sequenceAddEvent{};
+    ui::Node sequenceLoop{};
+    ui::Node sequenceRemove{};
+    ui::Node sequenceText{};
     /// What each entity row of a data document holds, as last read (D812).
     std::vector<document::Value> data;
     /// The game's description's lines as last read, and each settings row's

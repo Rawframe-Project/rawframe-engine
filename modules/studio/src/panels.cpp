@@ -1037,7 +1037,11 @@ void ShellParticipant::showEntity(std::size_t at) {
         return;
     }
     if (chosen(Listed::Sequence)) {
-        addSequenceTrack();
+        // The Add track row adds one; a track's row or the events' is only
+        // shown (D931).
+        if (entities_[at] == "track") {
+            addSequenceTrack();
+        }
         return;
     }
     if (!editing_.has_value() || editing_->role != FieldRow::Role::View) {

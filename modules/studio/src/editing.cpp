@@ -429,7 +429,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         } else {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         }
-    } else if (pressLive(node) || pressMixer(node)) {
+    } else if (pressLive(node) || pressMixer(node) || pressSequence(node)) {
         return;
     } else if (const auto kEntity = std::ranges::find(entityRows_, node); kEntity != entityRows_.end()) {
         // Held, it may be dragged onto another (D785).
@@ -751,6 +751,10 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
     }
     if (row.role == FieldRow::Role::SettingLine) {
         setSettingLine(row, text);
+        return;
+    }
+    if (row.role == FieldRow::Role::SequenceKey) {
+        setSequenceKey(row, text);
         return;
     }
     if (row.role == FieldRow::Role::NewSetting) {

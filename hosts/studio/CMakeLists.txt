@@ -1427,7 +1427,24 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set_tests_properties(studio_sequence PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "opening.sequence written: yes\nsequence 1\nduration 6\ntrack gate\ntrack track2\nplay 1 gate 0000000000000000\nevent 2 0000000000000001 opened\n.*\"code\":\"studio_sequence\"[^\n]*\"lines\":6,\"tracks\":2,\"plays\":1,\"events\":1}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"opening.sequence\",[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
+                             "opening.sequence written: yes\nsequence 1\nduration 6\ntrack gate\ntrack track2\nplay 1 gate 0000000000000000\nevent 2 0000000000000001 opened\n.*\"code\":\"studio_sequence\"[^\n]*\"lines\":6,\"tracks\":2,\"plays\":1,\"events\":1,\"animators\":[0-9]+}.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"opening.sequence\",[^\n]*\"applied\":2,\"refused\":0,.*\"exit\":\"clean_stop\"")
+        # The sequence's timeline (D931): the playhead put on the ruler, a
+        # key added there starting the game's animator, its time typed in
+        # the Inspector, the key kept in time order, as one step each.
+        add_test(NAME studio_sequence_keys
+                 COMMAND ${CMAKE_COMMAND} -E env
+                         "STUDIO_EXTRA_FILES=${CMAKE_CURRENT_SOURCE_DIR}/tests/sequences/opening.sequence=opening.sequence"
+                         STUDIO_SHOW_WRITTEN=1
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/runners/runners.game opening.sequence wheel=457,650,4 @opening.sequence until=studio_sequence
+                         "@Sequence ruler" "until=studio_said,status=\"playhead at" @Key "until=studio_said,status=\"added a key"
+                         "@key time:3" "until=studio_said,status=\"key time set to 3"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_sequence_keys PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "opening.sequence written: yes\nsequence 1\nduration 4\ntrack gate\nplay 1 gate 0000000000000000\nevent 2 0000000000000001 opened\nplay 3 gate [0-9a-f]+\n.*\"code\":\"studio_summary\"[^\n]*\"applied\":2,\"refused\":0,")
         # The World panel (D870): Runners' level's three platforms listed as
         # instances, the first streamed atomic and then persistent through
         # the session's scene.stream_instance, and written.
