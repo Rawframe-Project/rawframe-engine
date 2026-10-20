@@ -279,4 +279,55 @@ void ShellParticipant::showConsole() {
     static_cast<void>(tree_->scrollTo(consoleList_, 0, 1.0e9F));
 }
 
+void ShellParticipant::showFigures(double seconds) {
+    if (!tree_->contains(held_.statusFigures) || seconds < held_.nextFigures) {
+        return;
+    }
+    held_.nextFigures = seconds + 0.5;
+    std::size_t errors = 0;
+    std::size_t warnings = 0;
+    for (const ConsoleLine& kLine : console_) {
+        errors += kLine.level == ConsoleLine::Level::Error ? 1 : 0;
+        warnings += kLine.level == ConsoleLine::Level::Warning ? 1 : 0;
+    }
+    const std::string kCook = !gameOpen()            ? std::string{}
+                              : cooking_.has_value() ? std::string{"Cooking"}
+                              : cookBehind()         ? std::string{"Cook behind"}
+                                                     : std::string{"Cooked"};
+    const std::string kCounted = std::to_string(errors) + "/" + std::to_string(warnings) + "/" + kCook;
+    if (kCounted == held_.figuresSaid) {
+        return;
+    }
+    held_.figuresSaid = kCounted;
+    clear(held_.figureButtons);
+    // A figure as the design's: its mark and its words, pressed to show
+    // the Console where it counts its lines.
+    const auto kFigure = [this](Icon which, std::uint32_t ink, const std::string& text, bool pressed) {
+        auto made = box(held_.statusFigures, ui::Layout{.alignItems = ui::Align::Center, .gap = 5, .shrink = 0}, 0);
+        if (!made.has_value()) {
+            return;
+        }
+        held_.figureButtons.push_back(*made);
+        static_cast<void>(icon(*made, which, ink, 12));
+        if (auto said = box(*made, ui::Layout{.shrink = 0}, 0); said.has_value()) {
+            static_cast<void>(words(*said, text, look::kLabelInk, look::kLabelSize));
+            static_cast<void>(tree_->setInteraction(*said, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        }
+        if (pressed) {
+            static_cast<void>(tree_->setRole(*made, ui::Role::Button));
+            static_cast<void>(tree_->setName(*made, text));
+        }
+    };
+    if (errors > 0) {
+        kFigure(Icon::Error, look::kError, std::to_string(errors) + (errors == 1 ? " error" : " errors"), true);
+    }
+    if (warnings > 0) {
+        kFigure(
+            Icon::Warning, look::kWarn, std::to_string(warnings) + (warnings == 1 ? " warning" : " warnings"), true);
+    }
+    if (!kCook.empty()) {
+        kFigure(Icon::Cook, kCook == "Cooked" ? look::kReady : look::kWarn, kCook, false);
+    }
+}
+
 } // namespace rawframe::studio

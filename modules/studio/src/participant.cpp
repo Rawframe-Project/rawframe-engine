@@ -1,7 +1,7 @@
+#include "generated/studio_app_icon.h"
 #include "generated/studio_font.h"
 #include "generated/studio_font_mono.h"
 #include "generated/studio_font_strong.h"
-#include "generated/studio_app_icon.h"
 #include "generated/studio_icons.h"
 #include "rawframe/authoring_session/attach.h"
 #include "rawframe/authoring_session/game.h"
@@ -122,8 +122,9 @@ void offerToDesktop() {
     if (std::FILE* file = std::fopen(kEntry.string().c_str(), "wb")) {
         const std::string kText = "[Desktop Entry]\nType=Application\nName=Rawframe Studio\n"
                                   "Comment=Make games with the Rawframe engine\n" +
-                                  kLine + "Icon=rawframe-studio\nTerminal=false\nCategories=Development;Game;\n"
-                                          "StartupWMClass=rawframe-studio\n";
+                                  kLine +
+                                  "Icon=rawframe-studio\nTerminal=false\nCategories=Development;Game;\n"
+                                  "StartupWMClass=rawframe-studio\n";
         static_cast<void>(std::fwrite(kText.data(), 1, kText.size(), file));
         std::fclose(file);
     }
@@ -216,7 +217,8 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     const std::filesystem::path kHere = std::filesystem::canonical(process::ownExecutable(), beside).parent_path();
     templates_ = std::string{configuration.path("studio.templates").value_or((kHere / "templates").string())};
     const char* const kHome = std::getenv("USERPROFILE") != nullptr ? std::getenv("USERPROFILE") : std::getenv("HOME");
-    const std::filesystem::path kGames = kHome != nullptr ? std::filesystem::path{kHome} / "Rawframe Games" : kHere / "games";
+    const std::filesystem::path kGames =
+        kHome != nullptr ? std::filesystem::path{kHome} / "Rawframe Games" : kHere / "games";
     projects_ = std::string{configuration.path("studio.projects").value_or(kGames.string())};
     // Studio's own preferences, the docks' sizes and the games opened last,
     // where `studio.preferences` keeps them (D779); a file that does not
@@ -514,6 +516,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     outlineChosen();
     pollPicks(kSeconds);
     readLogs(kSeconds);
+    showFigures(kSeconds);
     readNetwork(kSeconds);
     readProfiler(kSeconds);
     readFrame(kSeconds);

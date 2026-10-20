@@ -361,6 +361,9 @@ private:
     /// The Console's filters lit as they stand, and its lines that pass
     /// them in its list, newest last.
     void showConsole();
+    /// The status bar's figures: the Console's errors and warnings, each
+    /// pressed to show it, and the cook's state (D923).
+    void showFigures(double seconds);
 
     /// The commands the window's buttons do (D777), then a button in `bar`
     /// for each menu that has any, and the palette's field after them.

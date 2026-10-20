@@ -141,6 +141,11 @@ struct EditorsHeld {
     ui::Node twoD{};
     ui::Node playersButton{};
     ui::Node statusFigures{};
+    /// What the status bar's figures last said, its errors' and warnings'
+    /// buttons, and when they are next counted (D923).
+    std::string figuresSaid;
+    std::vector<ui::Node> figureButtons;
+    double nextFigures = 0;
     /// What the frame does not draw but the commands reach (D915); the
     /// right dock and its tabs.
     ui::Node shelf{};

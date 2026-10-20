@@ -225,6 +225,9 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (node == consoleSearchValue_ && consoleSearchValue_ != ui::Node{}) {
         beginEdit(FieldRow{
             .value = consoleSearchValue_, .role = FieldRow::Role::ConsoleSearch, .field = "filter", .hint = "Filter"});
+    } else if (std::ranges::contains(held_.figureButtons, node)) {
+        // A figure in the status bar shows the Console (D923).
+        showDock(Dock::Console);
     } else if (node == consoleClear_ && consoleClear_ != ui::Node{}) {
         console_.clear();
         consoleEpoch_ = 0;
