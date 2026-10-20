@@ -227,7 +227,10 @@ struct EditorsHeld {
     /// The Frame tab: its tab and pane, its Capture button, its rows, when
     /// it next reads, how many reads it has shown, and the captures it has
     /// kept (D842).
+    /// The Profiler's head: its Frame view, and back to its timeline
+    /// (D928).
     ui::Node frameTab{};
+    ui::Node timelineTab{};
     ui::Node frameColumn{};
     ui::Node frameCapture{};
     std::vector<ui::Node> frameRows;

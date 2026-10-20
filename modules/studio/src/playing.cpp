@@ -203,7 +203,7 @@ bool ShellParticipant::bringCooked() {
 }
 
 void ShellParticipant::runPlayed(bool step) {
-    if (!playing_.has_value() || scene_.empty()) {
+    if (!playing_.has_value() || previewedName().empty()) {
         say("play the game to pause it");
         return;
     }
@@ -212,7 +212,7 @@ void ShellParticipant::runPlayed(bool step) {
         runPlayed(false);
     }
     const std::string kReply =
-        ask(step ? stepRecord(next(), scene_, 1) : runRecord(next(), scene_, !inViewport_.paused));
+        ask(step ? stepRecord(next(), previewedName(), 1) : runRecord(next(), previewedName(), !inViewport_.paused));
     const auto kParsed = document::parse(kReply);
     const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
     const Value* kPaused = kAnswer != nullptr ? kAnswer->find("paused") : nullptr;
@@ -236,8 +236,8 @@ void ShellParticipant::runPlayed(bool step) {
 }
 
 void ShellParticipant::stopPlaying() {
-    if (previewing_ && !scene_.empty()) {
-        static_cast<void>(ask(previewRecord(next(), scene_, nullptr)));
+    if (previewing_ && !previewedName().empty()) {
+        static_cast<void>(ask(previewRecord(next(), previewedName(), nullptr)));
     }
     previewing_ = false;
     preview_.reset();
@@ -386,9 +386,6 @@ void ShellParticipant::attachPlayed(double seconds) {
     // does (D916): observed, so the Hierarchy lists its World live
     // (D923); only the edited one is the editor's view.
     preview_->observe = editView_ && !playing_->edited();
-    if (scene_.empty()) {
-        return;
-    }
     attachPreview();
 }
 
@@ -706,7 +703,7 @@ void ShellParticipant::attachPreview() {
     if (documentChosen()) {
         return;
     }
-    const Answered kAttached = answeredOf(ask(previewRecord(next(), scene_, &*preview_)));
+    const Answered kAttached = answeredOf(ask(previewRecord(next(), previewedName(), &*preview_)));
     previewing_ = kAttached.previewing;
     if (kAttached.view.has_value()) {
         view_ = kAttached.view;
@@ -742,7 +739,7 @@ void ShellParticipant::attachPreview() {
     showViewText();
     showViewBar();
     if (!preview_->observe) {
-        say(kAttached.done ? (previewing_ ? "previewing " + scene_ : "no preview") : kAttached.message);
+        say(kAttached.done ? (previewing_ ? "previewing " + previewedName() : "no preview") : kAttached.message);
     }
     // A game played lists its World live in the Hierarchy, as an
     // editor's play mode does (D923).

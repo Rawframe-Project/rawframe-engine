@@ -161,6 +161,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     kOffer("Environment", "Window", {}, environmentTab_);
     kOffer("Profiler", "Window", {}, profilerTab_);
     kOffer("Frame", "Window", {}, held_.frameTab);
+    kOffer("Timeline", "Window", {}, held_.timelineTab);
     kOffer("Changes", "Window", {}, held_.changesTab);
     kOffer("Extension panels", "Window", {}, held_.panelsTab);
     // The menus whose commands come below, with no button, always shown.

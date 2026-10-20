@@ -883,6 +883,18 @@ private:
     /// scene is told or stepped back or forth to handed it by `tooling.look`;
     /// a null preview lets it go. One preview at a time.
     result::Result<Value> previewed(const authoring::SessionRecord& record) {
+        // A game whose world its Kest makes, no scene to show, is
+        // previewed by its description: its server's doors, no view
+        // (D928).
+        std::error_code error;
+        if (std::filesystem::equivalent(root_ / record.scene, game_, error)) {
+            RAWFRAME_TRY(preview_.open(record));
+            Value made = Value::object();
+            made.add("kind", Value::string("authoring.preview"));
+            made.add("reopened", Value::boolean(false));
+            made.add("previewing", Value::boolean(record.preview.has_value()));
+            return made;
+        }
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
         RAWFRAME_TRY(preview_.open(record));

@@ -78,7 +78,7 @@ std::string liveValue(std::string_view field, const Value& value) {
 } // namespace
 
 void ShellParticipant::switchLive() {
-    if (!live_.on && (!playing_.has_value() || scene_.empty())) {
+    if (!live_.on && (!playing_.has_value() || previewedName().empty())) {
         say("play the game to inspect its World live");
         return;
     }
@@ -86,7 +86,15 @@ void ShellParticipant::switchLive() {
     live_.chosen.clear();
     static_cast<void>(tree_->setLook(live_.button, ui::Look{.fill = live_.on ? kChosen : kRow, .radius = 4}));
     // The chosen scene shown again, its Hierarchy and Inspector the live
-    // World's or its own.
+    // World's or its own; with none, the World's alone (D928).
+    if (scene_.empty()) {
+        clear(entityRows_);
+        clear(componentRows_);
+        if (live_.on) {
+            showLive();
+        }
+        return;
+    }
     showScene(sceneAt_);
     if (!live_.on) {
         say("the scene again: " + scene_);
@@ -98,7 +106,7 @@ void ShellParticipant::showLive() {
     Value asked = Value::object();
     asked.add("kind", Value::string("authoring.live_entities"));
     asked.add("id", Value::integer(next()));
-    asked.add("scene", Value::string(scene_));
+    asked.add("scene", Value::string(previewedName()));
     asked.add("limit", Value::integer(kMostListed));
     const std::string kReply = ask(asked);
     const auto kParsed = document::parse(kReply);
@@ -188,7 +196,7 @@ void ShellParticipant::readLive(double seconds) {
     Value asked = Value::object();
     asked.add("kind", Value::string("authoring.live_entity"));
     asked.add("id", Value::integer(next()));
-    asked.add("scene", Value::string(scene_));
+    asked.add("scene", Value::string(previewedName()));
     asked.add("entity", Value::string(live_.chosen));
     const std::string kReply = ask(asked);
     const auto kParsed = document::parse(kReply);

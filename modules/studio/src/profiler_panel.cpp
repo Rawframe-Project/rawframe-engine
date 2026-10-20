@@ -23,17 +23,22 @@ std::string milliseconds(std::int64_t microseconds) {
 
 result::Status ShellParticipant::makeProfiler() {
     RAWFRAME_TRY_ASSIGN(held_.profilerColumn, pane("Profiler"));
-    RAWFRAME_TRY_ASSIGN(held_.profilerCapture, button(held_.profilerColumn, "Save capture"));
+    // The GPU's half: what the preview's frames hold (D928).
+    RAWFRAME_TRY_ASSIGN(const ui::Node kHead,
+                        box(held_.profilerColumn, ui::Layout{.gap = 6, .shrink = 0, .padding = {8, 8, 6, 0}}, 0));
+    RAWFRAME_TRY_ASSIGN(held_.frameTab, button(kHead, "Frame"));
+    RAWFRAME_TRY_ASSIGN(held_.profilerCapture, button(kHead, "Save capture"));
     showProfiler({});
     return {};
 }
 
 void ShellParticipant::readProfiler(double seconds) {
-    if (!playing_.has_value() || scene_.empty() || dockShown_ != Dock::Profiler || seconds < held_.profilerNextRead) {
+    if (!playing_.has_value() || previewedName().empty() || dockShown_ != Dock::Profiler ||
+        seconds < held_.profilerNextRead) {
         return;
     }
     held_.profilerNextRead = seconds + 1;
-    const auto kParsed = document::parse(ask(profileRecord(next(), scene_)));
+    const auto kParsed = document::parse(ask(profileRecord(next(), previewedName())));
     const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
     showProfiler(kAnswer != nullptr ? std::optional<Value>{*kAnswer} : std::nullopt);
 }

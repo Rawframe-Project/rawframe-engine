@@ -28,7 +28,7 @@ std::string_view ShellParticipant::tabOf(Dock pane) {
                                                         bottom("Network"),
                                                         placed("Environment", SurfaceKind::Panel, "Right"),
                                                         bottom("Profiler"),
-                                                        bottom("Frame"),
+                                                        bottom("Profiler"),
                                                         bottom("Mixer"),
                                                         bottom("Changes"),
                                                         bottom("Curves"),

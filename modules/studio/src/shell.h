@@ -442,6 +442,9 @@ private:
     std::string answerLine(const std::string& line);
     /// Whether a game is open, in a session of Studio's own or a host's.
     [[nodiscard]] bool gameOpen() const noexcept;
+    /// What the session previews the played game by: the open scene, or
+    /// the game's description where its Kest makes its world (D928).
+    [[nodiscard]] std::string previewedName() const;
     /// What the joined host said unasked, acted on, and what Studio has
     /// open and chosen said to it as it changes.
     void hearHost();

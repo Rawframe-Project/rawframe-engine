@@ -24,6 +24,10 @@ bool ShellParticipant::gameOpen() const noexcept {
     return session_ != nullptr || held_.joined != nullptr;
 }
 
+std::string ShellParticipant::previewedName() const {
+    return scene_.empty() && gameOpen() ? description_.filename().string() : scene_;
+}
+
 void ShellParticipant::hearHost() {
     if (held_.joined == nullptr) {
         return;

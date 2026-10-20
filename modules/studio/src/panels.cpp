@@ -351,7 +351,6 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(historyTab_, tab(kDockTabs, kBottom("History")));
     RAWFRAME_TRY_ASSIGN(networkTab_, tab(kDockTabs, kBottom("Network")));
     RAWFRAME_TRY_ASSIGN(profilerTab_, tab(kDockTabs, kBottom("Profiler")));
-    RAWFRAME_TRY_ASSIGN(held_.frameTab, tab(kDockTabs, kBottom("Frame")));
     RAWFRAME_TRY_ASSIGN(held_.mixerTab, tab(kDockTabs, kBottom("Mixer")));
     RAWFRAME_TRY_ASSIGN(held_.changesTab, tab(kDockTabs, kBottom("Changes")));
     RAWFRAME_TRY_ASSIGN(held_.curvesTab, tab(kDockTabs, kBottom("Curves")));
@@ -425,8 +424,8 @@ void ShellParticipant::showDock(Dock pane) {
     setTab(consoleTab_, pane == Dock::Console);
     setTab(networkTab_, pane == Dock::Network);
     setTab(environmentTab_, pane == Dock::Environment);
-    setTab(profilerTab_, pane == Dock::Profiler);
-    setTab(held_.frameTab, pane == Dock::Frame);
+    // The Frame view is the Profiler's (D928).
+    setTab(profilerTab_, pane == Dock::Profiler || pane == Dock::Frame);
     setTab(held_.mixerTab, pane == Dock::Mixer);
     setTab(held_.changesTab, pane == Dock::Changes);
     setTab(held_.curvesTab, pane == Dock::Curves);
@@ -671,7 +670,7 @@ void ShellParticipant::showScene(std::size_t at) {
         redoable_ = 0;
         static_cast<void>(showHistory());
         if (previewing_) {
-            static_cast<void>(ask(previewRecord(next(), scene_, nullptr)));
+            static_cast<void>(ask(previewRecord(next(), previewedName(), nullptr)));
             previewing_ = false;
         }
     }

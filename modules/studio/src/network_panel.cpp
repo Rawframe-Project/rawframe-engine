@@ -64,11 +64,12 @@ bool ShellParticipant::pressNetwork(ui::Node node) {
 }
 
 void ShellParticipant::readNetwork(double seconds) {
-    if (!playing_.has_value() || scene_.empty() || dockShown_ != Dock::Network || seconds < network_.nextRead) {
+    if (!playing_.has_value() || previewedName().empty() || dockShown_ != Dock::Network ||
+        seconds < network_.nextRead) {
         return;
     }
     network_.nextRead = seconds + 1;
-    const std::string kReply = ask(trafficRecord(next(), scene_));
+    const std::string kReply = ask(trafficRecord(next(), previewedName()));
     const auto kParsed = document::parse(kReply);
     const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
     if (kAnswer == nullptr) {

@@ -1118,6 +1118,23 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"status\":\"live: [1-9][0-9]* entities on the server.*\"code\":\"studio_played\"[^\n]*\"live\":false,\"liveListed\":1,\"liveReads\":([2-9]|[1-9][0-9]+),\"liveComponents\":[1-9]")
+        # A game whose Kest makes its world, no scene open, previewed by its
+        # description (D928): its World listed live as it plays, and its
+        # server's ticks in the Profiler.
+        add_test(NAME studio_inspects_kest_world
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/tycoon/tycoon.game ${PROJECT_BINARY_DIR}/hosts/client/stalls_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/stalls_clicked.conf @Play until=studio_previewing @Live
+                         "until=studio_said,status=\"live: " @Profiler "until=studio_profile,ticks>=60~600"
+                         @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_inspects_kest_world PROPERTIES
+                             FIXTURES_REQUIRED tycoon_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"status\":\"live: [1-9][0-9]* entities on the server.*\"code\":\"studio_profile\"[^\n]*\"ticks\":([6-9][0-9]|1[0-9][0-9]),.*\"exit\":\"clean_stop\"")
         # The Network panel (D807): the lossy link chosen, Plaza played, its
         # client over QUIC at 150 ms with loss, the server's traffic read
         # and shown while the panel is, once the server counts the client
@@ -1168,7 +1185,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         @Frame "until=studio_frame,draws>=1~600" "@Capture frame" "until=studio_frame,captures>=1~600"
+                         @Profiler @Frame "until=studio_frame,draws>=1~600" "@Capture frame" "until=studio_frame,captures>=1~600"
                          @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_frame_capture PROPERTIES
@@ -1185,7 +1202,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_author> $<TARGET_FILE:rawframe_host_cook_tool>
                          ${PROJECT_BINARY_DIR}/hosts/client/runners_clicked.conf
                          @level.scene @Cook "until=studio_said,status=\"cooked " @Play until=studio_previewing~600
-                         @Frame "until=studio_frame,passesTimed>=1~600" @Stop until=studio_game_ended
+                         @Profiler @Frame "until=studio_frame,passesTimed>=1~600" @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_joined_previews PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -1215,7 +1232,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/runners/runners.game /dev/null ${PROJECT_BINARY_DIR}/hosts/client/runners_clicked.conf
-                         @level.scene @Play until=studio_previewing @Frame "until=studio_frame,passesTimed>=1~600"
+                         @level.scene @Play until=studio_previewing @Profiler @Frame "until=studio_frame,passesTimed>=1~600"
                          @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_times_canvas PROPERTIES

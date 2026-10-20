@@ -19,7 +19,10 @@ std::int64_t figureOf(const Value& figures, std::string_view name) {
 
 result::Status ShellParticipant::makeFrame() {
     RAWFRAME_TRY_ASSIGN(held_.frameColumn, pane("Frame"));
-    RAWFRAME_TRY_ASSIGN(held_.frameCapture, button(held_.frameColumn, "Capture frame"));
+    RAWFRAME_TRY_ASSIGN(const ui::Node kHead,
+                        box(held_.frameColumn, ui::Layout{.gap = 6, .shrink = 0, .padding = {8, 8, 6, 0}}, 0));
+    RAWFRAME_TRY_ASSIGN(held_.timelineTab, button(kHead, "Timeline"));
+    RAWFRAME_TRY_ASSIGN(held_.frameCapture, button(kHead, "Capture frame"));
     if (auto made = row(held_.frameColumn, "play the game to see what its preview's frames hold", kQuiet, kPanel);
         made.has_value()) {
         held_.frameRows.push_back(*made);
@@ -31,7 +34,7 @@ bool ShellParticipant::pressCapture(ui::Node node) {
     if (node != held_.frameCapture && node != held_.profilerCapture) {
         return false;
     }
-    if (!playing_.has_value() || scene_.empty()) {
+    if (!playing_.has_value() || previewedName().empty()) {
         say("play the game to capture it");
         return true;
     }
@@ -47,7 +50,7 @@ bool ShellParticipant::pressCapture(ui::Node node) {
         }
     } else {
         path = "captures/profile-" + std::to_string(held_.profilerCaptures + 1) + ".rfprofile";
-        const std::string kReply = ask(profileRecord(next(), scene_, path));
+        const std::string kReply = ask(profileRecord(next(), previewedName(), path));
         if (kReply.find("\"capture\":") == std::string::npos) {
             say("the profile was not kept: " + answeredOf(kReply).message);
             return true;
@@ -86,11 +89,11 @@ void ShellParticipant::readFrame(double seconds, std::string_view capture) {
             held_.frameRows.push_back(*made);
         }
     };
-    if (!playing_.has_value() || scene_.empty()) {
+    if (!playing_.has_value() || previewedName().empty()) {
         kLine("play the game to see what its preview's frames hold", kQuiet);
         return;
     }
-    const std::string kReply = ask(drawnFrameRecord(next(), scene_, capture));
+    const std::string kReply = ask(drawnFrameRecord(next(), previewedName(), capture));
     const auto kParsed = document::parse(kReply);
     const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
     const Value* kFigures = kAnswer != nullptr ? kAnswer->find("figures") : nullptr;
