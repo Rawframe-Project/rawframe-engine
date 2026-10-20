@@ -323,6 +323,17 @@ struct EditorsHeld {
     /// place (D911).
     ui::Node layoutChooser{};
     std::uint64_t layoutsChosen = 0;
+    /// The Mixer tab, its pane, and each strip's press with its bus's
+    /// path in the mixer document (D927).
+    ui::Node mixerTab{};
+    ui::Node mixerColumn{};
+    std::vector<std::pair<ui::Node, std::string>> mixerStrips;
+    std::string mixerDocument;
+    std::vector<ui::Node> mixerRows;
+    /// The Curves tab and its pane (D927).
+    ui::Node curvesTab{};
+    ui::Node curvesColumn{};
+    std::vector<ui::Node> curvesRows;
     /// The Extension panels tab, its pane, and its rows (D878).
     ui::Node panelsTab{};
     ui::Node panelsColumn{};

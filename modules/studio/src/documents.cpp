@@ -448,10 +448,36 @@ void ShellParticipant::showMaterial() {
         const Value* held = interface != nullptr ? interface->find(kKind) : nullptr;
         for (const std::string& kName : held != nullptr ? held->names() : std::span<const std::string>{}) {
             const bool kSet = overrides != nullptr && overrides->find(kName) != nullptr;
-            auto added = row(entitiesColumn_, kName, kSet ? kText : kQuiet, kRow, true);
+            // As a graph's rows (D923): a dot of its kind, a texture's or a
+            // value's, then its name, those set brighter.
+            const Value* declared = held->find(kName);
+            const Value* type = declared != nullptr ? declared->find("type") : nullptr;
+            Value kinded = Value::object();
+            kinded.add("type",
+                       Value::string(type != nullptr && type->text() != nullptr && type->text()->starts_with("texture")
+                                         ? "rawframe/parameter_texture_2d@1"
+                                         : "rawframe/parameter@1"));
+            auto added = box(entitiesColumn_,
+                             ui::Layout{.height = ui::pixels(look::kRowHeight),
+                                        .alignItems = ui::Align::Center,
+                                        .gap = 8,
+                                        .shrink = 0,
+                                        .padding = {10, 8, 0, 0}},
+                             kRow);
             if (!added.has_value()) {
                 return;
             }
+            if (auto dot = box(*added, ui::Layout{.width = ui::pixels(8), .height = ui::pixels(8), .shrink = 0}, 0);
+                dot.has_value()) {
+                static_cast<void>(tree_->setLook(*dot, ui::Look{.fill = graphNodeDot(kinded), .radius = 2}));
+            }
+            if (auto said = box(*added, ui::Layout{.shrink = 1}, 0); said.has_value()) {
+                static_cast<void>(words(*said, kName, kSet ? look::kInk : look::kRowInk, look::kBodySize));
+                static_cast<void>(
+                    tree_->setInteraction(*said, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+            }
+            static_cast<void>(tree_->setRole(*added, ui::Role::Button));
+            static_cast<void>(tree_->setName(*added, kName));
             entityRows_.push_back(*added);
             entities_.push_back(kName);
             names_.push_back(std::string{kKind});
@@ -463,53 +489,170 @@ void ShellParticipant::showMaterial() {
     if (interface == nullptr || interface->kind() != Value::Kind::Object) {
         say("the instance's base does not read as a material");
     }
+    showInstanceCard();
+    showInstanceSheet();
+}
+
+void ShellParticipant::showInstanceCard() {
+    clear(viewRows_);
+    viewFields_.clear();
+    clear(held_.cameraRows);
+    const Value* instance = sheet_.has_value() ? sheet_->find("instance") : nullptr;
+    const Value* base = instance != nullptr ? instance->find("base") : nullptr;
+    const std::string kBase = base != nullptr && base->text() != nullptr ? *base->text() : std::string{};
+    // In the center, where a graph's canvas is: what the instance is, its
+    // look on a sphere as the last cook drew it, and its base to open
+    // (D927).
+    auto middle = box(centerColumn_,
+                      ui::Layout{.height = ui::pixels(0),
+                                 .direction = ui::Direction::Column,
+                                 .justify = ui::Justify::Center,
+                                 .alignItems = ui::Align::Center,
+                                 .grow = 1,
+                                 .shrink = 1},
+                      0x15161AFFU);
+    if (!middle.has_value()) {
+        return;
+    }
+    viewRows_.push_back(*middle);
+    auto card = box(*middle,
+                    ui::Layout{.width = ui::pixels(340),
+                               .direction = ui::Direction::Column,
+                               .alignItems = ui::Align::Center,
+                               .gap = 10,
+                               .shrink = 0,
+                               .padding = {20, 20, 18, 18},
+                               .border = {1, 1, 1, 1}},
+                    0);
+    if (!card.has_value()) {
+        return;
+    }
+    static_cast<void>(tree_->setLook(*card, ui::Look{.fill = 0x121317F0U, .borderColor = look::kEdge, .radius = 8}));
+    const auto kSource = std::ranges::find(browser_.sources, scene_, &ListedSource::path);
+    const std::shared_ptr<const texture::Texture> kPicture =
+        kSource != browser_.sources.end() ? thumbnailOf(*kSource) : nullptr;
+    if (kPicture != nullptr) {
+        if (auto image = box(*card, ui::Layout{.width = ui::pixels(180), .height = ui::pixels(180), .shrink = 0}, 0);
+            image.has_value()) {
+            static_cast<void>(tree_->setLook(*image, ui::Look{.image = thumbnailKey(scene_)}));
+        }
+    }
+    if (auto name = box(*card, ui::Layout{.shrink = 0}, 0); name.has_value()) {
+        static_cast<void>(strongWords(*name, std::filesystem::path{scene_}.filename().string(), look::kInk, 15));
+    }
+    if (auto what = box(*card, ui::Layout{.width = ui::share(1), .shrink = 0}, 0); what.has_value()) {
+        static_cast<void>(wrappedWords(*what,
+                                       kBase.empty() ? std::string{"A material instance whose base is not named."}
+                                                     : "An instance of " + kBase +
+                                                           ": it keeps the base's graph and sets its parameters, "
+                                                           "each in the Inspector.",
+                                       look::kLabelInk,
+                                       look::kLabelSize));
+    }
+    if (kPicture == nullptr) {
+        if (auto later = box(*card, ui::Layout{.shrink = 0}, 0); later.has_value()) {
+            static_cast<void>(words(*later, "Its preview after a cook", look::kFaintInk, look::kLabelSize));
+        }
+    }
+    if (!kBase.empty() && std::ranges::contains(scenes_, kBase)) {
+        if (auto opened = textButton(*card, Icon::Material, "Open " + kBase); opened.has_value()) {
+            actions_.push_back(ActionButton{.node = *opened, .opens = kBase});
+        }
+    }
+}
+
+void ShellParticipant::showInstanceSheet() {
+    endEdit();
+    fields_.clear();
+    clear(componentRows_);
+    std::erase_if(actions_, [](const ActionButton& action) {
+        return action.opens.empty();
+    });
+    components_ = 0;
+    const Value* interface = sheet_.has_value() ? sheet_->find("interface") : nullptr;
+    const Value* instance = sheet_.has_value() ? sheet_->find("instance") : nullptr;
+    const Value* overrides = instance != nullptr ? instance->find("overrides") : nullptr;
+    const Value* base = instance != nullptr ? instance->find("base") : nullptr;
+    // As the design's Inspector (D923): the instance's name and what it
+    // is, then every parameter at once, a field each: an override set, or
+    // its base's default shown faint.
+    if (auto head =
+            box(componentsColumn_,
+                ui::Layout{.direction = ui::Direction::Column, .gap = 3, .shrink = 0, .padding = {12, 12, 10, 8}},
+                0);
+        head.has_value()) {
+        componentRows_.push_back(*head);
+        if (auto name = box(*head, ui::Layout{.shrink = 0}, 0); name.has_value()) {
+            static_cast<void>(strongWords(*name, std::filesystem::path{scene_}.filename().string(), look::kInk, 15));
+        }
+        if (auto what = box(*head, ui::Layout{.shrink = 0}, 0); what.has_value()) {
+            static_cast<void>(
+                monoWords(*what,
+                          "material instance" +
+                              (base != nullptr && base->text() != nullptr ? " of " + *base->text() : std::string{}),
+                          look::kFaintInk,
+                          look::kSmallSize));
+        }
+    }
+    for (std::size_t at = 0; at < entities_.size(); ++at) {
+        if (at == 0 || names_[at] != names_[at - 1]) {
+            auto heading = box(componentsColumn_,
+                               ui::Layout{.alignItems = ui::Align::Center,
+                                          .gap = 8,
+                                          .shrink = 0,
+                                          .padding = {10, 10, 10, 6},
+                                          .border = {0, 0, 1, 0}},
+                               0);
+            if (!heading.has_value()) {
+                return;
+            }
+            componentRows_.push_back(*heading);
+            static_cast<void>(tree_->setLook(*heading, ui::Look{.borderColor = look::kLine}));
+            if (auto titled = box(*heading, ui::Layout{.shrink = 0}, 0); titled.has_value()) {
+                static_cast<void>(
+                    strongWords(*titled, names_[at] == "switches" ? "Switches" : "Parameters", look::kInk));
+            }
+            if (auto quieted = box(*heading, ui::Layout{.shrink = 1}, 0); quieted.has_value()) {
+                static_cast<void>(monoWords(*quieted, "empty keeps the base's", look::kFaintInk, look::kSmallSize));
+            }
+        }
+        const Value* kind = interface != nullptr ? interface->find(names_[at]) : nullptr;
+        const Value* declared = kind != nullptr ? kind->find(entities_[at]) : nullptr;
+        const Value* fallback = declared != nullptr ? declared->find("default") : nullptr;
+        const Value* held = overrides != nullptr ? overrides->find(entities_[at]) : nullptr;
+        const std::string kHint = held == nullptr && fallback != nullptr ? partText(*fallback) : std::string{};
+        auto line = fieldRow(
+            entities_[at], held != nullptr ? partText(*held) : kHint, std::nullopt, held != nullptr, entities_[at]);
+        if (!line.has_value()) {
+            return;
+        }
+        componentRows_.push_back(line->first);
+        fields_.push_back(
+            FieldRow{.value = line->second, .role = FieldRow::Role::Override, .field = entities_[at], .hint = kHint});
+    }
+    components_ = 1;
 }
 
 void ShellParticipant::showInput(std::size_t at) {
-    endEdit();
-    fields_.clear();
     entityAt_ = at;
     entity_ = entities_[at];
     for (std::size_t each = 0; each < entityRows_.size(); ++each) {
         static_cast<void>(
             tree_->setLook(entityRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
     }
-    clear(componentRows_);
-    actions_.clear();
-    components_ = 0;
-    const Value* interface = sheet_.has_value() ? sheet_->find("interface") : nullptr;
-    const Value* kind = interface != nullptr ? interface->find(names_[at]) : nullptr;
-    const Value* declared = kind != nullptr ? kind->find(entity_) : nullptr;
-    const Value* instance = sheet_.has_value() ? sheet_->find("instance") : nullptr;
-    const Value* overrides = instance != nullptr ? instance->find("overrides") : nullptr;
-    const Value* held = overrides != nullptr ? overrides->find(entity_) : nullptr;
-    // A switch is a bool its base's graph branches on (D719).
-    const Value* type = declared != nullptr ? declared->find("type") : nullptr;
-    const Value* fallback = declared != nullptr ? declared->find("default") : nullptr;
-    for (const std::string& kLine :
-         {names_[at] == "switches" ? std::string{"switch"} : (type != nullptr ? partText(*type) : std::string{}),
-          "default " + (fallback != nullptr ? partText(*fallback) : std::string{})}) {
-        auto line = row(componentsColumn_, kLine, kQuiet, kPanel);
-        if (!line.has_value()) {
-            return;
-        }
-        componentRows_.push_back(*line);
+    // Every parameter is in the Inspector already: the chosen one's field
+    // takes the keys.
+    if (at < fields_.size()) {
+        beginEdit(fields_[at]);
     }
-    auto line = fieldRow("override", held != nullptr ? partText(*held) : std::string{}, std::nullopt, held != nullptr);
-    if (!line.has_value()) {
-        return;
-    }
-    componentRows_.push_back(line->first);
-    fields_.push_back(FieldRow{.value = line->second, .role = FieldRow::Role::Override, .field = entity_});
-    components_ = 1;
 }
 
-void ShellParticipant::setOverride(const std::string& text) {
+void ShellParticipant::setOverride(const std::string& input, const std::string& text) {
     Value operation = Value::object();
     operation.add("operation", Value::string("materials.set_override"));
-    operation.add("input", Value::string(entity_));
+    operation.add("input", Value::string(input));
     operation.add("value", documentedValue(text));
-    commit(std::move(operation), entity_ + (text.empty() ? " unset" : " set to " + text), entity_);
+    commit(std::move(operation), input + (text.empty() ? " unset" : " set to " + text), input);
 }
 
 void ShellParticipant::showGraph() {

@@ -158,6 +158,10 @@ void ShellParticipant::showData() {
         showCanvas(*kGraph, "graph.");
     } else if (kNamed == "animation.clip") {
         showTimeline(*sheet_);
+    } else if (kNamed == "input.actions") {
+        showActionTables();
+    } else if (kNamed == "text.strings") {
+        showStringTables();
     } else {
         showDataTables();
     }
@@ -175,6 +179,13 @@ void ShellParticipant::showData() {
             }
         }
         showDataEntry(first);
+    }
+    // The bottom dock's views of it, where shown (D927).
+    if (dockShown_ == Dock::Curves) {
+        showCurves();
+    }
+    if (dockShown_ == Dock::Mixer && scene_ == held_.mixerDocument) {
+        showMixer();
     }
 }
 
@@ -398,8 +409,12 @@ void ShellParticipant::showDataEntry(std::size_t at) {
         showTimeline(*sheet_);
     } else if (kKindName == "animation.graph") {
         markCanvas();
+    } else if (kKindName == "input.actions") {
+        // The tables again, the chosen row lit (D923, D927).
+        showActionTables();
+    } else if (kKindName == "text.strings") {
+        showStringTables();
     } else {
-        // The tables again, the chosen row lit (D923).
         showDataTables();
     }
     clear(componentRows_);
@@ -444,6 +459,442 @@ void ShellParticipant::setDataValue(const FieldRow& row, const std::string& text
     operation.add("path", Value::string(row.field));
     operation.add("value", std::move(value));
     commit(std::move(operation), row.field + (text.empty() ? " removed" : " set to " + text), entity_);
+}
+
+namespace {
+
+/// A control's name as a chip says it (D927): a key's letter or word, a
+/// pad's control with its side first, `left stick` for `stick_left`.
+std::string chipOf(std::string_view control) {
+    std::string made{control.starts_with("key_") ? control.substr(4) : control};
+    for (const std::string_view kSide : {"_left", "_right"}) {
+        if (made.size() > kSide.size() && made.ends_with(kSide)) {
+            made = std::string{kSide.substr(1)} + " " + made.substr(0, made.size() - kSide.size());
+        }
+    }
+    std::ranges::replace(made, '_', ' ');
+    if (made.size() == 1) {
+        made[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(made[0])));
+    } else if (control.starts_with("key_") && !made.empty()) {
+        made[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(made[0])));
+    }
+    return made;
+}
+
+/// What a binding presses, as chips: a quad's four keys, up, left, down,
+/// right, as WASD reads; else its key or control.
+std::vector<std::string> chipsOf(const Value& binding) {
+    std::vector<std::string> made;
+    if (const Value* kQuad = binding.find("quad"); kQuad != nullptr) {
+        for (const std::string_view kWay : {"up", "left", "down", "right"}) {
+            if (const Value* kKey = kQuad->find(kWay); kKey != nullptr && kKey->text() != nullptr) {
+                made.push_back(chipOf(*kKey->text()));
+            }
+        }
+        return made;
+    }
+    for (const std::string_view kNamed : {"physicalKey", "control", "button", "key"}) {
+        if (const Value* kKey = binding.find(kNamed); kKey != nullptr && kKey->text() != nullptr) {
+            made.push_back(chipOf(*kKey->text()));
+            return made;
+        }
+    }
+    return made;
+}
+
+} // namespace
+
+void ShellParticipant::showActionTables() {
+    clear(viewRows_);
+    held_.canvasParts.clear();
+    held_.canvasBoxes.clear();
+    const Value* actions = sheet_.has_value() ? sheet_->find("actions") : nullptr;
+    if (actions == nullptr || actions->kind() != Value::Kind::Array) {
+        showDataTables();
+        return;
+    }
+    auto pane = box(centerColumn_,
+                    ui::Layout{.height = ui::pixels(0),
+                               .minHeight = ui::pixels(0),
+                               .direction = ui::Direction::Column,
+                               .gap = 18,
+                               .grow = 1,
+                               .padding = {20, 20, 16, 16},
+                               .scroll = ui::Scroll::Vertical},
+                    0);
+    if (!pane.has_value()) {
+        return;
+    }
+    viewRows_.push_back(*pane);
+    static_cast<void>(tree_->setName(*pane, "Actions"));
+    // As the design's Data screen: a table for each context, its actions'
+    // kinds and what each device presses for them as chips; those in no
+    // context last.
+    std::vector<std::pair<std::string, std::vector<std::string>>> groups;
+    std::vector<std::string> grouped;
+    if (const Value* kContexts = sheet_->find("contexts"); kContexts != nullptr) {
+        for (const Value& kContext : kContexts->items()) {
+            const Value* kName = kContext.find("name");
+            const Value* kListed = kContext.find("actions");
+            std::vector<std::string> names;
+            for (const Value& kAction : kListed != nullptr ? kListed->items() : std::span<const Value>{}) {
+                if (kAction.text() != nullptr) {
+                    names.push_back(*kAction.text());
+                    grouped.push_back(*kAction.text());
+                }
+            }
+            groups.emplace_back(kName != nullptr && kName->text() != nullptr ? *kName->text() : "context",
+                                std::move(names));
+        }
+    }
+    std::vector<std::string> rest;
+    for (const Value& kAction : actions->items()) {
+        const Value* kName = kAction.find("name");
+        if (kName != nullptr && kName->text() != nullptr && !std::ranges::contains(grouped, *kName->text())) {
+            rest.push_back(*kName->text());
+        }
+    }
+    if (!rest.empty()) {
+        groups.emplace_back(groups.empty() ? "Actions" : "In no context", std::move(rest));
+    }
+    constexpr std::array<std::string_view, 5> kColumns{"ACTION", "KIND", "KEYBOARD AND MOUSE", "GAMEPAD", "TOUCH"};
+    constexpr std::array<float, 5> kShares{1.0F, 0.8F, 1.6F, 1.3F, 1.3F};
+    for (const auto& [kGroup, kNames] : groups) {
+        auto table = box(*pane, ui::Layout{.direction = ui::Direction::Column, .shrink = 0}, 0);
+        if (!table.has_value()) {
+            return;
+        }
+        if (auto title =
+                box(*table,
+                    ui::Layout{.alignItems = ui::Align::Center, .gap = 10, .shrink = 0, .padding = {2, 2, 0, 8}},
+                    0);
+            title.has_value()) {
+            if (auto named = box(*title, ui::Layout{.shrink = 0}, 0); named.has_value()) {
+                static_cast<void>(strongWords(*named, prettyField(kGroup), look::kInk, 17));
+            }
+            if (auto counted = box(*title, ui::Layout{.shrink = 0}, 0); counted.has_value()) {
+                static_cast<void>(words(*counted,
+                                        std::to_string(kNames.size()) + (kNames.size() == 1 ? " action" : " actions"),
+                                        look::kFaintInk,
+                                        look::kLabelSize));
+            }
+        }
+        auto frame =
+            box(*table, ui::Layout{.direction = ui::Direction::Column, .shrink = 0, .border = {1, 1, 1, 1}}, 0);
+        if (!frame.has_value()) {
+            return;
+        }
+        static_cast<void>(tree_->setLook(
+            *frame, ui::Look{.fill = 0x17181CFFU, .borderColor = look::kEdge, .radius = 6, .clip = true}));
+        const auto kLine = [&](bool heading, std::uint32_t fill) -> std::optional<ui::Node> {
+            auto line = box(*frame,
+                            ui::Layout{.height = ui::pixels(heading ? 30 : 36),
+                                       .alignItems = ui::Align::Center,
+                                       .gap = 12,
+                                       .shrink = 0,
+                                       .padding = {12, 12, 0, 0},
+                                       .border = {0, 0, 0, 1}},
+                            0);
+            if (!line.has_value()) {
+                return std::nullopt;
+            }
+            static_cast<void>(tree_->setLook(*line, ui::Look{.fill = fill, .borderColor = look::kLine}));
+            return *line;
+        };
+        const auto kCell = [this](ui::Node line, float share) -> std::optional<ui::Node> {
+            auto cell = box(
+                line, ui::Layout{.width = ui::pixels(0), .alignItems = ui::Align::Center, .gap = 4, .grow = share}, 0);
+            if (!cell.has_value()) {
+                return std::nullopt;
+            }
+            static_cast<void>(tree_->setLook(*cell, ui::Look{.clip = true}));
+            static_cast<void>(tree_->setInteraction(*cell, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+            return *cell;
+        };
+        if (auto heading = kLine(true, 0); heading.has_value()) {
+            for (std::size_t column = 0; column < kColumns.size(); ++column) {
+                if (auto cell = kCell(*heading, kShares[column]); cell.has_value()) {
+                    static_cast<void>(monoWords(*cell, kColumns[column], look::kFaintInk, look::kSmallSize));
+                }
+            }
+        }
+        for (const std::string& kName : kNames) {
+            const auto kAction = std::ranges::find_if(actions->items(), [&kName](const Value& action) {
+                const Value* kNamed = action.find("name");
+                return kNamed != nullptr && kNamed->text() != nullptr && *kNamed->text() == kName;
+            });
+            const Value* kId = kAction != actions->items().end() ? kAction->find("actionId") : nullptr;
+            if (kId == nullptr || kId->text() == nullptr) {
+                continue;
+            }
+            const std::string kPath = "actions[actionId=" + *kId->text() + "]";
+            const auto kListed = std::ranges::find(entities_, kPath);
+            if (kListed == entities_.end()) {
+                continue;
+            }
+            const auto kEntity = static_cast<std::size_t>(kListed - entities_.begin());
+            auto line = kLine(false, kPath == entity_ ? kChosen : 0U);
+            if (!line.has_value()) {
+                return;
+            }
+            held_.canvasParts.emplace_back(*line, kEntity);
+            held_.canvasBoxes.emplace_back(*line, kEntity);
+            static_cast<void>(tree_->setRole(*line, ui::Role::Button));
+            static_cast<void>(tree_->setName(*line, kName + " row"));
+            if (auto cell = kCell(*line, kShares[0]); cell.has_value()) {
+                static_cast<void>(strongWords(*cell, kName, look::kInk, look::kBodySize));
+            }
+            if (auto cell = kCell(*line, kShares[1]); cell.has_value()) {
+                const Value* kType = kAction->find("valueType");
+                static_cast<void>(monoWords(*cell,
+                                            kType != nullptr && kType->text() != nullptr ? *kType->text() : "",
+                                            look::kSoftInk,
+                                            look::kSmallSize));
+            }
+            const Value* kBindings = kAction->find("bindings");
+            for (std::size_t column = 2; column < kColumns.size(); ++column) {
+                auto cell = kCell(*line, kShares[column]);
+                if (!cell.has_value()) {
+                    return;
+                }
+                std::size_t shown = 0;
+                for (const Value& kBinding : kBindings != nullptr ? kBindings->items() : std::span<const Value>{}) {
+                    const Value* kDevice = kBinding.find("device");
+                    const std::string_view kOn =
+                        kDevice != nullptr && kDevice->text() != nullptr ? std::string_view{*kDevice->text()} : "";
+                    const std::size_t kColumn = kOn == "gamepad" ? 3 : kOn == "touch" ? 4 : 2;
+                    if (kColumn != column) {
+                        continue;
+                    }
+                    for (const std::string& kChip : chipsOf(kBinding)) {
+                        auto chip = box(*cell,
+                                        ui::Layout{.height = ui::pixels(22),
+                                                   .alignItems = ui::Align::Center,
+                                                   .shrink = 0,
+                                                   .padding = {6, 6, 0, 0},
+                                                   .border = {1, 1, 1, 1}},
+                                        0);
+                        if (!chip.has_value()) {
+                            return;
+                        }
+                        static_cast<void>(tree_->setLook(
+                            *chip, ui::Look{.fill = look::kWellFill, .borderColor = look::kEdge, .radius = 4}));
+                        static_cast<void>(monoWords(*chip, kChip, look::kInk, look::kSmallSize));
+                        ++shown;
+                    }
+                }
+                if (shown == 0) {
+                    static_cast<void>(monoWords(*cell, "none", look::kFaintInk, look::kSmallSize));
+                }
+            }
+        }
+    }
+}
+
+namespace {
+
+/// A locale's name in its own words, where Studio knows it; else its code.
+std::string languageOf(std::string_view locale) {
+    constexpr std::array<std::pair<std::string_view, std::string_view>, 9> kKnown{{{"en", "English"},
+                                                                                   {"tr", "T\u00FCrk\u00E7e"},
+                                                                                   {"de", "Deutsch"},
+                                                                                   {"fr", "Fran\u00E7ais"},
+                                                                                   {"es", "Espa\u00F1ol"},
+                                                                                   {"it", "Italiano"},
+                                                                                   {"pt", "Portugu\u00EAs"},
+                                                                                   {"nl", "Nederlands"},
+                                                                                   {"pl", "Polski"}}};
+    const auto kFound =
+        std::ranges::find(kKnown, locale.substr(0, 2), &std::pair<std::string_view, std::string_view>::first);
+    return kFound != kKnown.end() ? std::string{kFound->second} : std::string{locale};
+}
+
+/// A message as its cell shows it: on one line, at most 44 characters.
+std::string messageCell(const Value* entry) {
+    const Value* kMessage = entry != nullptr ? entry->find("message") : nullptr;
+    if (kMessage == nullptr || kMessage->text() == nullptr) {
+        return {};
+    }
+    std::string made = *kMessage->text();
+    std::ranges::replace(made, '\n', ' ');
+    return made.size() > 44 ? made.substr(0, 43) + "\u2026" : made;
+}
+
+} // namespace
+
+void ShellParticipant::showStringTables() {
+    clear(viewRows_);
+    held_.canvasParts.clear();
+    held_.canvasBoxes.clear();
+    const Value* entries = sheet_.has_value() ? sheet_->find("entries") : nullptr;
+    if (entries == nullptr || entries->kind() != Value::Kind::Object) {
+        showDataTables();
+        return;
+    }
+    // Its translations: the game's documents named as this one with a
+    // locale before `.translations`, as `gale.tr.translations` is
+    // `gale.strings`' Turkish (D927).
+    const std::string kStem = std::filesystem::path{scene_}.stem().string();
+    const std::string kFolder = std::filesystem::path{scene_}.parent_path().generic_string();
+    std::vector<std::pair<std::string, Value>> translations;
+    for (const std::string& kDocument : scenes_) {
+        const std::filesystem::path kPath{kDocument};
+        if (kPath.extension() != ".translations" || kPath.parent_path().generic_string() != kFolder ||
+            !kPath.stem().string().starts_with(kStem + ".")) {
+            continue;
+        }
+        const std::optional<Value> kRead = read(kDocument, "data.read");
+        const Value* kData = kRead.has_value() ? kRead->find("data") : nullptr;
+        const Value* kLocale = kData != nullptr ? kData->find("locale") : nullptr;
+        if (kData != nullptr && kLocale != nullptr && kLocale->text() != nullptr) {
+            translations.emplace_back(*kLocale->text(), *kData);
+        }
+    }
+    auto pane = box(centerColumn_,
+                    ui::Layout{.height = ui::pixels(0),
+                               .minHeight = ui::pixels(0),
+                               .direction = ui::Direction::Column,
+                               .gap = 12,
+                               .grow = 1,
+                               .padding = {20, 20, 16, 16},
+                               .scroll = ui::Scroll::Vertical},
+                    0);
+    if (!pane.has_value()) {
+        return;
+    }
+    viewRows_.push_back(*pane);
+    static_cast<void>(tree_->setName(*pane, "Strings"));
+    const Value* kSource = sheet_->find("sourceLocale");
+    const std::string kSourceLocale = kSource != nullptr && kSource->text() != nullptr ? *kSource->text() : "en";
+    std::size_t missing = 0;
+    for (const auto& [kLocale, kData] : translations) {
+        const Value* kHeld = kData.find("entries");
+        for (const std::string& kKey : entries->names()) {
+            missing += kHeld == nullptr || kHeld->find(kKey) == nullptr ? 1 : 0;
+        }
+    }
+    if (auto title =
+            box(*pane, ui::Layout{.alignItems = ui::Align::Center, .gap = 10, .shrink = 0, .padding = {2, 2, 0, 0}}, 0);
+        title.has_value()) {
+        if (auto named = box(*title, ui::Layout{.shrink = 0}, 0); named.has_value()) {
+            static_cast<void>(strongWords(*named, "Strings", look::kInk, 17));
+        }
+        if (auto counted = box(*title, ui::Layout{.shrink = 0}, 0); counted.has_value()) {
+            static_cast<void>(words(*counted,
+                                    std::to_string(entries->names().size()) + " keys, " +
+                                        std::to_string(translations.size()) +
+                                        (translations.size() == 1 ? " translation, " : " translations, ") +
+                                        std::to_string(missing) + " missing",
+                                    missing > 0 ? look::kWarn : look::kFaintInk,
+                                    look::kLabelSize));
+        }
+    }
+    auto frame = box(*pane, ui::Layout{.direction = ui::Direction::Column, .shrink = 0, .border = {1, 1, 1, 1}}, 0);
+    if (!frame.has_value()) {
+        return;
+    }
+    static_cast<void>(
+        tree_->setLook(*frame, ui::Look{.fill = 0x17181CFFU, .borderColor = look::kEdge, .radius = 6, .clip = true}));
+    const auto kLine = [&](bool heading, std::uint32_t fill) -> std::optional<ui::Node> {
+        auto line = box(*frame,
+                        ui::Layout{.height = ui::pixels(heading ? 30 : 32),
+                                   .alignItems = ui::Align::Center,
+                                   .gap = 12,
+                                   .shrink = 0,
+                                   .padding = {12, 12, 0, 0},
+                                   .border = {0, 0, 0, 1}},
+                        0);
+        if (!line.has_value()) {
+            return std::nullopt;
+        }
+        static_cast<void>(tree_->setLook(*line, ui::Look{.fill = fill, .borderColor = look::kLine}));
+        return *line;
+    };
+    const auto kCell = [this](ui::Node line, float share, std::uint32_t fill) -> std::optional<ui::Node> {
+        auto cell = box(line,
+                        ui::Layout{.width = ui::pixels(share == 0 ? 16 : 0),
+                                   .height = ui::share(1),
+                                   .alignItems = ui::Align::Center,
+                                   .grow = share,
+                                   .shrink = share == 0 ? 0.0F : 1.0F,
+                                   .padding = {4, 4, 0, 0}},
+                        fill);
+        if (!cell.has_value()) {
+            return std::nullopt;
+        }
+        static_cast<void>(tree_->setLook(*cell, ui::Look{.fill = fill, .clip = true}));
+        static_cast<void>(tree_->setInteraction(*cell, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        // What it says in a child of its own height, which the cell
+        // centers (no text is centered upright by itself).
+        auto inner = box(*cell, ui::Layout{.shrink = 1}, 0);
+        if (inner.has_value()) {
+            static_cast<void>(tree_->setInteraction(*inner, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        }
+        return inner.has_value() ? std::optional<ui::Node>{*inner} : std::nullopt;
+    };
+    if (auto heading = kLine(true, 0); heading.has_value()) {
+        static_cast<void>(kCell(*heading, 0, 0));
+        if (auto cell = kCell(*heading, 1.0F, 0); cell.has_value()) {
+            static_cast<void>(words(*cell, "Key", look::kFaintInk, look::kLabelSize));
+        }
+        if (auto cell = kCell(*heading, 1.4F, 0); cell.has_value()) {
+            static_cast<void>(words(*cell, languageOf(kSourceLocale) + " source", look::kFaintInk, look::kLabelSize));
+        }
+        for (const auto& [kLocale, kData] : translations) {
+            const Value* kHeld = kData.find("entries");
+            std::size_t done = 0;
+            for (const std::string& kKey : entries->names()) {
+                done += kHeld != nullptr && kHeld->find(kKey) != nullptr ? 1 : 0;
+            }
+            if (auto cell = kCell(*heading, 1.4F, 0); cell.has_value()) {
+                static_cast<void>(words(
+                    *cell,
+                    languageOf(kLocale) + " " +
+                        std::to_string(entries->names().empty() ? 100 : done * 100 / entries->names().size()) + " %",
+                    look::kFaintInk,
+                    look::kLabelSize));
+            }
+        }
+    }
+    for (std::size_t item = 0; item < entries->names().size(); ++item) {
+        const std::string& kKey = entries->names()[item];
+        const std::string kPath = "entries." + kKey;
+        const auto kListed = std::ranges::find(entities_, kPath);
+        if (kListed == entities_.end()) {
+            continue;
+        }
+        const auto kEntity = static_cast<std::size_t>(kListed - entities_.begin());
+        auto line = kLine(false, kPath == entity_ ? kChosen : 0U);
+        if (!line.has_value()) {
+            return;
+        }
+        held_.canvasParts.emplace_back(*line, kEntity);
+        held_.canvasBoxes.emplace_back(*line, kEntity);
+        static_cast<void>(tree_->setRole(*line, ui::Role::Button));
+        static_cast<void>(tree_->setName(*line, kKey + " row"));
+        const bool kWhole = std::ranges::all_of(translations, [&kKey](const std::pair<std::string, Value>& each) {
+            const Value* kHeld = each.second.find("entries");
+            return kHeld != nullptr && kHeld->find(kKey) != nullptr;
+        });
+        if (auto cell = kCell(*line, 0, 0); cell.has_value()) {
+            static_cast<void>(
+                icon(*cell, kWhole ? Icon::Check : Icon::Warning, kWhole ? look::kReady : look::kWarn, 13));
+        }
+        if (auto cell = kCell(*line, 1.0F, 0); cell.has_value()) {
+            static_cast<void>(monoWords(*cell, kKey, look::kSoftInk, look::kSmallSize));
+        }
+        if (auto cell = kCell(*line, 1.4F, 0); cell.has_value()) {
+            static_cast<void>(words(*cell, messageCell(&entries->items()[item]), look::kInk, look::kBodySize));
+        }
+        for (const auto& [kLocale, kData] : translations) {
+            const Value* kHeld = kData.find("entries");
+            const Value* kEntry = kHeld != nullptr ? kHeld->find(kKey) : nullptr;
+            if (auto cell = kCell(*line, 1.4F, kEntry == nullptr ? 0x2A2214FFU : 0U); cell.has_value()) {
+                static_cast<void>(kEntry != nullptr ? words(*cell, messageCell(kEntry), look::kInk, look::kBodySize)
+                                                    : words(*cell, "missing", look::kWarn, look::kBodySize));
+            }
+        }
+    }
 }
 
 } // namespace rawframe::studio

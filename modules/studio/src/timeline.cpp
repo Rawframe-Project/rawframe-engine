@@ -59,14 +59,7 @@ std::span<const Value> itemsOf(const Value& clip, std::string_view name) {
 
 } // namespace
 
-void ShellParticipant::showTimeline(const Value& clip) {
-    clear(viewRows_);
-    viewFields_.clear();
-    clear(held_.cameraRows);
-    held_.canvasParts.clear();
-    held_.canvasBoxes.clear();
-    const Value* kDuration = clip.find("duration");
-    const double kLength = std::max(kDuration != nullptr ? kDuration->real().value_or(0) : 0, 0.01);
+std::map<std::string, std::string, std::less<>> ShellParticipant::boneNamesOf(const Value& clip) {
     // Each bone a track names by its skeleton's name for it, where the
     // skeleton is a document of the game's: else by the track's place.
     std::map<std::string, std::string, std::less<>> boneNames;
@@ -83,6 +76,18 @@ void ShellParticipant::showTimeline(const Value& clip) {
             }
         }
     }
+    return boneNames;
+}
+
+void ShellParticipant::showTimeline(const Value& clip) {
+    clear(viewRows_);
+    viewFields_.clear();
+    clear(held_.cameraRows);
+    held_.canvasParts.clear();
+    held_.canvasBoxes.clear();
+    const Value* kDuration = clip.find("duration");
+    const double kLength = std::max(kDuration != nullptr ? kDuration->real().value_or(0) : 0, 0.01);
+    const std::map<std::string, std::string, std::less<>> boneNames = boneNamesOf(clip);
     // A lane for each track, then one for the events and one for the sync
     // markers where the clip holds them; each lane's marks, its items'
     // rows' paths, and its name.
@@ -296,6 +301,102 @@ void ShellParticipant::dropKey(std::size_t at, float moved) {
     operation.add("path", Value::string(kPath + ".time"));
     operation.add("value", Value::real(kTo));
     commit(std::move(operation), kPath + " moved to " + timeText(kTo), kPath);
+}
+
+void ShellParticipant::showCurves() {
+    clear(held_.curvesRows);
+    const Value* kKind = sheet_.has_value() && chosen(Listed::Data) ? sheet_->find("kind") : nullptr;
+    const bool kClip = kKind != nullptr && kKind->text() != nullptr && *kKind->text() == "animation.clip";
+    std::optional<animation::Clip> read;
+    if (kClip) {
+        if (auto parsed = animation::readClip(document::write(*sheet_)); parsed.has_value()) {
+            read = std::move(*parsed);
+        }
+    }
+    if (!read.has_value() || read->tracks.empty()) {
+        if (auto none = box(held_.curvesColumn, ui::Layout{.shrink = 0, .padding = {14, 14, 12, 12}}, 0);
+            none.has_value()) {
+            held_.curvesRows.push_back(*none);
+            static_cast<void>(wrappedWords(*none,
+                                           kClip ? "This clip has no tracks yet."
+                                                 : "Curves show an animation clip's tracks over its time. Open a "
+                                                   ".rfanim clip from Assets.",
+                                           look::kFaintInk,
+                                           look::kBodySize));
+        }
+        return;
+    }
+    // Each track a row: its bone and channel, then its values over the
+    // clip as the engine samples them, each value a line of dots between
+    // the least and the most it reaches, x y z w in their colors (D927).
+    const std::span<const Value> kTracks = itemsOf(*sheet_, "tracks");
+    constexpr float kRowTall = 54;
+    constexpr std::size_t kAcross = 120;
+    const double kLength = std::max(read->duration, 0.01);
+    const std::map<std::string, std::string, std::less<>> kBones = boneNamesOf(*sheet_);
+    for (std::size_t track = 0; track < read->tracks.size() && track < kTracks.size() && track < 32; ++track) {
+        const animation::Track& kTrack = read->tracks[track];
+        auto line = box(held_.curvesColumn,
+                        ui::Layout{.height = ui::pixels(kRowTall),
+                                   .alignItems = ui::Align::Center,
+                                   .gap = 12,
+                                   .shrink = 0,
+                                   .padding = {12, 12, 4, 4},
+                                   .border = {0, 0, 0, 1}},
+                        0);
+        if (!line.has_value()) {
+            return;
+        }
+        held_.curvesRows.push_back(*line);
+        static_cast<void>(tree_->setLook(*line, ui::Look{.borderColor = look::kLine}));
+        const std::string* kBone = textOf(kTracks[track], "bone");
+        const std::string* kChannel = textOf(kTracks[track], "channel");
+        const auto kNamed = kBone != nullptr ? kBones.find(*kBone) : kBones.end();
+        if (auto named = box(*line, ui::Layout{.width = ui::pixels(kLabelWidth), .shrink = 0}, 0); named.has_value()) {
+            static_cast<void>(tree_->setLook(*named, ui::Look{.clip = true}));
+            static_cast<void>(words(*named,
+                                    (kNamed != kBones.end() ? kNamed->second : "track " + std::to_string(track + 1)) +
+                                        " \u00B7 " + (kChannel != nullptr ? *kChannel : std::string{}),
+                                    look::kSoftInk,
+                                    look::kLabelSize));
+        }
+        auto curve = box(*line, ui::Layout{.width = ui::pixels(0), .height = ui::share(1), .grow = 1}, kLaneFill);
+        if (!curve.has_value()) {
+            return;
+        }
+        static_cast<void>(tree_->setLook(*curve, ui::Look{.fill = kLaneFill, .radius = 4, .clip = true}));
+        const std::size_t kValues =
+            kTrack.channel == animation::Channel::Rotation                                                     ? 4
+            : kTrack.channel == animation::Channel::Translation || kTrack.channel == animation::Channel::Scale ? 3
+                                                                                                               : 1;
+        std::vector<std::array<double, 4>> samples;
+        double least = 0;
+        double most = 0;
+        for (std::size_t each = 0; each < kAcross; ++each) {
+            const double kTime = kLength * static_cast<double>(each) / static_cast<double>(kAcross - 1);
+            samples.push_back(each + 1 == kAcross ? animation::sampleTrackAtEnd(*read, kTrack)
+                                                  : animation::sampleTrack(*read, kTrack, kTime));
+            for (std::size_t value = 0; value < kValues; ++value) {
+                least = each == 0 && value == 0 ? samples.back()[value] : std::min(least, samples.back()[value]);
+                most = each == 0 && value == 0 ? samples.back()[value] : std::max(most, samples.back()[value]);
+            }
+        }
+        const double kSpan = most - least > 1e-9 ? most - least : 1;
+        constexpr float kInside = kRowTall - 8 - 14;
+        for (std::size_t each = 0; each < samples.size(); ++each) {
+            for (std::size_t value = 0; value < kValues; ++value) {
+                const double kHeight = (samples[each][value] - least) / kSpan;
+                static_cast<void>(
+                    box(*curve,
+                        ui::Layout{.width = ui::pixels(3),
+                                   .height = ui::pixels(3),
+                                   .placement = {.absolute = true,
+                                                 .x = ui::share(static_cast<float>(each) / static_cast<float>(kAcross)),
+                                                 .y = ui::pixels(4 + static_cast<float>(1 - kHeight) * kInside)}},
+                        kCurveColors[value]));
+            }
+        }
+    }
 }
 
 } // namespace rawframe::studio

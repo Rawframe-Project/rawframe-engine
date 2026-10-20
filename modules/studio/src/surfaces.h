@@ -63,7 +63,9 @@ inline constexpr auto kSurfaces = std::to_array<Surface>({
      "the right dock's Scene settings"},
     {"Profiler", SurfaceKind::Panel, "Bottom", "diagnostic span records; authoring.profile", ""},
     {"Frame", SurfaceKind::Panel, "Bottom", "authoring.preview's frame description; the capture file", ""},
+    {"Mixer", SurfaceKind::Panel, "Bottom", "the game's audio.mixer document; data.set", ""},
     {"Changes", SurfaceKind::Panel, "Bottom", "git", ""},
+    {"Curves", SurfaceKind::Panel, "Bottom", "the open clip's tracks as animation samples them", ""},
     {"Extension panels", SurfaceKind::Panel, "Bottom", "authoring.extension_panel", ""},
     // Document editors in the center's tabs.
     {"Scene", SurfaceKind::DocumentEditor, "Center", "the scene document", ""},

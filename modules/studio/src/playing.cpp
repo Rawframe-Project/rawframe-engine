@@ -1,4 +1,5 @@
 #include "rawframe/authoring_session/cooked_copy.h"
+#include "rawframe/render/device.h"
 #include "shell.h"
 
 #include <algorithm>
@@ -12,6 +13,29 @@
 #include <utility>
 
 namespace rawframe::studio {
+
+namespace {
+
+/// The picture a game streams into a viewport of `at`: its size, made
+/// smaller where its pixels would pass the UI's share of a frame's uploads
+/// and so never show (D927); drawn stretched over the viewport.
+std::array<std::uint32_t, 2> streamedSize(const ui::Rect& at) {
+    const double kWidth = at.width >= 64 ? std::floor(at.width) : 640.0;
+    const double kHeight = at.height >= 64 ? std::floor(at.height) : 360.0;
+    // Each row padded as a device copies it, 256 bytes.
+    const auto kBytes = [](double width, double height) {
+        return std::ceil(width * 4 / 256) * 256 * height;
+    };
+    const double kMost = render::kUiImageUploadBytes;
+    double scale = kBytes(kWidth, kHeight) > kMost ? std::sqrt(kMost / kBytes(kWidth, kHeight)) : 1.0;
+    while (scale > 0.1 && kBytes(std::floor(kWidth * scale), std::floor(kHeight * scale)) > kMost) {
+        scale -= 0.01;
+    }
+    return {static_cast<std::uint32_t>(std::max(64.0, std::floor(kWidth * scale))),
+            static_cast<std::uint32_t>(std::max(64.0, std::floor(kHeight * scale)))};
+}
+
+} // namespace
 
 void ShellParticipant::keepEditing() {
     if (!play_.has_value() || playing_.has_value() || stopping_.has_value()) {
@@ -49,16 +73,23 @@ void ShellParticipant::keepEditing() {
             showViewport();
         }
     }
-    if (scene_.empty() || !chosen(Listed::Scene) || cooking_.has_value()) {
+    if (cooking_.has_value()) {
         return;
     }
-    // Drawn from the game's content as Studio cooks it: cooked once first
-    // where nothing is yet.
+    // Cooked once on opening where it is behind, as an editor imports what
+    // it opens: the scene's view, the Assets' thumbnails and a material's
+    // preview are drawn from the cook (D927).
+    if (!editCooked_ && cookBehind()) {
+        editCooked_ = true;
+        cookOrStop();
+        return;
+    }
+    if (scene_.empty() || !chosen(Listed::Scene)) {
+        return;
+    }
+    // Drawn from the game's content as Studio cooks it: none before a cook.
     std::error_code error;
     if (!cookTool_.empty() && !std::filesystem::is_regular_file(cookAt_ / "content" / "content.manifest", error)) {
-        if (!std::exchange(editCooked_, true)) {
-            cookOrStop();
-        }
         return;
     }
     startPlaying(true);
@@ -92,20 +123,14 @@ void ShellParticipant::startPlaying(bool edited) {
     play_->viewport.reset();
     play_->device = device_;
     if (inViewport_.inViewport && !device_.has_value()) {
-        const ui::Rect kAt = tree_->contains(viewport_) ? tree_->placedRectOf(viewport_) : ui::Rect{};
-        play_->viewport =
-            std::array<std::uint32_t, 2>{kAt.width >= 64 ? static_cast<std::uint32_t>(kAt.width) : 640U,
-                                         kAt.height >= 64 ? static_cast<std::uint32_t>(kAt.height) : 360U};
+        play_->viewport = streamedSize(tree_->contains(viewport_) ? tree_->placedRectOf(viewport_) : ui::Rect{});
     }
     // With the players chosen, each a client (D804); edited, one, in the
     // viewport (D912).
     play_->players = edited ? 1 : players_;
     play_->edited = edited;
     if (edited && !play_->viewport.has_value()) {
-        const ui::Rect kAt = tree_->contains(viewport_) ? tree_->placedRectOf(viewport_) : ui::Rect{};
-        play_->viewport =
-            std::array<std::uint32_t, 2>{kAt.width >= 64 ? static_cast<std::uint32_t>(kAt.width) : 640U,
-                                         kAt.height >= 64 ? static_cast<std::uint32_t>(kAt.height) : 360U};
+        play_->viewport = streamedSize(tree_->contains(viewport_) ? tree_->placedRectOf(viewport_) : ui::Rect{});
     }
     auto started = Play::start(*play_);
     if (!started.has_value()) {

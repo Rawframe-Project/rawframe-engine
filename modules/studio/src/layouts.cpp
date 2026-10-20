@@ -22,15 +22,17 @@ consteval std::string_view bottom(std::string_view name) {
 
 std::string_view ShellParticipant::tabOf(Dock pane) {
     // In the order of the dock's panes.
-    constexpr std::array<std::string_view, 9> kTabs = {bottom("Assets"),
-                                                       bottom("History"),
-                                                       bottom("Console"),
-                                                       bottom("Network"),
-                                                       placed("Environment", SurfaceKind::Panel, "Right"),
-                                                       bottom("Profiler"),
-                                                       bottom("Frame"),
-                                                       bottom("Changes"),
-                                                       bottom("Extension panels")};
+    constexpr std::array<std::string_view, 11> kTabs = {bottom("Assets"),
+                                                        bottom("History"),
+                                                        bottom("Console"),
+                                                        bottom("Network"),
+                                                        placed("Environment", SurfaceKind::Panel, "Right"),
+                                                        bottom("Profiler"),
+                                                        bottom("Frame"),
+                                                        bottom("Mixer"),
+                                                        bottom("Changes"),
+                                                        bottom("Curves"),
+                                                        bottom("Extension panels")};
     static_assert(kTabs.size() == static_cast<std::size_t>(Dock::Panels) + 1);
     return kTabs.at(static_cast<std::size_t>(pane));
 }

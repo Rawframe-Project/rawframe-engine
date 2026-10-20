@@ -116,6 +116,9 @@ struct ActionButton {
     /// field pressed next, on this node or one chosen first, takes a
     /// connection from it (D733).
     bool connects = false;
+    /// The game's document `opens` opened in its place: a material
+    /// instance's base (D927).
+    std::string opens;
 };
 
 /// A named action (SPEC-0051 Part 1, D777): its menu's row, its palette

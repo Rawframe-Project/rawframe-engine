@@ -352,7 +352,9 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(networkTab_, tab(kDockTabs, kBottom("Network")));
     RAWFRAME_TRY_ASSIGN(profilerTab_, tab(kDockTabs, kBottom("Profiler")));
     RAWFRAME_TRY_ASSIGN(held_.frameTab, tab(kDockTabs, kBottom("Frame")));
+    RAWFRAME_TRY_ASSIGN(held_.mixerTab, tab(kDockTabs, kBottom("Mixer")));
     RAWFRAME_TRY_ASSIGN(held_.changesTab, tab(kDockTabs, kBottom("Changes")));
+    RAWFRAME_TRY_ASSIGN(held_.curvesTab, tab(kDockTabs, kBottom("Curves")));
     RAWFRAME_TRY_ASSIGN(held_.panelsTab, tab(kDockTabs, kBottom("Extension panels")));
     RAWFRAME_TRY(makeAssets());
     RAWFRAME_TRY_ASSIGN(historyColumn_, pane("History"));
@@ -361,7 +363,9 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY(makeEnvironment());
     RAWFRAME_TRY(makeProfiler());
     RAWFRAME_TRY(makeFrame());
+    RAWFRAME_TRY(makeMixer());
     RAWFRAME_TRY(makeChanges());
+    RAWFRAME_TRY_ASSIGN(held_.curvesColumn, pane("Curves"));
     RAWFRAME_TRY(makeExtensionPanels());
     RAWFRAME_TRY(tree_->attach(bottomDock_, scenesColumn_));
     dockShown_ = Dock::Assets;
@@ -406,7 +410,9 @@ void ShellParticipant::showDock(Dock pane) {
                : dock == Dock::Environment ? held_.environmentColumn
                : dock == Dock::Profiler    ? held_.profilerColumn
                : dock == Dock::Frame       ? held_.frameColumn
+               : dock == Dock::Mixer       ? held_.mixerColumn
                : dock == Dock::Changes     ? held_.changesColumn
+               : dock == Dock::Curves      ? held_.curvesColumn
                                            : held_.panelsColumn;
     };
     if (pane != dockShown_) {
@@ -421,12 +427,18 @@ void ShellParticipant::showDock(Dock pane) {
     setTab(environmentTab_, pane == Dock::Environment);
     setTab(profilerTab_, pane == Dock::Profiler);
     setTab(held_.frameTab, pane == Dock::Frame);
+    setTab(held_.mixerTab, pane == Dock::Mixer);
     setTab(held_.changesTab, pane == Dock::Changes);
+    setTab(held_.curvesTab, pane == Dock::Curves);
     setTab(held_.panelsTab, pane == Dock::Panels);
     if (pane == Dock::Console) {
         showConsole();
     } else if (pane == Dock::Environment) {
         showEnvironment();
+    } else if (pane == Dock::Mixer) {
+        showMixer();
+    } else if (pane == Dock::Curves) {
+        showCurves();
     } else if (pane == Dock::Changes) {
         readChanges();
     } else if (pane == Dock::Panels) {
@@ -712,6 +724,10 @@ void ShellParticipant::showScene(std::size_t at) {
     components_ = 0;
     findField_.reset();
     held_.timelineScale = 0;
+    // The Curves tab follows the open document: none but a clip's (D927).
+    if (dockShown_ == Dock::Curves && !chosen(Listed::Data)) {
+        showCurves();
+    }
     // The played game's World in place of the document's (D808).
     if (live_.on) {
         showLive();

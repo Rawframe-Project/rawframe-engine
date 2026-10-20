@@ -346,7 +346,9 @@ private:
         Environment,
         Profiler,
         Frame,
+        Mixer,
         Changes,
+        Curves,
         Panels
     };
     /// The bottom dock showing `pane`.
@@ -713,6 +715,14 @@ private:
     /// The data document's keyed lists as tables in the center, a row each,
     /// pressed to choose it (D923).
     void showDataTables();
+    /// An input actions document as the design's Data screen draws it: a
+    /// table for each context, each action's kind and what each device
+    /// presses for it as chips (D927).
+    void showActionTables();
+    /// A strings document as the design's Strings screen draws it: each
+    /// key, its source text, and each translation's beside it, a missing
+    /// one marked (D927).
+    void showStringTables();
     /// A graph's nodes laid out in the center by how far wires run into
     /// them, wires drawn (D819); `prefix` what each node id is among the
     /// rows' entities. A node pressed is its row pressed.
@@ -764,12 +774,16 @@ private:
     /// the entity column, read with the instance from the session
     /// (`materials.read_instance`, D722); those it overrides brighter.
     void showMaterial();
-    /// The input or switch at `at`: its type, its base's default, and the
-    /// instance's override as a field.
+    /// The input or switch at `at` chosen, its field in the Inspector
+    /// taking the keys.
     void showInput(std::size_t at);
+    /// In the center, what the instance is, its preview, and its base to
+    /// open; in the Inspector, every parameter as a field (D927).
+    void showInstanceCard();
+    void showInstanceSheet();
     /// `text` set as the chosen input's override (`materials.set_override`),
     /// typed as a part's is: nothing unsets it.
-    void setOverride(const std::string& text);
+    void setOverride(const std::string& input, const std::string& text);
     /// The chosen material graph's nodes in the entity column, each by its
     /// identity's first eight digits and its type, read whole from the
     /// session (`materials.read_graph`, D730).
@@ -912,6 +926,18 @@ private:
     void showLiveEntity(const std::string& entity);
     void readLive(double seconds);
     bool pressLive(ui::Node node);
+    /// The Mixer tab's pane, and its strips: the game's mixer document's
+    /// buses, the master first, each its volume on a fader and its
+    /// effects; a strip pressed opens the document at its bus (D927).
+    result::Status makeMixer();
+    void showMixer();
+    bool pressMixer(ui::Node node);
+    /// The Curves tab: the open clip's tracks, each its values over the
+    /// clip as the engine samples them (D927).
+    void showCurves();
+    /// A clip's bones by its skeleton's names for them, where the skeleton
+    /// is a document of the game's.
+    std::map<std::string, std::string, std::less<>> boneNamesOf(const Value& clip);
 
     /// The game let go and asked to stop.
     void stopPlaying();

@@ -186,7 +186,10 @@ result::Status Play::launch() {
     const auto kEndpointPort = static_cast<std::uint16_t>(kServerPort + 1);
     const auto kServerEndpointPort = static_cast<std::uint16_t>(kServerPort + 2);
     const std::filesystem::path& kAt = directory_;
-    for (const char* kLeft : {"server.fingerprint", "client.fingerprint", "picture"}) {
+    // What the last play left, the client's log among it: the Console reads
+    // that file from its start before this play's client is launched, and
+    // would show the last play's lines as this one's.
+    for (const char* kLeft : {"server.fingerprint", "client.fingerprint", "picture", "client.log"}) {
         std::error_code error;
         std::filesystem::remove(kAt / kLeft, error);
     }

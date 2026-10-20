@@ -213,14 +213,17 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if ((node == held_.inspectorTab || node == held_.sceneSettingsTab) && node != ui::Node{}) {
         showRight(node == held_.sceneSettingsTab);
     } else if (node == assetsTab_ || node == historyTab_ || node == consoleTab_ || node == networkTab_ ||
-               node == profilerTab_ || node == held_.frameTab || node == held_.changesTab || node == held_.panelsTab) {
+               node == profilerTab_ || node == held_.frameTab || node == held_.mixerTab || node == held_.changesTab ||
+               node == held_.curvesTab || node == held_.panelsTab) {
         showDock(node == assetsTab_         ? Dock::Assets
                  : node == historyTab_      ? Dock::History
                  : node == consoleTab_      ? Dock::Console
                  : node == networkTab_      ? Dock::Network
                  : node == profilerTab_     ? Dock::Profiler
                  : node == held_.frameTab   ? Dock::Frame
+                 : node == held_.mixerTab   ? Dock::Mixer
                  : node == held_.changesTab ? Dock::Changes
+                 : node == held_.curvesTab  ? Dock::Curves
                                             : Dock::Panels);
     } else if (pressNetwork(node) || pressEnvironment(node) || pressCapture(node) || pressChanges(node)) {
         return;
@@ -359,6 +362,14 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (const auto kAction = std::ranges::find(actions_, node, &ActionButton::node); kAction != actions_.end()) {
         endEdit();
         const ActionButton kAsked = *kAction;
+        if (!kAsked.opens.empty()) {
+            if (const auto kOpened = std::ranges::find(scenes_, kAsked.opens); kOpened != scenes_.end()) {
+                showScene(static_cast<std::size_t>(kOpened - scenes_.begin()));
+            } else {
+                say(kAsked.opens + " is not among the game's documents");
+            }
+            return;
+        }
         if (kAsked.connects) {
             connecting_ = std::pair{entity_, kAsked.field};
             say("choose the input to connect " + kAsked.field + " to");
@@ -405,7 +416,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         } else {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         }
-    } else if (pressLive(node)) {
+    } else if (pressLive(node) || pressMixer(node)) {
         return;
     } else if (const auto kEntity = std::ranges::find(entityRows_, node); kEntity != entityRows_.end()) {
         // Held, it may be dragged onto another (D785).
@@ -707,7 +718,7 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
         return;
     }
     if (row.role == FieldRow::Role::Override) {
-        setOverride(text);
+        setOverride(row.field, text);
         return;
     }
     if (row.role == FieldRow::Role::ImportSetting) {
