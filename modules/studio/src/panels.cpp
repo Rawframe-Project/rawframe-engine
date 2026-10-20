@@ -714,6 +714,7 @@ void ShellParticipant::showScene(std::size_t at) {
     clear(componentRows_);
     actions_.clear();
     entities_.clear();
+    held_.broughtFrom.clear();
     names_.clear();
     brought_.clear();
     removed_.clear();
@@ -847,11 +848,23 @@ void ShellParticipant::showScene(std::size_t at) {
         const Value* brought = each.find("brought");
         const Value* removed = each.find("removed");
         const bool kRemoved = removed != nullptr && removed->truth().value_or(false);
+        if (const Value* kFrom = brought != nullptr ? brought->find("scene") : nullptr;
+            kFrom != nullptr && kFrom->text() != nullptr) {
+            held_.broughtFrom[*id->text()] = *kFrom->text();
+        }
         std::string label = name != nullptr && name->text() != nullptr ? *name->text() : std::string{};
         if (label.empty() && brought != nullptr) {
+            // Named by the scene it is placed from and which placing, as
+            // `platform 2` (D927), else by its instance's place.
             const Value* instance = brought->find("instance");
-            label = "instance " + (instance != nullptr ? document::writeCompact(*instance) : std::string{"?"}) + "  " +
-                    id->text()->substr(0, 8);
+            const Value* from = brought->find("scene");
+            const auto kSource = from != nullptr && from->text() != nullptr
+                                     ? std::ranges::find(browser_.sources, *from->text(), &ListedSource::id)
+                                     : browser_.sources.end();
+            const std::int64_t kPlace = instance != nullptr ? instance->integer().value_or(0) : 0;
+            label = kSource != browser_.sources.end()
+                        ? std::filesystem::path{kSource->path}.stem().string() + " " + std::to_string(kPlace + 1)
+                        : "instance " + std::to_string(kPlace) + "  " + id->text()->substr(0, 8);
         }
         if (kRemoved) {
             label += "  (removed)";
@@ -1052,6 +1065,41 @@ void ShellParticipant::showEntity(std::size_t at) {
     if (auto head = inspectorHead(names_[at], brought_[at], catalog_.offers("scene.rename_entity") && !brought_[at]);
         head.has_value() && head->has_value()) {
         fields_.push_back(FieldRow{.value = **head, .role = FieldRow::Role::Name, .field = "name"});
+    }
+    // An instance's entity says where its values come from, and opens its
+    // source to edit it, as an editor's prefab does (D927).
+    if (const auto kFrom = held_.broughtFrom.find(entity_); brought_[at] && kFrom != held_.broughtFrom.end()) {
+        const auto kSource = std::ranges::find(browser_.sources, kFrom->second, &ListedSource::id);
+        const std::string kPath = kSource != browser_.sources.end() ? kSource->path : std::string{};
+        if (auto note = box(componentsColumn_,
+                            ui::Layout{.direction = ui::Direction::Column,
+                                       .gap = 8,
+                                       .shrink = 0,
+                                       .padding = {10, 10, 8, 8},
+                                       .margin = {10, 10, 4, 6},
+                                       .border = {1, 1, 1, 1}},
+                            0);
+            note.has_value()) {
+            componentRows_.push_back(*note);
+            static_cast<void>(
+                tree_->setLook(*note, ui::Look{.fill = 0x241A3AFFU, .borderColor = 0x4B3A78FFU, .radius = 6}));
+            if (auto said = box(*note, ui::Layout{.width = ui::share(1), .shrink = 0}, 0); said.has_value()) {
+                static_cast<void>(
+                    wrappedWords(*said,
+                                 (kPath.empty() ? std::string{"Placed from another scene"} : "Placed from " + kPath) +
+                                     ": its values come from there, and a value changed here "
+                                     "offers Revert.",
+                                 look::kSoftInk,
+                                 look::kLabelSize));
+            }
+            if (!kPath.empty() && std::ranges::contains(scenes_, kPath)) {
+                if (auto opened =
+                        textButton(*note, Icon::Prefab, "Open " + std::filesystem::path{kPath}.filename().string());
+                    opened.has_value()) {
+                    actions_.push_back(ActionButton{.node = *opened, .opens = kPath});
+                }
+            }
+        }
     }
     const std::optional<Value> kRead = read(scene_, "scene.read_entity", entity_);
     const Value* components = kRead.has_value() ? kRead->find("components") : nullptr;

@@ -35,6 +35,22 @@ std::array<std::uint32_t, 2> streamedSize(const ui::Rect& at) {
             static_cast<std::uint32_t>(std::max(64.0, std::floor(kHeight * scale)))};
 }
 
+/// Whether a game's description makes it a 2D one: its physics the 2D
+/// engine's, none of the 3D's (D927).
+bool flatGame(const std::filesystem::path& description) {
+    const std::string kText = authoring_session::readFile(description).value_or("");
+    const auto kSays = [&kText](std::string_view word) {
+        for (std::size_t at = kText.find(word); at != std::string::npos; at = kText.find(word, at + 1)) {
+            if ((at == 0 || kText[at - 1] == '\n') && at + word.size() < kText.size() &&
+                (kText[at + word.size()] == ' ' || kText[at + word.size()] == '\n')) {
+                return true;
+            }
+        }
+        return false;
+    };
+    return kSays("physics2d") && !kSays("physics3d");
+}
+
 } // namespace
 
 void ShellParticipant::keepEditing() {
@@ -66,6 +82,11 @@ void ShellParticipant::keepEditing() {
         if (const auto kFirst = std::ranges::find(listed_, Listed::Scene);
             kFirst != listed_.end() && static_cast<std::size_t>(kFirst - listed_.begin()) < scenes_.size()) {
             showScene(static_cast<std::size_t>(kFirst - listed_.begin()));
+            // A 2D game opens on the 2D view, as an editor opens a 2D
+            // project (D927).
+            if (!held_.flat && flatGame(description_)) {
+                seeIn2D(true);
+            }
         } else if (!documentChosen()) {
             // A game with no scene, its world made in Kest, still has its
             // viewport, where Play shows it (D923).

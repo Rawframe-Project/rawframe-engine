@@ -26,6 +26,7 @@
 namespace rawframe::studio {
 
 /// A graph laid out on the canvas (D819), a clip on its timeline (D827).
+inline constexpr diagnostics::EventIdentity kNoDevice{"studio", "studio_no_device"};
 inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canvas"};
 inline constexpr diagnostics::EventIdentity kBlockoutShown{"studio", "studio_blockout"};
 inline constexpr diagnostics::EventIdentity kPlanShown{"studio", "studio_plan"};
@@ -329,6 +330,12 @@ struct EditorsHeld {
     ui::Node mixerColumn{};
     std::vector<std::pair<ui::Node, std::string>> mixerStrips;
     std::string mixerDocument;
+    /// Whether this opening of the game kept its picture for the start
+    /// screen (D927).
+    bool gamePictured = false;
+    /// Each listed entity an instance brought, by its identity: the scene
+    /// it comes from, by that scene's resource identity (D927).
+    std::map<std::string, std::string, std::less<>> broughtFrom;
     std::vector<ui::Node> mixerRows;
     /// The Curves tab and its pane (D927).
     ui::Node curvesTab{};

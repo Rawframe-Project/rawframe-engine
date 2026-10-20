@@ -41,6 +41,12 @@ void ShellParticipant::followPicture() {
     const bool kFirst = inViewport_.picture == nullptr;
     inViewport_.picture = std::make_shared<const texture::Texture>(std::move(made));
     ++inViewport_.picturesShown;
+    // Kept once an opening, a few pictures in, as the start screen's tile
+    // for the game (D927).
+    if (!held_.gamePictured && inViewport_.picturesShown >= 12) {
+        held_.gamePictured = true;
+        keepGamePicture(*inViewport_.picture);
+    }
     // The game's first picture: it plays now, which the status line says
     // until something else is said (D923).
     if (kFirst && !playing_->edited()) {

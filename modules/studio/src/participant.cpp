@@ -23,7 +23,8 @@ constexpr std::string_view kMaybe[] = {view::kUiPointing.name,
                                        world_tooling::kForwarding.name,
                                        view::kFilesDropped.name,
                                        view::kFileDialogs.name,
-                                       view::kWindowClosing.name};
+                                       view::kWindowClosing.name,
+                                       render::kDevice.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 result::Status misconfigured(std::string_view why) {
@@ -278,6 +279,10 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     if (context.has(view::kWindowClosing.name)) {
         RAWFRAME_TRY_ASSIGN(closing_, context.capability(view::kWindowClosing));
     }
+    // The device Studio draws with, to know when there is none (D927).
+    if (context.has(render::kDevice.name)) {
+        RAWFRAME_TRY_ASSIGN(deviceHolder_, context.capability(render::kDevice));
+    }
     if (context.has(view::kFileDialogs.name)) {
         RAWFRAME_TRY_ASSIGN(dialogs_, context.capability(view::kFileDialogs));
     }
@@ -487,6 +492,21 @@ result::Status ShellParticipant::start(composition::ParticipantContext& context)
 
 void ShellParticipant::runHostPhase(composition::HostPhase, const composition::HostFrame&) noexcept {
     drawn_ = nullptr;
+    // No device, so not a word of Studio can be drawn: the device said why
+    // in the platform's box (render.unavailable_says), and Studio closes
+    // rather than stand as an empty window (D927).
+    if (deviceHolder_ != nullptr && !deviceFailed_) {
+        if (const std::optional<std::string> kWhy = deviceHolder_->failure(); kWhy.has_value()) {
+            deviceFailed_ = true;
+            emitter_.log(diagnostics::Severity::Error,
+                         kNoDevice,
+                         "Studio has no device to draw with, and closes",
+                         {diagnostics::field("reason", std::string_view{*kWhy})});
+            if (closing_ != nullptr) {
+                closing_->ask();
+            }
+        }
+    }
     // A screen reader's press is a pointer's on the node it names (D575);
     // Studio moves no focus of its own, so one it asks for is not taken. Its
     // edit of a field is typing into it, the field begun as a press begins

@@ -29,6 +29,12 @@ RAWFRAME_TEST(ARecordIsALineWithItsLevelAndPlace) {
     }
     RAWFRAME_EXPECT(kLine->at->file == "game/scripts/move.kest");
     RAWFRAME_EXPECT(kLine->at->line == 12 && kLine->at->column == 3);
+    // A record saying no error, its short values instead (D927).
+    const auto kSaid = consoleLineOf(R"({"kind":"log","severity":"info","code":"lifecycle","message":"host lifecycle",)"
+                                     R"("fields":{"state":"draining","iterations":12,"reason":"stopped"}})",
+                                     ConsoleLine::Source::Server);
+    RAWFRAME_EXPECT(kSaid.has_value() &&
+                    kSaid->text == "lifecycle: host lifecycle; state draining, iterations 12, reason stopped");
     RAWFRAME_EXPECT(!consoleLineOf(R"({"kind":"trace"})", ConsoleLine::Source::Client).has_value());
     RAWFRAME_EXPECT(!consoleLineOf("not a record", ConsoleLine::Source::Client).has_value());
 }

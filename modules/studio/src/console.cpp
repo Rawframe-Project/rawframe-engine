@@ -105,17 +105,39 @@ std::optional<ConsoleLine> consoleLineOf(std::string_view record, ConsoleLine::S
     // What went wrong, said in its fields, after what the record is; and a
     // place in the game's own files any of them names.
     if (const Value* fields = kParsed->find("fields"); fields != nullptr) {
+        bool said = false;
         for (const std::string_view kName : {"error", "report", "diagnostic", "status"}) {
             const std::string_view kSaid = textOf(fields->find(kName));
             if (kSaid.empty()) {
                 continue;
             }
+            said = true;
             if (line.text.size() < 400) {
                 line.text += "; " + std::string{kSaid.substr(0, 400)};
             }
             if (!line.at.has_value()) {
                 line.at = gamePlaceIn(kSaid);
             }
+        }
+        // Else its first few short values, each by its field's name, so a
+        // line says what happened, as `state draining, reason stopped`
+        // (D927).
+        std::string values;
+        for (std::size_t each = 0; !said && each < fields->names().size() && each < 4; ++each) {
+            const Value& kValue = fields->items()[each];
+            std::string shown;
+            if (kValue.kind() == Value::Kind::String) {
+                shown = *kValue.text();
+            } else if (kValue.kind() == Value::Kind::Number || kValue.kind() == Value::Kind::Bool) {
+                shown = document::writeCompact(kValue);
+            }
+            if (shown.empty() || shown.size() > 40 || shown.find('\n') != std::string::npos) {
+                continue;
+            }
+            values += (values.empty() ? "" : ", ") + fields->names()[each] + " " + shown;
+        }
+        if (!values.empty()) {
+            line.text += "; " + values;
         }
     }
     return line;

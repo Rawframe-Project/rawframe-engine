@@ -20,6 +20,7 @@
 #include "rawframe/composition/configuration.h"
 #include "rawframe/font_import/sanitize.h"
 #include "rawframe/process/child.h"
+#include "rawframe/render/device.h"
 #include "rawframe/studio/registrar.h"
 #include "rawframe/ui/access.h"
 #include "rawframe/ui/frames.h"
@@ -77,6 +78,10 @@ inline constexpr diagnostics::EventIdentity kBrowsed{"studio", "studio_assets"};
 inline constexpr diagnostics::EventIdentity kPlayedRecord{"studio", "studio_played"};
 /// The image key the viewport's picture is drawn under (D789).
 inline constexpr std::uint64_t kViewportImage = 0x5649455750ULL;
+/// The palette's found rows by their codes, past every command's place: an
+/// entity's place from the first, an asset's from the second (D927).
+inline constexpr std::size_t kFoundEntity = std::size_t{1} << 20U;
+inline constexpr std::size_t kFoundAsset = std::size_t{2} << 20U;
 inline constexpr diagnostics::EventIdentity kShown{"studio", "studio_shown"};
 /// Studio's window read by assistive technology (D575), or why not.
 inline constexpr diagnostics::EventIdentity kAccessible{"studio", "studio_accessibility_ready"};
@@ -395,7 +400,8 @@ private:
     /// The menu at `at` in a popup under its button, or closed if it is
     /// the one open.
     /// A menu's line for `command`, lit where `lit` (D923).
-    result::Result<ui::Node> menuLine(ui::Node popup, const Command& command, bool lit);
+    result::Result<ui::Node>
+    menuLine(ui::Node popup, const Command& command, bool lit, std::optional<bool> checked = std::nullopt);
     void showMenu(std::size_t at);
 
     /// The commands whose names hold `typed`, in a popup under the
@@ -408,6 +414,9 @@ private:
 
     /// The palette's field given the keyboard, emptied, its matches all.
     void openPalette();
+    /// What the palette found, by its code: an entity at kFoundEntity and
+    /// on, an asset at kFoundAsset and on (D927).
+    void runFound(std::size_t code);
 
     /// The palette's field let go, if it held the keyboard, reading its hint.
     void closePalette();
@@ -900,6 +909,11 @@ private:
     void showExtensionPanels();
     /// Studio's own directory, made the first time a tool needs it.
     std::optional<std::filesystem::path> ownDirectory();
+    /// Where a game's picture is kept for the start screen, beside the
+    /// preferences: none without them (D927).
+    [[nodiscard]] std::optional<std::filesystem::path> gamePicturePath(const std::filesystem::path& description) const;
+    /// The viewport's `picture` made small and kept as the open game's.
+    void keepGamePicture(const texture::Texture& picture);
     /// The Export dialog (D872), from the File menu: a target (desktop,
     /// web, Android, iOS), the output directory, the title, and for a
     /// phone the address it reaches the server by; the export run as
@@ -1173,6 +1187,8 @@ private:
     view::FileDialogs* dialogs_ = nullptr;
     /// Where Quit asks the window to close (D923); none without a window.
     view::WindowClosing* closing_ = nullptr;
+    render::DeviceHolder* deviceHolder_ = nullptr;
+    bool deviceFailed_ = false;
     std::uint64_t dialogTickets_ = 0;
     std::vector<std::pair<std::uint64_t, std::string>> dialogsAsked_;
     std::uint64_t made_ = 0;

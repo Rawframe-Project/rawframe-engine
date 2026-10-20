@@ -127,10 +127,14 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     // closes what is open (D777).
     if (const auto kLine = std::ranges::find(popupRows_, node, &std::pair<ui::Node, std::size_t>::first);
         kLine != popupRows_.end()) {
-        const std::string kName = commands_[kLine->second].name;
+        const std::size_t kCode = kLine->second;
         closePalette();
         closePopup();
-        static_cast<void>(runCommand(kName));
+        if (kCode >= kFoundEntity) {
+            runFound(kCode);
+        } else {
+            static_cast<void>(runCommand(commands_[kCode].name));
+        }
         return;
     }
     if (const auto kMenu = std::ranges::find(menus_, node, &std::pair<ui::Node, std::string>::first);

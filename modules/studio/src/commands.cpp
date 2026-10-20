@@ -470,7 +470,8 @@ bool ShellParticipant::commandOn(std::string_view name) const {
     return (name == kFlat && held_.flat) || (name == kTilted && !held_.flat);
 }
 
-result::Result<ui::Node> ShellParticipant::menuLine(ui::Node popup, const Command& command, bool lit) {
+result::Result<ui::Node>
+ShellParticipant::menuLine(ui::Node popup, const Command& command, bool lit, std::optional<bool> checked) {
     // A line as the design's menus (D923): its name, and its key at the
     // end in the fixed-width face; lit where it is on, or the first match.
     RAWFRAME_TRY_ASSIGN(const ui::Node kLine,
@@ -482,6 +483,26 @@ result::Result<ui::Node> ShellParticipant::menuLine(ui::Node popup, const Comman
                                        .padding = {10, 10, 0, 0}},
                             0));
     RAWFRAME_TRY(tree_->setLook(kLine, ui::Look{.fill = lit ? kChosen : 0U, .radius = 4}));
+    // A checkbox first where it says what is on (D927).
+    if (checked.has_value()) {
+        RAWFRAME_TRY_ASSIGN(const ui::Node kCheck,
+                            box(kLine,
+                                ui::Layout{.width = ui::pixels(14),
+                                           .height = ui::pixels(14),
+                                           .justify = ui::Justify::Center,
+                                           .alignItems = ui::Align::Center,
+                                           .shrink = 0,
+                                           .border = {1, 1, 1, 1}},
+                                0));
+        RAWFRAME_TRY(tree_->setLook(kCheck,
+                                    ui::Look{.fill = *checked ? look::kAccent : 0U,
+                                             .borderColor = *checked ? look::kAccent : look::kEdge,
+                                             .radius = 3}));
+        RAWFRAME_TRY(tree_->setInteraction(kCheck, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        if (*checked) {
+            RAWFRAME_TRY(icon(kCheck, Icon::Check, look::kInk, 11));
+        }
+    }
     RAWFRAME_TRY_ASSIGN(const ui::Node kName, box(kLine, ui::Layout{.width = ui::pixels(0), .grow = 1}, 0));
     RAWFRAME_TRY(words(kName, command.name, look::kRowInk, look::kBodySize));
     RAWFRAME_TRY(tree_->setInteraction(kName, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
@@ -547,7 +568,13 @@ void ShellParticipant::showMenu(std::size_t at) {
                 return;
             }
         }
-        auto line = menuLine(*popup, kCommand, kPill && commandOn(kCommand.name));
+        // The Show pill's rows each a checkbox, as the design's overlays
+        // menu (D927); the other pills' row that is on lit.
+        const bool kChecked = menus_[at].second == "Show";
+        auto line = menuLine(*popup,
+                             kCommand,
+                             !kChecked && kPill && commandOn(kCommand.name),
+                             kChecked ? std::optional<bool>{commandOn(kCommand.name)} : std::nullopt);
         if (!line.has_value()) {
             return;
         }
@@ -582,15 +609,111 @@ void ShellParticipant::showMatches(std::string_view typed) {
     static_cast<void>(tree_->setName(*popup, "matches"));
     popup_ = *popup;
     const std::string kWanted = lowered(typed);
-    for (std::size_t each = 0; each < commands_.size() && popupRows_.size() < 12; ++each) {
+    // As the design's palette (D927): the commands, then with words typed
+    // the open scene's entities and the game's assets they name, each
+    // under its heading.
+    const std::size_t kMostCommands = kWanted.empty() ? 12 : 7;
+    const auto kHeading = [this, &popup](std::string_view text) {
+        if (auto heading = box(*popup, ui::Layout{.shrink = 0, .padding = {10, 10, 8, 3}}, 0); heading.has_value()) {
+            static_cast<void>(monoWords(*heading, text, look::kFaintInk, look::kSmallSize));
+        }
+    };
+    const auto kFound = [this, &popup](std::string_view name, std::string_view quiet, Icon which, std::size_t code) {
+        auto line = box(*popup,
+                        ui::Layout{.height = ui::pixels(28),
+                                   .alignItems = ui::Align::Center,
+                                   .gap = 8,
+                                   .shrink = 0,
+                                   .padding = {10, 10, 0, 0}},
+                        0);
+        if (!line.has_value()) {
+            return;
+        }
+        static_cast<void>(tree_->setLook(*line, ui::Look{.fill = popupRows_.empty() ? kChosen : 0U, .radius = 4}));
+        static_cast<void>(icon(*line, which, look::kEntityInk, 14));
+        if (auto named = box(*line, ui::Layout{.width = ui::pixels(0), .grow = 1}, 0); named.has_value()) {
+            static_cast<void>(tree_->setLook(*named, ui::Look{.clip = true}));
+            static_cast<void>(words(*named, name, look::kRowInk, look::kBodySize));
+            static_cast<void>(tree_->setInteraction(*named, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        }
+        if (auto said = box(*line, ui::Layout{.shrink = 0}, 0); said.has_value()) {
+            static_cast<void>(monoWords(*said, quiet, look::kFaintInk, look::kSmallSize));
+            static_cast<void>(tree_->setInteraction(*said, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
+        }
+        static_cast<void>(tree_->setRole(*line, ui::Role::Button));
+        static_cast<void>(tree_->setName(*line, std::string{name}));
+        popupRows_.emplace_back(*line, code);
+    };
+    bool headed = false;
+    for (std::size_t each = 0; each < commands_.size() && popupRows_.size() < kMostCommands; ++each) {
         if (commands_[each].name == kPalette || !lowered(commands_[each].name).contains(kWanted)) {
             continue;
+        }
+        if (!kWanted.empty() && !std::exchange(headed, true)) {
+            kHeading("COMMANDS");
         }
         auto line = menuLine(*popup, commands_[each], popupRows_.empty());
         if (!line.has_value()) {
             return;
         }
         popupRows_.emplace_back(*line, each);
+    }
+    if (kWanted.empty()) {
+        return;
+    }
+    headed = false;
+    std::size_t entities = 0;
+    for (std::size_t each = 0; each < entities_.size() && !documentChosen() && entities < 5; ++each) {
+        if (each >= names_.size() || names_[each].empty() || !lowered(names_[each]).contains(kWanted)) {
+            continue;
+        }
+        if (!std::exchange(headed, true)) {
+            std::string scene = std::filesystem::path{scene_}.filename().string();
+            std::ranges::transform(scene, scene.begin(), [](char letter) {
+                return static_cast<char>(std::toupper(static_cast<unsigned char>(letter)));
+            });
+            kHeading("ENTITIES IN " + scene);
+        }
+        kFound(names_[each], "entity", Icon::Cube, kFoundEntity + each);
+        ++entities;
+    }
+    headed = false;
+    std::size_t assets = 0;
+    for (std::size_t each = 0; each < browser_.sources.size() && assets < 5; ++each) {
+        if (!lowered(browser_.sources[each].path).contains(kWanted)) {
+            continue;
+        }
+        if (!std::exchange(headed, true)) {
+            kHeading("ASSETS");
+        }
+        kFound(browser_.sources[each].path,
+               std::filesystem::path{browser_.sources[each].path}.extension().string().substr(
+                   std::filesystem::path{browser_.sources[each].path}.has_extension() ? 1 : 0),
+               Icon::Folder,
+               kFoundAsset + each);
+        ++assets;
+    }
+}
+
+void ShellParticipant::runFound(std::size_t code) {
+    if (code >= kFoundAsset) {
+        // An asset: its document opened where it is one, else chosen in
+        // Assets.
+        const std::size_t kAt = code - kFoundAsset;
+        if (kAt >= browser_.sources.size()) {
+            return;
+        }
+        const std::string kPath = browser_.sources[kAt].path;
+        if (const auto kOpened = std::ranges::find(scenes_, kPath); kOpened != scenes_.end()) {
+            showScene(static_cast<std::size_t>(kOpened - scenes_.begin()));
+        } else {
+            showDock(Dock::Assets);
+            say(kPath + " is in Assets");
+        }
+        return;
+    }
+    if (code >= kFoundEntity && code - kFoundEntity < entities_.size()) {
+        chooseEntity(code - kFoundEntity);
     }
 }
 
@@ -602,7 +725,9 @@ void ShellParticipant::paletteTyped(std::optional<view::TypingKey> left) {
         endEdit();
         static_cast<void>(words(palette_->value, kPaletteHint, look::kFaintInk, look::kLabelSize));
         closePopup();
-        if (kFirst.has_value()) {
+        if (kFirst.has_value() && *kFirst >= kFoundEntity) {
+            runFound(*kFirst);
+        } else if (kFirst.has_value()) {
             const std::string kName = commands_[*kFirst].name;
             static_cast<void>(runCommand(kName));
         }

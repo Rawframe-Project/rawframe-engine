@@ -525,7 +525,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_reverts
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/runners/runners.game level.scene @level.scene "@instance 0  b4560e55" "@Revert x" "until=studio_said,status=\"x reverted\""
+                     games/runners/runners.game level.scene @level.scene "@platform 1" "@Revert x" "until=studio_said,status=\"x reverted\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_reverts PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
@@ -594,7 +594,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     add_test(NAME studio_material
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
-                     games/gale/gale.game shore.rfmaterial @shore.rfmaterial @tint "@override:[0.6,0.2,0.1]" @Undo @Redo
+                     games/gale/gale.game shore.rfmaterial @shore.rfmaterial @tint "@tint:[0.6,0.2,0.1]" @Undo @Redo
                      "until=studio_said,status=\"redone\""
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(studio_material PROPERTIES
@@ -1577,8 +1577,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/gale/gale.game /dev/null ${PROJECT_BINARY_DIR}/hosts/client/gale_drawn.conf
-                         @Cook "until=studio_said,status=\"cooked ~600" @shore.rfmaterial @Play wait=6 @tint
-                         "@override:[0.6,0.2,0.1]" "until=studio_said,status=\"cooked #2~600" until=materials_reloaded@play/client.log~600
+                         "until=studio_said,status=\"cooked ~600" @shore.rfmaterial @Play wait=6 @tint
+                         "@tint:[0.6,0.2,0.1]" "until=studio_said,status=\"cooked #2~600" until=materials_reloaded@play/client.log~600
                          @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_recooks_gale PROPERTIES

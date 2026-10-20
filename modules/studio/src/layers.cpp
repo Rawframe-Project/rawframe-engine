@@ -56,6 +56,10 @@ void ShellParticipant::showLeft(Left shown) {
         static_cast<void>(tree_->attach(leftDock_, kColumn(shown)));
         leftShown_ = shown;
     }
+    // The tab shown underlined (D927).
+    setTab(hierarchyTab_, shown == Left::Hierarchy);
+    setTab(layersTab_, shown == Left::Layers);
+    setTab(worldTab_, shown == Left::World);
     if (shown == Left::Layers) {
         showLayers();
     }
@@ -102,9 +106,18 @@ void ShellParticipant::showLayers() {
         }
     }
     if (members.empty()) {
-        if (auto none = row(layersColumn_, "no layers: put entities on one with rawframe.world.layer", kQuiet, kPanel);
+        // As the design's Layers (D927): what they are for, and how one is
+        // made.
+        if (auto none =
+                box(layersColumn_, ui::Layout{.width = ui::share(1), .shrink = 0, .padding = {12, 12, 10, 10}}, 0);
             none.has_value()) {
             layerRows_.push_back(*none);
+            static_cast<void>(wrappedWords(*none,
+                                           "No layers yet. Layers group entities for showing, locking and "
+                                           "selecting: give an entity rawframe.world.layer in the Inspector to put "
+                                           "it on one. A locked layer cannot be picked in the view.",
+                                           look::kFaintInk,
+                                           look::kLabelSize));
         }
         return;
     }

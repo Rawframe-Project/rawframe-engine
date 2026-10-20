@@ -1,10 +1,13 @@
 #include "rawframe/authoring_session/new_game.h"
 #include "rawframe/process/self.h"
+#include "rawframe/render/capture.h"
 #include "shell.h"
 
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdio>
+#include <fstream>
 
 namespace rawframe::studio {
 
@@ -324,9 +327,30 @@ void ShellParticipant::showRecent() {
                                        .shrink = 0},
                             0);
             tile.has_value()) {
-            static_cast<void>(tree_->setLook(*tile, ui::Look{.fill = look::kRaisedFill, .radius = 5}));
             static_cast<void>(tree_->setInteraction(*tile, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
-            static_cast<void>(icon(*tile, Icon::Cube, look::kEntityInk, 18));
+            // Its picture where Studio kept one (D927), else its mark.
+            const std::uint64_t kKey = thumbnailKey("game:" + kDescription.lexically_normal().generic_string());
+            if (!browser_.pictures.contains(kKey)) {
+                if (const auto kPath = gamePicturePath(kDescription); kPath.has_value()) {
+                    const std::optional<std::string> kBytes = authoring_session::readFile(*kPath);
+                    std::optional<render::StreamedPicture> read =
+                        kBytes.has_value()
+                            ? render::streamedFrom(std::as_bytes(std::span{kBytes->data(), kBytes->size()}))
+                            : std::nullopt;
+                    if (read.has_value()) {
+                        texture::Texture made{.format = texture::Format::Rgba8Srgb};
+                        made.levels.push_back(texture::Level{
+                            .width = read->width, .height = read->height, .bytes = std::move(read->pixels)});
+                        browser_.pictures[kKey] = std::make_shared<const texture::Texture>(std::move(made));
+                    }
+                }
+            }
+            if (browser_.pictures.contains(kKey)) {
+                static_cast<void>(tree_->setLook(*tile, ui::Look{.radius = 5, .image = kKey}));
+            } else {
+                static_cast<void>(tree_->setLook(*tile, ui::Look{.fill = look::kRaisedFill, .radius = 5}));
+                static_cast<void>(icon(*tile, Icon::Cube, look::kEntityInk, 18));
+            }
         }
         if (auto texts = box(
                 *line, ui::Layout{.width = ui::pixels(0), .direction = ui::Direction::Column, .gap = 4, .grow = 1}, 0);
@@ -557,7 +581,9 @@ void ShellParticipant::chooseGame(const std::filesystem::path& description) {
     if (gameOpen() && held_.joined == nullptr) {
         closeGame();
     }
-    // Each game opens on its first scene and cooks once (D912, D918).
+    // Each game opens on its first scene and cooks once (D912, D918), and
+    // keeps a picture of itself once (D927).
+    held_.gamePictured = false;
     editOpened_ = false;
     editCooked_ = false;
     settle(description, description.parent_path());
@@ -615,6 +641,73 @@ void ShellParticipant::rebuild() {
     if (seat_ != nullptr) {
         static_cast<void>(seat_->seat(*tree_, root_));
     }
+}
+
+std::optional<std::filesystem::path> ShellParticipant::gamePicturePath(const std::filesystem::path& description) const {
+    if (preferencesFile_.empty()) {
+        return std::nullopt;
+    }
+    std::array<char, 24> name{};
+    std::snprintf(name.data(),
+                  name.size(),
+                  "%016llx",
+                  static_cast<unsigned long long>(thumbnailKey(description.lexically_normal().generic_string())));
+    return preferencesFile_.parent_path() / "pictures" / (std::string{name.data()} + ".picture");
+}
+
+void ShellParticipant::keepGamePicture(const texture::Texture& picture) {
+    const auto kPath = gamePicturePath(description_);
+    if (!kPath.has_value() || picture.levels.empty()) {
+        return;
+    }
+    // A tile's 144 by 88, from the picture's middle at its aspect, each
+    // pixel the mean of those it covers.
+    const texture::Level& kFrom = picture.levels[0];
+    constexpr std::uint32_t kWide = 144;
+    constexpr std::uint32_t kTall = 88;
+    if (kFrom.width < kWide || kFrom.height < kTall ||
+        kFrom.bytes.size() != std::size_t{kFrom.width} * kFrom.height * 4) {
+        return;
+    }
+    const double kScale = std::min(static_cast<double>(kFrom.width) / kWide, static_cast<double>(kFrom.height) / kTall);
+    const double kLeft = (kFrom.width - kWide * kScale) / 2;
+    const double kTop = (kFrom.height - kTall * kScale) / 2;
+    render::StreamedPicture made{.sequence = 1, .width = kWide, .height = kTall, .pixels = {}};
+    made.pixels.resize(std::size_t{kWide} * kTall * 4);
+    for (std::uint32_t y = 0; y < kTall; ++y) {
+        for (std::uint32_t x = 0; x < kWide; ++x) {
+            const auto kX0 = static_cast<std::uint32_t>(kLeft + x * kScale);
+            const auto kY0 = static_cast<std::uint32_t>(kTop + y * kScale);
+            const auto kX1 =
+                std::max(kX0 + 1, std::min(kFrom.width, static_cast<std::uint32_t>(kLeft + (x + 1) * kScale)));
+            const auto kY1 =
+                std::max(kY0 + 1, std::min(kFrom.height, static_cast<std::uint32_t>(kTop + (y + 1) * kScale)));
+            std::array<std::uint32_t, 4> sum{};
+            std::uint32_t count = 0;
+            for (std::uint32_t sy = kY0; sy < kY1; ++sy) {
+                for (std::uint32_t sx = kX0; sx < kX1; ++sx) {
+                    const std::size_t kAt = (std::size_t{sy} * kFrom.width + sx) * 4;
+                    for (std::size_t channel = 0; channel < 4; ++channel) {
+                        sum[channel] += std::to_integer<std::uint32_t>(kFrom.bytes[kAt + channel]);
+                    }
+                    ++count;
+                }
+            }
+            for (std::size_t channel = 0; channel < 4; ++channel) {
+                made.pixels[(std::size_t{y} * kWide + x) * 4 + channel] = static_cast<std::byte>(sum[channel] / count);
+            }
+        }
+    }
+    std::error_code error;
+    std::filesystem::create_directories(kPath->parent_path(), error);
+    const std::vector<std::byte> kBytes = render::streamedOf(made);
+    std::ofstream file{*kPath, std::ios::binary | std::ios::trunc};
+    file.write(reinterpret_cast<const char*>(kBytes.data()), static_cast<std::streamsize>(kBytes.size()));
+    if (!file) {
+        return;
+    }
+    // Shown afresh when the start screen is next.
+    browser_.pictures.erase(thumbnailKey("game:" + description_.lexically_normal().generic_string()));
 }
 
 } // namespace rawframe::studio
