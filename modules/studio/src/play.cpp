@@ -211,7 +211,10 @@ result::Status Play::launch() {
                                      // applies writes a scene, which the World then takes
                                      // (D410, D446), as ADR-0032 has a live edit go.
                                      // Edited, ten times a second (D912).
-                                     {"kest.reload_every", settings_.edited ? "12" : "60"}},
+                                     {"kest.reload_every", settings_.edited ? "12" : "60"},
+                                     // Kept running on a machine too busy to keep up,
+                                     // as its client is (D924).
+                                     {"world.overload_ms", "0"}},
                                     {{"kest.game", kGame},
                                      {"network.quic.self_signed", "true"},
                                      {"network.quic.fingerprint_file", (kAt / "server.fingerprint").string()},
