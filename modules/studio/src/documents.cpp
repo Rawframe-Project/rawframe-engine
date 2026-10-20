@@ -512,11 +512,13 @@ void ShellParticipant::showGraph() {
     if (!corner.has_value()) {
         return;
     }
-    if (auto card =
-            box(*corner,
-                ui::Layout{
-                    .direction = ui::Direction::Column, .gap = 6, .padding = {10, 10, 8, 10}, .border = {1, 1, 1, 1}},
-                0);
+    if (auto card = box(*corner,
+                        ui::Layout{.width = ui::pixels(192),
+                                   .direction = ui::Direction::Column,
+                                   .gap = 6,
+                                   .padding = {10, 10, 8, 10},
+                                   .border = {1, 1, 1, 1}},
+                        0);
         card.has_value()) {
         static_cast<void>(
             tree_->setLook(*card, ui::Look{.fill = 0x121317F0U, .borderColor = look::kEdge, .radius = 6}));
@@ -675,7 +677,7 @@ void ShellParticipant::showGraphNode(std::size_t at) {
     if (outputs == nullptr || outputs->items().empty()) {
         return;
     }
-    if (!kSection("Outputs", "pressed, then another node's input field typed")) {
+    if (!kSection("Outputs", "press one, then an input")) {
         return;
     }
     for (const Value& kOutput : outputs->items()) {
