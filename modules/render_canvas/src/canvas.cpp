@@ -596,4 +596,43 @@ view::Orthographic orthographicOf(const CanvasCamera& camera) noexcept {
     return view::Orthographic{.middle = {camera.x, camera.y}, .height = camera.height};
 }
 
+std::vector<CanvasLine> gridLines(const CanvasCamera& camera) {
+    std::vector<CanvasLine> made;
+    const double kTall = std::max(1.0, static_cast<double>(camera.height));
+    const double kWide = kTall * std::max(0.1, static_cast<double>(camera.aspect));
+    // A game's camera may say anything: one past a float's reach draws no
+    // grid, and the lines are counted, never stepped to, so a place too
+    // far for a step to move it still ends.
+    if (!std::isfinite(kTall) || !std::isfinite(kWide) || !std::isfinite(camera.x) || !std::isfinite(camera.y)) {
+        return made;
+    }
+    double step = kTall > 60 ? 10 : 1;
+    while ((kTall + kWide) / step > static_cast<double>(kMostCanvasLines / 2) - 4) {
+        step *= 10;
+    }
+    const double kLeft = std::floor((camera.x - kWide) / step) * step;
+    const double kRight = camera.x + kWide;
+    const double kBottom = std::floor((camera.y - kTall) / step) * step;
+    const double kTop = camera.y + kTall;
+    const auto kColor = [step](double place, std::uint32_t axis) {
+        if (std::abs(place) < step / 2) {
+            return axis;
+        }
+        return std::abs(std::remainder(place, step * 10)) < step / 2 ? 0x8A8F9A70U : 0x6A6E7840U;
+    };
+    const auto kCount = [step](double from, double to) {
+        return static_cast<std::size_t>(
+            std::clamp(std::floor((to - from) / step) + 1, 0.0, static_cast<double>(kMostCanvasLines / 2)));
+    };
+    for (std::size_t each = 0; each < kCount(kLeft, kRight); ++each) {
+        const double kX = kLeft + (step * static_cast<double>(each));
+        made.push_back(CanvasLine{.from = {kX, kBottom}, .to = {kX, kTop}, .color = kColor(kX, 0x4CB86AC0U)});
+    }
+    for (std::size_t each = 0; each < kCount(kBottom, kTop); ++each) {
+        const double kY = kBottom + (step * static_cast<double>(each));
+        made.push_back(CanvasLine{.from = {kLeft, kY}, .to = {kRight, kY}, .color = kColor(kY, 0xD94D4DC0U)});
+    }
+    return made;
+}
+
 } // namespace rawframe::render_canvas

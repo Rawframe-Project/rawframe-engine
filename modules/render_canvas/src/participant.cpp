@@ -29,38 +29,6 @@ namespace rawframe::render_canvas {
 
 namespace {
 
-/// The grid an editor's 2D view shows over the canvas (D933): a line a
-/// meter, brighter every ten, ten meters a line where the view is taller
-/// than sixty, out past what the view sees; faint, so what is drawn reads
-/// through it, the X axis red and the Y axis green where they pass, within
-/// half the lines a canvas draws.
-std::vector<CanvasLine> gridLinesAbout(const CanvasCamera& camera) {
-    std::vector<CanvasLine> made;
-    const double kTall = std::max(1.0, static_cast<double>(camera.height));
-    const double kWide = kTall * std::max(0.1, static_cast<double>(camera.aspect));
-    double step = kTall > 60 ? 10 : 1;
-    while ((kTall + kWide) / step > static_cast<double>(kMostCanvasLines / 2) - 4) {
-        step *= 10;
-    }
-    const double kLeft = std::floor((camera.x - kWide) / step) * step;
-    const double kRight = camera.x + kWide;
-    const double kBottom = std::floor((camera.y - kTall) / step) * step;
-    const double kTop = camera.y + kTall;
-    const auto kColor = [step](double place, std::uint32_t axis) {
-        if (std::abs(place) < step / 2) {
-            return axis;
-        }
-        return std::abs(std::remainder(place, step * 10)) < step / 2 ? 0x8A8F9A70U : 0x6A6E7840U;
-    };
-    for (double x = kLeft; x <= kRight; x += step) {
-        made.push_back(CanvasLine{.from = {x, kBottom}, .to = {x, kTop}, .color = kColor(x, 0x4CB86AC0U)});
-    }
-    for (double y = kBottom; y <= kTop; y += step) {
-        made.push_back(CanvasLine{.from = {kLeft, y}, .to = {kRight, y}, .color = kColor(y, 0xD94D4DC0U)});
-    }
-    return made;
-}
-
 constexpr diagnostics::EventIdentity kCanvasSummary{"canvas", "canvas_summary"};
 constexpr diagnostics::EventIdentity kUnread{"canvas", "textures_unavailable"};
 constexpr diagnostics::EventIdentity kUnreadTexture{"canvas", "texture_unavailable"};
@@ -525,7 +493,7 @@ private:
         if (kGrid != gridShown_ || (kGrid && kGridAt != gridAt_)) {
             gridShown_ = kGrid;
             gridAt_ = kGridAt;
-            gridLines_ = kGrid ? gridLinesAbout(camera_) : std::vector<CanvasLine>{};
+            gridLines_ = kGrid ? gridLines(camera_) : std::vector<CanvasLine>{};
             linesChanged = true;
         }
         if (linesChanged) {

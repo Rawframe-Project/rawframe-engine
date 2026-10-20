@@ -126,6 +126,13 @@ struct CanvasLine {
 /// The most lines a canvas draws, as a scene draws at most this many.
 inline constexpr std::size_t kMostCanvasLines = 1024;
 
+/// The grid an editor's 2D view shows over the canvas (D933): a line a
+/// meter, brighter every ten, ten meters a line where the view is taller
+/// than sixty, out past what the view sees; faint, so what is drawn reads
+/// through it, the X axis red and the Y axis green where they pass, within
+/// half the lines a canvas draws.
+[[nodiscard]] std::vector<CanvasLine> gridLines(const CanvasCamera& camera);
+
 /// Consecutive quads of one texture and one material, drawn by one
 /// command: the texture nought for white (a sprite with a material and no
 /// texture), the material its place among the frame's, nought for none.

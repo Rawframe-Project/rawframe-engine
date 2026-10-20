@@ -518,3 +518,18 @@ RAWFRAME_TEST(ALineIsAThinQuadOverTheSprites) {
     rig.canvas->showLines({});
     RAWFRAME_EXPECT(rig.frame({.x = 1000, .y = -2, .height = 10, .aspect = 2}).lines == 0);
 }
+
+RAWFRAME_TEST(TheGridIsBoundedWhateverTheCameraSays) {
+    // D933's grid about a ten meter view: a line a meter each way, the
+    // axes colored. A camera a game set past a float's reach draws none,
+    // and one too far off for a meter to move its place (where a stepped
+    // loop had never ended) draws at most half a canvas's lines.
+    const std::vector<CanvasLine> kNear = gridLines({.height = 10, .aspect = 1});
+    RAWFRAME_EXPECT(kNear.size() > 20 && kNear.size() <= kMostCanvasLines / 2);
+    RAWFRAME_EXPECT(std::ranges::any_of(kNear, [](const CanvasLine& line) {
+        return line.color == 0x4CB86AC0U;
+    }));
+    RAWFRAME_EXPECT(gridLines({.height = std::numeric_limits<float>::infinity(), .aspect = 1}).empty());
+    RAWFRAME_EXPECT(gridLines({.x = std::numeric_limits<double>::quiet_NaN(), .height = 10, .aspect = 1}).empty());
+    RAWFRAME_EXPECT(gridLines({.x = 1e300, .y = -1e300, .height = 10, .aspect = 1}).size() <= kMostCanvasLines);
+}
