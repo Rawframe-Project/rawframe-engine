@@ -24,6 +24,7 @@ constexpr std::string_view kMaybe[] = {view::kUiPointing.name,
                                        view::kFilesDropped.name,
                                        view::kFileDialogs.name,
                                        view::kWindowClosing.name,
+                                       view::kWindowShowing.name,
                                        render::kDevice.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
@@ -278,6 +279,9 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     // The platform's file dialogs (D918).
     if (context.has(view::kWindowClosing.name)) {
         RAWFRAME_TRY_ASSIGN(closing_, context.capability(view::kWindowClosing));
+    }
+    if (context.has(view::kWindowShowing.name)) {
+        RAWFRAME_TRY_ASSIGN(showing_, context.capability(view::kWindowShowing));
     }
     // The device Studio draws with, to know when there is none (D927).
     if (context.has(render::kDevice.name)) {
@@ -591,6 +595,12 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
         drawn_ = &list_;
         if (framesDrawn_++ == 0) {
             emitter_.log(diagnostics::Severity::Info, kShown, "Studio is shown");
+        }
+        // Its window shown once there is a device to draw it with, never
+        // a blank one (D942).
+        if (showing_ != nullptr && !deviceFailed_ &&
+            (deviceHolder_ == nullptr || !deviceHolder_->failure().has_value())) {
+            showing_->ask();
         }
     }
 }

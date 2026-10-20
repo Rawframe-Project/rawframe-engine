@@ -30,6 +30,7 @@
 #include "rawframe/view/dialogs.h"
 #include "rawframe/view/dropping.h"
 #include "rawframe/view/pointing.h"
+#include "rawframe/view/showing.h"
 #include "rawframe/view/typing.h"
 #include "rawframe/world_tooling/forwarding.h"
 #include "records.h"
@@ -1257,6 +1258,7 @@ private:
     view::FileDialogs* dialogs_ = nullptr;
     /// Where Quit asks the window to close (D923); none without a window.
     view::WindowClosing* closing_ = nullptr;
+    view::WindowShowing* showing_ = nullptr;
     render::DeviceHolder* deviceHolder_ = nullptr;
     bool deviceFailed_ = false;
     std::uint64_t dialogTickets_ = 0;

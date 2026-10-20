@@ -71,7 +71,8 @@ int main(int argc, char** argv) {
                            .drive = &play,
                            // Opened as an application is, with no file (D920): drawn on the
                            // best device there is, a game given as its argument opened.
-                           .defaults = "render.device = any\nrender.unavailable_says = true\nwindow.maximized = "
+                           .defaults = "render.device = any\nrender.unavailable_says = true\nwindow.shown_when_asked = "
+                                       "true\nwindow.maximized = "
                                        "true\nwindow.width = 1280\nwindow.height = 760\n",
                            .fileKey = "studio.game"});
 }

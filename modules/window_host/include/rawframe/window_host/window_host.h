@@ -32,6 +32,7 @@
 #include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
 #include "rawframe/view/preview.h"
+#include "rawframe/view/showing.h"
 #include "rawframe/view/typing.h"
 #include "rawframe/window/surfaces.h"
 #include "rawframe/window/windows.h"
@@ -178,6 +179,9 @@ private:
     /// each request's ticket until it completes.
     view::FileDialogs dialogs_;
     view::WindowClosing closing_;
+    /// Lent where the window waits hidden until asked (D942).
+    view::WindowShowing showing_;
+    bool showWhenAsked_ = false;
     std::vector<std::pair<window::RequestId, std::uint64_t>> dialogsShown_;
     /// Either, as the Host's frames tell its participants.
     std::atomic<bool> suspended_{false};

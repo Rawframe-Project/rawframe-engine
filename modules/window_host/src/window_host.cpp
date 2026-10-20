@@ -386,6 +386,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     lent_.push_back(composition::LentCapability{view::kFilesDropped.name, composition::provideAs(dropped_)});
     lent_.push_back(composition::LentCapability{view::kFileDialogs.name, composition::provideAs(dialogs_)});
     lent_.push_back(composition::LentCapability{view::kWindowClosing.name, composition::provideAs(closing_)});
+    lent_.push_back(composition::LentCapability{view::kWindowShowing.name, composition::provideAs(showing_)});
     lent_.insert(lent_.end(), settings_.lent.begin(), settings_.lent.end());
     request_.lent = lent_;
     request_.suspended = &suspended_;
@@ -422,6 +423,14 @@ result::Status WindowHost::start(window::Windows& windows) {
         // Kept hidden, as an editor keeps a game it shows in its own
         // viewport, the pictures streamed to it (D789).
         RAWFRAME_TRY_ASSIGN(made.visible, kConfiguration->truth("window.visible", true));
+        // Or hidden until what draws in it asks, so a program that finds
+        // nothing to draw with never stands as a blank window (D942).
+        RAWFRAME_TRY_ASSIGN(showWhenAsked_, kConfiguration->truth("window.shown_when_asked", false));
+        if (showWhenAsked_ && made.visible) {
+            made.visible = false;
+        } else {
+            showWhenAsked_ = false;
+        }
         // The views a preview of it may be split into, which an editor
         // playing it in its viewport allows (D797).
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kViews, kConfiguration->unsignedInteger("preview.views", 1));
@@ -480,6 +489,9 @@ result::Status WindowHost::start(window::Windows& windows) {
 window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     // An editor asking to close is a press on the close button (D923).
     bool closing = closing_.asked();
+    if (showing_.asked() && std::exchange(showWhenAsked_, false)) {
+        static_cast<void>(windows.requestVisible(window_, true));
+    }
     const bool kWasSuspended = suspended_.load(std::memory_order_relaxed);
     // The touch screen's halves split the window as it is now (D387).
     if (const auto kState = windows.state(window_); kState.has_value()) {
