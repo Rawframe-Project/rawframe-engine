@@ -510,11 +510,14 @@ void ShellParticipant::showMenu(std::size_t at) {
     if (popup.has_value()) {
         static_cast<void>(tree_->setLook(*popup, kMenuLook));
     }
-    if (!popup.has_value() ||
-        !tree_
-             ->setPopup(*popup,
-                        ui::Popup{.anchor = menus_[at].first, .side = ui::Popup::Side::Below, .gap = 2, .margin = 4})
-             .has_value()) {
+    if (!popup.has_value() || !tree_
+                                   ->setPopup(*popup,
+                                              ui::Popup{.anchor = menus_[at].first,
+                                                        .side = ui::Popup::Side::Below,
+                                                        .gap = 2,
+                                                        .margin = 4,
+                                                        .align = ui::Popup::Align::Start})
+                                   .has_value()) {
         return;
     }
     static_cast<void>(tree_->setRole(*popup, ui::Role::Group));

@@ -572,10 +572,18 @@ struct Popup {
         End,
         Center
     };
+    /// Where along its side it sits: centered on its anchor, or from the
+    /// anchor's start or end, as a menu bar's menus open (D923).
+    enum class Align : std::uint8_t {
+        Center,
+        Start,
+        End
+    };
     Node anchor;
     Side side = Side::Below;
     float gap = 0;
     float margin = 0;
+    Align align = Align::Center;
 };
 
 /// A pointer's event for `Tree::point` (D621): the primary button pressed

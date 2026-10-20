@@ -73,7 +73,8 @@ result::Status Tree::setPopup(Node node, const Popup& popup) {
     muiPopup made = muiDefaultPopup();
     made.anchor = idOf(popup.anchor);
     made.side = kSides[static_cast<std::size_t>(popup.side)];
-    made.align = mui_popupAlignCenter;
+    constexpr muiPopupAlign kAligns[] = {mui_popupAlignCenter, mui_popupAlignStart, mui_popupAlignEnd};
+    made.align = kAligns[static_cast<std::size_t>(popup.align)];
     made.gap = popup.gap;
     made.margin = popup.margin;
     // Opened and closed by its owner, never by a press or a key.
