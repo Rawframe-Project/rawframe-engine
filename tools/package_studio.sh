@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Packages Studio for an author with no build of their own (D768): Studio,
 # the cook tool, the dedicated server, the client, the authoring tool, the
-# thumbnail tool, and what Export runs (the export and build tools, the
-# launcher, the install tool; D944, and the web player, D948) from one build
-# tree, with the shader toolchain where the machine has one (D945), beside the templates and the
+# thumbnail tool, the debug adapter with its VS Code extension (D957), and
+# what Export runs (the export and build tools, the launcher, the install
+# tool; D944, and the web player, D948) from one build tree, with the shader
+# toolchain where the machine has one (D945), beside the templates and the
 # sources of the games named, which Studio's start screen offers as
 # samples. Studio opens as an application does, with no configuration and
 # no script (D920): double-clicked, it shows its start screen. A Windows
@@ -29,6 +30,11 @@ cp "$tree/hosts/studio/rawframe-studio$exe" "$tree/hosts/cook/rawframe-cook$exe"
 # scene's renderer (D899).
 thumbnail="$tree/hosts/thumbnail/rawframe-thumbnail$exe"
 [ -e "$thumbnail" ] && cp "$thumbnail" "$into/"
+# The debug adapter and the VS Code extension that starts it, so a game's
+# Kest is debugged from an editor without Studio (D461, D957).
+cp "$tree/hosts/debug/rawframe-debug$exe" "$into/"
+mkdir -p "$into/vscode"
+cp tools/vscode/* "$into/vscode/"
 # What Studio's Export runs: the export tool finds the others beside it.
 cp "$tree/hosts/export/rawframe-export$exe" "$tree/hosts/build/rawframe-build$exe" \
     "$tree/launcher/play/rawframe-play$exe" "$tree/launcher/install/rawframe-install$exe" "$into/"
