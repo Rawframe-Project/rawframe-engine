@@ -13,6 +13,21 @@ namespace {
 constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kTargets = {
     {{"desktop", "native"}, {"web", "web"}, {"android", "android"}, {"ios", "ios"}}};
 
+/// A target as an author reads it: the desktop named for the system Studio
+/// runs on, which it exports for (D947).
+std::string_view shownTarget(std::string_view target) {
+    if (target != "desktop") {
+        return target;
+    }
+#if defined(_WIN32)
+    return "windows";
+#elif defined(__APPLE__)
+    return "macos";
+#else
+    return "linux";
+#endif
+}
+
 /// The last line of `text` with something on it.
 std::string lastLine(std::string_view text) {
     const std::size_t kEnd = text.find_last_not_of(" \t\r\n");
@@ -33,7 +48,7 @@ std::filesystem::path ShellParticipant::exportOutput() const {
     // Beside the game's directory, by its name and the target, so the
     // game's own files never hold what is made of them.
     const std::filesystem::path kGame = description_.parent_path();
-    return kGame.parent_path() / (kGame.filename().string() + "-" + held_.exportTarget);
+    return kGame.parent_path() / (kGame.filename().string() + "-" + std::string{shownTarget(held_.exportTarget)});
 }
 
 void ShellParticipant::openExport() {
@@ -217,7 +232,7 @@ bool ShellParticipant::pressExport(ui::Node node) {
     if (const auto kTarget = std::ranges::find(held_.exportTargets, node, &std::pair<ui::Node, std::string>::first);
         kTarget != held_.exportTargets.end()) {
         held_.exportTarget = kTarget->second;
-        say("exports for " + held_.exportTarget);
+        say("exports for " + std::string{shownTarget(held_.exportTarget)});
         closeExport();
         openExport();
         return true;
@@ -300,7 +315,7 @@ void ShellParticipant::startExport() {
     }
     held_.exporting = std::move(*started);
     held_.exportingTo = kOutput;
-    kSay("exporting for " + held_.exportTarget + " to " + kOutput.string());
+    kSay("exporting for " + std::string{shownTarget(held_.exportTarget)} + " to " + kOutput.string());
 }
 
 void ShellParticipant::pollExport() {
@@ -317,7 +332,8 @@ void ShellParticipant::pollExport() {
     const bool kReceipt = std::filesystem::exists(held_.exportingTo / "export.receipt", error);
     if (*kCode == 0) {
         ++held_.exports;
-        held_.exportSaid = "exported for " + held_.exportTarget + " to " + held_.exportingTo.string();
+        held_.exportSaid =
+            "exported for " + std::string{shownTarget(held_.exportTarget)} + " to " + held_.exportingTo.string();
     } else {
         held_.exportSaid = "the export failed: " + lastLine(kOutput);
     }
