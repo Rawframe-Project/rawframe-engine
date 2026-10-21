@@ -53,7 +53,7 @@ jobs:
       - name: Test
         env:
           RAWFRAME_REQUIRE_GPU: 1
-        run: ctest --test-dir out/clang-development --output-on-failure -j3
+        run: ctest --test-dir out/clang-development --output-on-failure --timeout 1200 -j3
       # Stalls exported, played, and read and pressed as a screen reader
       # does (D579): its client's UI through the AX API while it plays, the
       # purse a button named by its coins and pressed, and the collect
@@ -104,7 +104,7 @@ jobs:
       - name: Build
         run: cmake --build out/clang-development -- -k 0
       - name: Test
-        run: ctest --test-dir out/clang-development --output-on-failure -j4
+        run: ctest --test-dir out/clang-development --output-on-failure --timeout 1200 -j4
 
   # Android, the first mobile target (ADR-0084, D549): the engine, its
   # programs, and its tests built for 64-bit ARM against NDK r29, whose libc++
@@ -301,7 +301,7 @@ jobs:
         shell: pwsh
         env:
           RAWFRAME_REQUIRE_GPU: 1
-        run: ctest --test-dir out/windows-development --output-on-failure -j3
+        run: ctest --test-dir out/windows-development --output-on-failure --timeout 1200 -j3
       # The frames the arena's drawn tests wrote, and the Lighting Test's
       # content as Windows cooked it, to look at where one reads differently
       # on WARP than on lavapipe (D765).

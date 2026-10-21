@@ -46,6 +46,8 @@ cat >"$work/studio.conf" <<CONF
 host.maximum_iterations = 7200
 host.iteration_rate = 120
 render.device = any
+# No one answers a message box here: a missing device is a skip (D962).
+render.unavailable_says = false
 studio.game = $PWD/$5
 studio.play.directory = $work/studio-play
 studio.preview.endpoint = 127.0.0.1:$port

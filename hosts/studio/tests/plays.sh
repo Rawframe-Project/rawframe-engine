@@ -46,6 +46,8 @@ cat >"$work/studio.conf" <<CONF
 host.maximum_iterations = 36000
 host.iteration_rate = 120
 render.device = any
+# No one answers a message box here: a missing device is a skip (D962).
+render.unavailable_says = false
 studio.game = $work/game/$(basename "$4")
 studio.play.server = $2
 studio.play.client = $3
