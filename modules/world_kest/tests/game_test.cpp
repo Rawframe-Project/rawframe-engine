@@ -707,6 +707,79 @@ RAWFRAME_TEST(AChangedProgramReloadsBetweenTicks) {
     std::filesystem::remove_all(kDirectory, error);
 }
 
+RAWFRAME_TEST(AProcessThatPlaysElsewhereFollowsItsProgram) {
+    // A client's plan (kest.plan_only) follows the game's sources as a
+    // server does, for its present systems: a changed program that
+    // compiles is the plan's program, one that changes a component's
+    // shape or does not compile is refused and the last one stays.
+    std::error_code error;
+    const std::filesystem::path kDirectory = test::scratchDirectory("plan-reload");
+    std::filesystem::remove_all(kDirectory, error);
+    std::filesystem::create_directories(kDirectory, error);
+    const std::string kSource = readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.kest");
+    writeText(kDirectory / "movers.kest", kSource);
+    writeText(kDirectory / "movers.game", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.game"));
+
+    std::vector<composition::Problem> problems;
+    const std::array<composition::RegistrarEntry, 4> kRegistered = {
+        kWatched[0],
+        kWatched[1],
+        kWatched[2],
+        composition::RegistrarEntry{"test.plan", &registerPlanWatcher, world_runtime::kScopes}};
+    auto plan = composition::compose(
+        composition::CompositionRequest{.registrars = kRegistered,
+                                        .shutdownBudget = execution::MonotonicDuration::fromSeconds(1)},
+        problems);
+    RAWFRAME_EXPECT(plan.has_value());
+    const std::string kText = "kest.game = " + (kDirectory / "movers.game").string() +
+                              "\nkest.plan_only = true\nkest.reload_every = 1\nworld.tick_rate = 10\n";
+    const auto kConfiguration = composition::Configuration::parse(kText);
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    composition::Composition composition{*plan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .configuration = &*kConfiguration}};
+    RAWFRAME_EXPECT(composition.start().has_value() && presentationPlan != nullptr);
+    if (presentationPlan == nullptr) {
+        return;
+    }
+    std::uint64_t iteration = 0;
+    const auto kIterate = [&] {
+        clock.advance(execution::MonotonicDuration::fromMilliseconds(100));
+        const composition::HostFrame kFrame{.iteration = iteration++, .now = clock.now()};
+        composition.runHostPhase(composition::HostPhase::RunWorlds, kFrame);
+        composition.runHostPhase(composition::HostPhase::Maintenance, kFrame);
+    };
+    const std::shared_ptr<const kest::Program> kFirst = presentationPlan->program();
+    kIterate();
+    RAWFRAME_EXPECT(kFirst != nullptr && presentationPlan->program() == kFirst);
+
+    std::string backwards = kSource;
+    const std::string kForward = "positions[i].x + velocities[i].dx";
+    backwards.replace(backwards.find(kForward), kForward.size(), "positions[i].x - velocities[i].dx");
+    rewrite(kDirectory / "movers.kest", backwards, 5);
+    kIterate();
+    const std::shared_ptr<const kest::Program> kReloaded = presentationPlan->program();
+    RAWFRAME_EXPECT(kReloaded != nullptr && kReloaded != kFirst);
+
+    std::string reshaped = kSource;
+    const std::string kFields = "    x: f32\n    y: f32\n";
+    reshaped.replace(reshaped.find(kFields), kFields.size(), kFields + "    z: f32\n");
+    rewrite(kDirectory / "movers.kest", reshaped, 10);
+    kIterate();
+    RAWFRAME_EXPECT(presentationPlan->program() == kReloaded);
+    rewrite(kDirectory / "movers.kest", "module movers\nfn broken( {\n", 15);
+    kIterate();
+    RAWFRAME_EXPECT(presentationPlan->program() == kReloaded);
+    composition.stop();
+    simulation = nullptr;
+    presentationPlan = nullptr;
+    std::filesystem::remove_all(kDirectory, error);
+}
+
 namespace {
 
 struct LinkRow {

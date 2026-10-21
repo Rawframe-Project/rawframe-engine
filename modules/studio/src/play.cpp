@@ -275,6 +275,9 @@ result::Status Play::launch() {
                          settingsOf(kWithContent(given),
                                     {{"host.iteration_rate", "120"},
                                      {"kest.plan_only", "true"},
+                                     // Its present systems' program followed as
+                                     // the server's is, twice a second.
+                                     {"kest.reload_every", "60"},
                                      {"bots.count", "1"},
                                      {"bots.player", "true"},
                                      {"render.device", "any"},

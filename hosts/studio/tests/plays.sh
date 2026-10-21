@@ -12,7 +12,7 @@
 #
 # usage: plays.sh <rawframe-studio> <rawframe-server> <rawframe-client> <game>
 #                 <server settings> <client settings>
-#                 <x>,<y>[:<text>] | wait=<seconds> ...
+#                 <x>,<y>[:<text>] | wait=<seconds> | edit={game}/<file>:<old>:<new> ...
 set -uo pipefail
 
 here="$(dirname "$0")"
@@ -90,7 +90,13 @@ if [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then
     ) &
     watcher=$!
 fi
-python3 "$here/../../../tools/click.py" "$studio" "$work/studio.log" studio_shown "$work/studio.pid" "${@:7}"
+# `{game}` in a step names the copy, where an `edit=` writes as an author
+# would while the game plays (D949).
+steps=()
+for step in "${@:7}"; do
+    steps+=("${step//\{game\}/$work/game}")
+done
+python3 "$here/../../../tools/click.py" "$studio" "$work/studio.log" studio_shown "$work/studio.pid" "${steps[@]}"
 wait "$studio"
 status=$?
 if [ -n "${watcher:-}" ]; then

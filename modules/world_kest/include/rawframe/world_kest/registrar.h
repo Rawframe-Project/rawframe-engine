@@ -22,7 +22,9 @@ namespace rawframe::world_kest {
 ///   kest.heap_bytes       the game machine's heap ceiling (67108864)
 ///   kest.fuel_per_system  steps one system may take per tick (500000)
 ///   kest.reload_every     every this many Host iterations, reload the program
-///                         if a `.kest` file beside it changed; 0 never (0)
+///                         if a `.kest` file beside it changed (with
+///                         kest.plan_only, the one its present systems run);
+///                         0 never (0)
 ///   kest.prediction_heap_bytes  a predicting client's machine heap (4194304)
 ///   kest.plan_only        true: compile the game and provide its replication
 ///                         plan, but add nothing to the World, for a process

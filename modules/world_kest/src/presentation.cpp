@@ -333,6 +333,16 @@ result::Result<std::unique_ptr<ClientPresentation>> ClientPresentation::create(P
     return std::unique_ptr<ClientPresentation>{new ClientPresentation{std::move(state)}};
 }
 
+result::Status ClientPresentation::reload(std::shared_ptr<const kest::Program> program) {
+    State& state = *state_;
+    // Not bound yet, its systems are made from the new program when they are.
+    if (state.systems != nullptr) {
+        RAWFRAME_TRY(state.systems->reload(program));
+    }
+    state.settings.program = std::move(program);
+    return {};
+}
+
 result::Status ClientPresentation::present(world::World& mirror,
                                            world::EntityHandle player,
                                            std::span<const world_replication::ReceivedMessage> arrived,
@@ -396,6 +406,8 @@ namespace {
 
 constexpr diagnostics::EventIdentity kPresentedSummary{"world_kest", "presented_summary"};
 constexpr diagnostics::EventIdentity kUnpresented{"world_kest", "presentation_unavailable"};
+constexpr diagnostics::EventIdentity kPresentReloaded{"world_kest", "present_reloaded"};
+constexpr diagnostics::EventIdentity kPresentReloadRefused{"world_kest", "present_reload_refused"};
 constexpr std::string_view kPresentedMaybe[] = {
     kPresentationPlan.name, world_replication::kClientWorlds.name, kUiQueries.name, kPresentationStarts.name};
 constexpr std::uint64_t kMostTicksPerFrame = 4;
@@ -426,6 +438,8 @@ public:
         RAWFRAME_TRY_ASSIGN(rate_,
                             world::TickRate::of(static_cast<std::uint32_t>(std::clamp<std::uint64_t>(kRate, 1, 1000))));
         clients_ = clients;
+        plan_ = plan;
+        program_ = plan->program();
         if (context.has(kUiQueries.name)) {
             RAWFRAME_TRY_ASSIGN(ui_, context.capability(kUiQueries));
             for (std::size_t player = 0; player < presented_.size(); ++player) {
@@ -469,6 +483,7 @@ public:
         if (phase != composition::HostPhase::RunWorlds || clients_ == nullptr) {
             return;
         }
+        follow();
         // The frames are counted on the first player's World; the others
         // are presented as many ticks.
         const world_replication::ClientView kFirst = clients_->client(clients_->playerClient().value_or(0));
@@ -539,6 +554,29 @@ public:
     }
 
 private:
+    /// The game's program, where it reloaded since the last frame, given
+    /// to each player's presentation; refused, the running one stays.
+    void follow() noexcept {
+        std::shared_ptr<const kest::Program> program = plan_->program();
+        if (program == program_) {
+            return;
+        }
+        program_ = program;
+        for (Presented& each : presented_) {
+            const result::Status kReloaded = each.presentation->reload(program);
+            if (!kReloaded.has_value()) {
+                emitter_.log(diagnostics::Severity::Warning,
+                             kPresentReloadRefused,
+                             "a reloaded program was not given to the present systems; the running one continues",
+                             {diagnostics::field("error", kReloaded.error().description())});
+                return;
+            }
+        }
+        emitter_.log(diagnostics::Severity::Info, kPresentReloaded, "the present systems run the reloaded program");
+    }
+
+    const PresentationPlan* plan_ = nullptr;
+    std::shared_ptr<const kest::Program> program_;
     world_replication::ClientWorlds* clients_ = nullptr;
     const UiQueries* ui_ = nullptr;
     /// The player's volumes its present systems set (D625).

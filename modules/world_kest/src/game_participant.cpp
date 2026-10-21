@@ -484,7 +484,9 @@ public:
             }
             context_->reportMemory(heap);
         }
-        if (systems_ == nullptr || reloadEvery_ == 0 || frame.iteration % reloadEvery_ != 0) {
+        // A process that plays elsewhere reloads the program its present
+        // systems run, and nothing of the World.
+        if ((systems_ == nullptr && !planOnly_) || reloadEvery_ == 0 || frame.iteration % reloadEvery_ != 0) {
             return;
         }
         // A reload watches a game's directory; from content, nothing changes.
@@ -492,7 +494,9 @@ public:
         if (!files_->directory()) {
             return;
         }
-        followScenes(*files_->directory());
+        if (!planOnly_) {
+            followScenes(*files_->directory());
+        }
         const auto kWritten = newestSource(*files_->directory());
         if (!kWritten || kWritten == sourcesWritten_) {
             return;
@@ -503,28 +507,11 @@ public:
 #endif
         std::string report;
         auto program = files_->compile(game_.program, {}, &report);
-        // The admission rule follows the program, and only if the systems
-        // do: a refused reload keeps both as they were.
-        std::unique_ptr<KestAdmission> admission;
         result::Status reloaded;
         if (!program.has_value()) {
             reloaded = std::unexpected<result::Error>{std::move(program).error()};
-        } else if (admission_ != nullptr) {
-            auto made = KestAdmission::create(*program, game_.admission, admissionLimits_);
-            if (made.has_value()) {
-                admission = std::move(*made);
-            } else {
-                reloaded = std::unexpected<result::Error>{std::move(made).error()};
-            }
-        }
-        if (reloaded.has_value()) {
-            reloaded = systems_->reload(*program);
-            if (reloaded.has_value()) {
-                debugging_.attach(systems_->machine());
-            }
-        }
-        if (reloaded.has_value() && admission != nullptr) {
-            admission_ = std::move(admission);
+        } else {
+            reloaded = planOnly_ ? keepsShapes(**program) : reloadSystems(*program);
         }
         if (!reloaded.has_value()) {
             emitter_.log(diagnostics::Severity::Warning,
@@ -534,7 +521,44 @@ public:
                           diagnostics::field("report", std::string_view{report})});
             return;
         }
+        // The plan's program from now on, which a client's present systems
+        // take (PresentationPlan::program).
+        program_ = std::move(*program);
         emitter_.log(diagnostics::Severity::Info, kGameReloaded, "the Kest program was reloaded");
+    }
+
+    /// The systems, and the admission rule with them, running `program`;
+    /// refused, both stay as they were.
+    result::Status reloadSystems(const std::shared_ptr<const kest::Program>& program) {
+        std::unique_ptr<KestAdmission> admission;
+        if (admission_ != nullptr) {
+            RAWFRAME_TRY_ASSIGN(admission, KestAdmission::create(program, game_.admission, admissionLimits_));
+        }
+        RAWFRAME_TRY(systems_->reload(program));
+        debugging_.attach(systems_->machine());
+        if (admission != nullptr) {
+            admission_ = std::move(admission);
+        }
+        return {};
+    }
+
+    /// Where the game plays elsewhere, whether `program` lays out every
+    /// component as the running one does: the mirror holds them, and
+    /// replication reads them as the running one laid them out.
+    result::Status keepsShapes(const kest::Program& program) const {
+        for (const GameComponent& component : game_.components) {
+            const auto kOld = program_->layout(component.kestType);
+            const auto kNew = program.layout(component.kestType);
+            if (kOld.has_value() != kNew.has_value() || (kOld.has_value() && kOld->mark != kNew->mark)) {
+                return std::unexpected<result::Error>{refuse(result::ErrorClass::FailedPrecondition,
+                                                             WorldKestError::ColumnMismatch,
+                                                             "a reloaded program changes the shape of a type the "
+                                                             "World holds")
+                                                          .error()
+                                                          .withContext("type", component.kestType)};
+            }
+        }
+        return {};
     }
 
 #if RAWFRAME_FILE_SYSTEM
@@ -686,6 +710,10 @@ public:
     void attach(const world_animation::AnimationQueries* queries) noexcept override {
         animationDoors_.queries = queries;
     }
+    std::shared_ptr<const kest::Program> program() const noexcept override {
+        return program_;
+    }
+
     result::Result<std::unique_ptr<ClientPresentation>> presentation() const override {
         return ClientPresentation::create(PresentationSettings{.program = program_,
                                                                .game = &game_,

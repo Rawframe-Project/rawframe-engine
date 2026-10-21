@@ -1033,6 +1033,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "typed 300 at [0-9]+,[0-9]+.*\"code\":\"studio_summary\"[^\n]*\"played\":1,[^\n]*\"status\":\"game stopped\".*\"code\":\"ui_rearranged\".*\"code\":\"presented_summary\"[^\n]*\"restarted\":1,")
+        # A script edited as the game plays (D949): the starter played, its
+        # box's color changed in starter.kest; the server reloads its
+        # program, and the played client its present systems', which draw
+        # the box.
+        add_test(NAME studio_plays_kest_edit
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         templates/starter-3d/starter.game /dev/null /dev/null @Play until=studio_previewing
+                         "edit={game}/starter.kest:0xe8743bff:0x3bd16fff"
+                         until=present_reloaded@play/client.log~300 @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_plays_kest_edit PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "edited [^\n]*starter.kest: 0xe8743bff to 0x3bd16fff\n.*\"code\":\"game_reloaded\".*\"code\":\"present_reloaded\"")
         # The game cooked by Studio and played from that content alone
         # (D502): Cook, its progress, then Play, the server's settings and
         # the client's naming no content; previewed, its client drawing

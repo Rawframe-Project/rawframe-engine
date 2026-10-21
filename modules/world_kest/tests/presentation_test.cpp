@@ -4,7 +4,7 @@
 // mirror in line order, telling the client's own player from others
 // (D390), a refused one changing nothing, and a new mirror bound afresh;
 // and a component started as a document says (D619), and started again in
-// the fields an edit changed.
+// the fields an edit changed; and a program reloaded as the game plays.
 
 #include "../src/presentation.h"
 #include "rawframe/test/test.h"
@@ -362,4 +362,81 @@ fn quiet(count: i32, views: [canvas.Camera]) {
     RAWFRAME_EXPECT(volumes.decibels[3] == -12.0F && volumes.decibels[0] == 0 && volumes.revision == 1);
     RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
     RAWFRAME_EXPECT(volumes.revision == 1);
+}
+
+RAWFRAME_TEST(APresentationRunsAReloadedProgram) {
+    // The game's sources changed as it plays (kest.reload_every): the dress
+    // gives another stick another texture from the next tick, made before
+    // or after the presentation was bound; a program that changes a type
+    // the mirror holds is refused, and the running one draws on.
+    std::string other{kProgram};
+    other.replace(other.find("u64(7)"), 6, "u64(9)");
+    std::string reshaped{kProgram};
+    reshaped.replace(reshaped.find("    run: f32\n"), 13, "    run: f32\n    rise: f32\n");
+    const auto kFiles =
+        GameFiles::fromHeld("shown.game", {{"shown.game", std::string{kGame}}, {"shown.kest", std::string{kProgram}}});
+    const auto kOtherFiles =
+        GameFiles::fromHeld("shown.game", {{"shown.game", std::string{kGame}}, {"shown.kest", other}});
+    const auto kReshapedFiles =
+        GameFiles::fromHeld("shown.game", {{"shown.game", std::string{kGame}}, {"shown.kest", reshaped}});
+    RAWFRAME_EXPECT(kFiles.has_value() && kOtherFiles.has_value() && kReshapedFiles.has_value());
+    if (!kFiles.has_value() || !kOtherFiles.has_value() || !kReshapedFiles.has_value()) {
+        return;
+    }
+    const auto kCompiled = kFiles->compile("shown.kest");
+    const auto kOther = kOtherFiles->compile("shown.kest");
+    const auto kReshaped = kReshapedFiles->compile("shown.kest");
+    RAWFRAME_EXPECT(kCompiled.has_value() && kOther.has_value() && kReshaped.has_value());
+    if (!kCompiled.has_value() || !kOther.has_value() || !kReshaped.has_value()) {
+        return;
+    }
+    const std::vector<schema::ComponentDescriptor> kDescriptors = {
+        {.id = kStickId, .name = "shown.stick", .size = sizeof(Stick), .alignment = alignof(Stick), .plainData = true},
+        {.id = kLookId, .name = "shown.look", .size = sizeof(Sprite), .alignment = alignof(Sprite), .plainData = true},
+        {.id = kViewId, .name = "shown.view", .size = sizeof(Camera), .alignment = alignof(Camera), .plainData = true}};
+    const auto kMake = [&] {
+        return ClientPresentation::create(
+            PresentationSettings{.program = *kCompiled,
+                                 .game = &kFiles->description(),
+                                 .descriptors = kDescriptors,
+                                 .limits = {.heapBytes = std::size_t{1} << 20U, .fuelPerCall = 100'000}});
+    };
+    auto bound = kMake();
+    auto unbound = kMake();
+    RAWFRAME_EXPECT(bound.has_value() && *bound != nullptr && unbound.has_value() && *unbound != nullptr);
+    if (!bound.has_value() || *bound == nullptr || !unbound.has_value() || *unbound == nullptr) {
+        return;
+    }
+    schema::RegistryBuilder builder;
+    for (const schema::ComponentDescriptor& descriptor : kDescriptors) {
+        builder.add(descriptor);
+    }
+    builder.add({.id = world::Persistent::kComponentTypeId,
+                 .name = world::Persistent::kComponentName,
+                 .size = sizeof(world::Persistent),
+                 .alignment = alignof(world::Persistent),
+                 .plainData = true});
+    const auto kRegistry = *builder.freeze();
+    world::World mirror{kRegistry};
+    const world::EntityHandle kStick = *mirror.create();
+    Stick stick{.run = 1.0F};
+    RAWFRAME_EXPECT(mirror.insertErased(kStick, *kRegistry->find(kStickId), &stick).has_value());
+    const auto kTexture = [&] {
+        return static_cast<const Sprite*>(mirror.getErased(kStick, *kRegistry->find(kLookId)))->texture;
+    };
+    RAWFRAME_EXPECT((*bound)->present(mirror, {}, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT(kTexture() == 7);
+    RAWFRAME_EXPECT((*bound)->reload(*kOther).has_value());
+    RAWFRAME_EXPECT((*bound)->present(mirror, {}, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT(kTexture() == 9 && (*bound)->statistics().bound == 1);
+    RAWFRAME_EXPECT(!(*bound)->reload(*kReshaped).has_value());
+    RAWFRAME_EXPECT((*bound)->present(mirror, {}, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT(kTexture() == 9 && (*bound)->statistics().systemsFailed == 0);
+    // Reloaded before it is bound, it binds the new program.
+    world::World again{kRegistry};
+    const world::EntityHandle kAgain = *again.create();
+    RAWFRAME_EXPECT(again.insertErased(kAgain, *kRegistry->find(kStickId), &stick).has_value());
+    RAWFRAME_EXPECT((*unbound)->reload(*kOther).has_value());
+    RAWFRAME_EXPECT((*unbound)->present(again, {}, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT(static_cast<const Sprite*>(again.getErased(kAgain, *kRegistry->find(kLookId)))->texture == 9);
 }

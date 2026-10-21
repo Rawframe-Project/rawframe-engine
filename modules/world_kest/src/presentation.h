@@ -62,6 +62,12 @@ public:
     ClientPresentation& operator=(const ClientPresentation&) = delete;
     ~ClientPresentation();
 
+    /// Its present systems run `program` from the next tick: a game whose
+    /// sources changed and compiled again as it plays. Refused, the
+    /// running program kept, when a type the mirror holds changed shape
+    /// or a present system takes other columns.
+    [[nodiscard]] result::Status reload(std::shared_ptr<const kest::Program> program);
+
     /// One game tick of `mirror`, whose own player is `player` (or none
     /// yet), its present systems reading the messages `arrived` for it
     /// (D266), bound afresh when it is another World than the last (a
@@ -111,6 +117,10 @@ public:
 
     /// The game's presentation, or nothing when it presents nothing.
     [[nodiscard]] virtual result::Result<std::unique_ptr<ClientPresentation>> presentation() const = 0;
+    /// The program the game runs now: another once its sources changed and
+    /// compiled again (`kest.reload_every`), which a presentation made
+    /// before then takes with `ClientPresentation::reload`.
+    [[nodiscard]] virtual std::shared_ptr<const kest::Program> program() const noexcept = 0;
 };
 
 inline constexpr composition::Capability<PresentationPlan> kPresentationPlan{"rawframe.world_kest.presentation_plan"};
