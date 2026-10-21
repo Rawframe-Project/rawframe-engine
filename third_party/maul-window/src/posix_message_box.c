@@ -4,9 +4,14 @@
 // The message box on Linux, where no library of the desktop's is
 // assumed: zenity (GNOME and most others), else kdialog (KDE), run with
 // the text as arguments, never through a shell. Exit status 0 is OK or
-// Yes; closing the box counts as Cancel or No.
+// Yes; closing the box counts as Cancel or No. Where neither is there,
+// the library draws one itself on an X server (x11_message_box.c).
 
 #include "message_box.h"
+
+#ifdef MAUL_WINDOW_X11
+#include "x11_message_box.h"
+#endif
 
 #include <errno.h>
 #include <spawn.h>
@@ -108,5 +113,11 @@ mwinResult mwinPlatformMessageBox(const mwinMessageBoxDef* def, bool* acceptedOu
             return mwin_success;
         }
     }
+#ifdef MAUL_WINDOW_X11
+    if (status == -1)
+    {
+        return mwinX11MessageBox(def, acceptedOut);
+    }
+#endif
     return status == -1 ? mwin_errorUnsupported : mwin_errorPlatform;
 }

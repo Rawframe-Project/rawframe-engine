@@ -23,6 +23,7 @@ set(MWIN_X11_SOURCES
     src/x11_drop.c
     src/x11_chrome.c
     src/x11_icon.c
+    src/x11_message_box.c
     src/x11_input.c
     src/x11_output.c
     src/x11_pen.c

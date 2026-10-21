@@ -69,7 +69,13 @@ static bool FindCore(mwinX11Api* api)
            FIND(library, setSelectionOwner, xcb_set_selection_owner) &&
            FIND(library, getSelectionOwner, xcb_get_selection_owner) &&
            FIND(library, getSelectionOwnerReply, xcb_get_selection_owner_reply) &&
-           FIND(library, convertSelection, xcb_convert_selection);
+           FIND(library, convertSelection, xcb_convert_selection) &&
+           FIND(library, waitForEvent, xcb_wait_for_event) &&
+           FIND(library, openFontChecked, xcb_open_font_checked) &&
+           FIND(library, closeFont, xcb_close_font) && FIND(library, queryFont, xcb_query_font) &&
+           FIND(library, queryFontReply, xcb_query_font_reply) &&
+           FIND(library, imageText8, xcb_image_text_8) &&
+           FIND(library, polyRectangle, xcb_poly_rectangle);
 }
 
 static bool FindRandr(mwinX11Api* api)

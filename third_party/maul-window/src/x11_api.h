@@ -73,6 +73,14 @@ typedef struct mwinX11Api
     typeof(xcb_get_selection_owner)* getSelectionOwner;
     typeof(xcb_get_selection_owner_reply)* getSelectionOwnerReply;
     typeof(xcb_convert_selection)* convertSelection;
+    // What the message box draws with, where no desktop program shows one.
+    typeof(xcb_wait_for_event)* waitForEvent;
+    typeof(xcb_open_font_checked)* openFontChecked;
+    typeof(xcb_close_font)* closeFont;
+    typeof(xcb_query_font)* queryFont;
+    typeof(xcb_query_font_reply)* queryFontReply;
+    typeof(xcb_image_text_8)* imageText8;
+    typeof(xcb_poly_rectangle)* polyRectangle;
     // libxcb-randr, NULL where it is missing.
     void* randrLibrary;
     xcb_extension_t* randrId;

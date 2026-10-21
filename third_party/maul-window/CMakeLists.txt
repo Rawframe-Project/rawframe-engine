@@ -288,6 +288,12 @@ if(MAUL_WINDOW_BUILD_TESTS)
         target_compile_definitions(test_x11_input PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_x11_input PRIVATE PkgConfig::MWIN_TEST_XCB)
         set_tests_properties(x11_input PROPERTIES SKIP_RETURN_CODE 77)
+        # The library's own message box, answered by the test's own
+        # connection where neither zenity nor kdialog is on PATH.
+        maul_add_test(x11_message_box POSIX)
+        target_compile_definitions(test_x11_message_box PRIVATE _POSIX_C_SOURCE=200809L)
+        target_link_libraries(test_x11_message_box PRIVATE PkgConfig::MWIN_TEST_XCB)
+        set_tests_properties(x11_message_box PROPERTIES SKIP_RETURN_CODE 77)
         # Another client of the test's own connection shares CLIPBOARD.
         maul_add_test(x11_clipboard POSIX)
         target_compile_definitions(test_x11_clipboard PRIVATE _POSIX_C_SOURCE=200809L)
