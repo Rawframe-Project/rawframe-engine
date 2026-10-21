@@ -635,6 +635,10 @@ void ShellParticipant::stop() noexcept {
     if (playing_.has_value()) {
         playing_->stop();
     }
+    // What it played given a second from now together to end as a Host
+    // does, its summaries written, before dropping it kills it (D952);
+    // the links below take their moment meanwhile.
+    const auto kUntil = std::chrono::steady_clock::now() + std::chrono::seconds{1};
     // Ending lets a preview go, the player's camera given back (D433).
     // A host joined is told the author leaves as its link goes.
     bool ended = false;
@@ -642,6 +646,11 @@ void ShellParticipant::stop() noexcept {
         static_cast<void>(session_->answer(R"({"kind":"authoring.end","id":0})", ended));
     }
     held_.joined.reset();
+    for (std::optional<Play>* each : {&playing_, &stopping_}) {
+        if (each->has_value() && !(*each)->ended(kUntil)) {
+            break;
+        }
+    }
     emitter_.log(diagnostics::Severity::Info,
                  kSummary,
                  "what Studio showed",
@@ -823,7 +832,9 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .providedCapabilities = kProvided,
         .optionalCapabilities = kMaybe,
         .eligibility = {.roles = ~kServer},
-        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
+        // Its links' last records wait a moment each (D947), and what it
+        // played is given a second meanwhile to end (D952).
+        .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(4000)},
         .observabilityIdentity = "studio.shell",
         .budgetOwner = "ui",
         .hostPhases = composition::hostPhaseBit(composition::HostPhase::PresentationExtract),

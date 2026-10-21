@@ -349,14 +349,18 @@ public:
         }
         made_ = true;
         // What the last frame made shows still, and it is not old (D494).
-        // Never for a headset, whose images are others each frame.
-        if (madeAt_.has_value() && now_ - *madeAt_ < kLongestUnchanged && !target_.readBack && target_.images.empty() &&
-            target_.width == lastWidth_ && target_.height == lastHeight_ &&
-            std::ranges::all_of(
-                joined_,
-                [&](const Joined& joined) {
-                    return unchanged_.contains(joined.recorder);
-                })) {
+        // Never for a headset, whose images are others each frame, nor for
+        // a picture read back to be kept or counted; one read back for the
+        // stream alone has been streamed already, however old, as no window
+        // of its own shows it to be drawn again (D952): a device too slow
+        // to draw four frames a second never skipped one.
+        const bool kReadForStream = stream_.has_value() && !capture_.has_value();
+        if (madeAt_.has_value() &&
+            (now_ - *madeAt_ < kLongestUnchanged || kReadForStream || kWindowsKeepTheirPictures) &&
+            (!target_.readBack || kReadForStream) && target_.images.empty() && target_.width == lastWidth_ &&
+            target_.height == lastHeight_ && std::ranges::all_of(joined_, [&](const Joined& joined) {
+                return unchanged_.contains(joined.recorder);
+            })) {
             ++framesUnchanged_;
             return;
         }

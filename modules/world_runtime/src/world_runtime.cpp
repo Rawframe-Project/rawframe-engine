@@ -275,11 +275,13 @@ public:
                 pacer_->ran(1);
             }
         }
-        // Behind, its debt at most once a second; caught up, nought once.
-        if (kDue.debt != 0 ? !debtSaid_.has_value() || frame.now - *debtSaid_ >= kDebtSaidEvery
-                           : debtSaid_.has_value()) {
+        // Its debt at most once a second, however often it falls behind and
+        // catches up; caught up, nought once (D950, D952).
+        if ((kDue.debt != 0 || debtShown_ != 0) &&
+            (!debtSaid_.has_value() || frame.now - *debtSaid_ >= kDebtSaidEvery)) {
             emitter_.gauge(kTickDebt, diagnostics::Unit::Count, static_cast<double>(kDue.debt));
-            debtSaid_ = kDue.debt != 0 ? std::optional{frame.now} : std::nullopt;
+            debtSaid_ = frame.now;
+            debtShown_ = kDue.debt;
         }
         context_->reportMemory(world_->heldBytes());
         // SPEC-0012's tick progress, on SPEC-0013's thresholds (D212): a
@@ -406,8 +408,9 @@ private:
     /// When the World fell more than a second behind, while it stays there;
     /// and whether it has been behind too long.
     std::optional<execution::MonotonicInstant> behindSince_;
-    /// When its debt was last said, while it is behind.
+    /// When its debt was last said, and what it was.
     std::optional<execution::MonotonicInstant> debtSaid_;
+    std::uint64_t debtShown_ = 0;
     bool overloaded_ = false;
 };
 

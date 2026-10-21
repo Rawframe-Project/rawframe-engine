@@ -195,6 +195,18 @@ private:
 /// The longest a window that nothing changes in goes undrawn (D494).
 inline constexpr execution::MonotonicDuration kLongestUnchanged = execution::MonotonicDuration::fromMilliseconds(250);
 
+/// Whether the platform keeps a window's last picture while another
+/// covers it, as a compositor that always runs does: Windows, Apple's
+/// systems, Android, and a browser. There an unchanged window is never
+/// drawn again for its age; a Linux desktop may run none, so there it is
+/// after `kLongestUnchanged` (D952). On a device that draws on the
+/// processor, an idle editor redrawn four times a second took four cores.
+#if defined(_WIN32) || defined(__APPLE__) || defined(__ANDROID__) || defined(__EMSCRIPTEN__) || defined(__wasi__)
+inline constexpr bool kWindowsKeepTheirPictures = true;
+#else
+inline constexpr bool kWindowsKeepTheirPictures = false;
+#endif
+
 /// How the last frame done kept up with the device (D533), as the frames
 /// saw it from Host iterations: from its submission, it certainly took
 /// until the last iteration that found it running, and at most until the
@@ -235,9 +247,11 @@ public:
     virtual void ready(FrameRecorder& recorder) noexcept = 0;
     /// Ready, and what it prepared draws what it drew in the last frame
     /// made (D494). A frame every recorder says so of, as large as the
-    /// last, read back by no one, is not made, so a window nothing changes
-    /// in is not drawn again; one is all the same at least every
-    /// `kLongestUnchanged`, so what a window lost while covered is drawn.
+    /// last, read back by no one but the stream (D952), is not made, so a
+    /// window nothing changes in is not drawn again; where windows may lose
+    /// their pictures (`kWindowsKeepTheirPictures`), one is all the same at
+    /// least every `kLongestUnchanged`, so what a window lost while covered
+    /// is drawn.
     virtual void unchanged(FrameRecorder& recorder) noexcept = 0;
     /// How the last frame done kept up with the device.
     [[nodiscard]] virtual FramePace pace() const noexcept = 0;

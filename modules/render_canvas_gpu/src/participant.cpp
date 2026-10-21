@@ -274,8 +274,12 @@ private:
             }
         }
         const std::uint64_t kRevision = drawn != nullptr && drawn->atlas != nullptr ? drawn->atlas->revision : 0;
-        const bool kSame = drawn != nullptr && last_.has_value() && *drawn == *last_ && kRevision == lastRevision_ &&
-                           images == lastImages_;
+        // No UI drawn after none is the same frame too, as an editor's
+        // view leaving the UI out draws one (D952).
+        const bool kSame = drawn == nullptr ? drewNone_
+                                            : last_.has_value() && *drawn == *last_ && kRevision == lastRevision_ &&
+                                                  images == lastImages_;
+        drewNone_ = drawn == nullptr;
         if (drawn == nullptr) {
             last_.reset();
         } else if (!kSame) {
@@ -291,6 +295,8 @@ private:
     view::PreviewCamera* preview_ = nullptr;
     std::unique_ptr<UiRenderer> renderer_;
     std::optional<ui::DrawList> last_;
+    /// Whether the last frame drew no UI.
+    bool drewNone_ = false;
     std::uint64_t lastRevision_ = 0;
     std::vector<std::shared_ptr<const texture::Texture>> lastImages_;
     bool failed_ = false;

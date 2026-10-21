@@ -69,6 +69,9 @@ int main(int argc, char** argv) {
                            .role = composition::TargetRole::Tool,
                            .registrars = kRegistrars,
                            .drive = &play,
+                           // The shell's own stop takes up to four seconds
+                           // beside the others' (D952).
+                           .defaultShutdownBudgetMs = 9500,
                            // Opened as an application is, with no file (D920): drawn on the
                            // best device there is, a game given as its argument opened.
                            .defaults = "render.device = any\nrender.unavailable_says = true\nwindow.shown_when_asked = "

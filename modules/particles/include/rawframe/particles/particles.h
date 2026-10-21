@@ -165,6 +165,8 @@ struct EmitterDraw {
     std::uint32_t columns = 1;
     std::uint32_t rows = 1;
     float streak = 0;
+
+    friend bool operator==(const EmitterDraw&, const EmitterDraw&) = default;
 };
 
 /// A point of a ribbon a frame draws (D354): where it is relative to the
@@ -175,6 +177,8 @@ struct RibbonPoint {
     float width = 0;
     std::array<float, 4> color{1, 1, 1, 1};
     float along = 0;
+
+    friend bool operator==(const RibbonPoint&, const RibbonPoint&) = default;
 };
 
 /// A ribbon a frame draws, a trail's or a beam's (D354): its material's
@@ -184,6 +188,8 @@ struct Ribbon {
     std::uint32_t material = 0;
     std::uint32_t first = 0;
     std::uint32_t count = 0;
+
+    friend bool operator==(const Ribbon&, const Ribbon&) = default;
 };
 
 /// ADR-0053's limit points (D352, D354), profile values: the emitters a
@@ -224,6 +230,8 @@ struct Frame {
     std::vector<RibbonPoint> ribbonPoints;
     std::size_t ribbonsLeftOut = 0;
     std::size_t ribbonsHeld = 0;
+
+    friend bool operator==(const Frame&, const Frame&) = default;
 };
 
 /// What a view's frames drew and left out of the triad, summed for its

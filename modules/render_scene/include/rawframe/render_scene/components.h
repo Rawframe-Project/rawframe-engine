@@ -139,6 +139,8 @@ struct AutoExposure {
     float high = 0;
     /// How much more the middle of the picture counts (D345).
     float centered = 0;
+
+    friend bool operator==(const AutoExposure&, const AutoExposure&) = default;
 };
 
 /// `rawframe.model.Sun` as C++ reads it.

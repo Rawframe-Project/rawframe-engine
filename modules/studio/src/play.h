@@ -12,6 +12,7 @@
 #include "records.h"
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <initializer_list>
@@ -102,6 +103,11 @@ public:
     }
     /// Asks both to stop, as a Host stops on a stop request.
     void stop() noexcept;
+    /// Whether every process it started has ended, or ends by `until`:
+    /// as Studio ends, a process asked to stop is given a moment to end as
+    /// a Host does, its records written, before dropping it kills it
+    /// (D952).
+    bool ended(std::chrono::steady_clock::time_point until) noexcept;
 
     /// Where the client streams its pictures when it plays in the
     /// viewport (D789).

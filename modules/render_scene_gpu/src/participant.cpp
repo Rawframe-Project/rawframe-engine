@@ -1,6 +1,7 @@
 #include "rawframe/composition/composition.h"
 #include "rawframe/render/frame.h"
 #include "rawframe/render_scene/frames.h"
+#include "rawframe/render_scene/still.h"
 #include "rawframe/render_scene_gpu/captures.h"
 #include "rawframe/render_scene_gpu/registrar.h"
 #include "rawframe/render_scene_gpu/renderer.h"
@@ -206,9 +207,28 @@ public:
                                                                    .height = kRegion.height,
                                                                    .bars = scene_->bars()}}
                                          : std::nullopt);
-            frames_->ready(*regions_[at]);
+            // A region not shown draws nothing, the same as before (D952).
+            if (kShown) {
+                frames_->ready(*regions_[at]);
+            } else {
+                frames_->unchanged(*regions_[at]);
+            }
         }
         prepareEyes();
+        // A picture that has stood (D952) is not drawn again, where the
+        // scene is drawn alone: no capture, render texture, shown split
+        // (a preview keeps its regions' views made while it shows one), or
+        // eye.
+        const render_scene::SceneFrame* kQueued = scene_->queued();
+        const bool kSplit = std::ranges::any_of(scene_->regionFrames(), [](const render_scene::RegionFrame& each) {
+            return each.width != 0 && each.height != 0;
+        });
+        if (!capturing_.has_value() && views_.empty() && !kSplit && eyes_.empty() && kQueued != nullptr &&
+            stillness_.still(*kQueued)) {
+            frames_->unchanged(*renderer_);
+            frames_->unchanged(renderer_->composed());
+            return;
+        }
         frames_->ready(*renderer_);
         frames_->ready(renderer_->composed());
     }
@@ -403,6 +423,8 @@ private:
     std::vector<std::unique_ptr<TextureView>> regions_;
     /// A headset's eyes' views (D595).
     std::vector<std::unique_ptr<TextureView>> eyes_;
+    /// Whether the scene's picture has stood (D952).
+    render_scene::Stillness stillness_;
     /// The frame a tool asked to capture, and whether the renderer was
     /// asked to read it.
     std::optional<render_scene::SceneFrame> capturing_;

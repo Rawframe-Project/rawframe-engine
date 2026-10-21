@@ -129,6 +129,8 @@ struct ScenePostProcess {
     std::array<float, material::kPostProcessBlobFloats> blob{};
     SceneTexture texture;
     float weight = 1;
+
+    friend bool operator==(const ScenePostProcess&, const ScenePostProcess&) = default;
 };
 
 struct SceneMesh {
@@ -280,6 +282,8 @@ struct SceneDraw {
     /// `previous` is its model's (D510); `palette` where it was not posed
     /// then.
     std::uint32_t previousPalette = 0;
+
+    friend bool operator==(const SceneDraw&, const SceneDraw&) = default;
 };
 
 /// The light a frame is drawn in, linear Rec. 709 (ADR-0047) in physical
@@ -304,6 +308,8 @@ struct SceneLights {
     /// overhead and paler at the horizon, as an editor's view shows it
     /// (D914, D925); a game's own view draws its light flat.
     bool graded = false;
+
+    friend bool operator==(const SceneLights&, const SceneLights&) = default;
 };
 
 /// A punctual light as the extract stage copies it out of the World, where
@@ -344,6 +350,8 @@ struct SceneDecal {
     std::uint64_t texture = 0;
     std::uint64_t normal = 0;
     float roughness = 0;
+
+    friend bool operator==(const SceneDecal&, const SceneDecal&) = default;
 };
 
 /// A reflection probe as a device reads it (D325): its box's middle
@@ -354,6 +362,8 @@ struct SceneProbe {
     std::array<float, 3> half{};
     std::uint64_t environment = 0;
     float intensity = 0;
+
+    friend bool operator==(const SceneProbe&, const SceneProbe&) = default;
 };
 
 /// A punctual light as a device reads it (D290): where it is relative to
@@ -372,6 +382,8 @@ struct SceneLight {
     /// for a spot, six for a point; none without shadows (D292).
     std::uint32_t shadowSlot = 0;
     std::uint32_t shadowSlots = 0;
+
+    friend bool operator==(const SceneLight&, const SceneLight&) = default;
 };
 
 /// One square of the punctual lights' shadow atlas (D292): a spot's map or
@@ -392,6 +404,8 @@ struct ShadowSlot {
     std::uint32_t side = 0;
     std::uint32_t firstCaster = 0;
     std::uint32_t casterCount = 0;
+
+    friend bool operator==(const ShadowSlot&, const ShadowSlot&) = default;
 };
 
 /// A punctual light's square of the shadows' atlas as seen from it, not yet
@@ -410,6 +424,8 @@ struct SceneLightShadows {
     std::vector<SceneDraw> casters;
     std::size_t evicted = 0;
     std::size_t overLimit = 0;
+
+    friend bool operator==(const SceneLightShadows&, const SceneLightShadows&) = default;
 };
 
 /// ADR-0051's one clustered structure for the view (D290): screen tiles by
@@ -432,6 +448,8 @@ struct SceneClusters {
     /// Lights by their place in the frame's lights, decals by theirs in
     /// the frame's decals, and probes by theirs in the frame's probes.
     std::vector<std::uint32_t> indices;
+
+    friend bool operator==(const SceneClusters&, const SceneClusters&) = default;
 };
 
 /// One cascade of the sun's shadow map (ADR-0051): a light-space box
@@ -447,6 +465,8 @@ struct ShadowCascade {
     /// Its casters, a run of `SceneShadows::casters` (D298).
     std::uint32_t firstCaster = 0;
     std::uint32_t casterCount = 0;
+
+    friend bool operator==(const ShadowCascade&, const ShadowCascade&) = default;
 };
 
 /// ADR-0051's typed ladder of shadow filters (D330): the hardware's two by
@@ -480,6 +500,8 @@ struct SceneShadows {
     std::vector<SceneDraw> casters;
     /// Casters left out past the models' limit, once for each cascade.
     std::size_t overLimit = 0;
+
+    friend bool operator==(const SceneShadows&, const SceneShadows&) = default;
 };
 
 /// What the queue stage builds: the view, the light, and the draws in the
@@ -496,6 +518,8 @@ struct SceneMetering {
     AutoExposure settings;
     float elapsed = 0;
     bool snap = false;
+
+    friend bool operator==(const SceneMetering&, const SceneMetering&) = default;
 };
 
 /// ADR-0051's grading form (D294), as the display stage applies it to the
@@ -514,6 +538,8 @@ struct SceneGrading {
     float saturation = 1;
     float contrast = 1;
     std::uint64_t table = 0;
+
+    friend bool operator==(const SceneGrading&, const SceneGrading&) = default;
 };
 
 /// The grading a camera's `Grading` asks for, made sound (D294).
@@ -526,6 +552,8 @@ struct SceneOcclusion {
     bool enabled = false;
     float radius = 0;
     float intensity = 0;
+
+    friend bool operator==(const SceneOcclusion&, const SceneOcclusion&) = default;
 };
 
 /// The occlusion a camera's `AmbientOcclusion` asks for, made sound
@@ -538,6 +566,8 @@ struct SceneOcclusion {
 struct SceneBloom {
     bool enabled = false;
     float intensity = 0;
+
+    friend bool operator==(const SceneBloom&, const SceneBloom&) = default;
 };
 
 /// The bloom a camera's `Bloom` asks for, made sound (D328): none for an
@@ -549,6 +579,8 @@ struct SceneBloom {
 struct SceneScreenReflections {
     bool enabled = false;
     float distance = 0;
+
+    friend bool operator==(const SceneScreenReflections&, const SceneScreenReflections&) = default;
 };
 
 /// The reflections a camera's `ScreenSpaceReflections` asks for, made
@@ -561,6 +593,8 @@ struct SceneScreenReflections {
 struct SceneMotionBlur {
     bool enabled = false;
     float shutter = 0;
+
+    friend bool operator==(const SceneMotionBlur&, const SceneMotionBlur&) = default;
 };
 
 /// The motion blur a camera's `MotionBlur` asks for, made sound (D334):
@@ -574,6 +608,8 @@ struct SceneDepthOfField {
     bool enabled = false;
     float focus = 0;
     float aperture = 0;
+
+    friend bool operator==(const SceneDepthOfField&, const SceneDepthOfField&) = default;
 };
 
 /// The depth of field a camera's `DepthOfField` asks for, made sound
@@ -586,6 +622,8 @@ struct SceneDepthOfField {
 struct SceneContactShadows {
     bool enabled = false;
     float length = 0;
+
+    friend bool operator==(const SceneContactShadows&, const SceneContactShadows&) = default;
 };
 
 /// The contact shadows a camera's `ContactShadows` asks for, made sound
@@ -603,6 +641,8 @@ struct SceneTemporal {
     std::array<float, 2> jitter{0, 0};
     Matrix previousViewProjection{};
     bool history = false;
+
+    friend bool operator==(const SceneTemporal&, const SceneTemporal&) = default;
 };
 
 /// The subpixel jitter of a frame counted from nought: Halton (2, 3) over
@@ -715,6 +755,8 @@ struct SceneFrame {
     std::vector<Matrix> palette;
     std::size_t skinned = 0;
     std::size_t paletteOverLimit = 0;
+
+    friend bool operator==(const SceneFrame&, const SceneFrame&) = default;
 };
 
 /// `frame` without its reflection probes, in its list or its clusters: as

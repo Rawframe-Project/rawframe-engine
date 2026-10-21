@@ -266,11 +266,31 @@ RAWFRAME_TEST(AWorldBehindSaysItsDebtOnceASecond) {
         clock.advance(MonotonicDuration::fromMilliseconds(20));
     }
     RAWFRAME_EXPECT(debts.said.size() == 2 && debts.said[0] > 0 && debts.said[1] > 0);
-    // Caught up with no time passing: nought, once.
+    // Caught up with no time passing, then a second on: nought, once.
     for (int round = 0; round < 200; ++round) {
         iterate(composition, iteration++, clock.now());
     }
+    RAWFRAME_EXPECT(debts.said.size() == 2);
+    for (int round = 0; round < 100; ++round) {
+        clock.advance(MonotonicDuration::fromMilliseconds(20));
+        iterate(composition, iteration++, clock.now());
+    }
     RAWFRAME_EXPECT(debts.said.size() == 3 && debts.said.back() == 0);
+    // A loaded machine falls a tick behind and catches up again and again:
+    // six seconds of it, then caught up, say at most one a second and a
+    // nought, not one each time.
+    const std::size_t kBefore = debts.said.size();
+    for (int round = 0; round < 40; ++round) {
+        clock.advance(MonotonicDuration::fromMilliseconds(150));
+        iterate(composition, iteration++, clock.now());
+        iterate(composition, iteration++, clock.now());
+        iterate(composition, iteration++, clock.now());
+    }
+    clock.advance(MonotonicDuration::fromSeconds(2));
+    for (int round = 0; round < 40; ++round) {
+        iterate(composition, iteration++, clock.now());
+    }
+    RAWFRAME_EXPECT(debts.said.size() - kBefore <= 9);
     composition.stop();
     movement = nullptr;
 }

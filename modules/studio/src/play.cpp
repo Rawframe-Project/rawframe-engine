@@ -10,6 +10,7 @@
 #include <random>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <utility>
 
 #if !defined(_WIN32)
@@ -439,6 +440,24 @@ bool Play::ended() noexcept {
            std::ranges::all_of(others_, [](process::Child& other) {
                return other.exited().has_value();
            });
+}
+
+bool Play::ended(std::chrono::steady_clock::time_point until) noexcept {
+    const auto kRunning = [this] {
+        return std::ranges::any_of(others_,
+                                   [](process::Child& other) {
+                                       return !other.exited().has_value();
+                                   }) ||
+               (client_.has_value() && !client_->exited().has_value()) ||
+               (server_.has_value() && !server_->exited().has_value());
+    };
+    while (kRunning()) {
+        if (std::chrono::steady_clock::now() >= until) {
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    }
+    return true;
 }
 
 void Play::stop() noexcept {
