@@ -1,6 +1,5 @@
 #include "frames.h"
 
-#include "rawframe/base/files.h"
 #include "rawframe/base/platform.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
@@ -475,19 +474,11 @@ private:
 
     void stream(const std::vector<std::byte>& pixels) {
 #if RAWFRAME_FILE_SYSTEM
-        const std::vector<std::byte> kBytes = streamedOf(
-            StreamedPicture{.sequence = streamed_ + 1, .width = readWidth_, .height = readHeight_, .pixels = pixels});
-        const std::string kWriting = *stream_ + ".writing";
-        {
-            std::ofstream file{kWriting, std::ios::binary | std::ios::trunc};
-            file.write(reinterpret_cast<const char*>(kBytes.data()), static_cast<std::streamsize>(kBytes.size()));
-            if (!file) {
-                ++streamFailures_;
-                return;
-            }
+        // Into the one file, written in place (D967).
+        if (!streamWriter_.has_value()) {
+            streamWriter_.emplace(*stream_);
         }
-        // Over the picture a reader may have open meanwhile (D965).
-        if (!base::moveOver(kWriting, *stream_)) {
+        if (!streamWriter_->write(readWidth_, readHeight_, pixels)) {
             ++streamFailures_;
             return;
         }
@@ -551,6 +542,9 @@ private:
     /// Where each picture read back is streamed, how many were, and how
     /// many could not be (D789).
     std::optional<std::string> stream_;
+#if RAWFRAME_FILE_SYSTEM
+    std::optional<PictureStreamWriter> streamWriter_;
+#endif
     std::uint64_t streamed_ = 0;
     std::uint64_t streamFailures_ = 0;
     /// The last frame read back, kept for the capture.

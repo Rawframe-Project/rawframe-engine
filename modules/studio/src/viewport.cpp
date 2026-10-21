@@ -14,33 +14,23 @@ void ShellParticipant::followPicture() {
     if (!playing_.has_value() || !play_.has_value() || !play_->viewport.has_value()) {
         return;
     }
-    // The newest picture the client streamed, when the file changed: it
-    // is put there whole, so what reads is one picture or none.
+    // The newest picture the client streamed, whole, through the one file
+    // it writes in place, mapped here (D967): neither a file read nor one
+    // scanned a picture at a time.
     const std::filesystem::path kPath = playing_->picture();
-    std::error_code error;
-    const auto kWritten = std::filesystem::last_write_time(kPath, error);
-    if (error || (inViewport_.pictureWritten.has_value() && *inViewport_.pictureWritten == kWritten)) {
-        return;
+    if (!inViewport_.stream.has_value() || inViewport_.streamed != kPath) {
+        inViewport_.stream.emplace(kPath);
+        inViewport_.streamed = kPath;
     }
-    inViewport_.pictureWritten = kWritten;
-    // In large blocks: a character at a time, four megabytes took a tenth
-    // of a second on Windows, which held a moving view under ten pictures
-    // a second (D964).
     const auto kStarted = std::chrono::steady_clock::now();
-    const std::optional<std::string> kBytes = authoring_session::readFile(kPath);
-    if (!kBytes.has_value()) {
-        return;
-    }
-    std::optional<render::StreamedPicture> read =
-        render::streamedFrom(std::as_bytes(std::span{kBytes->data(), kBytes->size()}));
+    std::optional<render::StreamedPicture> read = inViewport_.stream->next();
     const auto kTook = static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - kStarted).count());
     inViewport_.readMicroseconds += kTook;
     inViewport_.slowestReadMicroseconds = std::max(inViewport_.slowestReadMicroseconds, kTook);
-    if (!read.has_value() || read->sequence == inViewport_.pictureSequence) {
+    if (!read.has_value()) {
         return;
     }
-    inViewport_.pictureSequence = read->sequence;
     // Shown opaque: a camera's picture, whatever its device left in its
     // alpha (Direct3D 12's software adapter leaves nought, D923).
     for (std::size_t at = 3; at < read->pixels.size(); at += 4) {

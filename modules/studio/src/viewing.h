@@ -4,6 +4,7 @@
 // from the shell, as the preview is told it again whenever one is attached;
 // and the game played in the viewport (D789, D790).
 
+#include "rawframe/render/capture.h"
 #include "rawframe/texture/texture.h"
 #include "rawframe/world_tooling/forwarding.h"
 
@@ -45,14 +46,14 @@ struct PreviewShown {
 };
 
 /// The game played in the viewport (D789, D790): whether it plays there,
-/// the picture shown, when its file was written, its sequence, and how many
-/// were shown; and what lands on the viewport handed to it, how many events,
-/// and how many records the preview took.
+/// the picture shown, the stream it comes through, and how many were shown; and what lands on the viewport handed to
+/// it, how many events, and how many records the preview took.
 struct PlayedViewport {
     bool inViewport = false;
     std::shared_ptr<const texture::Texture> picture;
-    std::optional<std::filesystem::file_time_type> pictureWritten;
-    std::uint64_t pictureSequence = 0;
+    /// The stream its pictures come through, and the file it reads (D967).
+    std::optional<render::PictureStreamReader> stream;
+    std::filesystem::path streamed;
     std::uint64_t picturesShown = 0;
     /// The time its pictures took to read, in all and at the most, in
     /// microseconds (D964): what holds a moving view back.

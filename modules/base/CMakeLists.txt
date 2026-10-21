@@ -2,7 +2,7 @@
 # primitives, the 128-bit value, the byte vocabulary, platform detection,
 # SHA-256 for fingerprints, the operating system's secure random source, and
 # files replaced whole.
-rawframe_module(NAME base SOURCES src/fatal.cpp src/usage.cpp src/secure_random.cpp src/sha256.cpp src/files.cpp)
+rawframe_module(NAME base SOURCES src/fatal.cpp src/usage.cpp src/secure_random.cpp src/sha256.cpp src/files.cpp src/mapped.cpp)
 # Windows' secure random numbers (D237).
 if(WIN32)
     target_link_libraries(rawframe_base PUBLIC bcrypt)
