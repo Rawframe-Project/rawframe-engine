@@ -427,12 +427,16 @@ void ShellParticipant::pollPicks(double seconds) {
     }
     const std::optional<std::string> kSource = pickedIn(kReply, scene_);
     const std::optional<Moved> kMoved = movedIn(kReply, scene_);
+    // The Select tool's drag draws a box, choosing what stands in it
+    // (D974); its press chose what it met, as a click does, until then.
+    const std::optional<std::array<std::array<double, 3>, 2>> kBox = boxIn(kReply);
+    const bool kBoxChose = held_.tool == 0 && kBox.has_value() && chooseBoxed(*kBox);
     // With an extension's mode on, a click that met the scene runs it
     // there, on what it met, instead of choosing that (D877).
     const std::optional<std::array<double, 3>> kPoint = pickedPointIn(kReply);
     if (held_.extensionMode.has_value() && kPoint.has_value()) {
         runExtensionMode(*kPoint, kSource);
-    } else if (kSource.has_value()) {
+    } else if (kSource.has_value() && !kBoxChose) {
         if (const std::optional<std::string> kLayer = lockedOf(*kSource); kLayer.has_value()) {
             // Not picked in the viewport, nor moved there (D788).
             ++lockRefused_;
@@ -445,7 +449,7 @@ void ShellParticipant::pollPicks(double seconds) {
                                  : names_[static_cast<std::size_t>(kAt - entities_.begin())]));
         }
     }
-    if (kMoved.has_value() && !lockedOf(kMoved->source).has_value()) {
+    if (kMoved.has_value() && !kBoxChose && !lockedOf(kMoved->source).has_value()) {
         moveDragged(*kMoved);
     }
     // The view moved in the played game, shown in the view's fields
@@ -517,7 +521,10 @@ void ShellParticipant::markChosen() {
             at = std::array<double, 3>{kPose->at("x"), kPose->at("y"), kPose->at("z")};
         }
     }
-    const std::string kReply = ask(markRecord(next(), scene_, at));
+    // Its handles the tool's (D974): Move's axes, Rotate's ring, none for
+    // Select, which only chooses, or Scale, which has none of its own.
+    constexpr std::array<std::string_view, 4> kHandles = {"none", "axes", "ring", "none"};
+    const std::string kReply = ask(markRecord(next(), scene_, at, kHandles[held_.tool % kHandles.size()]));
     if (kReply.find("\"marked\":true") == std::string::npos) {
         return;
     }

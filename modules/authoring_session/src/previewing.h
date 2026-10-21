@@ -22,6 +22,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace rawframe::authoring_session {
@@ -183,6 +184,12 @@ private:
     std::int64_t flightsRead_ = 0;
     /// The part of it drawn lit: 0 none, 1 to 3 an axis, 4 the ring (D468).
     std::uint8_t lit_ = 0;
+    /// The newest press and the way its ray went, until it is let go: a
+    /// box drawn from it to where it is let go chooses what it holds
+    /// (D974).
+    std::optional<std::pair<std::int64_t, Point>> boxFrom_;
+    /// Its handles shown and grabbed, as the author's tool asks (D974).
+    std::uint8_t handles_ = kAllHandles;
 };
 
 } // namespace rawframe::authoring_session

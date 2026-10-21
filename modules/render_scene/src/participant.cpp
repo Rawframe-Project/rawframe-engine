@@ -525,7 +525,9 @@ private:
                 const auto kWidth = [](bool lit) {
                     return lit ? 1.0F / 90 : 1.0F / 150;
                 };
-                for (std::size_t axis = 0; axis < 3; ++axis) {
+                // Only the handles the author's tool uses (D974).
+                const std::uint8_t kHandles = preview_->handles();
+                for (std::size_t axis = 0; (kHandles & view::kMarkAxes) != 0 && axis < 3; ++axis) {
                     std::array<double, 3> to = *kAt;
                     to[axis] += 1;
                     const bool kAxisLit = static_cast<std::size_t>(kLit) == axis + 1;
@@ -545,7 +547,8 @@ private:
                 }
                 // And a yellow ring about it on the level plane, its turn's
                 // handle (D467).
-                for (std::size_t piece = 0; piece < view::kMarkRingPieces; ++piece) {
+                for (std::size_t piece = 0; (kHandles & view::kMarkRing) != 0 && piece < view::kMarkRingPieces;
+                     ++piece) {
                     const auto kOn = [&](std::size_t at) {
                         const double kAngle =
                             2 * std::numbers::pi * static_cast<double>(at) / static_cast<double>(view::kMarkRingPieces);

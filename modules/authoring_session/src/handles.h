@@ -50,10 +50,24 @@ grabbedRing(const Point& mark, const Point& origin, const Point& toward, double 
 [[nodiscard]] std::optional<double>
 alongAxis(const Point& mark, std::size_t axis, const Point& origin, const Point& toward) noexcept;
 
+/// Which of a mark's handles it shows and a press grabs (D974), a bit
+/// each: its axes, its ring, as the tool in use moves or turns.
+inline constexpr std::uint8_t kAxesHandles = 1;
+inline constexpr std::uint8_t kRingHandle = 2;
+inline constexpr std::uint8_t kAllHandles = kAxesHandles | kRingHandle;
+
+/// The name of a set of handles, its bits' number its place: none, axes,
+/// ring, all.
+[[nodiscard]] std::string_view handlesName(std::uint8_t handles) noexcept;
+
 /// The part of the mark at `mark` a ray grabs, as a press there would: 1
-/// to 3 an axis (X, Y, Z), 4 the ring, the axes first; 0 for none (D468).
-[[nodiscard]] std::uint8_t
-partUnder(const Point& mark, const Point& origin, const Point& toward, double fieldOfView) noexcept;
+/// to 3 an axis (X, Y, Z), 4 the ring, the axes first, of the `handles`
+/// shown; 0 for none (D468).
+[[nodiscard]] std::uint8_t partUnder(const Point& mark,
+                                     const Point& origin,
+                                     const Point& toward,
+                                     double fieldOfView,
+                                     std::uint8_t handles = kAllHandles) noexcept;
 
 /// A handle a press grabbed: an axis, and where along it, or the ring, and
 /// where the press met its plane.
@@ -62,17 +76,22 @@ struct Handle {
     Point point{};
 };
 
-/// The handle of the mark at `mark` a press's ray grabs, if any.
-[[nodiscard]] std::optional<Handle>
-grabbedHandle(const Point& mark, const Point& origin, const Point& toward, double fieldOfView) noexcept;
+/// The handle of the mark at `mark` a press's ray grabs, if any, of the
+/// `handles` shown.
+[[nodiscard]] std::optional<Handle> grabbedHandle(const Point& mark,
+                                                  const Point& origin,
+                                                  const Point& toward,
+                                                  double fieldOfView,
+                                                  std::uint8_t handles = kAllHandles) noexcept;
 
 /// The name of a mark's part as `partUnder` numbers it: x, y, z, or ring;
 /// empty for none.
 [[nodiscard]] std::string_view partName(std::uint8_t part) noexcept;
 
 /// `tooling.mark` for a point, or none, its part `lit` (as `partUnder`
-/// names it) drawn lit.
-[[nodiscard]] document::Value markRecord(const std::optional<Point>& at, std::uint8_t lit);
+/// names it) drawn lit, its `handles` shown.
+[[nodiscard]] document::Value
+markRecord(const std::optional<Point>& at, std::uint8_t lit, std::uint8_t handles = kAllHandles);
 
 /// The `moved` an authoring pick answers for a handle of the mark at `mark`
 /// grabbed at `grabbed` and let go along a ray: a move along X or Z or a

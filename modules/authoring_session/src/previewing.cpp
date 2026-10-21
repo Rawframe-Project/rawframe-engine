@@ -215,6 +215,9 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
     Value hit;
     if (kClicks > clicks_ && kAnswer->find("origin") != nullptr && kAnswer->find("toward") != nullptr) {
         pressed_ = grabbed(kClicks, *kAnswer, previewed);
+        if (const auto kToward = pointOf(kAnswer->find("toward")); kToward.has_value()) {
+            boxFrom_.emplace(kClicks, *kToward);
+        }
     }
     if (pressed_.has_value() && pressed_->count == kClicks && pressed_->handle.has_value()) {
         // A handle of the mark, its chosen entity's (D466): the server
@@ -320,6 +323,22 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
         pressed_.reset();
     }
     made.add("moved", std::move(moved));
+    // The press let go: the ways its ray went where it went down and where
+    // it came up, the corners of a box a tool may choose by (D974).
+    Value box;
+    if (const auto kTo = pointOf(kAnswer != nullptr ? kAnswer->find("releaseToward") : nullptr);
+        boxFrom_.has_value() && kRelease == boxFrom_->first && kTo.has_value()) {
+        box = Value::object();
+        for (const auto& [kName, kWay] : {std::pair{"from", boxFrom_->second}, std::pair{"to", *kTo}}) {
+            Value numbers = Value::array();
+            for (const double kEach : kWay) {
+                numbers.push(Value::real(kEach));
+            }
+            box.add(kName, std::move(numbers));
+        }
+        boxFrom_.reset();
+    }
+    made.add("box", std::move(box));
     if (kAnswer != nullptr) {
         lightUnder(*kAnswer);
     }
@@ -397,8 +416,9 @@ void Preview::lightUnder(const Value& clicked) {
     const auto kOrigin = pointOf(clicked.find("pointOrigin"));
     const auto kToward = pointOf(clicked.find("pointToward"));
     const std::uint8_t kPart =
-        kOrigin.has_value() && kToward.has_value() ? partUnder(*mark_, *kOrigin, *kToward, fieldOfView()) : 0;
-    if (kPart != lit_ && preview_->ask(rawframe::document::writeCompact(markRecord(mark_, kPart))).has_value()) {
+        kOrigin.has_value() && kToward.has_value() ? partUnder(*mark_, *kOrigin, *kToward, fieldOfView(), handles_) : 0;
+    if (kPart != lit_ &&
+        preview_->ask(rawframe::document::writeCompact(markRecord(mark_, kPart, handles_))).has_value()) {
         lit_ = kPart;
     }
 }
@@ -418,7 +438,7 @@ Preview::grabbed(std::int64_t count, const Value& clicked, const authoring::Auth
         previewed->selection().empty()) {
         return std::nullopt;
     }
-    const std::optional<Handle> kHandle = grabbedHandle(*mark_, *kOrigin, *kToward, fieldOfView());
+    const std::optional<Handle> kHandle = grabbedHandle(*mark_, *kOrigin, *kToward, fieldOfView(), handles_);
     if (!kHandle.has_value()) {
         return std::nullopt;
     }
@@ -462,7 +482,7 @@ bool Preview::outline(std::string_view scene, const Value& outlines) {
 Value Preview::marked(const authoring::SessionRecord& record) {
     bool shown = false;
     if (preview_ != nullptr && record.scene == scene_ && !observe_) {
-        const auto kReply = preview_->ask(rawframe::document::writeCompact(markRecord(record.mark, 0)));
+        const auto kReply = preview_->ask(rawframe::document::writeCompact(markRecord(record.mark, 0, record.handles)));
         const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
         const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
         const Value* kMarked = kAnswer != nullptr ? kAnswer->find("marked") : nullptr;
@@ -473,6 +493,7 @@ Value Preview::marked(const authoring::SessionRecord& record) {
     // choice stands.
     if (preview_ != nullptr && record.scene == scene_) {
         mark_ = record.mark;
+        handles_ = record.handles;
         // Marked afresh, nothing lit (D468).
         lit_ = 0;
     }

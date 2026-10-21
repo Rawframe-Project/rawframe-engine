@@ -240,12 +240,21 @@ void ShellParticipant::refreshFiles(const std::string& from, const std::string& 
 
 void ShellParticipant::dropAsset() {
     const std::optional<std::string> kHeld = std::exchange(browser_.held, std::nullopt);
-    if (!kHeld.has_value() || pointing_ == nullptr) {
+    const std::optional<std::size_t> kOpening = std::exchange(browser_.opening, std::nullopt);
+    const bool kChoosing = std::exchange(browser_.choosing, false);
+    const std::optional<std::array<float, 2>> kPointer = releasedAt_.has_value() ? releasedAt_ : pointerLaidOut();
+    if (!kHeld.has_value() || pointing_ == nullptr || !kPointer.has_value() ||
+        std::hypot((*kPointer)[0] - pressedAt_[0], (*kPointer)[1] - pressedAt_[1]) < kDragAfter) {
+        // A scene's row clicked, not dragged, opens it, and a source's
+        // card chooses it.
+        if (kOpening.has_value() && *kOpening < scenes_.size()) {
+            showScene(*kOpening);
+        } else if (kChoosing && kHeld.has_value()) {
+            chooseSource(*kHeld);
+        }
         return;
     }
-    const std::optional<std::array<float, 2>> kPointer = releasedAt_.has_value() ? releasedAt_ : pointerLaidOut();
-    if (!kPointer.has_value() ||
-        std::hypot((*kPointer)[0] - pressedAt_[0], (*kPointer)[1] - pressedAt_[1]) < kDragAfter) {
+    if (placeDropped(*kHeld, *kPointer)) {
         return;
     }
     const auto kHit = tree_->hit(root_, (*kPointer)[0], (*kPointer)[1]);
@@ -269,6 +278,62 @@ void ShellParticipant::dropAsset() {
         return;
     }
     moveFile(*kHeld, kTo);
+}
+
+bool ShellParticipant::placeDropped(const std::string& held, const std::array<float, 2>& at) {
+    const auto kInside = [this, &at](ui::Node node) {
+        if (node == ui::Node{} || !tree_->contains(node)) {
+            return false;
+        }
+        const ui::Rect kRect = tree_->placedRectOf(node);
+        return at[0] >= kRect.x && at[1] >= kRect.y && at[0] < kRect.x + kRect.width && at[1] < kRect.y + kRect.height;
+    };
+    const auto kPlaced = [this, &held](std::string_view onto) {
+        ++browser_.placed;
+        emitter_.log(diagnostics::Severity::Info,
+                     kAssetPlaced,
+                     "an asset dragged from Assets was placed",
+                     {diagnostics::field("asset", std::string_view{held}),
+                      diagnostics::field("onto", onto),
+                      diagnostics::field("placed", browser_.placed)});
+    };
+    // Onto a field that holds an asset of its kind (D786), that asset, as
+    // typing its name there gives it (D975).
+    for (const FieldRow& kTaking : fields_) {
+        if (kTaking.role != FieldRow::Role::Field || kTaking.type.asset.empty() || !kInside(kTaking.value)) {
+            continue;
+        }
+        const auto kAsset = std::ranges::find_if(assets_, [&](const Asset& each) {
+            return each.name == held && each.kind == kTaking.type.asset;
+        });
+        if (kAsset == assets_.end()) {
+            ++refused_;
+            say(kTaking.field + " holds a " + kTaking.type.asset + ", not " + leafOf(held));
+            return true;
+        }
+        const FieldRow kOnto = kTaking;
+        apply(kOnto, assetShown(*kAsset));
+        kPlaced("field");
+        return true;
+    }
+    // Onto the Hierarchy or the viewport, a scene is placed in the scene
+    // shown as an instance of it (D975), as the instance well does.
+    if (!scene_.empty() && (kInside(entitiesColumn_) || kInside(centerColumn_))) {
+        if (!held.ends_with(".scene")) {
+            ++refused_;
+            say(leafOf(held) + " is placed through a field that takes it");
+            return true;
+        }
+        if (held == scene_) {
+            ++refused_;
+            say("a scene is not placed in itself");
+            return true;
+        }
+        place(held);
+        kPlaced("scene");
+        return true;
+    }
+    return false;
 }
 
 void ShellParticipant::logFiles(std::string_view verb, std::string_view from, std::string_view to, std::size_t named) {

@@ -104,9 +104,11 @@ public:
     }
     /// Marks a point of the World in the preview, as an author chose
     /// something there, or none (D464), its part `lit` drawn lit: 0 none, 1
-    /// to 3 the X, Y, and Z axes, 4 the ring (D468); whether the Runtime
+    /// to 3 the X, Y, and Z axes, 4 the ring (D468), its `handles` drawn, a
+    /// bit each, 1 the axes and 2 the ring (D974); whether the Runtime
     /// shows a mark.
-    virtual bool mark(const std::optional<std::array<double, 3>>& /*at*/, std::uint8_t /*lit*/) {
+    virtual bool
+    mark(const std::optional<std::array<double, 3>>& /*at*/, std::uint8_t /*lit*/, std::uint8_t /*handles*/) {
         return false;
     }
     /// Draws the paths a previewed scene's splines make, each its points in

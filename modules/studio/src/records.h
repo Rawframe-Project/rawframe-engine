@@ -170,8 +170,11 @@ struct Heard {
 [[nodiscard]] Heard heardOf(std::string_view line);
 
 /// `authoring.mark` for `scene` (D464): the point its preview marks, or
-/// none.
-[[nodiscard]] Value markRecord(std::int64_t id, std::string_view scene, const std::optional<std::array<double, 3>>& at);
+/// none, and its handles by name (D974).
+[[nodiscard]] Value markRecord(std::int64_t id,
+                               std::string_view scene,
+                               const std::optional<std::array<double, 3>>& at,
+                               std::string_view handles = "all");
 /// `authoring.preview_input` (D790): what landed on the viewport, for the
 /// game played there.
 [[nodiscard]] Value previewInputRecord(std::int64_t id, std::string_view scene, Value events);
@@ -181,6 +184,10 @@ struct Heard {
 /// Where the ray of a pick met what it picked, if it met something
 /// (D877).
 [[nodiscard]] std::optional<std::array<double, 3>> pickedPointIn(std::string_view reply);
+/// The ways a press's ray went where it went down and where it was let
+/// go, as a pick's answer gives them once it is let go (D974); none
+/// before.
+[[nodiscard]] std::optional<std::array<std::array<double, 3>, 2>> boxIn(std::string_view reply);
 
 /// The part of the preview's mark a pick's answer says the pointer has
 /// lit (D468): x, y, z, or ring; empty for none.

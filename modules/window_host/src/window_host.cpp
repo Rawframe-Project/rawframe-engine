@@ -634,7 +634,8 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
                 event->pointer.position.x,
                 event->pointer.position.y,
                 view::UiPointing::Held{.control = kHolds(window::Modifier::Control) || kHolds(window::Modifier::Meta),
-                                       .shift = kHolds(window::Modifier::Shift)});
+                                       .shift = kHolds(window::Modifier::Shift),
+                                       .secondary = event->pointer.button == window::MouseButton::Right});
             // Where an author clicked in the preview, as a ray (D456).
             if (settings_.preview != nullptr && settings_.preview->looking().has_value() &&
                 event->pointer.button == window::MouseButton::Left) {

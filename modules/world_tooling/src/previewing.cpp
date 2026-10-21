@@ -80,7 +80,21 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
             }
             lit = static_cast<std::uint8_t>(kNamed - kParts.begin());
         }
-        made.add("marked", Value::boolean(settings.previewer != nullptr && settings.previewer->mark(kPoint, lit)));
+        // Its handles drawn, by name, each name's place its bits; all
+        // unless named (D974).
+        const Value* kHandles = record.find("handles");
+        constexpr std::array<std::string_view, 4> kHandleNames = {"none", "axes", "ring", "all"};
+        std::uint8_t handles = 3;
+        if (kHandles != nullptr) {
+            const auto kNamed =
+                kHandles->text() != nullptr ? std::ranges::find(kHandleNames, *kHandles->text()) : kHandleNames.end();
+            if (kNamed == kHandleNames.end()) {
+                return errorLine(id, ToolingError::Malformed, "handles are none, axes, ring, or all");
+            }
+            handles = static_cast<std::uint8_t>(kNamed - kHandleNames.begin());
+        }
+        made.add("marked",
+                 Value::boolean(settings.previewer != nullptr && settings.previewer->mark(kPoint, lit, handles)));
         return replyLine(id, "answer", std::move(made));
     }
     if (kind == "tooling.paths") {

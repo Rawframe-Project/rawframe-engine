@@ -69,6 +69,8 @@ namespace rawframe::studio {
 
 inline constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"};
 inline constexpr diagnostics::EventIdentity kLayout{"studio", "studio_layout"};
+/// A context menu opened (D973): the part it is for and its rows.
+inline constexpr diagnostics::EventIdentity kContextMenu{"studio", "studio_context"};
 /// A layout chosen or saved (D911): its name and the bottom dock's tab.
 inline constexpr diagnostics::EventIdentity kLayoutChosen{"studio", "studio_layout_chosen"};
 /// The toolbar's layout chooser, by the words on it and the menu it opens.
@@ -107,6 +109,8 @@ inline constexpr diagnostics::EventIdentity kCookBrought{"studio", "studio_cook_
 /// A drag in the played game committed to the chosen scene (D457, D463,
 /// D466, D467): how, and what it moved.
 inline constexpr diagnostics::EventIdentity kDragged{"studio", "studio_dragged"};
+inline constexpr diagnostics::EventIdentity kBoxed{"studio", "studio_boxed"};
+inline constexpr diagnostics::EventIdentity kAssetPlaced{"studio", "studio_asset_placed"};
 /// The view moved in the played game (D469): how far its eye is from its
 /// target now, and where each is (D472).
 inline constexpr diagnostics::EventIdentity kViewMoved{"studio", "studio_view_moved"};
@@ -124,6 +128,12 @@ inline constexpr std::uint32_t kPanel = look::kPanelFill;
 /// A row is clear until chosen (D915); a button is raised (button()).
 inline constexpr std::uint32_t kRow = 0x00000000U;
 inline constexpr std::uint32_t kChosen = look::kSelected;
+/// A menu's card: raised over the window, edged, with a shadow (D923); the
+/// menus' and the context menu's (D973).
+inline constexpr ui::Look kMenuLook{.fill = 0x1E2026FFU,
+                                    .borderColor = look::kRaisedEdge,
+                                    .radius = 7,
+                                    .outerShadow = {.color = 0x00000080U, .y = 6, .blur = 18}};
 inline constexpr std::uint32_t kField = look::kWellFill;
 inline constexpr std::uint32_t kEditing = 0x0B0C0FFFU;
 inline constexpr std::uint32_t kHeaderFill = look::kBarFill;
@@ -443,6 +453,15 @@ private:
 
     /// The open menu or matches closed, if any is.
     void closePopup();
+    /// A context menu (D973) at `x`, `y`, the tree's pixels, for the part
+    /// of the window a secondary press met there: its rows the commands and
+    /// buttons of that part, each doing what its own does.
+    void showContext(float x, float y);
+    /// A context menu's row pressed: its button pressed in its place.
+    bool pressContext(ui::Node node);
+    /// Whether a press on `node` chooses something (an entity's row or its
+    /// node on the canvas, a source's card), as a secondary press may.
+    [[nodiscard]] bool choosable(ui::Node node) const;
 
     /// A tab for each document opened, the chosen one marked; `opened`
     /// the scene listed at that place, opened now.
@@ -616,6 +635,14 @@ private:
     void removeAsked(bool sure);
     void refreshFiles(const std::string& from, const std::string& to);
     void dropAsset();
+    /// An asset dragged from Assets and let go at `at` placed where it
+    /// landed (D975): onto a field that takes an asset, that asset; onto
+    /// the Hierarchy or the viewport, a scene's instance. Whether it landed
+    /// somewhere it is placed.
+    bool placeDropped(const std::string& held, const std::array<float, 2>& at);
+    /// A source's card chosen: its import settings in the Inspector, and
+    /// what Assets' buttons act on (D800, D929).
+    void chooseSource(const std::string& path);
     void logFiles(std::string_view verb, std::string_view from, std::string_view to, std::size_t named);
 
     /// The game that does not read: why, where, and what to do.
@@ -645,6 +672,10 @@ private:
     /// `entities_`) the one pressed last: the components they all have,
     /// each field's value where they agree, empty where they differ.
     void showSelection(std::size_t at);
+    /// The Select tool's box (D974): every entity standing inside the box
+    /// a press drew across the view, from the way its ray went down to the
+    /// way it came up, chosen. Whether it was a box, not a click.
+    bool chooseBoxed(const std::array<std::array<double, 3>, 2>& box);
 
     /// `operation`, done to the entity chosen, or to each of several as one
     /// step (D787).
@@ -1105,6 +1136,8 @@ private:
     std::optional<ui::Node> popup_;
     std::optional<std::size_t> menuOpen_;
     std::vector<std::pair<ui::Node, std::size_t>> popupRows_;
+    /// A context menu's rows that press a button, each with it (D973).
+    std::vector<std::pair<ui::Node, ui::Node>> contextRows_;
     std::optional<FieldRow> palette_;
     /// The bottom dock, its tabs, and its panes: one attached at a time.
     ui::Node bottomDock_{};

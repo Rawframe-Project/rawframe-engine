@@ -273,6 +273,9 @@ struct SessionRecord {
     /// Mark's: the point, or none (D464); an extension's mode's point,
     /// where it runs (D877).
     std::optional<std::array<double, 3>> mark;
+    /// And its handles (D974), a bit each, 1 its axes and 2 its ring, by
+    /// `handles`' name: none, axes, ring, or all, all unless named.
+    std::uint8_t handles = 3;
     /// `preview_input`'s events, as the record gave them, which the
     /// session reads as tooling input before it hands them on.
     document::Value events;

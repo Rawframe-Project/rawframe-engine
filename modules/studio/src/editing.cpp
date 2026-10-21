@@ -38,6 +38,16 @@ void ShellParticipant::pressAt(float x, float y) {
     const auto kHit = tree_->hit(root_, x, y);
     heldEntity_.reset();
     browser_.held.reset();
+    // A secondary press chooses the row or card it met, as a primary one
+    // does, and presses nothing else; then the context menu for where it
+    // is opens there (D973).
+    if (pointing_ != nullptr && pointing_->held().secondary) {
+        if (kHit.has_value() && kHit->node.has_value() && choosable(*kHit->node)) {
+            pressOn(*kHit->node, kMoving);
+        }
+        showContext(x, y);
+        return;
+    }
     if (kHit.has_value() && kHit->node.has_value()) {
         // Only a pointer's press holds a row to drag; a screen reader's
         // press is let go as it is made.
@@ -45,6 +55,15 @@ void ShellParticipant::pressAt(float x, float y) {
         pressOn(*kHit->node, kMoving);
         pointerPress_ = false;
     }
+}
+
+bool ShellParticipant::choosable(ui::Node node) const {
+    const auto kIn = [node](const std::vector<std::pair<ui::Node, std::string>>& rows) {
+        return std::ranges::contains(rows, node, &std::pair<ui::Node, std::string>::first);
+    };
+    return std::ranges::contains(entityRows_, node) || canvasEntityOf(node).has_value() ||
+           (node != ui::Node{} && std::ranges::contains(sceneRows_, node)) || kIn(browser_.sourceRows) ||
+           kIn(browser_.scriptRows);
 }
 
 bool ShellParticipant::beforePress() {
@@ -127,6 +146,9 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     // A menu's or the matches' row does its command, a menu's button opens
     // its menu, the palette's field takes the keyboard, and any other press
     // closes what is open (D777).
+    if (pressContext(node)) {
+        return;
+    }
     if (const auto kLine = std::ranges::find(popupRows_, node, &std::pair<ui::Node, std::size_t>::first);
         kLine != popupRows_.end()) {
         const std::size_t kCode = kLine->second;
@@ -433,6 +455,9 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
             say("a node moves within its document");
         } else if (moving) {
             moveTo(static_cast<std::size_t>(kScene - sceneRows_.begin()));
+        } else if (pointerPress_) {
+            // Opened as it is let go, so a drag places it instead (D975).
+            browser_.opening = static_cast<std::size_t>(kScene - sceneRows_.begin());
         } else {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         }

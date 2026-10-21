@@ -587,6 +587,27 @@ void ShellParticipant::forwardInput() {
     inViewport_.forwarding->exceptOver(std::move(holes));
     inViewport_.forwarding->keysWhileHeld(playing_->edited());
     std::vector<world_tooling::WindowInput> events = inViewport_.forwarding->take();
+    // A right press let go where it went down opens the viewport's context
+    // menu there, as the large editors do (D973); one that moved flew the
+    // view (D469). Only while the scene is edited there: a game played
+    // keeps its right button.
+    using Input = world_tooling::WindowInput;
+    std::optional<std::array<float, 2>> contextAt;
+    for (const Input& kEvent : events) {
+        if (kEvent.kind == Input::Kind::Press) {
+            inViewport_.secondaryAt.reset();
+            if (kEvent.button == 1) {
+                inViewport_.secondaryAt = std::array<float, 2>{kEvent.x, kEvent.y};
+            }
+        } else if (kEvent.kind == Input::Kind::Move && inViewport_.secondaryAt.has_value() &&
+                   std::hypot(kEvent.x - (*inViewport_.secondaryAt)[0], kEvent.y - (*inViewport_.secondaryAt)[1]) > 4) {
+            inViewport_.secondaryAt.reset();
+        } else if (kEvent.kind == Input::Kind::Release && kEvent.button == 1 && inViewport_.secondaryAt.has_value() &&
+                   playing_->edited()) {
+            contextAt = std::array<float, 2>{kLeft + (kEvent.x * kPer), kTop + (kEvent.y * kPer)};
+            inViewport_.secondaryAt.reset();
+        }
+    }
     // At the picture's pixels, fewer than the viewport's where it would
     // pass the UI's uploads (D927) or the viewport grew since it started.
     if (kAt.width > 0 && kAt.height > 0) {
@@ -607,6 +628,9 @@ void ShellParticipant::forwardInput() {
         if (kReply.find("\"taken\":true") != std::string::npos) {
             ++inViewport_.inputsTaken;
         }
+    }
+    if (contextAt.has_value()) {
+        showContext((*contextAt)[0], (*contextAt)[1]);
     }
 }
 

@@ -55,10 +55,13 @@ public:
     }
     /// The keys held as a press went down (D787): Control (or Command) and
     /// Shift, which an editor takes as adding to a selection or extending
-    /// it.
+    /// it;
+    /// and whether it is the secondary button's (the right), which an
+    /// editor opens its context menu for (D973).
     struct Held {
         bool control = false;
         bool shift = false;
+        bool secondary = false;
     };
 
     /// The host's side: a mouse button or a touch went down at `x`, `y`

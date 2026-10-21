@@ -41,7 +41,8 @@
 # `move=` and a point moves the pointer there with no press, a second
 # before going on (D468), and `orbit=` and two points drags as `drag=`
 # does with the right button (D469), a key a fifth part names held through
-# it too (D472). An argument
+# it too (D472). An argument `context=` and a point or a name clicks it
+# with the right button, as a context menu is opened (D973). An argument
 # `wait=` and a number of seconds waits that long, and `until=` and a
 # record's code waits, up to three minutes, until the log holds it (D445),
 # one whose field has a value where `,name=value` follows (D476), or a
@@ -128,6 +129,10 @@ def alive(pid):
     except OSError:
         return False
     return True
+
+
+class Secondary(str):
+    """A click with the right button, which opens a context menu (D973)."""
 
 
 class Frozen(str):
@@ -311,11 +316,13 @@ def main():
             points.append((at, y, ("wheel", turns, parts[3]) if len(parts) > 3 else turns))
             continue
         frozen = argument.startswith("frozenclick=")
-        place, _, text = argument[len("frozenclick=") if frozen else 0:].partition(":")
+        secondary = argument.startswith("context=")
+        place, _, text = argument[len("frozenclick=") if frozen else len("context=") if secondary else 0:].partition(":")
+        made = Frozen(text) if frozen else Secondary(text) if secondary else text
         if place.startswith("@"):
-            points.append((place, None, Frozen(text) if frozen else text))
+            points.append((place, None, made))
             continue
-        points.append((*(int(side) for side in place.split(",")), Frozen(text) if frozen else text))
+        points.append((*(int(side) for side in place.split(",")), made))
     x = ctypes.CDLL(ctypes.util.find_library("X11"))
     xtest = ctypes.CDLL("libXtst.so.6")
     x.XOpenDisplay.restype = ctypes.c_void_p
@@ -602,12 +609,13 @@ def main():
             with open(pid_file, encoding="utf-8") as told:
                 stopped = int(told.read().strip())
             os.kill(stopped, signal.SIGSTOP)
-        xtest.XTestFakeButtonEvent(display, 1, 1, 0)
+        button = 3 if isinstance(text, Secondary) else 1
+        xtest.XTestFakeButtonEvent(display, button, 1, 0)
         x.XFlush(display)
         # Not stretched while the program is stopped, which reads the press
         # and the release in one frame (D458).
         time.sleep(0.2 if stopped else stretched(0.2))
-        xtest.XTestFakeButtonEvent(display, 1, 0, 0)
+        xtest.XTestFakeButtonEvent(display, button, 0, 0)
         x.XFlush(display)
         print(f"{'clicked frozen' if stopped else 'clicked'} at {at},{y}")
         time.sleep(1)

@@ -796,12 +796,21 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
     if (kSource == browser_.sourceRows.end()) {
         return false;
     }
-    browser_.chosen = kSource->second;
-    browser_.target = kSource->second;
-    // Held, it may be dragged onto a folder (D929).
+    // Held, it may be dragged onto a folder (D929), a field, or the scene
+    // (D975): chosen as it is let go unless it was dragged, so the
+    // Inspector a drag ends on still shows what it showed.
     if (pointerPress_) {
         browser_.held = kSource->second;
+        browser_.choosing = true;
+        return true;
     }
+    chooseSource(kSource->second);
+    return true;
+}
+
+void ShellParticipant::chooseSource(const std::string& path) {
+    browser_.chosen = path;
+    browser_.target = path;
     ++browser_.chosenCount;
     showImportSettings();
     // Lit as the list is made again.
@@ -810,7 +819,6 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
         say(kListed->path + ": " + kindOf(kListed->importer) + ", " + std::string{cookWords(kListed->cook)} +
             (kListed->problem.empty() ? "" : ": " + kListed->problem));
     }
-    return true;
 }
 
 void ShellParticipant::showImportSettings() {

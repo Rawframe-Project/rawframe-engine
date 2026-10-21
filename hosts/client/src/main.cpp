@@ -114,10 +114,11 @@ public:
             std::hypot(look->target[0] - look->eye[0], look->target[1] - look->eye[1], look->target[2] - look->eye[2]));
         return true;
     }
-    bool mark(const std::optional<std::array<double, 3>>& at, std::uint8_t lit) override {
+    bool mark(const std::optional<std::array<double, 3>>& at, std::uint8_t lit, std::uint8_t handles) override {
         camera.mark(at,
                     lit <= static_cast<std::uint8_t>(view::MarkPart::Ring) ? static_cast<view::MarkPart>(lit)
-                                                                           : view::MarkPart::None);
+                                                                           : view::MarkPart::None,
+                    handles);
         return true;
     }
     bool paths(const std::vector<std::vector<std::array<double, 3>>>& paths) override {

@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <string_view>
 #include <utility>
 
 namespace rawframe::authoring {
@@ -313,6 +314,8 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         leftOutable = parsed->find("capture") != nullptr ? 1 : 0;
     } else if (record.verb == SessionVerb::Extension) {
         leftOutable = parsed->find("point") != nullptr ? 1 : 0;
+    } else if (record.verb == SessionVerb::Mark) {
+        leftOutable = parsed->find("handles") != nullptr ? 1 : 0;
     }
     // A change's author, where the verb makes one (D879), and the author
     // whose presence or claim it is, where it is one (D880).
@@ -764,7 +767,17 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         }
         record.events = *kEvents;
     } else if (record.verb == SessionVerb::Mark) {
-        // A point of three finite numbers, or null for none.
+        // A point of three finite numbers, or null for none; its handles
+        // by name, each name's place its bits (D974).
+        if (const Value* kHandles = parsed->find("handles"); kHandles != nullptr) {
+            constexpr std::array<std::string_view, 4> kNames = {"none", "axes", "ring", "all"};
+            const auto kNamed =
+                textOf(kHandles) != nullptr ? std::ranges::find(kNames, *kHandles->text()) : kNames.end();
+            if (kNamed == kNames.end()) {
+                return malformed("mark's handles are none, axes, ring, or all");
+            }
+            record.handles = static_cast<std::uint8_t>(kNamed - kNames.begin());
+        }
         const Value* kAt = parsed->find("at");
         if (kAt != nullptr && kAt->isNull()) {
             return record;

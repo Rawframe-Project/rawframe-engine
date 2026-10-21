@@ -359,6 +359,8 @@ bool ShellParticipant::pressFrame(ui::Node node) {
         endEdit();
         held_.tool = static_cast<std::uint8_t>(kTool - held_.tools.begin());
         showToolbar();
+        // The mark shows the new tool's handles (D974).
+        markChosen();
         constexpr std::array<std::string_view, 4> kToolNames = {"select", "move", "rotate", "scale"};
         say(std::string{kToolNames[held_.tool]} + " tool");
         return true;

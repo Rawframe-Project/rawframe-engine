@@ -93,12 +93,6 @@ constexpr std::string_view kKeep = "Set bookmark ";
 constexpr std::array<std::pair<std::string_view, std::string_view>, 3> kModes = {
     {{"Lit", "lit"}, {"Unlit", "unlit"}, {"Normals", "normals"}}};
 
-/// A menu's card: raised over the window, edged, with a shadow (D923).
-constexpr ui::Look kMenuLook{.fill = 0x1E2026FFU,
-                             .borderColor = look::kRaisedEdge,
-                             .radius = 7,
-                             .outerShadow = {.color = 0x00000080U, .y = 6, .blur = 18}};
-
 /// The File menu's commands in its order, each with its key (D923).
 constexpr std::array<std::pair<std::string_view, std::string_view>, 7> kFileCommands = {{
     {"New game", ""},
@@ -859,6 +853,7 @@ void ShellParticipant::closePopup() {
     popup_.reset();
     menuOpen_.reset();
     popupRows_.clear();
+    contextRows_.clear();
     choiceRows_.clear();
     choosing_.reset();
 }

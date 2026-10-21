@@ -107,22 +107,27 @@ alongAxis(const Point& mark, std::size_t axis, const Point& origin, const Point&
     return kNearest->line;
 }
 
-std::uint8_t partUnder(const Point& mark, const Point& origin, const Point& toward, double fieldOfView) noexcept {
-    if (const std::optional<Grabbed> kAxis = grabbedAxis(mark, origin, toward, fieldOfView); kAxis.has_value()) {
+std::uint8_t partUnder(
+    const Point& mark, const Point& origin, const Point& toward, double fieldOfView, std::uint8_t handles) noexcept {
+    if (const std::optional<Grabbed> kAxis =
+            (handles & kAxesHandles) != 0 ? grabbedAxis(mark, origin, toward, fieldOfView) : std::nullopt;
+        kAxis.has_value()) {
         return static_cast<std::uint8_t>(kAxis->axis + 1);
     }
-    return grabbedRing(mark, origin, toward, fieldOfView) ? 4 : 0;
+    return (handles & kRingHandle) != 0 && grabbedRing(mark, origin, toward, fieldOfView) ? 4 : 0;
 }
 
-std::optional<Handle>
-grabbedHandle(const Point& mark, const Point& origin, const Point& toward, double fieldOfView) noexcept {
-    if (const std::optional<Grabbed> kAxis = grabbedAxis(mark, origin, toward, fieldOfView); kAxis.has_value()) {
+std::optional<Handle> grabbedHandle(
+    const Point& mark, const Point& origin, const Point& toward, double fieldOfView, std::uint8_t handles) noexcept {
+    if (const std::optional<Grabbed> kAxis =
+            (handles & kAxesHandles) != 0 ? grabbedAxis(mark, origin, toward, fieldOfView) : std::nullopt;
+        kAxis.has_value()) {
         Point at = mark;
         at[kAxis->axis] += kAxis->along;
         return Handle{.axis = kAxis->axis, .point = at};
     }
     const std::optional<Point> kMet = levelPoint(mark, origin, toward);
-    if (!kMet.has_value() || !grabbedRing(mark, origin, toward, fieldOfView)) {
+    if ((handles & kRingHandle) == 0 || !kMet.has_value() || !grabbedRing(mark, origin, toward, fieldOfView)) {
         return std::nullopt;
     }
     return Handle{.point = *kMet};
@@ -145,13 +150,22 @@ std::string_view partName(std::uint8_t part) noexcept {
     return part < kParts.size() ? kParts[part] : "";
 }
 
-document::Value markRecord(const std::optional<Point>& at, std::uint8_t lit) {
+std::string_view handlesName(std::uint8_t handles) noexcept {
+    constexpr std::array<std::string_view, 4> kHandles = {"none", "axes", "ring", "all"};
+    return kHandles[handles & kAllHandles];
+}
+
+document::Value markRecord(const std::optional<Point>& at, std::uint8_t lit, std::uint8_t handles) {
     document::Value mark = document::Value::object();
     mark.add("kind", document::Value::string("tooling.mark"));
     mark.add("id", document::Value::integer(0));
     mark.add("at", at.has_value() ? pointValue(*at) : document::Value{});
     if (!partName(lit).empty()) {
         mark.add("lit", document::Value::string(std::string{partName(lit)}));
+    }
+    // All by default, as a Runtime from before D974 shows them.
+    if ((handles & kAllHandles) != kAllHandles) {
+        mark.add("handles", document::Value::string(std::string{handlesName(handles)}));
     }
     return mark;
 }

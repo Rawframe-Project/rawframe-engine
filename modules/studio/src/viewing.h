@@ -8,6 +8,7 @@
 #include "rawframe/texture/texture.h"
 #include "rawframe/world_tooling/forwarding.h"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -61,6 +62,9 @@ struct PlayedViewport {
     std::uint64_t slowestReadMicroseconds = 0;
     world_tooling::Forwarding* forwarding = nullptr;
     std::uint64_t inputsForwarded = 0;
+    /// Where a right press went down over it, until it moves away or is
+    /// let go (D973).
+    std::optional<std::array<float, 2>> secondaryAt;
     std::uint64_t inputsTaken = 0;
     /// Whether the played game's World is paused, the tick its server last
     /// said, and how many times it was paused and stepped (D806).

@@ -153,6 +153,11 @@ struct AssetBrowser {
     /// there; that row.
     std::optional<std::string> held;
     ui::Node rootRow{};
+    /// A scene's row pressed, opened as it is let go unless it was dragged
+    /// to be placed (D975); and how many assets a drag placed.
+    std::optional<std::size_t> opening;
+    bool choosing = false;
+    std::uint64_t placed = 0;
     /// How many files were moved and removed, and folders made.
     std::uint64_t moved = 0;
     std::uint64_t removed = 0;

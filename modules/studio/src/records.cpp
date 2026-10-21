@@ -478,8 +478,14 @@ Value pickRecord(std::int64_t id, std::string_view scene) {
     return recordOf("authoring.pick", id, scene);
 }
 
-Value markRecord(std::int64_t id, std::string_view scene, const std::optional<std::array<double, 3>>& at) {
+Value markRecord(std::int64_t id,
+                 std::string_view scene,
+                 const std::optional<std::array<double, 3>>& at,
+                 std::string_view handles) {
     Value made = recordOf("authoring.mark", id, scene);
+    if (handles != "all") {
+        made.add("handles", Value::string(std::string{handles}));
+    }
     Value point;
     if (at.has_value()) {
         point = Value::array();
@@ -535,6 +541,30 @@ std::optional<std::array<double, 3>> pickedPointIn(std::string_view reply) {
         at[axis] = *kNumber;
     }
     return at;
+}
+
+std::optional<std::array<std::array<double, 3>, 2>> boxIn(std::string_view reply) {
+    const auto kParsed = document::parse(reply);
+    const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* box = answer != nullptr ? answer->find("box") : nullptr;
+    if (box == nullptr || box->kind() != Value::Kind::Object) {
+        return std::nullopt;
+    }
+    std::array<std::array<double, 3>, 2> ways{};
+    for (std::size_t corner = 0; corner < 2; ++corner) {
+        const Value* kWay = box->find(corner == 0 ? "from" : "to");
+        if (kWay == nullptr || kWay->kind() != Value::Kind::Array || kWay->items().size() != 3) {
+            return std::nullopt;
+        }
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+            const std::optional<double> kNumber = kWay->items()[axis].real();
+            if (!kNumber.has_value()) {
+                return std::nullopt;
+            }
+            ways[corner][axis] = *kNumber;
+        }
+    }
+    return ways;
 }
 
 Search searchOf(std::string_view text) {

@@ -109,6 +109,10 @@ struct Outline {
 /// frame says how many it left out.
 inline constexpr std::size_t kMostFrameSteps = 4096;
 
+/// A mark's handles a preview draws (D974), a bit each.
+inline constexpr std::uint8_t kMarkAxes = 1;
+inline constexpr std::uint8_t kMarkRing = 2;
+
 /// A part of a mark: none, an axis (X, Y, Z), or the ring (D468).
 enum class MarkPart : std::uint8_t {
     None,
@@ -172,10 +176,18 @@ public:
     /// A point the preview marks, where an author chose something (D464),
     /// drawn as three axes there; none for none. Counted, so a reader tells
     /// a new mark.
-    void mark(const std::optional<std::array<double, 3>>& at, MarkPart lit = MarkPart::None) noexcept {
+    /// Its `handles` drawn, a bit each, 1 the axes and 2 the ring, as
+    /// the author's tool moves or turns (D974).
+    void mark(const std::optional<std::array<double, 3>>& at,
+              MarkPart lit = MarkPart::None,
+              std::uint8_t handles = kMarkAxes | kMarkRing) noexcept {
         marked_ = at;
         lit_ = lit;
+        handles_ = handles;
         ++marks_;
+    }
+    [[nodiscard]] std::uint8_t handles() const noexcept {
+        return handles_;
     }
     /// The part of the mark drawn lit, the handle the pointer is over
     /// (D468).
@@ -387,6 +399,7 @@ private:
     std::optional<std::array<double, 3>> marked_;
     std::uint64_t marks_ = 0;
     MarkPart lit_ = MarkPart::None;
+    std::uint8_t handles_ = kMarkAxes | kMarkRing;
     std::vector<std::vector<std::array<double, 3>>> paths_;
     std::vector<PassTiming> timings_;
     mutable bool timesAsked_ = false;

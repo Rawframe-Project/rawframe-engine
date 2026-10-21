@@ -119,6 +119,35 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"formatVersion\": 1,[^}]*\"recent\"[^}]*}\n.*\"Studio follows the screen's scale.*\"exit\":\"clean_stop\"")
+    # A context menu (D973): the ground chosen by a right click on its row,
+    # which opens the Hierarchy's menu there, and Duplicate in it done as
+    # the Edit menu's.
+    add_test(NAME studio_context_menu
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene context=@ground "until=studio_context,part=\"hierarchy" @Duplicate
+                     "until=studio_said,status=\"ground copy made" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_context_menu PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"[^\"]+\",[^\n]*\"applied\":1,\"refused\":0,.*\"exit\":\"clean_stop\"")
+    # An asset dragged from Assets and placed (D975): the platform scene's
+    # row dragged onto the Hierarchy places an instance of it in the level,
+    # and hud.png's card dragged onto the ground's tile texture gives it
+    # that texture.
+    add_test(NAME studio_places_dragged
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene wait=1 drag=@platform.scene,@ground
+                     "until=studio_asset_placed,onto=\"scene" @ground wheel=1100,400,6 @Textures
+                     "until=studio_said,status=\"Textures in all folders" drag=@hud.png,@texture
+                     "until=studio_asset_placed,onto=\"field" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_places_dragged PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "level.scene written: yes.*\"code\":\"studio_said\"[^\n]*\"status\":\"instance of platform.scene placed.*\"code\":\"studio_said\"[^\n]*\"status\":\"texture set to hud.png")
     # Several entities chosen (D787): the west wall, then the east wall
     # with Control held, their shared friction set together as one step;
     # then the rows from the east wall to the steep slope with Shift held,
@@ -1944,16 +1973,53 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "orbited from 646,280 to 746,280 holding Shift_L.*turned the wheel -3 at 646,280 holding Shift_L.*\"code\":\"studio_view_moved\"[^\n]*\"eyeX\":-30,\"eyeY\":3,\"eyeZ\":-20,\"targetX\":-[23][0-9]\\.[0-9]+.*\"code\":\"studio_view_moved\"[^\n]*\"distance\":10\\.01[0-9]*,\"eyeX\":-2[0-9]\\.[0-9]+")
+        # The Select tool (D974): the post chosen shows no handles, so the
+        # pointer over where its X axis was lights none, and a drag across
+        # the view draws a box choosing what stands in it.
+        add_test(NAME studio_boxes_plaza
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
+                         "@Scene settings" "@eye:-30,3,-20" "@target:-30,2.5,-30" wait=3 "@Select (Q)"
+                         "until=studio_said,status=\"select tool" 646,280 until=studio_marked move=665,280 wait=2
+                         drag=560,200,740,360 until=studio_boxed @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_boxes_plaza PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_boxed\"[^\n]*\"chosen\":[1-9].*\"code\":\"scene_summary\"[^\n]*\"marksShown\":[1-9][0-9]*,\"marksLit\":0[,}]")
+        # A right click in the edit view's viewport, let go where it went
+        # down, opens the viewport's context menu there (D973), its rows the
+        # scene's parts and the chosen entity's edits.
+        add_test(NAME studio_viewport_context
+                 COMMAND ${CMAKE_COMMAND} -E env STUDIO_EDIT_VIEW=true
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene until=studio_previewing wait=3
+                         context=640,340 "until=studio_context,part=\"center"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_viewport_context PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_context\"[^\n]*\"part\":\"center\",\"rows\":[1-9]")
         # The mark's ring dragged (D467): seen from above, the post chosen,
-        # its ring pressed left of it and let go in front of it, a quarter
-        # turn about its upright.
+        # the Rotate tool taken, whose handle the ring is (D974), its ring
+        # pressed left of it and let go in front of it, a quarter turn about
+        # its upright.
         add_test(NAME studio_rings_plaza
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
                          ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
-                         "@Scene settings" "@eye:-30,8,-25" "@target:-30,2.5,-30" wait=3 646,280 until=studio_marked wait=1 drag=594,280,646,324 until=studio_dragged @Stop until=studio_game_ended
+                         "@Scene settings" "@eye:-30,8,-25" "@target:-30,2.5,-30" wait=3 646,280 until=studio_marked "@Rotate (E)"
+                         "until=studio_said,status=\"rotate tool" wait=1 drag=594,280,646,324 until=studio_dragged @Stop until=studio_game_ended
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_rings_plaza PROPERTIES
                              FIXTURES_REQUIRED plaza_content
@@ -2013,13 +2079,13 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # plays, cooks, and picks, and leaves these to the fast check (D645).
     if(TEST studio_drags_plaza)
         set_tests_properties(studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza
-                             studio_snaps_plaza studio_looks_plaza studio_rings_plaza studio_raises_plaza
+                             studio_snaps_plaza studio_looks_plaza studio_rings_plaza studio_boxes_plaza studio_raises_plaza
                              studio_turns_plaza PROPERTIES LABELS "window;studio;gesture")
         # A gesture played into Plaza is read as frames come: each holds six
         # processors, as the arena's bot tests do, so the fast check does not
         # lay them over one another and the other played tests (D821).
         set_tests_properties(studio_drags_plaza studio_handles_plaza studio_hovers_plaza studio_orbits_plaza
-                             studio_snaps_plaza studio_looks_plaza studio_rings_plaza studio_raises_plaza
+                             studio_snaps_plaza studio_looks_plaza studio_rings_plaza studio_boxes_plaza studio_raises_plaza
                              studio_turns_plaza PROPERTIES PROCESSORS 6)
     endif()
 endif()

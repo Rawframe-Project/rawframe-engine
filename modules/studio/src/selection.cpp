@@ -2,6 +2,11 @@
 #include "shell.h"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <optional>
+#include <string>
+#include <vector>
 
 namespace rawframe::studio {
 
@@ -51,6 +56,99 @@ void ShellParticipant::chooseEntity(std::size_t at) {
         const auto kOne = std::ranges::find(entities_, selected_.front());
         showEntity(kOne != entities_.end() ? static_cast<std::size_t>(kOne - entities_.begin()) : at);
     }
+}
+
+bool ShellParticipant::chooseBoxed(const std::array<std::array<double, 3>, 2>& box) {
+    using Point = std::array<double, 3>;
+    const auto kPointOf = [this](std::string_view name) -> std::optional<Point> {
+        const Value* kPoint = view_.has_value() ? view_->find(name) : nullptr;
+        if (kPoint == nullptr || kPoint->items().size() != 3) {
+            return std::nullopt;
+        }
+        return Point{kPoint->items()[0].real().value_or(0),
+                     kPoint->items()[1].real().value_or(0),
+                     kPoint->items()[2].real().value_or(0)};
+    };
+    const std::optional<Point> kEye = kPointOf("eye");
+    const std::optional<Point> kTarget = kPointOf("target");
+    if (!kEye.has_value() || !kTarget.has_value()) {
+        return false;
+    }
+    const auto kDot = [](const Point& a, const Point& b) {
+        return (a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2]);
+    };
+    const auto kCross = [](const Point& a, const Point& b) {
+        return Point{(a[1] * b[2]) - (a[2] * b[1]), (a[2] * b[0]) - (a[0] * b[2]), (a[0] * b[1]) - (a[1] * b[0])};
+    };
+    const auto kUnit = [&kDot](const Point& a) {
+        const double kLength = std::sqrt(kDot(a, a));
+        return kLength > 1e-9 ? Point{a[0] / kLength, a[1] / kLength, a[2] / kLength} : Point{};
+    };
+    // The view's own axes, and each way across it as the view's picture
+    // places it: across and up over ahead, as a lens draws it.
+    const Point kAhead = kUnit({(*kTarget)[0] - (*kEye)[0], (*kTarget)[1] - (*kEye)[1], (*kTarget)[2] - (*kEye)[2]});
+    Point across = kUnit(kCross(kAhead, {0, 1, 0}));
+    if (kDot(across, across) == 0) {
+        across = {1, 0, 0};
+    }
+    const Point kUp = kCross(across, kAhead);
+    const auto kPlaced = [&](const Point& way) -> std::optional<std::array<double, 2>> {
+        const double kForward = kDot(way, kAhead);
+        if (kForward <= 1e-6) {
+            return std::nullopt;
+        }
+        return std::array<double, 2>{kDot(way, across) / kForward, kDot(way, kUp) / kForward};
+    };
+    const auto kFrom = kPlaced(box[0]);
+    const auto kTo = kPlaced(box[1]);
+    // A press let go about where it went down, a hundredth of the view's
+    // reach across, is a click.
+    if (!kFrom.has_value() || !kTo.has_value() ||
+        std::max(std::abs((*kFrom)[0] - (*kTo)[0]), std::abs((*kFrom)[1] - (*kTo)[1])) < 0.01) {
+        return false;
+    }
+    std::vector<std::string> boxed;
+    std::optional<std::size_t> first;
+    for (std::size_t at = 0; at < entities_.size(); ++at) {
+        if (lockedOf(entities_[at]).has_value()) {
+            continue;
+        }
+        const auto kPose = poseOf(entities_[at]);
+        if (!kPose.has_value()) {
+            continue;
+        }
+        const auto kSeen =
+            kPlaced({kPose->at("x") - (*kEye)[0], kPose->at("y") - (*kEye)[1], kPose->at("z") - (*kEye)[2]});
+        if (!kSeen.has_value()) {
+            continue;
+        }
+        bool inside = true;
+        for (std::size_t side = 0; side < 2; ++side) {
+            inside = inside && (*kSeen)[side] >= std::min((*kFrom)[side], (*kTo)[side]) &&
+                     (*kSeen)[side] <= std::max((*kFrom)[side], (*kTo)[side]);
+        }
+        if (inside) {
+            boxed.push_back(entities_[at]);
+            first = first.value_or(at);
+        }
+    }
+    emitter_.log(diagnostics::Severity::Info,
+                 kBoxed,
+                 "a box drawn across the view chose what stands in it",
+                 {diagnostics::field("chosen", static_cast<std::uint64_t>(boxed.size()))});
+    if (!first.has_value()) {
+        say("nothing in the box");
+        return true;
+    }
+    selected_ = std::move(boxed);
+    anchor_ = first;
+    if (selected_.size() > 1) {
+        showSelection(*first);
+        say(std::to_string(selected_.size()) + " entities chosen");
+    } else {
+        showEntity(*first);
+    }
+    return true;
 }
 
 void ShellParticipant::showSelection(std::size_t at) {
