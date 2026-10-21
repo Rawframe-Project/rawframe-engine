@@ -1,5 +1,6 @@
 #include "frames.h"
 
+#include "rawframe/base/files.h"
 #include "rawframe/base/platform.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
@@ -485,9 +486,8 @@ private:
                 return;
             }
         }
-        std::error_code error;
-        std::filesystem::rename(kWriting, *stream_, error);
-        if (error) {
+        // Over the picture a reader may have open meanwhile (D965).
+        if (!base::moveOver(kWriting, *stream_)) {
             ++streamFailures_;
             return;
         }

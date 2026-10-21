@@ -1,17 +1,20 @@
 // A file replaced whole: written where there was none, then replaced, with
 // nothing left beside it; and refused where its directory is missing. A
-// file read whole, past its blocks, and none for one that is not there.
+// file read whole, past its blocks, and none for one that is not there. A
+// file moved over one a reader keeps reading, every time.
 
 #include "rawframe/base/files.h"
 #include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <optional>
 #include <span>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace rawframe;
@@ -67,6 +70,46 @@ RAWFRAME_TEST(AFileIsReadWhole) {
     RAWFRAME_EXPECT(base::writeWholeFile(kDirectory / "empty.bin", {}));
     RAWFRAME_EXPECT(base::readWholeFile(kDirectory / "empty.bin") == std::optional<std::string>{std::string{}});
     RAWFRAME_EXPECT(!base::readWholeFile(kDirectory / "absent.bin").has_value());
+    std::filesystem::remove_all(kDirectory);
+}
+
+RAWFRAME_TEST(AFileIsMovedOverOneBeingRead) {
+    // A picture streamed a frame at a time while an editor reads it: on
+    // Windows a classic move was refused while the reader had it open, and
+    // the frame was lost (D965). Read without a pause meanwhile, every move
+    // goes through, and every read is one whole picture.
+    const std::filesystem::path kDirectory = test::scratchDirectory("files_moved");
+    std::filesystem::create_directories(kDirectory);
+    const std::filesystem::path kPicture = kDirectory / "picture";
+    const std::string kFirst(std::size_t{1} << 20U, 'a');
+    const std::string kSecond(std::size_t{1} << 20U, 'b');
+    RAWFRAME_EXPECT(base::writeWholeFile(kPicture, std::as_bytes(std::span{kFirst.data(), kFirst.size()})));
+    std::atomic<bool> moving{true};
+    std::atomic<int> reads{0};
+    std::atomic<int> broken{0};
+    std::thread reader{[&] {
+        while (moving.load()) {
+            const std::optional<std::string> kRead = base::readWholeFile(kPicture);
+            if (kRead.has_value()) {
+                ++reads;
+                if (*kRead != kFirst && *kRead != kSecond) {
+                    ++broken;
+                }
+            }
+        }
+    }};
+    int moved = 0;
+    for (int frame = 0; frame < 100; ++frame) {
+        const std::string& kNext = frame % 2 == 0 ? kSecond : kFirst;
+        RAWFRAME_EXPECT(
+            base::writeWholeFile(kDirectory / "picture.writing", std::as_bytes(std::span{kNext.data(), kNext.size()})));
+        moved += base::moveOver(kDirectory / "picture.writing", kPicture) ? 1 : 0;
+    }
+    moving = false;
+    reader.join();
+    RAWFRAME_EXPECT(moved == 100);
+    RAWFRAME_EXPECT(reads.load() > 0 && broken.load() == 0);
+    RAWFRAME_EXPECT(contentsOf(kPicture) == kFirst && !std::filesystem::exists(kDirectory / "picture.writing"));
     std::filesystem::remove_all(kDirectory);
 }
 

@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <string>
 #include <system_error>
@@ -13,7 +14,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 #elif defined(_WIN32)
+// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file (D237).
 #include <io.h>
+#include <windows.h>
 #endif
 
 namespace rawframe::base {
@@ -44,6 +47,43 @@ bool writeOpened(const std::filesystem::path& path, std::span<const std::byte> b
 
 } // namespace
 
+#if defined(_WIN32)
+std::optional<std::string> readWholeFile(const std::filesystem::path& path) {
+    // Shared for deletion too, so moveOver can put a new file at `path`
+    // while this one reads the old (D965); a stream shares no deletion.
+    const HANDLE kFile = ::CreateFileW(path.c_str(),
+                                       GENERIC_READ,
+                                       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                       nullptr,
+                                       OPEN_EXISTING,
+                                       FILE_ATTRIBUTE_NORMAL,
+                                       nullptr);
+    if (kFile == INVALID_HANDLE_VALUE) {
+        return std::nullopt;
+    }
+    constexpr DWORD kBlock = DWORD{1} << 20U;
+    std::string text;
+    if (LARGE_INTEGER size{}; ::GetFileSizeEx(kFile, &size) != 0) {
+        text.reserve(static_cast<std::size_t>(size.QuadPart) + kBlock);
+    }
+    bool read = true;
+    for (;;) {
+        const std::size_t kHad = text.size();
+        text.resize(kHad + kBlock);
+        DWORD got = 0;
+        read = ::ReadFile(kFile, text.data() + kHad, kBlock, &got, nullptr) != 0;
+        text.resize(kHad + got);
+        if (!read || got == 0) {
+            break;
+        }
+    }
+    ::CloseHandle(kFile);
+    if (!read) {
+        return std::nullopt;
+    }
+    return text;
+}
+#else
 std::optional<std::string> readWholeFile(const std::filesystem::path& path) {
     std::ifstream file{path, std::ios::binary};
     if (!file) {
@@ -70,6 +110,48 @@ std::optional<std::string> readWholeFile(const std::filesystem::path& path) {
         return std::nullopt;
     }
     return text;
+}
+#endif
+
+bool moveOver(const std::filesystem::path& from, const std::filesystem::path& to) noexcept {
+#if defined(_WIN32)
+    // With POSIX semantics, which a classic move lacks: that one is refused
+    // while any handle has `to` open, so a reader of a picture streamed a
+    // frame at a time lost the writer one frame in a few (D965). Where the
+    // volume cannot (before Windows 10 1809, or not NTFS), the classic one.
+    // Named whole: a name alone would be taken as one in `from`'s directory.
+    std::error_code absolute;
+    const std::wstring kTo = std::filesystem::absolute(to, absolute).native();
+    const HANDLE kFile = absolute ? INVALID_HANDLE_VALUE
+                                  : ::CreateFileW(from.c_str(),
+                                                  DELETE,
+                                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                                  nullptr,
+                                                  OPEN_EXISTING,
+                                                  FILE_ATTRIBUTE_NORMAL,
+                                                  nullptr);
+    if (kFile != INVALID_HANDLE_VALUE) {
+        const std::size_t kNameBytes = kTo.size() * sizeof(wchar_t);
+        std::string info(offsetof(FILE_RENAME_INFO, FileName) + kNameBytes + sizeof(wchar_t), '\0');
+        // FileRenameInfoEx's flags sit where ReplaceIfExists does: replace
+        // (1) with POSIX semantics (2).
+        constexpr DWORD kFlags = 0x1U | 0x2U;
+        std::memcpy(info.data(), &kFlags, sizeof(kFlags));
+        const auto kLength = static_cast<DWORD>(kNameBytes);
+        std::memcpy(info.data() + offsetof(FILE_RENAME_INFO, FileNameLength), &kLength, sizeof(kLength));
+        std::memcpy(info.data() + offsetof(FILE_RENAME_INFO, FileName), kTo.data(), kNameBytes);
+        constexpr auto kRenameInfoEx = static_cast<FILE_INFO_BY_HANDLE_CLASS>(22);
+        const bool kMoved =
+            ::SetFileInformationByHandle(kFile, kRenameInfoEx, info.data(), static_cast<DWORD>(info.size())) != 0;
+        ::CloseHandle(kFile);
+        if (kMoved) {
+            return true;
+        }
+    }
+#endif
+    std::error_code error;
+    std::filesystem::rename(from, to, error);
+    return !error;
 }
 
 bool writeWholeFile(const std::filesystem::path& path, std::span<const std::byte> bytes) noexcept {
@@ -118,17 +200,13 @@ bool replaceFile(const std::filesystem::path& path, std::span<const std::byte> b
         std::filesystem::remove(partial, error);
         return false;
     }
-    for (int attempt = 0; attempt < 50; ++attempt) {
-        error.clear();
-        std::filesystem::rename(partial, path, error);
-        if (!error) {
-            break;
-        }
+    bool moved = moveOver(partial, path);
+    for (int attempt = 1; !moved && attempt < 50; ++attempt) {
         std::this_thread::sleep_for(std::chrono::milliseconds{10});
+        moved = moveOver(partial, path);
     }
-    if (error) {
-        std::error_code removed;
-        std::filesystem::remove(partial, removed);
+    if (!moved) {
+        std::filesystem::remove(partial, error);
         return false;
     }
     flushDirectory(path.has_parent_path() ? path.parent_path() : std::filesystem::path{"."});
