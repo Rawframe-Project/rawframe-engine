@@ -7,6 +7,7 @@
 #include "rawframe/document/json.h"
 #include "rawframe/network/provider.h"
 
+#include <chrono>
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -32,6 +33,9 @@ public:
     /// endpoint closed or kept silent. A line that is no reply, which the
     /// endpoint said unasked meanwhile, is kept for `heard`.
     [[nodiscard]] std::optional<std::string> ask(std::string_view record);
+    /// The same, waiting at most `within` for the reply: a last record to an
+    /// endpoint that may have gone (D947).
+    [[nodiscard]] std::optional<std::string> ask(std::string_view record, std::chrono::milliseconds within);
 
     /// Sends one record answered later, its reply and what is said of it
     /// meanwhile (a cook's progress) kept for `heard` under the record's own

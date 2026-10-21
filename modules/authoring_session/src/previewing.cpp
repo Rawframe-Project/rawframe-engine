@@ -105,7 +105,7 @@ result::Status Preview::open(const authoring::SessionRecord& record) {
 
 void Preview::letGo() {
     if (preview_ != nullptr) {
-        (void)preview_->ask(R"({"kind":"tooling.look","id":0,"view":null})");
+        (void)preview_->askLast(R"({"kind":"tooling.look","id":0,"view":null})");
     }
     preview_.reset();
     server_.reset();

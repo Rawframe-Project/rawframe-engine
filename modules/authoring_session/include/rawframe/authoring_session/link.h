@@ -44,6 +44,10 @@ public:
     /// Sends one record and waits for its reply line; none when the
     /// endpoint closed or kept silent.
     std::optional<std::string> ask(std::string_view record);
+    /// The same, a last record before the link is let go, waiting only a
+    /// moment: a program stopped by the system never replies, and the
+    /// ten seconds an ask waits held Studio's end (D947).
+    std::optional<std::string> askLast(std::string_view record);
 
 private:
     ToolingLink();

@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -21,6 +22,10 @@
 #include <vector>
 
 namespace rawframe::authoring_session {
+
+/// How long a link's last record waits for its reply: an endpoint on this
+/// machine or the next answers in milliseconds.
+constexpr std::chrono::milliseconds kEndWithin{1500};
 
 bool answered(std::string_view reply) {
     const auto kParsed = document::parse(reply);
@@ -32,8 +37,9 @@ ToolingLink::ToolingLink() = default;
 ToolingLink::~ToolingLink() {
     if (client_ != nullptr) {
         // Said for the endpoint; whether its reply or the close comes first,
-        // the connection is over.
-        (void)client_->ask(R"({"kind":"tooling.end","id":null})");
+        // the connection is over. A program already stopped never replies,
+        // and its link once waited ten seconds for it (D947).
+        (void)client_->ask(R"({"kind":"tooling.end","id":null})", kEndWithin);
         client_->close();
     }
 }
@@ -91,11 +97,15 @@ std::optional<std::string> ToolingLink::ask(std::string_view record) {
     return client_->ask(record);
 }
 
+std::optional<std::string> ToolingLink::askLast(std::string_view record) {
+    return client_->ask(record, kEndWithin);
+}
+
 HostLink::HostLink() = default;
 
 HostLink::~HostLink() {
     if (client_ != nullptr) {
-        (void)client_->ask(R"({"kind":"authoring.end","id":null})");
+        (void)client_->ask(R"({"kind":"authoring.end","id":null})", kEndWithin);
         client_->close();
     }
 }

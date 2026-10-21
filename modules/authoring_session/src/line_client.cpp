@@ -93,6 +93,10 @@ std::string LineClient::renumbered(const document::Value& line, const document::
 }
 
 std::optional<std::string> LineClient::ask(std::string_view record) {
+    return ask(record, std::chrono::duration_cast<std::chrono::milliseconds>(kReplyWithin));
+}
+
+std::optional<std::string> LineClient::ask(std::string_view record, std::chrono::milliseconds within) {
     // Each question numbered afresh, and only the reply with its number
     // taken: one that came after its asker stopped waiting is left behind,
     // not read as the next question's answer (D467).
@@ -104,7 +108,7 @@ std::optional<std::string> LineClient::ask(std::string_view record) {
     if (!provider_.send(connection_, stream_, kBytes).has_value()) {
         return std::nullopt;
     }
-    const auto kUntil = std::chrono::steady_clock::now() + kReplyWithin;
+    const auto kUntil = std::chrono::steady_clock::now() + within;
     while (std::chrono::steady_clock::now() < kUntil) {
         pump();
         if (auto reply = take(kNumbered ? std::optional{kId} : std::nullopt); reply.has_value()) {
