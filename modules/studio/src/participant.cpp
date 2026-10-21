@@ -636,20 +636,22 @@ void ShellParticipant::stop() noexcept {
         typing_->focus(std::nullopt);
         typing_->answer({});
     }
-    if (playing_.has_value()) {
-        playing_->stop();
-    }
-    // What it played given a second from now together to end as a Host
-    // does, its summaries written, before dropping it kills it (D952);
-    // the links below take their moment meanwhile.
-    const auto kUntil = std::chrono::steady_clock::now() + std::chrono::seconds{1};
-    // Ending lets a preview go, the player's camera given back (D433).
-    // A host joined is told the author leaves as its link goes.
+    // Ending lets a preview go, the player's camera given back (D433):
+    // before what it played is asked to stop, while its server still
+    // answers the links' last records, which waited out their bounds once
+    // it was stopping (D968). A host joined is told the author leaves as
+    // its link goes.
     bool ended = false;
     if (session_ != nullptr) {
         static_cast<void>(session_->answer(R"({"kind":"authoring.end","id":0})", ended));
     }
     held_.joined.reset();
+    if (playing_.has_value()) {
+        playing_->stop();
+    }
+    // What it played given a second from now together to end as a Host
+    // does, its summaries written, before dropping it kills it (D952).
+    const auto kUntil = std::chrono::steady_clock::now() + std::chrono::seconds{1};
     for (std::optional<Play>* each : {&playing_, &stopping_}) {
         if (each->has_value() && !(*each)->ended(kUntil)) {
             break;

@@ -182,6 +182,10 @@ private:
         case authoring::SessionVerb::Describe:
             return rawframe::document::parse(authoring::writeDiscovery(&*catalog_));
         case authoring::SessionVerb::End: {
+            // The preview let go as the session ends, its camera given back
+            // while it still runs (D433, D968), not only once the session
+            // goes.
+            preview_.letGo();
             Value made = Value::object();
             made.add("kind", Value::string("authoring.ended"));
             return made;

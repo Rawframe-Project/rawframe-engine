@@ -112,6 +112,7 @@ std::optional<std::string> LineClient::ask(std::string_view record, std::chrono:
     while (std::chrono::steady_clock::now() < kUntil) {
         pump();
         if (auto reply = take(kNumbered ? std::optional{kId} : std::nullopt); reply.has_value()) {
+            silent_ = false;
             if (!kNumbered) {
                 return reply;
             }
@@ -125,6 +126,7 @@ std::optional<std::string> LineClient::ask(std::string_view record, std::chrono:
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+    silent_ = !closed_;
     return std::nullopt;
 }
 

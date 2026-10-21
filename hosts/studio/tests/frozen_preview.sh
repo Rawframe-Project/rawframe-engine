@@ -3,7 +3,9 @@
 # preview live, its client stopped by the system as a loaded machine stalls
 # one, and Studio then asked to stop. The links to the preview send their
 # last record and wait a moment, not ten seconds, for a reply that cannot
-# come. Prints Studio's exit and how long its stop took. A machine with no
+# come. Prints Studio's exit, how long its stop took, and how long until the
+# process was gone: its children were let go after its Host stopped, and
+# waited out every link's last record there (D968). A machine with no
 # adapter the configuration allows skips, unless RAWFRAME_REQUIRE_GPU is
 # set. Run under an X server, from the repository root.
 #
@@ -47,6 +49,8 @@ for _ in $(seq 300); do
 done
 [ -n "$client" ] && kill -STOP "$client"
 echo "preview frozen: $([ -n "$client" ] && echo yes || echo no)"
+asked=$(date +%s%N)
 kill -TERM "$studio"
 wait "$studio"
+echo "gone in $((($(date +%s%N) - asked) / 1000000000)) s"
 grep -o '"exit":"[a-z_]*","exitCode":[0-9]*,"shutdownMs":[0-9]*' "$work/log" | tail -1

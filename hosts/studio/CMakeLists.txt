@@ -47,7 +47,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          LABELS "studio;window"
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "preview frozen: yes\n\"exit\":\"clean_stop\",\"exitCode\":0,\"shutdownMs\":[0-9]?[0-9]?[0-9]?[0-9]\n")
+                         "preview frozen: yes\ngone in [0-4] s\n\"exit\":\"clean_stop\",\"exitCode\":0,\"shutdownMs\":[0-9]?[0-9]?[0-9]?[0-9]\n")
     # Studio read by a screen reader (D575): its window's tree over AT-SPI
     # holds its menus and the palette's field (D777), its buttons, its
     # docks as scroll panes named by their headings or tabs in SPEC-0051's

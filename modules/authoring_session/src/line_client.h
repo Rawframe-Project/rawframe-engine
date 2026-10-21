@@ -52,6 +52,12 @@ public:
     [[nodiscard]] bool closed() const noexcept {
         return closed_;
     }
+    /// Whether the last question waited out its bound unanswered: an
+    /// endpoint stopped by its system, which a last record need not wait
+    /// for again (D968).
+    [[nodiscard]] bool silent() const noexcept {
+        return silent_;
+    }
 
     void close() noexcept {
         provider_.close(connection_);
@@ -78,6 +84,7 @@ private:
     std::map<std::int64_t, document::Value> waiting_;
     bool ready_ = false;
     bool closed_ = false;
+    bool silent_ = false;
     /// The questions asked, each one's number.
     std::int64_t asked_ = 0;
 };

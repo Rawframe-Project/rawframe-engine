@@ -38,8 +38,11 @@ ToolingLink::~ToolingLink() {
     if (client_ != nullptr) {
         // Said for the endpoint; whether its reply or the close comes first,
         // the connection is over. A program already stopped never replies,
-        // and its link once waited ten seconds for it (D947).
-        (void)client_->ask(R"({"kind":"tooling.end","id":null})", kEndWithin);
+        // and its link once waited ten seconds for it (D947); one that left
+        // the last question unanswered is not waited for again (D968).
+        if (!client_->silent()) {
+            (void)client_->ask(R"({"kind":"tooling.end","id":null})", kEndWithin);
+        }
         client_->close();
     }
 }
