@@ -79,7 +79,11 @@ for _ in $(seq 1 1800); do
     sleep 0.05
 done
 kill -TERM "$running" 2>/dev/null || true
-wait "$running"
+# Git's bash on Windows ends a native program it signals instead of asking
+# it to stop, so only elsewhere is the arena's exit its own clean stop.
+if ! wait "$running" && [ "$(uname -o)" != Msys ]; then
+    exit 1
+fi
 grep -q '"code":"content_reloaded"' "$work/log.ndjson"
 grep -o '"code":"materials_reloaded".*' "$work/log.ndjson" | head -1
 grep -o '"code":"texture_followed".*' "$work/log.ndjson" | head -1
