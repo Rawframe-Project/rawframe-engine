@@ -60,6 +60,9 @@ reply() { grep "\"id\":$1," "$work/replies"; }
             "$(grep -cE '^(mesh|material)' "$drawn/plan")" ] && break
         sleep 0.1
     done
+    # Kept, as the cook again below draws again over it, and the session's
+    # end may stop that run part way.
+    cp "$drawn/thumbnails.log" "$work/first.log" 2>/dev/null || true
     echo '{"kind":"authoring.thumbnail","id":5,"asset":"gate.scene","size":64}'
     # The brass changed, cooked again where it was, and its picture asked
     # until it is drawn again.
@@ -99,8 +102,8 @@ grep -q '"answer":{"kind":"authoring.thumbnail","asset":"paving.rfmaterial","obj
 # One run drew them all, the plaza's three meshes and seven materials (its
 # crate's two among them), each covering some of its picture and not all of
 # it.
-[[ $(grep -c '^thumbnail ' "$work/content/thumbnails/thumbnails.log") -eq 10 ]]
-if grep '^thumbnail ' "$work/content/thumbnails/thumbnails.log" | grep -q 'covering \(0\.0[0-4]\|1\.00\)'; then
+[[ $(grep -c '^thumbnail ' "$work/first.log") -eq 10 ]]
+if grep '^thumbnail ' "$work/first.log" | grep -q 'covering \(0\.0[0-4]\|1\.00\)'; then
     echo "a mesh covered too little or all of its picture"
     exit 1
 fi
