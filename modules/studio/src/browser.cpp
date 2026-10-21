@@ -22,6 +22,22 @@ namespace rawframe::studio {
 
 namespace {
 
+/// The largest `wide` by `tall` box a picture fills at its own proportions
+/// (D970): a square thumbnail drawn into a card's wider tile was stretched.
+std::array<float, 2> fitted(const texture::Texture* picture, float wide, float tall) {
+    if (picture == nullptr || picture->levels.empty() || picture->levels[0].width == 0 ||
+        picture->levels[0].height == 0) {
+        return {wide, tall};
+    }
+    const float kAspect = static_cast<float>(picture->levels[0].width) / static_cast<float>(picture->levels[0].height);
+    return wide / tall > kAspect ? std::array<float, 2>{tall * kAspect, tall}
+                                 : std::array<float, 2>{wide, wide / kAspect};
+}
+
+} // namespace
+
+namespace {
+
 using document::Value;
 
 /// A setting's value as a field shows it: a text as it is, anything else
@@ -376,9 +392,12 @@ result::Result<ui::Node> ShellParticipant::assetCard(const AssetCard& card) {
         kTile, ui::Look{.fill = look::kRaisedFill, .borderColor = look::kEdge, .radius = 5, .clip = true}));
     RAWFRAME_TRY(tree_->setInteraction(kTile, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
     if (card.picture != 0) {
+        const auto kHeld = browser_.pictures.find(card.picture);
+        const auto [kImageWide, kImageTall] =
+            fitted(kHeld != browser_.pictures.end() ? kHeld->second.get() : nullptr, kWide - 2, kTall - 2);
         RAWFRAME_TRY_ASSIGN(
             const ui::Node kImage,
-            box(kTile, ui::Layout{.width = ui::pixels(kWide - 2), .height = ui::pixels(kTall - 2), .shrink = 0}, 0));
+            box(kTile, ui::Layout{.width = ui::pixels(kImageWide), .height = ui::pixels(kImageTall), .shrink = 0}, 0));
         RAWFRAME_TRY(tree_->setLook(kImage, ui::Look{.image = card.picture}));
         RAWFRAME_TRY(tree_->setInteraction(kImage, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
     } else {
@@ -831,8 +850,11 @@ void ShellParticipant::showImportSettings() {
         static_cast<void>(tree_->setLook(
             *tile, ui::Look{.fill = look::kRaisedFill, .borderColor = look::kEdge, .radius = 6, .clip = true}));
         if (kPicture != nullptr) {
+            const auto [kImageWide, kImageTall] = fitted(kPicture.get(), 176, 176);
             if (auto image =
-                    box(*tile, ui::Layout{.width = ui::pixels(176), .height = ui::pixels(176), .shrink = 0}, 0);
+                    box(*tile,
+                        ui::Layout{.width = ui::pixels(kImageWide), .height = ui::pixels(kImageTall), .shrink = 0},
+                        0);
                 image.has_value()) {
                 static_cast<void>(tree_->setLook(*image, ui::Look{.image = thumbnailKey(browser_.chosen)}));
             }

@@ -18,6 +18,7 @@
 #include <maul-ui/style.h>
 #include <maul-ui/text.h>
 #include <maul-ui/text_block.h>
+#include <maul-ui/text_edit.h>
 #include <maul-ui/text_style.h>
 #include <maul-ui/visual.h>
 #include <string_view>
@@ -97,7 +98,17 @@ muiSize measureText(void* user, muiNodeId node, std::uint64_t, muiMeasureAxis wi
     if (kText == nullptr) {
         return muiSize{.width = 0, .height = 0};
     }
-    return muiMeasureText(&state->host, node, muiTextBlock_GetKey(kText->block), width, height);
+    const muiSize kMeasured = muiMeasureText(&state->host, node, muiTextBlock_GetKey(kText->block), width, height);
+    // An editable node emptied keeps a line's height (D970), as a field
+    // does: measured as nothing, it sat in its row's middle, and its caret,
+    // drawn down a line from its top, half a line low.
+    if (kText->editable && kMeasured.height <= 0) {
+        muiTextCaret caret{};
+        if (muiTextGetCaret(&state->host, node, kMeasured.width, muiTextPosition{}, &caret) == mui_success) {
+            return muiSize{.width = kMeasured.width, .height = caret.height};
+        }
+    }
+    return kMeasured;
 }
 
 void paintText(void* user, muiNodeId node, std::uint64_t, float width, float height, muiDrawSink* sink) {
