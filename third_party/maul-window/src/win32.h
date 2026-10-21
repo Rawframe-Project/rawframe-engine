@@ -138,6 +138,9 @@ struct mwinWin32Platform
     mwinContext* context;
     HINSTANCE instance;
     ATOM windowClass;
+    // The program's own icon, big and small, the class's: what a window
+    // given no icon of its own shows. Null where the program has none.
+    HICON programIcons[2];
     // A UTF-16 copy of a title with its terminator: titleBytes + 1 units.
     WCHAR* title;
     // An input method's string as read, its attributes and as UTF-8:

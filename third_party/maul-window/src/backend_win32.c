@@ -80,8 +80,74 @@ static void BecomeDpiAware(void)
     }
 }
 
+// The program's first icon group, the one Explorer shows for its file. A
+// name that is a string lives only while it is enumerated, so it is
+// copied; one too long for the copy is passed over.
+typedef struct FirstIcon
+{
+    WORD number;
+    WCHAR name[64];
+    bool found;
+} FirstIcon;
+
+static BOOL CALLBACK KeepFirstIcon(HMODULE module, LPCWSTR type, LPWSTR name, LONG_PTR into)
+{
+    (void)module;
+    (void)type;
+    FirstIcon* first = (FirstIcon*)into;
+    if (IS_INTRESOURCE(name))
+    {
+        first->number = (WORD)(ULONG_PTR)name;
+        first->found = true;
+        return FALSE;
+    }
+    size_t length = wcslen(name);
+    if (length < sizeof(first->name) / sizeof(first->name[0]))
+    {
+        memcpy(first->name, name, (length + 1) * sizeof(WCHAR));
+        first->found = true;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+// The program's own icon at the sizes Windows shows a window's, given to
+// the class, so a window shows the program's icon as its file does until
+// it is given one; none where the program has no icon.
+static void LoadProgramIcons(mwinWin32Platform* platform, WNDCLASSEXW* windowClass)
+{
+    FirstIcon first = {0};
+    (void)EnumResourceNamesW(platform->instance, (LPCWSTR)RT_GROUP_ICON, KeepFirstIcon,
+                             (LONG_PTR)&first);
+    if (!first.found)
+    {
+        return;
+    }
+    LPCWSTR name = first.name[0] != 0 ? first.name : MAKEINTRESOURCEW(first.number);
+    platform->programIcons[0] =
+        (HICON)LoadImageW(platform->instance, name, IMAGE_ICON, GetSystemMetrics(SM_CXICON),
+                          GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR);
+    platform->programIcons[1] =
+        (HICON)LoadImageW(platform->instance, name, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+                          GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
+    windowClass->hIcon = platform->programIcons[0];
+    windowClass->hIconSm = platform->programIcons[1];
+}
+
+static void DestroyProgramIcons(mwinWin32Platform* platform)
+{
+    for (size_t i = 0; i < 2; i++)
+    {
+        if (platform->programIcons[i] != nullptr)
+        {
+            DestroyIcon(platform->programIcons[i]);
+            platform->programIcons[i] = nullptr;
+        }
+    }
+}
+
 // Registers the window class, or finds it registered by an earlier
-// context of the process.
+// context of the process, whose icons it keeps.
 static bool RegisterWindowClass(mwinWin32Platform* platform)
 {
     WNDCLASSEXW windowClass = {0};
@@ -91,8 +157,15 @@ static bool RegisterWindowClass(mwinWin32Platform* platform)
     windowClass.hInstance = platform->instance;
     windowClass.hCursor = LoadCursorW(nullptr, (LPCWSTR)IDC_ARROW);
     windowClass.lpszClassName = MWIN_WIN32_CLASS;
+    LoadProgramIcons(platform, &windowClass);
     platform->windowClass = RegisterClassExW(&windowClass);
-    return platform->windowClass != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+    if (platform->windowClass == 0)
+    {
+        DWORD failure = GetLastError();
+        DestroyProgramIcons(platform);
+        return failure == ERROR_CLASS_ALREADY_EXISTS;
+    }
+    return true;
 }
 
 static void Stop(mwinContext* context)
@@ -109,6 +182,7 @@ static void Stop(mwinContext* context)
     {
         UnregisterClassW(MWIN_WIN32_CLASS, platform->instance);
     }
+    DestroyProgramIcons(platform);
 #ifdef MAUL_WINDOW_GAMEPAD
     mwinWin32PadsStop(&platform->pads);
 #endif

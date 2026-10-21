@@ -593,6 +593,10 @@ if(MAUL_WINDOW_BUILD_TESTS)
         # Window icons read back from Windows.
         maul_add_test(win32_icon)
         target_link_libraries(test_win32_icon PRIVATE user32 gdi32)
+        # The program's own icon on a window given none.
+        maul_add_test(win32_class_icon)
+        target_sources(test_win32_class_icon PRIVATE ${PROJECT_SOURCE_DIR}/test/win32_class_icon.rc)
+        target_link_libraries(test_win32_class_icon PRIVATE user32 gdi32)
         # The common item dialog, driven from the program's frames.
         maul_add_test(win32_dialog)
         target_link_libraries(test_win32_dialog PRIVATE user32)
