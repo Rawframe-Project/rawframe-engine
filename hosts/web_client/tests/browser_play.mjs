@@ -104,6 +104,8 @@ execFileSync(exportPath, [join(repository, 'games', name), exported, '--target',
                           join(repository, 'hosts/web_client/page')],
              { stdio: ['ignore', 'inherit', 'inherit'] });
 const setup = JSON.parse(await readFile(join(site, 'play.json'), 'utf8'));
+// The folder says how to host it (D958): the server's command and its port.
+const readme = await readFile(join(exported, 'README.txt'), 'utf8');
 // Quarry's server ticks a land of seven thousand entities: behind on a
 // loaded machine, it is not let degrade and refuse the page as unavailable,
 // nor stop itself (D212, D742).
@@ -411,6 +413,7 @@ try {
         framesShown: drawing !== null && Number(drawing[1]) > 0,
         lit: shown > 1000,
         noGpuErrors: gpuErrors.length === 0,
+        hostable: readme.includes('--config server/server.conf') && readme.includes(`UDP port ${port}`),
     };
     if (!stalls && !quarry && !lighting) {
         // Stalls, Quarry, and the Lighting Test predict nothing, so

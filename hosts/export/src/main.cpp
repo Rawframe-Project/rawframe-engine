@@ -323,23 +323,10 @@ std::string subjectNameOf(std::string_view game) {
     return name.empty() ? std::string{"game"} : name;
 }
 
-/// What a player of the exported game reads first: how to start it, and
-/// each action of the game's `actions` file with its default bindings.
-std::string
-howToPlay(const std::filesystem::path& game, const std::string& gameFile, const std::string& launcher, bool headset) {
-    std::string text = "To play, run " + launcher +
-                       " in this folder: it starts the game's server, then the game in a window.\n"
-                       "Closing the window ends both. The server's and the game's records are\n"
-                       "written beside them, in server.log and client.log. F11, or Alt and Enter,\n"
-                       "puts the window on the whole screen and back; window.fullscreen = true in\n"
-                       "client.conf starts it there. Where the graphics device cannot keep up, the\n"
-                       "picture is drawn at fewer pixels, down to half each way;\n"
-                       "scene.render_scale_least_percent = 100 in client.conf keeps every one.\n";
-    if (headset) {
-        text += "\nThe game is shown on a VR headset where the system's OpenXR runtime has one\n"
-                "(SteamVR, Meta's, or Monado made active), and played flat in the window\n"
-                "where it has none; xr.headset = false in client.conf always plays it flat.\n";
-    }
+/// Each action of the game's `actions` file with its default bindings, as
+/// the folder's README lists them; nothing for a game with none.
+std::string controlsOf(const std::filesystem::path& game, const std::string& gameFile) {
+    std::string text;
     std::ifstream description{game / gameFile};
     std::string line;
     while (std::getline(description, line)) {
@@ -365,6 +352,51 @@ howToPlay(const std::filesystem::path& game, const std::string& gameFile, const 
         break;
     }
     return text;
+}
+
+/// What a player of the exported game reads first: how to start it, and
+/// the game's controls.
+std::string
+howToPlay(const std::filesystem::path& game, const std::string& gameFile, const std::string& launcher, bool headset) {
+    std::string text = "To play, run " + launcher +
+                       " in this folder: it starts the game's server, then the game in a window.\n"
+                       "Closing the window ends both. The server's and the game's records are\n"
+                       "written beside them, in server.log and client.log. F11, or Alt and Enter,\n"
+                       "puts the window on the whole screen and back; window.fullscreen = true in\n"
+                       "client.conf starts it there. Where the graphics device cannot keep up, the\n"
+                       "picture is drawn at fewer pixels, down to half each way;\n"
+                       "scene.render_scale_least_percent = 100 in client.conf keeps every one.\n";
+    if (headset) {
+        text += "\nThe game is shown on a VR headset where the system's OpenXR runtime has one\n"
+                "(SteamVR, Meta's, or Monado made active), and played flat in the window\n"
+                "where it has none; xr.headset = false in client.conf always plays it flat.\n";
+    }
+    return text + controlsOf(game, gameFile);
+}
+
+/// What whoever hosts a web export reads first (D958): how to start its
+/// server, serve its site, and play it, and the game's controls.
+std::string howToHost(const std::filesystem::path& game,
+                      const std::string& gameFile,
+                      const std::string& server,
+                      const std::string& port) {
+    return "This folder is the game for the web: web/ is its site and server/ its server.\n"
+           "\n"
+           "To host it, start the server: " +
+           server +
+           " --config server/server.conf from this\n"
+           "folder. It listens on UDP port " +
+           port +
+           " for browsers over WebTransport, and writes web/fingerprint\n"
+           "as it starts, by which the page trusts it. Then serve web/ with any static file server,\n"
+           "for example python -m http.server 8000 run inside web/, and open\n"
+           "http://localhost:8000/ in Chrome or Edge. The page reaches the server on the host it\n"
+           "came from: for players elsewhere, serve web/ over HTTPS from the server's host, with\n"
+           "UDP port " +
+           port +
+           " open. A browser plays it where it offers WebGPU, with hardware\n"
+           "acceleration on.\n" +
+           controlsOf(game, gameFile);
 }
 
 constexpr std::string_view kPlatform =
@@ -873,10 +905,12 @@ int main(int argc, char** argv) {
         !writeApplication(kExported, *iosClient, "ios/" + kName + ".app", publisher + "." + kName, written)) {
         return 1;
     }
-    // How to play it, for a native folder's player.
-    if (target == Target::Native) {
+    // How to play it, for a native folder's player, or host it, for a web
+    // folder's.
+    if (target == Target::Native || kWeb) {
         if (!writeText(kOutput / "README.txt",
-                       howToPlay(kGame, gameFile, kExported.launcher + kSuffix, headset.value_or(false)))) {
+                       kWeb ? howToHost(kGame, gameFile, "server/rawframe-server" + kSuffix, kExported.port)
+                            : howToPlay(kGame, gameFile, kExported.launcher + kSuffix, headset.value_or(false)))) {
             std::fputs("rawframe-export: README.txt cannot be written\n", stderr);
             return 1;
         }
