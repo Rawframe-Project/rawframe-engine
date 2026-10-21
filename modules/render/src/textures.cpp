@@ -47,6 +47,13 @@ bool blocks(texture::Format format) noexcept {
     return format == texture::Format::Bc7 || format == texture::Format::Bc7Srgb;
 }
 
+/// Whether a texture made for `held` can draw what `image` holds.
+bool sameShape(const texture::Texture& held, const texture::Texture& image) noexcept {
+    return held.format == image.format && held.faces == image.faces && held.depth == image.depth &&
+           held.levels.size() == image.levels.size() && held.levels[0].width == image.levels[0].width &&
+           held.levels[0].height == image.levels[0].height;
+}
+
 std::uint64_t bytesOf(const texture::Texture& image) noexcept {
     std::uint64_t bytes = 0;
     for (const texture::Level& level : image.levels) {
@@ -129,6 +136,17 @@ bool DeviceTextures::choose(std::uint64_t id, const std::shared_ptr<const textur
         return false;
     }
     auto found = state.held.find(id);
+    // A new revision past what is left of the budget, of the size of the
+    // one held and uploaded: that one drawn a frame longer (D970). It was
+    // destroyed first, and nothing was drawn: an editor's viewport,
+    // streamed a picture a frame, went black whenever a changed glyph
+    // atlas took the frame's uploads first.
+    if (found != state.held.end() && found->second.source != image && found->second.uploaded &&
+        bytesOf(*image) > state.budget && sameShape(*found->second.source, *image)) {
+        ++state.statistics.uploadsDeferred;
+        state.chosen.emplace(id, &found->second);
+        return true;
+    }
     if (found != state.held.end() && found->second.source != image) {
         // A reload's new revision: the old one is retired once the frames
         // that draw it are done.
