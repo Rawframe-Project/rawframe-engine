@@ -232,6 +232,8 @@ bool ShellParticipant::pressExport(ui::Node node) {
     if (const auto kTarget = std::ranges::find(held_.exportTargets, node, &std::pair<ui::Node, std::string>::first);
         kTarget != held_.exportTargets.end()) {
         held_.exportTarget = kTarget->second;
+        // What the last export said was of the target left (D948).
+        held_.exportSaid.clear();
         say("exports for " + std::string{shownTarget(held_.exportTarget)});
         closeExport();
         openExport();

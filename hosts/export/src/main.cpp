@@ -596,6 +596,45 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "rawframe-export: %s is not empty\n", kOutput.string().c_str());
         return 1;
     }
+    // What the target is made from, all found before anything is cooked: a
+    // web export once failed a minute in, for the web player Studio's
+    // package did not carry (D948).
+    std::vector<std::pair<std::string, fs::path>> needed = {{"the cook tool", kTool("cook")},
+                                                            {"the build tool", kTool("build")},
+                                                            {"the dedicated server", kTool("server")}};
+    if (target == Target::Native) {
+        needed.emplace_back("the client", kTool("client"));
+        needed.emplace_back("the launcher", kTool("play"));
+        if (follow.has_value()) {
+            needed.emplace_back("the install tool", kTool("install"));
+        }
+    } else if (kWeb) {
+        for (const auto& [kOption, kFile] : {std::pair{"web-client", "rawframe-web-client.wasm"},
+                                             std::pair{"maul-window", "maul-window.mjs"},
+                                             std::pair{"maul-rhi", "maul-rhi.mjs"},
+                                             std::pair{"maul-ui", "maul-ui.mjs"}}) {
+            needed.emplace_back("the web player's " + std::string{kFile}, kWebFile(kOption, kFile));
+        }
+        needed.emplace_back("the web player's page", kWebFile("page", "page") / "play.html");
+    }
+    for (const auto& [kWhat, kPath] : needed) {
+        if (!fs::exists(kPath, error)) {
+            std::fprintf(stderr, "rawframe-export: %s is not at %s\n", kWhat.c_str(), kPath.string().c_str());
+            return 1;
+        }
+    }
+    // A folder this export makes is taken away again if it fails, so a
+    // failed export leaves nothing half made behind (D948).
+    struct Unmade {
+        fs::path folder;
+        bool made = false;
+        ~Unmade() {
+            if (!made && !folder.empty()) {
+                std::error_code ignored;
+                fs::remove_all(folder, ignored);
+            }
+        }
+    } unmade{.folder = fs::exists(kOutput, error) ? fs::path{} : kOutput};
     const std::string kName = kGame.filename().string();
     const std::string kSubject = publisher + "/" + subjectNameOf(kName);
     const auto kSidecar = readText(kGame / (gameFile + ".rfmeta"));
@@ -808,6 +847,7 @@ int main(int argc, char** argv) {
         std::fputs("rawframe-export: the receipt cannot be written\n", stderr);
         return 1;
     }
+    unmade.made = true;
     std::printf("exported %s, build %s, composition %s\n", kName.c_str(), kRoot->c_str(), kComposition->c_str());
     return 0;
 }

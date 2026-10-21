@@ -2,8 +2,8 @@
 # Packages Studio for an author with no build of their own (D768): Studio,
 # the cook tool, the dedicated server, the client, the authoring tool, the
 # thumbnail tool, and what Export runs (the export and build tools, the
-# launcher, the install tool; D944) from one build tree, with the shader
-# toolchain where the machine has one (D945), beside the templates and the
+# launcher, the install tool; D944, and the web player, D948) from one build
+# tree, with the shader toolchain where the machine has one (D945), beside the templates and the
 # sources of the games named, which Studio's start screen offers as
 # samples. Studio opens as an application does, with no configuration and
 # no script (D920): double-clicked, it shows its start screen. A Windows
@@ -66,6 +66,18 @@ if [ -n "$slangc" ] && [ -n "$dxc" ] && [ -n "$cross" ] && [ -n "$validator" ] &
     fi
 else
     echo "package_studio.sh: no shader toolchain here; the packaged cook refuses a material graph the blob cannot fold" >&2
+fi
+# The web player a web export lays out (D948), the same for every system:
+# from the WebAssembly tree RAWFRAME_WEB_TREE names, else the shipping one
+# beside the tree packaged, and the page from the sources.
+web="${RAWFRAME_WEB_TREE:-$(dirname "$tree")/wasm-shipping}"
+if [ -e "$web/hosts/web_client/rawframe-web-client.wasm" ]; then
+    mkdir -p "$into/web/page"
+    cp "$web/hosts/web_client/rawframe-web-client.wasm" "$web/third_party/maul-window/maul-window.mjs" \
+        "$web/third_party/maul-rhi/maul-rhi.mjs" "$web/third_party/maul-ui/maul-ui.mjs" "$into/web/"
+    cp hosts/web_client/page/* "$into/web/page/"
+else
+    echo "package_studio.sh: no web player at $web; the packaged Studio's web export says so" >&2
 fi
 # The templates a new game is made from (D780).
 cp -R templates "$into/templates"

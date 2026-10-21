@@ -9,6 +9,16 @@ rawframe_host(NAME export_tool OUTPUT rawframe-export
 if(RAWFRAME_BUILD_TESTS)
     add_test(NAME export_usage COMMAND rawframe_host_export_tool)
     set_tests_properties(export_usage PROPERTIES WILL_FAIL TRUE)
+    # A web export without its web player stops before cooking, saying what
+    # is missing, and leaves no folder (D948).
+    add_test(NAME export_missing_player
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/missing.sh $<TARGET_FILE:rawframe_host_export_tool>
+                     $<TARGET_FILE:rawframe_host_cook_tool> $<TARGET_FILE:rawframe_host_build_tool>
+                     $<TARGET_FILE:rawframe_host_dedicated_server> games/runners ${CMAKE_CURRENT_BINARY_DIR}/missing
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(export_missing_player PROPERTIES
+                         PASS_REGULAR_EXPRESSION
+                         "export: 1\nrawframe-export: the web player's rawframe-web-client.wasm is not at [^\n]*nowhere[^\n]*\nfolder left: no")
     # Runners exported for Android (D555): its package's configuration pinned
     # to the identity the exported server holds, and that server, started as
     # written, admitting a bot that plays from the package's library.
