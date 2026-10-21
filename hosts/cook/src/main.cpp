@@ -215,7 +215,8 @@ std::optional<rawframe::cook::ShaderTools> shaderTools(const std::optional<std::
         const auto kSize = fs::file_size(kFile, failed);
         const auto kWritten = fs::last_write_time(kFile, failed);
         stamped.update(kFile.generic_string());
-        stamped.update(std::to_string(kSize) + " " + std::to_string(kWritten.time_since_epoch().count()));
+        stamped.update(std::to_string(kSize) + " " +
+                       std::to_string(static_cast<long long>(kWritten.time_since_epoch().count())));
     }
     const rawframe::base::Sha256Digest kStamp = stamped.finish();
     const fs::path kKept = cache.has_value() ? *cache / "shader-tools.identity" : fs::path{};
