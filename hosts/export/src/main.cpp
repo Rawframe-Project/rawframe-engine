@@ -375,16 +375,20 @@ howToPlay(const std::filesystem::path& game, const std::string& gameFile, const 
 }
 
 /// What whoever hosts a web export reads first (D958): how to start its
-/// server, serve its site, and play it, and the game's controls.
+/// server, serve its site, and play it, and the game's controls. The
+/// command is written with the system's separator, as its shell reads it:
+/// cmd takes `server/...` for a switch.
 std::string howToHost(const std::filesystem::path& game,
                       const std::string& gameFile,
                       const std::string& server,
                       const std::string& port) {
+    const std::string kProgram = (std::filesystem::path{"server"} / server).make_preferred().string();
+    const std::string kConfig = (std::filesystem::path{"server"} / "server.conf").make_preferred().string();
     return "This folder is the game for the web: web/ is its site and server/ its server.\n"
            "\n"
            "To host it, start the server: " +
-           server +
-           " --config server/server.conf from this\n"
+           kProgram + " --config " + kConfig +
+           " from this\n"
            "folder. It listens on UDP port " +
            port +
            " for browsers over WebTransport, and writes web/fingerprint\n"
@@ -909,7 +913,7 @@ int main(int argc, char** argv) {
     // folder's.
     if (target == Target::Native || kWeb) {
         if (!writeText(kOutput / "README.txt",
-                       kWeb ? howToHost(kGame, gameFile, "server/rawframe-server" + kSuffix, kExported.port)
+                       kWeb ? howToHost(kGame, gameFile, "rawframe-server" + kSuffix, kExported.port)
                             : howToPlay(kGame, gameFile, kExported.launcher + kSuffix, headset.value_or(false)))) {
             std::fputs("rawframe-export: README.txt cannot be written\n", stderr);
             return 1;
