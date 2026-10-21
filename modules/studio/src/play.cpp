@@ -254,6 +254,7 @@ result::Status Play::launch() {
                          "render.width",
                          "render.height",
                          "render.stream",
+                         "render.frame_rate",
                          "preview.views",
                          "preview.flight"});
         const std::string kWidth = std::to_string((*settings_.viewport)[0]);
@@ -264,7 +265,11 @@ result::Status Play::launch() {
                      // Split three ways at most, in the viewport only (D797).
                      "\npreview.views = 3\n" +
                      // Edited, its camera flown as an editor's (D913).
-                     (settings_.edited ? "preview.flight = true\n" : "");
+                     (settings_.edited ? "preview.flight = true\n" : "") +
+                     // At most sixty pictures a second, a display's: each one
+                     // is read back and written whole to the stream, which a
+                     // device that keeps up did at its host's 120 (D947).
+                     "render.frame_rate = 60\n";
     }
     RAWFRAME_TRY(written(kAt / "client.conf",
                          settingsOf(kWithContent(given),
