@@ -64,6 +64,7 @@ cat >"$work/studio.conf" <<CONF
 host.maximum_iterations = 7200
 host.iteration_rate = 120
 render.device = any
+studio.play.directory = $work/studio-play
 CONF
 if [ "$2" = none ]; then
     printf 'studio.templates = %s\nstudio.projects = %s\n' "$PWD/templates" "$work/games" >>"$work/studio.conf"

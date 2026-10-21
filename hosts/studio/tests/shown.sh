@@ -15,6 +15,7 @@ host.maximum_iterations = 240
 host.iteration_rate = 120
 render.device = any
 studio.game = $PWD/$2
+studio.play.directory = $work/studio-play
 CONF
 # Its window the screen's size: no window manager runs to maximize it (D925).
 grep -q '^window.height' "$work/studio.conf" || printf 'window.height = 720\n' >>"$work/studio.conf"

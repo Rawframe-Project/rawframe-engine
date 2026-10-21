@@ -187,13 +187,15 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         kPlayServer = kBesideServer.string();
         kPlayClient = kBesideClient.string();
     }
+    // Where it plays and cooks, playing or not: a Studio that cannot play
+    // still cooks there (D950).
+    playDirectory_ = std::string{configuration.path("studio.play.directory").value_or("")};
     if (kPlayServer.has_value()) {
         play_ =
             PlaySettings{.server = *kPlayServer,
                          .client = *kPlayClient,
                          .serverSettings = std::string{configuration.path("studio.play.server_settings").value_or("")},
                          .clientSettings = std::string{configuration.path("studio.play.client_settings").value_or("")}};
-        playDirectory_ = std::string{configuration.path("studio.play.directory").value_or("")};
         // Played in the viewport, or in the client's own window (D789),
         // the viewport by default now its input reaches the game (D790).
         RAWFRAME_TRY_ASSIGN(inViewport_.inViewport, configuration.truth("studio.play_in_viewport", true));
@@ -320,13 +322,13 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
 
 void ShellParticipant::settle(const std::filesystem::path& description, const std::filesystem::path& root) {
     std::error_code error;
+    // The game's own play directory, where a debugger given the game finds
+    // it (D462), unless the settings name one.
+    cookAt_ = playDirectory_.empty() ? authoring_session::playDirectoryOf(description) : playDirectory_;
     if (play_.has_value()) {
         play_->game = std::filesystem::absolute(description, error);
-        // The game's own play directory, where a debugger given the game
-        // finds it (D462).
-        play_->directory = playDirectory_.empty() ? authoring_session::playDirectoryOf(description) : playDirectory_;
+        play_->directory = cookAt_;
     }
-    cookAt_ = play_.has_value() ? play_->directory : authoring_session::playDirectoryOf(description);
     if (play_.has_value()) {
         play_->content = cookAt_ / "content";
     }

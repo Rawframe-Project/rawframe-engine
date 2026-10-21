@@ -2,6 +2,7 @@
 // system, and Host iterations run exactly the ticks the pacer owes.
 
 #include "rawframe/composition/composition.h"
+#include "rawframe/diagnostics/router.h"
 #include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/query.h"
@@ -216,6 +217,60 @@ RAWFRAME_TEST(AWorldBehindTooLongIsOverloaded) {
         iterate(composition, iteration++, clock.now());
     }
     RAWFRAME_EXPECT(composition.health().health == composition::Health::Unhealthy);
+    composition.stop();
+    movement = nullptr;
+}
+
+namespace {
+
+/// The values of every tick debt gauge the World said.
+struct Debts final : diagnostics::Sink {
+    std::vector<double> said;
+    void accept(const diagnostics::Record& record) noexcept override {
+        if (record.identity.code == "tick_debt") {
+            said.push_back(record.value);
+        }
+    }
+};
+
+} // namespace
+
+RAWFRAME_TEST(AWorldBehindSaysItsDebtOnceASecond) {
+    // A machine that cannot keep up is behind every iteration: its debt is
+    // said at most once a second, not once an iteration (D950), and nought
+    // once when it has caught up.
+    const auto kPlan = plan();
+    RAWFRAME_EXPECT(kPlan.has_value());
+    const auto kConfiguration = composition::Configuration::parse(
+        "world.tick_rate = 10\nworld.maximum_ticks_per_iteration = 1\nworld.overload_ms = 0\n");
+    execution::ManualClock clock;
+    execution::CancellationScope root{clock};
+    Debts debts;
+    diagnostics::Sink* const kSinks[] = {&debts};
+    diagnostics::Router router{diagnostics::RouterSettings{}, kSinks};
+    composition::Composition composition{*kPlan,
+                                         composition::HostServices{.clock = &clock,
+                                                                   .scope = &root,
+                                                                   .cpu = &test::cpuExecutor(),
+                                                                   .blockingIo = &test::blockingIoExecutor(),
+                                                                   .emitter = router.emitter(),
+                                                                   .configuration = &*kConfiguration}};
+    RAWFRAME_EXPECT(composition.start().has_value());
+    std::uint64_t iteration = 0;
+    iterate(composition, iteration++, clock.now());
+    // Ten seconds owe a hundred ticks; ninety iterations over 1.8 seconds,
+    // each owing more than one: said at the first, and a second later.
+    clock.advance(MonotonicDuration::fromSeconds(10));
+    for (int round = 0; round < 90; ++round) {
+        iterate(composition, iteration++, clock.now());
+        clock.advance(MonotonicDuration::fromMilliseconds(20));
+    }
+    RAWFRAME_EXPECT(debts.said.size() == 2 && debts.said[0] > 0 && debts.said[1] > 0);
+    // Caught up with no time passing: nought, once.
+    for (int round = 0; round < 200; ++round) {
+        iterate(composition, iteration++, clock.now());
+    }
+    RAWFRAME_EXPECT(debts.said.size() == 3 && debts.said.back() == 0);
     composition.stop();
     movement = nullptr;
 }

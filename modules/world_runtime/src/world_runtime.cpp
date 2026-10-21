@@ -24,6 +24,10 @@ constexpr diagnostics::EventIdentity kTickDebt{"world_runtime", "tick_debt"};
 constexpr diagnostics::EventIdentity kOverloadedEvent{"world_runtime", "overloaded"};
 constexpr diagnostics::EventIdentity kTickSummary{"world_runtime", "tick_summary"};
 
+/// How often a World behind says how far: its debt gauge at most this
+/// often, so a machine that cannot keep up logs one a second, not one a tick.
+constexpr execution::MonotonicDuration kDebtSaidEvery = execution::MonotonicDuration::fromSeconds(1);
+
 /// Tick durations kept for the summary: the most recent this many.
 constexpr std::size_t kKeptTickDurations = std::size_t{1} << 16U;
 
@@ -271,8 +275,11 @@ public:
                 pacer_->ran(1);
             }
         }
-        if (kDue.debt != 0) {
+        // Behind, its debt at most once a second; caught up, nought once.
+        if (kDue.debt != 0 ? !debtSaid_.has_value() || frame.now - *debtSaid_ >= kDebtSaidEvery
+                           : debtSaid_.has_value()) {
             emitter_.gauge(kTickDebt, diagnostics::Unit::Count, static_cast<double>(kDue.debt));
+            debtSaid_ = kDue.debt != 0 ? std::optional{frame.now} : std::nullopt;
         }
         context_->reportMemory(world_->heldBytes());
         // SPEC-0012's tick progress, on SPEC-0013's thresholds (D212): a
@@ -399,6 +406,8 @@ private:
     /// When the World fell more than a second behind, while it stays there;
     /// and whether it has been behind too long.
     std::optional<execution::MonotonicInstant> behindSince_;
+    /// When its debt was last said, while it is behind.
+    std::optional<execution::MonotonicInstant> debtSaid_;
     bool overloaded_ = false;
 };
 

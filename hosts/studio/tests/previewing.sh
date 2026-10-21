@@ -47,6 +47,7 @@ host.maximum_iterations = 7200
 host.iteration_rate = 120
 render.device = any
 studio.game = $PWD/$5
+studio.play.directory = $work/studio-play
 studio.preview.endpoint = 127.0.0.1:$port
 studio.preview.pin_file = $work/preview.fingerprint
 studio.preview.token_file = $work/token

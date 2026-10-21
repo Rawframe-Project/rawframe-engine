@@ -19,6 +19,7 @@ host.maximum_iterations = 36000
 host.iteration_rate = 120
 render.device = any
 studio.game = $work/game/$(basename "$4")
+studio.play.directory = $work/studio-play
 studio.play.server = $2
 studio.play.client = $3
 studio.preferences = $work/studio.preferences
