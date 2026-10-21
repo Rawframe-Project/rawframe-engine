@@ -49,6 +49,7 @@
 #include <filesystem>
 #include <optional>
 #include <random>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -140,7 +141,7 @@ std::filesystem::path packagedTool(const std::filesystem::path& packaged, std::s
 /// tree's generator this tool was built from, and the programs on the path
 /// (the Slang compiler where RAWFRAME_SLANGC names it, unless the package
 /// has its own). Python is `python3`, or on Windows `python` or `py`.
-std::optional<rawframe::cook::ShaderTools> shaderTools() {
+std::optional<rawframe::cook::ShaderTools> shaderTools(const std::optional<std::filesystem::path>& cache) {
     namespace fs = std::filesystem;
     std::error_code error;
     const fs::path kPackaged = fs::canonical(rawframe::process::ownExecutable(), error).parent_path() / "shader-tools";
@@ -204,6 +205,32 @@ std::optional<rawframe::cook::ShaderTools> shaderTools() {
     }
     std::ranges::sort(libraries);
     files.insert(files.end(), libraries.begin(), libraries.end());
+    // Kept in the cook's cache under a stamp of each file's path, size, and
+    // time last written, so a cook digests the toolchain (hundreds of
+    // megabytes: Slang's and dxc's libraries, 16 s on the Windows test
+    // machine) only when a file of it changed; one changed with its size
+    // and time kept is missed, as a compiler cache misses it (D947).
+    rawframe::base::Sha256 stamped;
+    for (const fs::path& kFile : files) {
+        const auto kSize = fs::file_size(kFile, failed);
+        const auto kWritten = fs::last_write_time(kFile, failed);
+        stamped.update(kFile.generic_string());
+        stamped.update(std::to_string(kSize) + " " + std::to_string(kWritten.time_since_epoch().count()));
+    }
+    const rawframe::base::Sha256Digest kStamp = stamped.finish();
+    const fs::path kKept = cache.has_value() ? *cache / "shader-tools.identity" : fs::path{};
+    if (cache.has_value()) {
+        std::array<std::byte, 64> held{};
+        if (std::FILE* file = std::fopen(kKept.string().c_str(), "rb"); file != nullptr) {
+            const bool kRead = std::fread(held.data(), 1, held.size(), file) == held.size();
+            std::fclose(file);
+            if (kRead && std::ranges::equal(std::span{held}.first(32), kStamp)) {
+                rawframe::base::Sha256Digest kept{};
+                std::ranges::copy(std::span{held}.subspan(32), kept.begin());
+                return rawframe::cook::ShaderTools{.python = python, .generator = kGenerator, .identity = kept};
+            }
+        }
+    }
     rawframe::base::Sha256 identity;
     for (const fs::path& kFile : files) {
         const auto kDigest = rawframe::cook::digestOfFile(kFile);
@@ -213,7 +240,16 @@ std::optional<rawframe::cook::ShaderTools> shaderTools() {
         identity.update(kFile.filename().string());
         identity.update(*kDigest);
     }
-    return rawframe::cook::ShaderTools{.python = python, .generator = kGenerator, .identity = identity.finish()};
+    const rawframe::base::Sha256Digest kIdentity = identity.finish();
+    if (cache.has_value()) {
+        fs::create_directories(*cache, failed);
+        if (std::FILE* file = std::fopen(kKept.string().c_str(), "wb"); file != nullptr) {
+            static_cast<void>(std::fwrite(kStamp.data(), 1, kStamp.size(), file));
+            static_cast<void>(std::fwrite(kIdentity.data(), 1, kIdentity.size(), file));
+            std::fclose(file);
+        }
+    }
+    return rawframe::cook::ShaderTools{.python = python, .generator = kGenerator, .identity = kIdentity};
 }
 
 } // namespace
@@ -232,7 +268,8 @@ int main(int argc, char** argv) {
         std::fputs("rawframe-cook: cannot read its own executable\n", stderr);
         return 1;
     }
-    const std::vector<rawframe::cook::Importer> kImporters = rawframe::cook::engineImporters(shaderTools());
+    const std::vector<rawframe::cook::Importer> kImporters = rawframe::cook::engineImporters(
+        shaderTools(!kMap && argc == 4 ? std::optional<std::filesystem::path>{argv[3]} : std::nullopt));
     if (kMap) {
         // One source alone where named (D536), its path under the sources.
         const auto kReport = rawframe::cook::mapSubassets(
