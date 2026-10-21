@@ -104,6 +104,14 @@ std::optional<std::string> ToolingLink::askLast(std::string_view record) {
     return client_->ask(record, kEndWithin);
 }
 
+bool ToolingLink::send(std::string_view record) {
+    return client_->send(record);
+}
+
+std::vector<std::string> ToolingLink::heard() {
+    return client_->heard(0);
+}
+
 HostLink::HostLink() = default;
 
 HostLink::~HostLink() {

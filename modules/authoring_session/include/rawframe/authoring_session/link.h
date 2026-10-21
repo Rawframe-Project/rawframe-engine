@@ -48,6 +48,13 @@ public:
     /// moment: a program stopped by the system never replies, and the
     /// ten seconds an ask waits held Studio's end (D947).
     std::optional<std::string> askLast(std::string_view record);
+    /// Sends one record answered later (D969): its reply kept for `heard`
+    /// under the record's own id, so who sends it never waits on the
+    /// endpoint's next frame. Whether it was sent.
+    bool send(std::string_view record);
+    /// The replies to records sent since last asked, each under its own
+    /// id, and what the endpoint said unasked; without waiting.
+    std::vector<std::string> heard();
 
 private:
     ToolingLink();

@@ -411,7 +411,8 @@ void ShellParticipant::pollPicks(double seconds) {
         seconds < nextPick_) {
         return;
     }
-    nextPick_ = seconds + 0.25;
+    // Often, as nothing waits for the preview's answer (D969).
+    nextPick_ = seconds + 0.05;
     const std::string kReply = ask(pickRecord(next(), scene_));
     // Said once each time another part is lit, so what waits on a hover
     // waits for it (D504).

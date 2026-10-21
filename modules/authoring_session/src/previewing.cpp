@@ -110,8 +110,13 @@ void Preview::letGo() {
     preview_.reset();
     server_.reset();
     scene_.clear();
-    // A preview to come counts its wheel and drags afresh (D469).
+    // A preview to come counts its wheel and drags afresh (D469), and is
+    // asked afresh (D969).
     motionRead_ = {};
+    clickedHeard_.reset();
+    clickedAsked_ = false;
+    inputsWaiting_ = 0;
+    inputTaken_ = false;
 }
 
 /// Hands the preview the scene's view where it previews that scene and
@@ -194,9 +199,13 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
     }
     Value made = Value::object();
     made.add("kind", Value::string("authoring.picked"));
-    const auto kClicked = preview_->ask(R"({"kind":"tooling.clicked","id":0})");
-    const auto kParsed = rawframe::document::parse(kClicked.value_or(std::string{}));
-    const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    // The newest answer heard, the next asked: never waited for (D969).
+    hear();
+    if (!clickedAsked_ && preview_->send(R"({"kind":"tooling.clicked","id":"clicked"})")) {
+        clickedAsked_ = true;
+    }
+    const std::optional<Value> kHeard = std::exchange(clickedHeard_, std::nullopt);
+    const Value* kAnswer = kHeard.has_value() ? &*kHeard : nullptr;
     const Value* kCount = kAnswer != nullptr ? kAnswer->find("count") : nullptr;
     const std::int64_t kClicks = kCount != nullptr ? kCount->integer().value_or(0) : 0;
     Value scene;
@@ -316,6 +325,28 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
     }
     made.add("viewed", kAnswer != nullptr ? viewMovedBy(*kAnswer, previewed) : Value{});
     return made;
+}
+
+void Preview::hear() {
+    if (preview_ == nullptr) {
+        return;
+    }
+    for (const std::string& kLine : preview_->heard()) {
+        const auto kParsed = rawframe::document::parse(kLine);
+        const Value* kId = kParsed.has_value() ? kParsed->find("id") : nullptr;
+        const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+        const std::string_view kFor = kId != nullptr && kId->text() != nullptr ? *kId->text() : std::string_view{};
+        if (kFor == "clicked") {
+            clickedAsked_ = false;
+            if (kAnswer != nullptr) {
+                clickedHeard_ = *kAnswer;
+            }
+        } else if (kFor == "input") {
+            inputsWaiting_ -= inputsWaiting_ > 0 ? 1 : 0;
+            const Value* kTaken = kAnswer != nullptr ? kAnswer->find("taken") : nullptr;
+            inputTaken_ = kTaken != nullptr && kTaken->truth().value_or(false);
+        }
+    }
 }
 
 /// The scene's view moved by the preview's wheel and right drags since
@@ -459,21 +490,22 @@ result::Result<Value> Preview::inputted(const authoring::SessionRecord& record) 
                                        result::ErrorClass::InvalidArgument,
                                        "events are at most 64 input events that read")};
     }
-    bool taken = false;
-    if (preview_ != nullptr && record.scene == scene_ && !kEvents->empty()) {
+    // Sent without waiting for the preview's next frame (D969); taken as
+    // the last it answered was. A preview past kMostInputsWaiting
+    // unanswered has stopped taking any.
+    hear();
+    if (preview_ != nullptr && record.scene == scene_ && !kEvents->empty() && inputsWaiting_ < kMostInputsWaiting) {
         Value asked = Value::object();
         asked.add("kind", Value::string("tooling.input"));
-        asked.add("id", Value::integer(0));
+        asked.add("id", Value::string("input"));
         asked.add("events", world_tooling::windowInputsValue(*kEvents));
-        const auto kReply = preview_->ask(rawframe::document::writeCompact(asked));
-        const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
-        const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
-        const Value* kTaken = kAnswer != nullptr ? kAnswer->find("taken") : nullptr;
-        taken = kTaken != nullptr && kTaken->truth().value_or(false);
+        if (preview_->send(rawframe::document::writeCompact(asked))) {
+            ++inputsWaiting_;
+        }
     }
     Value made = Value::object();
     made.add("kind", Value::string("authoring.preview_inputted"));
-    made.add("taken", Value::boolean(taken));
+    made.add("taken", Value::boolean(inputTaken_));
     return made;
 }
 

@@ -138,6 +138,9 @@ private:
     [[nodiscard]] std::optional<Pressed>
     grabbed(std::int64_t count, const document::Value& clicked, const authoring::AuthoredScene* previewed) const;
     [[nodiscard]] document::Value movedAlong(const document::Value& clicked) const;
+    /// The preview's answers to what was sent it without waiting (D969):
+    /// its newest press, and whether the last input it answered was taken.
+    void hear();
 
     /// The preview, and the scene it shows (D433), the view it was last
     /// told, and the looks asked of it.
@@ -158,6 +161,16 @@ private:
     /// already answered.
     std::unique_ptr<ToolingLink> server_;
     std::int64_t clicks_ = 0;
+    /// Asked of the preview without waiting, as its frames come (D969): a
+    /// Studio that waited for each answer was held to the preview's pace,
+    /// a third of its time on a slow one. Its presses, asked once at a
+    /// time, the newest answer heard; and the inputs not yet answered, at
+    /// most kMostInputsWaiting, and whether the last answered was taken.
+    std::optional<document::Value> clickedHeard_;
+    bool clickedAsked_ = false;
+    std::size_t inputsWaiting_ = 0;
+    bool inputTaken_ = false;
+    static constexpr std::size_t kMostInputsWaiting = 64;
     /// The newest press, while it is held, when it met an authored entity:
     /// which press, what it met, and where (D457).
     std::optional<Pressed> pressed_;
